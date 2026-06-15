@@ -1076,3 +1076,65 @@ of `run_compute_spirv`) + `assert_pixels_exact` (full-frame exact compare, first
 **NEXT:** push both branches, open the daslang PR (emitter + main-tree tests) and the dasVulkan PR (GPU gates
 + exact-analytic harness), Copilot-to-dry. Then Phase 8 (control-flow / language completeness) — which is also
 where the two deferred gaps (vector arithmetic, folded const-vector operands) belong.
+
+---
+
+### Phase 8 — language completeness LANDED (2026-06-15, branch `bbatkin/dasspirv-phase8-language`)
+
+The last emitter-plumbing phase. Plan written first (`PHASE8_LANGUAGE.md`). All three tiers green
+(interp/JIT/AOT **88/88**), spirv-val clean, golden id-isomorphic, opcode census both directions,
+lint + format clean, no GC leak. Single daslang PR — no dasVulkan GPU gate required (this is
+language-surface; spirv-val + census are the oracle, and ternary/vector-math run in the existing GPU
+shaders implicitly).
+
+**Grammar reconciliation (the load-bearing scope finding).** The earlier masterplan Phase-8 list named
+`OpSwitch`, `do { } while`, and labeled break/continue. **daslang has none of these, by design** (Boris)
+— the only loop/branch keywords are `while`/`for`/`break`/`continue` (Phase 2), the ternary `?:`, and
+unstructured `goto`+numeric `label:` (already fail-closed-rejected; not structured-CFG lowerable). Those
+three bullets have no source construct and were dropped, not deferred. Real Phase-8 content = four items,
+two already partly done:
+
+- **8.1 ternary `?:` -> OpSelect.** `?:` parses to `ExprOp3("?", cond, a, b)`; added the missing
+  `visitExprOp3`. Branchless OpSelect (both arms eager — correct for side-effect-free shader operands,
+  same rule as `&&`/`||`). A vector result with a scalar bool condition splats the condition to a bvecN
+  via OpCompositeConstruct first (SPIR-V < 1.4 requires the OpSelect condition width to match the result).
+  New census opcode: `Select` (the only new opcode in all of Phase 8).
+- **8.2 folded const-vector operand (the real Phase-7 gap A/B reconciliation).** **Finding: "vector add
+  not wired" (the Phase-7 note) was a mischaracterization** — `scalar_class` already maps `tFloatN -> 2`,
+  so `binop_code` emits component-wise `OpFAdd`/`OpFSub`/`OpFDiv` on the vector result type, and unary `-`
+  emits `OpFNegate`. Verified by probe; locked in with the `vecarith` fixture. The ACTUAL gap was only the
+  **folded const vector** (`float2(0.5,0.5)` as an operand folds to `ExprConstFloat2`): scalar consts get
+  a `visitExprConst*` registration but the 9 vector-const node types didn't, so `value_of` failed.
+  `emit_const` already lowers them to `OpConstantComposite`; added the 9
+  `visitExprConst{Float,Int,UInt}{2,3,4}` overrides (via `register_vec_const`). No new census opcodes.
+- **8.3 GLSL.std.450 math = a fail-closed name-correctness audit.** The ext-inst table was keyed on GLSL
+  spellings, but `visitExprCall` dispatches by the DASLANG call name — so several entries were unreachable
+  dead branches and two real builtins were missing/misnamed. Fixed: `mix` -> `lerp`, `inversesqrt` ->
+  `rsqrt` (daslang's names), added `refract`; **removed `step`/`smoothstep`** (no daslang function — dead
+  branches) and **`radians`/`degrees`** (daslib/math_boost das functions whose bodies reference a `PI`
+  global the dependency walker can't lower — they compiled in the test context but errored under lint, a
+  context-dependent success that violates the no-fragility rule; a shader writes the multiply inline). The
+  table now holds only dependency-free builtin `math`. The `mathx` fixture exercises every reachable
+  ext-inst beyond Phase 3's dot/sqrt/clamp; `test_math` pins each by its GLSLstd450 **sub-opcode**
+  (the census tracks `OpExtInst` as one opcode, so it cannot enforce per-function coverage) + spirv-val
+  (the real per-function operand oracle). No new census opcodes.
+
+**Findings (load-bearing):**
+1. **daslang `math` names != GLSL names** for two: `lerp` (GLSL `mix`) and `rsqrt` (GLSL `inversesqrt`).
+   The emitter dispatches by daslang call name, so the table must use daslang spellings. `step`/
+   `smoothstep`/`mix` have no daslang function at all.
+2. **`radians`/`degrees` are NOT builtins** — they live in daslib/math_boost as das functions that
+   reference a `PI` global. The emitter maps them by name, but `collect_dependencies` still pulls `PI`,
+   which `classify_global` rejects. Excluded for that reason. The general rule: the ext-inst table should
+   list only **dependency-free builtin** math (no das body, no global deps), else a shader's compile
+   success becomes context-dependent.
+3. **The OpExtInst census gap.** The opcode census counts `OpExtInst` as a single opcode, so it cannot
+   enforce that each GLSLstd450 sub-function is actually exercised. `test_math` closes this by asserting
+   the sub-opcode at OpExtInst operand index 3 — the test-per-instruction discipline applied to ext-inst.
+4. **Two unrelated gaps surfaced, out of Phase-8 scope (NOT deferred work for 8.x):** multi-component
+   swizzle of a *global* (`fin.xyz` — only single-component global swizzle + local-value swizzle exist),
+   and that's the residual swizzle gap. Phase-8 fixtures build vectors from scalar swizzles, the existing
+   idiom.
+
+**This closes the emitter language surface.** Phases 9 (docs/tutorial), 10 (examples/vulkan), 11
+(vulkan_lint) are docs/demos/lint on top of a feature-complete emitter — not plumbing.

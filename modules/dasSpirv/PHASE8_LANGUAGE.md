@@ -82,3 +82,19 @@ small optional dasVulkan compute fixture exercising ternary + vector math + a GL
 real-driver belt-and-suspenders — decide at 8.3 whether it earns its keep. Standing gates: lint +
 format, Copilot-to-dry, no GC leak. AOT requires `rm -rf tests/spirv/_aot_generated` before rebuilding
 `test_aot` (transitive-dep tracking gap).
+
+## Outcome (refinements found during implementation — authoritative record: MASTERPLAN Phase-8 LANDED)
+
+- **Item 2 premise was wrong: vector arithmetic already worked.** `scalar_class` already maps
+  `tFloatN -> 2`, so `visitExprOp2` already emits component-wise `OpFAdd`/`OpFSub`/`OpFDiv` (and unary
+  `-` -> `OpFNegate`) on the vector result type. The only real gap was item 3 (folded const-vector
+  operand). 8.2 closed that and added a `vecarith` test to lock the (already-working) vector ops in.
+- **Item 4 (math) became a name-correctness audit, not a "broaden".** The table was already broad but
+  keyed on GLSL names while the emitter dispatches by daslang names: `mix`->`lerp`, `inversesqrt`->`rsqrt`,
+  `refract` added; `step`/`smoothstep` removed (no daslang fn); `radians`/`degrees` removed (math_boost
+  das functions with a `PI` global dependency the emitter can't lower). `mod` was not added (daslang `%`
+  already covers float mod via `OpFRem`).
+- **No GPU gate shipped** (language-surface; spirv-val + census + the per-ext-inst sub-opcode asserts are
+  the oracle).
+- **Out of scope, surfaced:** multi-component swizzle of a *global* (`fin.xyz`) is still unsupported — a
+  separate swizzle gap, not control-flow/math.
