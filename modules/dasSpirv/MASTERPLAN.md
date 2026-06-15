@@ -1283,3 +1283,34 @@ Fixture `gswizzle` (builtin-global multi-swizzle + @in-global contiguous/reorder
 component global + local-value swizzle regression) in `test_swizzle.das`; census wired
 (`phase10_2_emitter_opcodes` = Phase-8 set, unchanged). interp + JIT 90/90, spirv-val clean, lint + format
 clean.
+
+### Phase 10.3 — fragment realism LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-3-fragment`)
+
+Fragment-stage foundation rails — the realism toolkit a real fragment shader needs (alpha-test discard,
+edge-aware antialiasing via derivatives, mip selection / texel math via size queries, depth replacement).
+Five new census opcodes (`Kill`/`DPdx`/`DPdy`/`Fwidth`/`ImageQuerySizeLod`); each its own intrinsic in
+`spirv_builtins.das`, lowered in the emitter's call dispatch. interp + JIT 96/96, spirv-val clean,
+lint + format clean.
+
+- **`discard()` → `OpKill`.** A block terminator: sets `ctx.terminated`, so a statement following it on
+  the same path is rejected as unreachable (the existing dead-code guard) — matches glslang lowering
+  `discard` to `OpKill`. Fragment-only.
+- **`dFdx`/`dFdy`/`fwidth` → `OpDPdx`/`OpDPdy`/`OpFwidth`** (screen-space derivatives over the 2×2 quad).
+  Fragment-only; the basic forms need only the `Shader` capability (not the `DerivativeControl` the
+  `*Fine`/`*Coarse` variants would). Declared as **concrete per-width overloads** (float/float2/3/4),
+  NOT a generic — see finding 1.
+- **`textureSize(sampler, lod)` → `OpImage` (extract image) + `OpImageQuerySizeLod`**, lazily pulling in
+  the `ImageQuery` capability (deduped via a `ctx` flag, emitted into `SEC_CAPS`). int2 for 2D/Cube, int3
+  for 3D / 2D-array. Stage-agnostic.
+- **`gl_FragDepth` write → BuiltIn `FragDepth` Output + the `DepthReplacing` execution mode.** The exec
+  mode is emitted only when the builtin is referenced — `classify_global` sets `ctx.uses_frag_depth` and
+  `generate_spirv` reads it after dependency collection (which runs before the exec-mode section).
+
+**Findings (load-bearing):**
+1. **Generic builtins get mangled instance call-names** (`spirv_builtins`dFdx`5408…`), so the emitter's
+   `name == "dFdx"` dispatch can never match a `def dFdx(p : auto(TT))`. Every existing builtin is a
+   concrete overload for exactly this reason; the derivatives had to follow suit (4 widths × 3 functions).
+   The emitter dispatches by the DASLANG call name, which is clean only for non-generic functions.
+2. **`OpKill` is a terminator, so `discard()` composes with the existing terminated-block machinery for
+   free** — placed in an `if`-branch it skips the trailing `OpBranch merge`; followed by another statement
+   it trips the unreachable-code reject. No new control-flow plumbing.
