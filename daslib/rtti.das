@@ -7,8 +7,6 @@ module rtti shared public
 require rtti_core public
 require strings
 
-typedef FileAccessPtr = smart_ptr<FileAccess>
-
 
 //! Deprecated: resolves each AnnotationInfo back to the live Annotation object and
 //! reconstructs an AST-shaped argument list per invoke. Use `each_annotation` instead.

@@ -334,28 +334,22 @@ namespace das {
         unique_ptr<AstSerializer> serializer;
     };
 
-    // Create a writing serializer.
-    AstSerializerState * rtti_create_ast_serializer ();
+    DAS_API AstSerializerState * rtti_create_ast_serializer ();
 
-    // Create a reading serializer from a blob.
-    AstSerializerState * rtti_create_ast_deserializer ( const TArray<uint8_t> & data );
+    DAS_API AstSerializerState * rtti_create_ast_deserializer ( const TArray<uint8_t> & data );
 
-    // Delete a serializer state.
-    void rtti_delete_ast_serializer ( AstSerializerState * state );
+    DAS_API void rtti_delete_ast_serializer ( AstSerializerState * state );
 
-    // Serialize one program (writing mode). Returns false on failure.
-    bool rtti_ast_serializer_serialize_program (
+    DAS_API bool rtti_ast_serializer_serialize_program (
             AstSerializerState * state,
             const smart_ptr<Program> & program );
 
-    // Deserialize one program (reading mode).
-    void rtti_ast_serializer_deserialize_program (
+    DAS_API void rtti_ast_serializer_deserialize_program (
             AstSerializerState * state,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at );
 
-    // Get serialized data from a writing serializer.
-    void rtti_ast_serializer_get_data (
+    DAS_API void rtti_ast_serializer_get_data (
             AstSerializerState * state,
             const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
             Context * context, LineInfoArg * at );

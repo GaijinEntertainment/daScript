@@ -11,6 +11,7 @@ require ast_core public
 require daslib/rtti public
 require strings
 
+typedef FileAccessPtr = smart_ptr<FileAccess>
 typedef ExpressionPtr = Expression?
 typedef ProgramPtr = smart_ptr<Program>
 typedef TypeDeclPtr = TypeDecl?

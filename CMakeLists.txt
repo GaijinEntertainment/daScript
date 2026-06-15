@@ -754,11 +754,7 @@ src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_program.cpp
 src/ast/ast_allocate_stack.cpp
-src/ast/ast_derive_alias.cpp
 src/ast/ast_gc_collect.cpp
-src/ast/ast_gc_report.cpp
-src/ast/ast_inscope_pod.cpp
-src/ast/ast_escape_analysis.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
 src/ast/ast_validate.cpp
@@ -795,7 +791,6 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.h
@@ -807,6 +802,7 @@ src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
+src/builtin/module_builtin_ast_serialize.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -1119,7 +1115,12 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_infer_type_helper.cpp
     src/ast/ast_infer_type_op.cpp
     src/ast/ast_infer_type_make.cpp
+    src/ast/ast_derive_alias.cpp
+    src/ast/ast_gc_report.cpp
     src/ast/ast_generate.cpp
+    src/ast/ast_inscope_pod.cpp
+    src/ast/ast_escape_analysis.cpp
+
     src/builtin/module_builtin_ast.cpp
     src/builtin/module_builtin_ast_flags.cpp
     src/builtin/module_builtin_ast_annotations.cpp

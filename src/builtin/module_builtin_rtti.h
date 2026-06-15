@@ -47,12 +47,8 @@ MAKE_EXTERNAL_TYPE_FACTORY(DebugInfoHelper, das::DebugInfoHelper)
 MAKE_EXTERNAL_TYPE_FACTORY(Program, das::Program)
 MAKE_EXTERNAL_TYPE_FACTORY(Module, das::Module)
 MAKE_EXTERNAL_TYPE_FACTORY(Error,Error)
-MAKE_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context)
 MAKE_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
 MAKE_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
 MAKE_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
-
-namespace das { struct AstSerializerState; }
-MAKE_EXTERNAL_TYPE_FACTORY(AstSerializer,das::AstSerializerState)
 

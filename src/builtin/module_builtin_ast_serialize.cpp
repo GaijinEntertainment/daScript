@@ -369,6 +369,10 @@ namespace das {
         return *this;
     }
 
+    // explicit instantiation used by FileAccess::serialize in module_file_access.cpp
+    template AstSerializer & AstSerializer::operator << (
+        das_hash_map<string, unique_ptr<FileInfo>, daslang_hash<string,void>, das::equal_to<string>> & );
+
     // Guarded: see ast_serializer.h note. Under DAS_CUSTOM_HASH=0 these would
     // duplicate the das_hash_map definitions above (identical aliases).
 #if DAS_CUSTOM_HASH
@@ -867,22 +871,6 @@ namespace das {
             }
         }
         return *this;
-    }
-
-    void FileAccess::serialize ( AstSerializer & ser ) {
-        if ( ser.writing ) {
-            uint8_t tag = 0;
-            ser << tag;
-        }
-        ser << files;
-    }
-
-    void ModuleFileAccess::serialize ( AstSerializer & ser ) {
-        if ( ser.writing ) {
-            uint8_t tag = 1;
-            ser << tag;
-        }
-        ser << files;
     }
 
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
@@ -1978,37 +1966,6 @@ namespace das {
         ser << static_cast <vector<MakeFieldDeclPtr> &> ( *this );
     }
 
-    void FileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 0;
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
-        // Note: we do not serialize profileData
-    }
-
-    void TextFileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 1; // Signify the text file info
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        ser.serializeAdaptiveSize32(sourceLength);
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
-        // ser << owner;
-        // if ( ser.writing ) {
-        //     ser.write((const void *) source, sourceLength);
-        // } else {
-        //     source = (char *) das_aligned_alloc16(sourceLength + 1);
-        //     ser.read((void *) source, sourceLength);
-        // }
-    }
-
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
         dtag(HASH_TAG("CallMacro *"));
         if ( writing ) {
@@ -2922,6 +2879,29 @@ namespace das {
             uint64_t(state->storage->buffer.size()), uint64_t(state->storage->buffer.size()));
         vec4f args[1] = { cast<Array *>::from(&arr) };
         context->invoke(block, args, nullptr, at);
+    }
+
+    void FileInfo::serialize ( AstSerializer & ser ) {
+        uint8_t tag = 0;
+        if ( ser.writing ) {
+            ser << tag;
+        }
+        ser << name << tabSize;
+        if ( !ser.writing ) {
+            ser.deleteUponFinish.push_back(this);
+        }
+    }
+
+    void TextFileInfo::serialize ( AstSerializer & ser ) {
+        uint8_t tag = 1;
+        if ( ser.writing ) {
+            ser << tag;
+        }
+        ser << name << tabSize;
+        ser.serializeAdaptiveSize32(sourceLength);
+        if ( !ser.writing ) {
+            ser.deleteUponFinish.push_back(this);
+        }
     }
 
 }

@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/simulate/debug_info.h"
 
 #if !defined(DAS_NO_FILEIO)
@@ -215,4 +216,22 @@ namespace das {
         DAS_ASSERTF(!exc, "exception failed in `pod_in_scope_allowed`: %s", exc);
         return cast<bool>::to(res);
     }
+
+
+    void FileAccess::serialize ( AstSerializer & ser ) {
+        if ( ser.writing ) {
+            uint8_t tag = 0;
+            ser << tag;
+        }
+        ser << files;
+    }
+
+    void ModuleFileAccess::serialize ( AstSerializer & ser ) {
+        if ( ser.writing ) {
+            uint8_t tag = 1;
+            ser << tag;
+        }
+        ser << files;
+    }
+
 }
