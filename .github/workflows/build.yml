@@ -781,8 +781,10 @@ jobs:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
 
-    - name: "Install toolchain"
-      run: sudo apt-get update && sudo apt-get install -y ninja-build bison
+    # Pinned CMake + Ninja, matching the other Linux jobs (bison is preinstalled
+    # on the ubuntu runners — the matrix linux64 job relies on it the same way).
+    - name: "Get CMake + Ninja"
+      uses: lukka/get-cmake@latest
 
     - name: "Build: Daslang (gcc -Werror)"
       run: |
