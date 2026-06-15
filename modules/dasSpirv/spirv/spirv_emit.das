@@ -936,6 +936,13 @@ class SpirvEmit : AstVisitor {
     def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
         let k = intptr(e)
         if (key_exists(e2ptr, k)) return (id = e2ptr?[k] ?? 0u, pty = e2pty?[k] ?? 0u)
+        // a swizzle that produced a value (not a pointer) used as a write target: a multi-component
+        // swizzle (`v.xy = …`) or a single-component swizzle of a value. Fail-closed with a clear
+        // message rather than the generic "internal: not an lvalue".
+        if (e is ExprSwizzle) {
+            errs |> push("cannot assign through a swizzle — write-swizzle (e.g. `v.xy = …`) is not supported; assign the whole vector instead")
+            return (id = 0u, pty = 0u)
+        }
         errs |> push("internal: {e.__rtti} is not an lvalue")
         return (id = 0u, pty = 0u)
     }
