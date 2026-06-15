@@ -61,15 +61,15 @@ to remove.
 
 ## Emitter design notes
 
-The current `type_image` (spirv_builder.das:198) hardcodes `depth=0 arrayed=0 ms=0 sampled=1 format=Unknown`
-and `sampler_info` (spirv_emit.das:192) maps only `sampler2D → 2D`. Phase 7 parameterizes both.
+Pre-Phase-7, `type_image` hardcoded `depth=0 arrayed=0 ms=0 sampled=1 format=Unknown` and `sampler_info`
+mapped only `sampler2D → 2D`. Phase 7 parameterizes both.
 
 - **Known-format storage images (no without-format cap).** `image2D` lowers to `OpTypeImage … sampled=2
   format=Rgba8`. A *known* color format means **no** `StorageImageReadWithoutFormat`/`…WriteWithoutFormat`
   capability or device feature is required — portable, lavapipe-safe. (`format=Unknown` would drag in those
   feature bits; avoid.) `imageLoad`/`imageStore` need no capability beyond `Shader`.
-- **`type_image` gains `(depth, arrayed, ms, sampled, format)`** folded into its dedup key; the existing
-  2D-sampled callers pass the current values. `sampler_info` returns `(dim, arrayed)`; cube sets `Dim.Cube`,
+- **`type_image` gains `(arrayed, sampled, format)`** folded into its dedup key (depth/ms stay 0); the
+  existing 2D-sampled callers keep the defaults. `sampler_info` returns `(dim, arrayed)`; cube sets `Dim.Cube`,
   2DArray sets `arrayed=1`, 3D sets `Dim._3D`.
 - **Fetch/explicit-LOD from a combined sampler** needs the underlying image: `OpImage %img %sampledImage`
   then `OpImageFetch` / the sampled-image goes straight to `OpImageSampleExplicitLod` with a `Lod` operand.
@@ -102,7 +102,7 @@ and `sampler_info` (spirv_emit.das:192) maps only `sampler2D → 2D`. Phase 7 pa
 - **GPU gate:** each face/slice a solid color, NEAREST → sample one direction per face → exact color compare.
 
 ### 7.4 Separate image + sampler
-- **Authoring:** `var @binding=0 tex : texture2D`, `var @binding=1 smp : sampler`; `sample(tex, smp, uv)`.
+- **Authoring:** `var @binding=0 tex : texture2D`, `var @binding=1 smp : sampler`; `sampleTexture(tex, smp, uv)`.
 - **Emitter:** `OpTypeImage`(sampled=1) + `OpTypeSampler` globals; call → `OpSampledImage` + sample.
   Reflection kinds `sampled_image` + `sampler`. Defer-if-it-fights-the-marker-rail is resolved: it's in.
 - **GPU gate:** same content as 7.3's 2D case, two descriptors → exact compare (proves the split binding).
