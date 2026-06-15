@@ -49,6 +49,30 @@ def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
+// ===== additional sampler dimensionalities =====
+// Each is an opaque marker recognized by name in classify_global (sampler_info maps it to the SPIR-V
+// image Dim + Arrayed flag). All sample via texture() with a float3 coordinate: a cubemap direction, a
+// 3D texture coordinate, or (u,v,layer) for a 2D array. The emitter's texture() handler is dimension-
+// agnostic, so these need only their marker type + a texture() overload.
+struct sampler3D {}
+struct samplerCube {}
+struct sampler2DArray {}
+
+[unused_argument(s, uv)]
+def public texture(s : sampler3D; uv : float3) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+[unused_argument(s, uv)]
+def public texture(s : samplerCube; uv : float3) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+[unused_argument(s, uv)]
+def public texture(s : sampler2DArray; uv : float3) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
 // ===== storage images =====
 // image2D is an opaque marker for a read-write storage image (UniformConstant OpTypeImage with a
 // known Rgba8 format, recognized by name in classify_global). imageStore/imageLoad are stubs: their

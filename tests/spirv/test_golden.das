@@ -143,5 +143,6 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "conv", conv_words())
         check_iso(t, "storimg", storimg_words())
         check_iso(t, "texlod", texlod_words())
+        check_iso(t, "dims", dims_words())
     }
 }

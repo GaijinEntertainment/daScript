@@ -190,10 +190,14 @@ def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
 // ===== combined image sampler detection =====
 // sampler globals are recognized by their opaque marker struct name (sampler2D, ...). Returns the
 // SPIR-V image dimensionality so classify_global can build the OpTypeImage / OpTypeSampledImage.
-def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
-    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D)
-    if ("{t.structType.name}" == "sampler2D") return (ok = true, dim = SpvDim._2D)
-    return (ok = false, dim = SpvDim._2D)
+def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim; arrayed : uint> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D, arrayed = 0u)
+    let n = "{t.structType.name}"
+    if (n == "sampler2D") return (ok = true, dim = SpvDim._2D, arrayed = 0u)
+    if (n == "sampler3D") return (ok = true, dim = SpvDim._3D, arrayed = 0u)
+    if (n == "samplerCube") return (ok = true, dim = SpvDim.Cube, arrayed = 0u)
+    if (n == "sampler2DArray") return (ok = true, dim = SpvDim._2D, arrayed = 1u)
+    return (ok = false, dim = SpvDim._2D, arrayed = 0u)
 }
 
 // Storage-image globals are recognized by their opaque marker struct name (image2D, ...). Returns the
@@ -254,7 +258,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     // OpTypeSampledImage + DescriptorSet/Binding. Used only via texture(); not in the entry interface.
     let si = sampler_info(v._type)
     if (si.ok) {
-        let img = type_image(m, type_float(m, 32u), si.dim)
+        let img = type_image(m, type_float(m, 32u), si.dim, si.arrayed)
         let simg = type_sampled_image(m, img)
         let pt = type_pointer(m, SpvStorageClass.UniformConstant, simg)
         let vid = alloc_id(m)
@@ -1303,7 +1307,7 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             // extract the underlying image (same dedup key classify_global used for the sampler)
             let si = sampler_info(sg._type)
-            let img_type = type_image(bm, type_float(bm, 32u), si.dim)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
             let img = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
             let coord = value_of(expr.arguments[1])

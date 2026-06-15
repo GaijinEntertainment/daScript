@@ -575,6 +575,28 @@ def public texlod_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-7.3 additional sampler dimensionalities: samplerCube (Dim Cube), sampler3D (Dim 3D),
+// sampler2DArray (Dim 2D + Arrayed). All sample via texture() with a float3 coordinate. These add NO
+// new opcodes -- only different OpTypeImage Dim/Arrayed operands -- so they must stay within phase7b. =====
+var @binding = 0 cube_tex : samplerCube
+var @binding = 1 vol_tex : sampler3D
+var @binding = 2 arr_tex : sampler2DArray
+var @in @location = 0 dims_dir : float3
+var @out @location = 0 dims_out : float4
+[fragment_shader(name="dims_spv"), marker(no_coverage)]
+def dims_frag {
+    let c = texture(cube_tex, dims_dir)     // samplerCube -> OpTypeImage Dim Cube
+    let v = texture(vol_tex, dims_dir)      // sampler3D   -> OpTypeImage Dim 3D
+    let a = texture(arr_tex, dims_dir)      // sampler2DArray -> OpTypeImage Dim 2D, Arrayed 1
+    dims_out = float4(c.x, v.y, a.z, 1.0f)  // scalar swizzles + CompositeConstruct
+}
+
+def public dims_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(dims_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -767,4 +789,10 @@ def public phase7b_emitter_opcodes : table<uint> {
         s |> insert(uint(op))
     }
     return <- s
+}
+
+// Phase-7.3 (sampler3D / samplerCube / sampler2DArray) adds NO new opcodes -- only different
+// OpTypeImage Dim/Arrayed operands. The declared set is unchanged; the dims fixture must stay within it.
+def public phase7c_emitter_opcodes : table<uint> {
+    return <- phase7b_emitter_opcodes()
 }
