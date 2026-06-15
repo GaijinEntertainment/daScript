@@ -91,6 +91,21 @@ def test_reflect_sampler(t : T?) {
 }
 
 [test]
+def test_reflect_comparison_sampler(t : T?) {
+    t |> run("reflect: fragshadow -> one comparison_sampler @ (0,0), fragment stage") <| @(t : T?) {
+        var r = decode_reflection(fragshadow_spv_reflect)
+        t |> success(length(r.bindings) == 1, "fragshadow: one binding")
+        if (length(r.bindings) == 1) {
+            let b = r.bindings[0]
+            t |> success(b.set == 0 && b.binding == 0, "fragshadow: binding @ (0,0)")
+            t |> success(b.kind == SpirvDescriptorKind.comparison_sampler, "fragshadow: comparison_sampler kind")
+            t |> success(b.stages.fragment, "fragshadow: stages = fragment")
+        }
+        finalize(r)
+    }
+}
+
+[test]
 def test_reflect_malformed(t : T?) {
     t |> run("reflect: malformed streams decode to empty (no over-read / over-alloc / panic)") <| @(t : T?) {
         // empty stream

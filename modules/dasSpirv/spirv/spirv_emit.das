@@ -234,15 +234,18 @@ def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
 
 // ===== combined image sampler detection =====
 // sampler globals are recognized by their opaque marker struct name (sampler2D, ...). Returns the
-// SPIR-V image dimensionality so classify_global can build the OpTypeImage / OpTypeSampledImage.
-def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim; arrayed : uint> {
-    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D, arrayed = 0u)
+// OpTypeImage operands classify_global needs: dimensionality (dim), the Arrayed flag (arrayed), and
+// the Depth flag (depth, 1 for a sampler2DShadow comparison sampler, else 0).
+def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim; arrayed : uint; depth : uint> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D, arrayed = 0u, depth = 0u)
     let n = "{t.structType.name}"
-    if (n == "sampler2D") return (ok = true, dim = SpvDim._2D, arrayed = 0u)
-    if (n == "sampler3D") return (ok = true, dim = SpvDim._3D, arrayed = 0u)
-    if (n == "samplerCube") return (ok = true, dim = SpvDim.Cube, arrayed = 0u)
-    if (n == "sampler2DArray") return (ok = true, dim = SpvDim._2D, arrayed = 1u)
-    return (ok = false, dim = SpvDim._2D, arrayed = 0u)
+    if (n == "sampler2D") return (ok = true, dim = SpvDim._2D, arrayed = 0u, depth = 0u)
+    if (n == "sampler3D") return (ok = true, dim = SpvDim._3D, arrayed = 0u, depth = 0u)
+    if (n == "samplerCube") return (ok = true, dim = SpvDim.Cube, arrayed = 0u, depth = 0u)
+    if (n == "sampler2DArray") return (ok = true, dim = SpvDim._2D, arrayed = 1u, depth = 0u)
+    // sampler2DShadow: a 2D DEPTH-comparison sampler (Depth=1). Sampled only via textureCompare (Dref).
+    if (n == "sampler2DShadow") return (ok = true, dim = SpvDim._2D, arrayed = 0u, depth = 1u)
+    return (ok = false, dim = SpvDim._2D, arrayed = 0u, depth = 0u)
 }
 
 // Storage-image globals are recognized by their opaque marker struct name (image2D, ...). Returns the
@@ -308,7 +311,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     // OpTypeSampledImage + DescriptorSet/Binding. Used only via texture(); not in the entry interface.
     let si = sampler_info(v._type)
     if (si.ok) {
-        let img = type_image(m, type_float(m, 32u), si.dim, si.arrayed)
+        let img = type_image(m, type_float(m, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
         let simg = type_sampled_image(m, img)
         let pt = type_pointer(m, SpvStorageClass.UniformConstant, simg)
         let vid = alloc_id(m)
@@ -322,8 +325,11 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = simg, is_sampler = true))
+        // a Depth=1 sampler is a comparison sampler (sampled via textureCompare/Dref); the host binds a
+        // VkSampler created with compareEnable. Otherwise an ordinary combined image sampler.
+        let kind = si.depth != 0u ? SpirvDescriptorKind.comparison_sampler : SpirvDescriptorKind.combined_image_sampler
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
-            kind = SpirvDescriptorKind.combined_image_sampler, count = 1, stages = stage_flag(stage)))
+            kind = kind, count = 1, stages = stage_flag(stage)))
         return
     }
     // storage image: a global of an opaque image type (image2D) -> UniformConstant OpTypeImage with a
@@ -1483,7 +1489,9 @@ class SpirvEmit : AstVisitor {
             let simg = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             let si = sampler_info(sg._type)
-            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
+            // reconstruct the SAME image type classify_global built for this sampler so OpImage's
+            // result type matches the sampled image's image type -- depth included (type_image dedups on it)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
             let lod = value_of(expr.arguments[1])
@@ -1491,6 +1499,42 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ImageQuerySizeLod, rt, res, img, lod)
+            e2id[k] = res
+            return expr
+        }
+        // textureCompare(sampler2DShadow, uv, compare): depth-compare sampling. OpLoad the comparison
+        // sampler + OpImageSampleDrefImplicitLod with the reference value as the Dref operand; the
+        // scalar result is the comparison (1 = lit, 0 = shadowed; filtered -> PCF average). Implicit
+        // LOD -> fragment-only.
+        if (name == "textureCompare") {
+            if (length(expr.arguments) != 3) {
+                errs |> push("textureCompare expects (sampler2DShadow, uv, compare)")
+                return expr
+            }
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("textureCompare: implicit-LOD depth-compare sampling is only valid in a fragment shader")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("textureCompare: first argument must be a sampler2DShadow global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler || sampler_info(sg._type).depth == 0u) {
+                errs |> push("textureCompare: '{sg.name}' is not a sampler2DShadow (depth-compare sampler)")
+                return expr
+            }
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let uv = value_of(expr.arguments[1])
+            let dref = value_of(expr.arguments[2])
+            if (uv == 0u || dref == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, simg, uv, dref]
+            emit_n(bm, SEC_FUNCS, SpvOp.ImageSampleDrefImplicitLod, ops)
+            delete ops
             e2id[k] = res
             return expr
         }
@@ -1575,7 +1619,9 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             // extract the underlying image (same dedup key classify_global used for the sampler)
             let si = sampler_info(sg._type)
-            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed)
+            // reconstruct the SAME image type classify_global built for this sampler so OpImage's
+            // result type matches the sampled image's image type -- depth included (type_image dedups on it)
+            let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
             let coord = value_of(expr.arguments[1])

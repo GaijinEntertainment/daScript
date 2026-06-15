@@ -1314,3 +1314,39 @@ lint + format clean.
 2. **`OpKill` is a terminator, so `discard()` composes with the existing terminated-block machinery for
    free** — placed in an `if`-branch it skips the trailing `OpBranch merge`; followed by another statement
    it trips the unreachable-code reject. No new control-flow plumbing.
+
+### Phase 10.4 — depth-compare (shadow) sampling LANDED (2026-06-15, branch `bbatkin/dasspirv-phase10-4-dref`)
+
+The hardware-PCF shadow rail — `sampler2DShadow` sampled via `textureCompare` lowers to
+`OpImageSampleDrefImplicitLod`, the depth-compare sample. One new census opcode
+(`ImageSampleDrefImplicitLod`); the Depth=1 image flag and the `comparison_sampler` reflection kind are
+operand/reflection-only, not opcodes. This is the quality upgrade over the manual-compare shadow that
+already works (sample a depth texture as a plain `sampler2D`, compare with a ternary). interp + JIT
+100/100, spirv-val clean, external `spirv-dis` confirms textbook structure, lint + format clean.
+
+- **`sampler2DShadow` marker + `textureCompare(s, uv, compare) : float`.** A new opaque sampler type;
+  `sampler_info` maps it to a 2D image with the **Depth=1** flag (the operand that distinguishes a
+  comparison sampler from an ordinary one). `textureCompare` is its only sample path (the daslang type
+  system blocks passing it to `texture()`/`textureLod`/… since those overloads don't accept it).
+- **`OpImageSampleDrefImplicitLod`.** Loads the combined comparison sampler, then samples with the
+  reference value as the **Dref** operand; the scalar `float` result is the comparison (1 = lit, 0 =
+  shadowed; a filtered sampler returns the PCF average). Implicit LOD → fragment-only (same stage gate as
+  `texture()`). Emitted via `emit_n` (5 operands: resultType, result, sampledImage, coord, dref).
+- **`type_image` gained a `depth` parameter** (default 0), threaded into both the OpTypeImage Depth
+  operand (index 3) **and the dedup key** — without the key change a `sampler2DShadow` and a `sampler2D`
+  (same dim/arrayed/sampled/format) would collide on one type id.
+- **`comparison_sampler` reflection kind.** `classify_global` picks it (vs `combined_image_sampler`) when
+  the sampler's depth flag is set, so the host binds a `VkSampler` with `compareEnable`. Wire-format magic
+  bumped RFL2 → RFL3 (a descriptor-kind change), with the `kind_from_int` mapping extended.
+
+**Findings (load-bearing):**
+1. **The Depth flag lives on the OpTypeImage, not the sample op.** `OpImageSampleDrefImplicitLod` is the
+   same regardless of image type; what makes a sampler a *comparison* sampler is the `Depth=1` operand on
+   its `OpTypeImage`. So the dedup key MUST include depth (else the shadow sampler aliases a plain one and
+   spirv-val rejects the Dref sample against a non-depth image). External `spirv-dis` verified:
+   `OpTypeImage %float 2D 1 0 0 1 Unknown` + `OpImageSampleDrefImplicitLod %float %img %uv %ref`.
+2. **A dedicated `textureCompare` intrinsic beats overloading `texture()`.** GLSL packs the compare ref
+   into a third coordinate component (`texture(sampler2DShadow, vec3)`); a separate intrinsic with an
+   explicit `compare : float` is clearer, keeps the result type scalar (vs `texture()`'s float4), and
+   fail-closes by construction — the type system prevents the wrong sampler/op pairing without an emitter
+   check.
