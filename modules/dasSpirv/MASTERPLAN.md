@@ -918,6 +918,21 @@ now participates in the same fail-closed `AstVisitor` contract as every other da
 
 ### Phase 7 — texture / resource breadth
 
+> Working plan: `PHASE7_TEXTURES.md` (slices + per-slice oracle + the new harness API), written and
+> approved before code. Full coverage in one phase (all four slices, separate-image-sampler included).
+
+**Testing-strategy decision (Boris, 2026-06-14).** Generating valid SPIR-V (spirv-val) is not proof it
+*works* — for images the only real oracle is render/compute → read back → compare. The existing graphics
+gates compare *loosely* (sample ~5 pixels, assert per-channel inequalities); that is the debt. Phase 7
+adopts an **exact analytic oracle** as the backbone: Phase-7 content is procedural, so the expected pixel is
+CPU-computable in daslang — a *stronger* check than a golden image, no committed reference. New dasVulkan
+harness: `compute_image_rgba8` (image-readback analog of `run_compute_spirv`) + `assert_pixels_exact`
+(full-frame exact compare, first-mismatch report). Golden-image diff (`save/load_ppm` + `images_close(tol)`)
+is a *fallback*, added only when a filtered-LOD case needs it. Storage images emit a **known format (Rgba8)**
+so no without-format capability/feature is required (lavapipe-safe). Debt paid down: retrofit the
+textured-quad gate to `assert_pixels_exact` (NEAREST + integer MVP → analyzable); triangle centroid stays
+loose (genuinely fuzzy). Full rationale + the today-vs-debt analysis live in `PHASE7_TEXTURES.md`.
+
 Current sampler surface is **combined 2D only**:
 - **Storage images** — `OpTypeImage … 2` (read-write), `image2D` marker, `imageLoad`/`imageStore` →
   `OpImageRead`/`OpImageWrite`, the `StorageImageRead/WriteWithoutFormat` caps + format decoration. New
