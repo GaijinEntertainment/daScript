@@ -518,6 +518,44 @@ def public tex_frag_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-7.1a scalar conversions: float(int/uint), int(float/uint), uint(float/int) ->
+// OpConvertSToF/UToF/FToS/FToU + OpBitcast (int<->uint same-width reinterpret). Reuses the existing
+// int/uint/float SSBOs; every conversion opcode is exercised exactly once. =====
+[compute_shader(local_size_x=64, name="conv_spv"), marker(no_coverage)]
+def conv {
+    let i = gl_GlobalInvocationID.x
+    let s = idata[i]                    // int
+    let u = data[i]                     // uint
+    let f = fdata[i]                    // float
+    fdata[i] = float(s) + float(u)      // ConvertSToF + ConvertUToF
+    idata[i] = int(f) + int(u)          // ConvertFToS + Bitcast (uint -> int)
+    data[i] = uint(f) + uint(s)         // ConvertFToU + Bitcast (int -> uint)
+}
+
+def public conv_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(conv_spv)
+    return <- w
+}
+
+// ===== Phase-7.1b storage image: an image2D global -> UniformConstant OpTypeImage (Rgba8, sampled=2)
+// + DescriptorSet/Binding; imageLoad -> OpImageRead, imageStore -> OpImageWrite. A 2D dispatch writes a
+// coordinate-derived gradient (the GPU gate proves the coordinate mapping; here it just emits valid SPIR-V). =====
+var @binding = 0 img : image2D
+[compute_shader(local_size_x=8, local_size_y=8, name="storimg_spv"), marker(no_coverage)]
+def storimg {
+    let gid = gl_GlobalInvocationID
+    let coord = int2(int(gid.x), int(gid.y))
+    let prev = imageLoad(img, coord)                                            // OpImageRead
+    imageStore(img, coord, float4(float(gid.x), float(gid.y), prev.z, 1.0f))    // OpImageWrite
+}
+
+def public storimg_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(storimg_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -680,6 +718,20 @@ def public phase4d_emitter_opcodes : table<uint> {
     for (op in [
         SpvOp.TypeImage, SpvOp.TypeSampledImage,    // sampler2D -> OpTypeImage + OpTypeSampledImage
         SpvOp.ImageSampleImplicitLod                // texture(tex, uv)
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// Phase-7.1 adds scalar conversions + storage images. Phase-4d set + these:
+def public phase7a_emitter_opcodes : table<uint> {
+    var s <- phase4d_emitter_opcodes()
+    for (op in [
+        // scalar conversions
+        SpvOp.ConvertSToF, SpvOp.ConvertUToF, SpvOp.ConvertFToS, SpvOp.ConvertFToU, SpvOp.Bitcast,
+        // storage image read/write (OpTypeImage already declared by Phase-4d samplers)
+        SpvOp.ImageRead, SpvOp.ImageWrite
     ]) {
         s |> insert(uint(op))
     }

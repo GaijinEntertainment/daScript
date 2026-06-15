@@ -32,6 +32,7 @@ struct GlobalInfo {
     is_ssbo    : bool               // wrapped in a Block-decorated struct (member 0 = the array)
     is_block   : bool               // a Block-decorated struct (ssbo OR ubo); member access -> OpAccessChain by field index
     is_sampler : bool               // a combined image sampler (UniformConstant OpTypeSampledImage); used via texture()
+    is_storage_image : bool         // a read-write storage image (UniformConstant OpTypeImage); used via imageLoad/imageStore
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -195,6 +196,14 @@ def private sampler_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
     return (ok = false, dim = SpvDim._2D)
 }
 
+// Storage-image globals are recognized by their opaque marker struct name (image2D, ...). Returns the
+// SPIR-V image dimensionality so classify_global can build the read-write OpTypeImage (sampled=2).
+def private storage_image_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, dim = SpvDim._2D)
+    if ("{t.structType.name}" == "image2D") return (ok = true, dim = SpvDim._2D)
+    return (ok = false, dim = SpvDim._2D)
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
@@ -261,6 +270,28 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = simg, is_sampler = true))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
             kind = SpirvDescriptorKind.combined_image_sampler, count = 1, stages = stage_flag(stage)))
+        return
+    }
+    // storage image: a global of an opaque image type (image2D) -> UniformConstant OpTypeImage with a
+    // KNOWN format (Rgba8, sampled=2) so no without-format capability is required. DescriptorSet/Binding;
+    // read/written via imageLoad/imageStore. Not in the entry interface (UniformConstant, SPIR-V <= 1.3).
+    let ii = storage_image_info(v._type)
+    if (ii.ok) {
+        let img = type_image(m, type_float(m, 32u), ii.dim, 0u, 2u, SpvImageFormat.Rgba8)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, img)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("storage image '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = img, is_storage_image = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.storage_image, count = 1, stages = stage_flag(stage)))
         return
     }
     if (v.annotation |> find_arg("ssbo") is tBool) {
@@ -373,6 +404,33 @@ def private scalar_class(bt : Type) : int {
     if (bt == Type.tUInt || bt == Type.tUInt2 || bt == Type.tUInt3 || bt == Type.tUInt4) return 1
     if (bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) return 2
     return -1
+}
+
+// A scalar type-name used as a conversion call (float(x)/int(x)/uint(x)). Returns the destination
+// scalar class (0 signed / 1 unsigned / 2 float) or -1 if `name` is not a scalar type name. The
+// vecN constructor names (float2, ...) are handled separately by vector_ctor — they return -1 here.
+def private scalar_type_name_class(name : string) : int {
+    if (name == "int") return 0
+    if (name == "uint") return 1
+    if (name == "float") return 2
+    return -1
+}
+
+// SPIR-V opcode for a scalar conversion from src class to dst class (caller handles same-class no-op).
+// int<->uint is a same-width bit reinterpret (OpBitcast — daslang two's-complement cast semantics);
+// float<->int/uint are value conversions.
+def private convert_op(src_cls, dst_cls : int) : tuple<ok : bool; code : SpvOp> {
+    if (dst_cls == 2) {                                             // -> float
+        if (src_cls == 0) return (ok = true, code = SpvOp.ConvertSToF)
+        if (src_cls == 1) return (ok = true, code = SpvOp.ConvertUToF)
+    } elif (dst_cls == 0) {                                         // -> signed int
+        if (src_cls == 2) return (ok = true, code = SpvOp.ConvertFToS)
+        if (src_cls == 1) return (ok = true, code = SpvOp.Bitcast)
+    } elif (dst_cls == 1) {                                         // -> unsigned int
+        if (src_cls == 2) return (ok = true, code = SpvOp.ConvertFToU)
+        if (src_cls == 0) return (ok = true, code = SpvOp.Bitcast)
+    }
+    return (ok = false, code = SpvOp.Nop)
 }
 
 // daslang binary op -> SPIR-V opcode. Add/Sub/Mul are two's-complement sign-agnostic (IAdd for
@@ -1191,6 +1249,83 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+            e2id[k] = res
+            return expr
+        }
+        // imageStore(image, coord, value): OpLoad the image + OpImageWrite (void statement, no result)
+        if (name == "imageStore") {
+            if (length(expr.arguments) != 3) {
+                errs |> push("imageStore expects (image, coord, value)")
+                return expr
+            }
+            let ig = global_var_of(expr.arguments[0])
+            if (ig == null) {
+                errs |> push("imageStore: first argument must be a storage-image global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(ig)] ?? GlobalInfo()
+            if (!gi.is_storage_image) {
+                errs |> push("imageStore: '{ig.name}' is not a storage image")
+                return expr
+            }
+            let imgval = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, imgval, gi.var_id)
+            let coord = value_of(expr.arguments[1])
+            let texel = value_of(expr.arguments[2])
+            if (coord == 0u || texel == 0u) return expr
+            emit(bm, SEC_FUNCS, SpvOp.ImageWrite, imgval, coord, texel)
+            return expr
+        }
+        // imageLoad(image, coord) : float4: OpLoad the image + OpImageRead
+        if (name == "imageLoad") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("imageLoad expects (image, coord)")
+                return expr
+            }
+            let ig = global_var_of(expr.arguments[0])
+            if (ig == null) {
+                errs |> push("imageLoad: first argument must be a storage-image global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(ig)] ?? GlobalInfo()
+            if (!gi.is_storage_image) {
+                errs |> push("imageLoad: '{ig.name}' is not a storage image")
+                return expr
+            }
+            let imgval = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, imgval, gi.var_id)
+            let coord = value_of(expr.arguments[1])
+            if (coord == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageRead, rt, res, imgval, coord)
+            e2id[k] = res
+            return expr
+        }
+        // scalar numeric conversion: float(int/uint), int(float/uint), uint(float/int). Same-class is a
+        // no-op passthrough; cross-class emits OpConvert* / OpBitcast. Scalar only (vector casts rejected).
+        let dst_cls = scalar_type_name_class(name)
+        if (dst_cls >= 0 && length(expr.arguments) == 1) {
+            let a0 = expr.arguments[0]
+            if (component_count(a0._type.baseType) != 1) {
+                errs |> push("{name}: vector conversion is not supported (scalar only)")
+                return expr
+            }
+            let aid = value_of(a0)
+            if (aid == 0u) return expr
+            let src_cls = scalar_class(a0._type.baseType)
+            if (src_cls == dst_cls) {            // same-class no-op cast, e.g. float(someFloat)
+                e2id[k] = aid
+                return expr
+            }
+            let cc = convert_op(src_cls, dst_cls)
+            if (!cc.ok) {
+                errs |> push("{name}: conversion from {a0._type.baseType} is not supported")
+                return expr
+            }
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, cc.code, rt, res, aid)
             e2id[k] = res
             return expr
         }

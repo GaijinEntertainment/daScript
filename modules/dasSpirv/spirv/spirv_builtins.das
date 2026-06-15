@@ -34,3 +34,18 @@ struct sampler2D {}
 def public texture(s : sampler2D; uv : float2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
+
+// ===== storage images =====
+// image2D is an opaque marker for a read-write storage image (UniformConstant OpTypeImage with a
+// known Rgba8 format, recognized by name in classify_global). imageStore/imageLoad are stubs: their
+// bodies never run (only the AST is read), and they lower to OpImageWrite / OpImageRead. A KNOWN
+// format means no StorageImageRead/WriteWithoutFormat capability is required (lavapipe-safe).
+struct image2D {}
+
+[unused_argument(img, coord, value)]
+def public imageStore(img : image2D; coord : int2; value : float4) : void {}
+
+[unused_argument(img, coord)]
+def public imageLoad(img : image2D; coord : int2) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}

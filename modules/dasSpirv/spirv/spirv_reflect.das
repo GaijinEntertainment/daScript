@@ -16,6 +16,7 @@ enum SpirvDescriptorKind {
     uniform_buffer
     storage_buffer
     combined_image_sampler
+    storage_image
 }
 
 //! Stages a binding / push range is used in (the host maps to e.g. VkShaderStageFlags). A single
@@ -89,6 +90,7 @@ def encode_reflection(refl : SpirvReflection) : array<uint> {
 def private kind_from_int(k : int) : SpirvDescriptorKind {
     if (k == int(SpirvDescriptorKind.storage_buffer)) return SpirvDescriptorKind.storage_buffer
     if (k == int(SpirvDescriptorKind.combined_image_sampler)) return SpirvDescriptorKind.combined_image_sampler
+    if (k == int(SpirvDescriptorKind.storage_image)) return SpirvDescriptorKind.storage_image
     return SpirvDescriptorKind.uniform_buffer
 }
 
