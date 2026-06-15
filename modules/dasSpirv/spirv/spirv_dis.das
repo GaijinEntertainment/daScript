@@ -126,22 +126,15 @@ def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value :
 // words, and ids (id_main + interface globals) are all allocated in the unchanged module-assembly half,
 // so they are stable across the port and compare raw.
 def public op_operand_is_literal(opName : string; idx : int) : bool {
-    if (opName == "OpEntryPoint") return true
-    if (opName == "OpCapability") return true
-    if (opName == "OpMemoryModel") return true
-    if (opName == "OpExecutionMode") return idx >= 1
-    if (opName == "OpDecorate") return idx >= 1
-    if (opName == "OpMemberDecorate") return idx >= 1
-    if (opName == "OpExtInstImport") return idx >= 1
+    if (opName == "OpEntryPoint" || opName == "OpCapability" || opName == "OpMemoryModel") return true
+    if (opName == "OpExecutionMode" || opName == "OpDecorate" || opName == "OpMemberDecorate" || opName == "OpExtInstImport") return idx >= 1
     if (opName == "OpConstant") return idx == 2
     if (opName == "OpTypeInt") return idx == 1 || idx == 2
     if (opName == "OpTypeFloat") return idx == 1
-    if (opName == "OpTypeVector") return idx == 2
-    if (opName == "OpTypeMatrix") return idx == 2
+    if (opName == "OpTypeVector" || opName == "OpTypeMatrix") return idx == 2
     if (opName == "OpTypePointer") return idx == 1
     if (opName == "OpTypeImage") return idx >= 2
-    if (opName == "OpVariable") return idx == 2
-    if (opName == "OpFunction") return idx == 2
+    if (opName == "OpVariable" || opName == "OpFunction") return idx == 2
     if (opName == "OpSelectionMerge") return idx == 1
     if (opName == "OpLoopMerge") return idx == 2
     if (opName == "OpExtInst") return idx == 3

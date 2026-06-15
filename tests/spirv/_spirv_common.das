@@ -256,7 +256,7 @@ def echain {
     if (acc < 0) {
         acc = 0
     } elif (acc < 10) {
-        acc += 1
+        acc++
     } elif (acc < 20) {
         acc += 2
     } else {
@@ -292,7 +292,7 @@ def rfor {
     for (j in urange(0u, n)) {
         acc += j
     }
-    var flag = acc > 50u               // bool local -> Function OpVariable (Store/Load bool)
+    var flag = acc > 50u               // nolint:LINT003 -- must stay `var`: the point is to exercise the bool Function OpVariable Store/Load path (a `let` would be an SSA value, not memory-backed)
     if (flag) {
         acc = 0u
     }

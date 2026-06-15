@@ -11,7 +11,6 @@ options indenting = 4
 require _spirv_common
 require spirv/spirv_dis
 require daslib/fio
-require daslib/strings_boost
 
 def emit_golden(dir, name : string; words : array<uint>) {
     let path = "{dir}/{name}.txt"
