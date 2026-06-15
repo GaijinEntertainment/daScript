@@ -700,6 +700,7 @@ static HANDLE g_singleInstanceMutex = nullptr;
 #else
 #include <sys/file.h>
 #include <unistd.h>
+#include <cerrno>
 static int g_lockFd = -1;
 #endif
 
@@ -859,16 +860,21 @@ int main(int argc, char * argv[]) {
     if (changeCwd && !scriptFile.empty()) {
         auto slash = scriptFile.find_last_of("\\/");
         if (slash != string::npos) {
-            string dir = scriptFile.substr(0, slash);
+            // Keep the separator for root-level paths so the directory stays valid:
+            // POSIX "/foo.das" -> "/", Windows drive root "C:\foo.das" -> "C:\".
+            size_t cut = (slash == 0 || (slash == 2 && scriptFile[1] == ':')) ? slash + 1 : slash;
+            string dir = scriptFile.substr(0, cut);
             scriptFile = scriptFile.substr(slash + 1);
 #ifdef _WIN32
             if (!SetCurrentDirectoryA(dir.c_str())) {
-                fprintf(stderr, "ERROR: -cwd failed to change directory to %s\n", dir.c_str());
+                fprintf(stderr, "ERROR: -cwd failed to change directory to %s (error %lu)\n",
+                        dir.c_str(), (unsigned long)GetLastError());
                 return 1;
             }
 #else
             if (chdir(dir.c_str()) != 0) {
-                fprintf(stderr, "ERROR: -cwd failed to change directory to %s\n", dir.c_str());
+                fprintf(stderr, "ERROR: -cwd failed to change directory to %s: %s\n",
+                        dir.c_str(), strerror(errno));
                 return 1;
             }
 #endif

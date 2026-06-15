@@ -283,7 +283,7 @@ MACRO(DAS_APPLY_STRICT_WARNINGS _target)
                 $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual;-Wno-unqualified-std-cast-call>)
         ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
             target_compile_options(${_target} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-Wno-overloaded-virtual;-Wno-array-bounds;-Wno-clobbered;-Wno-maybe-uninitialized>)
+                $<$<COMPILE_LANGUAGE:CXX>:-Wno-overloaded-virtual;-Wno-array-bounds;-Wno-clobbered;-Wno-maybe-uninitialized;-Wno-stringop-overflow>)
         ENDIF()
     ENDIF()
 ENDMACRO()
