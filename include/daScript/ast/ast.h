@@ -1756,7 +1756,9 @@ namespace das
         Module *getThisModule() const { return thisModule.get(); }
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacro*> getReaderMacro ( const string & markup ) const;
-        void serialize ( AstSerializer & ser );
+        // defined in compiler-lib ast_serialize.cpp; DAS_CC_API exports it from
+        // that lib (DAS_API would resolve to import in a compiler-lib TU)
+        DAS_CC_API void serialize ( AstSerializer & ser );
     protected:
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead
