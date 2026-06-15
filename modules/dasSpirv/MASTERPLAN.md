@@ -972,21 +972,69 @@ The real Phase-8 content is four items:
   `log2`/`fract`/`mod`/`atan2`/`reflect`/`refract`/`length`/`distance`/`normalize`/`cross`/`inversesqrt`
   (+ `dot`→`OpDot`, already core). Tests + census per op; spirv-val is the real oracle.
 
-### Phase 9 — docs + tutorials
+### Phase 9 — SPIR-V reference docs (main tree)
 
-The only doc today is this masterplan:
-- RST reference under `doc/source/` (mirror the dasVulkan docs effort): the annotation surface, the
-  type/layout mapping, the reflection API, the supported-opcode matrix, the "drivers optimize; we emit naive
-  valid SPIR-V" principle.
-- A `tutorials/` page — "write your GPU shaders in daslang" — compute square → textured quad, showing the
-  daslang source, the disassembly, and the host consuming reflection.
+> Working plan: `PHASE9_TUTORIALS.md` (covers the whole docs+rails+tutorials arc), approved before code.
 
-### Phase 10 — `/examples/vulkan` in the main repo (demo-scene + imgui-on-vulkan)
+Mechanical RST reference under `doc/source/`. **Autogen = hook into `doc/reflections/das2rst.das`** (the
+existing module auto-doc generator: per-module `document_module_X` groups public symbols by regex and
+emits `.rst` from RTTI). Phase 9 is mostly "add a `document_module_spirv`" (the `[*_shader]` annotations,
+`spirv_reflect` types/functions, grammar enums) the same way `document_module_pugixml`/`_stbimage` do,
+plus two hand pages: (2) an **overview** (daslang→SPIR-V-direct pitch, "drivers optimize; we emit naive
+valid SPIR-V", reflection-as-single-source) and (3) the **mapping** page — daslang type → SPIR-V
+type/layout (std140/std430, ColMajor matrices, vec3 align), builtin → opcode. The supported-opcode matrix
+sources from the per-phase census set (can't drift). Each Phase-10 rail appends a mapping row; the autogen
+self-updates. dasVulkan keeps its own `vulkan2rst`; the dasSpirv reference links out to its tutorials.
 
-Two runnable apps under `examples/vulkan/` in the **main daslang tree**:
+### Phase 10 — emitter foundation rails (main-tree gated)
+
+> Working plan: `PHASE9_TUTORIALS.md` (rail-gap map grounded in the emitter source). **Tutorials-as-rail-
+> detector** (Boris, 2026-06-15): the language surface is complete, but not every GPU *feature* has a
+> rail. The tutorial set surfaces the gaps; foundation rails land first as gated emitter PRs, then the
+> tutorials consume a finished surface. Most rails also need a **daslang intrinsic** (a name the emitter
+> intercepts, like `texture`/`dot`) declared in `spirv_builtins.das`.
+
+- **10.1 SSBO std430 vec/struct** — lift the scalar-only SSBO-element restriction (ArrayStride + struct
+  member offsets). The biggest single unblocker (particles + all real compute data).
+- **10.2 Composite/global swizzle** — swizzle on a *loaded* composite (UBO/SSBO/sampler result), not just
+  locals (`OpCompositeExtract`/`OpVectorShuffle`). Closes the Phase-8 out-of-scope note.
+- **10.3 Fragment realism** — `discard` (`OpKill`/demote), derivatives (`dFdx/dFdy/fwidth`),
+  `textureSize` (`OpImageQuerySizeLod`), `gl_FragDepth` write. Batchable (same stage, small).
+- **10.4 Depth-compare sampling** — `sampler2DShadow` + compare-sample intrinsic → `OpImageSampleDref*`,
+  Depth image flag, comparison-sampler reflection kind. (Manual-compare shadow works without this; this
+  is the hardware-PCF upgrade.)
+- **10.5 Compute tier** — `@shared` Workgroup-storage globals; `barrier()`/`memoryBarrier()` →
+  `OpControlBarrier`/`OpMemoryBarrier`; atomics → `OpAtomic*`. The differentiator (cross-thread compute).
+
+Each slice: its own PR, all three tiers + census + spirv-val + LCOV green, one fixture per op, a
+mapping-page row. RT-tier rails (ray tracing, mesh/task, geometry/tess, subgroup, 64/16-bit) are **not**
+here — none block the tutorial set; scope per demand (RT = Phase 14).
+
+### Phase 11 — tutorials (dasVulkan repo)
+
+> Working plan: `PHASE9_TUTORIALS.md` (the ladder + the feature→demo→rail table).
+
+SDK-quality runnable tutorials in **dasVulkan's `tutorials/`** (the only place with the GPU runtime +
+lavapipe CI + offscreen readback — the main tree can't take a daspkg dep). Feature → canonical demo
+(depth-fetch → a real shadowmap, not a synthetic probe), each **renders and captures its own image** that
+is *both* the doc figure *and* the regression oracle (exact-analytic on procedural content — the Phase-7
+oracle; self-verifying-tutorial ethos). **Recording: PNG (static) / APNG (animated, not GIF), reusing the
+shared `stbimage` APNG writer + dasGlfw windowing; mp4 via the existing dasImgui ffmpeg process; optional
+voiced narrative or reusable strudel music bed per video** (Boris). Confirmed ladder: triangle, compute
+Mandelbrot, SDF raymarch, textured cube, shadow map, compute particles; plus procedural-noise, parallel-
+reduction/tiled-blur, histogram, instanced field, cubemap skybox, post-fx ping-pong. Ordering follows
+rail availability (full table in `PHASE9_TUTORIALS.md`). The main-tree reference (Phase 9) links to these.
+
+### Phase 12 — `/examples/vulkan` in the main repo (demo-scene + imgui-on-vulkan)
+
+Runnable apps under `examples/vulkan/` in the **main daslang tree** (each its own folder; all need
+`daspkg install dasVulkan`, so they ship as source + README, not in mandatory CI):
 - **`scene/`** — a small demo-scene: a lit, textured, MVP-animated mesh (UBO matrices + sampler + push-constant
   + Phase-7 textures), shaders authored in daslang, layouts auto-built from Phase-5 reflection. The showcase of
-  the whole stack in one file.
+  the whole stack in one file. Wants the finished Phase-10 rail surface.
+- **`pathtracer/`** — a Vulkan port of the existing `examples/pathTracer/` toy path tracer (today it has GL
+  variants: `toy_path_tracer_opengl*.das`). A compute path tracer first (Phase-10 compute-tier + SSBO-struct);
+  a hardware-RT variant later folds into the Phase-14 RT track. Separate daspkg-install folder like the others.
 - **`imgui/`** — imgui rendered on a Vulkan backend, which requires **resurrecting the dasImgui Vulkan
   backend**: `dasImgui/src/module_imgui_vulkan.*` exists but is NOT in dasImgui's CMake (unbuilt); the only
   reference is a gen1 `dasBox/.../example/imgui_vulkan.das` against an obsolete bundled `vulkan_simple_app`.
@@ -1000,7 +1048,7 @@ Two runnable apps under `examples/vulkan/` in the **main daslang tree**:
   real regression gates stay where lavapipe runs: dasVulkan's integration tests. (A future "examples smoke
   with daspkg packages present" lane could slot in here — until then, local + dasVulkan-side CI.)
 
-### Phase 11 — vulkan_lint expansion
+### Phase 13 — vulkan_lint expansion
 
 `daslib/vulkan_lint.das` today is a single rule — **VK001** (prefer the boost wrapper over a raw `vk*` call;
 map generated by the binding generator). Add reflection- and resource-aware rules:
@@ -1012,15 +1060,43 @@ map generated by the binding generator). Add reflection- and resource-aware rule
 - (candidate) raw `vkCmd*` inside a recorded block where a `record_*` boost helper exists.
 - Each rule: opt-out option + test fixture, mirroring VK001.
 
+### Phase 14 — ray tracing (own track, last, local-GPU-only)
+
+> Working plan: a dedicated `PHASE14_RAYTRACING.md` when it starts (own masterplan section).
+
+Ray tracing is a **track, not a rail** (Boris, 2026-06-15 — "way after" everything else): new stages
+(raygen/closest-hit/miss/any-hit/intersection/callable), new storage classes (`RayPayloadKHR`/
+`HitAttributeKHR`/`IncomingRayPayloadKHR`), the `accelerationStructureKHR` type, `OpTraceRayKHR`, ray
+payloads + hit attributes, plus a large dasVulkan-side lift (RT pipeline creation + acceleration-
+structure build + shader-binding-table). Capstone tutorial: raytraced reflections/shadows. **lavapipe
+does not do RT** — so this track has **no CI gate, local-GPU-only** (the one place the no-CI-gate rule
+gives), which is why it is parked last.
+
+### Phase 15 — intrinsic unification + OpenGL cleanup (think-about)
+
+Not scoped — a future-direction note (Boris, 2026-06-15). dasSpirv's Phase-10 shader intrinsics (`discard`/
+`dFdx`/`barrier`/`atomicAdd`/… in `spirv_builtins.das`) parallel a set dasOpenGL/dasGlsl already carries.
+Once both backends are mature, a **shared shader-intrinsic surface** (one set of names + signatures the
+GLSL *and* SPIR-V emitters both intercept) removes the duplication and lets a single shader source target
+either backend. Pairs with a dasOpenGL cleanup pass. Sequenced after the SPIR-V intrinsic set has settled
+(post Phase 10/11), so we unify against a known-good surface rather than a moving one.
+
 **Sequencing & dependencies.** 5 → 6 → 7 → 8 is the spine (Boris's order). The Phase-6 Visitor port goes
 *before* textures (7) and control-flow (8) because those add the most new node-handling and the port changes
 the base they're written against — porting first avoids writing emit-code we'd immediately rewrite, and
-Phase 8's ternary/vector-op handlers drop into the Visitor's expression hooks naturally. Phase 9 docs trail the
-surface they document (after 8, or incrementally). Phase 10's `scene/` wants Phase-7 textures; the `imgui/`
-sub-task is independent of the dasSpirv phases and can land any time after its dasImgui resurrection. Phase
-11's VK002+ want Phase-5 reflection. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all
-PR-protected) with the standing gates: opcode tests + census + spirv-val + LCOV (main tree), lavapipe +
-local-GPU regression (dasVulkan), lint + format, Copilot-to-dry, no GC leak.
+Phase 8's ternary/vector-op handlers drop into the Visitor's expression hooks naturally.
+
+The post-plumbing arc (9 → 14) is **tutorials-as-rail-detector** (`PHASE9_TUTORIALS.md`): Phase 9
+reference docs land first against the 0–8 surface (auto-gen matrix self-updates); Phase 10 foundation
+rails land as gated emitter PRs (10.1 SSBO-std430 unblocks the most); Phase 11 tutorials follow rail
+availability (#1/#2/#4/#10–12 need no new rail and start at once; #3 after 10.2; #6 after 10.1;
+#5-hardware after 10.4; #7 after 10.3; #8/#9 after 10.5). Phase 12's `scene/` consumes the finished
+surface; its `imgui/` sub-task is independent and can land any time after the dasImgui Vulkan-backend
+resurrection. Phase 13's VK002+ want Phase-5 reflection. Phase 14 (ray tracing) is last and
+local-GPU-only. Each phase is its own PR (daslang master, dasVulkan, and dasImgui all PR-protected) with
+the standing gates: opcode tests + census + spirv-val + LCOV (main tree), offscreen self-screenshot +
+exact/tolerance pixel oracle on lavapipe + local-GPU regression (dasVulkan tutorials), lint + format,
+Copilot-to-dry, no GC leak.
 
 ---
 
