@@ -572,7 +572,11 @@ def private ensure_glsl_ext(var m : SpirvModule; var ctx : EmitCtx) : uint {
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
 // variant by operand class; the rest are float-only. Operand class comes from arg 0 (vectors
 // classify by lane kind, so length/normalize/cross/etc. read as float-class). ok=false => not a
-// GLSL.std.450 builtin (or wrong class) -> caller emits a clean error.
+// GLSL.std.450 builtin (or wrong class) -> caller emits a clean error. NOTE: keyed on the DASLANG name,
+// which differs from the GLSL spelling for two: daslang `lerp` -> FMix, daslang `rsqrt` -> InverseSqrt.
+// Only dependency-free builtin `math` functions appear here (no dead branches). Excluded on purpose:
+// daslang has no mix/step/smoothstep; radians/degrees live in daslib/math_boost as das functions whose
+// bodies reference a PI global the dependency walker can't lower (a shader writes the multiply inline).
 def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLstd450> {
     if (name == "abs") {
         if (cls == 2) return (ok = true, op = GLSLstd450.FAbs)
@@ -604,7 +608,7 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     }
     if (cls != 2) return (ok = false, op = GLSLstd450.Round)   // the rest are float-only
     if (name == "sqrt") return (ok = true, op = GLSLstd450.Sqrt)
-    if (name == "inversesqrt") return (ok = true, op = GLSLstd450.InverseSqrt)
+    if (name == "rsqrt") return (ok = true, op = GLSLstd450.InverseSqrt)   // daslang rsqrt == GLSL inversesqrt
     if (name == "sin") return (ok = true, op = GLSLstd450.Sin)
     if (name == "cos") return (ok = true, op = GLSLstd450.Cos)
     if (name == "tan") return (ok = true, op = GLSLstd450.Tan)
@@ -622,16 +626,13 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     if (name == "round") return (ok = true, op = GLSLstd450.Round)
     if (name == "trunc") return (ok = true, op = GLSLstd450.Trunc)
     if (name == "fract") return (ok = true, op = GLSLstd450.Fract)
-    if (name == "radians") return (ok = true, op = GLSLstd450.Radians)
-    if (name == "degrees") return (ok = true, op = GLSLstd450.Degrees)
-    if (name == "mix") return (ok = true, op = GLSLstd450.FMix)
-    if (name == "step") return (ok = true, op = GLSLstd450.Step)
-    if (name == "smoothstep") return (ok = true, op = GLSLstd450.SmoothStep)
+    if (name == "lerp") return (ok = true, op = GLSLstd450.FMix)            // daslang lerp == GLSL mix
     if (name == "length") return (ok = true, op = GLSLstd450.Length)
     if (name == "distance") return (ok = true, op = GLSLstd450.Distance)
     if (name == "cross") return (ok = true, op = GLSLstd450.Cross)
     if (name == "normalize") return (ok = true, op = GLSLstd450.Normalize)
     if (name == "reflect") return (ok = true, op = GLSLstd450.Reflect)
+    if (name == "refract") return (ok = true, op = GLSLstd450.Refract)
     return (ok = false, op = GLSLstd450.Round)
 }
 
@@ -956,6 +957,53 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // Folded vector constants (float2(0.5,0.5) etc. fold to ExprConstFloatN/IntN/UIntN at patch time)
+    // are leaf rvalues with no scalar-style visit registration. emit_const already lowers each to an
+    // OpConstantComposite; record the id so value_of finds it when the node is an operand.
+    def register_vec_const(e : ExpressionPtr) {
+        var bm & = unsafe(*m)
+        let cr = emit_const(bm, e, errs)
+        if (cr.ok) {
+            e2id[intptr(e)] = cr.id
+        }
+    }
+    def override visitExprConstFloat2(var expr : ExprConstFloat2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstFloat3(var expr : ExprConstFloat3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstFloat4(var expr : ExprConstFloat4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt2(var expr : ExprConstInt2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt3(var expr : ExprConstInt3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt4(var expr : ExprConstInt4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt2(var expr : ExprConstUInt2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt3(var expr : ExprConstUInt3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt4(var expr : ExprConstUInt4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+
     // ----- variables: value-let -> SSA id; memory local / global -> pointer -----
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         let k = intptr(expr)
@@ -1174,6 +1222,46 @@ class SpirvEmit : AstVisitor {
         let rt = emit_type(bm, expr._type)
         let res = alloc_id(bm)
         emit(bm, SEC_FUNCS, bo.code, rt, res, l, r)
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
+    // ----- ternary cond ? a : b -> OpSelect. Branchless; both arms are evaluated (eager) which is
+    // correct for side-effect-free shader operands, same rule as eager &&/||. A vector result with a
+    // scalar bool condition is splatted to a bvecN: SPIR-V < 1.4 OpSelect requires the condition width
+    // to match the result component count. -----
+    def override visitExprOp3(var expr : ExprOp3?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        if ("{expr.op}" != "?") {
+            errs |> push("unsupported ternary operator '{expr.op}'")
+            return expr
+        }
+        let n = component_count(expr._type.baseType)
+        if (n == 0) {
+            errs |> push("unsupported ternary result type {expr._type.baseType}")
+            return expr
+        }
+        let cond = value_of(expr.subexpr)
+        let tv = value_of(expr.left)
+        let fv = value_of(expr.right)
+        if (cond == 0u || tv == 0u || fv == 0u) return expr
+        let resty = emit_type(bm, expr._type)
+        var sel_cond = cond
+        if (n > 1 && expr.subexpr._type.baseType == Type.tBool) {   // splat scalar bool -> bvecN
+            let bvec = type_vector(bm, type_bool(bm), n)
+            sel_cond = alloc_id(bm)
+            var sops <- [bvec, sel_cond]
+            sops |> reserve(n + 2)
+            for (_ in range(n)) {
+                sops |> push(cond)
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, sops)
+            delete sops
+        }
+        let res = alloc_id(bm)
+        var ops <- [resty, res, sel_cond, tv, fv]
+        emit_n(bm, SEC_FUNCS, SpvOp.Select, ops)
+        delete ops
         e2id[intptr(expr)] = res
         return expr
     }

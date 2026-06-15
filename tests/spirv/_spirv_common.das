@@ -615,6 +615,80 @@ def public septex_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-8.1 ternary cond ? a : b -> OpSelect (branchless). A scalar select uses the scalar bool
+// condition directly; a vector select with a scalar condition splats the bool to a bvecN first
+// (SPIR-V < 1.4 requires the OpSelect condition width to match the result). =====
+[compute_shader(local_size_x=64, name="tern_spv"), marker(no_coverage)]
+def tern {
+    let i = gl_GlobalInvocationID.x
+    let a = fdata[i]
+    let b = fdata[i + 1u]
+    let s = a > b ? a : b                                        // scalar OpSelect // nolint:PERF015
+    let v = a > b ? float4(a, a, a, a) : float4(b, b, b, b)      // vector OpSelect (splatted condition)
+    fdata[i] = s + v.x
+}
+
+def public tern_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tern_spv)
+    return <- w
+}
+
+// ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
+// OpFAdd/OpFSub/OpFDiv on the vector result type (scalar_class reads the lane kind); unary - is
+// OpFNegate. float2(0.5,0.5) as an operand folds to ExprConstFloat2 -> OpConstantComposite (the gap
+// Phase 7 deferred: a folded const vector used as an rvalue, not only inside a const-array init). =====
+var @in @location = 0 va_in : float2
+var @out @location = 0 va_out : float2
+[fragment_shader(name="vecarith_spv"), marker(no_coverage)]
+def vecarith {
+    let a = va_in
+    let b = va_in + float2(0.5, 0.5)    // folded const-vector operand + component-wise OpFAdd
+    let c = a - b                       // component-wise OpFSub
+    let d = c / b                       // component-wise OpFDiv
+    va_out = -d                         // component-wise OpFNegate
+}
+
+def public vecarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(vecarith_spv)
+    return <- w
+}
+
+// ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
+// Phase 3's dot/sqrt/clamp. Keyed on the DASLANG name (lerp -> FMix, rsqrt -> InverseSqrt). Vectors are
+// built from scalar swizzles (multi-component swizzle of a global is a separate, unrelated gap). Each
+// ext-inst is spirv-val'd + asserted by sub-opcode. =====
+var @in @location = 0 mx_in : float4
+var @out @location = 0 mx_out : float4
+[fragment_shader(name="mathx_spv"), marker(no_coverage)]
+def mathx {
+    let x = mx_in.x
+    let y = mx_in.y
+    let v = float3(x, y, x)
+    let w = float3(y, x, y)
+    var r = 0.0f
+    r += sin(x) + cos(x) + tan(x)
+    r += asin(x) + acos(x) + atan(x) + atan2(y, x)
+    r += pow(x, y) + exp(x) + log(x) + exp2(x) + log2(x)
+    r += floor(x) + ceil(x) + round(x) + trunc(x) + fract(x)
+    r += rsqrt(x)
+    r += abs(x) + sign(x) + min(x, y) + max(x, y)
+    r += lerp(x, y, 0.5f)                       // GLSL mix -> FMix
+    r += length(v) + distance(v, w)
+    let n = normalize(v)
+    let cr = cross(v, w)
+    let rf = reflect(v, w)
+    let rr = refract(v, w, 0.5f)
+    mx_out = float4(r + n.x + cr.x + rf.x + rr.x, 0.0f, 0.0f, 1.0f)
+}
+
+def public mathx_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mathx_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -824,5 +898,15 @@ def public phase7d_emitter_opcodes : table<uint> {
     ]) {
         s |> insert(uint(op))
     }
+    return <- s
+}
+
+// Phase-8.1 adds the ternary -> OpSelect (the bvecN splat reuses OpCompositeConstruct, already declared
+// by Phase 3). Phase-8.2 (vector arithmetic + folded const-vector operands) and Phase-8.3 (broader
+// GLSL.std.450 math, all via the already-declared OpExtInst) add NO new opcodes. So the Phase-8 declared
+// set is 7.4 + OpSelect. 7.4 set + this:
+def public phase8_emitter_opcodes : table<uint> {
+    var s <- phase7d_emitter_opcodes()
+    s |> insert(uint(SpvOp.Select))     // cond ? a : b
     return <- s
 }
