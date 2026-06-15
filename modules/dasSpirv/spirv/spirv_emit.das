@@ -256,6 +256,17 @@ def private storage_image_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
     return (ok = false, dim = SpvDim._2D)
 }
 
+// Exactly the type set emit_type lowers without panicking: a scalar/vector (scalar_class >= 0), bool,
+// a matrix, or a fixed array of those. Lets the @workgroup path reject an unsupported shared type with
+// a clean diagnostic instead of crashing in emit_type (struct/handle/dynamic-array shared vars).
+def private is_emittable_value_type(t : TypeDecl?) : bool {
+    if (t == null) return false
+    if (matrix_info(t).ok) return true
+    let bt = t.baseType
+    if (bt == Type.tFixedArray && t.firstType != null) return is_emittable_value_type(t.firstType)
+    return scalar_class(bt) >= 0 || bt == Type.tBool
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
@@ -460,6 +471,10 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     if (v.annotation |> find_arg("workgroup") is tBool) {
         if (stage != ShaderStage.Compute) {
             errors |> push("shared variable '{vname}': @workgroup memory is only valid in a compute shader")
+            return
+        }
+        if (!is_emittable_value_type(v._type)) {
+            errors |> push("shared variable '{vname}': @workgroup type must be a scalar, vector, matrix, or fixed array of those")
             return
         }
         let vt = emit_type(m, v._type)
@@ -1567,6 +1582,13 @@ class SpirvEmit : AstVisitor {
                 return expr
             }
             let rgi = ctx.globals?[intptr(rg)] ?? GlobalInfo()
+            // only @workgroup (Workgroup) and @ssbo (StorageBuffer) are writable atomic targets; a
+            // @uniform/@push_constant/builtin lvalue is read-only storage -> reject cleanly rather than
+            // emit an OpAtomic* on an invalid storage class (fail-closed, not spirv-val-only).
+            if (rgi.storage != SpvStorageClass.Workgroup && rgi.storage != SpvStorageClass.StorageBuffer) {
+                errs |> push("{name}: atomic target must live in @workgroup or @ssbo memory")
+                return expr
+            }
             let scope = rgi.storage == SpvStorageClass.Workgroup ? SpvScope.Workgroup : SpvScope.Device
             let sc_id = const_uint(bm, uint(scope))
             let sem_id = const_uint(bm, uint(SpvMemorySemantics.Relaxed))
