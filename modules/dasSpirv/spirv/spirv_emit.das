@@ -1441,9 +1441,10 @@ def private emit_body(var m : SpirvModule; var ctx : EmitCtx; body : ExpressionP
 // Value threading is llvm_jit's side-map model: each node records its result keyed by intptr — e2id for
 // an rvalue SSA id, e2ptr/e2pty for an lvalue pointer + pointee-type. Parents read children back out.
 // ExprRef2Value is the load marker; bare lvalue nodes stay pointers and value_of() loads on demand
-// (matching the hand-walker's `_type.flags.ref` branch). The patch-stage AST is const, so each hook
-// const-strips its node once (we only read the AST and emit into the side module — never mutate it),
-// after which the body reuses the existing non-const emit helpers verbatim.
+// (matching the hand-walker's `_type.flags.ref` branch). The patch-stage AST arrives const; each hook
+// takes its node as a `var` param (`def override visitExprX(var expr : ExprX?)`), which binds a non-const
+// view directly — no reinterpret const-strip, and `return expr` type-checks. We only read the AST and emit
+// into the side module (never mutate it), so the body reuses the existing non-const emit helpers verbatim.
 class SpirvEmit : AstVisitor {
     adapter : VisitorAdapter?
     @do_not_delete m   : SpirvModule?    // borrowed (addr of generate_spirv's module) — not owned
@@ -1475,28 +1476,24 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- constants -----
-    def override visitExprConstInt(cexpr : ExprConstInt?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprConstInt? -const>(cexpr))
+    def override visitExprConstInt(var expr : ExprConstInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
         e2id[intptr(expr)] = const_int(bm, expr.value)
         return expr
     }
-    def override visitExprConstUInt(cexpr : ExprConstUInt?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprConstUInt? -const>(cexpr))
+    def override visitExprConstUInt(var expr : ExprConstUInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
         e2id[intptr(expr)] = const_uint(bm, expr.value)
         return expr
     }
-    def override visitExprConstFloat(cexpr : ExprConstFloat?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprConstFloat? -const>(cexpr))
+    def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
         var bm & = unsafe(*m)
         e2id[intptr(expr)] = const_float(bm, expr.value)
         return expr
     }
 
     // ----- variables: value-let -> SSA id; memory local / global -> pointer -----
-    def override visitExprVar(cexpr : ExprVar?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprVar? -const>(cexpr))
+    def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         let k = intptr(expr)
         if (expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block) {
             let vk = intptr(expr.variable)
@@ -1516,8 +1513,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- swizzle: global single-component -> pointer (AccessChain); value -> extract/shuffle -----
-    def override visitExprSwizzle(cexpr : ExprSwizzle?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprSwizzle? -const>(cexpr))
+    def override visitExprSwizzle(var expr : ExprSwizzle?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
         let gv = global_var_of(expr.value)
@@ -1553,8 +1549,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- indexing: ssbo array or local fixed array -> pointer (AccessChain) -----
-    def override visitExprAt(cexpr : ExprAt?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprAt? -const>(cexpr))
+    def override visitExprAt(var expr : ExprAt?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
         let lev = expr.subexpr ?as ExprVar
@@ -1596,15 +1591,13 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- the load marker: read an lvalue child as a value -----
-    def override visitExprRef2Value(cexpr : ExprRef2Value?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprRef2Value? -const>(cexpr))
+    def override visitExprRef2Value(var expr : ExprRef2Value?) : ExpressionPtr {
         e2id[intptr(expr)] = value_of(expr.subexpr)
         return expr
     }
 
     // ----- unary: !, -, ~ (value) and statement-level ++/-- (load-op-store) -----
-    def override visitExprOp1(cexpr : ExprOp1?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprOp1? -const>(cexpr))
+    def override visitExprOp1(var expr : ExprOp1?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let op = "{expr.op}"
         if (op == "++" || op == "--") {
@@ -1647,8 +1640,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
-    def override visitExprOp2(cexpr : ExprOp2?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprOp2? -const>(cexpr))
+    def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let op = "{expr.op}"
         if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
@@ -1709,8 +1701,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- store: dst = rhs -----
-    def override visitExprCopy(cexpr : ExprCopy?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprCopy? -const>(cexpr))
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let p = ptr_of(expr.left)
         let val = value_of(expr.right)
@@ -1721,8 +1712,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- let: memory local -> store init; value-let -> bind SSA id -----
-    def override visitExprLetVariable(cexpr : ExprLet?; carg : VariablePtr; lastArg : bool) : VariablePtr {
-        var arg = unsafe(reinterpret<Variable? -const>(carg))
+    def override visitExprLetVariable(cexpr : ExprLet?; var arg : VariablePtr; lastArg : bool) : VariablePtr {
         var bm & = unsafe(*m)
         if (arg.init == null) {
             errs |> push("uninitialized local '{arg.name}' is not supported (every let/var must have an initializer)")
@@ -1742,8 +1732,7 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- return -----
-    def override visitExprReturn(cexpr : ExprReturn?) : ExpressionPtr {
-        var expr = unsafe(reinterpret<ExprReturn? -const>(cexpr))
+    def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
         emit(bm, SEC_FUNCS, SpvOp.Return)
         ctx.terminated = true

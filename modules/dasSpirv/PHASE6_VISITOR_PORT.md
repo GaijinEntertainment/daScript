@@ -249,14 +249,16 @@ positively:
    `ExprRef2Value` is the load marker; unwrapped lvalue nodes are pointers. `gl_GlobalInvocationID` reads
    as a global (`local=arg=_block=false`), `i` as a local; swizzle-of-global has `ref=true`.
 
-**New finding (folded into the design):** at patch the body nodes are **const** (`ExprVar? const`, …), so
-a `visit*` hook cannot `return expr` directly (the return slot is non-const `ExpressionPtr`). Emission of
-value-producing nodes must happen in `visit*` (post-order — children ids ready) and the hook returns the
-**same** node through a one-line const-cast helper (`return unsafe(reinterpret<ExpressionPtr>(expr))` — safe
-because we never mutate the AST, only read it and emit into the side module). `preVisit*` (void) hooks need
-no such cast and are used for the pre-order work (block setup, control-flow header emission, var
-pre-declare). llvm_jit returns `expr` directly only because it runs at true codegen where nodes are
-non-const; at patch we const-cast. *(The probe itself sidestepped this by using `preVisit`-only hooks.)*
+**New finding (folded into the design):** at patch the body nodes arrive **const** to the hook. The clean
+idiom is to declare the hook parameter as **`var`**: `def override visitExprVar(var expr : ExprVar?)` gives a
+non-const pointer binding directly — no `unsafe(reinterpret<ExprX? -const>(cexpr))` const-strip, and
+`return expr` type-checks against the non-const `ExpressionPtr` return slot. The same applies to
+`visitExprLetVariable(...; var arg : VariablePtr; ...)`. Emission of value-producing nodes still happens in
+`visit*` (post-order — children ids ready); `preVisit*` (void) hooks do the pre-order work (block setup,
+control-flow header emission, var pre-declare). This works because we only read the AST and emit into the
+side module — never mutate the node — so the non-const view is sound. *(The earlier const-cast-helper plan
+and the reinterpret-per-hook of 6.1 were both obviated by the `var`-param form; the probe itself sidestepped
+the issue by using `preVisit`-only hooks.)*
 
 ## 10. Remaining risks (post-spike)
 
