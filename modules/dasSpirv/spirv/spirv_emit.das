@@ -1909,7 +1909,7 @@ class SpirvEmit : AstVisitor {
         let cls = empty(expr.arguments) ? -1 : scalar_class(expr.arguments[0]._type.baseType)
         let ge = glsl_ext_op(name, cls)
         if (ge.ok) {
-            let set = ensure_glsl_ext(bm, unsafe(*ctx))
+            let set = ensure_glsl_ext(bm, *ctx)
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             var ops <- [rt, res, set, uint(ge.op)]
@@ -2135,6 +2135,138 @@ class SpirvEmit : AstVisitor {
         emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
         ctx.terminated = true
     }
+
+    // ===== Fail-closed rejections (Phase 6.4) =====
+    // Each shader-illegal construct gets an explicit preVisit override that records a clean error, so an
+    // unsupported node can never be silently walked over into an empty/wrong blob. The value_of/ptr_of
+    // backstop above is the complement: it catches a walked-but-unlowered node (incl. a future AST node
+    // type we have no hook for) the moment a parent reads its missing id. Mirrors dasGlsl's discipline.
+    def override preVisitExprNew(expr : ExprNew?) : void {
+        errs |> push("new is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAscend(expr : ExprAscend?) : void {
+        errs |> push("new (ascend) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprDelete(expr : ExprDelete?) : void {
+        errs |> push("delete is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprStringBuilder(expr : ExprStringBuilder?) : void {
+        errs |> push("string builder is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprNamedCall(expr : ExprNamedCall?) : void {
+        errs |> push("named call is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprNullCoalescing(expr : ExprNullCoalescing?) : void {
+        errs |> push("null coalescing (??) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprCast(expr : ExprCast?) : void {
+        errs |> push("cast is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprPtr2Ref(expr : ExprPtr2Ref?) : void {
+        errs |> push("pointer deref is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprRef2Ptr(expr : ExprRef2Ptr?) : void {
+        errs |> push("addr is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
+        errs |> push("function address (@@) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprConstPtr(expr : ExprConstPtr?) : void {
+        errs |> push("pointer constant is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeAt(expr : ExprSafeAt?) : void {
+        errs |> push("safe index (?[]) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeField(expr : ExprSafeField?) : void {
+        errs |> push("safe field (?.) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprIsType(expr : ExprIs?; typeDecl : TypeDeclPtr) : void {
+        errs |> push("'is' type test is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprIsVariant(expr : ExprIsVariant?) : void {
+        errs |> push("variant 'is' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAsVariant(expr : ExprAsVariant?) : void {
+        errs |> push("variant 'as' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeAsVariant(expr : ExprSafeAsVariant?) : void {
+        errs |> push("variant '?as' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMoveRight(expr : ExprMove?; right : ExpressionPtr) : void {
+        errs |> push("move (<-) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) : void {
+        errs |> push("clone (:=) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprWith(expr : ExprWith?) : void {
+        errs |> push("with is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+        errs |> push("try/recover is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeVariant(expr : ExprMakeVariant?) : void {
+        errs |> push("variant construction is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeTuple(expr : ExprMakeTuple?) : void {
+        errs |> push("tuple construction is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
+        errs |> push("struct construction is not supported in SPIR-V shaders")
+    }
+    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool {
+        return false   // already rejected in preVisit; don't descend into the (unlowerable) field inits
+    }
+    def override preVisitExprArrayComprehension(expr : ExprArrayComprehension?) : void {
+        errs |> push("array comprehension is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprTypeInfo(expr : ExprTypeInfo?) : void {
+        errs |> push("typeinfo is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprLabel(expr : ExprLabel?) : void {
+        errs |> push("label is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprGoto(expr : ExprGoto?) : void {
+        errs |> push("goto is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAssert(expr : ExprAssert?) : void {
+        errs |> push("assert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprStaticAssert(expr : ExprStaticAssert?) : void {
+        errs |> push("static_assert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprQuote(expr : ExprQuote?) : void {
+        errs |> push("quote is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprDebug(expr : ExprDebug?) : void {
+        errs |> push("debug is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        errs |> push("invoke is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprErase(expr : ExprErase?) : void {
+        errs |> push("erase is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSetInsert(expr : ExprSetInsert?) : void {
+        errs |> push("set insert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprFind(expr : ExprFind?) : void {
+        errs |> push("find is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprKeyExists(expr : ExprKeyExists?) : void {
+        errs |> push("key_exists is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprYield(expr : ExprYield?) : void {
+        errs |> push("yield is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
+        errs |> push("closure / block is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeGenerator(expr : ExprMakeGenerator?) : void {
+        errs |> push("generator is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMemZero(expr : ExprMemZero?) : void {
+        errs |> push("memzero is not supported in SPIR-V shaders")
+    }
 }
 
 // Phase-6 incremental scaffold: which shader bodies the visitor fully covers today. Grown per sub-phase;
@@ -2146,7 +2278,10 @@ def private visitor_handles(fn : FunctionPtr) : bool {
         || n == "nloop" || n == "echain" || n == "eret" || n == "rfor"
         || n == "tri_vert" || n == "tri_frag" || n == "vindex" || n == "raster_math"
         || n == "ubo_frag" || n == "mvp_vert" || n == "pc_frag" || n == "tex_frag"
-        || n == "catri")
+        || n == "catri"
+        // Phase-6.4 fail-closed negative fixtures (tests/spirv/_fc_*.das): routed through the
+        // visitor so the rejection paths exercised are the VISITOR's, not the to-be-deleted hand-walker.
+        || n == "fc_call" || n == "fc_global" || n == "fc_localtype" || n == "fc_stmt")
 }
 
 def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr; var errors : array<string>) {
