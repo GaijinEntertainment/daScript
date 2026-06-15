@@ -1434,6 +1434,342 @@ def private emit_body(var m : SpirvModule; var ctx : EmitCtx; body : ExpressionP
     }
 }
 
+// ===== SpirvEmit : AstVisitor (Phase 6 port — incremental) =====
+// Visitor-based replacement for the emit_* hand-walker, modeled on llvm_jit. Built construct-by-
+// construct: generate_spirv routes only the bodies visitor_handles() covers to the visitor; the rest
+// stay on emit_body until the port completes (then the emit_* hand-walker + this scaffold are deleted).
+// Value threading is llvm_jit's side-map model: each node records its result keyed by intptr — e2id for
+// an rvalue SSA id, e2ptr/e2pty for an lvalue pointer + pointee-type. Parents read children back out.
+// ExprRef2Value is the load marker; bare lvalue nodes stay pointers and value_of() loads on demand
+// (matching the hand-walker's `_type.flags.ref` branch). The patch-stage AST is const, so each hook
+// const-strips its node once (we only read the AST and emit into the side module — never mutate it),
+// after which the body reuses the existing non-const emit helpers verbatim.
+class SpirvEmit : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete m   : SpirvModule?    // borrowed (addr of generate_spirv's module) — not owned
+    @do_not_delete ctx : EmitCtx?        // borrowed (addr of generate_spirv's ctx) — not owned
+    e2id    : table<uint64; uint>        // intptr(Expression) -> rvalue SSA result-id
+    e2ptr   : table<uint64; uint>        // intptr(Expression) -> lvalue pointer result-id
+    e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
+    errs    : array<string>
+
+    // coerce a visited child to an rvalue id: a value passes through; a pointer is OpLoad'd here (the
+    // bare-ref load, matching emit_value's `_type.flags.ref` branch).
+    def value_of(e : ExpressionPtr) : uint {
+        let k = intptr(e)
+        if (key_exists(e2id, k)) return e2id?[k] ?? 0u
+        if (key_exists(e2ptr, k)) {
+            var bm & = unsafe(*m)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, e2pty?[k] ?? 0u, res, e2ptr?[k] ?? 0u)
+            return res
+        }
+        errs |> push("internal: no rvalue available for {e.__rtti}")
+        return 0u
+    }
+    def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
+        let k = intptr(e)
+        if (key_exists(e2ptr, k)) return (id = e2ptr?[k] ?? 0u, pty = e2pty?[k] ?? 0u)
+        errs |> push("internal: {e.__rtti} is not an lvalue")
+        return (id = 0u, pty = 0u)
+    }
+
+    // ----- constants -----
+    def override visitExprConstInt(cexpr : ExprConstInt?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprConstInt? -const>(cexpr))
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_int(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstUInt(cexpr : ExprConstUInt?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprConstUInt? -const>(cexpr))
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_uint(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstFloat(cexpr : ExprConstFloat?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprConstFloat? -const>(cexpr))
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_float(bm, expr.value)
+        return expr
+    }
+
+    // ----- variables: value-let -> SSA id; memory local / global -> pointer -----
+    def override visitExprVar(cexpr : ExprVar?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprVar? -const>(cexpr))
+        let k = intptr(expr)
+        if (expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block) {
+            let vk = intptr(expr.variable)
+            if (key_exists(ctx.local_vars, vk)) {
+                let lv = ctx.local_vars?[vk] ?? LocalVar()
+                e2ptr[k] = lv.ptr_id
+                e2pty[k] = lv.value_type
+            } else {
+                e2id[k] = ctx.locals?[vk] ?? 0u
+            }
+        } else {
+            let gi = ctx.globals?[intptr(expr.variable)] ?? GlobalInfo()
+            e2ptr[k] = gi.var_id
+            e2pty[k] = gi.value_type
+        }
+        return expr
+    }
+
+    // ----- swizzle: global single-component -> pointer (AccessChain); value -> extract/shuffle -----
+    def override visitExprSwizzle(cexpr : ExprSwizzle?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprSwizzle? -const>(cexpr))
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let gv = global_var_of(expr.value)
+        if (gv != null) {
+            if (length(expr.fields) != 1) {
+                errs |> push("only single-component swizzle of a global is supported for now")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
+            let pointee = emit_type(bm, expr._type)
+            let ptr_t = type_pointer(bm, gi.storage, pointee)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(expr.fields[0])))
+            e2ptr[k] = res
+            e2pty[k] = pointee
+        } else {
+            let base = value_of(expr.value)
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            if (length(expr.fields) == 1) {
+                emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(expr.fields[0]))
+            } else {
+                var ops <- [rt, res, base, base]
+                for (f in expr.fields) {
+                    ops |> push(uint(f))
+                }
+                emit_n(bm, SEC_FUNCS, SpvOp.VectorShuffle, ops)
+                delete ops
+            }
+            e2id[k] = res
+        }
+        return expr
+    }
+
+    // ----- indexing: ssbo array or local fixed array -> pointer (AccessChain) -----
+    def override visitExprAt(cexpr : ExprAt?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprAt? -const>(cexpr))
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let lev = expr.subexpr ?as ExprVar
+        if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
+            let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
+            if (lv.ptr_id == 0u) {
+                errs |> push("indexing local '{lev.name}': only fixed-array `var`/`let` locals are indexable")
+                return expr
+            }
+            let pointee = emit_type(bm, expr._type)
+            let idx = value_of(expr.index)
+            let ptr_t = type_pointer(bm, SpvStorageClass.Function, pointee)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
+            e2ptr[k] = res
+            e2pty[k] = pointee
+            return expr
+        }
+        let bv = global_var_of(expr.subexpr)
+        if (bv == null) {
+            errs |> push("indexing is only supported on a global ssbo array or a local fixed array for now")
+            return expr
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_ssbo) {
+            errs |> push("only ssbo array indexing is supported for now")
+            return expr
+        }
+        let pointee = emit_type(bm, expr._type)
+        let idx = value_of(expr.index)
+        let res = alloc_id(bm)
+        let ptr_t = type_pointer(bm, gi.storage, pointee)
+        var ops <- [ptr_t, res, gi.var_id, const_uint(bm, 0u), idx]
+        emit_n(bm, SEC_FUNCS, SpvOp.AccessChain, ops)
+        delete ops
+        e2ptr[k] = res
+        e2pty[k] = pointee
+        return expr
+    }
+
+    // ----- the load marker: read an lvalue child as a value -----
+    def override visitExprRef2Value(cexpr : ExprRef2Value?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprRef2Value? -const>(cexpr))
+        e2id[intptr(expr)] = value_of(expr.subexpr)
+        return expr
+    }
+
+    // ----- unary: !, -, ~ (value) and statement-level ++/-- (load-op-store) -----
+    def override visitExprOp1(cexpr : ExprOp1?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprOp1? -const>(cexpr))
+        var bm & = unsafe(*m)
+        let op = "{expr.op}"
+        if (op == "++" || op == "--") {
+            let cls = scalar_class(expr.subexpr._type.baseType)
+            let bo = binop_code(op == "++" ? "+" : "-", cls)
+            if (!bo.ok) {
+                errs |> push("unsupported {expr.op} on {expr.subexpr._type.baseType}")
+                return expr
+            }
+            let one = const_one(bm, cls)
+            let p = ptr_of(expr.subexpr)
+            if (p.id != 0u) {
+                let cur = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, one)
+                emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
+            }
+            return expr
+        }
+        let v = value_of(expr.subexpr)
+        if (v == 0u) return expr
+        if (op == "!") {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.LogicalNot, bt, res, v)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        let uo = unop_code(op, scalar_class(expr.subexpr._type.baseType))
+        if (!uo.ok) {
+            errs |> push("unsupported unary op '{expr.op}' on {expr.subexpr._type.baseType}")
+            return expr
+        }
+        let rt = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, uo.code, rt, res, v)
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
+    // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
+    def override visitExprOp2(cexpr : ExprOp2?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprOp2? -const>(cexpr))
+        var bm & = unsafe(*m)
+        let op = "{expr.op}"
+        if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
+            let bo = binop_code(compound_base(op), scalar_class(expr.left._type.baseType))
+            if (!bo.ok) {
+                errs |> push("unsupported compound assignment '{expr.op}'")
+                return expr
+            }
+            let rhs = value_of(expr.right)
+            let p = ptr_of(expr.left)
+            if (p.id != 0u && rhs != 0u) {
+                let cur = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs)
+                emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
+            }
+            return expr
+        }
+        let cls = scalar_class(expr.left._type.baseType)
+        let l = value_of(expr.left)
+        let r = value_of(expr.right)
+        if (l == 0u || r == 0u) return expr
+        if (op == "*") {
+            let mr = emit_mul(bm, expr, expr, l, r, errs)
+            if (mr.handled) {
+                if (mr.id != 0u) {
+                    e2id[intptr(expr)] = mr.id
+                }
+                return expr
+            }
+        }
+        let cc = cmp_code(op, cls)
+        if (cc.ok) {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, cc.code, bt, res, l, r)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        if (op == "&&" || op == "||") {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, op == "&&" ? SpvOp.LogicalAnd : SpvOp.LogicalOr, bt, res, l, r)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        let bo = binop_code(op, cls)
+        if (!bo.ok) {
+            errs |> push("unsupported binary op '{expr.op}' on {expr.left._type.baseType}")
+            return expr
+        }
+        let rt = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, bo.code, rt, res, l, r)
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
+    // ----- store: dst = rhs -----
+    def override visitExprCopy(cexpr : ExprCopy?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprCopy? -const>(cexpr))
+        var bm & = unsafe(*m)
+        let p = ptr_of(expr.left)
+        let val = value_of(expr.right)
+        if (p.id != 0u && val != 0u) {
+            emit(bm, SEC_FUNCS, SpvOp.Store, p.id, val)
+        }
+        return expr
+    }
+
+    // ----- let: memory local -> store init; value-let -> bind SSA id -----
+    def override visitExprLetVariable(cexpr : ExprLet?; carg : VariablePtr; lastArg : bool) : VariablePtr {
+        var arg = unsafe(reinterpret<Variable? -const>(carg))
+        var bm & = unsafe(*m)
+        if (arg.init == null) {
+            errs |> push("uninitialized local '{arg.name}' is not supported (every let/var must have an initializer)")
+            return arg
+        }
+        let vk = intptr(arg)
+        if (key_exists(ctx.local_vars, vk)) {
+            let lv = ctx.local_vars?[vk] ?? LocalVar()
+            let val = value_of(arg.init)
+            if (val != 0u) {
+                emit(bm, SEC_FUNCS, SpvOp.Store, lv.ptr_id, val)
+            }
+        } else {
+            ctx.locals[vk] = value_of(arg.init)
+        }
+        return arg
+    }
+
+    // ----- return -----
+    def override visitExprReturn(cexpr : ExprReturn?) : ExpressionPtr {
+        var expr = unsafe(reinterpret<ExprReturn? -const>(cexpr))
+        var bm & = unsafe(*m)
+        emit(bm, SEC_FUNCS, SpvOp.Return)
+        ctx.terminated = true
+        return expr
+    }
+}
+
+// Phase-6 incremental scaffold: which shader bodies the visitor fully covers today. Grown per sub-phase;
+// removed (always-true) once the visitor handles every construct and emit_body is deleted.
+def private visitor_handles(fn : FunctionPtr) : bool {
+    let n = "{fn.name}"
+    return n == "square" || n == "uarith" || n == "iarith" || n == "farith"
+}
+
+def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr; var errors : array<string>) {
+    var v = new SpirvEmit(m = unsafe(addr(m)), ctx = unsafe(addr(ctx)))
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(fn.body, v.adapter)
+    }
+    errors |> push_from(v.errs)
+    unsafe {
+        delete v
+    }
+}
+
 // ===== entry =====
 def private execution_model(stage : ShaderStage) : SpvExecutionModel {
     if (stage == ShaderStage.Vertex) return SpvExecutionModel.Vertex
@@ -1495,7 +1831,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
 
     // Function-storage OpVariables must lead the entry block, before any body code.
     collect_locals(m, ctx, fn.body, errors)
-    emit_body(m, ctx, fn.body, errors)
+    // Phase 6: route bodies the AstVisitor covers to it; the rest stay on the emit_body hand-walker
+    // until the port is complete (then visitor_handles is always-true and emit_body is deleted).
+    if (visitor_handles(fn)) {
+        drive_emit(m, ctx, fn, errors)
+    } else {
+        emit_body(m, ctx, fn.body, errors)
+    }
 
     if (!ctx.terminated) {
         emit(m, SEC_FUNCS, SpvOp.Return)
