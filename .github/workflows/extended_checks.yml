@@ -137,11 +137,10 @@ jobs:
       if: runner.os == 'Windows'
       uses: actions/cache@v4
       with:
-        # Whole vcpkg/ dir: bootstrapped vcpkg.exe + installed/<triplet>/openssl.
-        # On hit, install step skips clone + bootstrap + openssl build. Key is
+        # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Key is
         # shared with build.yml so this reads build.yml's master-seeded slot.
         path: vcpkg
-        key: vcpkg-x64-windows-v1
+        key: vcpkg-x64-windows-v2
 
     - name: "Install openssl (Windows)"
       if: runner.os == 'Windows'
@@ -151,6 +150,8 @@ jobs:
         fi
         ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
         echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+        # Drop build intermediates so the saved cache holds only installed/ — ~1.2GiB -> ~0.1GiB.
+        rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
 
     # sccache with LOCAL-DISK backend, wrapped in ONE actions/cache entry per
     # matrix config — mirrors build.yml. The GHA backend writes one cache item

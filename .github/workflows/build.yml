@@ -246,10 +246,10 @@ jobs:
       if: runner.os == 'Windows'
       uses: actions/cache@v4
       with:
-        # Whole vcpkg/ dir: bootstrapped vcpkg.exe + installed/<triplet>/openssl.
-        # On hit, install step skips clone + bootstrap + openssl build.
+        # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Build
+        # intermediates (buildtrees/downloads/packages) are trimmed pre-save below.
         path: vcpkg
-        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v1
+        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
 
     - name: "Install openssl windows"
       if: runner.os == 'Windows'
@@ -260,6 +260,8 @@ jobs:
         ./vcpkg/vcpkg install openssl:${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows --binarycaching
         echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
         echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+        # Drop build intermediates so the saved cache holds only installed/ — ~1.2GiB -> ~0.1GiB.
+        rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
 
     - name: "Install: Required Dev Packages"
       run: |
@@ -607,7 +609,9 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: CLANG64
-        update: true
+        # update:false keeps the cached pkg snapshot stable+small (no per-PR full
+        # `pacman -Syu` writing a fresh ~1.65GiB cache that evicts master slots).
+        update: false
         cache: true
         install: >-
           mingw-w64-clang-x86_64-toolchain

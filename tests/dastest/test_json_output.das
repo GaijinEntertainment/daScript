@@ -27,7 +27,7 @@ def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let dastest_path = "{das_root}/dastest/dastest.das"
     let json_file = "{das_root}/tests/dastest/_temp_{fixture}.json"
     let test_file = "{das_root}/tests/dastest/_fixture_{fixture}.das"
-    let cmd = "{compiler} {dastest_path} -- --test {test_file} --json-file {json_file} {extra_args}"
+    let cmd = "{compiler} -dasroot {das_root} {dastest_path} -- --test {test_file} --json-file {json_file} {extra_args}"
     var exitCode = 0
     let output = build_string() $(writer) {
         unsafe {
@@ -94,7 +94,7 @@ def test_failing_json_output(tt : T?) {
     tt |> success(fail_result != null, "test_will_fail should be in results")
     if (fail_result != null) {
         tt |> success(!fail_result.passed, "test_will_fail should not pass")
-        tt |> success(length(fail_result.messages) > 0, "failed test should have messages")
+        tt |> success(!empty(fail_result.messages), "failed test should have messages")
         tt |> success(!empty(fail_result.location), "failed test should have location")
     }
     var pass_result = find_test(report, "test_will_pass")
@@ -127,13 +127,13 @@ def test_skipped_json_output(tt : T?) {
 [test]
 def test_benchmark_json_output(tt : T?) {
     let report = run_dastest("bench", "--bench")
-    tt |> success(length(report.tests) > 0, "should have at least one result in tests array")
+    tt |> success(!empty(report.tests), "should have at least one result in tests array")
     var bench_result = find_test(report, "bench_simple")
     tt |> success(bench_result != null, "bench_simple should be in results")
     if (bench_result != null) {
         tt |> success(bench_result.passed, "benchmark should pass")
         tt |> success(bench_result.time_usec > 0, "benchmark should have positive time")
-        tt |> success(length(bench_result.messages) > 0, "benchmark should have sub-benchmark messages")
+        tt |> success(!empty(bench_result.messages), "benchmark should have sub-benchmark messages")
         // Verify message contains ns/op stats
         let msg = bench_result.messages[0]
         tt |> success(find(msg, "ns/op") >= 0, "benchmark message should contain 'ns/op'")
