@@ -73,6 +73,19 @@ def public texture(s : sampler2DArray; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
+// ===== separate image + sampler =====
+// texture2D is a standalone sampled image (OpTypeImage, no sampler) and sampler is a standalone
+// OpTypeSampler -- two independent descriptors with their own @binding. sampleTexture combines them at
+// the call site (OpSampledImage) before sampling (OpImageSampleImplicitLod, fragment-only). This is the
+// Vulkan separate-image/sampler model, distinct from the combined sampler2D.
+struct texture2D {}
+struct sampler {}
+
+[unused_argument(tex, smp, uv)]
+def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
 // ===== storage images =====
 // image2D is an opaque marker for a read-write storage image (UniformConstant OpTypeImage with a
 // known Rgba8 format, recognized by name in classify_global). imageStore/imageLoad are stubs: their

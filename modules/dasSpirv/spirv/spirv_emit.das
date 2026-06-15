@@ -33,6 +33,8 @@ struct GlobalInfo {
     is_block   : bool               // a Block-decorated struct (ssbo OR ubo); member access -> OpAccessChain by field index
     is_sampler : bool               // a combined image sampler (UniformConstant OpTypeSampledImage); used via texture()
     is_storage_image : bool         // a read-write storage image (UniformConstant OpTypeImage); used via imageLoad/imageStore
+    is_separate_image : bool        // a standalone sampled image (texture2D, OpTypeImage); combined at the call via OpSampledImage
+    is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -296,6 +298,31 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = img, is_storage_image = true))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
             kind = SpirvDescriptorKind.storage_image, count = 1, stages = stage_flag(stage)))
+        return
+    }
+    // separate image + sampler (Vulkan's split model): a texture2D is a standalone sampled OpTypeImage,
+    // a sampler is a standalone OpTypeSampler -- each its own UniformConstant descriptor. sampleTexture()
+    // combines them at the call site (OpSampledImage).
+    let stn = v._type != null && v._type.baseType == Type.tStructure && v._type.structType != null ? "{v._type.structType.name}" : ""
+    if (stn == "texture2D" || stn == "sampler") {
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("'{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        let is_img = stn == "texture2D"
+        let vt = is_img ? type_image(m, type_float(m, 32u), SpvDim._2D) : type_sampler(m)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, vt)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant,
+            value_type = vt, is_separate_image = is_img, is_separate_sampler = !is_img))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = is_img ? SpirvDescriptorKind.sampled_image : SpirvDescriptorKind.sampler,
+            count = 1, stages = stage_flag(stage)))
         return
     }
     if (v.annotation |> find_arg("ssbo") is tBool) {
@@ -1318,6 +1345,48 @@ class SpirvEmit : AstVisitor {
             var ops <- [rt, res, img, coord, uint(SpvImageOperands.Lod), lod]
             emit_n(bm, SEC_FUNCS, SpvOp.ImageFetch, ops)
             delete ops
+            e2id[k] = res
+            return expr
+        }
+        // sampleTexture(texture2D, sampler, uv): combine the separate image + sampler with OpSampledImage,
+        // then OpImageSampleImplicitLod. Implicit LOD -> fragment-only.
+        if (name == "sampleTexture") {
+            if (length(expr.arguments) != 3) {
+                errs |> push("sampleTexture expects (texture, sampler, uv)")
+                return expr
+            }
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("sampleTexture: implicit-LOD sampling is only valid in a fragment shader")
+                return expr
+            }
+            let tg = global_var_of(expr.arguments[0])
+            let sgv = global_var_of(expr.arguments[1])
+            if (tg == null || sgv == null) {
+                errs |> push("sampleTexture: texture and sampler must be globals")
+                return expr
+            }
+            let tgi = ctx.globals?[intptr(tg)] ?? GlobalInfo()
+            let sgi = ctx.globals?[intptr(sgv)] ?? GlobalInfo()
+            if (!tgi.is_separate_image) {
+                errs |> push("sampleTexture: '{tg.name}' is not a texture2D")
+                return expr
+            }
+            if (!sgi.is_separate_sampler) {
+                errs |> push("sampleTexture: '{sgv.name}' is not a sampler")
+                return expr
+            }
+            let imgv = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, tgi.value_type, imgv, tgi.var_id)
+            let smpv = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, sgi.value_type, smpv, sgi.var_id)
+            let simg_type = type_sampled_image(bm, tgi.value_type)
+            let combined = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.SampledImage, simg_type, combined, imgv, smpv)
+            let uv = value_of(expr.arguments[2])
+            if (uv == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, combined, uv)
             e2id[k] = res
             return expr
         }

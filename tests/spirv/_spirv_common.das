@@ -597,6 +597,24 @@ def public dims_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-7.4 separate image + sampler: a texture2D (standalone OpTypeImage) and a sampler
+// (standalone OpTypeSampler) are two independent descriptors; sampleTexture combines them at the call
+// site (OpSampledImage) before sampling. The Vulkan split model, distinct from the combined sampler2D. =====
+var @binding = 0 sep_img : texture2D
+var @binding = 1 sep_smp : sampler
+var @in @location = 0 sep_uv : float2
+var @out @location = 0 sep_out : float4
+[fragment_shader(name="septex_spv"), marker(no_coverage)]
+def septex_frag {
+    sep_out = sampleTexture(sep_img, sep_smp, sep_uv)   // OpSampledImage + OpImageSampleImplicitLod
+}
+
+def public septex_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(septex_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -795,4 +813,16 @@ def public phase7b_emitter_opcodes : table<uint> {
 // OpTypeImage Dim/Arrayed operands. The declared set is unchanged; the dims fixture must stay within it.
 def public phase7c_emitter_opcodes : table<uint> {
     return <- phase7b_emitter_opcodes()
+}
+
+// Phase-7.4 separate image + sampler adds the standalone sampler type + the call-site combine. 7.3 + these:
+def public phase7d_emitter_opcodes : table<uint> {
+    var s <- phase7c_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeSampler,      // a standalone sampler global
+        SpvOp.SampledImage      // sampleTexture combines image + sampler at the call
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
 }

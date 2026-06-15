@@ -211,6 +211,17 @@ def public type_image(var m : SpirvModule; sampled_type : uint; dim : SpvDim;
     return id
 }
 
+// OpTypeSampler — a standalone sampler type (separate image+sampler model). Deduped (no operands).
+def public type_sampler(var m : SpirvModule) : uint {
+    let key = "sampler"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeSampler, id)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 // OpTypeSampledImage wrapping an image type — the type of a combined image+sampler descriptor.
 def public type_sampled_image(var m : SpirvModule; image_type : uint) : uint {
     let key = "simg{image_type}"
