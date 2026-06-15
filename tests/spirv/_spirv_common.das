@@ -214,6 +214,115 @@ def public floop_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-6 control-flow coverage fixtures (added during the AstVisitor port). Each targets a
+// construct the Phase-2 fixtures left unexercised; all are byte-identical between the hand-walker and
+// the visitor (golden gate) and spirv-val-clean — the structured-CFG validity oracle. =====
+
+// nested loops (for inside while) + the full break/continue cross-product: continue+break in the
+// inner for AND continue+break in the outer while (Phase-2 had break only in while, continue only in
+// for). The loop_stack push/pop nesting is the #1 port risk; spirv-val rejects a misrouted target.
+[compute_shader(local_size_x=64, name="nloop_spv"), marker(no_coverage)]
+def nloop {
+    let i = gl_GlobalInvocationID.x
+    var acc = 0u
+    var outer = data[i]
+    while (outer > 0u) {
+        outer--
+        if (outer == 7u) {
+            continue                    // continue in the OUTER while
+        }
+        for (j in range(4)) {
+            if (j == 2) {
+                continue                // continue in the INNER for
+            }
+            acc += outer
+            if (acc > 5000u) {
+                break                   // break out of the INNER for
+            }
+        }
+        if (outer == 1u) {
+            break                       // break out of the OUTER while
+        }
+    }
+    data[i] = acc
+}
+
+// elif chain: if / elif / elif / else lowers to nested ExprIfThenElse in each if_false — exercises
+// the recursive selection-merge nesting (Phase-2 only had single if and if/else).
+[compute_shader(local_size_x=64, name="echain_spv"), marker(no_coverage)]
+def echain {
+    let i = gl_GlobalInvocationID.x
+    var acc = idata[i]
+    if (acc < 0) {
+        acc = 0
+    } elif (acc < 10) {
+        acc++
+    } elif (acc < 20) {
+        acc += 2
+    } else {
+        acc = 100
+    }
+    idata[i] = acc
+}
+
+// early return inside a loop: the then-block terminates with OpReturn while the loop/merge blocks
+// continue — the classic structured-CFG trap (a block already terminated + correct merge handling).
+[compute_shader(local_size_x=64, name="eret_spv"), marker(no_coverage)]
+def eret {
+    let i = gl_GlobalInvocationID.x
+    var acc = 0
+    for (j in range(8)) {
+        acc += idata[i] + j
+        if (acc > 100) {
+            idata[i] = acc
+            return                      // early return from inside the for-loop
+        }
+    }
+    idata[i] = acc
+}
+
+// runtime-bound for + bool local: `urange(0u, n)` with n a loaded SSBO value exercises the ExprCall
+// (non-ExprConstRange) for-source path — endpoints come from emitted Loads, not folded constants
+// (all Phase-2 ranges were constant). `var flag : bool` adds the bool Function-OpVariable store/load.
+[compute_shader(local_size_x=64, name="rfor_spv"), marker(no_coverage)]
+def rfor {
+    let i = gl_GlobalInvocationID.x
+    let n = data[i]                     // runtime upper bound
+    var acc = 0u
+    for (j in urange(0u, n)) {
+        acc += j
+    }
+    var flag = acc > 50u               // nolint:LINT003 -- must stay `var`: the point is to exercise the bool Function OpVariable Store/Load path (a `let` would be an SSA value, not memory-backed)
+    if (flag) {
+        acc = 0u
+    }
+    data[i] = acc
+}
+
+def public nloop_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(nloop_spv)
+    return <- w
+}
+
+def public echain_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(echain_spv)
+    return <- w
+}
+
+def public eret_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(eret_spv)
+    return <- w
+}
+
+def public rfor_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(rfor_spv)
+    return <- w
+}
+
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
 // (gl_Position/gl_VertexIndex/gl_InstanceIndex/gl_FragCoord), vector constructors
 // (OpCompositeConstruct), dot (OpDot), and GLSL.std.450 math (OpExtInst). Each emitted blob is

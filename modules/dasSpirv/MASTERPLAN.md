@@ -876,6 +876,46 @@ future AST additions surface as a clean dasSpirv compile error (the fail-closed 
 ordering: write the conversion plan first (every current `emit_*` mapped to its Visitor hook, the result-id
 map, the lvalue strategy, control-flow emission, the `canVisit*` gates) for review *before* touching code.
 
+### Phase 6 — emitter → AstVisitor LANDED (2026-06-14, branch `bbatkin/dasspirv-phase6-visitor`)
+
+The conversion plan (`PHASE6_VISITOR_PORT.md`) was written and reviewed first, then executed in five
+behavior-preserving sub-phases, each keeping the suite green:
+
+- **6.0 spike (GO).** A read-only probe confirmed an `AstVisitor` runs cleanly at the annotation's `patch()`
+  stage and the pre-fold node shapes (`ExprRef2Value` present, `fieldIndex == -1`) are walkable as designed.
+- **6.1 leaf + arithmetic; 6.2 control flow; 6.3 resources + composites.** Ported construct-by-construct
+  onto `SpirvEmit : AstVisitor` (llvm_jit's SSA side-map model: `e2id` rvalue ids, `e2ptr`/`e2pty` lvalue
+  pointers; `ExprRef2Value` is the load marker, `value_of`/`ptr_of` coerce on demand). Control flow uses
+  multi-phase hooks (preVisit*IfBlock/ElseBlock/WhileBody/ForBody + visit*) with block-label ids allocated in
+  the hand-walker's linear order to keep output **byte-identical**; resource/composite fixtures legitimately
+  renumber ids post-order and are gated **id-isomorphic** (role-aware canonicalizer
+  `spirv_dis::op_operand_is_literal`). Added the §7-A normalized-disassembly golden gate up front, plus §7-B
+  coverage fixtures the hand-walker left unexercised (nested loops, elif chain, early-return-in-loop,
+  runtime-bound `urange(0u,n)`, bool local).
+- **6.4 fail-closed.** Added the explicit-rejection half of the contract: a `preVisit*` override for every
+  shader-illegal construct (`new`/`delete`/`with`/`try`/variants/tuples/closures/table-ops/`yield`/
+  `typeinfo`/`memzero`/named-call/deref/safe-field/…) records a clean error, complementing the
+  `value_of`/`ptr_of` "no rvalue/lvalue" backstop (which catches a walked-but-unlowered node, including a
+  future AST node type with no hook). §7-C negative tests (`tests/spirv/_fail_closed/`, compiled via
+  `compile_file`) prove clean rejection of an unsupported CALL / GLOBAL / LOCAL TYPE / STATEMENT; fixtures sit
+  in a non-globbed subdir so the `tests/spirv/*.das` AOT glob never compiles them (`options no_aot` skips only
+  emission, not the failing compile) and carry `expect 50501` so lint skips them.
+- **6.5 prove + clean up.** Flipped `visitor_handles` to always-true, ran the dasVulkan GPU gate **9/9 green**
+  through the visitor (compute `i*i`, offscreen triangle pixel check, textured-quad UBO-matrix+sampler+
+  push-constant pixel check), then deleted the entire hand-walker (`emit_body`/`emit_stmt`/`emit_value`/
+  `emit_ptr`/`emit_call`/`emit_if`/`emit_while`/`emit_for`/`emit_load_op_store`, −648 lines). The stateless
+  lowering helpers (`emit_const`, `emit_mul`, `binop/cmp/unop_code`, `vector_ctor`, `glsl_ext_op`,
+  `build_block_struct`, std140, `field_index_by_name`, …) and the `collect_locals` pre-pass are reused verbatim.
+
+**Finding (folded into the design):** at `patch` the body nodes arrive **const** to each hook; declaring the
+hook parameter `var` (`def override visitExprX(var expr : ExprX?)`) binds a non-const view directly — no
+`reinterpret` const-strip, and `return expr` type-checks against the non-const `ExpressionPtr` slot. Sound
+because the visitor only reads the AST and emits into a side module.
+
+**Proof at landing:** 72/72 spirv tests green (byte/iso golden both ways, opcode census both directions,
+spirv-val clean, reflection), dasVulkan integration **9/9 on the local GPU**, lint clean, no GC leak. dasSpirv
+now participates in the same fail-closed `AstVisitor` contract as every other daslang backend.
+
 ### Phase 7 — texture / resource breadth
 
 Current sampler surface is **combined 2D only**:

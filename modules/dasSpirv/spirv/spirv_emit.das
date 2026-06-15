@@ -1,11 +1,10 @@
 options gen2
 
-// daslang AST -> SPIR-V codegen. Manual two-function recursion (emit_value / emit_ptr) rather
-// than the auto AstVisitor: SPIR-V's value/pointer (SSA + OpAccessChain) model maps cleanly to
-// it, and lvalue-ness is read straight off the type's ref (&) flag. ExprRef2Value wrappers can
-// still appear when generate_spirv runs at the annotation's patch() stage (pre-fold); emit_value
-// peels them. generate_spirv is the [macro_function] entry, called by both the shader annotation's
-// patch and the unit tests, so opcode assertions hit the real codegen path.
+// daslang AST -> SPIR-V codegen via the SpirvEmit AstVisitor (modeled on llvm_jit's SSA backend).
+// SPIR-V's value/pointer model (SSA + OpAccessChain) is threaded through per-node side-maps: e2id for
+// rvalue ids, e2ptr/e2pty for lvalue pointers; ExprRef2Value (still present at the annotation's patch()
+// pre-fold stage) is the explicit load marker. generate_spirv is the [macro_function] entry, called by
+// both the shader annotation's patch and the unit tests, so opcode assertions hit the real codegen path.
 
 module spirv_emit shared public
 
@@ -58,6 +57,22 @@ struct EmitCtx {
 struct LoopTargets {
     merge : uint
     cont  : uint
+}
+
+// ===== per-control-flow-node label ids (visitor side-maps; allocated to match the hand-walker's
+// linear id order so the emitted blob stays byte-identical) =====
+struct IteIds {
+    merge   : uint
+    then_l  : uint
+    else_l  : uint   // == merge when there is no else branch (no separate else label emitted)
+}
+
+struct LoopIds {
+    header : uint
+    cond_l : uint
+    body_l : uint
+    cont_l : uint
+    merge  : uint
 }
 
 def finalize(var c : EmitCtx) {
@@ -350,109 +365,6 @@ def private global_var_of(e : ExpressionPtr) : Variable const? {
     return ev.variable
 }
 
-// ===== lvalue: produce a pointer result-id + its pointee type-id =====
-def emit_ptr(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : tuple<id : uint; pointee : uint> {
-    let at = e ?as ExprAt
-    if (at != null) {
-        // local fixed-array indexing: positions[i] -> OpAccessChain into the Function-storage var
-        let lev = at.subexpr ?as ExprVar
-        if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
-            let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
-            if (lv.ptr_id != 0u) {
-                let idx = emit_value(m, ctx, at.index, errors)
-                if (idx == 0u) return (id = 0u, pointee = 0u)
-                let pointee = emit_type(m, e._type)
-                let ptr_t = type_pointer(m, SpvStorageClass.Function, pointee)
-                let res = alloc_id(m)
-                emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
-                return (id = res, pointee = pointee)
-            }
-            errors |> push("indexing local '{lev.name}': only fixed-array `var`/`let` locals are indexable")
-            return (id = 0u, pointee = 0u)
-        }
-        let bv = global_var_of(at.subexpr)
-        if (bv == null) {
-            errors |> push("indexing is only supported on a global ssbo array or a local fixed array for now")
-            return (id = 0u, pointee = 0u)
-        }
-        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
-        if (!gi.is_ssbo) {
-            errors |> push("only ssbo array indexing is supported for now")
-            return (id = 0u, pointee = 0u)   // no AccessChain emitted: don't return an undefined id
-        }
-        let pointee = emit_type(m, e._type)
-        let idx = emit_value(m, ctx, at.index, errors)
-        let res = alloc_id(m)
-        let ptr_t = type_pointer(m, gi.storage, pointee)
-        var ops <- [ptr_t, res, gi.var_id, const_uint(m, 0u), idx]
-        emit_n(m, SEC_FUNCS, SpvOp.AccessChain, ops)
-        delete ops
-        return (id = res, pointee = pointee)
-    }
-    // member of a Block global (ubo.color) -> OpAccessChain by field index into the Uniform/SSBO struct
-    let fld = e ?as ExprField
-    if (fld != null) {
-        let bv = global_var_of(fld.value)
-        if (bv == null) {
-            errors |> push("member access '.{fld.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
-            return (id = 0u, pointee = 0u)
-        }
-        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
-        if (!gi.is_block) {
-            errors |> push("member access '.{fld.name}': '{bv.name}' is not a block (uniform/ssbo/push_constant) global")
-            return (id = 0u, pointee = 0u)
-        }
-        let midx = field_index_by_name(bv._type.structType, "{fld.name}")
-        if (midx < 0) {
-            errors |> push("member access '.{fld.name}': no such field on '{bv.name}'")
-            return (id = 0u, pointee = 0u)
-        }
-        let pointee = emit_type(m, e._type)
-        let ptr_t = type_pointer(m, gi.storage, pointee)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(m, uint(midx)))
-        return (id = res, pointee = pointee)
-    }
-    let sw = e ?as ExprSwizzle
-    if (sw != null) {
-        let bv = global_var_of(sw.value)
-        if (bv == null || length(sw.fields) != 1) {
-            errors |> push("only single-component swizzle of a global is supported for now")
-            return (id = 0u, pointee = 0u)
-        }
-        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
-        if (gi.var_id == 0u) {
-            errors |> push("swizzle target global is not classified")
-            return (id = 0u, pointee = 0u)
-        }
-        let pointee = emit_type(m, e._type)
-        let ptr_t = type_pointer(m, gi.storage, pointee)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(m, uint(sw.fields[0])))
-        return (id = res, pointee = pointee)
-    }
-    let lev = e ?as ExprVar
-    if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
-        let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
-        if (lv.ptr_id != 0u) {
-            return (id = lv.ptr_id, pointee = lv.value_type)
-        }
-        errors |> push("cannot take the address of '{lev.name}': only `var` locals are addressable (Function-storage OpVariables); `let` values and arguments are not")
-        return (id = 0u, pointee = 0u)
-    }
-    let gv = global_var_of(e)
-    if (gv != null) {
-        let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
-        if (gi.var_id == 0u) {
-            errors |> push("global '{gv.name}' is not classified")
-            return (id = 0u, pointee = 0u)
-        }
-        return (id = gi.var_id, pointee = gi.value_type)
-    }
-    errors |> push("unsupported lvalue {e.__rtti}")
-    return (id = 0u, pointee = 0u)
-}
-
 // ===== arithmetic opcode selection =====
 // 0 = signed int, 1 = unsigned int, 2 = float, -1 = other. Vectors classify by their lane kind
 // (IAdd/FAdd/… operate component-wise on vectors with the same opcode as the scalar).
@@ -634,141 +546,6 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     return (ok = false, op = GLSLstd450.Round)
 }
 
-// ===== ExprCall: vector constructors, dot (core OpDot), GLSL.std.450 math (OpExtInst) =====
-def private emit_call(var m : SpirvModule; var ctx : EmitCtx; call : ExprCall?; e : ExpressionPtr; var errors : array<string>) : uint {
-    let name = "{call.name}"
-    // ----- texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod -----
-    if (name == "texture") {
-        if (length(call.arguments) != 2) {
-            errors |> push("texture expects (sampler, uv)")
-            return 0u
-        }
-        // implicit-LOD sampling uses screen-space derivatives -> fragment stage only (fail-closed)
-        if (ctx.stage != ShaderStage.Fragment) {
-            errors |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
-            return 0u
-        }
-        let sg = global_var_of(call.arguments[0])
-        if (sg == null) {
-            errors |> push("texture: first argument must be a sampler global")
-            return 0u
-        }
-        let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-        if (!gi.is_sampler) {
-            errors |> push("texture: '{sg.name}' is not a sampler")
-            return 0u
-        }
-        let simg = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
-        let uv = emit_value(m, ctx, call.arguments[1], errors)
-        if (uv == 0u) return 0u
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
-        return res
-    }
-    // ----- vector constructor: OpCompositeConstruct (or splat / identity for one arg) -----
-    let vc = vector_ctor(name)
-    if (vc.ok) {
-        let rt = emit_type(m, e._type)
-        if (length(call.arguments) == 1) {
-            let a0 = call.arguments[0]
-            let cc = component_count(a0._type.baseType)
-            // a different component kind is a conversion (int4(float4(...)), float4(int(...))),
-            // which needs OpConvert* we don't emit yet — reject rather than alias the wrong type.
-            if (scalar_class(a0._type.baseType) != vc.cls) {
-                errors |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
-                return 0u
-            }
-            let aid = emit_value(m, ctx, a0, errors)
-            if (aid == 0u) return 0u
-            if (cc == vc.n) return aid                  // identity: float4(someFloat4), same kind
-            if (cc == 1) {                              // splat: float4(scalar) -> repeat N lanes
-                let res = alloc_id(m)
-                var cons <- [rt, res]
-                cons |> reserve(2 + vc.n)
-                for (_l in range(vc.n)) {
-                    cons |> push(aid)
-                }
-                emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
-                delete cons
-                return res
-            }
-            errors |> push("cannot construct {name} from a single {a0._type.baseType}")
-            return 0u
-        }
-        // multi-arg: each constituent contributes its lanes; kinds must match and lanes sum to n
-        var total = 0
-        let res = alloc_id(m)
-        var cons <- [rt, res]
-        cons |> reserve(2 + length(call.arguments))
-        for (a in call.arguments) {
-            let cc = component_count(a._type.baseType)
-            if (cc == 0) {
-                errors |> push("{name}: argument of type {a._type.baseType} is not a scalar/vector")
-                delete cons
-                return 0u
-            }
-            if (scalar_class(a._type.baseType) != vc.cls) {
-                errors |> push("{name}: constituent of type {a._type.baseType} has a different component kind (conversion not supported yet)")
-                delete cons
-                return 0u
-            }
-            total += cc
-            let aid = emit_value(m, ctx, a, errors)
-            if (aid == 0u) {
-                delete cons
-                return 0u
-            }
-            cons |> push(aid)
-        }
-        if (total != vc.n) {
-            errors |> push("{name}: constituent lanes sum to {total}, expected {vc.n}")
-            delete cons
-            return 0u
-        }
-        emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
-        delete cons
-        return res
-    }
-    // ----- dot: core OpDot (vector . vector -> scalar) -----
-    if (name == "dot") {
-        if (length(call.arguments) != 2) {
-            errors |> push("dot expects 2 arguments")
-            return 0u
-        }
-        let a = emit_value(m, ctx, call.arguments[0], errors)
-        let b = emit_value(m, ctx, call.arguments[1], errors)
-        if (a == 0u || b == 0u) return 0u
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.Dot, rt, res, a, b)
-        return res
-    }
-    // ----- GLSL.std.450 math: OpExtInst -----
-    let cls = empty(call.arguments) ? -1 : scalar_class(call.arguments[0]._type.baseType)
-    let ge = glsl_ext_op(name, cls)
-    if (ge.ok) {
-        let set = ensure_glsl_ext(m, ctx)
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        var ops <- [rt, res, set, uint(ge.op)]
-        for (a in call.arguments) {
-            let aid = emit_value(m, ctx, a, errors)
-            if (aid == 0u) {
-                delete ops
-                return 0u
-            }
-            ops |> push(aid)
-        }
-        emit_n(m, SEC_FUNCS, SpvOp.ExtInst, ops)
-        delete ops
-        return res
-    }
-    errors |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
-    return 0u
-}
-
 // ===== compile-time constants: scalars, all-const vector constructors, const arrays =====
 // Produces a deduped OpConstant / OpConstantComposite for a fully-constant expression. Used for
 // array literals (which must be constant initializers for now) and their constituents. ok=false =>
@@ -935,134 +712,6 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
     return (handled = true, id = res)
 }
 
-// ===== rvalue: produce an SSA result-id =====
-def emit_value(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) : uint {
-    // ExprRef2Value wraps a ref lvalue to read its value; running in `patch` (pre-fold) the AST
-    // still carries these (the fixup-stage AST has them folded away). Just recurse on the inner
-    // expression — a value-let resolves to its SSA id, a memory ref to emit_ptr + OpLoad.
-    let r2v = e ?as ExprRef2Value
-    if (r2v != null) return emit_value(m, ctx, r2v.subexpr, errors)
-    let cu = e ?as ExprConstUInt
-    if (cu != null) return const_uint(m, cu.value)
-    let ci = e ?as ExprConstInt
-    if (ci != null) return const_int(m, ci.value)
-    let cf = e ?as ExprConstFloat
-    if (cf != null) return const_float(m, cf.value)
-    let op2 = e ?as ExprOp2
-    if (op2 != null) {
-        let ops = "{op2.op}"
-        // operand type drives the signed/unsigned/float opcode choice for every op family.
-        let cls = scalar_class(op2.left._type.baseType)
-        let l = emit_value(m, ctx, op2.left, errors)
-        let r = emit_value(m, ctx, op2.right, errors)
-        if (l == 0u || r == 0u) return 0u   // operand error already reported; don't emit with id 0
-        // matrix / vector-scalar `*`: SPIR-V has dedicated linear-algebra ops (operand types differ,
-        // so the plain component-wise FMul path would be invalid). Handled before the scalar binop.
-        if (ops == "*") {
-            let mr = emit_mul(m, op2, e, l, r, errors)
-            if (mr.handled) return mr.id
-        }
-        // comparison -> bool result (operands keep their scalar class)
-        let cc = cmp_code(ops, cls)
-        if (cc.ok) {
-            let bt = type_bool(m)
-            let res = alloc_id(m)
-            emit(m, SEC_FUNCS, cc.code, bt, res, l, r)
-            return res
-        }
-        // logical and/or -> bool. daslang `&&`/`||` short-circuit, but shader condition operands are
-        // side-effect free, so eager OpLogicalAnd/Or is equivalent (no extra control flow needed).
-        if (ops == "&&" || ops == "||") {
-            let bt = type_bool(m)
-            let res = alloc_id(m)
-            emit(m, SEC_FUNCS, ops == "&&" ? SpvOp.LogicalAnd : SpvOp.LogicalOr, bt, res, l, r)
-            return res
-        }
-        // arithmetic -> same type as operands
-        let bo = binop_code(ops, cls)
-        if (!bo.ok) {
-            errors |> push("unsupported binary op '{op2.op}' on {op2.left._type.baseType}")
-            return 0u   // no instruction emitted: don't return an undefined result id
-        }
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, bo.code, rt, res, l, r)
-        return res
-    }
-    let op1 = e ?as ExprOp1
-    if (op1 != null) {
-        let ops = "{op1.op}"
-        let v = emit_value(m, ctx, op1.subexpr, errors)
-        if (v == 0u) return 0u
-        if (ops == "!") {       // logical not -> bool
-            let bt = type_bool(m)
-            let res = alloc_id(m)
-            emit(m, SEC_FUNCS, SpvOp.LogicalNot, bt, res, v)
-            return res
-        }
-        let uo = unop_code(ops, scalar_class(op1.subexpr._type.baseType))
-        if (!uo.ok) {
-            errors |> push("unsupported unary op '{op1.op}' on {op1.subexpr._type.baseType}")
-            return 0u
-        }
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, uo.code, rt, res, v)
-        return res
-    }
-    let call = e ?as ExprCall
-    if (call != null) return emit_call(m, ctx, call, e, errors)
-    let mk = e ?as ExprMakeArray
-    if (mk != null) {
-        let r = emit_const(m, e, errors)   // emit_const reports the specific reason on failure
-        return r.ok ? r.id : 0u
-    }
-    let ev = e ?as ExprVar
-    if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
-        let lv = ctx.local_vars?[intptr(ev.variable)] ?? LocalVar()
-        if (lv.ptr_id != 0u) {      // memory-backed local: read through OpLoad
-            let res = alloc_id(m)
-            emit(m, SEC_FUNCS, SpvOp.Load, lv.value_type, res, lv.ptr_id)
-            return res
-        }
-        let lid = ctx.locals?[intptr(ev.variable)] ?? 0u
-        if (lid == 0u) {
-            errors |> push("local '{ev.name}' used before it was assigned an SSA id")
-        }
-        return lid
-    }
-    // swizzle of a local/computed VALUE (p.x / p.xy on a let or expression result). A swizzle of a
-    // global lvalue is a ref and goes through emit_ptr below; this handles the value case via
-    // OpCompositeExtract (single component) / OpVectorShuffle (multiple).
-    let sw = e ?as ExprSwizzle
-    if (sw != null && global_var_of(sw.value) == null) {
-        let base = emit_value(m, ctx, sw.value, errors)
-        if (base == 0u) return 0u
-        let rt = emit_type(m, e._type)
-        let res = alloc_id(m)
-        if (length(sw.fields) == 1) {
-            emit(m, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(sw.fields[0]))
-        } else {
-            var ops <- [rt, res, base, base]   // shuffle from a single source: vec1==vec2==base
-            for (f in sw.fields) {
-                ops |> push(uint(f))
-            }
-            emit_n(m, SEC_FUNCS, SpvOp.VectorShuffle, ops)
-            delete ops
-        }
-        return res
-    }
-    if (e._type.flags.ref) {
-        let p = emit_ptr(m, ctx, e, errors)
-        if (p.id == 0u) return 0u   // emit_ptr already reported the error; don't OpLoad from id 0
-        let res = alloc_id(m)
-        emit(m, SEC_FUNCS, SpvOp.Load, p.pointee, res, p.id)
-        return res
-    }
-    errors |> push("unsupported rvalue {e.__rtti}")
-    return 0u
-}
-
 // ===== local variable declaration (Function-storage OpVariable) =====
 // SPIR-V requires every Function-storage OpVariable to be among the first instructions of the
 // function's first block. So we pre-scan the whole body (one walk, all scopes — SPIR-V locals are
@@ -1152,285 +801,870 @@ def private const_int_for(var m : SpirvModule; cls : int; v : int) : uint {
     return const_int(m, v)
 }
 
-// load-modify-store against an lvalue: `dst <op>= rhs` and `dst++`/`dst--`.
-def private emit_load_op_store(var m : SpirvModule; var ctx : EmitCtx; lhs : ExpressionPtr; code : SpvOp; rhs : uint; var errors : array<string>) {
-    if (rhs == 0u) return
-    let p = emit_ptr(m, ctx, lhs, errors)
-    if (p.id == 0u) return
-    let cur = alloc_id(m)
-    emit(m, SEC_FUNCS, SpvOp.Load, p.pointee, cur, p.id)
-    let res = alloc_id(m)
-    emit(m, SEC_FUNCS, code, p.pointee, res, cur, rhs)
-    emit(m, SEC_FUNCS, SpvOp.Store, p.id, res)
-}
+// ===== SpirvEmit : AstVisitor =====
+// The body-codegen visitor (modeled on llvm_jit). generate_spirv builds the module scaffold (caps /
+// entry-point / OpFunction / trailing return) and drives this visitor over fn.body for all codegen.
+// Value threading is llvm_jit's side-map model: each node records its result keyed by intptr — e2id for
+// an rvalue SSA id, e2ptr/e2pty for an lvalue pointer + pointee-type. Parents read children back out.
+// ExprRef2Value is the load marker; bare lvalue nodes stay pointers and value_of() loads on demand
+// (matching the hand-walker's `_type.flags.ref` branch). The patch-stage AST arrives const; each hook
+// takes its node as a `var` param (`def override visitExprX(var expr : ExprX?)`), which binds a non-const
+// view directly — no reinterpret const-strip, and `return expr` type-checks. We only read the AST and emit
+// into the side module (never mutate it), so the body reuses the existing non-const emit helpers verbatim.
+class SpirvEmit : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete m   : SpirvModule?    // borrowed (addr of generate_spirv's module) — not owned
+    @do_not_delete ctx : EmitCtx?        // borrowed (addr of generate_spirv's ctx) — not owned
+    e2id    : table<uint64; uint>        // intptr(Expression) -> rvalue SSA result-id
+    e2ptr   : table<uint64; uint>        // intptr(Expression) -> lvalue pointer result-id
+    e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
+    ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
+    loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
+    for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
+    errs    : array<string>
 
-// ===== if / else (OpSelectionMerge + OpBranchConditional) =====
-def private emit_if(var m : SpirvModule; var ctx : EmitCtx; ite : ExprIfThenElse?; var errors : array<string>) {
-    let cond = emit_value(m, ctx, ite.cond, errors)
-    if (cond == 0u) return
-    let merge = alloc_id(m)
-    let then_l = alloc_id(m)
-    let else_l = ite.if_false != null ? alloc_id(m) : merge
-    // the header block selects the merge target, then branches on the condition
-    emit(m, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
-    emit(m, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
-    ctx.terminated = true
-    emit(m, SEC_FUNCS, SpvOp.Label, then_l)
-    ctx.terminated = false
-    emit_stmt(m, ctx, ite.if_true, errors)
-    if (!ctx.terminated) {
-        emit(m, SEC_FUNCS, SpvOp.Branch, merge)
-        ctx.terminated = true
+    // coerce a visited child to an rvalue id: a value passes through; a pointer is OpLoad'd here (the
+    // bare-ref load, matching emit_value's `_type.flags.ref` branch).
+    def value_of(e : ExpressionPtr) : uint {
+        let k = intptr(e)
+        if (key_exists(e2id, k)) return e2id?[k] ?? 0u
+        if (key_exists(e2ptr, k)) {
+            let pid = e2ptr?[k] ?? 0u
+            let pty = e2pty?[k] ?? 0u
+            if (pid == 0u || pty == 0u) {   // unresolved pointer / pointee — never OpLoad with a 0 operand
+                errs |> push("internal: cannot load {e.__rtti} (unresolved pointer or pointee type)")
+                return 0u
+            }
+            var bm & = unsafe(*m)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, pty, res, pid)
+            return res
+        }
+        errs |> push("internal: no rvalue available for {e.__rtti}")
+        return 0u
     }
-    if (ite.if_false != null) {
-        emit(m, SEC_FUNCS, SpvOp.Label, else_l)
+    def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
+        let k = intptr(e)
+        if (key_exists(e2ptr, k)) return (id = e2ptr?[k] ?? 0u, pty = e2pty?[k] ?? 0u)
+        errs |> push("internal: {e.__rtti} is not an lvalue")
+        return (id = 0u, pty = 0u)
+    }
+
+    // ----- constants -----
+    def override visitExprConstInt(var expr : ExprConstInt?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_int(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstUInt(var expr : ExprConstUInt?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_uint(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_float(bm, expr.value)
+        return expr
+    }
+
+    // ----- variables: value-let -> SSA id; memory local / global -> pointer -----
+    def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
+        let k = intptr(expr)
+        if (expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block) {
+            let vk = intptr(expr.variable)
+            if (key_exists(ctx.local_vars, vk)) {
+                let lv = ctx.local_vars?[vk] ?? LocalVar()
+                e2ptr[k] = lv.ptr_id
+                e2pty[k] = lv.value_type
+            } else {
+                let lid = ctx.locals?[vk] ?? 0u
+                if (lid == 0u) {   // value-let read before its init was visited -> no SSA id
+                    errs |> push("local '{expr.name}' used before it was assigned an SSA id")
+                }
+                e2id[k] = lid
+            }
+        } else {
+            let gi = ctx.globals?[intptr(expr.variable)] ?? GlobalInfo()
+            if (gi.var_id == 0u) {   // referenced global was not classified (unsupported / not collected)
+                errs |> push("global '{expr.name}' is not classified")
+            }
+            e2ptr[k] = gi.var_id
+            e2pty[k] = gi.value_type
+        }
+        return expr
+    }
+
+    // ----- swizzle: global single-component -> pointer (AccessChain); value -> extract/shuffle -----
+    def override visitExprSwizzle(var expr : ExprSwizzle?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let gv = global_var_of(expr.value)
+        if (gv != null) {
+            if (length(expr.fields) != 1) {
+                errs |> push("only single-component swizzle of a global is supported for now")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(gv)] ?? GlobalInfo()
+            if (gi.var_id == 0u) {   // global not classified -> never AccessChain through a 0 base
+                errs |> push("swizzle target global '{gv.name}' is not classified")
+                return expr
+            }
+            let pointee = emit_type(bm, expr._type)
+            let ptr_t = type_pointer(bm, gi.storage, pointee)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(expr.fields[0])))
+            e2ptr[k] = res
+            e2pty[k] = pointee
+        } else {
+            let base = value_of(expr.value)
+            if (base == 0u) return expr   // operand failed to lower (error already pushed) — no 0-operand extract/shuffle
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            if (length(expr.fields) == 1) {
+                emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, rt, res, base, uint(expr.fields[0]))
+            } else {
+                var ops <- [rt, res, base, base]
+                for (f in expr.fields) {
+                    ops |> push(uint(f))
+                }
+                emit_n(bm, SEC_FUNCS, SpvOp.VectorShuffle, ops)
+                delete ops
+            }
+            e2id[k] = res
+        }
+        return expr
+    }
+
+    // ----- indexing: ssbo array or local fixed array -> pointer (AccessChain) -----
+    def override visitExprAt(var expr : ExprAt?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let lev = expr.subexpr ?as ExprVar
+        if (lev != null && (lev.varFlags.local || lev.varFlags.argument || lev.varFlags._block)) {
+            let lv = ctx.local_vars?[intptr(lev.variable)] ?? LocalVar()
+            if (lv.ptr_id == 0u) {
+                errs |> push("indexing local '{lev.name}': only fixed-array `var`/`let` locals are indexable")
+                return expr
+            }
+            let idx = value_of(expr.index)
+            if (idx == 0u) return expr   // index failed to lower (error already pushed) — no 0-operand access chain
+            let pointee = emit_type(bm, expr._type)
+            let ptr_t = type_pointer(bm, SpvStorageClass.Function, pointee)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
+            e2ptr[k] = res
+            e2pty[k] = pointee
+            return expr
+        }
+        let bv = global_var_of(expr.subexpr)
+        if (bv == null) {
+            errs |> push("indexing is only supported on a global ssbo array or a local fixed array for now")
+            return expr
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_ssbo) {
+            errs |> push("only ssbo array indexing is supported for now")
+            return expr
+        }
+        let idx = value_of(expr.index)
+        if (idx == 0u) return expr   // index failed to lower (error already pushed) — no 0-operand access chain
+        let pointee = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        let ptr_t = type_pointer(bm, gi.storage, pointee)
+        var ops <- [ptr_t, res, gi.var_id, const_uint(bm, 0u), idx]
+        emit_n(bm, SEC_FUNCS, SpvOp.AccessChain, ops)
+        delete ops
+        e2ptr[k] = res
+        e2pty[k] = pointee
+        return expr
+    }
+
+    // ----- the load marker: read an lvalue child as a value -----
+    def override visitExprRef2Value(var expr : ExprRef2Value?) : ExpressionPtr {
+        e2id[intptr(expr)] = value_of(expr.subexpr)
+        return expr
+    }
+
+    // ----- unary: !, -, ~ (value) and statement-level ++/-- (load-op-store) -----
+    def override visitExprOp1(var expr : ExprOp1?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let op = "{expr.op}"
+        if (op == "++" || op == "--") {
+            let cls = scalar_class(expr.subexpr._type.baseType)
+            let bo = binop_code(op == "++" ? "+" : "-", cls)
+            if (!bo.ok) {
+                errs |> push("unsupported {expr.op} on {expr.subexpr._type.baseType}")
+                return expr
+            }
+            let one = const_one(bm, cls)
+            let p = ptr_of(expr.subexpr)
+            if (p.id != 0u) {
+                let cur = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, one)
+                emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
+            }
+            return expr
+        }
+        let v = value_of(expr.subexpr)
+        if (v == 0u) return expr
+        if (op == "!") {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.LogicalNot, bt, res, v)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        let uo = unop_code(op, scalar_class(expr.subexpr._type.baseType))
+        if (!uo.ok) {
+            errs |> push("unsupported unary op '{expr.op}' on {expr.subexpr._type.baseType}")
+            return expr
+        }
+        let rt = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, uo.code, rt, res, v)
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
+    // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
+    def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let op = "{expr.op}"
+        if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
+            let bo = binop_code(compound_base(op), scalar_class(expr.left._type.baseType))
+            if (!bo.ok) {
+                errs |> push("unsupported compound assignment '{expr.op}'")
+                return expr
+            }
+            let rhs = value_of(expr.right)
+            let p = ptr_of(expr.left)
+            if (p.id != 0u && rhs != 0u) {
+                let cur = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs)
+                emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
+            }
+            return expr
+        }
+        let cls = scalar_class(expr.left._type.baseType)
+        let l = value_of(expr.left)
+        let r = value_of(expr.right)
+        if (l == 0u || r == 0u) return expr
+        if (op == "*") {
+            let mr = emit_mul(bm, expr, expr, l, r, errs)
+            if (mr.handled) {
+                if (mr.id != 0u) {
+                    e2id[intptr(expr)] = mr.id
+                }
+                return expr
+            }
+        }
+        let cc = cmp_code(op, cls)
+        if (cc.ok) {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, cc.code, bt, res, l, r)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        if (op == "&&" || op == "||") {
+            let bt = type_bool(bm)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, op == "&&" ? SpvOp.LogicalAnd : SpvOp.LogicalOr, bt, res, l, r)
+            e2id[intptr(expr)] = res
+            return expr
+        }
+        let bo = binop_code(op, cls)
+        if (!bo.ok) {
+            errs |> push("unsupported binary op '{expr.op}' on {expr.left._type.baseType}")
+            return expr
+        }
+        let rt = emit_type(bm, expr._type)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, bo.code, rt, res, l, r)
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
+    // ----- store: dst = rhs -----
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let p = ptr_of(expr.left)
+        let val = value_of(expr.right)
+        if (p.id != 0u && val != 0u) {
+            emit(bm, SEC_FUNCS, SpvOp.Store, p.id, val)
+        }
+        return expr
+    }
+
+    // ----- let: memory local -> store init; value-let -> bind SSA id -----
+    def override visitExprLetVariable(cexpr : ExprLet?; var arg : VariablePtr; lastArg : bool) : VariablePtr {
+        var bm & = unsafe(*m)
+        if (arg.init == null) {
+            errs |> push("uninitialized local '{arg.name}' is not supported (every let/var must have an initializer)")
+            return arg
+        }
+        let vk = intptr(arg)
+        if (key_exists(ctx.local_vars, vk)) {
+            let lv = ctx.local_vars?[vk] ?? LocalVar()
+            let val = value_of(arg.init)
+            if (val != 0u) {
+                emit(bm, SEC_FUNCS, SpvOp.Store, lv.ptr_id, val)
+            }
+        } else {
+            ctx.locals[vk] = value_of(arg.init)
+        }
+        return arg
+    }
+
+    // ----- return -----
+    def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        emit(bm, SEC_FUNCS, SpvOp.Return)
+        ctx.terminated = true
+        return expr
+    }
+
+    // ----- member of a Block global (ubo.color) -> OpAccessChain by field index -> pointer -----
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let bv = global_var_of(expr.value)
+        if (bv == null) {
+            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
+            return expr
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_block) {
+            errs |> push("member access '.{expr.name}': '{bv.name}' is not a block (uniform/ssbo/push_constant) global")
+            return expr
+        }
+        let midx = field_index_by_name(bv._type.structType, "{expr.name}")
+        if (midx < 0) {
+            errs |> push("member access '.{expr.name}': no such field on '{bv.name}'")
+            return expr
+        }
+        let pointee = emit_type(bm, expr._type)
+        let ptr_t = type_pointer(bm, gi.storage, pointee)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(midx)))
+        e2ptr[k] = res
+        e2pty[k] = pointee
+        return expr
+    }
+
+    // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
+    // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
+    // range()/urange() calls are consumed by preVisitExprForBody and skipped here.
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (key_exists(for_src, intptr(expr))) return expr
+        var bm & = unsafe(*m)
+        let name = "{expr.name}"
+        let k = intptr(expr)
+        // texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod
+        if (name == "texture") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("texture expects (sampler, uv)")
+                return expr
+            }
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("texture: first argument must be a sampler global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler) {
+                errs |> push("texture: '{sg.name}' is not a sampler")
+                return expr
+            }
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let uv = value_of(expr.arguments[1])
+            if (uv == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+            e2id[k] = res
+            return expr
+        }
+        // vector constructor: OpCompositeConstruct (or splat / identity for one arg)
+        let vc = vector_ctor(name)
+        if (vc.ok) {
+            let rt = emit_type(bm, expr._type)
+            if (length(expr.arguments) == 1) {
+                let a0 = expr.arguments[0]
+                let cc = component_count(a0._type.baseType)
+                if (scalar_class(a0._type.baseType) != vc.cls) {
+                    errs |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
+                    return expr
+                }
+                let aid = value_of(a0)
+                if (aid == 0u) return expr
+                if (cc == vc.n) {                            // identity: float4(someFloat4)
+                    e2id[k] = aid
+                    return expr
+                }
+                if (cc == 1) {                               // splat: float4(scalar)
+                    let res = alloc_id(bm)
+                    var cons <- [rt, res]
+                    cons |> reserve(2 + vc.n)
+                    for (_l in range(vc.n)) {
+                        cons |> push(aid)
+                    }
+                    emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+                    delete cons
+                    e2id[k] = res
+                    return expr
+                }
+                errs |> push("cannot construct {name} from a single {a0._type.baseType}")
+                return expr
+            }
+            var total = 0
+            let res = alloc_id(bm)
+            var cons <- [rt, res]
+            cons |> reserve(2 + length(expr.arguments))
+            for (a in expr.arguments) {
+                let cc = component_count(a._type.baseType)
+                if (cc == 0) {
+                    errs |> push("{name}: argument of type {a._type.baseType} is not a scalar/vector")
+                    delete cons
+                    return expr
+                }
+                if (scalar_class(a._type.baseType) != vc.cls) {
+                    errs |> push("{name}: constituent of type {a._type.baseType} has a different component kind (conversion not supported yet)")
+                    delete cons
+                    return expr
+                }
+                total += cc
+                let aid = value_of(a)
+                if (aid == 0u) {
+                    delete cons
+                    return expr
+                }
+                cons |> push(aid)
+            }
+            if (total != vc.n) {
+                errs |> push("{name}: constituent lanes sum to {total}, expected {vc.n}")
+                delete cons
+                return expr
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+            delete cons
+            e2id[k] = res
+            return expr
+        }
+        // dot: core OpDot (vector . vector -> scalar)
+        if (name == "dot") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("dot expects 2 arguments")
+                return expr
+            }
+            let a = value_of(expr.arguments[0])
+            let b = value_of(expr.arguments[1])
+            if (a == 0u || b == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Dot, rt, res, a, b)
+            e2id[k] = res
+            return expr
+        }
+        // GLSL.std.450 math: OpExtInst
+        let cls = empty(expr.arguments) ? -1 : scalar_class(expr.arguments[0]._type.baseType)
+        let ge = glsl_ext_op(name, cls)
+        if (ge.ok) {
+            let set = ensure_glsl_ext(bm, *ctx)
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, set, uint(ge.op)]
+            for (a in expr.arguments) {
+                let aid = value_of(a)
+                if (aid == 0u) {
+                    delete ops
+                    return expr
+                }
+                ops |> push(aid)
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.ExtInst, ops)
+            delete ops
+            e2id[k] = res
+            return expr
+        }
+        errs |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
+        return expr
+    }
+
+    // ----- fixed-array literal -> OpConstantComposite (whole-array, deduped) -----
+    // emit_const recurses into the (const) elements internally, so the elements' own default visit emits
+    // nothing — at patch they fold to ExprConstFloatN leaves, not sub-call nodes. Records the array's
+    // constant id; a fixed-array `let` then Stores it into the Function-storage OpVariable.
+    def override visitExprMakeArray(var expr : ExprMakeArray?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let r = emit_const(bm, expr, errs)
+        if (r.ok) {
+            e2id[intptr(expr)] = r.id
+        }
+        return expr
+    }
+
+    // ----- if / elif / else (OpSelectionMerge + OpBranchConditional, multi-phase) -----
+    // Block ids are allocated in the IfBlock hook — AFTER the cond is visited — so the id order
+    // matches the hand-walker (cond ids first, then merge/then/else), keeping the blob byte-identical.
+    // `elif` chains fall out for free: an `if_false` that is itself an ExprIfThenElse just recurses.
+    def override preVisitExprIfThenElse(var expr : ExprIfThenElse?) : void {}
+
+    def override preVisitExprIfThenElseIfBlock(var expr : ExprIfThenElse?; ifBlock : ExpressionPtr) : void {
+        var bm & = unsafe(*m)
+        let cond = value_of(expr.cond)
+        let merge = alloc_id(bm)
+        let then_l = alloc_id(bm)
+        let else_l = expr.if_false != null ? alloc_id(bm) : merge
+        ite_ids[intptr(expr)] = IteIds(merge = merge, then_l = then_l, else_l = else_l)
+        if (cond != 0u) {   // a 0 cond means it failed to lower (error already pushed) — no 0-operand branch
+            emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Label, then_l)
         ctx.terminated = false
-        emit_stmt(m, ctx, ite.if_false, errors)
-        if (!ctx.terminated) {
-            emit(m, SEC_FUNCS, SpvOp.Branch, merge)
-            ctx.terminated = true
-        }
     }
-    emit(m, SEC_FUNCS, SpvOp.Label, merge)
-    ctx.terminated = false
-}
 
-// ===== loops (OpLoopMerge, 4-block: header / cond / body / continue + merge) =====
-// Canonical structured-loop shape (matches glslang): the header carries OpLoopMerge then branches to
-// the condition block; the condition block does OpBranchConditional body/merge; the body branches to
-// the continue block; the continue block branches back to the header. break -> merge, continue -> cont.
-// The shared header/cond/continue/merge skeleton. The caller supplies the condition result-id (via
-// `eval_cond`, emitted into the cond block) and the body; `emit_continue` runs in the continue block
-// (range-for's `i += 1`; while passes nothing). Returns nothing — terminator state is left on a fresh
-// merge block.
-def private emit_while(var m : SpirvModule; var ctx : EmitCtx; wh : ExprWhile?; var errors : array<string>) {
-    let header = alloc_id(m)
-    let cond_l = alloc_id(m)
-    let body_l = alloc_id(m)
-    let cont_l = alloc_id(m)
-    let merge = alloc_id(m)
-    emit(m, SEC_FUNCS, SpvOp.Branch, header)
-    emit(m, SEC_FUNCS, SpvOp.Label, header)
-    ctx.terminated = false
-    emit(m, SEC_FUNCS, SpvOp.LoopMerge, merge, cont_l, uint(SpvLoopControl.None))
-    emit(m, SEC_FUNCS, SpvOp.Branch, cond_l)
-    emit(m, SEC_FUNCS, SpvOp.Label, cond_l)
-    ctx.terminated = false
-    let c = emit_value(m, ctx, wh.cond, errors)
-    if (c == 0u) return
-    emit(m, SEC_FUNCS, SpvOp.BranchConditional, c, body_l, merge)
-    emit(m, SEC_FUNCS, SpvOp.Label, body_l)
-    ctx.terminated = false
-    ctx.loop_stack |> push(LoopTargets(merge = merge, cont = cont_l))
-    emit_stmt(m, ctx, wh.body, errors)
-    pop(ctx.loop_stack)
-    if (!ctx.terminated) emit(m, SEC_FUNCS, SpvOp.Branch, cont_l)
-    emit(m, SEC_FUNCS, SpvOp.Label, cont_l)
-    ctx.terminated = false
-    emit(m, SEC_FUNCS, SpvOp.Branch, header)
-    emit(m, SEC_FUNCS, SpvOp.Label, merge)
-    ctx.terminated = false
-}
+    def override preVisitExprIfThenElseElseBlock(var expr : ExprIfThenElse?; elseBlock : ExpressionPtr) : void {
+        let ids = ite_ids?[intptr(expr)] ?? IteIds()
+        var bm & = unsafe(*m)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.else_l)
+        ctx.terminated = false
+    }
 
-// `for (i in range(lo, hi))` -> init i = lo; loop while i < hi; continue-block does i += 1. The
-// condition (`i < hi`) and update (`i += 1`) are synthesized directly against the induction
-// OpVariable — there is no daslang AST node for them.
-def private emit_for(var m : SpirvModule; var ctx : EmitCtx; fr : ExprFor?; var errors : array<string>) {
-    if (length(fr.iteratorVariables) != 1 || length(fr.sources) != 1) {
-        errors |> push("for: only a single `i in range(...)` iterator is supported for now")
-        return
+    def override visitExprIfThenElse(var expr : ExprIfThenElse?) : ExpressionPtr {
+        let ids = ite_ids?[intptr(expr)] ?? IteIds()
+        var bm & = unsafe(*m)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
     }
-    let iv = fr.iteratorVariables[0]
-    let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
-    if (lvr.ptr_id == 0u) {
-        errors |> push("for: induction variable '{iv.name}' was not declared")
-        return
-    }
-    let cls = scalar_class(iv._type.baseType)
-    if (cls != 0 && cls != 1) {
-        // induction must be a 32-bit int/uint; otherwise the synthesized `i < hi` / `i += 1` would
-        // pick a Nop opcode (cmp_code/binop_code return ok=false) and emit invalid SPIR-V silently.
-        errors |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
-        return
-    }
-    // bounds (lo inclusive, hi exclusive) evaluated ONCE in the pre-header — range captures them at
-    // loop entry. Constant-bound range() folds to ExprConstRange (a half-open [from,to) value);
-    // runtime bounds stay an ExprCall to range()/urange().
-    var lo = 0u
-    var hi = 0u
-    let cr = fr.sources[0] ?as ExprConstRange
-    if (cr != null) {
-        let fromto = unsafe(reinterpret<int2>(cr.value))   // range == { from : int; to : int }
-        lo = const_int_for(m, cls, fromto.x)
-        hi = const_int_for(m, cls, fromto.y)
-    } else {
-        let src = fr.sources[0] ?as ExprCall
-        if (src == null) {
-            errors |> push("for: source is {fr.sources[0].__rtti}, expected range()/urange()")
-            return
-        }
-        if ("{src.name}" != "range" && "{src.name}" != "urange") {
-            errors |> push("for: source call is '{src.name}', expected range()/urange()")
-            return
-        }
-        let na = length(src.arguments)
-        if (na != 1 && na != 2) {
-            errors |> push("for: only range(n) and range(lo, hi) are supported for now (no step)")
-            return
-        }
-        lo = na == 2 ? emit_value(m, ctx, src.arguments[0], errors) : const_zero(m, cls)
-        hi = emit_value(m, ctx, src.arguments[na - 1], errors)
-    }
-    if (lo == 0u || hi == 0u) return
-    emit(m, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, lo)
-    let header = alloc_id(m)
-    let cond_l = alloc_id(m)
-    let body_l = alloc_id(m)
-    let cont_l = alloc_id(m)
-    let merge = alloc_id(m)
-    emit(m, SEC_FUNCS, SpvOp.Branch, header)
-    emit(m, SEC_FUNCS, SpvOp.Label, header)
-    ctx.terminated = false
-    emit(m, SEC_FUNCS, SpvOp.LoopMerge, merge, cont_l, uint(SpvLoopControl.None))
-    emit(m, SEC_FUNCS, SpvOp.Branch, cond_l)
-    emit(m, SEC_FUNCS, SpvOp.Label, cond_l)
-    ctx.terminated = false
-    let cur = alloc_id(m)
-    emit(m, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur, lvr.ptr_id)
-    let cc = cmp_code("<", cls)
-    let cres = alloc_id(m)
-    emit(m, SEC_FUNCS, cc.code, type_bool(m), cres, cur, hi)
-    emit(m, SEC_FUNCS, SpvOp.BranchConditional, cres, body_l, merge)
-    emit(m, SEC_FUNCS, SpvOp.Label, body_l)
-    ctx.terminated = false
-    ctx.loop_stack |> push(LoopTargets(merge = merge, cont = cont_l))
-    emit_stmt(m, ctx, fr.body, errors)
-    pop(ctx.loop_stack)
-    if (!ctx.terminated) emit(m, SEC_FUNCS, SpvOp.Branch, cont_l)
-    emit(m, SEC_FUNCS, SpvOp.Label, cont_l)
-    ctx.terminated = false
-    let cur2 = alloc_id(m)
-    emit(m, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur2, lvr.ptr_id)
-    let nxt = alloc_id(m)
-    emit(m, SEC_FUNCS, binop_code("+", cls).code, lvr.value_type, nxt, cur2, const_one(m, cls))
-    emit(m, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, nxt)
-    emit(m, SEC_FUNCS, SpvOp.Branch, header)
-    emit(m, SEC_FUNCS, SpvOp.Label, merge)
-    ctx.terminated = false
-}
 
-// ===== statement =====
-def private emit_stmt(var m : SpirvModule; var ctx : EmitCtx; s : ExpressionPtr; var errors : array<string>) {
-    // nested lexical block -> inline its statements (locals are function-scoped, already pre-declared)
-    let blk = s ?as ExprBlock
-    if (blk != null) {
-        for (st in blk.list) {
-            emit_stmt(m, ctx, st, errors)
-            break if (ctx.terminated)   // SPIR-V forbids instructions after a block terminator
+    // ----- while (OpLoopMerge 4-block, multi-phase) -----
+    def override preVisitExprWhile(var expr : ExprWhile?) : void {
+        var bm & = unsafe(*m)
+        let ids = LoopIds(header = alloc_id(bm), cond_l = alloc_id(bm), body_l = alloc_id(bm),
+                          cont_l = alloc_id(bm), merge = alloc_id(bm))
+        loop_ids[intptr(expr)] = ids
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.header)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.LoopMerge, ids.merge, ids.cont_l, uint(SpvLoopControl.None))
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cond_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cond_l)
+        ctx.terminated = false
+    }
+
+    def override preVisitExprWhileBody(var expr : ExprWhile?; right : ExpressionPtr) : void {
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        let c = value_of(expr.cond)
+        if (c != 0u) {   // a 0 cond means it failed to lower (error already pushed) — no 0-operand branch
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, c, ids.body_l, ids.merge)
         }
-        return
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.body_l)
+        ctx.terminated = false
+        ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
     }
-    let ite = s ?as ExprIfThenElse
-    if (ite != null) {
-        emit_if(m, ctx, ite, errors)
-        return
+
+    def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        if (!empty(ctx.loop_stack)) pop(ctx.loop_stack)   // guard underflow if the body hook was skipped on an earlier error
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cont_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cont_l)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
     }
-    let wh = s ?as ExprWhile
-    if (wh != null) {
-        emit_while(m, ctx, wh, errors)
-        return
+
+    // ----- for (i in range(...)): synthesized 4-block loop. All setup runs in ForBody (after the
+    // source is visited, so runtime range() endpoints are already in e2id); const ranges read
+    // ExprConstRange.value directly. Block ids allocated here to match the hand-walker's order. -----
+    def override preVisitExprFor(var expr : ExprFor?) : void {
+        // record the for-source so a future visitExprCall (6.3) skips emitting the range() call; its
+        // arguments are still visited normally, so runtime endpoints land in e2id.
+        if (!empty(expr.sources)) {
+            for_src |> insert(intptr(expr.sources[0]))
+        }
     }
-    let fr = s ?as ExprFor
-    if (fr != null) {
-        emit_for(m, ctx, fr, errors)
-        return
-    }
-    if (s is ExprBreak) {
-        if (empty(ctx.loop_stack)) {
-            errors |> push("break outside of a loop")
+
+    def override preVisitExprForBody(var expr : ExprFor?) : void {
+        var bm & = unsafe(*m)
+        if (length(expr.iteratorVariables) != 1 || length(expr.sources) != 1) {
+            errs |> push("for: only a single `i in range(...)` iterator is supported for now")
             return
         }
-        emit(m, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
-        ctx.terminated = true
-        return
-    }
-    if (s is ExprContinue) {
-        if (empty(ctx.loop_stack)) {
-            errors |> push("continue outside of a loop")
+        let iv = expr.iteratorVariables[0]
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        if (lvr.ptr_id == 0u) {
+            errs |> push("for: induction variable '{iv.name}' was not declared")
             return
         }
-        emit(m, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
-        ctx.terminated = true
-        return
-    }
-    let cp = s ?as ExprCopy
-    if (cp != null) {
-        let p = emit_ptr(m, ctx, cp.left, errors)
-        let val = emit_value(m, ctx, cp.right, errors)
-        if (p.id == 0u || val == 0u) return   // emit_ptr/emit_value already reported; don't OpStore with id 0
-        emit(m, SEC_FUNCS, SpvOp.Store, p.id, val)
-        return
-    }
-    // compound assignment `dst <op>= rhs` arrives as a void-typed ExprOp2
-    let cop2 = s ?as ExprOp2
-    if (cop2 != null && cop2._type.baseType == Type.tVoid) {
-        let base = compound_base("{cop2.op}")
-        let bo = binop_code(base, scalar_class(cop2.left._type.baseType))
-        if (!bo.ok) {
-            errors |> push("unsupported compound assignment '{cop2.op}'")
+        let cls = scalar_class(iv._type.baseType)
+        if (cls != 0 && cls != 1) {
+            errs |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
             return
         }
-        emit_load_op_store(m, ctx, cop2.left, bo.code, emit_value(m, ctx, cop2.right, errors), errors)
-        return
-    }
-    // `dst++` / `dst--` arrive as a statement-level ExprOp1
-    let iop1 = s ?as ExprOp1
-    if (iop1 != null && ("{iop1.op}" == "++" || "{iop1.op}" == "--")) {
-        let cls = scalar_class(iop1.subexpr._type.baseType)
-        let bo = binop_code("{iop1.op}" == "++" ? "+" : "-", cls)
-        if (!bo.ok) {
-            errors |> push("unsupported {iop1.op} on {iop1.subexpr._type.baseType}")
-            return
-        }
-        emit_load_op_store(m, ctx, iop1.subexpr, bo.code, const_one(m, cls), errors)
-        return
-    }
-    let lt = s ?as ExprLet
-    if (lt != null) {
-        for (v in lt.variables) {
-            if (v.init == null) {
-                errors |> push("uninitialized local '{v.name}' is not supported (every let/var must have an initializer)")
-                continue
+        var lo = 0u
+        var hi = 0u
+        let cr = expr.sources[0] ?as ExprConstRange
+        if (cr != null) {
+            let fromto = unsafe(reinterpret<int2>(cr.value))   // range == { from : int; to : int }
+            lo = const_int_for(bm, cls, fromto.x)
+            hi = const_int_for(bm, cls, fromto.y)
+        } else {
+            let src = expr.sources[0] ?as ExprCall
+            if (src == null) {
+                errs |> push("for: source is {expr.sources[0].__rtti}, expected range()/urange()")
+                return
             }
-            let lv = ctx.local_vars?[intptr(v)] ?? LocalVar()
-            if (lv.ptr_id != 0u) {                  // mutable: OpVariable pre-declared -> store init
-                let val = emit_value(m, ctx, v.init, errors)
-                if (val != 0u) emit(m, SEC_FUNCS, SpvOp.Store, lv.ptr_id, val)
-            } else {                                // immutable value-let -> bind SSA id
-                ctx.locals |> insert(intptr(v), emit_value(m, ctx, v.init, errors))
+            if ("{src.name}" != "range" && "{src.name}" != "urange") {
+                errs |> push("for: source call is '{src.name}', expected range()/urange()")
+                return
             }
+            let na = length(src.arguments)
+            if (na != 1 && na != 2) {
+                errs |> push("for: only range(n) and range(lo, hi) are supported for now (no step)")
+                return
+            }
+            lo = na == 2 ? value_of(src.arguments[0]) : const_zero(bm, cls)
+            hi = value_of(src.arguments[na - 1])
         }
-        return
+        if (lo == 0u || hi == 0u) return
+        emit(bm, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, lo)
+        let ids = LoopIds(header = alloc_id(bm), cond_l = alloc_id(bm), body_l = alloc_id(bm),
+                          cont_l = alloc_id(bm), merge = alloc_id(bm))
+        loop_ids[intptr(expr)] = ids
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.header)
+        ctx.terminated = false
+        emit(bm, SEC_FUNCS, SpvOp.LoopMerge, ids.merge, ids.cont_l, uint(SpvLoopControl.None))
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cond_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cond_l)
+        ctx.terminated = false
+        let cur = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur, lvr.ptr_id)
+        let cc = cmp_code("<", cls)
+        let cres = alloc_id(bm)
+        emit(bm, SEC_FUNCS, cc.code, type_bool(bm), cres, cur, hi)
+        emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cres, ids.body_l, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.body_l)
+        ctx.terminated = false
+        ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
     }
-    let rt = s ?as ExprReturn
-    if (rt != null) {
-        emit(m, SEC_FUNCS, SpvOp.Return)
+
+    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (!key_exists(loop_ids, intptr(expr))) return expr   // setup failed; errors already pushed
+        let ids = loop_ids?[intptr(expr)] ?? LoopIds()
+        var bm & = unsafe(*m)
+        let iv = expr.iteratorVariables[0]
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        let cls = scalar_class(iv._type.baseType)
+        pop(ctx.loop_stack)
+        if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.cont_l)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.cont_l)
+        ctx.terminated = false
+        let cur2 = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, lvr.value_type, cur2, lvr.ptr_id)
+        let nxt = alloc_id(bm)
+        emit(bm, SEC_FUNCS, binop_code("+", cls).code, lvr.value_type, nxt, cur2, const_one(bm, cls))
+        emit(bm, SEC_FUNCS, SpvOp.Store, lvr.ptr_id, nxt)
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.header)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        return expr
+    }
+
+    // ----- break / continue -> branch to the innermost loop's merge / continue block -----
+    def override preVisitExprBreak(var expr : ExprBreak?) : void {
+        var bm & = unsafe(*m)
+        if (empty(ctx.loop_stack)) {
+            errs |> push("break outside of a loop")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
         ctx.terminated = true
-        return
     }
-    errors |> push("unsupported statement {s.__rtti}")
+
+    def override preVisitExprContinue(var expr : ExprContinue?) : void {
+        var bm & = unsafe(*m)
+        if (empty(ctx.loop_stack)) {
+            errs |> push("continue outside of a loop")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
+        ctx.terminated = true
+    }
+
+    // ----- reject dead code after a block terminator -----
+    // SPIR-V forbids any instruction after a block terminator (OpReturn/OpBranch/...). The hand-walker
+    // dropped such unreachable statements; the visitor can't skip a sibling subtree (no per-statement
+    // canVisit gate), so fail closed instead: a statement reached while the current block is already
+    // terminated is unreachable code (daslang only warns LINT001) and is rejected with a clean error.
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+        if (ctx.terminated) {
+            errs |> push("unreachable code after a block terminator (a statement following return/break/continue) is not supported in SPIR-V shaders")
+        }
+    }
+
+    // ===== Fail-closed rejections (Phase 6.4) =====
+    // Each shader-illegal construct gets an explicit preVisit override that records a clean error, so an
+    // unsupported node can never be silently walked over into an empty/wrong blob. The value_of/ptr_of
+    // backstop above is the complement: it catches a walked-but-unlowered node (incl. a future AST node
+    // type we have no hook for) the moment a parent reads its missing id. Mirrors dasGlsl's discipline.
+    def override preVisitExprNew(expr : ExprNew?) : void {
+        errs |> push("new is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAscend(expr : ExprAscend?) : void {
+        errs |> push("new (ascend) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprDelete(expr : ExprDelete?) : void {
+        errs |> push("delete is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprStringBuilder(expr : ExprStringBuilder?) : void {
+        errs |> push("string builder is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprNamedCall(expr : ExprNamedCall?) : void {
+        errs |> push("named call is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprNullCoalescing(expr : ExprNullCoalescing?) : void {
+        errs |> push("null coalescing (??) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprCast(expr : ExprCast?) : void {
+        errs |> push("cast is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprPtr2Ref(expr : ExprPtr2Ref?) : void {
+        errs |> push("pointer deref is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprRef2Ptr(expr : ExprRef2Ptr?) : void {
+        errs |> push("addr is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
+        errs |> push("function address (@@) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprConstPtr(expr : ExprConstPtr?) : void {
+        errs |> push("pointer constant is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeAt(expr : ExprSafeAt?) : void {
+        errs |> push("safe index (?[]) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeField(expr : ExprSafeField?) : void {
+        errs |> push("safe field (?.) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprIsType(expr : ExprIs?; typeDecl : TypeDeclPtr) : void {
+        errs |> push("'is' type test is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprIsVariant(expr : ExprIsVariant?) : void {
+        errs |> push("variant 'is' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAsVariant(expr : ExprAsVariant?) : void {
+        errs |> push("variant 'as' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSafeAsVariant(expr : ExprSafeAsVariant?) : void {
+        errs |> push("variant '?as' is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMoveRight(expr : ExprMove?; right : ExpressionPtr) : void {
+        errs |> push("move (<-) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) : void {
+        errs |> push("clone (:=) is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprWith(expr : ExprWith?) : void {
+        errs |> push("with is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+        errs |> push("try/recover is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeVariant(expr : ExprMakeVariant?) : void {
+        errs |> push("variant construction is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeTuple(expr : ExprMakeTuple?) : void {
+        errs |> push("tuple construction is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
+        errs |> push("struct construction is not supported in SPIR-V shaders")
+    }
+    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool {
+        return false   // already rejected in preVisit; don't descend into the (unlowerable) field inits
+    }
+    def override preVisitExprArrayComprehension(expr : ExprArrayComprehension?) : void {
+        errs |> push("array comprehension is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprTypeInfo(expr : ExprTypeInfo?) : void {
+        errs |> push("typeinfo is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprLabel(expr : ExprLabel?) : void {
+        errs |> push("label is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprGoto(expr : ExprGoto?) : void {
+        errs |> push("goto is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprAssert(expr : ExprAssert?) : void {
+        errs |> push("assert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprStaticAssert(expr : ExprStaticAssert?) : void {
+        errs |> push("static_assert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprQuote(expr : ExprQuote?) : void {
+        errs |> push("quote is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprDebug(expr : ExprDebug?) : void {
+        errs |> push("debug is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        errs |> push("invoke is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprErase(expr : ExprErase?) : void {
+        errs |> push("erase is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprSetInsert(expr : ExprSetInsert?) : void {
+        errs |> push("set insert is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprFind(expr : ExprFind?) : void {
+        errs |> push("find is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprKeyExists(expr : ExprKeyExists?) : void {
+        errs |> push("key_exists is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprYield(expr : ExprYield?) : void {
+        errs |> push("yield is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
+        errs |> push("closure / block is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMakeGenerator(expr : ExprMakeGenerator?) : void {
+        errs |> push("generator is not supported in SPIR-V shaders")
+    }
+    def override preVisitExprMemZero(expr : ExprMemZero?) : void {
+        errs |> push("memzero is not supported in SPIR-V shaders")
+    }
 }
 
-// ===== function body driver =====
-def private emit_body(var m : SpirvModule; var ctx : EmitCtx; body : ExpressionPtr; var errors : array<string>) {
-    let blk = body ?as ExprBlock
-    if (blk == null) {
-        errors |> push("shader body must be a block")
-        return
+// Drive the SpirvEmit visitor over a function body. The visitor owns all body codegen; the module
+// scaffold (caps / entry-point / OpFunction / trailing return) stays in generate_spirv.
+def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr; var errors : array<string>) {
+    var v = new SpirvEmit(m = unsafe(addr(m)), ctx = unsafe(addr(ctx)))
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(fn.body, v.adapter)
     }
-    for (s in blk.list) {
-        emit_stmt(m, ctx, s, errors)
-        break if (ctx.terminated)   // SPIR-V forbids instructions after a block terminator
+    errors |> push_from(v.errs)
+    unsafe {
+        delete v
     }
 }
 
@@ -1495,7 +1729,8 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
 
     // Function-storage OpVariables must lead the entry block, before any body code.
     collect_locals(m, ctx, fn.body, errors)
-    emit_body(m, ctx, fn.body, errors)
+    // Body codegen: the SpirvEmit AstVisitor walks fn.body, emitting into m.
+    drive_emit(m, ctx, fn, errors)
 
     if (!ctx.terminated) {
         emit(m, SEC_FUNCS, SpvOp.Return)
