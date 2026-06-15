@@ -956,6 +956,53 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // Folded vector constants (float2(0.5,0.5) etc. fold to ExprConstFloatN/IntN/UIntN at patch time)
+    // are leaf rvalues with no scalar-style visit registration. emit_const already lowers each to an
+    // OpConstantComposite; record the id so value_of finds it when the node is an operand.
+    def register_vec_const(e : ExpressionPtr) {
+        var bm & = unsafe(*m)
+        let cr = emit_const(bm, e, errs)
+        if (cr.ok) {
+            e2id[intptr(e)] = cr.id
+        }
+    }
+    def override visitExprConstFloat2(var expr : ExprConstFloat2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstFloat3(var expr : ExprConstFloat3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstFloat4(var expr : ExprConstFloat4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt2(var expr : ExprConstInt2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt3(var expr : ExprConstInt3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstInt4(var expr : ExprConstInt4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt2(var expr : ExprConstUInt2?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt3(var expr : ExprConstUInt3?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+    def override visitExprConstUInt4(var expr : ExprConstUInt4?) : ExpressionPtr {
+        register_vec_const(expr)
+        return expr
+    }
+
     // ----- variables: value-let -> SSA id; memory local / global -> pointer -----
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         let k = intptr(expr)

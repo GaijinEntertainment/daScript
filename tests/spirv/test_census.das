@@ -56,6 +56,7 @@ def test_opcode_census(t : T?) {
         add_set(present, dims_words())
         add_set(present, septex_words())
         add_set(present, tern_words())
+        add_set(present, vecarith_words())
         var declared <- phase8_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")

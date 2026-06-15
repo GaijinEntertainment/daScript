@@ -634,6 +634,27 @@ def public tern_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
+// OpFAdd/OpFSub/OpFDiv on the vector result type (scalar_class reads the lane kind); unary - is
+// OpFNegate. float2(0.5,0.5) as an operand folds to ExprConstFloat2 -> OpConstantComposite (the gap
+// Phase 7 deferred: a folded const vector used as an rvalue, not only inside a const-array init). =====
+var @in @location = 0 va_in : float2
+var @out @location = 0 va_out : float2
+[fragment_shader(name="vecarith_spv"), marker(no_coverage)]
+def vecarith {
+    let a = va_in
+    let b = va_in + float2(0.5, 0.5)    // folded const-vector operand + component-wise OpFAdd
+    let c = a - b                       // component-wise OpFSub
+    let d = c / b                       // component-wise OpFDiv
+    va_out = -d                         // component-wise OpFNegate
+}
+
+def public vecarith_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(vecarith_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
