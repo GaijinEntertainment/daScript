@@ -12,6 +12,7 @@ require spirv_builder
 require spirv_types
 require spirv_grammar
 require spirv_reflect
+require math
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
@@ -35,6 +36,7 @@ struct GlobalInfo {
     is_storage_image : bool         // a read-write storage image (UniformConstant OpTypeImage); used via imageLoad/imageStore
     is_separate_image : bool        // a standalone sampled image (texture2D, OpTypeImage); combined at the call via OpSampledImage
     is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
+    elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type)
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -131,23 +133,28 @@ def private round_up(off, a : int) : int {
     return ((off + a - 1) / a) * a
 }
 
-// Build a Block-decorated interface struct from a daslang struct's fields, laid out std140. Shared
-// by @uniform and @push_constant blocks. 32-bit scalar/vector/matrix members are supported; nested
-// structs and arrays are not yet. Returns the struct type-id; the caller wraps it in the right
-// storage-class pointer + descriptor decorations.
-def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : tuple<ok : bool; type_id : uint; size : int> {
+// Build a laid-out interface struct from a daslang struct's fields. 32-bit scalar/vector/matrix
+// members are supported; nested structs and arrays are not yet. `as_block` toggles the Block decoration
+// (true for @uniform/@push_constant blocks, false for an SSBO runtime-array element struct).
+// Member offsets are identical under std140 and std430 for these flat member kinds — the two layouts
+// only diverge on array/nested-struct members (rejected here) and on the final struct-size rounding,
+// which the caller does via the returned `align` (max member base alignment). `size` is the offset
+// past the last member (the push-constant range size); `align` lets the SSBO caller round it up to
+// the std430 array stride.
+def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; as_block : bool; var errors : array<string>) : tuple<ok : bool; type_id : uint; size : int; align : int> {
     if (st == null || empty(st.fields)) {
         errors |> push("interface block '{sname}' must be a struct with at least one field")
-        return (ok = false, type_id = 0u, size = 0)
+        return (ok = false, type_id = 0u, size = 0, align = 0)
     }
     var members : array<uint>
     var offsets : array<int>
     var mat_strides : array<int>
     var off = 0
+    var max_align = 0
     for (fld in st.fields) {
         let mi = matrix_info(fld._type)
         if (mi.ok) {
-            // std140 matrix: ColMajor, each column padded to vec4 (MatrixStride 16), align 16,
+            // std140/std430 matrix: ColMajor, each column padded to vec4 (MatrixStride 16), align 16,
             // size = 16 * cols. (daslang float3x3 stores packed columns, so its bytes need
             // repacking host-side before upload; float4x4 columns are already vec4 -> direct.)
             off = round_up(off, 16)
@@ -155,6 +162,7 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
             offsets |> push(off)
             mat_strides |> push(16)
             off += 16 * mi.cols
+            max_align = max(max_align, 16)
             continue
         }
         let fbt = fld._type.baseType
@@ -166,19 +174,51 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
             delete members
             delete offsets
             delete mat_strides
-            return (ok = false, type_id = 0u, size = 0)
+            return (ok = false, type_id = 0u, size = 0, align = 0)
         }
-        off = round_up(off, std140_align(fbt))
+        let falign = std140_align(fbt)
+        off = round_up(off, falign)
         members |> push(emit_type(m, fld._type))
         offsets |> push(off)
         mat_strides |> push(0)
         off += std140_size(fbt)
+        max_align = max(max_align, falign)
     }
-    let id = type_struct_block(m, members, offsets, mat_strides)
+    let id = (as_block ? type_struct_block(m, members, offsets, mat_strides)
+                       : type_struct_layout(m, members, offsets, mat_strides))
     delete members
     delete offsets
     delete mat_strides
-    return (ok = true, type_id = id, size = off)
+    return (ok = true, type_id = id, size = off, align = max_align)
+}
+
+// std430 layout of an SSBO runtime-array element. Returns the element SPIR-V type-id + the
+// ArrayStride. A 32-bit scalar/vector element strides by its std430 base size rounded up to its base
+// alignment (vec3 -> 16, vec2 -> 8, scalar -> 4); a struct element is laid out non-Block and strides
+// by its size rounded to the struct alignment. Matrix and nested-array elements are rejected (wrap a
+// matrix in a struct). std140_size/std140_align are reused: they equal the std430 base size/alignment
+// for these flat scalar/vector kinds (std430 differs only on array/struct padding, handled here).
+def private ssbo_element_layout(var m : SpirvModule; sname : string; et : TypeDecl?; var errors : array<string>) : tuple<ok : bool; elem_type : uint; stride : int> {
+    if (et == null) {
+        errors |> push("ssbo '{sname}' has no element type")
+        return (ok = false, elem_type = 0u, stride = 0)
+    }
+    if (matrix_info(et).ok) {
+        errors |> push("ssbo '{sname}' element is a matrix — wrap it in a struct (a bare matrix runtime-array element is not supported)")
+        return (ok = false, elem_type = 0u, stride = 0)
+    }
+    let bt = et.baseType
+    if (bt == Type.tStructure) {
+        let bs = build_block_struct(m, "{sname} element", et.structType, false, errors)
+        if (!bs.ok) return (ok = false, elem_type = 0u, stride = 0)
+        return (ok = true, elem_type = bs.type_id, stride = round_up(bs.size, bs.align))
+    }
+    // 32-bit scalar or its 2/3/4 vector (scalar_class rejects bool and non-numeric base types)
+    if (component_count(bt) >= 1 && scalar_class(bt) >= 0) {
+        return (ok = true, elem_type = emit_type(m, et), stride = round_up(std140_size(bt), std140_align(bt)))
+    }
+    errors |> push("ssbo '{sname}' element type {bt} is not supported (a 32-bit scalar, a vector of those, or a struct of those)")
+    return (ok = false, elem_type = 0u, stride = 0)
 }
 
 // The single SpirvStageFlags bit for one shader stage. A shader module is one stage, so every
@@ -330,17 +370,11 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             errors |> push("ssbo '{vname}' must be an array<T>")
             return
         }
-        // std430 array stride == element sizeOf only for scalars; vec3/struct elements need
-        // larger aligned strides we don't compute yet. Reject non-scalars rather than emit a
-        // wrong/non-portable layout (Phase 4 adds real std430 layout).
-        let et = v._type.firstType.baseType
-        if (et != Type.tInt && et != Type.tUInt && et != Type.tFloat) {
-            errors |> push("ssbo '{vname}' element must be a 32-bit scalar (int/uint/float) for now — std430 vector/struct layout is not yet implemented")
-            return
-        }
-        let elem_t = emit_type(m, v._type.firstType)
-        let stride = v._type.firstType.sizeOf
-        let rta = type_runtime_array(m, elem_t, stride)
+        // std430 element layout: 32-bit scalar/vector elements stride by their aligned base size,
+        // struct elements are laid out non-Block and stride by their aligned struct size.
+        let el = ssbo_element_layout(m, vname, v._type.firstType, errors)
+        if (!el.ok) return
+        let rta = type_runtime_array(m, el.elem_type, el.stride)
         var members <- [rta]
         var offsets <- [0]
         let st = type_struct_block(m, members, offsets)
@@ -357,7 +391,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         }
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
-        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true, elem_type = el.elem_type))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
             kind = SpirvDescriptorKind.storage_buffer, count = 1, stages = stage_flag(stage)))
         return
@@ -369,7 +403,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             errors |> push("uniform '{vname}' must be a struct")
             return
         }
-        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        let bs = build_block_struct(m, vname, v._type.structType, true, errors)
         if (!bs.ok) return
         let pt = type_pointer(m, SpvStorageClass.Uniform, bs.type_id)
         let vid = alloc_id(m)
@@ -395,7 +429,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             errors |> push("push_constant '{vname}' must be a struct")
             return
         }
-        let bs = build_block_struct(m, vname, v._type.structType, errors)
+        let bs = build_block_struct(m, vname, v._type.structType, true, errors)
         if (!bs.ok) return
         let pt = type_pointer(m, SpvStorageClass.PushConstant, bs.type_id)
         let vid = alloc_id(m)
@@ -1105,7 +1139,8 @@ class SpirvEmit : AstVisitor {
         }
         let idx = value_of(expr.index)
         if (idx == 0u) return expr   // index failed to lower (error already pushed) — no 0-operand access chain
-        let pointee = emit_type(bm, expr._type)
+        // use the classified element type-id: a struct element can't go through emit_type
+        let pointee = gi.elem_type != 0u ? gi.elem_type : emit_type(bm, expr._type)
         let res = alloc_id(bm)
         let ptr_t = type_pointer(bm, gi.storage, pointee)
         var ops <- [ptr_t, res, gi.var_id, const_uint(bm, 0u), idx]
@@ -1306,12 +1341,38 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- member of a Block global (ubo.color) -> OpAccessChain by field index -> pointer -----
+    // Two shapes: a direct block global (ubo.color), and a field of an indexed SSBO struct element
+    // (particles[i].pos) where expr.value is the ExprAt's element pointer — chain the field off it.
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
         let bv = global_var_of(expr.value)
         if (bv == null) {
-            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
+            if (key_exists(e2ptr, intptr(expr.value))) {
+                let base = ptr_of(expr.value)
+                let est = expr.value._type.structType
+                if (est == null) {
+                    errs |> push("member access '.{expr.name}': base is not a struct value")
+                    return expr
+                }
+                let midx = field_index_by_name(est, "{expr.name}")
+                if (midx < 0) {
+                    errs |> push("member access '.{expr.name}': no such field")
+                    return expr
+                }
+                // chain the field pointer in the element pointer's storage class (StorageBuffer for an SSBO)
+                let av = expr.value ?as ExprAt
+                let rgi = av != null ? (ctx.globals?[intptr(global_var_of(av.subexpr))] ?? GlobalInfo()) : GlobalInfo()
+                let storage = rgi.var_id != 0u ? rgi.storage : SpvStorageClass.StorageBuffer
+                let pointee = emit_type(bm, expr._type)
+                let ptr_t = type_pointer(bm, storage, pointee)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, base.id, const_uint(bm, uint(midx)))
+                e2ptr[k] = res
+                e2pty[k] = pointee
+                return expr
+            }
+            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global or an indexed ssbo struct element for now")
             return expr
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()

@@ -320,11 +320,25 @@ def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets
 // ColMajor + MatrixStride decorations (daslang matrices are column-major, so ColMajor matches). The
 // stride is part of the dedup key so the decorations stay tied to a single deduped type emission.
 def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint {
+    return type_struct_decorated(m, members, offsets, mat_strides, true)
+}
+
+// A laid-out struct WITHOUT the Block decoration — used as the element type of an SSBO runtime array
+// (the outer wrapping struct carries Block; the element struct only needs member Offset/matrix
+// decorations). Same offset/matrix-stride contract as type_struct_block.
+def public type_struct_layout(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint {
+    return type_struct_decorated(m, members, offsets, mat_strides, false)
+}
+
+// Shared core: emit a laid-out OpTypeStruct with member Offset (+ ColMajor/MatrixStride for matrix
+// members), optionally Block-decorated. `block` is part of the dedup key so a Block and a non-Block
+// struct with identical members/offsets stay distinct types.
+def private type_struct_decorated(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>; as_block : bool) : uint {
     if (empty(members) || length(members) != length(offsets) || length(members) != length(mat_strides)) {
-        panic("type_struct_block: members/offsets/mat_strides must be non-empty and equal length (members={length(members)}, offsets={length(offsets)}, mat_strides={length(mat_strides)})")
+        panic("type_struct_decorated: members/offsets/mat_strides must be non-empty and equal length (members={length(members)}, offsets={length(offsets)}, mat_strides={length(mat_strides)})")
     }
     let key = build_string() $(var wr) {
-        wr |> write("struct_b")
+        wr |> write(as_block ? "struct_b" : "struct_l")
         for (mid in members) {
             wr |> write("_{mid}")
         }
@@ -343,7 +357,9 @@ def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets
     ops |> push_from(members)
     emit_n(m, SEC_TYPES, SpvOp.TypeStruct, ops)
     delete ops
-    emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.Block))
+    if (as_block) {
+        emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.Block))
+    }
     for (k in range(length(offsets))) {
         emit(m, SEC_DECOR, SpvOp.MemberDecorate, id, uint(k), uint(SpvDecoration.Offset), uint(offsets[k]))
         if (mat_strides[k] > 0) {
