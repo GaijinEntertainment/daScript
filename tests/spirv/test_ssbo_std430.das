@@ -66,11 +66,12 @@ def test_ssbo_struct_elements(t : T?) {
         // two OpTypeStruct: the element struct (non-Block) + the outer Block wrapper
         t |> success(count_op(words, SpvOp.TypeStruct) == 2,
             "ssbostruct: two OpTypeStruct (element + Block wrapper), got {count_op(words, SpvOp.TypeStruct)}")
-        // the wrapper struct is Block-decorated; the element struct must NOT be (spirv-val rejects a
-        // Block on a runtime-array element, and TypeStruct==2 confirms the element struct is distinct)
-        t |> success(op_has_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Block)),
-            "ssbostruct: the wrapper struct is Block-decorated")
-        // std430 element layout: pos@0, vel@8, life@16
+        // EXACTLY one Block decoration -- the wrapper. The element struct must NOT be Block-decorated
+        // (a Block on a runtime-array element is invalid; this pins it directly, not just via spirv-val).
+        t |> success(count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Block)) == 1,
+            "ssbostruct: exactly one Block decoration (the wrapper, not the element struct), got {count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Block))}")
+        // std430 element layout: vel@8 and life@16 are unique to the element struct (the wrapper's only
+        // member is at offset 0, so pos@0 alone wouldn't discriminate -- the 8/16 offsets + stride do).
         t |> success(has_member_offset(words, 0u), "ssbostruct: pos @ std430 offset 0")
         t |> success(has_member_offset(words, 8u), "ssbostruct: vel @ std430 offset 8")
         t |> success(has_member_offset(words, 16u), "ssbostruct: life @ std430 offset 16")

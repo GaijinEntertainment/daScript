@@ -117,6 +117,19 @@ def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value :
     return found
 }
 
+// How many instructions with `op` carry `value` at operand index `idx` (0-based, after word0)?
+// The counting form of op_has_operand_at — e.g. count OpDecorate with Block (decoration at idx 1) to
+// assert there is EXACTLY one Block-decorated struct.
+def public count_op_operand_at(words : array<uint>; op : SpvOp; idx : int; value : uint) : int {
+    var count = 0
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(op) && idx >= 0 && idx < n && w[s + idx] == value) {
+            count++
+        }
+    }
+    return count
+}
+
 // Operand-role classifier for the symbolic dump: is operand `idx` (0-based, after the opcode name) of
 // `opName` a LITERAL rather than an <id>? Lets a dump be id-canonicalized (ids -> first-appearance
 // placeholders) for id-renaming-insensitive golden comparison, without conflating a literal whose value

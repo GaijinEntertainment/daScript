@@ -331,7 +331,7 @@ def public type_struct_layout(var m : SpirvModule; members : array<uint>; offset
 }
 
 // Shared core: emit a laid-out OpTypeStruct with member Offset (+ ColMajor/MatrixStride for matrix
-// members), optionally Block-decorated. `block` is part of the dedup key so a Block and a non-Block
+// members), optionally Block-decorated. `as_block` is part of the dedup key so a Block and a non-Block
 // struct with identical members/offsets stay distinct types.
 def private type_struct_decorated(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>; as_block : bool) : uint {
     if (empty(members) || length(members) != length(offsets) || length(members) != length(mat_strides)) {
