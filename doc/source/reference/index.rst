@@ -25,6 +25,7 @@ THE SOFTWARE.
    design_philosophy.rst
    language.rst
    embedding.rst
+   spirv.rst
    utils.rst
    tutorials.rst
    flatten.rst

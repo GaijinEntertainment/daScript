@@ -131,6 +131,7 @@ require strudel/strudel_midi_player
 require strudel/strudel_sf2
 require strudel/strudel_sf2_voice
 require strudel/strudel_pattern
+require spirv/spirv_reflect
 
 def document_module_math(_root : string) {
     var mod = get_module("math")
@@ -1647,6 +1648,16 @@ def document_module_peg(_root : string) {
     document("PEG parser generator", mod, "peg.rst", groups)
 }
 
+def document_module_spirv(_root : string) {
+    var mod = find_module("spirv_reflect")
+    var groups <- array<DocGroup>(
+        group_by_regex("Reflection types", mod, %regex~(SpirvReflection|SpirvDescriptorBinding|SpirvPushConstantRange|SpirvDescriptorKind|SpirvStageFlags)$%%),
+        group_by_regex("Serialization", mod, %regex~(encode_reflection|decode_reflection)$%%),
+        hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%))
+    )
+    document("SPIR-V shader reflection (dasSpirv): API-neutral descriptor + push-constant layout, host-consumed", mod, "spirv_reflect.rst", groups)
+}
+
 [export]
 def main {
     disable_profiler(this_context())
@@ -1686,6 +1697,8 @@ def main {
     document_module_strudel_pattern(root)
     // document dasPEG module
     document_module_peg(root)
+    // document dasSpirv reflection module
+    document_module_spirv(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)
