@@ -56,7 +56,7 @@ struct EmitCtx {
     terminated    : bool                        // current block already has a terminator
     glsl_ext      : uint                        // OpExtInstImport "GLSL.std.450" set id (0 = not imported yet)
     stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
-    uses_frag_depth : bool                      // gl_FragDepth is written -> emit the DepthReplacing execution mode
+    uses_frag_depth : bool                      // gl_FragDepth referenced (Output-only, so = written) -> emit DepthReplacing
     image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
 }
 
@@ -269,7 +269,8 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.BuiltIn), uint(bi.bi))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = bi.storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)   // Input + Output builtins both list in the entry interface
-        // Writing gl_FragDepth replaces the fixed-function depth -> the shader must declare DepthReplacing.
+        // gl_FragDepth is Output-only, so any reference to it is a write -> the shader replaces the
+        // fixed-function depth and must declare DepthReplacing. Flagged here at classification.
         if (bi.bi == SpvBuiltIn.FragDepth) {
             ctx.uses_frag_depth = true
         }
@@ -2233,7 +2234,8 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         delete em
     } elif (stage == ShaderStage.Fragment) {
         emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OriginUpperLeft))
-        // Writing gl_FragDepth (detected by classify_global above) replaces the fixed-function depth.
+        // gl_FragDepth referenced (detected by classify_global above; Output-only, so a reference is a
+        // write) -> the shader replaces the fixed-function depth.
         if (ctx.uses_frag_depth) {
             emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.DepthReplacing))
         }

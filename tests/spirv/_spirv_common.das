@@ -758,8 +758,10 @@ def public gswizzle_words : array<uint> {
 
 // ===== Phase-10.3 fragment realism: discard (OpKill), screen-space derivatives (OpDPdx/OpDPdy/
 // OpFwidth), textureSize (OpImageQuerySizeLod + the ImageQuery capability), and a gl_FragDepth write
-// (BuiltIn FragDepth Output -> the DepthReplacing execution mode). All fragment-only. discard() sits
-// in an if-branch (it is a block terminator); dFdx/dFdy take the whole float2 global, fwidth a scalar. =====
+// (BuiltIn FragDepth Output -> the DepthReplacing execution mode). discard/derivatives/gl_FragDepth are
+// fragment-only; textureSize is stage-agnostic (exercised here in a fragment shader for convenience).
+// discard() sits in an if-branch (it is a block terminator); dFdx/dFdy take the whole float2 global,
+// fwidth a scalar. =====
 var @binding = 0 fx_tex : sampler2D
 var @in @location = 0 fx_uv : float2
 var @out @location = 0 fx_color : float4
