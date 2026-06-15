@@ -615,6 +615,25 @@ def public septex_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-8.1 ternary cond ? a : b -> OpSelect (branchless). A scalar select uses the scalar bool
+// condition directly; a vector select with a scalar condition splats the bool to a bvecN first
+// (SPIR-V < 1.4 requires the OpSelect condition width to match the result). =====
+[compute_shader(local_size_x=64, name="tern_spv"), marker(no_coverage)]
+def tern {
+    let i = gl_GlobalInvocationID.x
+    let a = fdata[i]
+    let b = fdata[i + 1u]
+    let s = a > b ? a : b                                        // scalar OpSelect // nolint:PERF015
+    let v = a > b ? float4(a, a, a, a) : float4(b, b, b, b)      // vector OpSelect (splatted condition)
+    fdata[i] = s + v.x
+}
+
+def public tern_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(tern_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -824,5 +843,15 @@ def public phase7d_emitter_opcodes : table<uint> {
     ]) {
         s |> insert(uint(op))
     }
+    return <- s
+}
+
+// Phase-8.1 adds the ternary -> OpSelect (the bvecN splat reuses OpCompositeConstruct, already declared
+// by Phase 3). Phase-8.2 (vector arithmetic + folded const-vector operands) and Phase-8.3 (broader
+// GLSL.std.450 math, all via the already-declared OpExtInst) add NO new opcodes. So the Phase-8 declared
+// set is 7.4 + OpSelect. 7.4 set + this:
+def public phase8_emitter_opcodes : table<uint> {
+    var s <- phase7d_emitter_opcodes()
+    s |> insert(uint(SpvOp.Select))     // cond ? a : b
     return <- s
 }

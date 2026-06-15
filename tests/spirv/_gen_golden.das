@@ -55,4 +55,5 @@ def main {
     emit_golden(dir, "texlod", texlod_words())
     emit_golden(dir, "dims", dims_words())
     emit_golden(dir, "septex", septex_words())
+    emit_golden(dir, "tern", tern_words())
 }

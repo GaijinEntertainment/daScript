@@ -1178,6 +1178,46 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // ----- ternary cond ? a : b -> OpSelect. Branchless; both arms are evaluated (eager) which is
+    // correct for side-effect-free shader operands, same rule as eager &&/||. A vector result with a
+    // scalar bool condition is splatted to a bvecN: SPIR-V < 1.4 OpSelect requires the condition width
+    // to match the result component count. -----
+    def override visitExprOp3(var expr : ExprOp3?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        if ("{expr.op}" != "?") {
+            errs |> push("unsupported ternary operator '{expr.op}'")
+            return expr
+        }
+        let n = component_count(expr._type.baseType)
+        if (n == 0) {
+            errs |> push("unsupported ternary result type {expr._type.baseType}")
+            return expr
+        }
+        let cond = value_of(expr.subexpr)
+        let tv = value_of(expr.left)
+        let fv = value_of(expr.right)
+        if (cond == 0u || tv == 0u || fv == 0u) return expr
+        let resty = emit_type(bm, expr._type)
+        var sel_cond = cond
+        if (n > 1 && expr.subexpr._type.baseType == Type.tBool) {   // splat scalar bool -> bvecN
+            let bvec = type_vector(bm, type_bool(bm), n)
+            sel_cond = alloc_id(bm)
+            var sops <- [bvec, sel_cond]
+            sops |> reserve(n + 2)
+            for (_ in range(n)) {
+                sops |> push(cond)
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, sops)
+            delete sops
+        }
+        let res = alloc_id(bm)
+        var ops <- [resty, res, sel_cond, tv, fv]
+        emit_n(bm, SEC_FUNCS, SpvOp.Select, ops)
+        delete ops
+        e2id[intptr(expr)] = res
+        return expr
+    }
+
     // ----- store: dst = rhs -----
     def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         var bm & = unsafe(*m)

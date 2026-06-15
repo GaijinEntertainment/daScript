@@ -145,5 +145,7 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "texlod", texlod_words())
         check_iso(t, "dims", dims_words())
         check_iso(t, "septex", septex_words())
+        // Phase-8 fixtures (visitor baseline): ternary OpSelect + vector constructors (post-order ids).
+        check_iso(t, "tern", tern_words())
     }
 }
