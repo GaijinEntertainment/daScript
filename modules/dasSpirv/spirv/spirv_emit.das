@@ -1758,6 +1758,191 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // ----- member of a Block global (ubo.color) -> OpAccessChain by field index -> pointer -----
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let k = intptr(expr)
+        let bv = global_var_of(expr.value)
+        if (bv == null) {
+            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global for now")
+            return expr
+        }
+        let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
+        if (!gi.is_block) {
+            errs |> push("member access '.{expr.name}': '{bv.name}' is not a block (uniform/ssbo/push_constant) global")
+            return expr
+        }
+        let midx = field_index_by_name(bv._type.structType, "{expr.name}")
+        if (midx < 0) {
+            errs |> push("member access '.{expr.name}': no such field on '{bv.name}'")
+            return expr
+        }
+        let pointee = emit_type(bm, expr._type)
+        let ptr_t = type_pointer(bm, gi.storage, pointee)
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(midx)))
+        e2ptr[k] = res
+        e2pty[k] = pointee
+        return expr
+    }
+
+    // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
+    // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
+    // range()/urange() calls are consumed by preVisitExprForBody and skipped here.
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (key_exists(for_src, intptr(expr))) return expr
+        var bm & = unsafe(*m)
+        let name = "{expr.name}"
+        let k = intptr(expr)
+        // texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod
+        if (name == "texture") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("texture expects (sampler, uv)")
+                return expr
+            }
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
+                return expr
+            }
+            let sg = global_var_of(expr.arguments[0])
+            if (sg == null) {
+                errs |> push("texture: first argument must be a sampler global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
+            if (!gi.is_sampler) {
+                errs |> push("texture: '{sg.name}' is not a sampler")
+                return expr
+            }
+            let simg = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let uv = value_of(expr.arguments[1])
+            if (uv == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+            e2id[k] = res
+            return expr
+        }
+        // vector constructor: OpCompositeConstruct (or splat / identity for one arg)
+        let vc = vector_ctor(name)
+        if (vc.ok) {
+            let rt = emit_type(bm, expr._type)
+            if (length(expr.arguments) == 1) {
+                let a0 = expr.arguments[0]
+                let cc = component_count(a0._type.baseType)
+                if (scalar_class(a0._type.baseType) != vc.cls) {
+                    errs |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
+                    return expr
+                }
+                let aid = value_of(a0)
+                if (aid == 0u) return expr
+                if (cc == vc.n) {                            // identity: float4(someFloat4)
+                    e2id[k] = aid
+                    return expr
+                }
+                if (cc == 1) {                               // splat: float4(scalar)
+                    let res = alloc_id(bm)
+                    var cons <- [rt, res]
+                    cons |> reserve(2 + vc.n)
+                    for (_l in range(vc.n)) {
+                        cons |> push(aid)
+                    }
+                    emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+                    delete cons
+                    e2id[k] = res
+                    return expr
+                }
+                errs |> push("cannot construct {name} from a single {a0._type.baseType}")
+                return expr
+            }
+            var total = 0
+            let res = alloc_id(bm)
+            var cons <- [rt, res]
+            cons |> reserve(2 + length(expr.arguments))
+            for (a in expr.arguments) {
+                let cc = component_count(a._type.baseType)
+                if (cc == 0) {
+                    errs |> push("{name}: argument of type {a._type.baseType} is not a scalar/vector")
+                    delete cons
+                    return expr
+                }
+                if (scalar_class(a._type.baseType) != vc.cls) {
+                    errs |> push("{name}: constituent of type {a._type.baseType} has a different component kind (conversion not supported yet)")
+                    delete cons
+                    return expr
+                }
+                total += cc
+                let aid = value_of(a)
+                if (aid == 0u) {
+                    delete cons
+                    return expr
+                }
+                cons |> push(aid)
+            }
+            if (total != vc.n) {
+                errs |> push("{name}: constituent lanes sum to {total}, expected {vc.n}")
+                delete cons
+                return expr
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+            delete cons
+            e2id[k] = res
+            return expr
+        }
+        // dot: core OpDot (vector . vector -> scalar)
+        if (name == "dot") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("dot expects 2 arguments")
+                return expr
+            }
+            let a = value_of(expr.arguments[0])
+            let b = value_of(expr.arguments[1])
+            if (a == 0u || b == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Dot, rt, res, a, b)
+            e2id[k] = res
+            return expr
+        }
+        // GLSL.std.450 math: OpExtInst
+        let cls = empty(expr.arguments) ? -1 : scalar_class(expr.arguments[0]._type.baseType)
+        let ge = glsl_ext_op(name, cls)
+        if (ge.ok) {
+            let set = ensure_glsl_ext(bm, unsafe(*ctx))
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, set, uint(ge.op)]
+            for (a in expr.arguments) {
+                let aid = value_of(a)
+                if (aid == 0u) {
+                    delete ops
+                    return expr
+                }
+                ops |> push(aid)
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.ExtInst, ops)
+            delete ops
+            e2id[k] = res
+            return expr
+        }
+        errs |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
+        return expr
+    }
+
+    // ----- fixed-array literal -> OpConstantComposite (whole-array, deduped) -----
+    // emit_const recurses into the (const) elements internally, so the elements' own default visit emits
+    // nothing — at patch they fold to ExprConstFloatN leaves, not sub-call nodes. Records the array's
+    // constant id; a fixed-array `let` then Stores it into the Function-storage OpVariable.
+    def override visitExprMakeArray(var expr : ExprMakeArray?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let r = emit_const(bm, expr, errs)
+        if (r.ok) {
+            e2id[intptr(expr)] = r.id
+        }
+        return expr
+    }
+
     // ----- if / elif / else (OpSelectionMerge + OpBranchConditional, multi-phase) -----
     // Block ids are allocated in the IfBlock hook — AFTER the cond is visited — so the id order
     // matches the hand-walker (cond ids first, then merge/then/else), keeping the blob byte-identical.
@@ -1958,7 +2143,10 @@ def private visitor_handles(fn : FunctionPtr) : bool {
     let n = "{fn.name}"
     return (n == "square" || n == "uarith" || n == "iarith" || n == "farith"
         || n == "uctrl" || n == "ictrl" || n == "fctrl" || n == "wloop" || n == "floop"
-        || n == "nloop" || n == "echain" || n == "eret" || n == "rfor")
+        || n == "nloop" || n == "echain" || n == "eret" || n == "rfor"
+        || n == "tri_vert" || n == "tri_frag" || n == "vindex" || n == "raster_math"
+        || n == "ubo_frag" || n == "mvp_vert" || n == "pc_frag" || n == "tex_frag"
+        || n == "catri")
 }
 
 def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr; var errors : array<string>) {

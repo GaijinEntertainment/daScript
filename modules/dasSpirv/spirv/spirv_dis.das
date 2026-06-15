@@ -117,6 +117,39 @@ def public op_has_operand_at(words : array<uint>; op : SpvOp; idx : int; value :
     return found
 }
 
+// Operand-role classifier for the symbolic dump: is operand `idx` (0-based, after the opcode name) of
+// `opName` a LITERAL rather than an <id>? Lets a dump be id-canonicalized (ids -> first-appearance
+// placeholders) for id-renaming-insensitive golden comparison, without conflating a literal whose value
+// happens to equal an id number (e.g. OpTypeFloat's width 32 vs result-id 32). Covers exactly the opcode
+// set dasSpirv emits; any other opcode treats all operands as ids (the census gate separately pins the
+// emitted set, so unknown opcodes cannot reach here). OpEntryPoint is all-literal: its model word, name
+// words, and ids (id_main + interface globals) are all allocated in the unchanged module-assembly half,
+// so they are stable across the port and compare raw.
+def public op_operand_is_literal(opName : string; idx : int) : bool {
+    if (opName == "OpEntryPoint") return true
+    if (opName == "OpCapability") return true
+    if (opName == "OpMemoryModel") return true
+    if (opName == "OpExecutionMode") return idx >= 1
+    if (opName == "OpDecorate") return idx >= 1
+    if (opName == "OpMemberDecorate") return idx >= 1
+    if (opName == "OpExtInstImport") return idx >= 1
+    if (opName == "OpConstant") return idx == 2
+    if (opName == "OpTypeInt") return idx == 1 || idx == 2
+    if (opName == "OpTypeFloat") return idx == 1
+    if (opName == "OpTypeVector") return idx == 2
+    if (opName == "OpTypeMatrix") return idx == 2
+    if (opName == "OpTypePointer") return idx == 1
+    if (opName == "OpTypeImage") return idx >= 2
+    if (opName == "OpVariable") return idx == 2
+    if (opName == "OpFunction") return idx == 2
+    if (opName == "OpSelectionMerge") return idx == 1
+    if (opName == "OpLoopMerge") return idx == 2
+    if (opName == "OpExtInst") return idx == 3
+    if (opName == "OpCompositeExtract") return idx >= 3
+    if (opName == "OpVectorShuffle") return idx >= 4
+    return false
+}
+
 // Symbolic dump for eyeballing / diffing against external spirv-dis. Operands are printed as
 // raw decimal words (a result-id-aware pretty printer is a later refinement).
 def public dump(words : array<uint>) : string {
