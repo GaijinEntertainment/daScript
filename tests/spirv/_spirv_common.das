@@ -890,7 +890,7 @@ let MC_BASE = float2(0.5, 0.5)
 def modconst {
     let i = gl_GlobalInvocationID.x
     var acc = MC_LO + float(MC_ITER)        // module-scope float + int consts as rvalues
-    for (k in range(MC_ITER)) {             // int const as a loop bound
+    for (_k in range(MC_ITER)) {            // int const as a loop bound (counter unused)
         acc += MC_HI
     }
     let b = MC_BASE                          // folded const-vector module const
