@@ -3,7 +3,7 @@ options persistent_heap
 
 // Convolution-reverb quality tiers: per-block cost of the real conv_reverb_process.
 //   high   = two decorrelated IRs (two full partitioned convolutions per block)
-//   medium = one mono IR + two Schroeder allpass filters (~half the convolution cost)
+//   medium = one mono IR + a Schroeder allpass cascade (default 5 stages, ~half the convolution cost)
 // One conv_reverb_process(.., BLK) call accumulates exactly one block, so ns/op is the
 // per-frame cost of one steady-state block (FFT-input + convolution(s) + IFFT + overlap).
 // The FFT-input and the single IFFT are shared by both tiers, so the medium speedup here is

@@ -133,6 +133,8 @@ float conv_reverb_get_max_ir();
 #include <vecmath/dag_vecMath.h>
 #include <math.h>
 #include <string.h>
+#include <stdint.h>
+#include <limits.h>
 
 static float g_conv_reverb_max_ir = CONV_DEFAULT_MAX_IR;
 
@@ -656,7 +658,12 @@ int conv_reverb_process(ConvolutionReverb * rev, const float * input, float * ou
     for (uint32_t i = 0, ns = nFrames * 2; i < ns; i++) {
         if (input[i] > 1e-5f || input[i] < -1e-5f) { has_input = 1; break; }
     }
-    if (has_input) rev->tail_frames = (int)rev->ir_length + 2 * (int)B;
+    if (has_input) {
+        // Compute in 64-bit and clamp: a very large ir_length (huge conv_reverb_set_max_ir / high
+        // sample rate) could otherwise overflow int to a negative budget and wrongly skip the bus.
+        int64_t budget = (int64_t)rev->ir_length + 2 * (int64_t)B;
+        rev->tail_frames = budget > (int64_t)INT_MAX ? INT_MAX : (int)budget;
+    }
     if (rev->tail_frames <= 0) {
         memset(output, 0, (size_t)nFrames * 2 * sizeof(float));
         return 0;

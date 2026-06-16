@@ -22,7 +22,7 @@ struct FeatureArgs {
     track_memory : bool = false
     wav_path : string
     room_quality : int = -1   // -1 = per-event default; 0=high/1=medium/2=low forces all reverbs
-    room_stages : int = -1    // -1 = per-event default; 1–8 forces the medium allpass cascade depth
+    room_stages : int = -1    // -1 = per-event default; 0 = tier default, 1–8 forces the medium cascade depth
 }
 
 def parse_feature_args() : FeatureArgs {
