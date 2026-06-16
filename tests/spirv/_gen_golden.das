@@ -58,4 +58,15 @@ def main {
     emit_golden(dir, "tern", tern_words())
     emit_golden(dir, "vecarith", vecarith_words())
     emit_golden(dir, "mathx", mathx_words())
+    // Phase-10.1..10.6 fixtures: forward-regression freezes (no hand-walker baseline; locks the
+    // current emitter's output so future drift is caught on top of census + spirv-val).
+    emit_golden(dir, "ssbovec", ssbovec_words())            // 10.1 SSBO std430 vec elements
+    emit_golden(dir, "ssbostruct", ssbostruct_words())      // 10.1 SSBO std430 struct elements
+    emit_golden(dir, "gswizzle", gswizzle_words())          // 10.2 composite/global swizzle
+    emit_golden(dir, "fragx", fragx_words())                // 10.3 fragment realism rails
+    emit_golden(dir, "fragshadow", fragshadow_words())      // 10.4 depth-compare sampling (Dref)
+    emit_golden(dir, "cshared", cshared_words())            // 10.5 shared memory + barriers
+    emit_golden(dir, "catomics", catomics_words())          // 10.5 atomics
+    emit_golden(dir, "imgquery", imgquery_words())          // 10.6 imageSize
+    emit_golden(dir, "modconst", modconst_words())          // 10.6 module-scope let constants
 }
