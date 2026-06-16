@@ -909,6 +909,87 @@ def public modconst_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-11 user-defined shader functions: OpFunction / OpFunctionCall + ref-param copy-in/out =====
+// Each user function called (transitively) from a shader is emitted as its own OpFunction. A value
+// parameter binds an SSA OpFunctionParameter; a by-reference parameter binds a Function pointer and the
+// caller wraps the argument in a copy-in / copy-out temp (Logical addressing forbids passing an
+// access-chain pointer straight to a call). The only NEW opcodes are OpFunctionCall / OpFunctionParameter
+// / OpReturnValue; everything else reuses already-declared opcodes.
+
+def private uf_add1(x : int) : int {                // scalar value param, scalar return
+    return x + 1
+}
+def private uf_muladd(a, b, c : int) : int {        // multiple value params
+    return a * b + c
+}
+def private uf_double(x : int) : int {              // transitive: calls the shared uf_add1 twice
+    return uf_add1(uf_add1(x))
+}
+def private uf_grade(uv : float2) : float3 {        // vector value param + vector return
+    return float3(uv.x, uv.y, uv.x + uv.y)
+}
+
+// userfn: value-param surface. uf_add1 is shared (called directly AND inside uf_double) -> ONE OpFunction
+// but several OpFunctionCall; uf_grade is the vector-in/vector-out showcase.
+[compute_shader(local_size_x=64, name="userfn_spv"), marker(no_coverage)]
+def userfn {
+    let i = int(gl_GlobalInvocationID.x)
+    let a = uf_add1(idata[i])                       // scalar value call
+    let b = uf_muladd(a, 2, 3)                      // multi-arg value call
+    let c = uf_double(b)                            // transitive (uf_double -> uf_add1 x2)
+    let g = uf_grade(float2(float(a), float(b)))    // vector param + vector return
+    idata[i] = a + b + c + int(g.x + g.y + g.z)
+}
+
+def private uf_accumulate(var acc : float&; x : float) {   // by-reference param (read-modify-write), void
+    acc = acc + x * x
+}
+def private uf_scale_inplace(var v : float&; s : float) {  // a second ref helper (mixed with a value arg)
+    v = v * s
+}
+
+// userfn_ref: by-reference parameter copy-in/copy-out. `acc` is a local var; each call copies its current
+// value into a Function temp, runs the helper through the temp pointer, then copies the temp back into acc.
+[compute_shader(local_size_x=64, name="userfn_ref_spv"), marker(no_coverage)]
+def userfn_ref {
+    let i = int(gl_GlobalInvocationID.x)
+    var acc = 0.0f
+    uf_accumulate(acc, fdata[i])    // ref arg + value arg
+    uf_accumulate(acc, 1.0f)        // shared ref helper, second call site
+    uf_scale_inplace(acc, 0.5f)     // a different ref helper
+    fdata[i] = acc
+}
+
+def private uf_lane_seed() : uint {     // a no-arg helper that READS a builtin global (gl_GlobalInvocationID)
+    return gl_GlobalInvocationID.x * 747796405u + 2891336453u
+}
+
+// userfn_global: a helper with no parameters that reads a module global directly (the global is collected
+// transitively through the helper and classified once for the whole module).
+[compute_shader(local_size_x=64, name="userfn_global_spv"), marker(no_coverage)]
+def userfn_global {
+    let i = gl_GlobalInvocationID.x
+    data[i] = uf_lane_seed()
+}
+
+def public userfn_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(userfn_spv)
+    return <- w
+}
+
+def public userfn_ref_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(userfn_ref_spv)
+    return <- w
+}
+
+def public userfn_global_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(userfn_global_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -1196,5 +1277,16 @@ def public phase10_5_emitter_opcodes : table<uint> {
 def public phase10_6_emitter_opcodes : table<uint> {
     var s <- phase10_5_emitter_opcodes()
     s |> insert(uint(SpvOp.ImageQuerySize))     // imageSize(img)
+    return <- s
+}
+
+// Phase-11 user-defined shader functions add three opcodes: OpFunctionCall (the call), OpFunctionParameter
+// (each parameter of an emitted helper), and OpReturnValue (a value return; void helpers keep OpReturn,
+// already declared). OpFunction / OpLabel / OpFunctionEnd were declared back in Phase 1. Phase-10.6 + these:
+def public phase11_fn_emitter_opcodes : table<uint> {
+    var s <- phase10_6_emitter_opcodes()
+    for (op in [SpvOp.FunctionCall, SpvOp.FunctionParameter, SpvOp.ReturnValue]) {
+        s |> insert(uint(op))
+    }
     return <- s
 }
