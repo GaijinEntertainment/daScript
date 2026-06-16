@@ -115,6 +115,14 @@ def public imageLoad(img : image2D; coord : int2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
+// imageSize is a stub too: it lowers to OpImageQuerySize (the storage image's dimensions in texels,
+// no LOD). Lets a compute shader size its pixel<->coordinate mapping off the bound image instead of a
+// hardcoded constant.
+[unused_argument(img)]
+def public imageSize(img : image2D) : int2 {
+    return int2(0, 0)
+}
+
 // ===== fragment realism =====
 // discard() abandons the current fragment (OpKill). It is a block terminator, so it must be the last
 // statement on its control-flow path (typically `if (cond) { discard() }`); fragment-only.
