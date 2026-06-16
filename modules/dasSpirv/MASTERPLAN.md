@@ -1389,3 +1389,36 @@ lint + format clean.
    (`ExprAt`/`ExprField`/`ExprSwizzle`/`ExprRef2Value` → root `ExprVar`) to read the storage class for the
    memory scope. External `spirv-dis` verified: shared scalar atomics at `%uint_2` (Workgroup) scope, the
    SSBO `atomicAdd` at `%uint_1` (Device).
+
+### Phase 10.6 — imageSize + module-scope shader constants LANDED (2026-06-15, branch `bbatkin/dasspirv-shader-const-imagesize`)
+
+Two small emitter rails surfaced by the Mandelbrot tutorial (Phase 11) — the "gaps show up, we fix at
+the core" pass. One new census opcode (`OpImageQuerySize`); 108/108, spirv-val clean.
+
+- **`imageSize(image2D)` → `OpImageQuerySize`.** The storage image's dimensions in texels, NO LOD — a
+  storage image is `Sampled=2`, so the no-LOD query is legal (unlike `textureSize`, which needs a LOD
+  operand and emits `OpImageQuerySizeLod` on a `Sampled=1` image). Loads the UniformConstant image, then
+  queries; pulls in the `ImageQuery` capability via the shared `ensure_image_query` guard. Lets a compute
+  shader size its pixel↔coordinate mapping off the bound image instead of a hardcoded extent.
+- **Module-scope `let` constants.** An immutable `let X = <const-expr>` at module scope folds (via
+  `emit_const`) to an `OpConstant` / `OpConstantComposite` and references resolve straight to the id (no
+  `OpVariable` / `OpLoad`) — so a shader can hoist iteration counts, view rectangles, etc. to module scope
+  and share them with the host. `GlobalInfo` carries `is_constant` + `const_id`; `visitExprVar`'s global
+  else-branch resolves a constant global to its folded id.
+
+**Findings (load-bearing):**
+1. **The fold gate is `v._type.flags.constant` (an immutable `let`), NOT just "has a const-foldable
+   init".** A mutable `var g : uint = 2u` global has a const initializer too, but folding it would be
+   wrong (it is memory the shader can write). Gating on the const-qualified type keeps `var` globals on
+   the fail-closed `unsupported global` path (the `_fc_global` fixture in test_fail_closed.das proves the
+   rejection), while `let` globals fold. Compilation succeeding at all is the positive fold proof.
+2. **All `spirv_builtins.das` stubs are now `[sideeffects]` — the macro runs POST-infer, so a folded
+   stub call would lower wrong.** `generate_spirv` is called from the annotation's `patch` override (the
+   `patchAnnotations` pass), which runs *after* inference. The stubs have empty/constant bodies +
+   `[unused_argument]`, so the analyzer would see them as pure — a pure constant-returning call
+   (`imageSize` → `int2(0,0)`) or a pure void call (`discard`/`barrier`) is exactly what const-fold /
+   dead-code-elimination target. They survived only because daslang infer doesn't inline-and-fold
+   arbitrary calls and the optimize passes run after patch — pass-ordering luck, not a guarantee.
+   `[sideeffects]` sets `Function::sideEffectFlags`, so `ast_const_folding.cpp` marks every such call
+   `noSideEffects=false` and no pass folds/elides/CSEs it. The declarations are now honest: these stubs
+   model GPU side-effecting operations. (Boris's catch on the imageSize stub in the PR.)

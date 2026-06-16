@@ -65,7 +65,9 @@ def test_opcode_census(t : T?) {
         add_set(present, fragshadow_words())
         add_set(present, cshared_words())
         add_set(present, catomics_words())
-        var declared <- phase10_5_emitter_opcodes()
+        add_set(present, imgquery_words())
+        add_set(present, modconst_words())
+        var declared <- phase10_6_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }

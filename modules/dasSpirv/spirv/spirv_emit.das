@@ -37,6 +37,8 @@ struct GlobalInfo {
     is_separate_image : bool        // a standalone sampled image (texture2D, OpTypeImage); combined at the call via OpSampledImage
     is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
     elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type)
+    is_constant : bool              // a module-scope `let X = <const>` folded to an OpConstant; references resolve to const_id directly (no OpVariable / OpLoad)
+    const_id   : uint               // the OpConstant result-id (when is_constant)
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -484,7 +486,21 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Workgroup, value_type = vt, is_ssbo = false))
         return
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, or a sampler type e.g. sampler2D)")
+    // module-scope constant: an immutable `let X = <const-expr>` referenced by the shader body. Fold the
+    // initializer to an OpConstant and resolve references straight to it (no OpVariable / OpLoad), so a
+    // shader can hoist view rectangles, iteration counts, etc. to module scope and share them with the
+    // host. Gated on a const-qualified type (a `let`, not a `var`) AND a const-foldable initializer;
+    // a mutable `var` global, or a non-const initializer, falls through to the error below.
+    if (v.init != null && v._type != null && v._type.flags.constant) {
+        var probe : array<string>
+        let cc = emit_const(m, v.init, probe)
+        delete probe
+        if (cc.ok) {
+            ctx.globals |> insert(intptr(v), GlobalInfo(value_type = emit_type(m, v._type), is_constant = true, const_id = cc.id))
+            return
+        }
+    }
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, a constant `let`, or a sampler type e.g. sampler2D)")
 }
 
 // ===== member index of a struct field by name =====
@@ -1155,11 +1171,15 @@ class SpirvEmit : AstVisitor {
             }
         } else {
             let gi = ctx.globals?[intptr(expr.variable)] ?? GlobalInfo()
-            if (gi.var_id == 0u) {   // referenced global was not classified (unsupported / not collected)
-                errs |> push("global '{expr.name}' is not classified")
+            if (gi.is_constant) {   // module-scope constant let -> the folded OpConstant id directly (no pointer/load)
+                e2id[k] = gi.const_id
+            } else {
+                if (gi.var_id == 0u) {   // referenced global was not classified (unsupported / not collected)
+                    errs |> push("global '{expr.name}' is not classified")
+                }
+                e2ptr[k] = gi.var_id
+                e2pty[k] = gi.value_type
             }
-            e2ptr[k] = gi.var_id
-            e2pty[k] = gi.value_type
         }
         return expr
     }
@@ -1889,6 +1909,32 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ImageRead, rt, res, imgval, coord)
+            e2id[k] = res
+            return expr
+        }
+        // imageSize(image) : int2: the storage image's dimensions in texels (OpImageQuerySize, no LOD --
+        // a storage image is Sampled=2, so the no-LOD query is legal). Needs the ImageQuery capability.
+        if (name == "imageSize") {
+            if (length(expr.arguments) != 1) {
+                errs |> push("imageSize expects (image)")
+                return expr
+            }
+            let ig = global_var_of(expr.arguments[0])
+            if (ig == null) {
+                errs |> push("imageSize: argument must be a storage-image global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(ig)] ?? GlobalInfo()
+            if (!gi.is_storage_image) {
+                errs |> push("imageSize: '{ig.name}' is not a storage image")
+                return expr
+            }
+            ensure_image_query(bm, *ctx)
+            let imgval = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, imgval, gi.var_id)
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageQuerySize, rt, res, imgval)
             e2id[k] = res
             return expr
         }

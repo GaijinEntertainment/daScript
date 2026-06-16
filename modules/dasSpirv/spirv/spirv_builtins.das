@@ -31,21 +31,21 @@ var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writin
 // stub: its body is never executed (only the AST is read), and the call lowers to OpImageSampleImplicitLod.
 struct sampler2D {}
 
-[unused_argument(s, uv)]
+[unused_argument(s, uv), sideeffects]
 def public texture(s : sampler2D; uv : float2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
 // textureLod samples with an EXPLICIT level-of-detail (OpImageSampleExplicitLod): no screen-space
 // derivatives, so unlike texture() it is valid in any stage (vertex/compute), not fragment-only.
-[unused_argument(s, uv, lod)]
+[unused_argument(s, uv, lod), sideeffects]
 def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
 // texelFetch reads a single texel by integer coordinate + mip level, unfiltered (OpImage to extract the
 // image from the sampled image, then OpImageFetch). Stage-agnostic (no derivatives).
-[unused_argument(s, coord, lod)]
+[unused_argument(s, coord, lod), sideeffects]
 def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
@@ -59,17 +59,17 @@ struct sampler3D {}
 struct samplerCube {}
 struct sampler2DArray {}
 
-[unused_argument(s, uv)]
+[unused_argument(s, uv), sideeffects]
 def public texture(s : sampler3D; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
-[unused_argument(s, uv)]
+[unused_argument(s, uv), sideeffects]
 def public texture(s : samplerCube; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
-[unused_argument(s, uv)]
+[unused_argument(s, uv), sideeffects]
 def public texture(s : sampler2DArray; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
@@ -82,7 +82,7 @@ def public texture(s : sampler2DArray; uv : float3) : float4 {
 // fragment-only. The stub body never runs — only the call AST is lowered.
 struct sampler2DShadow {}
 
-[unused_argument(s, uv, compare)]
+[unused_argument(s, uv, compare), sideeffects]
 def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : float {
     return 0.0
 }
@@ -95,7 +95,7 @@ def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : f
 struct texture2D {}
 struct sampler {}
 
-[unused_argument(tex, smp, uv)]
+[unused_argument(tex, smp, uv), sideeffects]
 def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
@@ -107,45 +107,54 @@ def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
 // format means no StorageImageRead/WriteWithoutFormat capability is required (lavapipe-safe).
 struct image2D {}
 
-[unused_argument(img, coord, value)]
+[unused_argument(img, coord, value), sideeffects]
 def public imageStore(img : image2D; coord : int2; value : float4) : void {}
 
-[unused_argument(img, coord)]
+[unused_argument(img, coord), sideeffects]
 def public imageLoad(img : image2D; coord : int2) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+// imageSize is a stub too: it lowers to OpImageQuerySize (the storage image's dimensions in texels,
+// no LOD). Lets a compute shader size its pixel<->coordinate mapping off the bound image instead of a
+// hardcoded constant.
+[unused_argument(img), sideeffects]
+def public imageSize(img : image2D) : int2 {
+    return int2(0, 0)
 }
 
 // ===== fragment realism =====
 // discard() abandons the current fragment (OpKill). It is a block terminator, so it must be the last
 // statement on its control-flow path (typically `if (cond) { discard() }`); fragment-only.
+[sideeffects]
 def public discard() : void {}
 
 // Screen-space partial derivatives over the 2x2 fragment quad: dFdx/dFdy (OpDPdx/OpDPdy), and
 // fwidth = |dFdx| + |dFdy| (OpFwidth). Fragment-only. Concrete per-width overloads (NOT a generic):
 // the emitter dispatches by the call name, and a generic instance carries a mangled name the
 // name-match would miss. The stub bodies are never executed — only the call AST is lowered.
-[unused_argument(p)] def public dFdx(p : float) : float { return p }
-[unused_argument(p)] def public dFdx(p : float2) : float2 { return p }
-[unused_argument(p)] def public dFdx(p : float3) : float3 { return p }
-[unused_argument(p)] def public dFdx(p : float4) : float4 { return p }
-[unused_argument(p)] def public dFdy(p : float) : float { return p }
-[unused_argument(p)] def public dFdy(p : float2) : float2 { return p }
-[unused_argument(p)] def public dFdy(p : float3) : float3 { return p }
-[unused_argument(p)] def public dFdy(p : float4) : float4 { return p }
-[unused_argument(p)] def public fwidth(p : float) : float { return p }
-[unused_argument(p)] def public fwidth(p : float2) : float2 { return p }
-[unused_argument(p)] def public fwidth(p : float3) : float3 { return p }
-[unused_argument(p)] def public fwidth(p : float4) : float4 { return p }
+[unused_argument(p), sideeffects] def public dFdx(p : float) : float { return p }
+[unused_argument(p), sideeffects] def public dFdx(p : float2) : float2 { return p }
+[unused_argument(p), sideeffects] def public dFdx(p : float3) : float3 { return p }
+[unused_argument(p), sideeffects] def public dFdx(p : float4) : float4 { return p }
+[unused_argument(p), sideeffects] def public dFdy(p : float) : float { return p }
+[unused_argument(p), sideeffects] def public dFdy(p : float2) : float2 { return p }
+[unused_argument(p), sideeffects] def public dFdy(p : float3) : float3 { return p }
+[unused_argument(p), sideeffects] def public dFdy(p : float4) : float4 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float) : float { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float2) : float2 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float3) : float3 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float4) : float4 { return p }
 
 // textureSize(sampler, lod): the mip-level dimensions in texels (OpImageQuerySizeLod; needs the
 // ImageQuery capability). int2 for 2D/Cube, int3 for 3D / 2D-array (width,height,depth-or-layers).
-[unused_argument(s, lod)]
+[unused_argument(s, lod), sideeffects]
 def public textureSize(s : sampler2D; lod : int) : int2 { return int2(0, 0) }
-[unused_argument(s, lod)]
+[unused_argument(s, lod), sideeffects]
 def public textureSize(s : samplerCube; lod : int) : int2 { return int2(0, 0) }
-[unused_argument(s, lod)]
+[unused_argument(s, lod), sideeffects]
 def public textureSize(s : sampler3D; lod : int) : int3 { return int3(0, 0, 0) }
-[unused_argument(s, lod)]
+[unused_argument(s, lod), sideeffects]
 def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0, 0) }
 
 // ===== compute synchronization =====
@@ -154,7 +163,9 @@ def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0,
 // visible to all after it. The must-have sync point for shared-memory compute (the tiled-reduction
 // pattern). memoryBarrierShared() is the memory-only variant (OpMemoryBarrier) -- it orders shared
 // writes without the execution rendezvous. Both compute-only; the stub bodies never run.
+[sideeffects]
 def public barrier() : void {}
+[sideeffects]
 def public memoryBarrierShared() : void {}
 
 // ===== atomics =====
@@ -164,21 +175,21 @@ def public memoryBarrierShared() : void {}
 // SMax/UMax by the operand's signedness). Lowered to OpAtomicIAdd/SMin/.../Exchange/CompareExchange
 // at Workgroup scope (shared) or Device scope (buffer). The stub bodies never run -- only the call
 // AST is read. Use as `let old = atomicAdd(counter, 1)`.
-[unused_argument(value)] def public atomicAdd(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicAdd(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicMin(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicMin(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicMax(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicMax(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicAnd(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicAnd(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicOr(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicOr(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicXor(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicXor(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value)] def public atomicExchange(mem : int &; value : int) : int { return mem }
-[unused_argument(value)] def public atomicExchange(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicAdd(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicAdd(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicMin(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicMin(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicMax(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicMax(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicAnd(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicAnd(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicOr(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicOr(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicXor(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicXor(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicExchange(mem : int &; value : int) : int { return mem }
+[unused_argument(value), sideeffects] def public atomicExchange(mem : uint &; value : uint) : uint { return mem }
 // atomicCompSwap(mem, compare, value): if mem == compare, store value; returns the OLD value either
 // way (OpAtomicCompareExchange). The lock-free CAS primitive.
-[unused_argument(compare, value)] def public atomicCompSwap(mem : int &; compare, value : int) : int { return mem }
-[unused_argument(compare, value)] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint { return mem }
+[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : int &; compare, value : int) : int { return mem }
+[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint { return mem }
