@@ -46,3 +46,37 @@ def test_storage_image_compute(t : T?) {
         delete words
     }
 }
+
+[test]
+def test_image_size_query(t : T?) {
+    t |> run("imageSize(storage image) -> OpImageQuerySize + ImageQuery capability") <| @(t : T?) {
+        var words <- imgquery_words()
+        t |> success(has_op(words, SpvOp.ImageQuerySize), "imgquery: imageSize -> OpImageQuerySize")
+        // the no-LOD query: must NOT emit the LOD variant (that one is textureSize's, Sampled=1 images)
+        t |> success(!has_op(words, SpvOp.ImageQuerySizeLod),
+            "imgquery: storage-image query is the no-LOD OpImageQuerySize, not OpImageQuerySizeLod")
+        // OpImageQuerySize takes (result_type, result_id, image) -- the image operand is the loaded
+        // storage image, so an OpLoad of the UniformConstant image must precede it
+        t |> success(has_op(words, SpvOp.Load), "imgquery: loads the storage image before the query")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.ImageQuery)),
+            "imgquery: imageSize pulls in OpCapability ImageQuery")
+        validate(t, words, "imgquery")
+        delete words
+    }
+}
+
+[test]
+def test_module_scope_const(t : T?) {
+    t |> run("module-scope `let` constants fold to OpConstant / OpConstantComposite") <| @(t : T?) {
+        var words <- modconst_words()
+        // Compilation succeeding at all is the fold proof: a non-folded module-scope const falls through
+        // to the fail-closed `unsupported global` error (see test_fail_closed.das for the `var` rejection).
+        // Here we pin the positive structure -- the folded scalar consts become OpConstant, the const-
+        // vector becomes OpConstantComposite, referenced straight by id (no OpVariable / OpLoad).
+        t |> success(has_op(words, SpvOp.Constant), "modconst: scalar module consts -> OpConstant")
+        t |> success(has_op(words, SpvOp.ConstantComposite),
+            "modconst: const-vector module const -> OpConstantComposite")
+        validate(t, words, "modconst")
+        delete words
+    }
+}

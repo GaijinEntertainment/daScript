@@ -861,6 +861,54 @@ def public catomics_words : array<uint> {
     return <- w
 }
 
+// ===== Phase-10.6 storage-image size query + module-scope shader constants =====
+// imgquery: imageSize(img) -> OpImageQuerySize (the storage image's dimensions in texels, NO LOD --
+// a storage image is Sampled=2 so the no-LOD query is legal, unlike textureSize which needs a LOD).
+// Pulls in the ImageQuery capability. Lets a compute shader size its pixel<->coordinate mapping off
+// the bound image instead of a hardcoded extent (the Mandelbrot-tutorial rail).
+var @binding = 0 qimg : image2D
+[compute_shader(local_size_x=8, local_size_y=8, name="imgquery_spv"), marker(no_coverage)]
+def imgquery {
+    let gid = gl_GlobalInvocationID
+    let dim = imageSize(qimg)                            // OpImageQuerySize -> int2
+    let coord = int2(int(gid.x), int(gid.y))
+    let u = float(gid.x) / float(dim.x)                  // the queried size feeds the mapping
+    let v = float(gid.y) / float(dim.y)
+    imageStore(qimg, coord, float4(u, v, 0.0f, 1.0f))
+}
+
+// modconst: module-scope shader constants. An immutable `let X = <const-expr>` at module scope folds to
+// an OpConstant and references resolve straight to it (no OpVariable / OpLoad) -- so a shader can hoist
+// iteration counts, view rectangles, etc. to module scope and share them with the host. Scalar (float +
+// int) and a folded const-vector module const are all exercised. Counterpart fail-closed case (a mutable
+// `var` global must still be rejected) lives in test_fail_closed.das.
+let MC_LO = -2.0f
+let MC_HI = 1.0f
+let MC_ITER = 16
+let MC_BASE = float2(0.5, 0.5)
+[compute_shader(local_size_x=64, name="modconst_spv"), marker(no_coverage)]
+def modconst {
+    let i = gl_GlobalInvocationID.x
+    var acc = MC_LO + float(MC_ITER)        // module-scope float + int consts as rvalues
+    for (k in range(MC_ITER)) {             // int const as a loop bound
+        acc += MC_HI
+    }
+    let b = MC_BASE                          // folded const-vector module const
+    fdata[i] = acc + b.x
+}
+
+def public imgquery_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(imgquery_spv)
+    return <- w
+}
+
+def public modconst_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(modconst_spv)
+    return <- w
+}
+
 // ===== spirv-val gate =====
 struct SpirvValResult {
     ran : bool      // false => tool not found (soft-skip locally; CI provides it)
@@ -1139,5 +1187,14 @@ def public phase10_5_emitter_opcodes : table<uint> {
     ]) {
         s |> insert(uint(op))
     }
+    return <- s
+}
+
+// Phase-10.6 adds the storage-image size query (imageSize -> OpImageQuerySize, the no-LOD sibling of
+// Phase-10.3's OpImageQuerySizeLod). Module-scope shader constants add NO new opcodes: a folded `let`
+// global resolves straight to its already-declared OpConstant/OpConstantComposite. Phase-10.5 set + this:
+def public phase10_6_emitter_opcodes : table<uint> {
+    var s <- phase10_5_emitter_opcodes()
+    s |> insert(uint(SpvOp.ImageQuerySize))     // imageSize(img)
     return <- s
 }
