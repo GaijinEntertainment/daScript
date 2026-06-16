@@ -795,9 +795,10 @@ struct ConvolutionReverbAnnotation : ManagedStructureAnnotation<ConvolutionRever
 
 void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float decay_time,
                                 float lp_freq_start, float lp_freq_end, float fade_in, ConvReverbQualityEnum quality,
-                                Context * context, LineInfoArg * at ) {
+                                int decorr_stages, Context * context, LineInfoArg * at ) {
     if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
-    conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in, (uint32_t)quality);
+    conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in,
+                     (uint32_t)quality, decorr_stages < 0 ? 0u : (uint32_t)decorr_stages);
 }
 
 // Returns 1 if it produced output, 0 if the bus was idle and skipped (output is zeroed on skip).
@@ -902,7 +903,7 @@ public:
         addAnnotation(new ConvolutionReverbAnnotation(lib));
         addExtern<DAS_BIND_FUN(dasAudio_convReverbInit)>(*this, lib, "conv_reverb_init",
             SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbInit")
-                ->args({"reverb", "sample_rate", "decay_time", "lp_freq_start", "lp_freq_end", "fade_in", "quality", "context", "at"});
+                ->args({"reverb", "sample_rate", "decay_time", "lp_freq_start", "lp_freq_end", "fade_in", "quality", "decorr_stages", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_convReverbProcess)>(*this, lib, "conv_reverb_process",
             SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbProcess")
                 ->args({"reverb", "input", "output", "nFrames", "context", "at"});

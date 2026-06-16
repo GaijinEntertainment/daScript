@@ -47,7 +47,7 @@ def assert_stereo(b : B?; var rev : ConvolutionReverb?; var input : array<float>
 
 def run_quality(b : B?; qual : ConvReverbQuality; name : string) {
     var rev = new ConvolutionReverb
-    conv_reverb_init(rev, SR, DECAY, 15000.0, 1000.0, 0.1, qual)
+    conv_reverb_init(rev, SR, DECAY, 15000.0, 1000.0, 0.1, qual, 0)
     var input <- make_input_block(BLK)
     assert_stereo(b, rev, input)
     var output : array<float>

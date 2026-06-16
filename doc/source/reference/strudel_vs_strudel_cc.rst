@@ -254,10 +254,11 @@ per-orbit *quality* tier, selected with ``roomquality``:
 * ``"high"`` (default) — two decorrelated impulse responses, one full
   partitioned convolution per channel.  Most expensive.
 * ``"medium"`` — a single mono impulse response convolved once, then
-  split into stereo by a fixed four-stage Schroeder allpass cascade per
-  channel.  Roughly **half** the per-block convolution cost, with a
-  stereo image close to ``"high"`` (the cascade is tuned to a wide,
-  mono-safe spread).
+  split into stereo by a Schroeder allpass cascade per channel.  Roughly
+  **half** the per-block convolution cost.  The cascade depth defaults to
+  four stages but is adjustable from one to eight with ``roomstages`` —
+  the allpass phase response is non-monotonic in depth, so there is no
+  single "best" value; pick one by ear.
 * ``"low"`` — a Freeverb-style algorithmic reverb (eight damped comb
   filters plus four series allpasses per channel).  No FFT, so it is by
   far the cheapest tier (roughly **6x** cheaper than ``"high"`` per
@@ -268,12 +269,13 @@ per-orbit *quality* tier, selected with ``roomquality``:
 
 .. code-block:: das
 
-    // a cheaper, narrower reverb on this orbit
+    // a cheaper reverb on this orbit, with a 6-stage allpass decorrelation
     note("c2 e2 g2") |> s("supersaw") |> room(0.6) |> roomsize(6.0)
-        |> roomquality("medium") |> orbit(2)
+        |> roomquality("medium") |> roomstages(6) |> orbit(2)
 
-Quality is chosen when the orbit's reverb is first allocated and is
-re-applied if it changes; like ``roomsize``, set it once per orbit.
+Quality (and ``roomstages``) is chosen when the orbit's reverb is first
+allocated and is re-applied if it changes; like ``roomsize``, set it once
+per orbit.
 
 Mini-notation parsing
 ---------------------

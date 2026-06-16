@@ -111,8 +111,12 @@ struct ConvolutionReverb {
     void *   arena;            // single allocation for all buffers
 };
 
+// decorrStages: medium-path allpass cascade depth (1..CONV_DECORR_MAX_STAGES). 0 = default
+// (CONV_DECORR_STAGES). Ignored by the high and low tiers. More stages = a different (not strictly
+// wider) stereo image — the phase response is non-monotonic, so it is exposed for the user to tune.
 void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayTime,
-                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality);
+                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality,
+                      uint32_t decorrStages);
 // Returns 1 if it produced output, 0 if it skipped (idle: silent input + decayed tail);
 // on skip the output buffer is zeroed so callers can mix unconditionally.
 int conv_reverb_process(ConvolutionReverb * rev, const float * input, float * output, uint32_t nFrames);
@@ -490,7 +494,8 @@ static void conv_reverb_process_low(ConvolutionReverb * rev, const float * input
 }
 
 void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayTime,
-                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality) {
+                      float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality,
+                      uint32_t decorrStages) {
     memset(rev, 0, sizeof(ConvolutionReverb));
     rev->sampleRate = sampleRate;
     rev->quality = (quality <= CONV_QUALITY_LOW) ? quality : CONV_QUALITY_MEDIUM;
@@ -524,9 +529,12 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
     int stereo_ir = (rev->quality == CONV_QUALITY_HIGH);  // high keeps 2 IRs; medium is mono
     uint32_t ir_channels = stereo_ir ? 2u : 1u;
 
-    // Medium-path allpass cascade: a fixed CONV_DECORR_STAGES-deep cascade per channel.
+    // Medium-path allpass cascade: a user-selectable, CONV_DECORR_STAGES-by-default cascade per
+    // channel (0 -> default; clamped to [1, CONV_DECORR_MAX_STAGES]).
     if (!stereo_ir) {
-        uint32_t S = CONV_DECORR_STAGES;
+        uint32_t S = (decorrStages == 0) ? (uint32_t)CONV_DECORR_STAGES : decorrStages;
+        if (S < 1) S = 1;
+        if (S > CONV_DECORR_MAX_STAGES) S = CONV_DECORR_MAX_STAGES;
         rev->decorr_stages = S;
         for (uint32_t s = 0; s < S; s++) {
             uint32_t ll = (uint32_t)(CONV_DECORR_TIMES_L[s] * (float)sampleRate);

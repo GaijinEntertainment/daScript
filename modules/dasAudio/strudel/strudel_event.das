@@ -51,7 +51,9 @@ struct Event {
     roomsize : float = 2.0      // reverb decay time in seconds (0.1–10.0)
         //! Reverb decay time in seconds (0.1–10.0).
     reverb_quality : int = 0    // reverb quality tier: 0=high (default), 1=medium, 2=low
-        //! Reverb quality tier: 0 = high (dual-IR, default), 1 = medium (mono IR + 4-stage allpass decorrelation, ~2x cheaper), 2 = low.
+        //! Reverb quality tier: 0 = high (dual-IR, default), 1 = medium (mono IR + allpass decorrelation, ~2x cheaper), 2 = low (Freeverb, cheapest).
+    reverb_stages : int = 0     // medium allpass cascade depth (0 = default 4, range 1–8)
+        //! Medium-tier allpass cascade depth (0 = default of 4; range 1–8). Ignored by high/low.
     delay_amount : float = 0.0  // delay send amount 0.0–1.0
         //! Delay send amount 0.0–1.0.
     delaytime    : float = -1.0 // delay time in seconds (-1 = unset → derived from delaysync and cps)

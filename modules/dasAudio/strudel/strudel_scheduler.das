@@ -115,6 +115,8 @@ struct OrbitBus {
         //! Most recently applied reverb roomsize (-1 = uninitialized).
     current_quality       : int = -1
         //! Most recently applied reverb quality tier (-1 = uninitialized; 0=high/1=medium/2=low).
+    current_stages        : int = -1
+        //! Most recently applied medium-tier allpass cascade depth (-1 = uninitialized).
     current_delaytime     : float = -1.0
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
@@ -181,14 +183,21 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
 }
 
-// Global reverb-quality override (-1 = off). When >= 0 it forces every orbit reverb to that tier
-// regardless of per-event roomquality — used to render A/B comparisons of the quality tiers.
+// Global reverb overrides (-1 = off). When >= 0 they force every orbit reverb to that tier /
+// allpass depth regardless of per-event roomquality()/roomstages() — used to render A/B comparisons.
 var private g_force_reverb_quality : int = -1
+var private g_force_reverb_stages : int = -1
 
 def set_force_reverb_quality(q : int) {
     //! Force all orbit reverbs to a quality tier (0=high, 1=medium, 2=low), overriding per-event
     //! roomquality(). Pass -1 to disable the override (the default). Intended for A/B rendering.
     g_force_reverb_quality = q
+}
+
+def set_force_reverb_stages(n : int) {
+    //! Force the medium-tier allpass cascade depth on all orbit reverbs, overriding per-event
+    //! roomstages(). Pass -1 to disable the override (the default). Intended for A/B rendering.
+    g_force_reverb_stages = n
 }
 
 // Initialize reverb on an orbit bus.
@@ -199,25 +208,31 @@ def private conv_quality_from_int(q : int) : ConvReverbQuality {
     return ConvReverbQuality.high
 }
 
-def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0) {
+def private effective_stages(s : int) : int {
+    return g_force_reverb_stages >= 0 ? g_force_reverb_stages : s
+}
+
+def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0; stages : int = 0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality))
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality), effective_stages(stages))
         bus.current_roomsize = rs
         bus.current_quality = quality
+        bus.current_stages = stages
     }
 }
 
-// Update reverb decay time / quality on an orbit bus. Only reconfigures if changed.
-def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int) {
+// Update reverb decay time / quality / allpass depth on an orbit bus. Only reconfigures if changed.
+def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int; stages : int) {
     let rs = clamp(roomsize, 0.1, 10.0)
-    if (abs(rs - bus.current_roomsize) < 0.01 && quality == bus.current_quality) return
+    if (abs(rs - bus.current_roomsize) < 0.01 && quality == bus.current_quality && stages == bus.current_stages) return
     bus.current_roomsize = rs
     bus.current_quality = quality
-    // Reinitialize with new decay time / quality
+    bus.current_stages = stages
+    // Reinitialize with new decay time / quality / allpass depth
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality))
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality), effective_stages(stages))
 }
 
 // Initialize delay on an orbit bus.
@@ -273,9 +288,9 @@ def private setup_orbit_for_event(var sched : Scheduler; event : Event) {
     var bus = sched.orbit_buses[orb]
     if (event.room > 0.0) {
         if (bus.reverb == null) {
-            init_orbit_reverb(*bus, event.roomsize, event.reverb_quality)
+            init_orbit_reverb(*bus, event.roomsize, event.reverb_quality, event.reverb_stages)
         }
-        update_orbit_reverb(*bus, event.roomsize, event.reverb_quality)
+        update_orbit_reverb(*bus, event.roomsize, event.reverb_quality, event.reverb_stages)
     }
     if (event.delay_amount > 0.0) {
         let dt = resolve_delaytime(event.delaytime, event.delaysync, float(sched.cps))

@@ -30,7 +30,7 @@ def fill_noise(var buf : array<float>) {
 
 def run_bus(b : B?; name : string; active : bool) {
     var rev = new ConvolutionReverb
-    conv_reverb_init(rev, SR, DECAY, 15000.0, 1000.0, 0.1, ConvReverbQuality.high)
+    conv_reverb_init(rev, SR, DECAY, 15000.0, 1000.0, 0.1, ConvReverbQuality.high, 0)
     var input : array<float>
     input |> resize(BLK * 2)
     if (active) {

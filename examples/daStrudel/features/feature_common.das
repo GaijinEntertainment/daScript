@@ -22,6 +22,7 @@ struct FeatureArgs {
     track_memory : bool = false
     wav_path : string
     room_quality : int = -1   // -1 = per-event default; 0=high/1=medium/2=low forces all reverbs
+    room_stages : int = -1    // -1 = per-event default; 1–8 forces the medium allpass cascade depth
 }
 
 def parse_feature_args() : FeatureArgs {
@@ -42,6 +43,9 @@ def parse_feature_args() : FeatureArgs {
             let q = args[i + 1]
             res.room_quality = q == "medium" ? 1 : (q == "low" ? 2 : 0)
             i += 2
+        } elif (args[i] == "--roomstages" && i + 1 < length(args)) {
+            res.room_stages = to_int(args[i + 1])
+            i += 2
         } else {
             i ++
         }
@@ -61,6 +65,9 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ 
     let wav_path = args.wav_path
     if (args.room_quality >= 0) {
         set_force_reverb_quality(args.room_quality)
+    }
+    if (args.room_stages >= 0) {
+        set_force_reverb_stages(args.room_stages)
     }
     if (!empty(wav_path)) {
         // --- Offline WAV render (no audio driver) ---
