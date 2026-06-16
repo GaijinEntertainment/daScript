@@ -1412,3 +1412,13 @@ the core" pass. One new census opcode (`OpImageQuerySize`); 108/108, spirv-val c
    wrong (it is memory the shader can write). Gating on the const-qualified type keeps `var` globals on
    the fail-closed `unsupported global` path (the `_fc_global` fixture in test_fail_closed.das proves the
    rejection), while `let` globals fold. Compilation succeeding at all is the positive fold proof.
+2. **All `spirv_builtins.das` stubs are now `[sideeffects]` — the macro runs POST-infer, so a folded
+   stub call would lower wrong.** `generate_spirv` is called from the annotation's `patch` override (the
+   `patchAnnotations` pass), which runs *after* inference. The stubs have empty/constant bodies +
+   `[unused_argument]`, so the analyzer would see them as pure — a pure constant-returning call
+   (`imageSize` → `int2(0,0)`) or a pure void call (`discard`/`barrier`) is exactly what const-fold /
+   dead-code-elimination target. They survived only because daslang infer doesn't inline-and-fold
+   arbitrary calls and the optimize passes run after patch — pass-ordering luck, not a guarantee.
+   `[sideeffects]` sets `Function::sideEffectFlags`, so `ast_const_folding.cpp` marks every such call
+   `noSideEffects=false` and no pass folds/elides/CSEs it. The declarations are now honest: these stubs
+   model GPU side-effecting operations. (Boris's catch on the imageSize stub in the PR.)
