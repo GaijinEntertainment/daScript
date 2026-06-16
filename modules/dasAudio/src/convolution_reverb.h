@@ -634,8 +634,12 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
 // Returns 1 if it produced output, 0 if the bus was idle (silent input + decayed tail) and skipped.
 int conv_reverb_process(ConvolutionReverb * rev, const float * input, float * output, uint32_t nFrames) {
     if (nFrames == 0) return 0;
-    // The convolution tiers need an FFT plan; the low (Freeverb) tier does not.
-    if (rev->quality != CONV_QUALITY_LOW && !rev->fft_aux) return 0;
+    // The convolution tiers need an FFT plan; the low (Freeverb) tier does not. Zero the output on
+    // this skip too, so the "skip => silence" contract holds for callers that mix unconditionally.
+    if (rev->quality != CONV_QUALITY_LOW && !rev->fft_aux) {
+        memset(output, 0, (size_t)nFrames * 2 * sizeof(float));
+        return 0;
+    }
 
     uint32_t B = CONV_BLOCK_SIZE;
     uint32_t written = 0;
