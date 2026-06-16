@@ -257,6 +257,27 @@ def public type_function_void(var m : SpirvModule; ret : uint) : uint {
     return id
 }
 
+// OpTypeFunction with `ret` result and `params` operand types (deduped). Generalizes
+// type_function_void; used for user-defined shader function signatures (one param-type per
+// argument: a value type for by-value params, an OpTypePointer Function for by-reference params).
+def public type_function(var m : SpirvModule; ret : uint; params : array<uint>) : uint {
+    let key = build_string() $(var w) {
+        w |> write("fn_{ret}")
+        for (p in params) {
+            w |> write("_{p}")
+        }
+    }
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    var ops <- [id, ret]
+    ops |> push_from(params)
+    emit_n(m, SEC_TYPES, SpvOp.TypeFunction, ops)
+    delete ops
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 def public type_runtime_array(var m : SpirvModule; elem : uint; stride : int) : uint {
     if (stride <= 0) {
         panic("type_runtime_array: ArrayStride must be positive, got {stride}")

@@ -60,6 +60,28 @@ struct EmitCtx {
     stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
     uses_frag_depth : bool                      // gl_FragDepth referenced (Output-only, so = written) -> emit DepthReplacing
     image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
+    user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
+    user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
+    call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
+}
+
+// A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
+// pre-allocated in a first pass so an OpFunctionCall can forward-reference a not-yet-emitted callee.
+struct UserFunc {
+    fn      : Function const?   // the function (collect_dependencies yields pointee-const pointers)
+    fn_id   : uint          // OpFunction result id (pre-allocated; 0 when !valid)
+    type_id : uint          // OpTypeFunction id
+    ret_type : uint         // result type id (void's type id when is_void)
+    is_void : bool
+    valid   : bool          // false = signature rejected at registration (error already emitted)
+}
+
+// Per ref-argument copy-in/copy-out scratch: a Function-storage OpVariable hoisted into the calling
+// function's entry block. SPIR-V (Logical addressing) forbids passing an access-chain pointer as a
+// call argument, so every by-reference argument goes through one of these temps.
+struct CallTemp {
+    ptr_id     : uint
+    value_type : uint
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -90,6 +112,11 @@ def finalize(var c : EmitCtx) {
     delete c.local_vars
     delete c.interface_ids
     delete c.loop_stack
+    unsafe {
+        delete c.user_funcs   // value type holds a FunctionPtr -> delete needs unsafe
+    }
+    delete c.user_order
+    delete c.call_temps
 }
 
 // ===== builtin name -> SpvBuiltIn + storage class + the stage it's legal in =====
@@ -1466,10 +1493,23 @@ class SpirvEmit : AstVisitor {
     }
 
     // ----- return -----
+    // Valueless (`return` in the void entry / a void helper) -> OpReturn; a value return inside a
+    // user-defined shader function -> OpReturnValue with the loaded subexpression. ctx.terminated is
+    // ONLY set when an actual terminator was emitted — if value_of() failed (e.g. an upstream error
+    // already pushed onto errs), leaving terminated=false lets the function-end fallback close the
+    // block with OpUnreachable so the blob stays structurally valid (one terminator per block).
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        emit(bm, SEC_FUNCS, SpvOp.Return)
-        ctx.terminated = true
+        if (expr.subexpr != null) {
+            let v = value_of(expr.subexpr)
+            if (v != 0u) {
+                emit(bm, SEC_FUNCS, SpvOp.ReturnValue, v)
+                ctx.terminated = true
+            }
+        } else {
+            emit(bm, SEC_FUNCS, SpvOp.Return)
+            ctx.terminated = true
+        }
         return expr
     }
 
@@ -1525,6 +1565,59 @@ class SpirvEmit : AstVisitor {
         e2ptr[k] = res
         e2pty[k] = pointee
         return expr
+    }
+
+    // ----- user-defined shader function call: OpFunctionCall + ref-param copy-in/copy-out -----
+    // Value args pass their loaded value directly. Each by-reference arg goes through a Function-storage
+    // temp (pre-allocated into this function's entry block by alloc_call_temps): copy the current value
+    // in before the call, then copy the (mutated) temp back to the original lvalue after — SPIR-V's
+    // Logical addressing forbids handing an access-chain pointer straight to a call.
+    def emit_user_call(var bm : SpirvModule; expr : ExprCall?; uf : UserFunc) {
+        let f = expr.func
+        let res = alloc_id(bm)
+        var ops <- [uf.ret_type, res, uf.fn_id]
+        var ref_temps : array<tuple<temp : uint; orig : uint; vt : uint>>
+        for (arg, i in expr.arguments, count()) {
+            let is_ref = i < length(f.arguments) && f.arguments[i]._type.flags.ref && !f.arguments[i]._type.flags.constant
+            if (is_ref) {
+                let ct = ctx.call_temps?[intptr(arg)] ?? CallTemp()
+                if (ct.ptr_id == 0u) {
+                    errs |> push("internal: missing copy-in/out temp for a by-reference argument to '{f.name}'")
+                    delete ops
+                    delete ref_temps
+                    return
+                }
+                let v = value_of(arg)        // copy-in: current value of the lvalue
+                let p = ptr_of(arg)          // original lvalue, for copy-out
+                if (v == 0u || p.id == 0u) {
+                    delete ops
+                    delete ref_temps
+                    return
+                }
+                emit(bm, SEC_FUNCS, SpvOp.Store, ct.ptr_id, v)
+                ops |> push(ct.ptr_id)
+                ref_temps |> push((temp = ct.ptr_id, orig = p.id, vt = ct.value_type))
+            } else {
+                let v = value_of(arg)
+                if (v == 0u) {
+                    delete ops
+                    delete ref_temps
+                    return
+                }
+                ops |> push(v)
+            }
+        }
+        emit_n(bm, SEC_FUNCS, SpvOp.FunctionCall, ops)
+        delete ops
+        for (rt in ref_temps) {
+            let lv = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, rt.vt, lv, rt.temp)
+            emit(bm, SEC_FUNCS, SpvOp.Store, rt.orig, lv)
+        }
+        delete ref_temps
+        if (!uf.is_void) {
+            e2id[intptr(expr)] = res
+        }
     }
 
     // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
@@ -2067,6 +2160,19 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
+        // user-defined shader function -> OpFunctionCall (copy-in / copy-out around ref params)
+        if (expr.func != null && key_exists(ctx.user_funcs, intptr(expr.func))) {
+            let uf = ctx.user_funcs?[intptr(expr.func)] ?? UserFunc()
+            if (!uf.valid) return expr   // signature rejected at registration; error already emitted
+            emit_user_call(bm, expr, uf)
+            return expr
+        }
+        // a resolved call we can't lower: a host/extern builtin (print, ...) or a daslang function in
+        // an unsupported module. Fail-closed with a clear message rather than the generic one below.
+        if (expr.func != null) {
+            errs |> push("cannot call '{name}' in a SPIR-V shader — only user-defined shader functions and built-in shader intrinsics (texture/imageStore/dot/math/...) are callable")
+            return expr
+        }
         errs |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
         return expr
     }
@@ -2439,6 +2545,213 @@ def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr;
     }
 }
 
+// ===== user-defined shader functions =====
+// A dependency function is emitted as its own OpFunction iff it is a real daslang function with a
+// body that we control — not the entry point, not a host/extern builtin, and not a function whose
+// calls are intercepted by name (math -> GLSL.std.450, spirv_builtins -> texture/imageStore/...).
+def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool {
+    // `f == null` short-circuits first, so the later field reads never deref a null pointer.
+    if (f == null || intptr(f) == intptr(entry) || f.flags.builtIn || f.body == null) return false
+    // module "" is the user's own root module (a shader written without an explicit `module` line) —
+    // a valid place for helper functions. Host/extern builtins are already excluded by flags.builtIn
+    // above; the named modules below have their calls intercepted by name (math -> GLSL.std.450,
+    // spirv_builtins -> texture/imageStore/...), so they must never be emitted as OpFunctions.
+    let mn = "{f._module.name}"
+    return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins")
+}
+
+// Validate a user function's signature, allocate its OpFunction id + OpTypeFunction, and record it.
+// Only 32-bit scalar/vector results+params are supported (by value, or by reference for params);
+// anything else is rejected here with a clean error so a later call site doesn't emit invalid SPIR-V.
+def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Function const?; var errors : array<string>) {
+    if (key_exists(ctx.user_funcs, intptr(f))) return
+    var uf = UserFunc(fn = f, valid = true, is_void = false, fn_id = 0u, type_id = 0u, ret_type = 0u)
+    if (f.result.baseType == Type.tVoid) {
+        uf.is_void = true
+        uf.ret_type = type_void(m)
+    } elif (is_emittable_value_type(f.result) && f.result.baseType != Type.tFixedArray) {
+        uf.ret_type = emit_type(m, f.result)
+    } else {
+        errors |> push("shader function '{f.name}': return type {f.result.baseType} is not supported (only void and 32-bit scalar/vector/matrix results)")
+        uf.valid = false
+    }
+    var ptypes : array<uint>
+    for (arg in f.arguments) {
+        let at = arg._type
+        if (!is_emittable_value_type(at) || at.baseType == Type.tFixedArray) {
+            errors |> push("shader function '{f.name}': parameter '{arg.name}' of type {at.baseType} is not supported (only 32-bit scalar/vector/matrix parameters, by value or by reference)")
+            uf.valid = false
+            continue
+        }
+        let vt = emit_type(m, at)
+        if (at.flags.ref && !at.flags.constant) {
+            ptypes |> push(type_pointer(m, SpvStorageClass.Function, vt))
+        } else {
+            ptypes |> push(vt)
+        }
+    }
+    if (uf.valid) {
+        uf.fn_id = alloc_id(m)
+        uf.type_id = type_function(m, uf.ret_type, ptypes)
+    }
+    delete ptypes
+    ctx.user_funcs |> insert(intptr(f), uf)
+    ctx.user_order |> push(intptr(f))
+}
+
+// Mini-visitor: collect the user-function call targets directly invoked from one function body
+// (for the recursion / call-graph check). Only records targets already in ctx.user_funcs.
+class SpirvCalleeScan : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete ctx : EmitCtx?
+    callees : table<uint64>
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        if (expr.func != null && key_exists(ctx.user_funcs, intptr(expr.func))) {
+            callees |> insert(intptr(expr.func))
+        }
+    }
+}
+
+def private scan_callees(var ctx : EmitCtx; f : Function const?; var out : table<uint64>) {
+    let fnc = unsafe(reinterpret<FunctionPtr>(f))   // read-only walk; strip pointee const for visit
+    var v = new SpirvCalleeScan(ctx = unsafe(addr(ctx)))
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(fnc.body, v.adapter)
+    }
+    for (k in keys(v.callees)) {
+        out |> insert(k)
+    }
+    unsafe {
+        delete v
+    }
+}
+
+def private has_cycle_from(u : uint64; var adj : table<uint64; array<uint64>>; var color : table<uint64; int>) : bool {
+    color[u] = 1
+    if (key_exists(adj, u)) {
+        for (w in adj[u]) {
+            let c = color?[w] ?? 0
+            if (c == 1 || (c == 0 && has_cycle_from(w, adj, color))) return true   // gray = back-edge -> cycle
+        }
+    }
+    color[u] = 2
+    return false
+}
+
+// SPIR-V (without recursion capability) forbids any function being part of a call cycle. Build the
+// call graph over {entry} + user_funcs and report a clean error on any cycle (direct or mutual).
+def private detect_recursion(var ctx : EmitCtx; entry : FunctionPtr; var errors : array<string>) : bool {
+    var adj : table<uint64; array<uint64>>
+    // entry node
+    {
+        var cs : table<uint64>
+        scan_callees(ctx, entry, cs)
+        adj[intptr(entry)] <- [for (k in keys(cs)); k]
+        delete cs
+    }
+    for (key in ctx.user_order) {
+        let uf = ctx.user_funcs?[key] ?? UserFunc()
+        if (!uf.valid) continue
+        var cs : table<uint64>
+        scan_callees(ctx, uf.fn, cs)
+        adj[key] <- [for (k in keys(cs)); k]
+        delete cs
+    }
+    var color : table<uint64; int>
+    var found = false
+    if (has_cycle_from(intptr(entry), adj, color)) {
+        found = true
+    }
+    for (key in ctx.user_order) {
+        if (found) break
+        if ((color?[key] ?? 0) == 0 && has_cycle_from(key, adj, color)) {
+            found = true
+        }
+    }
+    if (found) {
+        errors |> push("recursion is not supported in SPIR-V shaders (a shader function is part of a call cycle)")
+    }
+    delete color
+    delete adj
+    return found
+}
+
+// Mini-visitor: hoist one Function-storage OpVariable into the current function's entry block for
+// every by-reference argument of every user-function call in its body. Run after collect_locals and
+// before the body walk, so the temps lead the entry block (SPIR-V requires all OpVariable there).
+class SpirvTempAlloc : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete m   : SpirvModule?
+    @do_not_delete ctx : EmitCtx?
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        let f = expr.func
+        if (f == null || !key_exists(ctx.user_funcs, intptr(f))) return
+        let uf = ctx.user_funcs?[intptr(f)] ?? UserFunc()
+        if (!uf.valid) return
+        var bm & = unsafe(*m)
+        for (arg, i in expr.arguments, count()) {
+            if (i >= length(f.arguments)) break
+            let pt = f.arguments[i]._type
+            if (pt.flags.ref && !pt.flags.constant) {
+                if (key_exists(ctx.call_temps, intptr(arg))) continue
+                let vt = emit_type(bm, pt)
+                let ptr_t = type_pointer(bm, SpvStorageClass.Function, vt)
+                let pid = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Variable, ptr_t, pid, uint(SpvStorageClass.Function))
+                ctx.call_temps |> insert(intptr(arg), CallTemp(ptr_id = pid, value_type = vt))
+            }
+        }
+    }
+}
+
+def private alloc_call_temps(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr) {
+    var v = new SpirvTempAlloc(m = unsafe(addr(m)), ctx = unsafe(addr(ctx)))
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(f.body, v.adapter)
+    }
+    unsafe {
+        delete v
+    }
+}
+
+// Emit one user-defined shader function: OpFunction, its OpFunctionParameters (value params bind an
+// SSA id; ref params bind a Function pointer), the entry block (locals + ref-arg temps), the body,
+// and the trailing return. The result id / type were pre-allocated by register_user_func.
+def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : UserFunc; var errors : array<string>) {
+    let f = unsafe(reinterpret<FunctionPtr>(uf.fn))   // read-only emission; strip pointee const
+    emit(m, SEC_FUNCS, SpvOp.Function, uf.ret_type, uf.fn_id, 0u, uf.type_id)
+    for (arg in f.arguments) {
+        let at = arg._type
+        let vt = emit_type(m, at)
+        let pid = alloc_id(m)
+        if (at.flags.ref && !at.flags.constant) {
+            let pt = type_pointer(m, SpvStorageClass.Function, vt)
+            emit(m, SEC_FUNCS, SpvOp.FunctionParameter, pt, pid)
+            ctx.local_vars |> insert(intptr(arg), LocalVar(ptr_id = pid, value_type = vt))
+        } else {
+            emit(m, SEC_FUNCS, SpvOp.FunctionParameter, vt, pid)
+            ctx.locals |> insert(intptr(arg), pid)
+        }
+    }
+    let id_label = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Label, id_label)
+    ctx.terminated = false
+    collect_locals(m, ctx, f.body, errors)
+    alloc_call_temps(m, ctx, f)
+    drive_emit(m, ctx, f, errors)
+    if (!ctx.terminated) {
+        if (uf.is_void) {
+            emit(m, SEC_FUNCS, SpvOp.Return)
+        } else {
+            errors |> push("shader function '{f.name}': not every control-flow path returns a value")
+            emit(m, SEC_FUNCS, SpvOp.Unreachable)
+        }
+    }
+    emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+}
+
 // ===== entry =====
 def private execution_model(stage : ShaderStage) : SpvExecutionModel {
     if (stage == ShaderStage.Vertex) return SpvExecutionModel.Vertex
@@ -2463,11 +2776,19 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
 
-    collect_dependencies(fn) $(_vfun, vvar) {
+    collect_dependencies(fn) $(vfun, vvar) {
         for (v in vvar) {
             classify_global(m, ctx, v, stage, reflection, errors)
         }
+        // Register every user-defined dependency function (stable collect_dependencies order) so calls
+        // can forward-reference a not-yet-emitted callee; their bodies are emitted after the entry point.
+        for (uffn in vfun) {
+            if (is_user_shader_func(uffn, fn)) {
+                register_user_func(m, ctx, uffn, errors)
+            }
+        }
     }
+    detect_recursion(ctx, fn, errors)
 
     let t_void = type_void(m)
     let t_fn = type_function_void(m, t_void)
@@ -2505,6 +2826,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
 
     // Function-storage OpVariables must lead the entry block, before any body code.
     collect_locals(m, ctx, fn.body, errors)
+    alloc_call_temps(m, ctx, fn)
     // Body codegen: the SpirvEmit AstVisitor walks fn.body, emitting into m.
     drive_emit(m, ctx, fn, errors)
 
@@ -2512,6 +2834,14 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         emit(m, SEC_FUNCS, SpvOp.Return)
     }
     emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+
+    // user-defined shader functions, in stable registration order, after the entry point
+    for (key in ctx.user_order) {
+        let uf = ctx.user_funcs?[key] ?? UserFunc()
+        if (uf.valid) {
+            emit_user_function(m, ctx, uf, errors)
+        }
+    }
 
     var words <- module_words(m)
     delete m

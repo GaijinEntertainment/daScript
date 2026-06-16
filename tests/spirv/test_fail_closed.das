@@ -44,7 +44,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
 [test]
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects shader-illegal constructs cleanly") <| @(t : T?) {
-        check_rejects(t, "_fc_call", "unsupported call 'helper'")
+        check_rejects(t, "_fc_call", "cannot call 'tanh'")
         check_rejects(t, "_fc_global", "unsupported global 'g_scale'")
         check_rejects(t, "_fc_localtype", "type tDouble is not supported")
         check_rejects(t, "_fc_stmt", "memzero is not supported in SPIR-V shaders")
@@ -52,5 +52,10 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_wswz", "cannot assign through a swizzle")
         check_rejects(t, "_fc_wgtype", "@workgroup type must be a scalar, vector, matrix, or fixed array")
         check_rejects(t, "_fc_atomicmem", "atomic target must live in @workgroup or @ssbo memory")
+        // user-defined function call rejections (Phase: shader functions)
+        check_rejects(t, "_fc_recursion", "recursion is not supported")
+        check_rejects(t, "_fc_mutual", "recursion is not supported")
+        check_rejects(t, "_fc_badparam", "is not supported (only 32-bit scalar/vector/matrix parameters")
+        check_rejects(t, "_fc_badret", "return type tDouble is not supported")
     }
 }

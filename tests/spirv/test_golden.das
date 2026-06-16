@@ -149,5 +149,11 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "tern", tern_words())
         check_iso(t, "vecarith", vecarith_words())
         check_iso(t, "mathx", mathx_words())
+        // Phase-11 user-defined function fixtures: frozen from the current visitor, so byte-identical
+        // check() (the strictest lock — pins opcodes, operands, AND id order of OpFunction/OpFunctionCall/
+        // OpFunctionParameter/OpReturnValue + the ref-param copy-in/out temps).
+        check(t, "userfn", userfn_words())
+        check(t, "userfn_ref", userfn_ref_words())
+        check(t, "userfn_global", userfn_global_words())
     }
 }
