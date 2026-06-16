@@ -790,6 +790,7 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
+src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.h
@@ -801,7 +802,6 @@ src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -842,6 +842,7 @@ src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
+src/misc/lexer_alloc_track.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -963,7 +964,6 @@ include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
-src/simulate/file_access.cpp
 )
 
 
@@ -1106,7 +1106,6 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_unused.cpp
     src/ast/ast_lint.cpp
     src/ast/dyn_modules.cpp
-    src/misc/lexer_alloc_track.cpp
     src/misc/daScriptC.cpp
     src/builtin/modules.cpp
     src/ast/ast_infer_type.cpp

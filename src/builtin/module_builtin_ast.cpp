@@ -6,7 +6,6 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
-#include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
@@ -18,9 +17,6 @@
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 #include "module_builtin_ast.h"
-
-IMPLEMENT_EXTERNAL_TYPE_FACTORY(AstSerializer,das::AstSerializerState)
-IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,das::FileAccess)
 
 // get_file_access lives in the compiler lib (ast_parse.cpp); it compiles the pak.
 das::FileAccessPtr get_file_access ( char * pak );
@@ -1222,51 +1218,11 @@ namespace das {
     }
 #endif
 
-    struct AstSerializerAnnotation : ManagedStructureAnnotation<AstSerializerState, false, false> {
-        AstSerializerAnnotation(ModuleLibrary & ml)
-            : ManagedStructureAnnotation ("AstSerializer", ml) {
-        }
-    };
-
-    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess,false,true> {
-        FileAccessAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileAccess", ml) {
-        }
-    };
-
-    bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path ) {
-        if ( !mod ) return false;
-        if ( !path ) return false;
-        return access->addFsRoot(mod, path);
-    }
-
-    void rtti_add_extra_module ( smart_ptr_raw<FileAccess> access, const char * modName, const char * modFile, Context * context, LineInfoArg * at ) {
-        if ( !modName ) context->throw_error_at(at, "expecting module name");
-        if ( !modFile ) context->throw_error_at(at, "expecting module file path");
-        access->addExtraModule(modName, modFile);
-    }
-
-#if !DAS_NO_FILEIO
-    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
-        if ( !fname ) context->throw_error_at(at, "expecting file name");
-        const char * safeStr = str ? str : "";
-        uint32_t str_len = stringLength(*context, safeStr);
-        auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
-        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
-    }
-#else
-    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
-        return false;
-    }
-#endif
-
     Module_Ast::Module_Ast() : Module("ast_core") {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         addBuiltinDependency(lib, Module::require("rtti_core"), true);
-        addAnnotation(new AstSerializerAnnotation(lib));
-        addAnnotation(new FileAccessAnnotation(lib));
         registerAnnotations(lib);
         registerAnnotations1(lib);
         registerAnnotations2(lib);
@@ -1282,32 +1238,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
             SideEffects::modifyExternal, "makeFileAccess")
                 ->args({"project","context","at"});
-        addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
-            SideEffects::modifyExternal, "introduceFile")
-                ->args({"access","fileName","text","context","line"});
-        addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
-            SideEffects::modifyExternal, "rtti_add_file_access_root")
-                ->args({"access","mod","path"});
-        addExtern<DAS_BIND_FUN(rtti_add_extra_module)>(*this, lib, "add_extra_module",
-            SideEffects::modifyExternal, "rtti_add_extra_module")
-                ->args({"access","modName","modFile","context","line"});
-        addExtern<DAS_BIND_FUN(rtti_create_ast_serializer)>(*this, lib, "create_ast_serializer",
-            SideEffects::modifyExternal, "rtti_create_ast_serializer");
-        addExtern<DAS_BIND_FUN(rtti_create_ast_deserializer)>(*this, lib, "create_ast_deserializer",
-            SideEffects::modifyExternal, "rtti_create_ast_deserializer")
-                ->args({"data"});
-        addExtern<DAS_BIND_FUN(rtti_delete_ast_serializer)>(*this, lib, "delete_ast_serializer",
-            SideEffects::modifyExternal, "rtti_delete_ast_serializer")
-                ->args({"serializer"});
-        addExtern<DAS_BIND_FUN(rtti_ast_serializer_serialize_program)>(*this, lib, "serialize_program",
-            SideEffects::modifyExternal, "rtti_ast_serializer_serialize_program")
-                ->args({"serializer","program"});
-        addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
-            SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
-                ->args({"serializer","block","context","line"});
-        addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
-            SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
-                ->args({"serializer","block","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
             SideEffects::modifyExternal, "rtti_builtin_compile")
                 ->args({"module_name","codeText","codeOfPolicies","block","context","line"});

@@ -11,7 +11,6 @@ das::Context * get_context ( int stackSize=0 );
 namespace das {
 
     ModuleFileAccess::ModuleFileAccess() {
-        serializeKind = 1;
     }
 
     ModuleFileAccess::~ModuleFileAccess() {
@@ -19,7 +18,6 @@ namespace das {
     }
 
     ModuleFileAccess::ModuleFileAccess ( const string & pak, const ProgramPtr & program ) {
-        serializeKind = 1;
         TextWriter tout;
         if ( program ) {
             if ( program->failed() ) {
@@ -217,5 +215,4 @@ namespace das {
         DAS_ASSERTF(!exc, "exception failed in `pod_in_scope_allowed`: %s", exc);
         return cast<bool>::to(res);
     }
-
 }

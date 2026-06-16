@@ -2,10 +2,6 @@
 
 #include <daScript/simulate/aot_builtin_ast.h>
 
-namespace das { struct AstSerializerState; }
-MAKE_EXTERNAL_TYPE_FACTORY(AstSerializer,das::AstSerializerState)
-MAKE_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
-
 MAKE_EXTERNAL_TYPE_FACTORY(TypeDecl,das::TypeDecl)
 MAKE_EXTERNAL_TYPE_FACTORY(FieldDeclaration,das::Structure::FieldDeclaration)
 MAKE_EXTERNAL_TYPE_FACTORY(Structure,das::Structure)
