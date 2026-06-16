@@ -34,7 +34,7 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 | File | Description |
 |---|---|
-| `test01.das` | Convolution-reverb per-block cost — `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work). The per-partition complex multiply-accumulate is SIMD-vectorized via `dag_vecMath` (cross-platform SSE/NEON), ~2× over scalar in both tiers |
+| `test01.das` | Convolution-reverb per-block cost — `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work) vs `low` (Freeverb-style algorithmic reverb, 8 damped comb + 4 allpass per channel, no FFT — ~6× cheaper than high). The convolution tiers' per-partition complex multiply-accumulate is SIMD-vectorized via `dag_vecMath` (cross-platform SSE/NEON), ~2× over scalar |
 | `test02.das` | Reverb tail-skip gating (in `conv_reverb_process`) — per-bus cost of an active bus (full convolution) vs an idle bus (silent input → gate skips: scan + zero + return); the idle cost is what the gate saves per idle orbit |
 
 ## core/bool_array/

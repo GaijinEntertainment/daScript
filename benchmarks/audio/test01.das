@@ -70,3 +70,9 @@ def conv_reverb_high(b : B?) {
 def conv_reverb_medium(b : B?) {
     run_quality(b, ConvReverbQuality.medium, "conv_reverb/medium/{BLK}")
 }
+
+[benchmark]
+def conv_reverb_low(b : B?) {
+    // low = Freeverb-style algorithmic reverb (8 damped comb + 4 allpass per channel, no FFT)
+    run_quality(b, ConvReverbQuality.low, "conv_reverb/low/{BLK}")
+}

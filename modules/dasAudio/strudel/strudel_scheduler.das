@@ -181,10 +181,21 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
 }
 
+// Global reverb-quality override (-1 = off). When >= 0 it forces every orbit reverb to that tier
+// regardless of per-event roomquality — used to render A/B comparisons of the quality tiers.
+var private g_force_reverb_quality : int = -1
+
+def set_force_reverb_quality(q : int) {
+    //! Force all orbit reverbs to a quality tier (0=high, 1=medium, 2=low), overriding per-event
+    //! roomquality(). Pass -1 to disable the override (the default). Intended for A/B rendering.
+    g_force_reverb_quality = q
+}
+
 // Initialize reverb on an orbit bus.
 def private conv_quality_from_int(q : int) : ConvReverbQuality {
-    if (q == 1) return ConvReverbQuality.medium
-    if (q == 2) return ConvReverbQuality.low
+    let qq = g_force_reverb_quality >= 0 ? g_force_reverb_quality : q
+    if (qq == 1) return ConvReverbQuality.medium
+    if (qq == 2) return ConvReverbQuality.low
     return ConvReverbQuality.high
 }
 

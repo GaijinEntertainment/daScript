@@ -258,8 +258,13 @@ per-orbit *quality* tier, selected with ``roomquality``:
   channel.  Roughly **half** the per-block convolution cost, with a
   stereo image close to ``"high"`` (the cascade is tuned to a wide,
   mono-safe spread).
-* ``"low"`` — reserved for a cheaper recirculating-delay reverb; maps
-  to ``"medium"`` until that path lands.
+* ``"low"`` — a Freeverb-style algorithmic reverb (eight damped comb
+  filters plus four series allpasses per channel).  No FFT, so it is by
+  far the cheapest tier (roughly **6x** cheaper than ``"high"`` per
+  block, and with no per-block convolution burst its peak CPU is far
+  lower too).  The trade is a less natural, more "metallic" tail; per-comb
+  feedback still tracks ``roomsize`` and the tail brightness still tracks
+  the lowpass, so it responds to the same controls as the other tiers.
 
 .. code-block:: das
 

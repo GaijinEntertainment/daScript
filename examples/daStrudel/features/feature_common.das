@@ -21,6 +21,7 @@ struct FeatureArgs {
     duration : float = 10.0
     track_memory : bool = false
     wav_path : string
+    room_quality : int = -1   // -1 = per-event default; 0=high/1=medium/2=low forces all reverbs
 }
 
 def parse_feature_args() : FeatureArgs {
@@ -36,6 +37,10 @@ def parse_feature_args() : FeatureArgs {
             i ++
         } elif (args[i] == "--wav" && i + 1 < length(args)) {
             res.wav_path = args[i + 1]
+            i += 2
+        } elif (args[i] == "--roomquality" && i + 1 < length(args)) {
+            let q = args[i + 1]
+            res.room_quality = q == "medium" ? 1 : (q == "low" ? 2 : 0)
             i += 2
         } else {
             i ++
@@ -54,6 +59,9 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ 
     let duration = args.duration
     let track_memory = args.track_memory
     let wav_path = args.wav_path
+    if (args.room_quality >= 0) {
+        set_force_reverb_quality(args.room_quality)
+    }
     if (!empty(wav_path)) {
         // --- Offline WAV render (no audio driver) ---
         strudel_set_cps(cps)

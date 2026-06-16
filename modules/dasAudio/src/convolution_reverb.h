@@ -18,7 +18,8 @@
 //   medium - a single mono IR convolved once, split into stereo by two Schroeder allpass filters
 //            (~half the per-block convolution cost; allpass is |H|=1 so the spectrum is preserved,
 //             only phase differs, which the ear reads as stereo width).
-//   low    - reserved for a cheap recirculating-delay reverb (added later); falls back to medium.
+//   low    - a Freeverb-style algorithmic reverb (8 damped comb + 4 allpass per channel); no FFT,
+//            far cheaper than the convolution tiers, with a less natural / more metallic tail.
 typedef enum {
     CONV_QUALITY_HIGH   = 0,
     CONV_QUALITY_MEDIUM = 1,
@@ -32,6 +33,15 @@ typedef enum {
 #define CONV_DECORR_STAGES     4    // fixed cascade depth for the medium path
 #define CONV_DECORR_MAX_STAGES 8    // delay-table capacity
 #define CONV_DECORR_G          0.6f // allpass feedback coefficient (all stages)
+
+// Low tier: a Freeverb-style algorithmic reverb — 8 parallel damped comb filters plus 4 series
+// allpass filters per channel. O(1) per sample, no FFT or partitions, so it is far cheaper than
+// the convolution tiers; the trade is a less natural, more "metallic" tail. Per-comb feedback is
+// derived from decayTime so RT60 tracks the same decay parameter as high/medium, and the comb
+// damping pole is derived from lpFreqEnd so the tail brightness control still applies.
+#define CONV_FV_NUM_COMB 8
+#define CONV_FV_NUM_AP   4
+#define CONV_FV_SPREAD   23    // right-channel delay offset (samples @44.1k) for stereo width
 
 struct ConvolutionReverb {
     // Impulse response parameters (exposed to daScript)
@@ -79,6 +89,25 @@ struct ConvolutionReverb {
     uint32_t decorr_len_r[CONV_DECORR_MAX_STAGES];   // per-stage right delay lengths (samples)
     uint32_t decorr_pos_l[CONV_DECORR_MAX_STAGES];   // per-stage left write positions
     uint32_t decorr_pos_r[CONV_DECORR_MAX_STAGES];   // per-stage right write positions
+    // Low (Freeverb) path: 8 damped comb + 4 allpass per channel. All unused on high/medium.
+    float *  comb_buf_l[CONV_FV_NUM_COMB];
+    float *  comb_buf_r[CONV_FV_NUM_COMB];
+    uint32_t comb_len_l[CONV_FV_NUM_COMB];
+    uint32_t comb_len_r[CONV_FV_NUM_COMB];
+    uint32_t comb_pos_l[CONV_FV_NUM_COMB];
+    uint32_t comb_pos_r[CONV_FV_NUM_COMB];
+    float    comb_fb_l[CONV_FV_NUM_COMB];     // per-comb feedback (from decayTime)
+    float    comb_fb_r[CONV_FV_NUM_COMB];
+    float    comb_store_l[CONV_FV_NUM_COMB];  // one-pole damping filter state
+    float    comb_store_r[CONV_FV_NUM_COMB];
+    float *  ap_buf_l[CONV_FV_NUM_AP];
+    float *  ap_buf_r[CONV_FV_NUM_AP];
+    uint32_t ap_len_l[CONV_FV_NUM_AP];
+    uint32_t ap_len_r[CONV_FV_NUM_AP];
+    uint32_t ap_pos_l[CONV_FV_NUM_AP];
+    uint32_t ap_pos_r[CONV_FV_NUM_AP];
+    float    fv_damp1, fv_damp2;   // damping pole and (1 - pole)
+    float    fv_in_gain, fv_wet;   // input fixed gain and wet output scale
     void *   arena;            // single allocation for all buffers
 };
 
@@ -337,22 +366,151 @@ static void conv_reverb_decorrelate(ConvolutionReverb * rev, float * io_left, fl
     }
 }
 
+// Freeverb comb/allpass delay tunings (samples @44.1kHz; scaled to the actual sample rate at
+// init). The right channel adds CONV_FV_SPREAD for stereo width. These are the canonical
+// Freeverb values — mutually-prime lengths chosen for a smooth, dense tail.
+static const uint32_t CONV_FV_COMB_TUNING[CONV_FV_NUM_COMB] =
+    { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
+static const uint32_t CONV_FV_AP_TUNING[CONV_FV_NUM_AP] =
+    { 556, 441, 341, 225 };
+
+// Initialize the low (Freeverb) path: scale the delay tunings to the sample rate, derive per-comb
+// feedback from decayTime (RT60) and the damping pole from lpFreqEnd, and lay out the delay lines
+// in a single arena. Called from conv_reverb_init when quality == low; leaves fft_aux null.
+static void conv_reverb_init_low(ConvolutionReverb * rev) {
+    float sr = (float)rev->sampleRate;
+    float srScale = sr / 44100.0f;
+
+    // Damping: a one-pole lowpass in each comb's feedback. Pole from the tail brightness control.
+    float fc = rev->lpFreqEnd;
+    if (fc < 20.0f) fc = 20.0f;
+    if (fc > sr * 0.49f) fc = sr * 0.49f;
+    float damp = expf(-6.2831853f * fc / sr);
+    if (damp > 0.95f) damp = 0.95f;
+    if (damp < 0.0f) damp = 0.0f;
+    rev->fv_damp1 = damp;
+    rev->fv_damp2 = 1.0f - damp;
+    rev->fv_in_gain = 0.015f;   // Freeverb's fixed input gain
+    rev->fv_wet = 2.0f;         // wet output scale (tuned to match the high-tier output level)
+
+    size_t total = 0;
+    for (int c = 0; c < CONV_FV_NUM_COMB; c++) {
+        uint32_t ll = (uint32_t)((float)CONV_FV_COMB_TUNING[c] * srScale);
+        uint32_t lr = (uint32_t)((float)(CONV_FV_COMB_TUNING[c] + CONV_FV_SPREAD) * srScale);
+        if (ll < 1) ll = 1;
+        if (lr < 1) lr = 1;
+        rev->comb_len_l[c] = ll;
+        rev->comb_len_r[c] = lr;
+        total += (size_t)ll + lr;
+        // Per-comb feedback so the comb reaches -60dB in decayTime: fb^(RT60*sr/len) = 1e-3.
+        float fbl = powf(10.0f, -3.0f * ((float)ll / sr) / rev->decayTime);
+        float fbr = powf(10.0f, -3.0f * ((float)lr / sr) / rev->decayTime);
+        if (fbl > 0.98f) fbl = 0.98f;
+        if (fbr > 0.98f) fbr = 0.98f;
+        rev->comb_fb_l[c] = fbl;
+        rev->comb_fb_r[c] = fbr;
+    }
+    for (int a = 0; a < CONV_FV_NUM_AP; a++) {
+        uint32_t ll = (uint32_t)((float)CONV_FV_AP_TUNING[a] * srScale);
+        uint32_t lr = (uint32_t)((float)(CONV_FV_AP_TUNING[a] + CONV_FV_SPREAD) * srScale);
+        if (ll < 1) ll = 1;
+        if (lr < 1) lr = 1;
+        rev->ap_len_l[a] = ll;
+        rev->ap_len_r[a] = lr;
+        total += (size_t)ll + lr;
+    }
+
+    rev->arena = calloc(total, sizeof(float));
+    float * f = (float *)rev->arena;
+    for (int c = 0; c < CONV_FV_NUM_COMB; c++) {
+        rev->comb_buf_l[c] = f; f += rev->comb_len_l[c];
+        rev->comb_buf_r[c] = f; f += rev->comb_len_r[c];
+    }
+    for (int a = 0; a < CONV_FV_NUM_AP; a++) {
+        rev->ap_buf_l[a] = f; f += rev->ap_len_l[a];
+        rev->ap_buf_r[a] = f; f += rev->ap_len_r[a];
+    }
+}
+
+// Process one channel-pair through the Freeverb network: mono-downmix -> 8 parallel damped combs
+// (summed) -> 4 series allpasses, per channel. Right uses spread delays for stereo width.
+static void conv_reverb_process_low(ConvolutionReverb * rev, const float * input, float * output, uint32_t nFrames) {
+    float damp1 = rev->fv_damp1, damp2 = rev->fv_damp2;
+    float inGain = rev->fv_in_gain, wet = rev->fv_wet;
+    const float apfb = 0.5f;
+    for (uint32_t i = 0; i < nFrames; i++) {
+        float mono = (input[i * 2] + input[i * 2 + 1]) * 0.5f * inGain;
+        // Left channel
+        float outl = 0.0f;
+        for (int c = 0; c < CONV_FV_NUM_COMB; c++) {
+            float * b = rev->comb_buf_l[c];
+            uint32_t p = rev->comb_pos_l[c];
+            float y = b[p];
+            rev->comb_store_l[c] = y * damp2 + rev->comb_store_l[c] * damp1;
+            b[p] = mono + rev->comb_store_l[c] * rev->comb_fb_l[c];
+            if (++p >= rev->comb_len_l[c]) p = 0;
+            rev->comb_pos_l[c] = p;
+            outl += y;
+        }
+        for (int a = 0; a < CONV_FV_NUM_AP; a++) {
+            float * b = rev->ap_buf_l[a];
+            uint32_t p = rev->ap_pos_l[a];
+            float bufout = b[p];
+            float y = -outl + bufout;
+            b[p] = outl + bufout * apfb;
+            if (++p >= rev->ap_len_l[a]) p = 0;
+            rev->ap_pos_l[a] = p;
+            outl = y;
+        }
+        // Right channel
+        float outr = 0.0f;
+        for (int c = 0; c < CONV_FV_NUM_COMB; c++) {
+            float * b = rev->comb_buf_r[c];
+            uint32_t p = rev->comb_pos_r[c];
+            float y = b[p];
+            rev->comb_store_r[c] = y * damp2 + rev->comb_store_r[c] * damp1;
+            b[p] = mono + rev->comb_store_r[c] * rev->comb_fb_r[c];
+            if (++p >= rev->comb_len_r[c]) p = 0;
+            rev->comb_pos_r[c] = p;
+            outr += y;
+        }
+        for (int a = 0; a < CONV_FV_NUM_AP; a++) {
+            float * b = rev->ap_buf_r[a];
+            uint32_t p = rev->ap_pos_r[a];
+            float bufout = b[p];
+            float y = -outr + bufout;
+            b[p] = outr + bufout * apfb;
+            if (++p >= rev->ap_len_r[a]) p = 0;
+            rev->ap_pos_r[a] = p;
+            outr = y;
+        }
+        output[i * 2]     = outl * wet;
+        output[i * 2 + 1] = outr * wet;
+    }
+}
+
 void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayTime,
                       float lpFreqStart, float lpFreqEnd, float fadeIn, uint32_t quality) {
     memset(rev, 0, sizeof(ConvolutionReverb));
     rev->sampleRate = sampleRate;
-    // CONV_QUALITY_LOW is not implemented yet — treat it as medium until the cheap path lands.
-    rev->quality = (quality == CONV_QUALITY_HIGH) ? CONV_QUALITY_HIGH : CONV_QUALITY_MEDIUM;
+    rev->quality = (quality <= CONV_QUALITY_LOW) ? quality : CONV_QUALITY_MEDIUM;
     rev->decayTime = decayTime;
     rev->lpFreqStart = lpFreqStart;
     rev->lpFreqEnd = lpFreqEnd;
     rev->fadeIn = fadeIn;
 
-    // IR extends to 1.5x decay time (reaches ~-90dB), capped at configurable max
+    // IR extends to 1.5x decay time (reaches ~-90dB), capped at configurable max. For every tier
+    // this also sets the idle-gate tail budget (see conv_reverb_process).
     float irTime = decayTime * 1.5f;
     if (irTime > g_conv_reverb_max_ir) irTime = g_conv_reverb_max_ir;
     rev->ir_length = (uint32_t)(irTime * (float)sampleRate);
     if (rev->ir_length < 64) rev->ir_length = 64;
+
+    // Low tier is a self-contained Freeverb network — no FFT, partitions, or FDDL.
+    if (rev->quality == CONV_QUALITY_LOW) {
+        conv_reverb_init_low(rev);
+        return;
+    }
 
     uint32_t B = CONV_BLOCK_SIZE;
     uint32_t N = B * 2;
@@ -465,15 +623,17 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
 // Process interleaved stereo input to interleaved stereo output.
 // Returns 1 if it produced output, 0 if the bus was idle (silent input + decayed tail) and skipped.
 int conv_reverb_process(ConvolutionReverb * rev, const float * input, float * output, uint32_t nFrames) {
-    if (!rev->fft_aux || nFrames == 0) return 0;
+    if (nFrames == 0) return 0;
+    // The convolution tiers need an FFT plan; the low (Freeverb) tier does not.
+    if (rev->quality != CONV_QUALITY_LOW && !rev->fft_aux) return 0;
 
     uint32_t B = CONV_BLOCK_SIZE;
     uint32_t written = 0;
 
-    // Idle-bus gate: a partitioned convolver costs the same on silence. Scan the input; on signal,
-    // refill the tail budget (IR length + block latency). Once it decays to zero the FDDL has
-    // flushed to silence, so skip the whole convolution and emit silence. The over-estimate
-    // guarantees a tail is never cut short. Mirrors the chorus path's activity gate.
+    // Idle-bus gate (all tiers): the convolver costs the same on silence, and the Freeverb tail
+    // recirculates indefinitely. Scan the input; on signal, refill the tail budget (IR length +
+    // block latency). Once it decays to zero the tail has flushed to silence, so skip processing
+    // and emit silence. The over-estimate guarantees a tail is never cut short.
     int has_input = 0;
     for (uint32_t i = 0, ns = nFrames * 2; i < ns; i++) {
         if (input[i] > 1e-5f || input[i] < -1e-5f) { has_input = 1; break; }
@@ -484,6 +644,12 @@ int conv_reverb_process(ConvolutionReverb * rev, const float * input, float * ou
         return 0;
     }
     rev->tail_frames -= (int)nFrames;
+
+    // Low tier: self-contained Freeverb network, no block accumulation or latency.
+    if (rev->quality == CONV_QUALITY_LOW) {
+        conv_reverb_process_low(rev, input, output, nFrames);
+        return 1;
+    }
 
     // 1. Flush pending output from previous call
     while (rev->pending_count > 0 && written < nFrames) {
