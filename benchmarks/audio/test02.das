@@ -14,7 +14,6 @@ options persistent_heap
 
 require dastest/testing_boost
 require audio
-require math
 
 let SR    = 48000
 let BLK   = 1024
@@ -22,9 +21,9 @@ let DECAY = 2.0
 
 def fill_noise(var buf : array<float>) {
     var seed = 0x12345678u
-    for (i in range(length(buf))) {
+    for (c in buf) {
         seed = seed * 1664525u + 1013904223u
-        buf[i] = float(seed >> 9u) / float(0x7FFFFF) * 2.0 - 1.0
+        c = float(seed >> 9u) / float(0x7FFFFF) * 2.0 - 1.0
     }
 }
 

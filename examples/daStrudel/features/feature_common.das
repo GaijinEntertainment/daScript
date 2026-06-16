@@ -31,7 +31,7 @@ def parse_feature_args() : FeatureArgs {
     var i = 0
     while (i < length(args)) {
         if (args[i] == "--duration" && i + 1 < length(args)) {
-            res.duration = float(to_float(args[i + 1]))
+            res.duration = to_float(args[i + 1])
             i += 2
         } elif (args[i] == "--track-memory") {
             res.track_memory = true
@@ -82,9 +82,7 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ 
         to_log(0, "rendering {duration} seconds to {wav_path}...\n")
         while (g_wall_time < double(duration)) {
             strudel_tick_offline()
-            for (s in g_master_pcm) {
-                all_samples |> push(s)
-            }
+            all_samples |> push_from(g_master_pcm)
         }
         write_wav(wav_path, all_samples, 48000u, 2)
         to_log(0, "wrote {wav_path} ({length(all_samples) / 2} frames)\n")

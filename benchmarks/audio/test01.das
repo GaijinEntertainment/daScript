@@ -33,7 +33,7 @@ def assert_stereo(b : B?; var rev : ConvolutionReverb?; var input : array<float>
     var output : array<float>
     output |> resize(BLK * 2)
     var diff = 0.0
-    for (k in range(200)) {   // settle past the one-block latency, let the tail build
+    for (_ in range(200)) {   // settle past the one-block latency, let the tail build
         unsafe { conv_reverb_process(rev, addr(input[0]), addr(output[0]), BLK) }
     }
     for (i in range(BLK)) {
