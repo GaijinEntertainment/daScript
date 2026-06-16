@@ -827,9 +827,9 @@ namespace das {
         return out;
     }
 
-    static string winBuildCommandLine ( char ** argv, uint32_t argc ) {
+    static string winBuildCommandLine ( char ** argv, uint64_t argc ) {
         string s;
-        for ( uint32_t i = 0; i < argc; ++i ) {
+        for ( uint64_t i = 0; i < argc; ++i ) {
             if ( i ) s += ' ';
             s += winArgvEscape(argv[i]);
         }
@@ -953,7 +953,7 @@ namespace das {
         // trailing NULL element.
         vector<char *> cargv;
         cargv.reserve(args_arr.size + 1);
-        for ( uint32_t i = 0; i < args_arr.size; ++i ) {
+        for ( uint64_t i = 0; i < args_arr.size; ++i ) {
             cargv.push_back(argv[i] ? argv[i] : (char *)"");
         }
         cargv.push_back(nullptr);
@@ -1137,7 +1137,7 @@ namespace das {
         }
         vector<char *> cargv;
         cargv.reserve(args_arr.size + 1);
-        for ( uint32_t i = 0; i < args_arr.size; ++i ) {
+        for ( uint64_t i = 0; i < args_arr.size; ++i ) {
             cargv.push_back(argv[i] ? argv[i] : (char *)"");
         }
         cargv.push_back(nullptr);
