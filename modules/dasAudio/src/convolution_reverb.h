@@ -28,9 +28,10 @@ typedef enum {
 
 // Stereo decorrelation for the medium (mono) path: a per-channel cascade of Schroeder allpass
 // filters at short, mutually-prime delays. Each allpass has |H| = 1 (spectrum preserved, only
-// phase scrambled). The medium path uses a fixed CONV_DECORR_STAGES-deep cascade, chosen to give
-// a wide, mono-safe image (L/R correlation ~0.36, close to the dual-IR high tier) at ~free cost.
-#define CONV_DECORR_STAGES     4    // fixed cascade depth for the medium path
+// phase scrambled). The depth is user-selectable (conv_reverb_init's decorrStages); the default
+// below is chosen for a wide image that stays mono-safe (L/R correlation ~+0.27, mono fold-down
+// only ~-2dB — unlike e.g. depth 4, which is wide in stereo but cancels heavily in mono).
+#define CONV_DECORR_STAGES     5    // default cascade depth for the medium path (overridable 1..8)
 #define CONV_DECORR_MAX_STAGES 8    // delay-table capacity
 #define CONV_DECORR_G          0.6f // allpass feedback coefficient (all stages)
 

@@ -256,9 +256,10 @@ per-orbit *quality* tier, selected with ``roomquality``:
 * ``"medium"`` — a single mono impulse response convolved once, then
   split into stereo by a Schroeder allpass cascade per channel.  Roughly
   **half** the per-block convolution cost.  The cascade depth defaults to
-  four stages but is adjustable from one to eight with ``roomstages`` —
-  the allpass phase response is non-monotonic in depth, so there is no
-  single "best" value; pick one by ear.
+  five stages but is adjustable from one to eight with ``roomstages`` —
+  the allpass phase response is non-monotonic in depth (some depths are
+  wide in stereo yet cancel in mono), so there is no single "best" value;
+  pick one by ear.
 * ``"low"`` — a Freeverb-style algorithmic reverb (eight damped comb
   filters plus four series allpasses per channel).  No FFT, so it is by
   far the cheapest tier (roughly **6x** cheaper than ``"high"`` per

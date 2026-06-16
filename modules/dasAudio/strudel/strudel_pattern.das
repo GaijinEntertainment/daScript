@@ -459,8 +459,8 @@ def set_roomsize(var pat : Pattern; r : int | float | double) : Pattern {
 // pat |> set_roomquality("medium") — pick the reverb quality tier
 def set_roomquality(var pat : Pattern; q : string) : Pattern {
     //! Sets the reverb quality tier on every event: "high" (dual-IR, default),
-    //! "medium" (single mono IR + a 4-stage allpass decorrelation cascade, ~2x cheaper
-    //! with a stereo image close to high), or "low". Unknown values fall back to "high".
+    //! "medium" (single mono IR + an allpass decorrelation cascade, ~2x cheaper;
+    //! depth set by roomstages), or "low" (Freeverb, cheapest). Unknown values fall back to "high".
     let qi = q == "medium" ? 1 : (q == "low" ? 2 : 0)
     let fn <- @capture(= qi) (e : Event) : Event {
         var ev = e; ev.reverb_quality = qi; return ev
@@ -471,7 +471,7 @@ def set_roomquality(var pat : Pattern; q : string) : Pattern {
 // pat |> set_roomstages(6) — set the medium-tier allpass cascade depth
 def set_roomstages(var pat : Pattern; n : int) : Pattern {
     //! Sets the medium-tier allpass cascade depth on every event (1–8; 0 selects the default
-    //! of 4). Only the "medium" quality tier uses it — more stages give a different (not strictly
+    //! of 5). Only the "medium" quality tier uses it — more stages give a different (not strictly
     //! wider) stereo image, so it is exposed for tuning by ear. Ignored by "high" and "low".
     let ni = n
     let fn <- @capture(= ni) (e : Event) : Event {
@@ -2618,7 +2618,7 @@ def roomquality(var pat : Pattern; q : string) : Pattern {
 }
 def roomstages(var pat : Pattern; n : int) : Pattern {
     //! Fluent shorthand for `set_roomstages`. Sets the medium-tier allpass cascade depth (1–8;
-    //! 0 = default 4). Only "medium" uses it; tune by ear.
+    //! 0 = default 5). Only "medium" uses it; tune by ear.
     return <- set_roomstages(pat, n)
 }
 def delay(var pat : Pattern; d : int | float | double) : Pattern {
