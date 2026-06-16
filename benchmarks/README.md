@@ -35,6 +35,7 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | File | Description |
 |---|---|
 | `test01.das` | Convolution-reverb per-block cost — `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work) |
+| `test02.das` | Reverb tail-skip gating — scheduler tick over N orbit reverbs with most idle: always-process every bus vs skip when input is silent and the reverb tail has decayed (win scales with idle fraction) |
 
 ## core/bool_array/
 

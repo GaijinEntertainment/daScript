@@ -17,6 +17,10 @@ require audio/audio_boost
 require audio
 require math
 
+// Reverb tail-skip gating (mirror convolution_reverb.h CONV_BLOCK_SIZE / CONV_DEFAULT_MAX_IR).
+let private CONV_BLOCK_SIZE = 1024
+let private CONV_REVERB_MAX_IR = 8.0   // seconds
+
 //! An active voice: a pre-rendered stereo buffer being played back.
 struct Voice {
     samples : array<float>   // interleaved stereo PCM (raw, no gain/pan)
@@ -115,6 +119,8 @@ struct OrbitBus {
         //! Most recently applied reverb roomsize (-1 = uninitialized).
     current_quality       : int = -1
         //! Most recently applied reverb quality tier (-1 = uninitialized; 0=high/1=medium/2=low).
+    reverb_tail_frames    : int = 0
+        //! Remaining reverb-tail frames; >0 keeps the convolver running after input stops, 0 = skip.
     current_delaytime     : float = -1.0
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
@@ -857,16 +863,33 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
     let chunkSamples = chunkFrames * 2
     for (bus in sched.orbit_buses) {
         if (bus == null) continue
-        // Always process reverb when it exists — convolver needs continuous input
+        // Process reverb only while the bus has input or a live tail. A partitioned
+        // convolver costs the same on silence, so an idle bus past its tail is pure waste.
         if (bus.reverb != null) {
+            var has_input = false
             for (s in range(chunkSamples)) {
-                bus.reverb_out_buf[s] = 0.0
+                if (abs(bus.reverb_send_buf[s]) > 0.00001) {
+                    has_input = true
+                    break
+                }
             }
-            unsafe {
-                conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
+            if (has_input) {
+                // Refill the tail budget: IR length (decay*1.5, capped) plus block latency.
+                // Over-estimating only delays the skip; it never cuts the tail short.
+                let irTime = min(bus.current_roomsize * 1.5, CONV_REVERB_MAX_IR)
+                bus.reverb_tail_frames = int(irTime * float(SAMPLE_RATE)) + 2 * CONV_BLOCK_SIZE
             }
-            for (s in range(chunkSamples)) {
-                output[s] += bus.reverb_out_buf[s]
+            if (bus.reverb_tail_frames > 0) {
+                for (s in range(chunkSamples)) {
+                    bus.reverb_out_buf[s] = 0.0
+                }
+                unsafe {
+                    conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
+                }
+                for (s in range(chunkSamples)) {
+                    output[s] += bus.reverb_out_buf[s]
+                }
+                bus.reverb_tail_frames -= chunkFrames
             }
         }
         // Always process delay when it exists — internal buffer needs to decay
