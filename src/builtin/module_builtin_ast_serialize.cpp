@@ -231,7 +231,8 @@ namespace das {
         // 64-bit user-space pointers fit in 48 bits (canonical form on x86-64
         // and AArch64 Linux/macOS — top 16 bits are sign-extended copies of
         // bit 47, and we only ever see user-space addresses here, so they are
-        // zero). Pack a small epoch into those unused top 16 bits so the
+        // zero — but we mask them on write regardless, since ptr is an identity
+        // key only). Pack a small epoch into those unused top 16 bits so the
         // common case is a single 8-byte word. Reserve sentinel 0xFFFF for
         // "epoch overflow" — fall back to a separate adaptive-size write.
         // 32-bit hosts have no headroom; always emit ptr + adaptive epoch.
@@ -239,10 +240,7 @@ namespace das {
             constexpr uint64_t kPtrMask  = (uint64_t(1) << 48) - 1;
             constexpr uint64_t kEpochOverflowTag = 0xFFFFull << 48;
             if ( writing ) {
-                uintptr_t pbits = reinterpret_cast<uintptr_t>(value.ptr);
-                DAS_ASSERTF((uint64_t(pbits) & ~kPtrMask) == 0,
-                    "SerializeNodeId: pointer %p has non-zero top 16 bits — "
-                    "non-canonical address violates packing assumption", value.ptr);
+                uintptr_t pbits = reinterpret_cast<uintptr_t>(value.ptr) & kPtrMask;
                 if ( value.epoch < 0xFFFFull ) {
                     uint64_t packed = (uint64_t(value.epoch) << 48) | uint64_t(pbits);
                     *this << packed;
