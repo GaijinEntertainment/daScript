@@ -459,8 +459,8 @@ def set_roomsize(var pat : Pattern; r : int | float | double) : Pattern {
 // pat |> set_roomquality("medium") — pick the reverb quality tier
 def set_roomquality(var pat : Pattern; q : string) : Pattern {
     //! Sets the reverb quality tier on every event: "high" (dual-IR, default),
-    //! "medium" (single mono IR + allpass decorrelation, ~2x cheaper but a narrower
-    //! stereo image), or "low". Unknown values fall back to "high".
+    //! "medium" (single mono IR + a 4-stage allpass decorrelation cascade, ~2x cheaper
+    //! with a stereo image close to high), or "low". Unknown values fall back to "high".
     let qi = q == "medium" ? 1 : (q == "low" ? 2 : 0)
     let fn <- @capture(= qi) (e : Event) : Event {
         var ev = e; ev.reverb_quality = qi; return ev

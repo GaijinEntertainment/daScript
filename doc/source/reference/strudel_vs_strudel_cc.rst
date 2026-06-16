@@ -252,12 +252,12 @@ Reverb quality
 per-orbit *quality* tier, selected with ``roomquality``:
 
 * ``"high"`` (default) — two decorrelated impulse responses, one full
-  partitioned convolution per channel.  Widest, most diffuse stereo
-  image; most expensive.
+  partitioned convolution per channel.  Most expensive.
 * ``"medium"`` — a single mono impulse response convolved once, then
-  split into stereo by two Schroeder allpass filters.  Roughly **half**
-  the per-block convolution cost, at the price of a narrower stereo
-  image (the allpass decorrelation is milder than two independent IRs).
+  split into stereo by a fixed four-stage Schroeder allpass cascade per
+  channel.  Roughly **half** the per-block convolution cost, with a
+  stereo image close to ``"high"`` (the cascade is tuned to a wide,
+  mono-safe spread).
 * ``"low"`` — reserved for a cheaper recirculating-delay reverb; maps
   to ``"medium"`` until that path lands.
 

@@ -800,10 +800,11 @@ void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float d
     conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in, (uint32_t)quality);
 }
 
-void dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames,
-                                   Context * context, LineInfoArg * at ) {
+// Returns 1 if it produced output, 0 if the bus was idle and skipped (output is zeroed on skip).
+int dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames,
+                                  Context * context, LineInfoArg * at ) {
     if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
-    conv_reverb_process(rev, input, output, (uint32_t)nFrames);
+    return conv_reverb_process(rev, input, output, (uint32_t)nFrames);
 }
 
 void dasAudio_convReverbProcessMono ( ConvolutionReverb * rev, float * input, float * output, int nSamples,
