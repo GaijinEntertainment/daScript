@@ -1,12 +1,11 @@
 options gen2
 options indenting = 4
 
-// One-shot generator for the Phase-6 behavior-preservation safety net: writes a full symbolic
-// disassembly (spirv_dis::dump) of every captured fixture blob to tests/spirv/_golden/<name>.txt.
-// Run ONCE against the pre-port (hand-walker) emitter to freeze the golden, commit the _golden/ dir,
-// then test_golden.das asserts the post-port visitor emits the identical dump. Not a [test] — run via
+// Maintained golden generator: writes a full symbolic disassembly (spirv_dis::dump) of every
+// captured fixture blob to tests/spirv/_golden/<name>.txt.  Re-run whenever a new fixture is
+// added or the emitter is intentionally changed to update the frozen baseline.  Not a [test] — run via
 //   daslang tests/spirv/_gen_golden.das
-// Delete this generator after the goldens are committed (test_golden.das is the permanent gate).
+// test_golden.das is the permanent byte-identical gate; this script keeps the _golden/ dir in sync.
 
 require _spirv_common
 require spirv/spirv_dis
