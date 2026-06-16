@@ -1422,3 +1422,56 @@ the core" pass. One new census opcode (`OpImageQuerySize`); 108/108, spirv-val c
    `[sideeffects]` sets `Function::sideEffectFlags`, so `ast_const_folding.cpp` marks every such call
    `noSideEffects=false` and no pass folds/elides/CSEs it. The declarations are now honest: these stubs
    model GPU side-effecting operations. (Boris's catch on the imageSize stub in the PR.)
+
+### Phase 11 — user-defined shader function calls (`OpFunctionCall` + ref params) LANDED (2026-06-16, branch `bbatkin/dasspirv-functions`)
+
+The first emitter feature surfaced as a *hard gap* by tutorial authoring: a shader could only call built-in
+intrinsics + the entry point's own straight-line body — no user-defined helper functions. Now every
+daslang function called (transitively) from a shader is emitted as its own `OpFunction`, with proper calls,
+parameters, and value returns. Three new census opcodes (`OpFunctionCall` / `OpFunctionParameter` /
+`OpReturnValue`); 114/114, spirv-val clean, plus a real-GPU behavioral proof.
+
+**Model (glslang-style, Logical addressing ≤ 1.3, no recursion / VariablePointers):**
+- **Two-pass id allocation.** `collect_dependencies` (already used for globals) also yields the dependency
+  functions; `register_user_func` validates each signature and *pre-allocates* its `OpFunction` id +
+  `OpTypeFunction` before the entry body emits, so an `OpFunctionCall` can forward-reference a callee
+  defined later in the module. Helpers are emitted after the entry point in stable `collect_dependencies`
+  order (`ctx.user_order`) → byte-stable output.
+- **Value params by value; ref params by Function pointer.** A by-value parameter binds an SSA
+  `OpFunctionParameter` (recorded in `ctx.locals`, read straight through `visitExprVar`'s `argument` path).
+  A `var x : T&` parameter binds an `OpTypePointer Function` parameter (recorded in `ctx.local_vars`, so it
+  reuses the existing memory-local load/store path verbatim).
+- **Ref args via copy-in / copy-out temps.** SPIR-V forbids handing an access-chain pointer (`arr[i]`,
+  `ubo.f`) straight to a call — the pointer arg must be a *memory object declaration*. So every by-reference
+  argument goes through a fresh `Function`-storage `OpVariable` temp: copy the current lvalue value in
+  before the call, pass the temp, copy the (mutated) temp back to the lvalue after. The temps are hoisted
+  into the calling function's entry block by `alloc_call_temps` (a mini-visitor run after `collect_locals`,
+  before the body walk — SPIR-V requires all `OpVariable` to lead the first block).
+- **Fail-closed.** A call-graph cycle check (`detect_recursion`, 3-colour DFS over {entry} ∪ user_funcs)
+  rejects direct + mutual recursion; unsupported param/return types (double, struct, array, sampler) are
+  rejected at registration; a resolved call to a host/extern builtin (`print`, unmapped math like `tanh`)
+  hits a clean "cannot call '…' in a SPIR-V shader" message rather than a silent or invalid blob.
+
+**Tests:** `test_functions.das` (3 good-path tests — value/multi/vector params, transitive + *shared*
+helper proving single-emission, ref-param copy-in/out, a helper reading a global; exact opcode counts +
+spirv-val) and 5 new `_fail_closed` fixtures (recursion, mutual recursion, bad param, bad return, unmapped
+builtin). The census now declares the three new opcodes and matches exactly. **Real-GPU behavioral gate:**
+temporarily routing dasVulkan's `out[i]=i*i` square through a value-param helper `sq(x)` AND a ref-param
+helper `accumulate_into(acc&, v)` still produced the correct result for all 256 elements on real hardware —
+i.e. the copy-out genuinely lands the value back through the reference.
+
+**Findings (load-bearing):**
+1. **`collect_dependencies` yields pointee-const `Function` pointers, and module `""` is the user's own
+   root module.** The discriminator for "emit as a user `OpFunction`" is: not the entry, not `flags.builtIn`,
+   has a `body`, and not in `{builtin, math, math_bits, spirv_builtins}` (whose calls are intercepted
+   by name). Excluding `""` was the first-cut bug — helpers in a shader written *without* an explicit
+   `module` line live in `""` and must be emitted. The emitter only reads the AST, so the const is stripped
+   once at the registration/emission boundary (`reinterpret<FunctionPtr>`); `UserFunc.fn` stays
+   `Function const?`.
+2. **The entry-block `OpVariable` rule forces the temp pre-pass.** Ref-arg temps can't be emitted inline at
+   the (arbitrarily deep) call site — they must lead the entry block. A pre-pass visitor over the body
+   allocates them up front (mirrors how `collect_locals` already hoists `var`/loop locals). Value args need
+   no temp (they pass their SSA value directly), so the pre-pass only fires for `var …&` parameters.
+3. **`marker(no_coverage)` fixtures still drive the emitter's own LCOV.** The marker suppresses the
+   *shader's* coverage instrumentation (which would corrupt the SPIR-V), not the emitter-side line coverage
+   collected while the fixture compiles — so the function fixtures still exercise the new emit paths.

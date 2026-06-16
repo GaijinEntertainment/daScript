@@ -68,4 +68,9 @@ def main {
     emit_golden(dir, "catomics", catomics_words())          // 10.5 atomics
     emit_golden(dir, "imgquery", imgquery_words())          // 10.6 imageSize
     emit_golden(dir, "modconst", modconst_words())          // 10.6 module-scope let constants
+    // Phase-11 user-defined function fixtures (forward-regression freeze — byte-identical locks on
+    // the current emitter, asserted via check()).
+    emit_golden(dir, "userfn", userfn_words())
+    emit_golden(dir, "userfn_ref", userfn_ref_words())
+    emit_golden(dir, "userfn_global", userfn_global_words())
 }
