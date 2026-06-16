@@ -95,6 +95,7 @@ float conv_reverb_get_max_ir();
 #ifdef CONVOLUTION_REVERB_IMPLEMENTATION
 
 #include "minfft.h"
+#include <vecmath/dag_vecMath.h>
 #include <math.h>
 #include <string.h>
 
@@ -197,13 +198,51 @@ static void conv_reverb_generate_ir(ConvolutionReverb * rev, float * ir_left, fl
     }
 }
 
+// acc[i] += a[i] * b[i] over `count` complex numbers in interleaved [re,im] layout — the
+// per-partition convolution kernel (P calls per block per channel; the reverb's hot loop).
+// Vectorized via dag_vecMath (one path for SSE + NEON): four complex per iteration, deinterleaved
+// into real/imag lanes so a plain msub/madd computes ar*br-ai*bi and ar*bi+ai*br with no addsub.
+// Every op is SSE2/NEON baseline (v_madd degrades to mul+add without FMA), so there is no runtime
+// CPU dispatch; the scalar fallback only covers targets with no dag_vecMath SIMD backend.
 static void conv_reverb_complex_multiply_acc(float * acc, const float * a, const float * b, uint32_t count) {
+#if defined(_TARGET_SIMD_SSE) || defined(_TARGET_SIMD_NEON)
+    uint32_t i = 0;
+    uint32_t vN = count & ~3u;  // largest multiple of 4
+    for (; i < vN; i += 4) {
+        const float * ap = a + i * 2;
+        const float * bp = b + i * 2;
+        float * cp = acc + i * 2;
+        vec4f a0 = v_ldu(ap);      // [ar0 ai0 ar1 ai1]
+        vec4f a1 = v_ldu(ap + 4);  // [ar2 ai2 ar3 ai3]
+        vec4f b0 = v_ldu(bp);
+        vec4f b1 = v_ldu(bp + 4);
+        vec4f ar = v_perm_xzac(a0, a1);  // [ar0 ar1 ar2 ar3]
+        vec4f ai = v_perm_ywbd(a0, a1);  // [ai0 ai1 ai2 ai3]
+        vec4f br = v_perm_xzac(b0, b1);
+        vec4f bi = v_perm_ywbd(b0, b1);
+        vec4f re = v_msub(ar, br, v_mul(ai, bi));  // ar*br - ai*bi
+        vec4f im = v_madd(ar, bi, v_mul(ai, br));  // ar*bi + ai*br
+        vec4f c0 = v_ldu(cp);
+        vec4f c1 = v_ldu(cp + 4);
+        c0 = v_add(c0, v_merge_hw(re, im));  // re-interleave -> [re0 im0 re1 im1]
+        c1 = v_add(c1, v_merge_lw(re, im));  //               -> [re2 im2 re3 im3]
+        v_stu(cp, c0);
+        v_stu(cp + 4, c1);
+    }
+    for (; i < count; i++) {
+        float ar = a[i*2],   ai = a[i*2+1];
+        float br = b[i*2],   bi = b[i*2+1];
+        acc[i*2]   += ar * br - ai * bi;
+        acc[i*2+1] += ar * bi + ai * br;
+    }
+#else
     for (uint32_t i = 0; i < count; i++) {
         float ar = a[i*2],   ai = a[i*2+1];
         float br = b[i*2],   bi = b[i*2+1];
         acc[i*2]   += ar * br - ai * bi;
         acc[i*2+1] += ar * bi + ai * br;
     }
+#endif
 }
 
 // FFT one block of input, store spectrum in the FDDL. Called once per block (shared across L/R).
