@@ -149,6 +149,19 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "tern", tern_words())
         check_iso(t, "vecarith", vecarith_words())
         check_iso(t, "mathx", mathx_words())
+        // Phase-10.1..10.6 fixtures (visitor baseline): byte-identical check() — the goldens are
+        // produced by the very emitter under test, so ids ARE deterministic. Pins opcodes, operands,
+        // AND id order across the SSBO std430 / swizzle / fragment-realism / Dref / compute (shared
+        // + barriers + atomics) / image-query / module-scope-let paths added across 10.1..10.6.
+        check(t, "ssbovec", ssbovec_words())
+        check(t, "ssbostruct", ssbostruct_words())
+        check(t, "gswizzle", gswizzle_words())
+        check(t, "fragx", fragx_words())
+        check(t, "fragshadow", fragshadow_words())
+        check(t, "cshared", cshared_words())
+        check(t, "catomics", catomics_words())
+        check(t, "imgquery", imgquery_words())
+        check(t, "modconst", modconst_words())
         // Phase-11 user-defined function fixtures: frozen from the current visitor, so byte-identical
         // check() (the strictest lock — pins opcodes, operands, AND id order of OpFunction/OpFunctionCall/
         // OpFunctionParameter/OpReturnValue + the ref-param copy-in/out temps).

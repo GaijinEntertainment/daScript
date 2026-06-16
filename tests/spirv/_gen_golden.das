@@ -1,12 +1,11 @@
 options gen2
 options indenting = 4
 
-// One-shot generator for the Phase-6 behavior-preservation safety net: writes a full symbolic
-// disassembly (spirv_dis::dump) of every captured fixture blob to tests/spirv/_golden/<name>.txt.
-// Run ONCE against the pre-port (hand-walker) emitter to freeze the golden, commit the _golden/ dir,
-// then test_golden.das asserts the post-port visitor emits the identical dump. Not a [test] — run via
+// Maintained golden generator: writes a full symbolic disassembly (spirv_dis::dump) of every
+// captured fixture blob to tests/spirv/_golden/<name>.txt.  Re-run whenever a new fixture is
+// added or the emitter is intentionally changed to update the frozen baseline.  Not a [test] — run via
 //   daslang tests/spirv/_gen_golden.das
-// Delete this generator after the goldens are committed (test_golden.das is the permanent gate).
+// test_golden.das is the permanent byte-identical gate; this script keeps the _golden/ dir in sync.
 
 require _spirv_common
 require spirv/spirv_dis
@@ -58,8 +57,19 @@ def main {
     emit_golden(dir, "tern", tern_words())
     emit_golden(dir, "vecarith", vecarith_words())
     emit_golden(dir, "mathx", mathx_words())
-    // Phase-11 user-defined function fixtures (forward-regression freeze — no pre-port hand-walker
-    // baseline, so these are byte-identical locks on the current emitter, asserted via check()).
+    // Phase-10.1..10.6 fixtures: forward-regression freezes (no hand-walker baseline; locks the
+    // current emitter's output so future drift is caught on top of census + spirv-val).
+    emit_golden(dir, "ssbovec", ssbovec_words())            // 10.1 SSBO std430 vec elements
+    emit_golden(dir, "ssbostruct", ssbostruct_words())      // 10.1 SSBO std430 struct elements
+    emit_golden(dir, "gswizzle", gswizzle_words())          // 10.2 composite/global swizzle
+    emit_golden(dir, "fragx", fragx_words())                // 10.3 fragment realism rails
+    emit_golden(dir, "fragshadow", fragshadow_words())      // 10.4 depth-compare sampling (Dref)
+    emit_golden(dir, "cshared", cshared_words())            // 10.5 shared memory + barriers
+    emit_golden(dir, "catomics", catomics_words())          // 10.5 atomics
+    emit_golden(dir, "imgquery", imgquery_words())          // 10.6 imageSize
+    emit_golden(dir, "modconst", modconst_words())          // 10.6 module-scope let constants
+    // Phase-11 user-defined function fixtures (forward-regression freeze — byte-identical locks on
+    // the current emitter, asserted via check()).
     emit_golden(dir, "userfn", userfn_words())
     emit_golden(dir, "userfn_ref", userfn_ref_words())
     emit_golden(dir, "userfn_global", userfn_global_words())
