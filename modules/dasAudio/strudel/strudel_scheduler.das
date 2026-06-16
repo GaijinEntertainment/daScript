@@ -212,27 +212,33 @@ def private effective_stages(s : int) : int {
     return g_force_reverb_stages >= 0 ? g_force_reverb_stages : s
 }
 
+// current_quality/current_stages store the EFFECTIVE (post-override) values, so a changed global
+// override re-triggers update_orbit_reverb's reinit even when the per-event values are unchanged.
 def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0; stages : int = 0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
+        let eq = conv_quality_from_int(quality)
+        let es = effective_stages(stages)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality), effective_stages(stages))
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, eq, es)
         bus.current_roomsize = rs
-        bus.current_quality = quality
-        bus.current_stages = stages
+        bus.current_quality = int(eq)
+        bus.current_stages = es
     }
 }
 
 // Update reverb decay time / quality / allpass depth on an orbit bus. Only reconfigures if changed.
 def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int; stages : int) {
     let rs = clamp(roomsize, 0.1, 10.0)
-    if (abs(rs - bus.current_roomsize) < 0.01 && quality == bus.current_quality && stages == bus.current_stages) return
+    let eq = conv_quality_from_int(quality)
+    let es = effective_stages(stages)
+    if (abs(rs - bus.current_roomsize) < 0.01 && int(eq) == bus.current_quality && es == bus.current_stages) return
     bus.current_roomsize = rs
-    bus.current_quality = quality
-    bus.current_stages = stages
+    bus.current_quality = int(eq)
+    bus.current_stages = es
     // Reinitialize with new decay time / quality / allpass depth
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality), effective_stages(stages))
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, eq, es)
 }
 
 // Initialize delay on an orbit bus.

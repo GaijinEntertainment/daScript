@@ -499,7 +499,8 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
                       uint32_t decorrStages) {
     memset(rev, 0, sizeof(ConvolutionReverb));
     rev->sampleRate = sampleRate;
-    rev->quality = (quality <= CONV_QUALITY_LOW) ? quality : CONV_QUALITY_MEDIUM;
+    // Unknown values fall back to high — the documented default and the original (pre-tier) behavior.
+    rev->quality = (quality <= CONV_QUALITY_LOW) ? quality : CONV_QUALITY_HIGH;
     rev->decayTime = decayTime;
     rev->lpFreqStart = lpFreqStart;
     rev->lpFreqEnd = lpFreqEnd;
