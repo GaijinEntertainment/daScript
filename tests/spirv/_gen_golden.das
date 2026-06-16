@@ -58,4 +58,9 @@ def main {
     emit_golden(dir, "tern", tern_words())
     emit_golden(dir, "vecarith", vecarith_words())
     emit_golden(dir, "mathx", mathx_words())
+    // Phase-11 user-defined function fixtures (forward-regression freeze — no pre-port hand-walker
+    // baseline, so these are byte-identical locks on the current emitter, asserted via check()).
+    emit_golden(dir, "userfn", userfn_words())
+    emit_golden(dir, "userfn_ref", userfn_ref_words())
+    emit_golden(dir, "userfn_global", userfn_global_words())
 }
