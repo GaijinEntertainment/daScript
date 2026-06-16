@@ -355,7 +355,8 @@ namespace das {
         if ( !tab->data ) return;
         char * values = tab->data;
         char * keys = tab->keys;
-        for ( uint32_t index=0, indexs=tab->capacity; index!=indexs; index++, keys+=keyStride, values+=valueStride ) {
+        // counters must be 64-bit: Table::capacity is uint64_t (a 32-bit index truncates past 4G slots)
+        for ( uint64_t index=0, indexs=tab->capacity; index!=indexs; index++, keys+=keyStride, values+=valueStride ) {
             if ( tableLiveSlot(*tab, index) ) {
                 das_invoke<void>::invoke<void *,void *>(context,at,blk,(void*)keys,(void*)values);
             }
@@ -366,7 +367,8 @@ namespace das {
         auto arr = (Array *) _arr;
         if ( !arr->data ) return;
         char * values = arr->data;
-        for ( uint32_t index=0, indexs=arr->size; index!=indexs; index++, values+=stride ) {
+        // counters must be 64-bit: Array::size is uint64_t (a 32-bit index truncates past 4G elements)
+        for ( uint64_t index=0, indexs=arr->size; index!=indexs; index++, values+=stride ) {
             das_invoke<void>::invoke<void *>(context,at,blk,(void*)values);
         }
     }
