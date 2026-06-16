@@ -29,7 +29,7 @@ namespace das {
     DAS_CC_API FunctionPtr forceGeneratedFunction ( const FunctionPtr & expr, bool setGenerated );
 
     // gives combined region for all subexpressions
-    LineInfo encloseAt ( ExpressionPtr expr );
+    DAS_CC_API LineInfo encloseAt ( ExpressionPtr expr );
 
     // replaces all occurrences of block argument name
     void renameBlockArgument ( ExprBlock * block, const string & name, const string & newName );

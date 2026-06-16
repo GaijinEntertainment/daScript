@@ -308,7 +308,11 @@ namespace das {
 
     DAS_API AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
 
-    class PassVisitor : public Visitor {
+    // DAS_CC_API (not DAS_API): PassVisitor's virtuals live in the compiler-lib
+    // optimizer TUs (ast_const_folding/block_folding/unused.cpp). DAS_API would
+    // make MSVC dllexport the vtable from every runtime TU and fail to find the
+    // methods. It is never constructed in the runtime lib.
+    class DAS_CC_API PassVisitor : public Visitor {
     public:
         explicit PassVisitor(int32_t round) : round(round) {}
         using Visitor::preVisit;
@@ -337,7 +341,7 @@ namespace das {
         Function *  func = nullptr;
     };
 
-    class FoldingVisitor : public PassVisitor {
+    class DAS_CC_API FoldingVisitor : public PassVisitor {
     public:
         FoldingVisitor(const ProgramPtr & prog, int32_t round = 0)
             : PassVisitor(round), ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
