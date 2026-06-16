@@ -428,7 +428,7 @@ def private hrtf_render_voice(
                               var voice_hrtf_l : ma_hrtf?&;// L-channel HRTF — virtual source at az - 30°
                               var voice_hrtf_r : ma_hrtf?&;// R-channel HRTF — virtual source at az + 30°
                               azimuth, elevation : float;
-                              var stereo_in : array<float>;
+                              stereo_in : array<float>;
                               src_start : int;// source offset (interleaved sample index)
                               voice_gain : float;
                               chunkFrames : int
