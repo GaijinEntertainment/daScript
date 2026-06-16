@@ -15,9 +15,10 @@
 
 // Reverb quality / cost tier (per-instance, chosen at init).
 //   high   - two decorrelated IRs, one full partitioned convolution per channel (most expensive).
-//   medium - a single mono IR convolved once, split into stereo by two Schroeder allpass filters
-//            (~half the per-block convolution cost; allpass is |H|=1 so the spectrum is preserved,
-//             only phase differs, which the ear reads as stereo width).
+//   medium - a single mono IR convolved once, split into stereo by a per-channel Schroeder allpass
+//            cascade (depth user-selectable via decorrStages, default CONV_DECORR_STAGES; ~half the
+//            per-block convolution cost; allpass is |H|=1 so the spectrum is preserved, only phase
+//            differs, which the ear reads as stereo width).
 //   low    - a Freeverb-style algorithmic reverb (8 damped comb + 4 allpass per channel); no FFT,
 //            far cheaper than the convolution tiers, with a less natural / more metallic tail.
 typedef enum {
@@ -501,6 +502,9 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
     rev->sampleRate = sampleRate;
     // Unknown values fall back to high — the documented default and the original (pre-tier) behavior.
     rev->quality = (quality <= CONV_QUALITY_LOW) ? quality : CONV_QUALITY_HIGH;
+    // Guard against decayTime <= 0: it divides the Freeverb comb feedback (INF/NaN) and scales
+    // ir_length (negative -> huge via unsigned cast). Clamp once so every consumer sees it.
+    if (decayTime < 0.01f) decayTime = 0.01f;
     rev->decayTime = decayTime;
     rev->lpFreqStart = lpFreqStart;
     rev->lpFreqEnd = lpFreqEnd;

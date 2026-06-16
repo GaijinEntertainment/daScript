@@ -208,17 +208,23 @@ def private conv_quality_from_int(q : int) : ConvReverbQuality {
     return ConvReverbQuality.high
 }
 
-def private effective_stages(s : int) : int {
-    return g_force_reverb_stages >= 0 ? g_force_reverb_stages : s
+// Returns the allpass depth as the reverb will actually apply it for this tier: 0 (= conv_reverb_init's
+// default) on high/low, which ignore it, so changing roomstages there never forces a needless reinit;
+// for medium, the override-or-event value clamped to [0, 8] (0 = default) to match the C++ clamp.
+def private effective_stages(eq : ConvReverbQuality; s : int) : int {
+    if (eq != ConvReverbQuality.medium) return 0
+    let v = g_force_reverb_stages >= 0 ? g_force_reverb_stages : s
+    return clamp(v, 0, 8)
 }
 
-// current_quality/current_stages store the EFFECTIVE (post-override) values, so a changed global
-// override re-triggers update_orbit_reverb's reinit even when the per-event values are unchanged.
+// current_quality/current_stages store the EFFECTIVE (post-override, tier-applied) values, so a
+// changed global override re-triggers update_orbit_reverb's reinit even when the per-event values
+// are unchanged — and a high/low stages change (which the reverb ignores) does NOT.
 def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0; stages : int = 0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
         let eq = conv_quality_from_int(quality)
-        let es = effective_stages(stages)
+        let es = effective_stages(eq, stages)
         bus.reverb = new ConvolutionReverb
         conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, eq, es)
         bus.current_roomsize = rs
@@ -231,7 +237,7 @@ def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; qualit
 def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int; stages : int) {
     let rs = clamp(roomsize, 0.1, 10.0)
     let eq = conv_quality_from_int(quality)
-    let es = effective_stages(stages)
+    let es = effective_stages(eq, stages)
     if (abs(rs - bus.current_roomsize) < 0.01 && int(eq) == bus.current_quality && es == bus.current_stages) return
     bus.current_roomsize = rs
     bus.current_quality = int(eq)
