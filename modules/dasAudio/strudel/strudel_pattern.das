@@ -456,6 +456,30 @@ def set_roomsize(var pat : Pattern; r : int | float | double) : Pattern {
     return <- fmap(pat, fn)
 }
 
+// pat |> set_roomquality("medium") — pick the reverb quality tier
+def set_roomquality(var pat : Pattern; q : string) : Pattern {
+    //! Sets the reverb quality tier on every event: "high" (dual-IR, default),
+    //! "medium" (single mono IR + an allpass decorrelation cascade, ~2x cheaper;
+    //! depth set by roomstages), or "low" (Freeverb, cheapest). Unknown values fall back to "high".
+    let qi = q == "medium" ? 1 : (q == "low" ? 2 : 0)
+    let fn <- @capture(= qi) (e : Event) : Event {
+        var ev = e; ev.reverb_quality = qi; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_roomstages(6) — set the medium-tier allpass cascade depth
+def set_roomstages(var pat : Pattern; n : int) : Pattern {
+    //! Sets the medium-tier allpass cascade depth on every event (1–8; 0 selects the default
+    //! of 5). Only the "medium" quality tier uses it — more stages give a different (not strictly
+    //! wider) stereo image, so it is exposed for tuning by ear. Ignored by "high" and "low".
+    let ni = n
+    let fn <- @capture(= ni) (e : Event) : Event {
+        var ev = e; ev.reverb_stages = ni; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
 // pat |> set_delay(0.5) — set delay send amount
 def set_delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the delay send amount (`delay_amount`, 0..1) on every event in `pat`.
@@ -2587,6 +2611,15 @@ def roomsize(var pat : Pattern; r : int | float | double) : Pattern {
 def size(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `roomsize`.
     return <- set_roomsize(pat, r)
+}
+def roomquality(var pat : Pattern; q : string) : Pattern {
+    //! Fluent shorthand for `set_roomquality`. Picks the reverb quality: "high" (default), "medium", or "low".
+    return <- set_roomquality(pat, q)
+}
+def roomstages(var pat : Pattern; n : int) : Pattern {
+    //! Fluent shorthand for `set_roomstages`. Sets the medium-tier allpass cascade depth (1–8;
+    //! 0 = default 5). Only "medium" uses it; tune by ear.
+    return <- set_roomstages(pat, n)
 }
 def delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delay`. Sets delay send amount (0..1).

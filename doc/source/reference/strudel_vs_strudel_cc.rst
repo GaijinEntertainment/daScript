@@ -245,6 +245,39 @@ reverb/delay through SuperDirt differently.
 share a reverb, in daslang they need the same ``orbit`` number.
 If you want independent reverbs/choruses per voice, split orbits.
 
+Reverb quality
+--------------
+
+**Extension (no strudel.cc equivalent):** the convolution reverb has a
+per-orbit *quality* tier, selected with ``roomquality``:
+
+* ``"high"`` (default) — two decorrelated impulse responses, one full
+  partitioned convolution per channel.  Most expensive.
+* ``"medium"`` — a single mono impulse response convolved once, then
+  split into stereo by a Schroeder allpass cascade per channel.  Roughly
+  **half** the per-block convolution cost.  The cascade depth defaults to
+  five stages but is adjustable from one to eight with ``roomstages`` —
+  the allpass phase response is non-monotonic in depth (some depths are
+  wide in stereo yet cancel in mono), so there is no single "best" value;
+  pick one by ear.
+* ``"low"`` — a Freeverb-style algorithmic reverb (eight damped comb
+  filters plus four series allpasses per channel).  No FFT, so it is by
+  far the cheapest tier (roughly **6x** cheaper than ``"high"`` per
+  block, and with no per-block convolution burst its peak CPU is far
+  lower too).  The trade is a less natural, more "metallic" tail; per-comb
+  feedback still tracks ``roomsize`` and the tail brightness still tracks
+  the lowpass, so it responds to the same controls as the other tiers.
+
+.. code-block:: das
+
+    // a cheaper reverb on this orbit, with a 6-stage allpass decorrelation
+    note("c2 e2 g2") |> s("supersaw") |> room(0.6) |> roomsize(6.0)
+        |> roomquality("medium") |> roomstages(6) |> orbit(2)
+
+Quality (and ``roomstages``) is chosen when the orbit's reverb is first
+allocated and is re-applied if it changes; like ``roomsize``, set it once
+per orbit.
+
 Mini-notation parsing
 ---------------------
 

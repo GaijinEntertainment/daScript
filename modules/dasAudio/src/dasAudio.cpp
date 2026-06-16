@@ -232,6 +232,10 @@ DAS_BASE_BIND_ENUM( das::I3DL2Preset, I3DL2Preset, \
 );
 DAS_BIND_ENUM_CAST ( das::I3DL2Preset );
 
+// ConvReverbQualityEnum is defined in dasAudio.h (das-facing names for the C ConvReverbQuality enum)
+DAS_BASE_BIND_ENUM( ConvReverbQualityEnum, ConvReverbQuality, high, medium, low );
+DAS_BIND_ENUM_CAST ( ConvReverbQualityEnum );
+
 MAKE_TYPE_FACTORY(I3DL2ReverbProperties,I3DL2ReverbProperties);
 MAKE_TYPE_FACTORY(I3DL2Reverb,I3DL2Reverb);
 
@@ -790,16 +794,18 @@ struct ConvolutionReverbAnnotation : ManagedStructureAnnotation<ConvolutionRever
 };
 
 void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float decay_time,
-                                float lp_freq_start, float lp_freq_end, float fade_in,
-                                Context * context, LineInfoArg * at ) {
+                                float lp_freq_start, float lp_freq_end, float fade_in, ConvReverbQualityEnum quality,
+                                int decorr_stages, Context * context, LineInfoArg * at ) {
     if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
-    conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in);
+    conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in,
+                     (uint32_t)quality, decorr_stages < 0 ? 0u : (uint32_t)decorr_stages);
 }
 
-void dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames,
-                                   Context * context, LineInfoArg * at ) {
+// Returns 1 if it produced output, 0 if the bus was idle and skipped (output is zeroed on skip).
+int dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames,
+                                  Context * context, LineInfoArg * at ) {
     if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
-    conv_reverb_process(rev, input, output, (uint32_t)nFrames);
+    return conv_reverb_process(rev, input, output, (uint32_t)nFrames);
 }
 
 void dasAudio_convReverbProcessMono ( ConvolutionReverb * rev, float * input, float * output, int nSamples,
@@ -893,10 +899,11 @@ public:
         addExtern<DAS_BIND_FUN(dasAudio_getReverbPreset),SimNode_ExtFuncCallRef>(*this, lib, "get_preset",
             SideEffects::modifyArgumentAndExternal, "dasAudio_getReverbPreset")->args({"preset", "context", "at"});
         // convolution reverb
+        addEnumeration(new EnumerationConvReverbQuality());
         addAnnotation(new ConvolutionReverbAnnotation(lib));
         addExtern<DAS_BIND_FUN(dasAudio_convReverbInit)>(*this, lib, "conv_reverb_init",
             SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbInit")
-                ->args({"reverb", "sample_rate", "decay_time", "lp_freq_start", "lp_freq_end", "fade_in", "context", "at"});
+                ->args({"reverb", "sample_rate", "decay_time", "lp_freq_start", "lp_freq_end", "fade_in", "quality", "decorr_stages", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_convReverbProcess)>(*this, lib, "conv_reverb_process",
             SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbProcess")
                 ->args({"reverb", "input", "output", "nFrames", "context", "at"});

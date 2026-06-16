@@ -68,7 +68,7 @@ def private apply_room(var samples : array<float>; amount : float = 0.3, decay_s
     // Create a short convolution reverb for the drum room
     // decay=0.4s gives a nice small room, lpFreqStart=12kHz→lpFreqEnd=2kHz darkens the tail
     var rev = new ConvolutionReverb
-    conv_reverb_init(rev, SAMPLE_RATE, decay_sec, 12000.0, 2000.0, 0.005)
+    conv_reverb_init(rev, SAMPLE_RATE, decay_sec, 12000.0, 2000.0, 0.005, ConvReverbQuality.high, 0)
     // Process mono → mono
     var wet : array<float>
     wet |> resize(n)

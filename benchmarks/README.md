@@ -30,6 +30,13 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `test01.das` | Runtime heap `heap_collect` cost — mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
 
+## audio/
+
+| File | Description |
+|---|---|
+| `test01.das` | Convolution-reverb per-block cost — `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work) vs `low` (Freeverb-style algorithmic reverb, 8 damped comb + 4 allpass per channel, no FFT — ~6× cheaper than high). The convolution tiers' per-partition complex multiply-accumulate is SIMD-vectorized via `dag_vecMath` (cross-platform SSE/NEON), ~2× over scalar |
+| `test02.das` | Reverb tail-skip gating (in `conv_reverb_process`) — per-bus cost of an active bus (full convolution) vs an idle bus (silent input → gate skips: scan + zero + return); the idle cost is what the gate saves per idle orbit |
+
 ## core/bool_array/
 
 | File | Description |

@@ -113,6 +113,10 @@ struct OrbitBus {
         //! Scratch buffer receiving the chorus's wet output for mixing into the master.
     current_roomsize      : float = -1.0
         //! Most recently applied reverb roomsize (-1 = uninitialized).
+    current_quality       : int = -1
+        //! Most recently applied reverb quality tier (-1 = uninitialized; 0=high/1=medium/2=low).
+    current_stages        : int = -1
+        //! Most recently applied medium-tier allpass cascade depth (-1 = uninitialized).
     current_delaytime     : float = -1.0
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
@@ -179,24 +183,68 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
 }
 
+// Global reverb overrides (-1 = off). When >= 0 they force every orbit reverb to that tier /
+// allpass depth regardless of per-event roomquality()/roomstages() — used to render A/B comparisons.
+var private g_force_reverb_quality : int = -1
+var private g_force_reverb_stages : int = -1
+
+def set_force_reverb_quality(q : int) {
+    //! Force all orbit reverbs to a quality tier (0=high, 1=medium, 2=low), overriding per-event
+    //! roomquality(). Pass -1 to disable the override (the default). Intended for A/B rendering.
+    g_force_reverb_quality = q
+}
+
+def set_force_reverb_stages(n : int) {
+    //! Force the medium-tier allpass cascade depth on all orbit reverbs, overriding per-event
+    //! roomstages(). Pass -1 to disable the override (the default). Intended for A/B rendering.
+    g_force_reverb_stages = n
+}
+
 // Initialize reverb on an orbit bus.
-def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
+def private conv_quality_from_int(q : int) : ConvReverbQuality {
+    let qq = g_force_reverb_quality >= 0 ? g_force_reverb_quality : q
+    if (qq == 1) return ConvReverbQuality.medium
+    if (qq == 2) return ConvReverbQuality.low
+    return ConvReverbQuality.high
+}
+
+// Returns the allpass depth as the reverb will actually apply it for this tier: 0 (= conv_reverb_init's
+// default) on high/low, which ignore it, so changing roomstages there never forces a needless reinit;
+// for medium, the override-or-event value clamped to [0, 8] (0 = default) to match the C++ clamp.
+def private effective_stages(eq : ConvReverbQuality; s : int) : int {
+    if (eq != ConvReverbQuality.medium) return 0
+    let v = g_force_reverb_stages >= 0 ? g_force_reverb_stages : s
+    return clamp(v, 0, 8)
+}
+
+// current_quality/current_stages store the EFFECTIVE (post-override, tier-applied) values, so a
+// changed global override re-triggers update_orbit_reverb's reinit even when the per-event values
+// are unchanged — and a high/low stages change (which the reverb ignores) does NOT.
+def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0; stages : int = 0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
+        let eq = conv_quality_from_int(quality)
+        let es = effective_stages(eq, stages)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, eq, es)
         bus.current_roomsize = rs
+        bus.current_quality = int(eq)
+        bus.current_stages = es
     }
 }
 
-// Update reverb decay time on an orbit bus. Only reconfigures if changed.
-def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
+// Update reverb decay time / quality / allpass depth on an orbit bus. Only reconfigures if changed.
+def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int; stages : int) {
     let rs = clamp(roomsize, 0.1, 10.0)
-    if (abs(rs - bus.current_roomsize) < 0.01) return
+    let eq = conv_quality_from_int(quality)
+    let es = effective_stages(eq, stages)
+    if (abs(rs - bus.current_roomsize) < 0.01 && int(eq) == bus.current_quality && es == bus.current_stages) return
     bus.current_roomsize = rs
-    // Reinitialize with new decay time
+    bus.current_quality = int(eq)
+    bus.current_stages = es
+    // Reinitialize with new decay time / quality / allpass depth
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, eq, es)
 }
 
 // Initialize delay on an orbit bus.
@@ -252,9 +300,9 @@ def private setup_orbit_for_event(var sched : Scheduler; event : Event) {
     var bus = sched.orbit_buses[orb]
     if (event.room > 0.0) {
         if (bus.reverb == null) {
-            init_orbit_reverb(*bus)
+            init_orbit_reverb(*bus, event.roomsize, event.reverb_quality, event.reverb_stages)
         }
-        update_orbit_reverb_roomsize(*bus, event.roomsize)
+        update_orbit_reverb(*bus, event.roomsize, event.reverb_quality, event.reverb_stages)
     }
     if (event.delay_amount > 0.0) {
         let dt = resolve_delaytime(event.delaytime, event.delaysync, float(sched.cps))
@@ -392,7 +440,7 @@ def private hrtf_render_voice(
                               var voice_hrtf_l : ma_hrtf?&;// L-channel HRTF — virtual source at az - 30°
                               var voice_hrtf_r : ma_hrtf?&;// R-channel HRTF — virtual source at az + 30°
                               azimuth, elevation : float;
-                              var stereo_in : array<float>;
+                              stereo_in : array<float>;
                               src_start : int;// source offset (interleaved sample index)
                               voice_gain : float;
                               chunkFrames : int
@@ -847,16 +895,17 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
     let chunkSamples = chunkFrames * 2
     for (bus in sched.orbit_buses) {
         if (bus == null) continue
-        // Always process reverb when it exists — convolver needs continuous input
+        // Reverb tail-skip gating lives in conv_reverb_process: it returns 0 (and zeros the
+        // output) when the bus is idle and its tail has decayed, so we only mix when it ran.
         if (bus.reverb != null) {
-            for (s in range(chunkSamples)) {
-                bus.reverb_out_buf[s] = 0.0
-            }
+            var ran = 0
             unsafe {
-                conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
+                ran = conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
             }
-            for (s in range(chunkSamples)) {
-                output[s] += bus.reverb_out_buf[s]
+            if (ran != 0) {
+                for (s in range(chunkSamples)) {
+                    output[s] += bus.reverb_out_buf[s]
+                }
             }
         }
         // Always process delay when it exists — internal buffer needs to decay

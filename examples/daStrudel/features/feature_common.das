@@ -21,6 +21,8 @@ struct FeatureArgs {
     duration : float = 10.0
     track_memory : bool = false
     wav_path : string
+    room_quality : int = -1   // -1 = per-event default; 0=high/1=medium/2=low forces all reverbs
+    room_stages : int = -1    // -1 = per-event default; 0 = tier default, 1–8 forces the medium cascade depth
 }
 
 def parse_feature_args() : FeatureArgs {
@@ -29,13 +31,20 @@ def parse_feature_args() : FeatureArgs {
     var i = 0
     while (i < length(args)) {
         if (args[i] == "--duration" && i + 1 < length(args)) {
-            res.duration = float(to_float(args[i + 1]))
+            res.duration = to_float(args[i + 1])
             i += 2
         } elif (args[i] == "--track-memory") {
             res.track_memory = true
             i ++
         } elif (args[i] == "--wav" && i + 1 < length(args)) {
             res.wav_path = args[i + 1]
+            i += 2
+        } elif (args[i] == "--roomquality" && i + 1 < length(args)) {
+            let q = args[i + 1]
+            res.room_quality = q == "medium" ? 1 : (q == "low" ? 2 : 0)
+            i += 2
+        } elif (args[i] == "--roomstages" && i + 1 < length(args)) {
+            res.room_stages = to_int(args[i + 1])
             i += 2
         } else {
             i ++
@@ -54,6 +63,12 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ 
     let duration = args.duration
     let track_memory = args.track_memory
     let wav_path = args.wav_path
+    if (args.room_quality >= 0) {
+        set_force_reverb_quality(args.room_quality)
+    }
+    if (args.room_stages >= 0) {
+        set_force_reverb_stages(args.room_stages)
+    }
     if (!empty(wav_path)) {
         // --- Offline WAV render (no audio driver) ---
         strudel_set_cps(cps)
@@ -67,9 +82,7 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ 
         to_log(0, "rendering {duration} seconds to {wav_path}...\n")
         while (g_wall_time < double(duration)) {
             strudel_tick_offline()
-            for (s in g_master_pcm) {
-                all_samples |> push(s)
-            }
+            all_samples |> push_from(g_master_pcm)
         }
         write_wav(wav_path, all_samples, 48000u, 2)
         to_log(0, "wrote {wav_path} ({length(all_samples) / 2} frames)\n")
