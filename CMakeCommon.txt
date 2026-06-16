@@ -274,7 +274,7 @@ ENDMACRO()
 MACRO(DAS_APPLY_STRICT_WARNINGS _target)
     IF(MSVC AND NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         target_compile_options(${_target} PRIVATE
-            $<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/wd4100;/wd4244;/wd4267;/wd4273;/wd4310;/wd4456;/wd4457;/wd4458;/wd4459>)
+            $<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/wd4100;/wd4267;/wd4273;/wd4310;/wd4456;/wd4457;/wd4458;/wd4459>)
     ELSEIF(NOT MSVC)
         target_compile_options(${_target} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor;-Werror>)

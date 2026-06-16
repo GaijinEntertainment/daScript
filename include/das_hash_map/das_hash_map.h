@@ -538,7 +538,7 @@ private:
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];
             if ( kh <= daslang_hash_map_detail::HASH_KILLED ) continue;
-            uint64_t j = kh & mask;
+            size_t j = kh & mask;
             while ( new_hashes[j] != daslang_hash_map_detail::HASH_EMPTY ) {
                 j = daslang_hash_map_detail::next_probe_slot(j, mask);
             }
@@ -851,7 +851,7 @@ private:
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];
             if ( kh == daslang_hash_map_detail::HASH_EMPTY ) continue;
-            uint64_t j = kh & mask;
+            size_t j = kh & mask;
             while ( new_hashes[j] != daslang_hash_map_detail::HASH_EMPTY ) {
                 j = daslang_hash_map_detail::next_probe_slot(j, mask);
             }
@@ -1074,7 +1074,7 @@ private:
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];
             if ( kh <= daslang_hash_map_detail::HASH_KILLED ) continue;
-            uint64_t j = kh & mask;
+            size_t j = kh & mask;
             while ( new_hashes[j] != daslang_hash_map_detail::HASH_EMPTY ) {
                 j = daslang_hash_map_detail::next_probe_slot(j, mask);
             }
@@ -1265,7 +1265,7 @@ private:
         for ( size_t i = 0, n = hashes_.size(); i < n; ++i ) {
             const uint64_t kh = hashes_[i];
             if ( kh == daslang_hash_map_detail::HASH_EMPTY ) continue;
-            uint64_t j = kh & mask;
+            size_t j = kh & mask;
             while ( new_hashes[j] != daslang_hash_map_detail::HASH_EMPTY ) {
                 j = daslang_hash_map_detail::next_probe_slot(j, mask);
             }
