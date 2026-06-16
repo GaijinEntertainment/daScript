@@ -456,6 +456,18 @@ def set_roomsize(var pat : Pattern; r : int | float | double) : Pattern {
     return <- fmap(pat, fn)
 }
 
+// pat |> set_roomquality("medium") — pick the reverb quality tier
+def set_roomquality(var pat : Pattern; q : string) : Pattern {
+    //! Sets the reverb quality tier on every event: "high" (dual-IR, default),
+    //! "medium" (single mono IR + allpass decorrelation, ~2x cheaper but a narrower
+    //! stereo image), or "low". Unknown values fall back to "high".
+    let qi = q == "medium" ? 1 : (q == "low" ? 2 : 0)
+    let fn <- @capture(= qi) (e : Event) : Event {
+        var ev = e; ev.reverb_quality = qi; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
 // pat |> set_delay(0.5) — set delay send amount
 def set_delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Sets the delay send amount (`delay_amount`, 0..1) on every event in `pat`.
@@ -2587,6 +2599,10 @@ def roomsize(var pat : Pattern; r : int | float | double) : Pattern {
 def size(var pat : Pattern; r : int | float | double) : Pattern {
     //! Alias for `roomsize`.
     return <- set_roomsize(pat, r)
+}
+def roomquality(var pat : Pattern; q : string) : Pattern {
+    //! Fluent shorthand for `set_roomquality`. Picks the reverb quality: "high" (default), "medium", or "low".
+    return <- set_roomquality(pat, q)
 }
 def delay(var pat : Pattern; d : int | float | double) : Pattern {
     //! Fluent shorthand for `set_delay`. Sets delay send amount (0..1).

@@ -1621,7 +1621,7 @@ def document_module_strudel_pattern(_root : string) {
         group_by_regex("Setter primitives", mod, %regex~set_.*$%%),
         group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|freq|sound|cut|orbit|begin|end_pos)$%%),
         group_by_regex("Fluent control: 3D positioning (HRTF)", mod, %regex~(hrtf|hrtf_azimuth|hrtf_elevation)$%%),
-        group_by_regex("Fluent control: effects sends", mod, %regex~(room|roomsize|size|delay|delaytime|dt|delayfeedback|dfb|delaysync|chorus)$%%),
+        group_by_regex("Fluent control: effects sends", mod, %regex~(room|roomquality|roomsize|size|delay|delaytime|dt|delayfeedback|dfb|delaysync|chorus)$%%),
         group_by_regex("Fluent control: filters", mod, %regex~(lpf|lp|hpf|hp|lpq|resonance|hpq|bpf|bpq|djf)$%%),
         group_by_regex("Fluent control: envelope", mod, %regex~(attack|att|decay|dec|sustain|sus|release|rel)$%%),
         group_by_regex("Fluent control: synthesis and shaping", mod, %regex~(fm|fmh|crush|coarse|shape)$%%),

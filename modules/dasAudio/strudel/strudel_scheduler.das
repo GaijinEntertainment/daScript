@@ -113,6 +113,8 @@ struct OrbitBus {
         //! Scratch buffer receiving the chorus's wet output for mixing into the master.
     current_roomsize      : float = -1.0
         //! Most recently applied reverb roomsize (-1 = uninitialized).
+    current_quality       : int = -1
+        //! Most recently applied reverb quality tier (-1 = uninitialized; 0=high/1=medium/2=low).
     current_delaytime     : float = -1.0
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
@@ -180,23 +182,31 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
 }
 
 // Initialize reverb on an orbit bus.
-def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
+def private conv_quality_from_int(q : int) : ConvReverbQuality {
+    if (q == 1) return ConvReverbQuality.medium
+    if (q == 2) return ConvReverbQuality.low
+    return ConvReverbQuality.high
+}
+
+def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0; quality : int = 0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, ConvReverbQuality.medium)
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality))
         bus.current_roomsize = rs
+        bus.current_quality = quality
     }
 }
 
-// Update reverb decay time on an orbit bus. Only reconfigures if changed.
-def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
+// Update reverb decay time / quality on an orbit bus. Only reconfigures if changed.
+def private update_orbit_reverb(var bus : OrbitBus; roomsize : float; quality : int) {
     let rs = clamp(roomsize, 0.1, 10.0)
-    if (abs(rs - bus.current_roomsize) < 0.01) return
+    if (abs(rs - bus.current_roomsize) < 0.01 && quality == bus.current_quality) return
     bus.current_roomsize = rs
-    // Reinitialize with new decay time
+    bus.current_quality = quality
+    // Reinitialize with new decay time / quality
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, ConvReverbQuality.medium)
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1, conv_quality_from_int(quality))
 }
 
 // Initialize delay on an orbit bus.
@@ -252,9 +262,9 @@ def private setup_orbit_for_event(var sched : Scheduler; event : Event) {
     var bus = sched.orbit_buses[orb]
     if (event.room > 0.0) {
         if (bus.reverb == null) {
-            init_orbit_reverb(*bus)
+            init_orbit_reverb(*bus, event.roomsize, event.reverb_quality)
         }
-        update_orbit_reverb_roomsize(*bus, event.roomsize)
+        update_orbit_reverb(*bus, event.roomsize, event.reverb_quality)
     }
     if (event.delay_amount > 0.0) {
         let dt = resolve_delaytime(event.delaytime, event.delaysync, float(sched.cps))

@@ -245,6 +245,31 @@ reverb/delay through SuperDirt differently.
 share a reverb, in daslang they need the same ``orbit`` number.
 If you want independent reverbs/choruses per voice, split orbits.
 
+Reverb quality
+--------------
+
+**Extension (no strudel.cc equivalent):** the convolution reverb has a
+per-orbit *quality* tier, selected with ``roomquality``:
+
+* ``"high"`` (default) — two decorrelated impulse responses, one full
+  partitioned convolution per channel.  Widest, most diffuse stereo
+  image; most expensive.
+* ``"medium"`` — a single mono impulse response convolved once, then
+  split into stereo by two Schroeder allpass filters.  Roughly **half**
+  the per-block convolution cost, at the price of a narrower stereo
+  image (the allpass decorrelation is milder than two independent IRs).
+* ``"low"`` — reserved for a cheaper recirculating-delay reverb; maps
+  to ``"medium"`` until that path lands.
+
+.. code-block:: das
+
+    // a cheaper, narrower reverb on this orbit
+    note("c2 e2 g2") |> s("supersaw") |> room(0.6) |> roomsize(6.0)
+        |> roomquality("medium") |> orbit(2)
+
+Quality is chosen when the orbit's reverb is first allocated and is
+re-applied if it changes; like ``roomsize``, set it once per orbit.
+
 Mini-notation parsing
 ---------------------
 
