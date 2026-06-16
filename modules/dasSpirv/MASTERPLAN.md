@@ -1389,3 +1389,26 @@ lint + format clean.
    (`ExprAt`/`ExprField`/`ExprSwizzle`/`ExprRef2Value` → root `ExprVar`) to read the storage class for the
    memory scope. External `spirv-dis` verified: shared scalar atomics at `%uint_2` (Workgroup) scope, the
    SSBO `atomicAdd` at `%uint_1` (Device).
+
+### Phase 10.6 — imageSize + module-scope shader constants LANDED (2026-06-15, branch `bbatkin/dasspirv-shader-const-imagesize`)
+
+Two small emitter rails surfaced by the Mandelbrot tutorial (Phase 11) — the "gaps show up, we fix at
+the core" pass. One new census opcode (`OpImageQuerySize`); 108/108, spirv-val clean.
+
+- **`imageSize(image2D)` → `OpImageQuerySize`.** The storage image's dimensions in texels, NO LOD — a
+  storage image is `Sampled=2`, so the no-LOD query is legal (unlike `textureSize`, which needs a LOD
+  operand and emits `OpImageQuerySizeLod` on a `Sampled=1` image). Loads the UniformConstant image, then
+  queries; pulls in the `ImageQuery` capability via the shared `ensure_image_query` guard. Lets a compute
+  shader size its pixel↔coordinate mapping off the bound image instead of a hardcoded extent.
+- **Module-scope `let` constants.** An immutable `let X = <const-expr>` at module scope folds (via
+  `emit_const`) to an `OpConstant` / `OpConstantComposite` and references resolve straight to the id (no
+  `OpVariable` / `OpLoad`) — so a shader can hoist iteration counts, view rectangles, etc. to module scope
+  and share them with the host. `GlobalInfo` carries `is_constant` + `const_id`; `visitExprVar`'s global
+  else-branch resolves a constant global to its folded id.
+
+**Findings (load-bearing):**
+1. **The fold gate is `v._type.flags.constant` (an immutable `let`), NOT just "has a const-foldable
+   init".** A mutable `var g : uint = 2u` global has a const initializer too, but folding it would be
+   wrong (it is memory the shader can write). Gating on the const-qualified type keeps `var` globals on
+   the fail-closed `unsupported global` path (the `_fc_global` fixture in test_fail_closed.das proves the
+   rejection), while `let` globals fold. Compilation succeeding at all is the positive fold proof.
