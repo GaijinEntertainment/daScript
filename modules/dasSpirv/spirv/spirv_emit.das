@@ -1494,19 +1494,22 @@ class SpirvEmit : AstVisitor {
 
     // ----- return -----
     // Valueless (`return` in the void entry / a void helper) -> OpReturn; a value return inside a
-    // user-defined shader function -> OpReturnValue with the loaded subexpression. Either way a block
-    // terminator (sets ctx.terminated).
+    // user-defined shader function -> OpReturnValue with the loaded subexpression. ctx.terminated is
+    // ONLY set when an actual terminator was emitted — if value_of() failed (e.g. an upstream error
+    // already pushed onto errs), leaving terminated=false lets the function-end fallback close the
+    // block with OpUnreachable so the blob stays structurally valid (one terminator per block).
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
         if (expr.subexpr != null) {
             let v = value_of(expr.subexpr)
             if (v != 0u) {
                 emit(bm, SEC_FUNCS, SpvOp.ReturnValue, v)
+                ctx.terminated = true
             }
         } else {
             emit(bm, SEC_FUNCS, SpvOp.Return)
+            ctx.terminated = true
         }
-        ctx.terminated = true
         return expr
     }
 
