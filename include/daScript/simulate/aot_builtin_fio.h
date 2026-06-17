@@ -48,6 +48,18 @@ namespace das {
         bool     is_dir() const { return S_ISDIR(stats.st_mode); }
 #endif
     };
+#else
+    // No filesystem: keep FStat a complete type so fio_core registers the same
+    // API. Queries are never populated (builtin_stat/fstat are stubs).
+    struct FStat {
+        bool     is_valid = false;
+        uint64_t size() const   { return 0; }
+        Time     atime() const  { return Time{}; }
+        Time     ctime() const  { return Time{}; }
+        Time     mtime() const  { return Time{}; }
+        bool     is_reg() const { return false; }
+        bool     is_dir() const { return false; }
+    };
 #endif
 
     DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at );
