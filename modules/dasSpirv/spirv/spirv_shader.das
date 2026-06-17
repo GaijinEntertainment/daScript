@@ -36,9 +36,39 @@ def private build_uint_array_literal(words : array<uint>; at : LineInfo) : Expre
     return toMove
 }
 
+// Per-shader auxiliary function names. The dasGlsl/dasOpenGL split puts the body fill in a backend
+// subclass; we mirror that. {shader}_bind_uniform writes @uniform-tagged module globals into mapped
+// UBO memory; {shader}_push_constants pushes @push_constant-tagged globals via the backend's push API.
+// [macro_function]: both helpers are called from the backend subclass during patch/apply (macro
+// context), mirroring glsl_internal::bind_uniform_function_name.
+[macro_function]
+def bind_uniform_function_name(fnMain : FunctionPtr) {
+    return "{fnMain.name}_bind_uniform"
+}
+[macro_function]
+def push_constants_function_name(fnMain : FunctionPtr) {
+    return "{fnMain.name}_push_constants"
+}
+
 class SpirvShader : AstFunctionAnnotation {
     // overridden per stage; drives the entry-point execution model + execution mode in generate_spirv
     def shader_stage() : ShaderStage => ShaderStage.Compute
+    // Backend-specific hooks. Base = no-op (keeps dasSpirv usable without a host backend). A backend
+    // subclass (e.g. dasVulkan's SpirvVulkanShader) overrides all four: the _dummy form reserves an
+    // empty function during apply() so consumer code references resolve in the first inference pass;
+    // the non-dummy form fills the body during patch() after generate_spirv has succeeded.
+    def generate_bind_uniform_dummy(var func : FunctionPtr) {
+        pass
+    }
+    def generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
+        pass
+    }
+    def generate_push_constants_dummy(var func : FunctionPtr) {
+        pass
+    }
+    def generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr) {
+        pass
+    }
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true   // temporary: keeps the function alive through dependency collection
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`spirv"
@@ -56,6 +86,8 @@ class SpirvShader : AstFunctionAnnotation {
             errors := "can't add global variable {argName}_reflect"
             return false
         }
+        generate_bind_uniform_dummy(func)
+        generate_push_constants_dummy(func)
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
@@ -89,6 +121,23 @@ class SpirvShader : AstFunctionAnnotation {
         if (!(err |> empty())) {
             errors := join(err, "\n")
             return false
+        }
+        // Backend body-fill: the dummy bind_uniform / push_constants functions were reserved in apply();
+        // their bodies stay empty (still `exports = true`) until the backend's generate_* override
+        // populates them here. astChanged on the first fill triggers re-infer so the bodies resolve.
+        for_each_function(compiling_module(), bind_uniform_function_name(func)) $(bfun) {
+            if (bfun.flags.exports) {
+                bfun.flags.exports = false
+                generate_bind_uniform(func, bfun)
+                astChanged = true
+            }
+        }
+        for_each_function(compiling_module(), push_constants_function_name(func)) $(bfun) {
+            if (bfun.flags.exports) {
+                bfun.flags.exports = false
+                generate_push_constants(func, bfun)
+                astChanged = true
+            }
         }
         return true
     }
