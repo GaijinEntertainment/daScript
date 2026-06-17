@@ -231,6 +231,10 @@ def test_flatten_fold(t : T?) {
         t |> success(zk |> find("sin") >= 0, "the zero-lane kill must be skipped (sin survives): {zk}")
         let mj = bodies?["nf_mj_flat"] ?? ""
         t |> success(mj |> find("* 12f") >= 0, "majority compensation must be skipped: {mj}")
+        let oinv = bodies?["nf_ordered_inv_flat"] ?? ""
+        t |> success(oinv |> find("!(") >= 0, "ordered float `!(s>0.9)` flip is NaN-unsafe — must survive no-fast-math: {oinv}")
+        let einv = bodies?["nf_eq_inv_flat"] ?? ""
+        t |> success(einv |> find("!(") < 0, "equality `!(s==0.9)` flip is NaN-exact — must still fold (to `!=`): {einv}")
         delete bodies
     }
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {

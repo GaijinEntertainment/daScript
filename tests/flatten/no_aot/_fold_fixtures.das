@@ -63,3 +63,33 @@ def fx_scalar(v : float; s : float) : float {
     }
     return acc
 }
+
+// Bool-inversion fold: `break if (cond)` updates the loop-active mask as `m = m && !(s > 0.9)`
+// (the motivating case). The comparison-negation fold flips it to `m && (s <= 0.9)`, so no
+// `!comparison` residual survives.
+[flatten]
+def fx_loop_break(uv : float2; s : float) : float3 {
+    var acc = float3(0.0, 0.0, 0.0)
+    for (_i in range(3)) {
+        acc += float3(length(uv) * s)
+        if (s > 0.9) {
+            break
+        }
+    }
+    return acc
+}
+
+// De Morgan: `break if (compound)` updates the loop mask as `m = m && !((a > 0) && (b < 1))`;
+// the fold pushes the `!` through the `&&` to the leaves → `m && ((a <= 0) || (b >= 1))`,
+// leaving no residual `!`.
+[flatten]
+def fx_demorgan(a, b : float) : float {
+    var acc = 0.0
+    for (_i in range(3)) {
+        acc += a + b
+        if ((a > 0.0) && (b < 1.0)) {
+            break
+        }
+    }
+    return acc
+}

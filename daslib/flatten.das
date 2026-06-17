@@ -863,6 +863,8 @@ class private FoldResidualVisitor : AstVisitor {
     def override preVisitExprOp1(expr : ExprOp1?) : void {
         if (expr.op == "!" && expr.subexpr is ExprConstBool) {
             found |> push("an unfolded constant '!'")
+        } elif (expr.op == "!" && can_negate_bool(expr.subexpr, noFastMath)) {
+            found |> push("an unfolded boolean inversion ('!' over a comparison / '!' / && / ||)")
         }
     }
     def override preVisitExprSwizzle(var expr : ExprSwizzle?) : void {
