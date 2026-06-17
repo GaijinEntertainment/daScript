@@ -69,6 +69,22 @@ namespace das {
 
 #endif
 
+// glfwInitVulkanLoader hands GLFW the Vulkan loader's vkGetInstanceProcAddr so GLFW
+// does not have to discover the loader itself — needed on macOS where the Homebrew
+// loader is off GLFW's default dlopen search path. glfw3.h guards its prototype
+// behind VK_VERSION_1_0 (i.e. needs vulkan.h, which this module does not include),
+// so forward-declare it with an ABI-compatible loader type and bind a void* shim.
+extern "C" {
+    typedef void * (* DAS_vkGetInstanceProcAddr)(void * instance, const char * name);
+    GLFWAPI void glfwInitVulkanLoader(DAS_vkGetInstanceProcAddr loader);
+}
+
+namespace das {
+    void DAS_glfwInitVulkanLoader(void * loader) {
+        glfwInitVulkanLoader((DAS_vkGetInstanceProcAddr) loader);
+    }
+}
+
 
 namespace das {
 
@@ -428,6 +444,8 @@ namespace das {
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeWindow)>(*this, lib, "glfwGetNativeWindow",SideEffects::worstDefault, "DAS_glfwGetNativeWindow")
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeDisplay)>(*this, lib, "glfwGetNativeDisplay",SideEffects::worstDefault, "DAS_glfwGetNativeDisplay");
+        addExtern<DAS_BIND_FUN(DAS_glfwInitVulkanLoader)>(*this, lib, "glfwInitVulkanLoader",SideEffects::worstDefault, "DAS_glfwInitVulkanLoader")
+            ->args({"loader"});
     }
 
 	ModuleAotType Module_dasGLFW::aotRequire ( TextWriter & tw ) const {
