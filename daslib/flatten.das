@@ -896,6 +896,11 @@ def public flatten_fold_residuals(var func : FunctionPtr; no_fast_math : bool = 
         unsafe {
             delete v
         }
+        // Statement-level (not a node pattern): a same-condition select-accumulation chain that
+        // fuse_select_chains should have collapsed to one select.
+        if (func.body is ExprBlock && has_fusable_select_chain(func.body as ExprBlock)) {
+            res |> push("an un-fused same-condition select chain (N selects should be 1)")
+        }
     }
     return <- res
 }
