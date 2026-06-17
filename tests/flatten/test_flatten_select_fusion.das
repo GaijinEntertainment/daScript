@@ -71,7 +71,7 @@ def sf_clamp(s, n : float) : float {
     var acc = 0.0
     for (i in range(5)) {
         if (s > 0.5) {
-            acc = clamp(acc + n, 0.0, 50.0)
+            acc = clamp(acc + n * float(i + 1), 0.0, 50.0)
         }
     }
     return acc

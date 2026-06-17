@@ -1635,11 +1635,11 @@ def private chain_successor(var ub : FlatUsesBuilder?; var blk : ExprBlock?; acc
     // single-use: accName referenced in exactly one statement (its successor)
     if (!key_exists(ub.nameUses, hk) || length(ub.nameUses[hk]) != 1) return -1
     let j = ub.nameUses[hk][0]
-    if (j <= afterIdx || key_exists(consumed, j)) return -1
-    if (select_let_name(blk.list[j]) == "") return -1
+    // successor must be a later, unconsumed select-let
+    if (j <= afterIdx || key_exists(consumed, j) || select_let_name(blk.list[j]) == "") return -1
     let succSel = sel3((blk.list[j] as ExprLet).variables[0].init)
-    if (describe(succSel.subexpr) != condKey) return -1     // same condition
-    if (ref_var_name(succSel.right) != accName) return -1   // false arm is the running accumulator
+    // …on the same condition, with its false arm = the running accumulator
+    if (describe(succSel.subexpr) != condKey || ref_var_name(succSel.right) != accName) return -1
     return j
 }
 
