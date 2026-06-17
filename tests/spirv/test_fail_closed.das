@@ -44,7 +44,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
 [test]
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects shader-illegal constructs cleanly") <| @(t : T?) {
-        check_rejects(t, "_fc_call", "cannot call 'tanh'")
+        check_rejects(t, "_fc_call", "cannot call 'safe_acos'")
         check_rejects(t, "_fc_global", "unsupported global 'g_scale'")
         check_rejects(t, "_fc_localtype", "type tDouble is not supported")
         check_rejects(t, "_fc_stmt", "memzero is not supported in SPIR-V shaders")

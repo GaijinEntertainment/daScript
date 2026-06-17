@@ -1,0 +1,1 @@
+Returns 0.0 when x is strictly less than edge, otherwise 1.0; computed component-wise for float2, float3, and float4 vector types. Matches the GLSL step(edge, x) semantics: at the boundary (x == edge) the result is 1.0.
