@@ -637,11 +637,16 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprOp1(var that : ExprOp1?) : ExpressionPtr {
-        // `!true → false`, `!false → true` — const operand only (already folded
-        // post-order). Double-negation `!!x → x` is intentionally out of scope.
+        // `!true → false`, `!false → true` (const operand). Then push `!` into its operand
+        // where it eliminates — flip a comparison (`!(a > b) → a <= b`), drop a double `!`,
+        // De-Morgan through `&&` / `||` — via negate_bool; it returns null (leave the `!`)
+        // when a residual `!` would remain. The select-fold above emits `c ? false : true → !c`,
+        // so this is what collapses the resulting `!comparison`.
         if (that.op == "!") {
             if (is_bool_val(that.subexpr, true)) { changed = true; return new ExprConstBool(at = that.at, value = false) }
             if (is_bool_val(that.subexpr, false)) { changed = true; return new ExprConstBool(at = that.at, value = true) }
+            var neg = negate_bool(that.subexpr, noFastMath)
+            if (neg != null) { changed = true; return neg }
         }
         return that
     }
@@ -865,6 +870,66 @@ def private same_base_type(a, b : ExpressionPtr) : bool {
 
 def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
+}
+
+// Negate a boolean expression by pushing `!` down to negatable leaves — flip a comparison
+// (`!(a > b) → a <= b`), drop a double `!`, De-Morgan through `&&` / `||` — and return the
+// residual-`!`-free result. Returns null when that can't be done (a leaf would still need a
+// wrapping `!`), so the caller keeps the original `!` rather than churn for no win. NaN charter:
+// an ordered float/double comparison flips only under fast-math; equality flips are always exact.
+def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPtr {
+    if (e is ExprConstBool) {
+        return new ExprConstBool(at = e.at, value = !((e as ExprConstBool).value))
+    }
+    if (e is ExprOp1 && (e as ExprOp1).op == "!") {
+        return (e as ExprOp1).subexpr               // !!x → x
+    }
+    if (e is ExprOp2) {
+        var o = e as ExprOp2
+        if (o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=" || o.op == "==" || o.op == "!=") {
+            // don't flip when: (a) a user / non-built-in operator — daslang doesn't auto-generate
+            // its complement (`<=` from `<`, `!=` from `==`), so flipping could call a missing op or
+            // change semantics; or (b) an ordered float/double comparison under no-fast-math, which
+            // is NaN-unsafe (`!(a>b) ≠ a<=b` for NaN)
+            if (o.func == null || !o.func.flags.builtIn ||
+                    ((o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=") && noFastMath && is_float_valued(o.left))) {
+                return null
+            }
+            if (o.op == ">") return new ExprOp2(at = e.at, op := "<=", left = o.left, right = o.right)
+            if (o.op == "<") return new ExprOp2(at = e.at, op := ">=", left = o.left, right = o.right)
+            if (o.op == ">=") return new ExprOp2(at = e.at, op := "<",  left = o.left, right = o.right)
+            if (o.op == "<=") return new ExprOp2(at = e.at, op := ">",  left = o.left, right = o.right)
+            if (o.op == "==") return new ExprOp2(at = e.at, op := "!=", left = o.left, right = o.right)
+            if (o.op == "!=") return new ExprOp2(at = e.at, op := "==", left = o.left, right = o.right)
+        }
+        if (o.op == "&&" || o.op == "||") {        // De Morgan, only if both sides negate clean
+            var nl = negate_bool(o.left, noFastMath)
+            if (nl == null) return null
+            var nr = negate_bool(o.right, noFastMath)
+            if (nr == null) return null
+            if (o.op == "&&") return new ExprOp2(at = e.at, op := "||", left = nl, right = nr)
+            return new ExprOp2(at = e.at, op := "&&", left = nl, right = nr)
+        }
+    }
+    return null
+}
+
+// Read-only twin of negate_bool: would a wrapping `!` over `e` fold away? Used by the residual
+// oracle (which must NOT call negate_bool — it reuses `e`'s children and would alias the live
+// tree). Keep the foldability rules here in lockstep with negate_bool above.
+def public can_negate_bool(e : ExpressionPtr; noFastMath : bool) : bool {
+    if (e is ExprConstBool || (e is ExprOp1 && (e as ExprOp1).op == "!")) return true   // const / !!x
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        if (o.op == "==" || o.op == "!=") return o.func != null && o.func.flags.builtIn
+        if (o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=") {
+            return o.func != null && o.func.flags.builtIn && !(noFastMath && is_float_valued(o.left))
+        }
+        if (o.op == "&&" || o.op == "||") {
+            return can_negate_bool(o.left, noFastMath) && can_negate_bool(o.right, noFastMath)
+        }
+    }
+    return false
 }
 
 // A fresh zero literal of `t` (the RESULT type of `X * 0`; also the lowering's materialized
