@@ -202,56 +202,58 @@ namespace das {
     char * builtin_fs_temp_directory ( char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_create_temp_directory ( const char * prefix, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fread_to_eof ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void * register_dynamic_module_silent ( const char * path, const char * mod_name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
 #undef GENERATE_IO_STUB
 
-#define GENERATE_IO_STUB { DAS_FATAL_ERROR("%s is not implemented (because DAS_NO_FILEIO is enabled).", __FUNCTION__); }
-#define GENERATE_IO_STUB_RET { GENERATE_IO_STUB; return {}; }
-    void builtin_sleep ( uint32_t msec ) GENERATE_IO_STUB
+    // entry points that report via `ctx` instead of `context`
+#define GENERATE_IO_STUB { ctx->throw_error_at(at, "%s is not implemented (because DAS_NO_FILEIO is enabled)", __FUNCTION__); }
+    int64_t builtin_fs_file_size ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fs_equivalent ( const char * a, const char * b, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fs_is_symlink ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fs_set_mtime ( const char * path, Time time, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_remove_file_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_rename_file_ec ( const char * old_path, const char * new_path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_mkdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+#undef GENERATE_IO_STUB
+
+    // no usable context to report on: return an empty result / no-op (never crash)
+#define GENERATE_IO_STUB {}
+#define GENERATE_IO_STUB_RET { return {}; }
+    void builtin_sleep ( uint32_t ) GENERATE_IO_STUB
     const FILE * builtin_stdin() GENERATE_IO_STUB_RET
     const FILE * builtin_stdout() GENERATE_IO_STUB_RET
     const FILE * builtin_stderr() GENERATE_IO_STUB_RET
-    bool builtin_feof(const FILE* _f) GENERATE_IO_STUB_RET
-    const FILE * builtin_fopen  ( const char * name, const char * mode, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
-    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
-    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
-    vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) GENERATE_IO_STUB_RET
-    bool builtin_stat ( const char * filename, FStat & fs ) GENERATE_IO_STUB_RET
-    bool builtin_chdir ( const char * path ) GENERATE_IO_STUB_RET
-    bool builtin_mkdir ( const char * path ) GENERATE_IO_STUB_RET
-    void builtin_exit ( int32_t ec ) GENERATE_IO_STUB
-    char * builtin_resolve_this_module_dir ( const char * baked_path, Context * context ) GENERATE_IO_STUB_RET
-    bool builtin_remove_file ( const char * path ) GENERATE_IO_STUB_RET
-    bool builtin_rename_file ( const char * old_path, const char * new_path ) GENERATE_IO_STUB_RET
-    bool builtin_rmdir ( const char * path ) GENERATE_IO_STUB_RET
-    bool builtin_fexist ( const char * path ) GENERATE_IO_STUB_RET
-    bool builtin_rmdir_rec ( const char * path ) GENERATE_IO_STUB_RET
-    bool builtin_fs_is_absolute ( const char * path ) GENERATE_IO_STUB_RET
-    int64_t builtin_fs_file_size ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_fs_equivalent ( const char * a, const char * b, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_fs_is_symlink ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_fs_set_mtime ( const char * path, Time time, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_remove_file_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_rename_file_ec ( const char * old_path, const char * new_path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_mkdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
-    bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB_RET
+    bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
+    const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
+    vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
+    vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
+    vec4f builtin_load ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
+    bool builtin_stat ( const char *, FStat & ) GENERATE_IO_STUB_RET
+    bool builtin_chdir ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_mkdir ( const char * ) GENERATE_IO_STUB_RET
+    void builtin_exit ( int32_t ) GENERATE_IO_STUB
+    char * builtin_resolve_this_module_dir ( const char *, Context * ) GENERATE_IO_STUB_RET
+    bool builtin_remove_file ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_rename_file ( const char *, const char * ) GENERATE_IO_STUB_RET
+    bool builtin_rmdir ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_fexist ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_rmdir_rec ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_fs_is_absolute ( const char * ) GENERATE_IO_STUB_RET
     void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
     DAS_API void retry_pending_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
-
-    class Module_FIO : public Module {
-    public:
-        Module_FIO() : Module("fio_core") {
-        }
-        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-            return ModuleAotType::cpp;
-        }
-    };
 
 }
 #else // DAS_NO_FILEIO
@@ -273,10 +275,6 @@ namespace das {
 #include <fstream>
 #include <random>
 
-MAKE_TYPE_FACTORY(FStat, das::FStat)
-MAKE_TYPE_FACTORY(FILE,FILE)
-MAKE_TYPE_FACTORY(DiskSpaceInfo, das::DiskSpaceInfo)
-
 namespace das {
     void builtin_sleep ( uint32_t msec ) {
 #if defined(_WIN32)
@@ -285,23 +283,6 @@ namespace das {
         usleep(1000 * msec);
 #endif
     }
-
-    struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
-        FStatAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FStat", ml) {
-            validationNeverFails = true;
-            addField<DAS_BIND_MANAGED_FIELD(is_valid)>("is_valid");
-            addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
-            addProperty<DAS_BIND_MANAGED_PROP(atime)>("atime");
-            addProperty<DAS_BIND_MANAGED_PROP(ctime)>("ctime");
-            addProperty<DAS_BIND_MANAGED_PROP(mtime)>("mtime");
-            addProperty<DAS_BIND_MANAGED_PROP(is_reg)>("is_reg");
-            addProperty<DAS_BIND_MANAGED_PROP(is_dir)>("is_dir");
-        }
-        virtual bool canMove() const override { return true; }
-        virtual bool canCopy() const override { return true; }
-        virtual bool isLocal() const override { return true; }
-    };
-
 
     void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fprint NULL");
@@ -1521,18 +1502,6 @@ namespace das {
         return ctx->allocateString(msg.data(), uint32_t(msg.size()), at);
     }
 
-    struct DiskSpaceInfoAnnotation : ManagedStructureAnnotation<DiskSpaceInfo, true> {
-        DiskSpaceInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation("DiskSpaceInfo", ml) {
-            validationNeverFails = true;
-            addField<DAS_BIND_MANAGED_FIELD(capacity)>("capacity");
-            addField<DAS_BIND_MANAGED_FIELD(free)>("free");
-            addField<DAS_BIND_MANAGED_FIELD(available)>("available");
-        }
-        virtual bool canMove() const override { return true; }
-        virtual bool canCopy() const override { return true; }
-        virtual bool isLocal() const override { return true; }
-    };
-
     // path manipulation
 
     char * builtin_fs_extension ( const char * path, Context * ctx, LineInfoArg * at ) {
@@ -1820,6 +1789,42 @@ namespace das {
         }
         return context->allocateString(baked_dir_str.c_str(), nullptr);
     }
+}
+#endif // DAS_NO_FILEIO
+
+MAKE_TYPE_FACTORY(FStat, das::FStat)
+MAKE_TYPE_FACTORY(FILE,FILE)
+MAKE_TYPE_FACTORY(DiskSpaceInfo, das::DiskSpaceInfo)
+
+namespace das {
+
+    struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
+        FStatAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FStat", ml) {
+            validationNeverFails = true;
+            addField<DAS_BIND_MANAGED_FIELD(is_valid)>("is_valid");
+            addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
+            addProperty<DAS_BIND_MANAGED_PROP(atime)>("atime");
+            addProperty<DAS_BIND_MANAGED_PROP(ctime)>("ctime");
+            addProperty<DAS_BIND_MANAGED_PROP(mtime)>("mtime");
+            addProperty<DAS_BIND_MANAGED_PROP(is_reg)>("is_reg");
+            addProperty<DAS_BIND_MANAGED_PROP(is_dir)>("is_dir");
+        }
+        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return true; }
+        virtual bool isLocal() const override { return true; }
+    };
+
+    struct DiskSpaceInfoAnnotation : ManagedStructureAnnotation<DiskSpaceInfo, true> {
+        DiskSpaceInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation("DiskSpaceInfo", ml) {
+            validationNeverFails = true;
+            addField<DAS_BIND_MANAGED_FIELD(capacity)>("capacity");
+            addField<DAS_BIND_MANAGED_FIELD(free)>("free");
+            addField<DAS_BIND_MANAGED_FIELD(available)>("available");
+        }
+        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return true; }
+        virtual bool isLocal() const override { return true; }
+    };
 
     class Module_FIO : public Module {
     public:
@@ -2075,7 +2080,7 @@ namespace das {
     };
 }
 
-#if _WIN32
+#if _WIN32 && !DAS_NO_FILEIO
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -2107,5 +2112,4 @@ int munmap ( void* start, size_t ) {
 
 #endif
 
-#endif // !DAS_NO_FILEIO
 REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
