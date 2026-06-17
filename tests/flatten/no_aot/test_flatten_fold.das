@@ -114,6 +114,9 @@ def test_flatten_fold(t : T?) {
         // predicated first iteration keeps the `float3(0f,0f,0f)` init as its false arm.
         var bodies <- twin_bodies(t, "{root}/tests/flatten/no_aot/_fold_fixtures.das")
         let lb = bodies?["fx_loop_break_flat"] ?? ""
+        // existence guard: a missing twin leaves lb == "" and the negative find below would pass
+        // vacuously (false positive). Assert the twin was produced before checking its shape.
+        t |> success(!empty(lb), "fx_loop_break_flat twin must be produced")
         t |> success(lb |> find("float3(0f,0f,0f)") < 0,
             "loop-break first iter must fold unconditional (mask const-prop): {lb}")
         delete bodies
