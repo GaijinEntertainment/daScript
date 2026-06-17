@@ -292,7 +292,7 @@ namespace das {
         DAS_ASSERT(mRef==0);
     }
 
-    void Stream::push ( const uint8_t * data, uint32_t size ) {
+    void Stream::push ( const uint8_t * data, uint64_t size ) {
         lock_guard<mutex> guard(mCompleteMutex);
         pipe.emplace_back();
         auto & v = pipe.back();
@@ -301,9 +301,9 @@ namespace das {
         mCond.notify_all();
     }
 
-    void Stream::pushBatch ( const uint8_t * const * data, const uint32_t * sizes, int count ) {
+    void Stream::pushBatch ( const uint8_t * const * data, const uint64_t * sizes, int64_t count ) {
         lock_guard<mutex> guard(mCompleteMutex);
-        for ( int i=0; i!=count; ++i ) {
+        for ( int64_t i=0; i<count; ++i ) {
             pipe.emplace_back();
             auto & v = pipe.back();
             v.resize(sizes[i]);
@@ -313,7 +313,7 @@ namespace das {
     }
 
     static void invoke_stream_block ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk,
-                                      const uint8_t * data, uint32_t size,
+                                      const uint8_t * data, uint64_t size,
                                       Context * context, LineInfoArg * at ) {
         Array arr;
         array_mark_locked(arr, (void *)data, size);
@@ -342,7 +342,7 @@ namespace das {
                 pipe.pop_front();
             }
         }
-        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+        invoke_stream_block(blk, item.data(), item.size(), context, at);
     }
 
     bool Stream::tryPop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
@@ -353,7 +353,7 @@ namespace das {
             item = das::move(pipe.front());
             pipe.pop_front();
         }
-        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+        invoke_stream_block(blk, item.data(), item.size(), context, at);
         return true;
     }
 
@@ -370,7 +370,7 @@ namespace das {
             item = das::move(pipe.front());
             pipe.pop_front();
         }
-        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+        invoke_stream_block(blk, item.data(), item.size(), context, at);
         return true;
     }
 
@@ -420,15 +420,15 @@ namespace das {
         if ( !ch ) context->throw_error_at(at, "streamPushBatch: stream is null");
         if ( data.size == 0 ) return;
         vector<const uint8_t *> ptrs;
-        vector<uint32_t> sizes;
+        vector<uint64_t> sizes;
         ptrs.reserve(data.size);
         sizes.reserve(data.size);
         auto items = (const TArray<uint8_t> *)data.data;
-        for ( uint32_t i=0; i!=data.size; ++i ) {
+        for ( uint64_t i=0; i!=data.size; ++i ) {
             ptrs.push_back((const uint8_t *)items[i].data);
             sizes.push_back(items[i].size);
         }
-        ch->pushBatch(ptrs.data(), sizes.data(), (int)data.size);
+        ch->pushBatch(ptrs.data(), sizes.data(), int64_t(data.size));
     }
 
     void streamPop ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
