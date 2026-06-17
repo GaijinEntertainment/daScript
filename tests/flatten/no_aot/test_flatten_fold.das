@@ -26,6 +26,18 @@ require daslib/fio
 //! daslib/flatten at runtime, pulling macro_boost generic instantiations that don't AOT-link
 //! in the full-tree batch. Runs in interp + JIT; the residual check is tier-independent.
 
+// Count non-overlapping occurrences of `sub` in `s` — used to tally ` ? ` select nodes in a
+// twin's describe() for the select-fusion FIRED proof.
+def private count_sub(s, sub : string) : int {
+    var n = 0
+    var p = find(s, sub, 0)
+    while (p >= 0) {
+        n ++
+        p = find(s, sub, p + length(sub))
+    }
+    return n
+}
+
 // A flatten OUTPUT to validate: a `[flatten]` twin (`*_flat`) or a `[pixel_shader]` entry.
 def private is_flatten_output(func : FunctionPtr) : bool {
     if (func.name |> ends_with("_flat")) {
@@ -124,6 +136,24 @@ def test_flatten_fold(t : T?) {
     t |> run("const-identity corpus folds clean (test_flatten_const.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_const.das")
         t |> success(n >= 70, "expected >=70 twins, checked {n}")
+    }
+    t |> run("select-fusion corpus folds clean (test_flatten_select_fusion.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_select_fusion.das")
+        t |> success(n >= 7, "expected >=7 twins, checked {n}")
+        // FIRED proof: an invariant-guarded accumulation chain collapses to exactly ONE select,
+        // whatever the op (+, *, min, clamp, vector). The per-iteration-guard control keeps all its
+        // distinct-condition selects (4) — the same-condition boundary. (Symmetric-oracle guard:
+        // the residual above shares build_select_chain with the transform, so a matcher break would
+        // blind both; this positive count is the independent check.)
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_select_fusion.das")
+        for (nm in ["sf_add_flat", "sf_add_base_flat", "sf_mul_flat", "sf_min_flat", "sf_clamp_flat", "sf_vec_flat"]) {
+            let b = bodies?[nm] ?? ""
+            t |> success(!empty(b), "{nm} twin must be produced")
+            t |> equal(count_sub(b, " ? "), 1, "{nm} must fuse to one select: {b}")
+        }
+        let pv = bodies?["sf_pervar_flat"] ?? ""
+        t |> success(count_sub(pv, " ? ") >= 2, "per-iteration guard must NOT fuse (distinct masks): {pv}")
+        delete bodies
     }
     t |> run("optimize corpus folds clean (test_flatten_opt.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_opt.das")
