@@ -68,6 +68,21 @@ namespace das {
 
     __forceinline vec4f lerp_vec_float(vec4f a, vec4f b, float t) { return v_madd(v_sub(b, a), v_splats(t), a); }
 
+    __forceinline float step_float(float edge, float x) { return x < edge ? 0.0f : 1.0f; }
+    __forceinline float smoothstep_float(float e0, float e1, float x) {
+        float t = (x - e0) / (e1 - e0);
+        t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+        return t * t * (3.0f - 2.0f * t);
+    }
+    __forceinline vec4f step_vec(vec4f edge, vec4f x) {
+        // GLSL: step(edge,x) = x<edge ? 0 : 1 (so x==edge yields 1). v_sel(a,b,mask) = mask?b:a.
+        return v_sel(v_splats(1.0f), v_zero(), v_cmp_lt(x, edge));
+    }
+    __forceinline vec4f smoothstep_vec(vec4f e0, vec4f e1, vec4f x) {
+        vec4f t = v_saturate(v_div(v_sub(x, e0), v_sub(e1, e0)));
+        return v_mul(v_mul(t, t), v_madd(v_splats(-2.0f), t, v_splats(3.0f)));
+    }
+
 #if defined(__GNUC__) || defined(__clang__)
 #if !defined(__clang__)
 #define DAS_FINITE_MATH __attribute__((optimize("no-finite-math-only")))

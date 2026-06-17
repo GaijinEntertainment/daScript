@@ -108,6 +108,8 @@ let g_intrin_lookup <- {
     "math::min" => @@intrinsic_math_minmax,
     "math::max" => @@intrinsic_math_minmax,
     "math::clamp" => @@intrinsic_math_clamp,
+    "math::step" => @@intrinsic_math_step,
+    "math::smoothstep" => @@intrinsic_math_smoothstep,
     "math::round" => @@intrinsic_math_float_op1,
     "math::floor" => @@intrinsic_math_float_op1,
     "math::ceil" => @@intrinsic_math_float_op1,
@@ -743,6 +745,46 @@ def intrinsic_math_lerp_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     var b_sub_a = LLVMBuildFSub(ctx.builder, b, a, "")
     var b_a_mul_t = LLVMBuildFMul(ctx.builder, b_sub_a, t, "")
     return LLVMBuildFAdd(ctx.builder, b_a_mul_t, a, "lerp")
+}
+
+def intrinsic_math_step(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.baseType == Type.tFloat || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
+        var zero = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 0.0lf))
+        var one = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 1.0lf))
+        // GLSL step(edge,x) = x<edge ? 0 : 1. fcmp OLT(x,edge) -> select(cmp, 0, 1).
+        var cmp = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOLT, arguments[1], arguments[0], "")
+        return LLVMBuildSelect(ctx.builder, cmp, zero, one, "step")
+    } else {
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
+    }
+}
+
+def intrinsic_math_smoothstep(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.baseType == Type.tFloat || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
+        var zero = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 0.0lf))
+        var one = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 1.0lf))
+        var two = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 2.0lf))
+        var three = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 3.0lf))
+        // t = clamp((x-e0)/(e1-e0), 0, 1)
+        var x_minus_e0 = LLVMBuildFSub(ctx.builder, arguments[2], arguments[0], "")
+        var e1_minus_e0 = LLVMBuildFSub(ctx.builder, arguments[1], arguments[0], "")
+        var t_raw = LLVMBuildFDiv(ctx.builder, x_minus_e0, e1_minus_e0, "")
+        var cmp_lo = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOGT, t_raw, zero, "")
+        var t_lo = LLVMBuildSelect(ctx.builder, cmp_lo, t_raw, zero, "")
+        var cmp_hi = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOLT, t_lo, one, "")
+        var t = LLVMBuildSelect(ctx.builder, cmp_hi, t_lo, one, "")
+        // t*t*(3 - 2*t)
+        var two_t = LLVMBuildFMul(ctx.builder, two, t, "")
+        var three_minus_two_t = LLVMBuildFSub(ctx.builder, three, two_t, "")
+        var t_sq = LLVMBuildFMul(ctx.builder, t, t, "")
+        return LLVMBuildFMul(ctx.builder, t_sq, three_minus_two_t, "smoothstep")
+    } else {
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
+    }
 }
 
 def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

@@ -744,7 +744,7 @@ def private ensure_image_query(var m : SpirvModule; var ctx : EmitCtx) {
 // GLSL.std.450 builtin (or wrong class) -> caller emits a clean error. NOTE: keyed on the DASLANG name,
 // which differs from the GLSL spelling for two: daslang `lerp` -> FMix, daslang `rsqrt` -> InverseSqrt.
 // Only dependency-free builtin `math` functions appear here (no dead branches). Excluded on purpose:
-// daslang has no mix/step/smoothstep; radians/degrees live in daslib/math_boost as das functions whose
+// daslang has no mix; radians/degrees live in daslib/math_boost as das functions whose
 // bodies reference a PI global the dependency walker can't lower (a shader writes the multiply inline).
 def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLstd450> {
     if (name == "abs") {
@@ -795,6 +795,8 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     if (name == "round") return (ok = true, op = GLSLstd450.Round)
     if (name == "trunc") return (ok = true, op = GLSLstd450.Trunc)
     if (name == "fract") return (ok = true, op = GLSLstd450.Fract)
+    if (name == "step") return (ok = true, op = GLSLstd450.Step)
+    if (name == "smoothstep") return (ok = true, op = GLSLstd450.SmoothStep)
     if (name == "lerp") return (ok = true, op = GLSLstd450.FMix)            // daslang lerp == GLSL mix
     if (name == "length") return (ok = true, op = GLSLstd450.Length)
     if (name == "distance") return (ok = true, op = GLSLstd450.Distance)
