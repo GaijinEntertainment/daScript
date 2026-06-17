@@ -5,8 +5,9 @@ require dastest/testing_boost public
 options optimize = false
 
 // Stage-2 math-shader-breadth: fmod + mad get dasSpirv + llvm_jit dispatch coverage. fmod maps to
-// GLSLstd450.FMod (FRem in LLVM); mad maps to GLSLstd450.Fma (= a*b + c per sim_policy). C++
-// bindings already exist for float scalar + float2/3/4; this test pins per-tier float correctness.
+// SPIR-V core OpFRem (GLSL.std.450 has no FMod sub-opcode; OpFRem matches C fmod sign-of-dividend
+// semantics) / LLVM frem; mad maps to GLSLstd450.Fma (= a*b + c per sim_policy). C++ bindings
+// already exist for float scalar + float2/3/4; this test pins per-tier float correctness.
 
 [test]
 def test_fmod_scalar(t : T?) {
