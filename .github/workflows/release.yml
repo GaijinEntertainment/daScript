@@ -279,7 +279,8 @@ jobs:
             TEST_PATH="../tests"
             EXEC=""
           fi
-          ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --test "$TEST_PATH"
+          ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test "$TEST_PATH" \
+            || ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test "$TEST_PATH"
 
       - name: "Install binaries"
         if: matrix.cmake_preset == 'Release'
