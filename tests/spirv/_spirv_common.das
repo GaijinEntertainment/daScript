@@ -361,6 +361,26 @@ def vindex {
     vi_col = float4(x, x, x, 1.0f)
 }
 
+// vertex: gl_PointSize (BuiltIn PointSize Output) — the rasteriser uses this when the pipeline's
+// topology is POINT_LIST, drawing each point as a screen-space splat of width gl_PointSize pixels.
+// Same vertex-shader storage class as gl_Position (Output); writes route to a BuiltIn PointSize
+// decorated OpVariable. Requires the largePoints device feature on the Vulkan side for sizes > 1.
+[vertex_shader(name="point_size_spv"), marker(no_coverage)]
+def point_size {
+    gl_Position = float4(float(gl_VertexIndex), 0.0f, 0.0f, 1.0f)
+    gl_PointSize = 4.0f                              // BuiltIn PointSize write -> screen-space splat width
+}
+
+// fragment: gl_PointCoord (BuiltIn PointCoord Input) — the UV inside a rasterised point primitive,
+// [0,1]^2 with (0.5, 0.5) at the centre of the sprite. Lets a fragment shader compute a circular
+// mask + soft falloff for "pretty point sprites" without uploading a texture; valid only when the
+// pipeline's topology is POINT_LIST. Storage class Input (read-only), fragment-stage-only.
+var @out @location = 0 pc_color : float4
+[fragment_shader(name="point_coord_spv"), marker(no_coverage)]
+def point_coord {
+    pc_color = float4(gl_PointCoord, 0.0f, 1.0f)     // BuiltIn PointCoord read -> sprite-space UV
+}
+
 // fragment: gl_FragCoord builtin + GLSL.std.450 math (dot/sqrt/clamp) -> grayscale
 var @out @location = 0 m_out : float4
 [fragment_shader(name="raster_math_spv"), marker(no_coverage)]
@@ -375,6 +395,18 @@ def raster_math {
 def public tri_vert_words : array<uint> {
     var w : array<uint>
     w |> push_from(tri_vert_spv)
+    return <- w
+}
+
+def public point_size_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(point_size_spv)
+    return <- w
+}
+
+def public point_coord_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(point_coord_spv)
     return <- w
 }
 
