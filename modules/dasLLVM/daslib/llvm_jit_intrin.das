@@ -170,7 +170,7 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
 
 // intrinsics, $ aka builtin
 
-def intrinsic_builtin_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     return LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, arguments[0], "$::variant_index")
 }
 
@@ -178,7 +178,7 @@ def intrinsic_builtin_set_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?;
     return LLVMBuildStore2(ctx.builder, ctx.types, ctx.types.t_int32, arguments[1], arguments[0])
 }
 
-def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     assume argType = expr.arguments[0]._type
     if (argType.isGoodArrayType) {
         var arr = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "arr")
@@ -193,7 +193,7 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
 
 // empty(array) / empty(table) -> size == 0. SIZE is field 1 in both the Array and Table LLVM
 // structs (Table inherits Array), so one body covers both. Returns i1 directly (no truncation).
-def intrinsic_builtin_empty(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_empty(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     assume argType = expr.arguments[0]._type
     if (argType.isGoodArrayType || argType.isGoodTableType) {
         var cont = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "cont")
@@ -204,7 +204,7 @@ def intrinsic_builtin_empty(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     }
 }
 
-def intrinsic_is_standalone_exe(var ctx : JitCtx; _expr : ExprCallFunc?; _arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_is_standalone_exe(var ctx : JitCtx; _expr : ExprCallFunc?; _arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     return LLVMConstInt(ctx.types.t_int1, g_jit_exe_mode ? 1ul : 0ul, 0)
 }
 
@@ -342,7 +342,7 @@ def intrinsic_builtin_hash_string(var ctx : JitCtx; expr : ExprCallFunc?; argume
     return build_string_hash(ctx, arguments[0])
 }
 
-def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     let intType = base_type_to_llvm_type(expr._type.baseType)
     if (empty(arguments)) return LLVMConstInt(intType, 0ul, 0)
     assume argType = expr.arguments[0]._type
@@ -373,7 +373,7 @@ def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     }
 }
 
-def any2int(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType?; inbytes, outbytes : int; outSigned : bool) : LLVMOpaqueValue? {
+def any2int(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType?; inbytes, outbytes : int; outSigned : bool) : LLVMOpaqueValue? {   // nolint:LINT014 — private helper called from intrinsics that share the table signature
     var outType = _outType != null ? _outType : ctx.types.t_int32
     if (argType == Type.tFloat || argType == Type.tDouble) {
         if (outSigned) {
@@ -435,7 +435,7 @@ def intrinsic_builtin_int_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
     return vres
 }
 
-def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType? = null) {
+def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType? = null) {   // nolint:LINT014 — private helper called from intrinsics that share the table signature
     let outType = _outType != null ? _outType : ctx.types.t_float
     return val                                              if (argType == Type.tFloat)
     return LLVMBuildFPTrunc(ctx.builder, val, outType, "") if (argType == Type.tDouble)
@@ -477,7 +477,7 @@ def intrinsic_builtin_float_vec(var ctx : JitCtx; expr : ExprCallFunc?; argument
     return vres
 }
 
-def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     let floatType = base_type_to_llvm_type(expr._type.baseType)
     if (empty(arguments)) return LLVMConstReal(floatType, 0.0lf)
     assume argType = expr.arguments[0]._type
@@ -815,7 +815,7 @@ def intrinsic_math_degrees(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
     }
 }
 
-def intrinsic_math_fmod(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_math_fmod(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     assume argType = expr.arguments[0]._type
     if (argType.baseType == Type.tFloat || argType.baseType == Type.tDouble || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
         return LLVMBuildFRem(ctx.builder, arguments[0], arguments[1], "fmod")
@@ -945,7 +945,7 @@ def build_fsqrt(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOp
     return LLVMBuildCall2(ctx.builder, typ, decl_fsqrt, args_fsqrt, name)
 }
 
-def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; _name : string) : LLVMOpaqueValue? {
+def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; _name : string) : LLVMOpaqueValue? {   // nolint:LINT014 — private helper called from intrinsics that share the table signature
     var one = LLVMConstReal(ctx.types.t_float, 1.0lf)
     var fdiv = LLVMBuildFDiv(ctx.builder, one, v2, "")
     return fdiv
@@ -1101,13 +1101,13 @@ def intrinsic_das_ptr_sub(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     return intrinsic_das_ptr_add(ctx, expr, args)
 }
 
-def intrinsic_memset8(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def intrinsic_memset8(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     assume opType = expr.arguments[0]._type
     assert(opType.isPointer)
     return LLVMBuildMemSet(ctx.builder, arguments[0], arguments[1], arguments[2], 1u)
 }
 
-def build_cmove_nz(var ctx : JitCtx; val : LLVMOpaqueValue?; blk : block) {
+def build_cmove_nz(var ctx : JitCtx; val : LLVMOpaqueValue?; blk : block) {   // nolint:LINT014 — private helper called from intrinsics that share the table signature
     let cb = LLVMGetInsertBlock(ctx.builder)
     var write = LLVMInsertBasicBlockInContext(ctx.ctx, cb, "write")
     var skip = LLVMInsertBasicBlockInContext(ctx.ctx, cb, "skip")

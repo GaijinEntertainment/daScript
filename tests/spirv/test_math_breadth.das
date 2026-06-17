@@ -9,7 +9,6 @@ options indenting = 4
 require dastest/testing_boost public
 require _spirv_common
 require spirv/spirv_shader
-require spirv/spirv_builtins
 require spirv/spirv_dis
 require spirv/spirv_grammar
 require math
