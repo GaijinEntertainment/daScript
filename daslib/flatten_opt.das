@@ -1627,6 +1627,44 @@ def private ref_var_name(e : ExpressionPtr) : string {
     return (x != null && x is ExprVar) ? "{(x as ExprVar).name}" : ""
 }
 
+// Safe to evaluate UNCONDITIONALLY? A stripped (non-last) chain link's true arm runs even when the
+// guard is false (in interp/JIT/AOT `?:` short-circuits, so the original did not), so it must not
+// be able to fault or have a side effect. Flagged: `ExprAt` (index OOB → panic) and integer `/` /
+// `%` (zero divisor → panic; float div is inf, safe). Surviving calls are whitelisted pure GPU
+// builtins (verify_flat bars user calls) — total, no fault. Closed post-flatten node set.
+def private select_arm_eval_safe(e : ExpressionPtr) : bool {
+    if (e == null) return true
+    if (e is ExprAt) return false
+    if (e is ExprOp1) return select_arm_eval_safe((e as ExprOp1).subexpr)
+    if (e is ExprOp2) {
+        let o = e as ExprOp2
+        if ((o.op == "/" || o.op == "%") && !is_float_valued(e)) return false
+        return select_arm_eval_safe(o.left) && select_arm_eval_safe(o.right)
+    }
+    if (e is ExprOp3) {
+        let o = e as ExprOp3
+        return select_arm_eval_safe(o.subexpr) && select_arm_eval_safe(o.left) && select_arm_eval_safe(o.right)
+    }
+    if (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (!select_arm_eval_safe(a)) return false
+        }
+        return true
+    }
+    if (e is ExprRef2Value) return select_arm_eval_safe((e as ExprRef2Value).subexpr)
+    if (e is ExprSwizzle) return select_arm_eval_safe((e as ExprSwizzle).value)
+    if (e is ExprField) return select_arm_eval_safe((e as ExprField).value)
+    if (e is ExprCast) return select_arm_eval_safe((e as ExprCast).subexpr)
+    if (e is ExprPtr2Ref) return select_arm_eval_safe((e as ExprPtr2Ref).subexpr)
+    if (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (!select_arm_eval_safe(v)) return false
+        }
+        return true
+    }
+    return true   // ExprVar / consts and other pure leaves
+}
+
 // Walk the def-use successor of `accName` (its sole referencing statement, since single-use) and,
 // if that statement is a same-`condKey` select whose false arm is `accName`, return its index; else -1.
 def private chain_successor(var ub : FlatUsesBuilder?; var blk : ExprBlock?; accName, condKey : string;
@@ -1661,6 +1699,12 @@ def private build_select_chain(var ub : FlatUsesBuilder?; var blk : ExprBlock?; 
     while (true) {
         let j = chain_successor(ub, blk, accName, condKey, chain[length(chain) - 1], consumed)
         if (j < 0) break
+        // Appending j makes the current tail a STRIPPED non-last link — its true arm will run
+        // unconditionally, so it must be fault-free / side-effect-free. If not, stop here: the
+        // current tail stays the (guarded) last link. The check is in this shared walk so the
+        // transform and the residual oracle agree on which chains are fusable.
+        let tailSel = sel3((blk.list[chain[length(chain) - 1]] as ExprLet).variables[0].init)
+        if (!select_arm_eval_safe(tailSel.left)) break
         chain |> push(j)
         accName = "{(blk.list[j] as ExprLet).variables[0].name}"
     }

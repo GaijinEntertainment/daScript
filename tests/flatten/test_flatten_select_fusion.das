@@ -101,6 +101,20 @@ def sf_pervar(s, n : float) : float {
     return acc
 }
 
+// ----- CONTROL: fault-capable true arm (INTEGER division) must NOT fuse — stripping the select
+// would run `acc / d` unconditionally, panicking on d == 0 when the guard is false (the original
+// short-circuits). The eval-safety gate keeps the selects. -----
+[flatten]
+def sf_intdiv(s : float; d : int) : int {
+    var acc = 100
+    for (_i in range(4)) {
+        if (s > 0.5) {
+            acc = acc / d
+        }
+    }
+    return acc
+}
+
 // ----- driver -----
 
 var SG : array<float>
@@ -138,5 +152,16 @@ def test_flatten_select_fusion(t : T?) {
     }
     t |> run("control: per-iteration guard stays value-correct (un-fused)") @(t : T?) {
         for (s in SG) { for (n in NG) { t |> equal(sf_pervar_flat(s, n), sf_pervar(s, n)) } }
+    }
+    t |> run("control: integer-division true arm value-correct (un-fused)") @(t : T?) {
+        for (s in SG) { for (d in [1, 2, 5, -3]) { t |> equal(sf_intdiv_flat(s, d), sf_intdiv(s, d)) } }
+    }
+    t |> run("safety: guard-false with a zero divisor must NOT divide (gate kept the short-circuit)") @(t : T?) {
+        // s <= 0.5 so the guard is false; had the gate fused `acc / d`, the twin would run it
+        // unconditionally and panic on d == 0. Un-fused, it short-circuits to the base (100).
+        for (s in [-1.0, 0.0, 0.4]) {
+            t |> equal(sf_intdiv_flat(s, 0), 100)
+            t |> equal(sf_intdiv(s, 0), 100)
+        }
     }
 }

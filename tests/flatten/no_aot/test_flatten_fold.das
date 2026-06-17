@@ -153,6 +153,11 @@ def test_flatten_fold(t : T?) {
         }
         let pv = bodies?["sf_pervar_flat"] ?? ""
         t |> success(count_sub(pv, " ? ") >= 2, "per-iteration guard must NOT fuse (distinct masks): {pv}")
+        // eval-safety gate: a fault-capable true arm (integer division) must NOT be stripped to run
+        // unconditionally, so its selects survive (the chain can't grow past the unsafe link).
+        let idv = bodies?["sf_intdiv_flat"] ?? ""
+        t |> success(!empty(idv), "sf_intdiv_flat twin must be produced")
+        t |> success(count_sub(idv, " ? ") >= 2, "integer-division true arm must NOT fuse (eval-safety gate): {idv}")
         delete bodies
     }
     t |> run("optimize corpus folds clean (test_flatten_opt.das twins)") @(t : T?) {
