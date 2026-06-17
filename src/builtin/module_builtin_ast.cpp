@@ -373,12 +373,26 @@ namespace das {
         }
     }
 
-    int32_t any_array_size ( void * _arr ) {
-        return int32_t(((Array *) _arr)->size);
+    // Array::size / Table::size are uint64_t. The 32-bit accessors panic past INT_MAX instead of
+    // silently truncating; callers that can handle 4G+ elements use the long_ counterparts below.
+    int32_t any_array_size ( void * _arr, Context * context, LineInfoArg * at ) {
+        uint64_t sz = ((Array *) _arr)->size;
+        if ( sz > uint64_t(INT32_MAX) ) context->throw_error_at(at, "any_array_size: array size %llu exceeds INT_MAX; use any_array_long_size", (unsigned long long)sz);
+        return int32_t(sz);
     }
 
-    int32_t any_table_size ( void * _tab ) {
-        return int32_t(((Table *) _tab)->size);
+    int32_t any_table_size ( void * _tab, Context * context, LineInfoArg * at ) {
+        uint64_t sz = ((Table *) _tab)->size;
+        if ( sz > uint64_t(INT32_MAX) ) context->throw_error_at(at, "any_table_size: table size %llu exceeds INT_MAX; use any_table_long_size", (unsigned long long)sz);
+        return int32_t(sz);
+    }
+
+    int64_t any_array_long_size ( void * _arr ) {
+        return int64_t(((Array *) _arr)->size);
+    }
+
+    int64_t any_table_long_size ( void * _tab ) {
+        return int64_t(((Table *) _tab)->size);
     }
 
     void ast_gc_guard ( const TBlock<void> & block, Context * context, LineInfoArg * at ) {
@@ -1450,9 +1464,15 @@ namespace das {
                 ->args({"array","stride","block","context","line"});
         addExtern<DAS_BIND_FUN(any_array_size)>(*this, lib,  "any_array_size",
             SideEffects::none, "any_array_size")
-                ->arg("array");
+                ->args({"array","context","line"});
         addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
             SideEffects::none, "any_table_size")
+                ->args({"table","context","line"});
+        addExtern<DAS_BIND_FUN(any_array_long_size)>(*this, lib,  "any_array_long_size",
+            SideEffects::none, "any_array_long_size")
+                ->arg("array");
+        addExtern<DAS_BIND_FUN(any_table_long_size)>(*this, lib,  "any_table_long_size",
+            SideEffects::none, "any_table_long_size")
                 ->arg("table");
         addExtern<DAS_BIND_FUN(getUnderlyingValueType)>(*this, lib,  "get_underlying_value_type",
             SideEffects::none, "getUnderlyingValueType")

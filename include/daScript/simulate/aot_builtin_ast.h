@@ -16,8 +16,10 @@ namespace das {
     DAS_CC_API int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value );
     DAS_CC_API int64_t ast_find_enum_value_ex ( Enumeration * enu, const char * value );
 
-    DAS_CC_API int32_t any_array_size ( void * _arr );
-    DAS_CC_API int32_t any_table_size ( void * _tab );
+    DAS_CC_API int32_t any_array_size ( void * _arr, Context * context, LineInfoArg * at );
+    DAS_CC_API int32_t any_table_size ( void * _tab, Context * context, LineInfoArg * at );
+    DAS_CC_API int64_t any_array_long_size ( void * _arr );
+    DAS_CC_API int64_t any_table_long_size ( void * _tab );
     DAS_CC_API void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     DAS_CC_API void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context, LineInfoArg * at );
 
