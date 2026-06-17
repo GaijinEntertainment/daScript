@@ -1629,12 +1629,13 @@ def private ref_var_name(e : ExpressionPtr) : string {
 
 // Safe to evaluate UNCONDITIONALLY? A stripped (non-last) chain link's true arm runs even when the
 // guard is false (in interp/JIT/AOT `?:` short-circuits, so the original did not), so it must not
-// be able to fault or have a side effect. Flagged: `ExprAt` (index OOB → panic) and integer `/` /
-// `%` (zero divisor → panic; float div is inf, safe). Surviving calls are whitelisted pure GPU
-// builtins (verify_flat bars user calls) — total, no fault. Closed post-flatten node set.
+// be able to fault or have a side effect. CONSERVATIVE: explicitly whitelist the known-pure nodes
+// and recurse; ANYTHING else — `ExprAt` (index OOB), `ExprPtr2Ref` (null deref), `ExprNullCoalescing`,
+// or a node kind not reasoned about — is unsafe by default. Integer `/` / `%` panic on a zero divisor
+// (float div is inf, safe). Surviving calls are whitelisted pure GPU builtins (verify_flat bars user
+// calls) — total, no fault. A rejected true arm just isn't fused (a missed opt, never a miscompile).
 def private select_arm_eval_safe(e : ExpressionPtr) : bool {
-    if (e == null) return true
-    if (e is ExprAt) return false
+    if (e == null || e is ExprVar || e |> is_expr_const()) return true   // null / var read / literal is pure
     if (e is ExprOp1) return select_arm_eval_safe((e as ExprOp1).subexpr)
     if (e is ExprOp2) {
         let o = e as ExprOp2
@@ -1655,14 +1656,13 @@ def private select_arm_eval_safe(e : ExpressionPtr) : bool {
     if (e is ExprSwizzle) return select_arm_eval_safe((e as ExprSwizzle).value)
     if (e is ExprField) return select_arm_eval_safe((e as ExprField).value)
     if (e is ExprCast) return select_arm_eval_safe((e as ExprCast).subexpr)
-    if (e is ExprPtr2Ref) return select_arm_eval_safe((e as ExprPtr2Ref).subexpr)
     if (e is ExprMakeTuple) {
         for (v in (e as ExprMakeTuple).values) {
             if (!select_arm_eval_safe(v)) return false
         }
         return true
     }
-    return true   // ExprVar / consts and other pure leaves
+    return false   // ExprAt / ExprPtr2Ref / ExprNullCoalescing / unrecognized → conservatively unsafe
 }
 
 // Walk the def-use successor of `accName` (its sole referencing statement, since single-use) and,
