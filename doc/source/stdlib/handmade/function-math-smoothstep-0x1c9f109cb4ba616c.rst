@@ -1,0 +1,1 @@
+Performs a smooth Hermite interpolation between 0 and 1 when x is between edge0 and edge1: returns 0 for x <= edge0, 1 for x >= edge1, and the smooth cubic t*t*(3 - 2*t) (where t = clamp((x - edge0) / (edge1 - edge0), 0, 1)) in between. Computed component-wise for float2, float3, and float4 vector types.
