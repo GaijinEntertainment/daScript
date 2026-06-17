@@ -26,6 +26,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        $ErrorActionPreference = 'SilentlyContinue'
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
     - name: Configure CMake
       run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 17 2022"
 

@@ -218,13 +218,21 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       continue-on-error: true
-      # Real-time Defender scans every .obj/.exe/.dll the build writes and every
-      # test process/DLL load; excluding the workspace cuts Windows CI wall-time.
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
       # continue-on-error: a managed-Defender runner must not fail the job.
       run: |
+        $ErrorActionPreference = 'SilentlyContinue'
         Add-MpPreference -ExclusionPath "${{ github.workspace }}"
-        Add-MpPreference -ExclusionProcess "daslang.exe"
-        Add-MpPreference -ExclusionProcess "test_aot.exe"
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
@@ -605,6 +613,26 @@ jobs:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
 
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        $ErrorActionPreference = 'SilentlyContinue'
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
     - name: "Install MSYS2 + clang-mingw64 toolchain"
       uses: msys2/setup-msys2@v2
       with:
@@ -703,13 +731,25 @@ jobs:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
 
-    - name: "Exclude workspace from Defender"
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
       shell: pwsh
       continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
       run: |
+        $ErrorActionPreference = 'SilentlyContinue'
         Add-MpPreference -ExclusionPath "${{ github.workspace }}"
-        Add-MpPreference -ExclusionProcess "daslang.exe"
-        Add-MpPreference -ExclusionProcess "test_aot.exe"
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: "Install nasm (OpenSSL asm)"
       uses: ilammy/setup-nasm@v1
