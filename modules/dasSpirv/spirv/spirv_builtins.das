@@ -15,14 +15,16 @@ var gl_LocalInvocationID    : uint3     // LocalInvocationId
 var gl_GlobalInvocationID   : uint3     // GlobalInvocationId
 var gl_LocalInvocationIndex : uint      // LocalInvocationIndex
 
-// vertex (gl_Position is the one Output builtin; the indices are Inputs)
+// vertex (gl_Position + gl_PointSize are the Output builtins; the indices are Inputs)
 var gl_Position             : float4    // BuiltIn Position (Output)
+var gl_PointSize            : float     // BuiltIn PointSize (Output) — point size in pixels when rasterising POINT_LIST; needs the largePoints device feature for values > 1
 var gl_VertexIndex          : int       // BuiltIn VertexIndex (Input)
 var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
 
 // fragment
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
 var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
+var gl_PointCoord           : float2    // BuiltIn PointCoord (Input) — UV within the rasterised point primitive, [0,1]^2; valid only when POINT_LIST topology is rendered
 
 // ===== combined image samplers =====
 // sampler2D is an opaque marker type: a global of this type lowers to an OpTypeSampledImage in

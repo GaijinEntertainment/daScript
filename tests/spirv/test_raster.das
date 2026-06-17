@@ -91,6 +91,45 @@ def test_vertex_index_builtins(t : T?) {
 }
 
 [test]
+def test_vertex_point_size(t : T?) {
+    t |> run("vertex: gl_PointSize (BuiltIn PointSize Output) for POINT_LIST rasterisation") <| @(t : T?) {
+        var words <- point_size_words()
+        let vmodel = op_first_operand(words, SpvOp.EntryPoint)
+        t |> success(vmodel.ok && vmodel.value == uint(SpvExecutionModel.Vertex),
+            "point_size: EntryPoint model is Vertex")
+        // gl_PointSize -> BuiltIn PointSize decoration on a vertex-stage Output variable
+        t |> success(op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PointSize)),
+            "point_size: gl_PointSize -> BuiltIn PointSize")
+        t |> success(has_builtin(words, SpvBuiltIn.Position),
+            "point_size: gl_Position still present (Vertex shaders must write it)")
+        // an Output-storage variable (gl_Position + gl_PointSize)
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Output)),
+            "point_size: has an Output-storage OpVariable")
+        check_ops(t, words, "point_size", [SpvOp.Store])
+        validate(t, words, "point_size")
+        delete words
+    }
+}
+
+[test]
+def test_fragment_point_coord(t : T?) {
+    t |> run("fragment: gl_PointCoord (BuiltIn PointCoord Input) for point-sprite UV") <| @(t : T?) {
+        var words <- point_coord_words()
+        let fmodel = op_first_operand(words, SpvOp.EntryPoint)
+        t |> success(fmodel.ok && fmodel.value == uint(SpvExecutionModel.Fragment),
+            "point_coord: EntryPoint model is Fragment")
+        // gl_PointCoord -> BuiltIn PointCoord decoration on a fragment-stage Input variable
+        t |> success(op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PointCoord)),
+            "point_coord: gl_PointCoord -> BuiltIn PointCoord")
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Input)),
+            "point_coord: has an Input-storage OpVariable")
+        check_ops(t, words, "point_coord", [SpvOp.CompositeConstruct, SpvOp.Load, SpvOp.Store])
+        validate(t, words, "point_coord")
+        delete words
+    }
+}
+
+[test]
 def test_fragment_math(t : T?) {
     t |> run("fragment: gl_FragCoord + GLSL.std.450 math (dot/sqrt/clamp)") <| @(t : T?) {
         var words <- raster_math_words()

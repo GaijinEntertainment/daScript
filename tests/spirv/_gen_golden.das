@@ -42,6 +42,8 @@ def main {
     emit_golden(dir, "rfor", rfor_words())
     emit_golden(dir, "tri_vert", tri_vert_words())
     emit_golden(dir, "tri_frag", tri_frag_words())
+    emit_golden(dir, "point_size", point_size_words())
+    emit_golden(dir, "point_coord", point_coord_words())
     emit_golden(dir, "vindex", vindex_words())
     emit_golden(dir, "raster_math", raster_math_words())
     emit_golden(dir, "catri", catri_words())
