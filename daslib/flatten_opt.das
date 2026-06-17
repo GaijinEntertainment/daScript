@@ -447,6 +447,77 @@ def public dse_pass(var out : array<ExpressionPtr>) {
     delete dead
 }
 
+// ===== Flow-sensitive const-bool propagation of loop/iter masks =====
+// The break/continue masks (`__flat_loop_*`, `__flat_iter_*`) are multi-def — a `var M = true`
+// decl plus `M = M && !(term)` narrows — so copy_prop (single-def only) leaves them. But the body
+// is straight-line, so a forward scan carries each mask's known const-bool value to its next use:
+// the decl seeds `true`; every use before the first narrow folds (`true && X → X`, `true ? a : b →
+// a`, so the first unrolled iteration is unconditional); the first narrow itself (`M = M && X`, M
+// known true → `M = X`) drops the dead `&& true` AND — when M is read nowhere else (a continue
+// mask whose sole consumer was its own narrow) — leaves the whole decl+store dead for the
+// following dse_pass. A non-const narrow clears the mask (subsequent uses are genuine reads).
+
+// True if `e` reads any flat-mask currently in `known` (fills `reads`, cleared first). Cheap
+// O(size) scan gating the cloning fold_const so mask-free statements are skipped.
+def private reads_known(var e : ExpressionPtr; known : table<uint64; bool>; var reads : table<uint64>) : bool {
+    clear(reads)
+    var risky = false
+    scan_flat(e, reads, risky)
+    for (h in keys(reads)) {
+        if (key_exists(known, h)) return true
+    }
+    return false
+}
+
+def public mask_const_prop_pass(var out : array<ExpressionPtr>) {
+    var known : table<uint64; bool>   // flat-mask name-hash -> currently-known const bool value
+    var reads : table<uint64>         // scratch, cleared per statement
+    let n = length(out)
+    for (i in range(n)) {
+        var s = out[i]
+        // (1) flat-mask decl `var M = <init>`: fold init under known masks, then (re)seed M.
+        if (s is ExprLet && length((s as ExprLet).variables) == 1 && is_flat_temp((s as ExprLet).variables[0].name)) {
+            var lc = s as ExprLet
+            let h = hash(lc.variables[0].name)
+            if (lc.variables[0].init != null) {
+                if (!empty(known) && reads_known(lc.variables[0].init, known, reads)) {
+                    lc.variables[0].init = fold_const(lc.variables[0].init, known)
+                }
+                var bv = false
+                if (const_bool(lc.variables[0].init, bv)) {
+                    known[h] = bv
+                } else {
+                    known |> erase(h)
+                }
+            } else {
+                known |> erase(h)
+            }
+            continue
+        }
+        // (2) flat-mask store `M = <rhs>`: fold rhs (the `M = M && X` collapse), then update M.
+        if (s is ExprCopy && (s as ExprCopy).left is ExprVar && is_flat_temp(((s as ExprCopy).left as ExprVar).name)) {
+            var cp = s as ExprCopy
+            let h = hash((cp.left as ExprVar).name)
+            if (!empty(known) && reads_known(cp.right, known, reads)) {
+                cp.right = fold_const(cp.right, known)
+            }
+            var bv = false
+            if (const_bool(cp.right, bv)) {
+                known[h] = bv
+            } else {
+                known |> erase(h)
+            }
+            continue
+        }
+        // (3) any other statement: fold its mask reads (select predicates) under known masks.
+        if (!empty(known) && reads_known(s, known, reads)) {
+            out[i] = fold_stmt(s, known)
+        }
+    }
+    delete known
+    delete reads
+}
+
 // ===== SSA-rename of reassigned user locals =====
 // Straight-line body → a reassigned local is a linear def-chain (no phi); renaming each write to a
 // fresh single-def `__ssa_` version lets post-infer const-prop fold the chain (declared-with-init only).

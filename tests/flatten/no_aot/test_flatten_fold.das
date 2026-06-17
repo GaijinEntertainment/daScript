@@ -108,6 +108,15 @@ def test_flatten_fold(t : T?) {
     t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/no_aot/_fold_fixtures.das")
         t |> success(n >= 3, "expected >=3 twins, checked {n}")
+        // mask const-prop FIRED proof: a break loop's first unrolled iteration is unconditional
+        // (the loop mask is statically `true` there), so the acc zero-init is consumed — no
+        // `(mask ? new : float3(0,0,0))` first-iter select survives. Without the fold the
+        // predicated first iteration keeps the `float3(0f,0f,0f)` init as its false arm.
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/no_aot/_fold_fixtures.das")
+        let lb = bodies?["fx_loop_break_flat"] ?? ""
+        t |> success(lb |> find("float3(0f,0f,0f)") < 0,
+            "loop-break first iter must fold unconditional (mask const-prop): {lb}")
+        delete bodies
     }
     t |> run("const-identity corpus folds clean (test_flatten_const.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_const.das")
