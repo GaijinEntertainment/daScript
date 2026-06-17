@@ -142,8 +142,8 @@ namespace das {
         Stream() { mTrackMagic = TRACK_STREAM; }
         Stream( int count ) { mTrackMagic = TRACK_STREAM; mRemaining = count; }
         virtual ~Stream();
-        void push ( const uint8_t * data, uint32_t size );
-        void pushBatch ( const uint8_t * const * data, const uint32_t * sizes, int count );
+        void push ( const uint8_t * data, uint64_t size );
+        void pushBatch ( const uint8_t * const * data, const uint64_t * sizes, int64_t count );
         void pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
         bool tryPop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
         bool popWithTimeout ( int timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
@@ -155,7 +155,7 @@ namespace das {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & v : pipe ) {
                 Array arr;
-                array_mark_locked(arr, (void *)v.data(), (uint32_t)v.size());
+                array_mark_locked(arr, (void *)v.data(), v.size());
                 tt(&arr);
             }
         }
@@ -164,7 +164,7 @@ namespace das {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & v : pipe ) {
                 Array arr;
-                array_mark_locked(arr, (void *)v.data(), (uint32_t)v.size());
+                array_mark_locked(arr, (void *)v.data(), v.size());
                 tt(&arr);
             }
             pipe.clear();
