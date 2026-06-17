@@ -110,6 +110,12 @@ let g_intrin_lookup <- {
     "math::clamp" => @@intrinsic_math_clamp,
     "math::step" => @@intrinsic_math_step,
     "math::smoothstep" => @@intrinsic_math_smoothstep,
+    "math::radians" => @@intrinsic_math_radians,
+    "math::degrees" => @@intrinsic_math_degrees,
+    "math::fmod" => @@intrinsic_math_fmod,
+    "math::sinh" => @@intrinsic_math_sinh_cosh_tanh,
+    "math::cosh" => @@intrinsic_math_sinh_cosh_tanh,
+    "math::tanh" => @@intrinsic_math_sinh_cosh_tanh,
     "math::round" => @@intrinsic_math_float_op1,
     "math::floor" => @@intrinsic_math_float_op1,
     "math::ceil" => @@intrinsic_math_float_op1,
@@ -785,6 +791,42 @@ def intrinsic_math_smoothstep(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
     }
+}
+
+def intrinsic_math_radians(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.baseType == Type.tFloat || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
+        let k = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 3.14159265358979323846lf / 180.0lf))
+        return LLVMBuildFMul(ctx.builder, arguments[0], k, "radians")
+    } else {
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
+    }
+}
+
+def intrinsic_math_degrees(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.baseType == Type.tFloat || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
+        let k = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 180.0lf / 3.14159265358979323846lf))
+        return LLVMBuildFMul(ctx.builder, arguments[0], k, "degrees")
+    } else {
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
+    }
+}
+
+def intrinsic_math_fmod(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume argType = expr.arguments[0]._type
+    if (argType.baseType == Type.tFloat || argType.baseType == Type.tDouble || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
+        return LLVMBuildFRem(ctx.builder, arguments[0], arguments[1], "fmod")
+    } else {
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
+    }
+}
+
+def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    return intrinsic_math_any_float_op1(string(expr.name), ctx.builder, expr, arguments)
 }
 
 def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

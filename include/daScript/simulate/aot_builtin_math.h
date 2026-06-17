@@ -83,6 +83,11 @@ namespace das {
         return v_mul(v_mul(t, t), v_madd(v_splats(-2.0f), t, v_splats(3.0f)));
     }
 
+    __forceinline float radians_float(float deg) { return deg * (3.14159265358979323846f / 180.0f); }
+    __forceinline float degrees_float(float rad) { return rad * (180.0f / 3.14159265358979323846f); }
+    __forceinline vec4f radians_vec(vec4f deg) { return v_mul(deg, v_splats(3.14159265358979323846f / 180.0f)); }
+    __forceinline vec4f degrees_vec(vec4f rad) { return v_mul(rad, v_splats(180.0f / 3.14159265358979323846f)); }
+
 #if defined(__GNUC__) || defined(__clang__)
 #if !defined(__clang__)
 #define DAS_FINITE_MATH __attribute__((optimize("no-finite-math-only")))

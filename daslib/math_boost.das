@@ -36,16 +36,6 @@ struct Ray {
     origin : float3 //! origin
 }
 
-def degrees(f : float) {
-    //! convert radians to degrees
-    return f * 180. / PI
-}
-
-def radians(f : float) {
-    //! convert degrees to radians
-    return f * PI / 180.
-}
-
 def RGBA_TO_UCOLOR(x, y, z, w : float) {
     //! conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
     return pack_float_to_byte(float4(x, y, z, w) * 255.)

@@ -726,6 +726,14 @@ namespace das {
             addExternEx<float2(float2,float2,float2),DAS_BIND_FUN(smoothstep_vec)>(*this, lib, "smoothstep", SideEffects::none, "smoothstep_vec2")->args({"edge0","edge1","x"});
             addExternEx<float3(float3,float3,float3),DAS_BIND_FUN(smoothstep_vec)>(*this, lib, "smoothstep", SideEffects::none, "smoothstep_vec3")->args({"edge0","edge1","x"});
             addExternEx<float4(float4,float4,float4),DAS_BIND_FUN(smoothstep_vec)>(*this, lib, "smoothstep", SideEffects::none, "smoothstep_vec4")->args({"edge0","edge1","x"});
+            addExternEx<float(float),DAS_BIND_FUN(radians_float)>(*this, lib, "radians", SideEffects::none, "radians_float")->arg("deg");
+            addExternEx<float2(float2),DAS_BIND_FUN(radians_vec)>(*this, lib, "radians", SideEffects::none, "radians_vec2")->arg("deg");
+            addExternEx<float3(float3),DAS_BIND_FUN(radians_vec)>(*this, lib, "radians", SideEffects::none, "radians_vec3")->arg("deg");
+            addExternEx<float4(float4),DAS_BIND_FUN(radians_vec)>(*this, lib, "radians", SideEffects::none, "radians_vec4")->arg("deg");
+            addExternEx<float(float),DAS_BIND_FUN(degrees_float)>(*this, lib, "degrees", SideEffects::none, "degrees_float")->arg("rad");
+            addExternEx<float2(float2),DAS_BIND_FUN(degrees_vec)>(*this, lib, "degrees", SideEffects::none, "degrees_vec2")->arg("rad");
+            addExternEx<float3(float3),DAS_BIND_FUN(degrees_vec)>(*this, lib, "degrees", SideEffects::none, "degrees_vec3")->arg("rad");
+            addExternEx<float4(float4),DAS_BIND_FUN(degrees_vec)>(*this, lib, "degrees", SideEffects::none, "degrees_vec4")->arg("rad");
 
             // unique float functions
             addExtern<DAS_BIND_FUN(fisnan)>(*this, lib, "is_nan", SideEffects::none, "fisnan")->arg("x");

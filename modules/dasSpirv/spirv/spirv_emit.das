@@ -744,8 +744,7 @@ def private ensure_image_query(var m : SpirvModule; var ctx : EmitCtx) {
 // GLSL.std.450 builtin (or wrong class) -> caller emits a clean error. NOTE: keyed on the DASLANG name,
 // which differs from the GLSL spelling for two: daslang `lerp` -> FMix, daslang `rsqrt` -> InverseSqrt.
 // Only dependency-free builtin `math` functions appear here (no dead branches). Excluded on purpose:
-// daslang has no mix; radians/degrees live in daslib/math_boost as das functions whose
-// bodies reference a PI global the dependency walker can't lower (a shader writes the multiply inline).
+// daslang has no mix.
 def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLstd450> {
     if (name == "abs") {
         if (cls == 2) return (ok = true, op = GLSLstd450.FAbs)
@@ -785,6 +784,15 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     if (name == "acos") return (ok = true, op = GLSLstd450.Acos)
     if (name == "atan") return (ok = true, op = GLSLstd450.Atan)
     if (name == "atan2") return (ok = true, op = GLSLstd450.Atan2)
+    if (name == "sinh") return (ok = true, op = GLSLstd450.Sinh)
+    if (name == "cosh") return (ok = true, op = GLSLstd450.Cosh)
+    if (name == "tanh") return (ok = true, op = GLSLstd450.Tanh)
+    if (name == "asinh") return (ok = true, op = GLSLstd450.Asinh)
+    if (name == "acosh") return (ok = true, op = GLSLstd450.Acosh)
+    if (name == "atanh") return (ok = true, op = GLSLstd450.Atanh)
+    if (name == "mad") return (ok = true, op = GLSLstd450.Fma)
+    if (name == "radians") return (ok = true, op = GLSLstd450.Radians)
+    if (name == "degrees") return (ok = true, op = GLSLstd450.Degrees)
     if (name == "pow") return (ok = true, op = GLSLstd450.Pow)
     if (name == "exp") return (ok = true, op = GLSLstd450.Exp)
     if (name == "log") return (ok = true, op = GLSLstd450.Log)
@@ -2123,6 +2131,21 @@ class SpirvEmit : AstVisitor {
             }
             emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
             delete cons
+            e2id[k] = res
+            return expr
+        }
+        // fmod: core OpFRem (C fmod semantics — sign-of-dividend). NOT a GLSL.std.450 ext-inst.
+        if (name == "fmod") {
+            if (length(expr.arguments) != 2) {
+                errs |> push("fmod expects 2 arguments")
+                return expr
+            }
+            let a = value_of(expr.arguments[0])
+            let b = value_of(expr.arguments[1])
+            if (a == 0u || b == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.FRem, rt, res, a, b)
             e2id[k] = res
             return expr
         }
