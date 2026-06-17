@@ -225,12 +225,11 @@ jobs:
       # (managed Defender / Tamper Protection may silently no-op).
       # continue-on-error: a managed-Defender runner must not fail the job.
       run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
         foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
-          Add-MpPreference -ExclusionProcess $p
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
         }
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
@@ -624,12 +623,11 @@ jobs:
       # (managed Defender / Tamper Protection may silently no-op).
       # continue-on-error: a managed-Defender runner must not fail the job.
       run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
         foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
-          Add-MpPreference -ExclusionProcess $p
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
         }
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
@@ -742,12 +740,11 @@ jobs:
       # (managed Defender / Tamper Protection may silently no-op).
       # continue-on-error: a managed-Defender runner must not fail the job.
       run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
         foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
-          Add-MpPreference -ExclusionProcess $p
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
         }
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
