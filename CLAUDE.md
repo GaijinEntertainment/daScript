@@ -185,6 +185,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 ### Unsafe
 
 - **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it. Lint backs this: STYLE024 flags `unsafe` wraps with no descendant needing unsafe; STYLE025 flags blocks where exactly one statement needs unsafe (narrow to expression form); STYLE026 flags nested `unsafe { ... }`
+  - **The expression form does NOT propagate into nested call arguments.** `unsafe(f(addr(x)))` still fails with `error[31000] address of reference requires unsafe` at the inner `addr` — the wrap only authorizes the unsafe op at the *top* of `expr`, not a sub-expression buried in an argument. Wrap the exact unsafe op instead: `f(unsafe(addr(x)))`. The block form `unsafe { f(addr(x)) }` *does* cover the nested op (whole scope), so it's the fallback when several nested ops need it.
 - **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
 - **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
 - **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
