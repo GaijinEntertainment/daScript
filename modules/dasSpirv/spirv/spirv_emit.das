@@ -165,6 +165,64 @@ def private round_up(off, a : int) : int {
     return ((off + a - 1) / a) * a
 }
 
+//! One std140-laid-out field of a @uniform / @push_constant interface block. Returned by
+//! compute_block_layout and consumed by host-side bind macros (e.g. dasVulkan's SpirvVulkanShader)
+//! to emit one write per field at the right byte offset. `is_matrix` just means "this field IS a
+//! matrix" (and gets MatrixStride 16 in SPIR-V) — it does NOT by itself imply the daslang storage
+//! and std140 layout differ. For float4x4 the columns are already vec4-wide so a single memcpy
+//! works; for float3x3 / float3x4 the daslang storage is packed (3-wide columns) while std140 pads
+//! each column to vec4, so bind code must repack per-column. **Use `matrix_width` to choose**:
+//! `matrix_width == 4` → safe to memcpy the field; `matrix_width < 4` → repack per column.
+struct public BlockField {
+    name         : string //!< field name as declared in the daslang struct
+    offset       : int    //!< std140 byte offset from the block base
+    size         : int    //!< std140 base size of the field (matrices: 16 * cols)
+    is_matrix    : bool   //!< true if this field is a matrix (MatrixStride 16 in SPIR-V); see struct docstring re: repack
+    matrix_width : int    //!< matrix column-vector width — 4 for float4x4 (memcpy-safe); 3 for float3x3/3x4 (per-column repack)
+    matrix_cols  : int    //!< matrix column count (only valid when is_matrix); 0 otherwise
+}
+
+//! Compute the std140 layout of one interface block. Pure: takes a Structure?, fills `fields` with
+//! per-field offsets / sizes / matrix flags, returns the block total size and max member alignment.
+//! Used by build_block_struct (SPIR-V type emit) and by host-side bind macros. Rejects bool and
+//! non-numeric fields fail-closed (no physical std140 layout). `sname` is only used in error messages.
+//! `fields` is cleared at entry so reuse across calls and partial-failure returns can't bleed.
+//! [macro_function]: callable from a backend's bind-gen macro at compile time, mirrors generate_spirv.
+[macro_function]
+def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>) : tuple<ok : bool; size : int; align : int> {
+    fields |> clear
+    if (st == null || empty(st.fields)) {
+        errors |> push("interface block '{sname}' must be a struct with at least one field")
+        return (ok = false, size = 0, align = 0)
+    }
+    var off = 0
+    var max_align = 0
+    for (fld in st.fields) {
+        let mi = matrix_info(fld._type)
+        if (mi.ok) {
+            off = round_up(off, 16)
+            fields |> emplace(BlockField(name := string(fld.name), offset = off, size = 16 * mi.cols,
+                is_matrix = true, matrix_width = mi.width, matrix_cols = mi.cols))
+            off += 16 * mi.cols
+            max_align = max(max_align, 16)
+            continue
+        }
+        let fbt = fld._type.baseType
+        if (scalar_class(fbt) < 0) {
+            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, and matrices; bool has no physical interface-block layout in Vulkan)")
+            fields |> clear
+            return (ok = false, size = 0, align = 0)
+        }
+        let falign = std140_align(fbt)
+        off = round_up(off, falign)
+        fields |> emplace(BlockField(name := string(fld.name), offset = off, size = std140_size(fbt),
+            is_matrix = false, matrix_width = 0, matrix_cols = 0))
+        off += std140_size(fbt)
+        max_align = max(max_align, falign)
+    }
+    return (ok = true, size = off, align = max_align)
+}
+
 // Build a laid-out interface struct from a daslang struct's fields. 32-bit scalar/vector/matrix
 // members are supported; nested structs and arrays are not yet. `as_block` toggles the Block decoration
 // (true for @uniform/@push_constant blocks, false for an SSBO runtime-array element struct).
@@ -174,54 +232,31 @@ def private round_up(off, a : int) : int {
 // past the last member (the push-constant range size); `align` lets the SSBO caller round it up to
 // the std430 array stride.
 def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; as_block : bool; var errors : array<string>) : tuple<ok : bool; type_id : uint; size : int; align : int> {
-    if (st == null || empty(st.fields)) {
-        errors |> push("interface block '{sname}' must be a struct with at least one field")
+    var fields : array<BlockField>
+    let layout = compute_block_layout(sname, st, fields, errors)
+    if (!layout.ok) {
+        delete fields
         return (ok = false, type_id = 0u, size = 0, align = 0)
     }
     var members : array<uint>
     var offsets : array<int>
     var mat_strides : array<int>
-    var off = 0
-    var max_align = 0
+    var fi = 0
     for (fld in st.fields) {
-        let mi = matrix_info(fld._type)
-        if (mi.ok) {
-            // std140/std430 matrix: ColMajor, each column padded to vec4 (MatrixStride 16), align 16,
-            // size = 16 * cols. (daslang float3x3 stores packed columns, so its bytes need
-            // repacking host-side before upload; float4x4 columns are already vec4 -> direct.)
-            off = round_up(off, 16)
-            members |> push(emit_type(m, fld._type))
-            offsets |> push(off)
-            mat_strides |> push(16)
-            off += 16 * mi.cols
-            max_align = max(max_align, 16)
-            continue
-        }
-        let fbt = fld._type.baseType
-        // only 32-bit int/uint/float scalars + their vectors. scalar_class rejects bool (and any
-        // non-numeric): OpTypeBool has no physical size in a std140/std430 interface block, so a
-        // bool member would emit an invalid layout — reject it fail-closed rather than emit it.
-        if (scalar_class(fbt) < 0) {
-            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, and matrices; bool has no physical interface-block layout in Vulkan)")
-            delete members
-            delete offsets
-            delete mat_strides
-            return (ok = false, type_id = 0u, size = 0, align = 0)
-        }
-        let falign = std140_align(fbt)
-        off = round_up(off, falign)
+        let f = fields[fi]
         members |> push(emit_type(m, fld._type))
-        offsets |> push(off)
-        mat_strides |> push(0)
-        off += std140_size(fbt)
-        max_align = max(max_align, falign)
+        offsets |> push(f.offset)
+        // std140 matrix: ColMajor, each column padded to vec4 (MatrixStride 16) — see BlockField docs.
+        mat_strides |> push(f.is_matrix ? 16 : 0)
+        fi++
     }
     let id = (as_block ? type_struct_block(m, members, offsets, mat_strides)
                        : type_struct_layout(m, members, offsets, mat_strides))
     delete members
     delete offsets
     delete mat_strides
-    return (ok = true, type_id = id, size = off, align = max_align)
+    delete fields
+    return (ok = true, type_id = id, size = layout.size, align = layout.align)
 }
 
 // std430 layout of an SSBO runtime-array element. Returns the element SPIR-V type-id + the
