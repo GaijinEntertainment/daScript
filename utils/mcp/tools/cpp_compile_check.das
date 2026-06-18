@@ -169,9 +169,16 @@ def private command_is_msvc(cmd : string) : bool {
     return comp == "cl.exe" || comp == "cl" || comp == "clang-cl.exe" || comp == "clang-cl"
 }
 
+// Strip a matching pair of surrounding double-quotes. split_ws keeps quotes on
+// tokens, and a compiler path under "C:\Program Files\..." is quoted — without
+// this, base_name() would keep the trailing quote and MSVC detection would fail.
+def private unquote(s : string) : string {
+    return (length(s) >= 2 && starts_with(s, "\"") && ends_with(s, "\"")) ? slice(s, 1, length(s) - 1) : s
+}
+
 def private compiler_of(cmd : string) : string {
     let toks <- split_ws(cmd)
-    return empty(toks) ? "" : toks[0]
+    return empty(toks) ? "" : unquote(toks[0])
 }
 
 // Drop the codegen-output tail (object/pdb/asm/PCH outputs and the compile-only
