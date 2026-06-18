@@ -258,6 +258,9 @@ def render_sfxr(snd : SfxrSound; sample_rate : int = SFXR_SAMPLE_RATE) : array<f
             ssample += sample * env_vol
         }
         ssample = ssample / 8.0 * 2.0 * snd.sound_vol
+        if (!(ssample > -1.0e30 && ssample < 1.0e30)) {   // guard NaN/Inf (clamp handles range)
+            ssample = 0.0
+        }
         samples[sidx] = clamp(ssample, -1.0, 1.0)
         written++
         if (freq_done) break

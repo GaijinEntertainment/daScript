@@ -84,10 +84,15 @@ def render_sound(layers : array<Layer>) : array<float> {
     for (x in out) {
         pk = max(pk, abs(x))
     }
-    if (pk > 0.0) {
+    if (pk > 1.0e-4) {   // don't amplify near-silence into garbage
         let g = 0.89 / pk
         for (x in out) {
             x *= g
+        }
+    }
+    for (x in out) {     // guard any NaN/Inf that slipped through
+        if (!(x > -1.0e30 && x < 1.0e30)) {
+            x = 0.0
         }
     }
     return <- out
@@ -312,7 +317,11 @@ def apply_post(var mono : array<float>; p : PostChain; rate : float) {
     }
 
     for (i in range(n)) {
-        mono[i] = (st[i * 2] + st[i * 2 + 1]) * 0.5
+        var m = (st[i * 2] + st[i * 2 + 1]) * 0.5
+        if (!(m > -1.0e30 && m < 1.0e30)) {   // guard NaN/Inf from any effect
+            m = 0.0
+        }
+        mono[i] = m
     }
     delete st
 }
