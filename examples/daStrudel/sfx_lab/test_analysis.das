@@ -36,10 +36,13 @@ def main {
     let f_self = fit(s200, s200, RATE)
     let d_fast = analyze(fast, RATE).decay_ms
     let d_slow = analyze(slow, RATE).decay_ms
+    let evo_self = spectral_evo_fit(s200, s200, RATE)
+    let evo_diff = spectral_evo_fit(s200, s4000, RATE)
 
     to_log(LOG_INFO, "spectral self={self_sp} diff(200v4000)={diff_sp}\n")
     to_log(LOG_INFO, "centroid lo={c_lo} hi={c_hi}\n")
     to_log(LOG_INFO, "envelope self={self_env} diff(fast v slow)={diff_env}\n")
+    to_log(LOG_INFO, "evo self={evo_self} diff(200v4000)={evo_diff}\n")
     to_log(LOG_INFO, "fit.overall(self)={f_self.overall}\n")
     to_log(LOG_INFO, "decay fast={d_fast}ms slow={d_slow}ms\n")
 
@@ -48,6 +51,8 @@ def main {
     verify(c_hi > c_lo * 3.0)
     verify(self_env > 0.99)
     verify(diff_env < 0.95)
+    verify(evo_self > 0.99)        // identical buffers -> perfect time-resolved match
+    verify(evo_diff < 0.6)         // low vs high tone -> different spectrograms
     verify(f_self.overall > 0.99)
     verify(d_fast < d_slow)
     to_log(LOG_INFO, "ALL CHECKS PASSED\n")

@@ -191,7 +191,7 @@ def public envelope_fit(a, b : array<float>; rate : int) : float {
 }
 
 def public fit(ref, mix : array<float>; rate : int) : FitScore {
-    let sp = spectral_fit(ref, mix)
+    let sp = spectral_evo_fit(ref, mix, rate)   // dB / log-freq / time-resolved
     let en = envelope_fit(ref, mix, rate)
     return FitScore(spectral = sp, envelope = en, overall = 0.6 * sp + 0.4 * en)
 }
@@ -248,20 +248,19 @@ def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float
     return <- out
 }
 
-// STFT magnitude in dB, row-major [nbins rows (freq, HIGH at row 0 / top) x nframes cols (time)],
-// LOG-frequency from SPEC_FMIN..fmax Hz (spreads the low end for drums) — hand to plot_heatmap.
-def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
+// STFT magnitude in dB over `win_len` samples (frames evenly spaced across [0,win_len)),
+// row-major [nbins rows (freq, HIGH at row 0 / top) x nframes cols (time)], LOG-frequency from
+// SPEC_FMIN..fmax Hz. Core shared by the UI spectrogram and the time-resolved fit.
+def private log_spectro(buf : array<float>; win_len, rate, nframes, nbins : int; fmax : float) : array<float> {
     var out : array<float>
     out |> resize(nbins * nframes)
-    let n = length(buf)
-    if (n == 0) return <- out
-    let hop = max((n - STFT_N) / max(nframes - 1, 1), 1)
-    let last = max(n - 1, 0)
+    if (empty(buf) || win_len <= 0) return <- out
+    let hop = max(win_len / nframes, 1)
     let logmin = log(SPEC_FMIN)
     let logspan = log(fmax) - logmin
     let hz_to_bin = float(STFT_N) / float(rate)
     for (f in range(nframes)) {
-        let start = min(f * hop, last)
+        let start = f * hop
         var mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         let mlen = length(mags)
@@ -280,4 +279,46 @@ def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : fl
         delete mags
     }
     return <- out
+}
+
+// UI spectrogram: frames spread across the whole buffer (spectrum over time, for plot_heatmap).
+def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
+    return <- log_spectro(buf, length(buf), rate, nframes, nbins, fmax)
+}
+
+// subtract the max cell so the loudest = 0 dB (level-invariant)
+def private norm_db(var s : array<float>) {
+    var mx = -1.0e30
+    for (v in s) {
+        mx = max(mx, v)
+    }
+    if (mx > -1.0e29) {
+        for (v in s) {
+            v -= mx
+        }
+    }
+}
+
+// Time-resolved, log-frequency, dB-domain spectral distance over a shared absolute window.
+// dB weighting makes a quiet-but-defining structure (the inharmonic mid-ladder) count as much as
+// the loud fundamental, and the per-frame grid captures spectral evolution (a pitch sweep) — both
+// blind spots of the single-window linear-cosine spectral_fit.
+def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
+    if (empty(a) || empty(b)) return 0.0
+    let L = min(min(length(a), length(b)), rate)   // shared absolute window, up to ~1 s
+    let NF = 32
+    let NB = 40
+    let FMAX = 12000.0
+    var sa <- log_spectro(a, L, rate, NF, NB, FMAX)
+    var sb <- log_spectro(b, L, rate, NF, NB, FMAX)
+    norm_db(sa)
+    norm_db(sb)
+    let n = NF * NB
+    var acc = 0.0
+    for (i in range(n)) {
+        acc += abs(max(sa[i], -80.0) - max(sb[i], -80.0))   // floor silence at -80 dB
+    }
+    delete sa
+    delete sb
+    return clamp(1.0 - acc / float(n) / 45.0, 0.0, 1.0)
 }
