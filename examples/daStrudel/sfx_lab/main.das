@@ -638,7 +638,8 @@ def modal_editor() : bool {
     return ch
 }
 
-def mix_panel() {
+// shared play button + fit readout — rendered at the top of both the Mix and Spectrogram tabs
+def mix_header() {
     if (icon_button(MIX_PLAY, (glyph = "play", tip = "Play the mix"))) {
         play_mix()
     }
@@ -649,6 +650,10 @@ def mix_panel() {
     } else {
         text(FIT_TXT, (text = "fit: load a reference to compare"))
     }
+}
+
+def mix_panel() {
+    mix_header()
     plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
         setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("mix", g_mix_wave)
@@ -667,14 +672,15 @@ def mix_panel() {
 
 // spectrum-over-time: STFT magnitude (dB) as a color heatmap, time on X, freq on Y (high at top)
 def spectro_panel() {
+    mix_header()
     plot(SPEC_MIX, (title = "mix - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("time", "freq", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         if (!empty(g_mix_spectro)) {
             plot_heatmap("mix", g_mix_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
         }
     }
     plot(SPEC_REF, (title = "reference - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("time", "freq", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         if (!empty(g_ref_spectro)) {
             plot_heatmap("ref", g_ref_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
         }

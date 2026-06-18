@@ -13,6 +13,7 @@ let private TWO_PI = 6.28318530717958647692
 let private FFT_N = 4096
 let private STFT_N = 1024            // smaller window for time-resolved analysis
 let private INV_LN10 = 0.43429448190325176
+let private SPEC_FMIN = 30.0         // spectrogram low-frequency edge (log axis)
 
 struct SfxFeatures {
     peak     : float    //!< max |sample|, 0..1
@@ -248,25 +249,28 @@ def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float
 }
 
 // STFT magnitude in dB, row-major [nbins rows (freq, HIGH at row 0 / top) x nframes cols (time)],
-// covering 0..fmax Hz — ready to hand straight to plot_heatmap.
+// LOG-frequency from SPEC_FMIN..fmax Hz (spreads the low end for drums) — hand to plot_heatmap.
 def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
     var out : array<float>
     out |> resize(nbins * nframes)
     let n = length(buf)
     if (n == 0) return <- out
     let hop = max((n - STFT_N) / max(nframes - 1, 1), 1)
-    let binmax = max(int(fmax * float(STFT_N) / float(rate)), 1)
     let last = max(n - 1, 0)
+    let logmin = log(SPEC_FMIN)
+    let logspan = log(fmax) - logmin
+    let hz_to_bin = float(STFT_N) / float(rate)
     for (f in range(nframes)) {
         let start = min(f * hop, last)
         var mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         let mlen = length(mags)
         for (r in range(nbins)) {
-            let frac_hi = 1.0 - float(r) / float(nbins)
-            let frac_lo = 1.0 - float(r + 1) / float(nbins)
-            let b0 = clamp(int(frac_lo * float(binmax)), 0, mlen - 1)
-            let b1 = clamp(int(frac_hi * float(binmax)), b0 + 1, mlen)
+            // row 0 = top = high freq; log-spaced bands so the low end gets resolution
+            let f_lo = exp(logmin + (1.0 - float(r + 1) / float(nbins)) * logspan)
+            let f_hi = exp(logmin + (1.0 - float(r) / float(nbins)) * logspan)
+            let b0 = clamp(int(f_lo * hz_to_bin), 0, mlen - 1)
+            let b1 = clamp(int(f_hi * hz_to_bin), b0 + 1, mlen)
             var m = 0.0
             for (b in range(b0, b1)) {
                 m = max(m, mags[b])
