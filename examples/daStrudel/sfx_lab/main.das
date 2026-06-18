@@ -545,6 +545,47 @@ def optimize(scope : int; iterations : int) : float {
     return best_fit
 }
 
+// fill the in-scope params with random values within their bounds (reuses the knob bounds)
+def randomize_scope(scope : int) {
+    g_opt_scope = scope
+    g_kv |> clear()
+    g_klo |> clear()
+    g_khi |> clear()
+    knobs_io(false)
+    for (k in range(length(g_kv))) {
+        g_kv[k] = g_klo[k] + orand(g_seed) * (g_khi[k] - g_klo[k])
+    }
+    knobs_io(true)
+    g_mix_dirty = true
+    g_edit_dirty = true
+}
+
+// add a fresh layer, random-init it, tune it alone, then refine the whole sound
+def discover(modal : bool; iters : int) : float {
+    if (modal) {
+        var mv = ModalVoice()
+        mv.n_modes = 3 + int(orand(g_seed) * 4.0)   // 3..6 partials so an inharmonic ladder can form
+        add_layer(modal_layer("discover", mv))
+    } else {
+        add_layer(sfxr_layer("discover", SfxrSound()))
+    }
+    randomize_scope(OPT_VOICE)                       // random init the new (selected) layer
+    optimize(OPT_VOICE, max(iters, 1))              // fit it to the residual on its own
+    return optimize(OPT_COMBINED, max(iters / 2, 1))   // then refine everything together
+}
+
+def run_discover() {
+    if (empty(g_ref)) {
+        g_opt_result = "load a reference first"
+        return
+    }
+    let before = eval_fit()
+    let after = discover(true, OPT_ITERS.value)
+    g_post_reload = true
+    g_sel_loaded = -1
+    g_opt_result = "discover: {int(before * 100.0)}% -> {int(after * 100.0)}%"
+}
+
 def run_optimize(scope : int) {
     if (empty(g_ref)) {
         g_opt_result = "load a reference first"
@@ -981,6 +1022,10 @@ def mix_panel() {
             run_optimize(OPT_COMBINED)
         }
         same_line(OPT_SL3)
+        if (button(OPT_DISC_BTN, (text = "+ discover modal"))) {
+            run_discover()
+        }
+        same_line(OPT_SL4)
         OPT_ITERS.bounds = (4, 80)
         slider_int(OPT_ITERS, (text = "iters"))
         if (!empty(g_opt_result)) {
@@ -1621,5 +1666,29 @@ def sfx_optimize(input : JsonValue?) : JsonValue? {
     if (g_mix_dirty) {
         rebuild_mix()
     }
+    return make_report()
+}
+
+[live_command(description = "SFX lab: randomize the selected layer's voice params (within bounds). Returns fit.")]
+def sfx_randomize_layer(_input : JsonValue?) : JsonValue? {
+    randomize_scope(OPT_VOICE)
+    g_post_reload = true
+    g_sel_loaded = -1
+    rebuild_mix()
+    return make_report()
+}
+
+struct DiscoverArgs {
+    kind : string = "modal"
+    iters : int = 24
+}
+
+[live_command(description = "SFX lab: add a fresh layer (kind modal|sfxr), random-init it, optimize it alone, then optimize the whole sound. Args: kind, iters. Returns fit.")]
+def sfx_discover(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<DiscoverArgs>)
+    discover(args.kind != "sfxr", max(args.iters, 1))
+    g_post_reload = true
+    g_sel_loaded = -1
+    rebuild_mix()
     return make_report()
 }
