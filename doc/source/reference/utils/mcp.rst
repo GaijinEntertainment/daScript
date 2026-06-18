@@ -341,6 +341,80 @@ Edits to ``cpp_search_config.das`` trigger an index rebuild on the
 next lookup automatically (the file's mtime is part of the staleness
 signature; see the ``with_cpp_source`` redirect section above).
 
+C++ build tools (compile database)
+-----------------------------------
+
+Compiler-backed C++ tools driven by the CMake compile database
+(``build/compile_commands.json``).  The top-level ``CMakeLists.txt`` sets
+``CMAKE_EXPORT_COMPILE_COMMANDS ON``; the **Ninja** and **Makefile**
+generators honor it, but the **Visual Studio generator does not** emit the
+database --- on Windows, configure a side Ninja build directory.  The tools
+probe ``build/``, ``build-ninja/``, then ``build*/`` under the repo root;
+pass ``build_dir`` to point elsewhere.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Tool
+     - Description
+   * - ``cpp_compile_check``
+     - Syntax-check a C++ translation unit with the real compiler.  Takes
+       the TU's exact flags from the compile database, strips the codegen
+       tail (``/Fo`` ``/Fd`` ``-c`` ``-o`` + PCH) and appends ``/Zs``
+       (MSVC) or ``-fsyntax-only`` (clang/gcc).  Inherits the build's
+       flags including ``/WX``.  Optional ``json`` -> structured
+       ``CppCompileResult`` (``file``, ``success``, ``errors``,
+       ``warnings``); optional ``build_dir``.  Headers are not translation
+       units (not in the database) --- pass a ``.cpp``/``.cc`` that
+       includes them.
+   * - ``cpp_build_info``
+     - Return the compiler, build directory, and both the full and
+       derived syntax-only command lines for a TU.  Answers "what command
+       line compiles this file".
+   * - ``cpp_format_file``
+     - Format a C++ file in place with clang-format, but only when a
+       ``.clang-format`` is discoverable by walking up from the file.
+       No-op-with-message otherwise (the daslang tree ships none); for
+       external C++ consumers that carry a style.
+
+.. _utils_mcp_msvc_env:
+
+Windows + MSVC: developer environment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On MSVC the compile database omits the system include paths --- the
+compiler reads them from the ``INCLUDE`` environment variable set by
+``vcvars64.bat``.  The MCP server (and the ``cl.exe`` it spawns) therefore
+needs a Visual Studio developer environment, or ``cpp_compile_check`` fails
+on ``<vcruntime.h>``.  Two options:
+
+#. **Wrapper launcher (recommended).**  Point ``.mcp.json`` at
+   ``utils/mcp/daslang-mcp-msvc.cmd`` instead of the bare binary.  The
+   wrapper locates Visual Studio via ``vswhere``, loads the x64 developer
+   environment, then starts the server --- so it works no matter how Claude
+   Code is launched:
+
+   .. code-block:: json
+
+      {
+        "mcpServers": {
+          "daslang": {
+            "command": "cmd",
+            "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd"],
+            "defer_loading": false
+          }
+        }
+      }
+
+#. **Launch from a developer shell.**  Start Claude Code from an *x64
+   Native Tools Command Prompt for VS* (or any shell where ``vcvars64`` has
+   run); the server inherits the environment and needs no wrapper.
+
+clang/gcc find their system headers automatically, so this is
+Windows/MSVC-only --- on Linux/macOS point ``.mcp.json`` straight at the
+daslang binary.
+
 Duplicate detection
 -------------------
 
@@ -522,6 +596,9 @@ Optionally, allow all MCP tools without prompting by adding to
          "mcp__daslang__cpp_find_symbol",
          "mcp__daslang__cpp_outline",
          "mcp__daslang__cpp_goto_definition",
+         "mcp__daslang__cpp_compile_check",
+         "mcp__daslang__cpp_build_info",
+         "mcp__daslang__cpp_format_file",
          "mcp__daslang__aot"
        ]
      }

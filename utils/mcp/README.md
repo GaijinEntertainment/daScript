@@ -44,7 +44,19 @@ Parse-aware (tree-sitter-cpp) source search plus compiler-backed build tools. Th
 | `cpp_build_info` | Return the compiler, build directory, full compile command, and derived syntax-only command for a TU. Answers "what command line compiles this file" |
 | `cpp_format_file` | Format a C++ file in place with clang-format, but only when a `.clang-format` is discoverable by walking up from the file. No-op-with-message otherwise (the daScript tree ships none) |
 
-**Compile DB requirement.** `cpp_compile_check` / `cpp_build_info` need `build/compile_commands.json`. The top-level `CMakeLists.txt` sets `CMAKE_EXPORT_COMPILE_COMMANDS ON`, but only the **Ninja and Makefile** generators honor it — the **Visual Studio generator does not emit the DB**, so on Windows use a side Ninja build dir (the tools probe `build/`, `build-ninja/`, then `build*/`; pass `build_dir` to override). Headers aren't translation units (not in the DB) — pass a `.cpp`/`.cc` that includes them. On **MSVC**, the DB omits system include paths (read from the `INCLUDE` env var), so launch the MCP server from a Visual Studio developer environment (`vcvars64`); clang/gcc find system headers automatically.
+**Compile DB requirement.** `cpp_compile_check` / `cpp_build_info` need `build/compile_commands.json`. The top-level `CMakeLists.txt` sets `CMAKE_EXPORT_COMPILE_COMMANDS ON`, but only the **Ninja and Makefile** generators honor it — the **Visual Studio generator does not emit the DB**, so on Windows use a side Ninja build dir (the tools probe `build/`, `build-ninja/`, then `build*/`; pass `build_dir` to override). Headers aren't translation units (not in the DB) — pass a `.cpp`/`.cc` that includes them.
+
+**Windows + MSVC: developer environment.** On MSVC the DB omits system include paths (the compiler reads them from the `INCLUDE` env var set by `vcvars64`), so the MCP server — and the `cl.exe` it spawns — must run in a Visual Studio developer environment, or `cpp_compile_check` fails on `<vcruntime.h>`. The simplest fix is to point `.mcp.json` at the bundled launcher `utils/mcp/daslang-mcp-msvc.cmd`, which locates VS via `vswhere`, loads the x64 dev environment, then starts the server — so it works no matter how Claude Code is launched:
+
+```json
+"daslang": {
+  "command": "cmd",
+  "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd"],
+  "defer_loading": false
+}
+```
+
+Alternatively, launch Claude Code itself from an *x64 Native Tools Command Prompt for VS* (the server inherits the environment). clang/gcc find their system headers automatically, so this is Windows/MSVC-only — on Linux/macOS point `.mcp.json` straight at the daslang binary.
 
 ### Duplicate Detection
 
