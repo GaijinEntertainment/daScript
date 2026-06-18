@@ -57,5 +57,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_mutual", "recursion is not supported")
         check_rejects(t, "_fc_badparam", "is not supported (only 32-bit scalar/vector/matrix parameters")
         check_rejects(t, "_fc_badret", "return type tDouble is not supported")
+        // subpass input attachments + subpassLoad are fragment-only
+        check_rejects(t, "_fc_subpass_stage", "subpassInput 'fc_subpass' is fragment-only")
     }
 }

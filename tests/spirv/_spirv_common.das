@@ -859,6 +859,25 @@ def public mrt_words : array<uint> {
     return <- w
 }
 
+// ===== Subpass input attachment: a Vulkan deferred-rendering rail (tutorial 10 lighting subpass).
+// Reads a previous subpass's color/depth at the SAME fragment coordinate via subpassLoad. The
+// opaque type subpassInput lowers to OpTypeImage Dim=SubpassData (Sampled=2, no format) decorated
+// with InputAttachmentIndex (from @input_attachment_index); subpassLoad emits OpImageRead with an
+// internal int2(0,0) coord. Requires the InputAttachment capability. =====
+var @set = 0 @binding = 0 @input_attachment_index = 0 sp_color : subpassInput
+var @out @location = 0 sp_out : float4
+[fragment_shader(name="subpass_spv"), marker(no_coverage)]
+def subpass_load_frag {
+    let sample = subpassLoad(sp_color)         // OpImageRead -> read color from prev subpass
+    sp_out = float4(sample.x, sample.y, sample.z, 1.0f)
+}
+
+def public subpass_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(subpass_spv)
+    return <- w
+}
+
 // ===== Phase-10.5 compute-tier fixtures: shared memory + barriers + atomics =====
 // cshared: a workgroup-shared scratch array (`@workgroup`, GLSL `shared` -> Workgroup OpVariable),
 // the control + shared-memory sync (barrier() -> OpControlBarrier, memoryBarrierShared() ->
