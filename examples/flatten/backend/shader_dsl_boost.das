@@ -892,13 +892,18 @@ class ValidateShaderVisitor : AstVisitor {
         let fn = native_bare_name("{expr.func.name}")
         var nativeOp = NATIVE_OPCODE?[fn] ?? ""
         if (nativeOp == "" && !empty(expr.arguments)) {
+            // dot/length/normalize: width-specific opcode, ONLY for an exact float2/3/4 operand
+            // (and arity). Any other type leaves nativeOp empty so an unrelated overload — e.g.
+            // length(string)/length(array) — falls through to the "unsupported function call"
+            // rejection rather than silently emitting len_f3 (fail-closed).
             let w = expr.arguments[0]._type.baseType
-            if (fn == "dot") {
-                nativeOp = w == Type.tFloat2 ? DotF2 : (w == Type.tFloat4 ? DotF4 : DotF3)
-            } elif (fn == "length") {
-                nativeOp = w == Type.tFloat2 ? LenF2 : (w == Type.tFloat4 ? LenF4 : LenF3)
-            } elif (fn == "normalize") {
-                nativeOp = w == Type.tFloat2 ? NormF2 : (w == Type.tFloat4 ? NormF4 : NormF3)
+            let nargs = expr.arguments.length()
+            if (fn == "dot" && nargs == 2) {
+                nativeOp = w == Type.tFloat2 ? DotF2 : (w == Type.tFloat3 ? DotF3 : (w == Type.tFloat4 ? DotF4 : ""))
+            } elif (fn == "length" && nargs == 1) {
+                nativeOp = w == Type.tFloat2 ? LenF2 : (w == Type.tFloat3 ? LenF3 : (w == Type.tFloat4 ? LenF4 : ""))
+            } elif (fn == "normalize" && nargs == 1) {
+                nativeOp = w == Type.tFloat2 ? NormF2 : (w == Type.tFloat3 ? NormF3 : (w == Type.tFloat4 ? NormF4 : ""))
             }
         }
         if (nativeOp != "") {
