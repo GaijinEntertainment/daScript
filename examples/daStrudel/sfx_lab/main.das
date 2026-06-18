@@ -1212,3 +1212,20 @@ def sfx_save(input : JsonValue?) : JsonValue? {
     do_save_sound(path)
     return JV("saved {path}")
 }
+
+struct AddLayerArgs {
+    kind : string = "sfxr"
+    name : string = "layer"
+}
+
+[live_command(description = "SFX lab: add a new voice layer (kind = sfxr | modal), selected at the end; tune it with sfx_set_layer using its index. Args: kind, name.")]
+def sfx_add_layer(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<AddLayerArgs>)
+    if (args.kind == "modal") {
+        add_layer(modal_layer(args.name, ModalVoice()))
+    } else {
+        add_layer(sfxr_layer(args.name, SfxrSound()))
+    }
+    rebuild_mix()
+    return make_report()
+}

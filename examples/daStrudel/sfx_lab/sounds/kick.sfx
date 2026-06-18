@@ -7,24 +7,121 @@
       "voice":{
         "modal":{
           "pitch":86,
-          "spread":1.10000002,
+          "spread":1.02199996,
           "n_modes":1,
-          "ring":0.180000007,
-          "brightness":0.200000003,
-          "damp_skew":0.699999988,
-          "transient":0.150000006,
-          "transient_rate":600,
-          "echo_amount":0,
+          "ring":0.0390000008,
+          "brightness":0.0900000036,
+          "damp_skew":0.693000019,
+          "transient":0.449999988,
+          "transient_rate":612.838013,
+          "echo_amount":0.330000013,
           "echo_delay":0.0399999991,
-          "duration":0.400000006
+          "duration":0.783999979
         }
       },
-      "gain":1,
+      "gain":1.22099996,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    },
+    {
+      "name":"noise top",
+      "voice":{
+        "sfxr":{
+          "wave":"noise",
+          "sound_vol":0.5,
+          "env_attack":0,
+          "env_sustain":0,
+          "env_punch":0,
+          "env_decay":0.123999998,
+          "base_freq":0.300000012,
+          "freq_limit":0,
+          "freq_ramp":0,
+          "freq_dramp":0,
+          "vib_strength":0,
+          "vib_speed":0,
+          "arp_mod":0,
+          "arp_speed":0,
+          "duty":0,
+          "duty_ramp":0,
+          "repeat_speed":0,
+          "pha_offset":0,
+          "pha_ramp":0,
+          "lpf_freq":0.400000006,
+          "lpf_ramp":0,
+          "lpf_resonance":0,
+          "hpf_freq":0.0799999982,
+          "hpf_ramp":0
+        }
+      },
+      "gain":0.0379999988,
       "delay":0,
       "enabled":true,
       "solo":false,
       "locked":false,
       "link_source":-1
     }
-  ]
+  ],
+  "post":{
+    "filter":{
+      "enabled":false,
+      "position":0.5
+    },
+    "bandpass":{
+      "enabled":false,
+      "freq":1000,
+      "q":1
+    },
+    "drive":{
+      "enabled":false,
+      "drive":1
+    },
+    "crush":{
+      "enabled":false,
+      "bits":8,
+      "coarse":0
+    },
+    "comp":{
+      "enabled":false,
+      "threshold":-18,
+      "ratio":4,
+      "knee":10,
+      "attack":0.00499999989,
+      "release":0.0500000007
+    },
+    "chorus":{
+      "enabled":false,
+      "rate":1,
+      "depth":3,
+      "feedback":0.300000012,
+      "delay_ms":7,
+      "wet":0.5
+    },
+    "phaser":{
+      "enabled":false,
+      "rate":1,
+      "depth":0.5,
+      "center":1000,
+      "sweep":2000
+    },
+    "tremolo":{
+      "enabled":false,
+      "rate":5,
+      "depth":0.5
+    },
+    "delay":{
+      "enabled":false,
+      "time":0.25,
+      "feedback":0.300000012
+    },
+    "reverb":{
+      "enabled":true,
+      "wet":0.465999991,
+      "decay":2.34200001,
+      "lp_start":12000,
+      "lp_end":2000
+    }
+  }
 }
