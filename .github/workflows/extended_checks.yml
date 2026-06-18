@@ -82,13 +82,20 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       continue-on-error: true
-      # Real-time Defender scans every .obj/.exe/.dll the build writes and every
-      # process + DLL load at test time; excluding the workspace cuts Windows CI
-      # wall-time. continue-on-error: a managed-Defender runner must not fail CI.
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail CI.
       run: |
-        Add-MpPreference -ExclusionPath "${{ github.workspace }}"
-        Add-MpPreference -ExclusionProcess "daslang.exe"
-        Add-MpPreference -ExclusionProcess "daslang_static.exe"
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
