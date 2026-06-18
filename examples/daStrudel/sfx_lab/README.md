@@ -1,9 +1,9 @@
 # SFX Lab
 
 An interactive procedural sound-effect workbench built on the daStrudel audio engine.
-Tweak a full **sfxr**-style synth with sliders, fire the classic presets, randomize/mutate,
-and watch the rendered **waveform + spectrum** (ImPlot) update live. Play with the button
-(or autoplay on a preset).
+A **sound** is a stack of **layers** — each an **sfxr** (subtractive) or **modal** (struck/resonant)
+voice with its own gain + onset delay, mixed. Build it from the docked panels, audition each layer
+or the whole mix, and watch the rendered **waveform + spectrum** (ImPlot) update live.
 
 ## Components
 
@@ -14,7 +14,11 @@ and watch the rendered **waveform + spectrum** (ImPlot) update live. Play with t
   daslang examples/daStrudel/sfx_lab/sfxr_presets.das
   ```
 
-- `main.das` — the interactive GUI workbench (sliders + presets + live waveform/spectrum plots).
+- `main.das` — the interactive GUI workbench. Docked panels (re-dock freely; layout persists in
+  `imgui.ini`): **Layers** (add sfxr/modal, select, mute, duplicate, dup-linked, delete, ▶ play),
+  **Editor** (the selected layer's voice params + gain/delay/lock + a collapsible layer preview),
+  and **Mix** (the summed waveform + spectrum). See `PLAN.md` for the roadmap (reference target,
+  save/load, drum re-authoring).
 
 ## Running the GUI
 
@@ -40,6 +44,5 @@ The sound generators live in `modules/dasAudio/strudel/` and are reusable on the
 
 - `strudel_sfxr` — faithful sfxr-style subtractive voice (`render_sfxr`, presets, randomize/mutate).
 - `strudel_modal` — modal impact voice for struck/resonant sounds (`render_modal_voice`).
-
-A future revision turns the lab into a **multi-layer** tool: a sound = a stack of sfxr/modal
-voices with per-voice gain + onset delay, summed.
+- `strudel_sfx` — the multi-layer model: `Layer` (sfxr or modal voice + gain + delay) and
+  `render_sound(layers)`. Reusable by games (load a saved sound and render it).
