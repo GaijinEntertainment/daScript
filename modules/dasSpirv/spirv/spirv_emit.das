@@ -62,6 +62,7 @@ struct EmitCtx {
     uses_frag_depth : bool                      // gl_FragDepth referenced (Output-only, so = written) -> emit DepthReplacing
     image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
     input_attachment_cap : bool                 // OpCapability InputAttachment already emitted (subpassLoad)
+    draw_parameters_cap : bool                  // OpCapability DrawParameters already emitted (gl_DrawID)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
@@ -138,6 +139,7 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
     if (name == "gl_PointSize") return (ok = true, bi = SpvBuiltIn.PointSize, storage = SpvStorageClass.Output, req = ShaderStage.Vertex)
     if (name == "gl_VertexIndex") return (ok = true, bi = SpvBuiltIn.VertexIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
     if (name == "gl_InstanceIndex") return (ok = true, bi = SpvBuiltIn.InstanceIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
+    if (name == "gl_DrawID") return (ok = true, bi = SpvBuiltIn.DrawIndex, storage = SpvStorageClass.Input, req = ShaderStage.Vertex)
     // fragment
     if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
     if (name == "gl_FragDepth") return (ok = true, bi = SpvBuiltIn.FragDepth, storage = SpvStorageClass.Output, req = ShaderStage.Fragment)
@@ -364,6 +366,11 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // fixed-function depth and must declare DepthReplacing. Flagged here at classification.
         if (bi.bi == SpvBuiltIn.FragDepth) {
             ctx.uses_frag_depth = true
+        }
+        // gl_DrawID -> BuiltIn DrawIndex pulls in the DrawParameters capability (the multi-draw
+        // draw-call ordinal isn't part of the base Shader cap).
+        if (bi.bi == SpvBuiltIn.DrawIndex) {
+            ensure_draw_parameters(m, ctx)
         }
         return
     }
@@ -843,6 +850,14 @@ def private ensure_input_attachment(var m : SpirvModule; var ctx : EmitCtx) {
     if (ctx.input_attachment_cap) return
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.InputAttachment))
     ctx.input_attachment_cap = true
+}
+
+// gl_DrawID -> BuiltIn DrawIndex requires the DrawParameters capability (in SPIR-V core at 1.3, no
+// extension needed at our target). Emit-once + ctx-flag dedupe.
+def private ensure_draw_parameters(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.draw_parameters_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.DrawParameters))
+    ctx.draw_parameters_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U

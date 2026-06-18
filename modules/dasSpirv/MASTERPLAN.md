@@ -1475,3 +1475,92 @@ i.e. the copy-out genuinely lands the value back through the reference.
 3. **`marker(no_coverage)` fixtures still drive the emitter's own LCOV.** The marker suppresses the
    *shader's* coverage instrumentation (which would corrupt the SPIR-V), not the emitter-side line coverage
    collected while the fixture compiles — so the function fixtures still exercise the new emit paths.
+
+---
+
+## Active backlog — frontend prerequisites for the remaining tutorial arc (audited 2026-06-18)
+
+After Tutorial 10 (deferred shading) landed, an emitter audit (MASTERPLAN + PHASE6/7/8/9.md +
+dasVulkan/ROADMAP.md cross-referenced against `spirv_emit.das`/`spirv_grammar.das`/`spirv_builtins.das`)
+identified the **hard prerequisites** for the unbuilt tutorials (#11 HDR+bloom, #12 GPU-driven, #13 mesh).
+Listed smallest-first; each PR ships with its golden + census + spirv-val gate and, where relevant, a
+local-GPU behavioral proof through dasVulkan.
+
+### Bindless track — gates Tutorial 12 (GPU-driven)
+
+- **PR-A. `gl_DrawID` builtin + `DrawParameters` capability.** Single `builtin_info` row + capability
+  emission. `OpenCL` / Vulkan `BuiltIn DrawIndex = 4426`; grammar already has the enumerant. Smallest
+  piece; proves the workflow before the bigger ones.
+- **PR-B. `nonuniformEXT()` intrinsic + `NonUniform` decoration.** `spirv_grammar.das` already has
+  `Decoration.NonUniform = 5300` and `Capability.RuntimeDescriptorArray = 5302`; never emitted today.
+  Add a `nonuniformEXT(x)` intrinsic in `spirv_builtins.das` + a `visitExprCall` interception that
+  emits the `NonUniform` decoration on the underlying access-chain result id.
+- **PR-C. Descriptor arrays (`sampler2D[]` etc.).** Classify in `classify_global`; reflection plumbing
+  for variable-count bindings (`descriptorBindingVariableDescriptorCount`); host-side handler.
+  Unblocks the dasVulkan bindless descriptor helper (ROADMAP Arc PR 8) and Tutorial 12.
+
+### Mesh-shader track — gates Tutorial 13
+
+- **PR-D. Mesh/task stage scaffolding.** Add `ShaderStage.Mesh` / `ShaderStage.Task` + `[mesh_shader]` /
+  `[task_shader]` annotations; widen the hardcoded vert/frag/compute exec-model dispatch at
+  `spirv_emit.das:~2911`. Emit `MeshShadingEXT = 5283` capability + `OutputVertices` /
+  `OutputPrimitivesEXT` / `OutputTrianglesEXT` execution modes; `LocalSize` reused.
+- **PR-E. Mesh intrinsics + array-of-builtin classification.** `SetMeshOutputsEXT` →
+  `OpSetMeshOutputsEXT = 5295`; `EmitMeshTasksEXT` → `OpEmitMeshTasksEXT = 5294`. The **novel surface**:
+  per-vertex / per-primitive Output **arrays of builtins** (`gl_MeshVerticesEXT[]` → BuiltIn Position
+  per-vertex; `gl_PrimitiveTriangleIndicesEXT[]` → uvec3 array). Every existing builtin is scalar/vec —
+  this is new ground in `classify_global` / `builtin_info`.
+- **PR-F. `PerPrimitiveEXT` decoration + polish.** Grammar has the enumerant; emit on per-primitive
+  outputs. Task-shader payload via `TaskPayloadWorkgroupEXT` storage class.
+
+### Independent — shipped-surface gaps surfaced by the audit (no tutorial dependency, fold in opportunistically)
+
+- **PR-G. UBO / SSBO nested struct + array-in-struct.** `build_block_struct` (`spirv_emit.das:~231-234`)
+  walks one level; nested structs and arrays inside a Block are rejected. This is the root of the
+  recurring "sibling field reads as 0" surprise behind dasVulkan PR #31's push-constant case — the host
+  walker stopped short *because the emitter does too*. Fix unblocks more interesting UBOs in any
+  subsequent tutorial.
+- **Storage-image formats beyond `Rgba8`.** Currently hardcoded in `storage_image_info`. No current
+  blocker; queue for any HDR-compute pipeline.
+- **Image sampling — `Gather` / `Proj` / offset operand / `OpImageQueryLevels` / `OpImageQueryLod` /
+  `OpImageQuerySamples`.** Wishlist; no current blocker.
+- **Atomics — 64-bit (`Int64Atomics`), float (`AtomicFloat32AddEXT`).** Wishlist.
+- **Missing sampler types — `sampler2DMS`, `samplerCubeShadow`, `sampler2DArrayShadow`.** Declare in
+  `spirv_builtins.das` when a tutorial needs them.
+- **Wider numeric types — 16-bit (`Float16`/`Int16` caps) and 64-bit (`Float64`/`Int64`).** `double`
+  rejected for shader function params (`spirv_emit.das:~2730`); `var d : double` rejected. No tutorial
+  blocker.
+- **Interpolation qualifiers beyond `@flat`** — `noperspective` / `centroid` / `sample`. No blocker.
+
+### Explicit non-goals (clarified by the audit, do not plan)
+
+- **Geometry / tessellation stages.** Obviated by mesh shaders; explicitly out of scope.
+- **`OpSwitch`.** daslang has no `switch`/`case` keyword. Out of scope at the language level.
+- **`PhysicalStorageBuffer` (BDA).** Requires SPIR-V > 1.3; defer until a `spirv_version` annotation
+  arg lands (the existing version-knob plan).
+- **`PHASE6_VISITOR_PORT.md` / `PHASE7_TEXTURES.md` / `PHASE8_LANGUAGE.md` / `PHASE9_TUTORIALS.md`.**
+  Fully shipped; content captured in the Implementation log above. Standalone files are stale and
+  superseded by this section + the LANDED entries. Candidate for a hygiene-PR archival pass.
+
+### Tutorial-11 (HDR + bloom)
+
+ROADMAP confirms **zero emitter prerequisite** — HDR is a runtime render-target format choice on the
+dasVulkan side (float16/32 color attachments + additive blending), and the bloom blur passes use
+already-shipped storage-image read/write + sampling. Can ship between tracks as a pure dasVulkan PR.
+
+### Suggested ordering
+
+```
+PR-A: gl_DrawID + DrawParameters cap                   (smallest, proves the workflow)
+PR-B: nonuniformEXT + NonUniform decoration            (small)
+PR-C: descriptor arrays                                (medium; unblocks bindless host helper)
+       └─ then Tutorial 12 path opens
+PR-D: mesh/task stage scaffolding                      (medium; capability + exec modes)
+PR-E: mesh intrinsics + array-of-builtin classify      (largest; novel surface)
+PR-F: PerPrimitiveEXT + polish
+       └─ then Tutorial 13 path opens
+PR-G: UBO/SSBO nested struct + array-in-struct         (independent; fixes recurring surprise)
+PR-H: plan-doc archival sweep                          (no code; deletes PHASE6/7/8/9.md)
+```
+
+Tutorial 11 (HDR+bloom) is independent and can slot in any time — no emitter dependency.

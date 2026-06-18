@@ -20,6 +20,7 @@ var gl_Position             : float4    // BuiltIn Position (Output)
 var gl_PointSize            : float     // BuiltIn PointSize (Output) — point size in pixels when rasterising POINT_LIST; needs the largePoints device feature for values > 1
 var gl_VertexIndex          : int       // BuiltIn VertexIndex (Input)
 var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
+var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-draw draw call ordinal; needs the DrawParameters capability (in core in SPIR-V 1.3)
 
 // fragment
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
