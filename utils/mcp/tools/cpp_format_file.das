@@ -44,11 +44,14 @@ def get_clang_format_cmd() : string {
 }
 
 // Walk up from `start_dir` looking for a .clang-format / _clang-format file.
-// Returns the directory containing it, or "" if none up to the filesystem root.
+// Returns the full path to the config file found, or "" if none up to the root.
 def private find_clang_format_config(start_dir : string) : string {
     var dir = start_dir
     while (!empty(dir)) {
-        if (fexist(path_join(dir, ".clang-format")) || fexist(path_join(dir, "_clang-format"))) return dir
+        let dot = path_join(dir, ".clang-format")
+        if (fexist(dot)) return dot
+        let under = path_join(dir, "_clang-format")
+        if (fexist(under)) return under
         let parent = dir_name(dir)
         if (parent == dir || empty(parent)) break
         dir = parent
@@ -65,8 +68,8 @@ def do_cpp_format_file(file : string) : string {
     let abs_file = resolve_path(file)
     if (!fexist(abs_file)) return one_result(CppFormatResult(file = file, status = "error", message = "file not found: {file}"), true)
     let rel = make_relative_path(abs_file, get_das_root())
-    let cfg_dir = find_clang_format_config(dir_name(abs_file))
-    if (empty(cfg_dir)) {
+    let cfg_path = find_clang_format_config(dir_name(abs_file))
+    if (empty(cfg_path)) {
         return one_result(CppFormatResult(file = rel, status = "no_config",
             message = "no .clang-format found walking up from the file — skipped (no style to apply). Expected in the daScript tree, which ships none."))
     }
@@ -81,7 +84,6 @@ def do_cpp_format_file(file : string) : string {
         return one_result(CppFormatResult(file = rel, status = "error",
             message = "clang-format failed (exit {rc}): {strip(output)}"), true)
     }
-    let cfg_rel = make_relative_path(path_join(cfg_dir, ".clang-format"), get_das_root())
     return one_result(CppFormatResult(file = rel, status = "formatted",
-        message = "formatted in place using style from {cfg_rel}"))
+        message = "formatted in place using style from {make_relative_path(cfg_path, get_das_root())}"))
 }

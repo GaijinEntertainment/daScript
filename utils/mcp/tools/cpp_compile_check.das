@@ -122,8 +122,35 @@ def private find_entry(entries : array<CompileEntry>; abs_file : string) : int {
     return -1
 }
 
+// Whitespace tokenizer that respects double-quotes, so a quoted argument with
+// spaces (e.g. `/I"C:\Program Files\inc"` or `-isystem "/path with spaces"`)
+// stays one token. Quotes are preserved — the tokens are rejoined and handed to
+// the shell, which needs them.
 def private split_ws(s : string) : array<string> {
-    return [for (tok in split(s, " ")); tok; where !empty(tok)]
+    var out : array<string>
+    peek_data(s) $(bytes) {
+        let n = length(bytes)
+        var i = 0
+        while (i < n) {
+            while (i < n && (bytes[i] == uint8(' ') || bytes[i] == uint8('\t'))) {
+                i++
+            }
+            if (i >= n) break
+            let start = i
+            var in_quote = false
+            while (i < n) {
+                let ch = bytes[i]
+                if (ch == uint8('"')) {
+                    in_quote = !in_quote
+                } elif (!in_quote && (ch == uint8(' ') || ch == uint8('\t'))) {
+                    break
+                }
+                i++
+            }
+            out |> push(slice(s, start, i))
+        }
+    }
+    return <- out
 }
 
 // MSVC / clang-cl drivers emit /Fo for the object output; GNU drivers emit -o.
@@ -186,9 +213,16 @@ def private filter_compiler_noise(output, src_base : string) : string {
 }
 
 // popen captures stdout only; compiler diagnostics go to stderr — merge with 2>&1.
-def private run_syntax_check(cmd : string; var output : string&) : int {
+// Run from the entry's `directory`: most compile DBs use absolute paths (so cwd
+// is moot), but some producers emit relative include/source paths that only
+// resolve from there.
+def private run_syntax_check(work_dir, cmd : string; var output : string&) : int {
+    // `cd /d` (Windows) handles a different drive and accepts the DB's
+    // generic-path `directory` as-is; `cd` is the POSIX form.
+    let cd = get_platform_name() == "windows" ? "cd /d" : "cd"
+    let full = empty(work_dir) ? "{cmd} 2>&1" : "{cd} \"{work_dir}\" && {cmd} 2>&1"
     var captured : string
-    let rc = unsafe(popen_timeout("{cmd} 2>&1", 180.0, $(f) {
+    let rc = unsafe(popen_timeout(full, 180.0, $(f) {
         if (f == null) return
         captured = build_string() $(var w) {
             while (!feof(f)) {
@@ -224,7 +258,7 @@ def do_cpp_compile_check(file : string; build_dir : string = ""; json : bool = f
     let e = entries[idx]
     let is_msvc = command_is_msvc(e.command)
     var output : string
-    let rc = run_syntax_check(to_syntax_only(e.command, is_msvc), output)
+    let rc = run_syntax_check(e.directory, to_syntax_only(e.command, is_msvc), output)
     let timed_out = rc == popen_timed_out
     let success = rc == 0 && !timed_out
     let rel = make_relative_path(abs_file, get_das_root())

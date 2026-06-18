@@ -185,7 +185,7 @@ def make_tool(name, description : string; var props : table<string; PropertySche
 
 def handle_tools_list(id_json : string) : string {
     var result : ToolsListResult
-    result.tools |> emplace(make_tool(
+    result.tools |> emplace(make_tool( // nolint:STYLE012
         "compile_check",
         "Compile daScript file(s) and return errors or success. Supports single file, comma-separated list, or glob pattern (e.g. 'utils/mcp/tools/*.das'). Batch mode reports pass/fail per file with summary.",
         {
@@ -390,7 +390,7 @@ def handle_tools_list(id_json : string) : string {
         ["module"]
     ))
     if (ast_grep_available) {
-        result.tools |> emplace(make_tool(
+        result.tools |> emplace(make_tool( // nolint:STYLE012
             "grep_usage",
             "Parse-aware symbol search across .das files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Much faster than compilation-based search.",
             {
@@ -453,7 +453,7 @@ def handle_tools_list(id_json : string) : string {
             ["file", "line", "column"]
         ))
     }
-    result.tools |> emplace(make_tool(
+    result.tools |> emplace(make_tool( // nolint:STYLE012
         "cpp_compile_check",
         "Syntax-check a C++ translation unit using the project's compile_commands.json (clangd-free). Takes the TU's exact flags from the compile DB, strips the codegen tail, and runs cl /Zs (MSVC) or -fsyntax-only (clang/gcc). Requires a CMake build configured with CMAKE_EXPORT_COMPILE_COMMANDS=ON (Ninja/Makefiles emit it; the Visual Studio generator does NOT — use a side Ninja build dir on Windows). On MSVC the spawned compiler needs a developer environment (INCLUDE/LIB from vcvars), since the compile DB omits system include paths. Headers aren't translation units — pass a .cpp/.cc that includes them.",
         {
