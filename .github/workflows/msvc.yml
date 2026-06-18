@@ -46,7 +46,11 @@ jobs:
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: Configure CMake
-      run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 17 2022"
+      # Generator pinned to the VS major on the windows-latest-fat image. GitHub
+      # migrated it from VS2022 (v17) to VS2026 (v18); bump in lockstep (see
+      # build.yml's build_windows_clangcl). On a mismatch, configure dies at
+      # project() with "could not find any instance of Visual Studio".
+      run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 18 2026"
 
     - name: Build CMake
       run: cmake --build ${{ env.CONFIG_DIR }} --config ${{ matrix.cmake_configuration }}
