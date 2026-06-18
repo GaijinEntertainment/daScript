@@ -16,6 +16,7 @@ require audio/audio_boost
 require audio/audio_wav
 require strudel/strudel_sfx
 require sfx_icons
+require minfft
 require daslib/fio
 require math
 
@@ -55,75 +56,33 @@ var private ROW_SL3 : table<int; EmptyMarkerState>
 
 // ===== DSP / plot helpers =====
 
-def private fft(var re, im : array<float>) {
-    let n = length(re)
-    var j = 0
-    for (i in range(1, n)) {
-        var bit = n >> 1
-        while ((j & bit) != 0) {
-            j = j ^ bit
-            bit = bit >> 1
-        }
-        j = j | bit
-        if (i < j) {
-            let tr = re[i]; re[i] = re[j]; re[j] = tr
-            let ti = im[i]; im[i] = im[j]; im[j] = ti
-        }
-    }
-    var len = 2
-    while (len <= n) {
-        let half = len / 2
-        let ang = -TWO_PI / float(len)
-        let wr = cos(ang)
-        let wi = sin(ang)
-        var i = 0
-        while (i < n) {
-            var cr = 1.0
-            var ci = 0.0
-            for (k in range(half)) {
-                let a = i + k
-                let b = a + half
-                let xr = re[b] * cr - im[b] * ci
-                let xi = re[b] * ci + im[b] * cr
-                re[b] = re[a] - xr
-                im[b] = im[a] - xi
-                re[a] = re[a] + xr
-                im[a] = im[a] + xi
-                let ncr = cr * wr - ci * wi
-                ci = cr * wi + ci * wr
-                cr = ncr
-            }
-            i = i + len
-        }
-        len = len << 1
-    }
-}
-
 def private compute_spectrum(buf : array<float>; var out : array<float>) {
     let N = 2048
-    var re : array<float>
-    var im : array<float>
-    re |> resize(N)
-    im |> resize(N)
+    var win : array<float>
+    win |> resize(N)
     let m = min(length(buf), N)
     for (i in range(N)) {
-        im[i] = 0.0
         if (i < m) {
-            let w = 0.5 - 0.5 * cos(TWO_PI * float(i) / float(N - 1))
-            re[i] = buf[i] * w
+            let w = 0.5 - 0.5 * cos(TWO_PI * float(i) / float(N - 1))  // Hann window
+            win[i] = buf[i] * w
         } else {
-            re[i] = 0.0
+            win[i] = 0.0
         }
     }
-    fft(re, im)
-    let half = N / 2
-    out |> resize(half)
-    for (i in range(half)) {
-        let mag = sqrt(re[i] * re[i] + im[i] * im[i]) / float(half)
-        out[i] = 20.0 * log(mag + 1.0e-9) * INV_LN10
+    // fast FFT from the minfft module (real -> complex), then magnitudes -> dB
+    var cplx : array<float2>
+    fft_real_forward(win, cplx)
+    var mags : array<float>
+    fft_calculate_magnitudes(cplx, mags)
+    let nrm = float(N) * 0.5
+    let n = length(mags)
+    out |> resize(n)
+    for (i in range(n)) {
+        out[i] = 20.0 * log(mags[i] / nrm + 1.0e-9) * INV_LN10
     }
-    delete re
-    delete im
+    delete win
+    delete cplx
+    delete mags
 }
 
 def private downsample(buf : array<float>; var out : array<float>; maxpts : int) {
@@ -510,11 +469,11 @@ def editor_panel() {
 
     collapsing_header(PREVIEW_H, (text = "layer preview", closable = false, flags = ImGuiTreeNodeFlags.None)) {
         plot(PV_WAVE, (title = "layer waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
-            setup_axes_limits(0.0lf, double(max(length(g_lyr_wave), 1)), -1.0lf, 1.0lf)
+            setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
             plot_line("layer", g_lyr_wave)
         }
         plot(PV_SPEC, (title = "layer spectrum (dB)", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
-            setup_axes_limits(0.0lf, double(max(length(g_lyr_spec), 1)), -80.0lf, 0.0lf)
+            setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
             plot_line("layer", g_lyr_spec)
         }
     }
@@ -609,14 +568,14 @@ def modal_editor() : bool {
 
 def mix_panel() {
     plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes_limits(0.0lf, double(max(length(g_mix_wave), 1)), -1.0lf, 1.0lf)
+        setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("mix", g_mix_wave)
         if (g_show_ref && !empty(g_ref_wave)) {
             plot_line("reference", g_ref_wave)
         }
     }
     plot(MIX_SPEC, (title = "mix spectrum (dB)", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes_limits(0.0lf, double(max(length(g_mix_spec), 1)), -80.0lf, 0.0lf)
+        setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("mix", g_mix_spec)
         if (g_show_ref && !empty(g_ref_spec)) {
             plot_line("reference", g_ref_spec)
@@ -638,11 +597,11 @@ def reference_panel() {
     g_show_ref = REF_SHOW.value
     text(REF_NAME, (text = g_ref_name))
     plot(REF_WAVE, (title = "reference waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
-        setup_axes_limits(0.0lf, double(max(length(g_ref_wave), 1)), -1.0lf, 1.0lf)
+        setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("ref", g_ref_wave)
     }
     plot(REF_SPEC, (title = "reference spectrum (dB)", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
-        setup_axes_limits(0.0lf, double(max(length(g_ref_spec), 1)), -80.0lf, 0.0lf)
+        setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("ref", g_ref_spec)
     }
 }
