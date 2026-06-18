@@ -1248,6 +1248,20 @@ if (NOT ${DAS_TOOLS_DISABLED})
         SETUP_LTO(${target_name})
     ENDMACRO()
 
+    # Relative RPATH so an installed binary in bin/ finds the shared libs in ../lib.
+    MACRO(SETUP_BIN_RPATH target_name)
+        if(APPLE)
+            SET_TARGET_PROPERTIES(${target_name} PROPERTIES
+                INSTALL_RPATH "@loader_path/../lib"
+                CMAKE_MACOSX_RPATH ON
+            )
+        elseif(UNIX)
+            SET_TARGET_PROPERTIES(${target_name} PROPERTIES
+                INSTALL_RPATH "\$ORIGIN/../lib"
+            )
+        endif()
+    ENDMACRO()
+
     SETUP_COMPILER_BINARY(daslang_static libDaScript DAS_MODULES_LIBS "")
 
     # Dynamic/DLL compiler binary — the default shipped binary.
@@ -1257,16 +1271,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     target_sources(daslang        PRIVATE src/misc/alloc_tracker_overrides.cpp)
     target_sources(daslang_static PRIVATE src/misc/alloc_tracker_overrides.cpp)
     # relative RPATH from install location
-    if(APPLE)
-        SET_TARGET_PROPERTIES(daslang PROPERTIES
-            INSTALL_RPATH "@loader_path/../lib"
-            CMAKE_MACOSX_RPATH ON
-        )
-    elseif(UNIX)
-        SET_TARGET_PROPERTIES(daslang PROPERTIES
-            INSTALL_RPATH "\$ORIGIN/../lib"
-        )
-    endif()
+    SETUP_BIN_RPATH(daslang)
     # Export daslang target, so it can be found
     # as a target (for example in aot).
     INSTALL(
@@ -1289,17 +1294,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
     SETUP_CPP11(daslang-live)
     DAS_APPLY_STRICT_WARNINGS(daslang-live)
     SETUP_LTO(daslang-live)
+    SETUP_BIN_RPATH(daslang-live)
     if(APPLE)
-        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
-            INSTALL_RPATH "@loader_path/../lib"
-            CMAKE_MACOSX_RPATH ON
-        )
         # Foundation: NSProcessInfo, used to disable App Nap at startup (dasImgui #190).
         TARGET_LINK_LIBRARIES(daslang-live "-framework Foundation")
-    elseif(UNIX)
-        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
-            INSTALL_RPATH "\$ORIGIN/../lib"
-        )
     endif()
     INSTALL(
         TARGETS daslang-live
@@ -1330,12 +1328,14 @@ if (NOT ${DAS_TOOLS_DISABLED})
     )
 
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
-    TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+    TARGET_LINK_LIBRARIES(das-fmt libDaScriptDyn ${SRC_LIBRARIES})
+    ADD_DEPENDENCIES(das-fmt libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
     target_include_directories(das-fmt PRIVATE ${NEED_MODULES_PATH})
 
     SETUP_CPP11(das-fmt)
     DAS_APPLY_STRICT_WARNINGS(das-fmt)
     SETUP_LTO(das-fmt)
+    SETUP_BIN_RPATH(das-fmt)
     install(TARGETS das-fmt RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 get_target_property(DAS_FMT_INCLUDES libDaScriptDyn INCLUDE_DIRECTORIES)
 get_target_property(DAS_FMT_DEFS das-fmt COMPILE_DEFINITIONS)

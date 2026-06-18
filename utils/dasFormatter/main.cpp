@@ -1,16 +1,28 @@
 #include "daScript/ast/ast.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/platform.h"
+#include "daScript/misc/sysos.h"
 #include "fmt.h"
 
 using namespace das;
 
+das::FileAccessPtr get_file_access( char * pak );
 
 void InitModules() {
     // register modules
     register_builtin_modules();
+#if !defined(DAS_ENABLE_DLL) || !defined(DAS_ENABLE_DYN_INCLUDES)
 #include "modules/external_need.inc"
+#endif
+#ifdef DAS_ENABLE_DYN_INCLUDES
+    daScriptEnvironment::ensure();
+    auto access = get_file_access(nullptr);
+    TextPrinter tout;
+    vector<string> load_modules;
+    require_dynamic_modules(access, getDasRoot(), "", load_modules, tout);
+#endif
     Module::Initialize();
     // compile and run
 
