@@ -350,7 +350,6 @@ let OPT_VOICE = 0      // selected layer's voice
 let OPT_POST = 1       // enabled postprocess params
 let OPT_COMBINED = 2   // all layers + enabled postprocess
 var g_opt_scope = 0
-var g_opt_skip_gain = false   // exclude layer gain from tuning (so discover can't mute its layer)
 var g_kv : array<float>    // working param vector
 var g_klo : array<float>   // per-param lower bound
 var g_khi : array<float>   // per-param upper bound
@@ -379,9 +378,7 @@ def private knob(writing : bool; var i : int&; var field : float&; lo, hi : floa
 
 // walk one layer's continuous voice params (wave / n_modes excluded — structural)
 def private voice_knobs_io(writing : bool; li : int; var i : int&) {
-    if (!g_opt_skip_gain) {
-        knob(writing, i, g_layers[li].gain, 0.0, 2.0)
-    }
+    // layer gain is the user's mix decision — the optimizer matches timbre, never touches gain
     if (g_layers[li].voice is sfxr) {
         var s = g_layers[li].voice as sfxr
         knob(writing, i, s.base_freq, 0.0, 1.0)
@@ -572,13 +569,10 @@ def discover(modal : bool; iters : int) : float {
     } else {
         add_layer(sfxr_layer("discover", SfxrSound()))
     }
-    g_opt_skip_gain = true                            // discover tunes TIMBRE, never gain — so the
-    randomize_scope(OPT_VOICE)                        // new layer can't be optimized down to silence
-    g_layers[g_sel].gain = 0.7                        // hold it audible
+    randomize_scope(OPT_VOICE)                        // random-init the new layer's timbre
+    g_layers[g_sel].gain = 0.7                        // hold it audible (the optimizer won't touch gain)
     optimize(OPT_VOICE, max(iters, 1))               // fit its timbre to the residual on its own
-    let f = optimize(OPT_COMBINED, max(iters / 2, 1))   // then refine all timbres together
-    g_opt_skip_gain = false
-    return f
+    return optimize(OPT_COMBINED, max(iters / 2, 1))    // then refine all timbres together
 }
 
 def run_discover() {
