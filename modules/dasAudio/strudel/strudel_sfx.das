@@ -26,6 +26,7 @@ struct Layer {
     gain : float = 1.0
     delay : float = 0.0          //!< onset delay in seconds
     enabled : bool = true        //!< mute when false
+    solo : bool = false          //!< UI: when any layer is soloed, only soloed layers play
     locked : bool = false        //!< UI: collapsed + read-only
     link_source : int = -1       //!< index of the layer this mirrors; -1 = independent
 }

@@ -15,10 +15,11 @@ or the whole mix, and watch the rendered **waveform + spectrum** (ImPlot) update
   ```
 
 - `main.das` — the interactive GUI workbench. Docked panels (re-dock freely; layout persists in
-  `imgui.ini`): **Layers** (add sfxr/modal, select, mute, duplicate, dup-linked, delete, ▶ play),
+  `imgui.ini`): **Layers** (add sfxr/modal, select, solo/mute, duplicate, dup-linked, delete, ▶ play),
   **Editor** (the selected layer's voice params + gain/delay/lock + a collapsible layer preview),
-  and **Mix** (the summed waveform + spectrum). See `PLAN.md` for the roadmap (reference target,
-  save/load, drum re-authoring).
+  **Reference** (load an external wav to mimic — view + overlay its waveform/spectrum on the Mix),
+  and **Mix** (the summed waveform + spectrum). See `PLAN.md` for the roadmap (save/load `.sfx`,
+  drum re-authoring).
 
 ## Running the GUI
 

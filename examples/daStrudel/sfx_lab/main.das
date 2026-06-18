@@ -9,10 +9,13 @@ options gen2
 require imgui/imgui_harness
 require imgui/imgui_containers_builtin
 require imgui/imgui_widgets_builtin
+require imgui/imgui_file_dialog
 require imgui/imgui_implot_boost_v2
 require implot
 require audio/audio_boost
+require audio/audio_wav
 require strudel/strudel_sfx
+require daslib/fio
 require math
 
 let SR = 44100
@@ -28,6 +31,11 @@ var g_mix_wave : array<float>
 var g_mix_spec : array<float>
 var g_lyr_wave : array<float>    // selected layer's own preview
 var g_lyr_spec : array<float>
+var g_ref : array<float>         // loaded reference target (mono @ SR)
+var g_ref_wave : array<float>
+var g_ref_spec : array<float>
+var g_ref_name = "(no reference loaded)"
+var g_show_ref = true            // overlay the reference on the mix plots
 var g_seed = 0x1234567u
 var g_autoplay = true
 var g_mix_dirty = true
@@ -39,10 +47,12 @@ var g_audio : AudioSystemChannels
 
 // per-row widget state (indexed by layer position) — must be declared at module scope
 var private LAYER_ROW : table<int; ClickState>
+var private SOLO_ROW : table<int; ClickState>
 var private MUTE_ROW : table<int; ClickState>
 var private PLAY_ROW : table<int; ClickState>
 var private ROW_SL1 : table<int; EmptyMarkerState>
 var private ROW_SL2 : table<int; EmptyMarkerState>
+var private ROW_SL3 : table<int; EmptyMarkerState>
 
 // ===== DSP / plot helpers =====
 
@@ -153,10 +163,78 @@ def play_layer(idx : int) {
 
 def rebuild_mix() {
     propagate_links(g_layers)
-    g_mix <- render_sound(g_layers)
+    // solo: if any layer is soloed, only soloed (and enabled) layers play
+    var any_solo = false
+    for (lyr in g_layers) {
+        if (lyr.solo) {
+            any_solo = true
+            break
+        }
+    }
+    var eff : array<Layer>
+    eff |> reserve(length(g_layers))
+    for (lyr in g_layers) {
+        var c = lyr
+        if (any_solo) {
+            c.enabled = lyr.enabled && lyr.solo
+        }
+        eff |> push(c)
+    }
+    g_mix <- render_sound(eff)
+    delete eff
     downsample(g_mix, g_mix_wave, 2000)
     compute_spectrum(g_mix, g_mix_spec)
     g_mix_dirty = false
+}
+
+// ===== reference target =====
+
+def private load_to_mono44k(src : array<float>; src_rate, src_ch : int) : array<float> {
+    let ch = max(src_ch, 1)
+    let frames = length(src) / ch
+    var mono : array<float>
+    mono |> resize(frames)
+    for (i in range(frames)) {
+        var s = 0.0
+        for (c in range(ch)) {
+            s += src[i * ch + c]
+        }
+        mono[i] = s / float(ch)
+    }
+    if (src_rate == SR || frames == 0) {
+        return <- mono
+    }
+    let outn = int(float(frames) * float(SR) / float(src_rate))
+    var out : array<float>
+    out |> resize(outn)
+    for (i in range(outn)) {
+        let pos = float(i) * float(src_rate) / float(SR)
+        let i0 = int(pos)
+        let frac = pos - float(i0)
+        let a = mono[min(i0, frames - 1)]
+        let b = mono[min(i0 + 1, frames - 1)]
+        out[i] = a + (b - a) * frac
+    }
+    delete mono
+    return <- out
+}
+
+def load_reference(path : string) {
+    var samples : array<float>
+    var sr = SR
+    var ch = 2
+    if (!read_wav(path, samples, sr, ch)) {
+        g_ref_name = "load failed: {base_name(path)}"
+        delete samples
+        return
+    }
+    g_ref <- load_to_mono44k(samples, sr, ch)
+    delete samples
+    downsample(g_ref, g_ref_wave, 2000)
+    compute_spectrum(g_ref, g_ref_spec)
+    g_ref_name = "{base_name(path)}  ({sr} Hz, {ch} ch)"
+    g_show_ref = true
+    REF_SHOW.value = true
 }
 
 def rebuild_layer_preview() {
@@ -355,17 +433,23 @@ def layers_panel() {
         if (g_layers[i].link_source >= 0) { marks += " [link]"; }
         let lbl = "{g_layers[i].name}  ({kind}){marks}###L{i}"
         // limit the selectable to the name column so its hit-box doesn't sit under the row buttons
-        let name_w = max(GetContentRegionAvail().x - 130.0, 80.0)
+        let name_w = max(GetContentRegionAvail().x - 180.0, 80.0)
         if (selectable_label(LAYER_ROW[i], lbl, i == g_sel, ImGuiSelectableFlags.None, float2(name_w, 0.0))) {
             g_sel = i
         }
         same_line(ROW_SL1[i])
+        let solo_lbl = (g_layers[i].solo ? "[S]" : "S") + "###solo{i}"
+        if (button(SOLO_ROW[i], (text = solo_lbl))) {
+            g_layers[i].solo = !g_layers[i].solo
+            g_mix_dirty = true
+        }
+        same_line(ROW_SL2[i])
         let on_lbl = (g_layers[i].enabled ? "on" : "off") + "###mute{i}"
         if (button(MUTE_ROW[i], (text = on_lbl))) {
             g_layers[i].enabled = !g_layers[i].enabled
             g_mix_dirty = true
         }
-        same_line(ROW_SL2[i])
+        same_line(ROW_SL3[i])
         if (button(PLAY_ROW[i], (text = "play###pl{i}"))) {
             play_layer(i)
         }
@@ -529,10 +613,39 @@ def mix_panel() {
     plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
         setup_axes_limits(0.0lf, double(max(length(g_mix_wave), 1)), -1.0lf, 1.0lf)
         plot_line("mix", g_mix_wave)
+        if (g_show_ref && !empty(g_ref_wave)) {
+            plot_line("reference", g_ref_wave)
+        }
     }
     plot(MIX_SPEC, (title = "mix spectrum (dB)", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
         setup_axes_limits(0.0lf, double(max(length(g_mix_spec), 1)), -80.0lf, 0.0lf)
         plot_line("mix", g_mix_spec)
+        if (g_show_ref && !empty(g_ref_spec)) {
+            plot_line("reference", g_ref_spec)
+        }
+    }
+}
+
+def reference_panel() {
+    if (button(REF_LOAD, (text = "Load wav..."))) {
+        file_dialog_open(FileDialogConfig(title = "Load reference audio", start_dir = "",
+            filters <- file_filters("Audio (*.wav)|wav|All files|"), mode = FileDialogMode.open, max_selection = 0))
+    }
+    same_line(REF_SL1)
+    if (button(REF_PLAY, (text = "play reference"))) {
+        play_buf_copy(g_ref)
+    }
+    same_line(REF_SL2)
+    checkbox(REF_SHOW, (text = "overlay on mix"))
+    g_show_ref = REF_SHOW.value
+    text(REF_NAME, (text = g_ref_name))
+    plot(REF_WAVE, (title = "reference waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
+        setup_axes_limits(0.0lf, double(max(length(g_ref_wave), 1)), -1.0lf, 1.0lf)
+        plot_line("ref", g_ref_wave)
+    }
+    plot(REF_SPEC, (title = "reference spectrum (dB)", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
+        setup_axes_limits(0.0lf, double(max(length(g_ref_spec), 1)), -80.0lf, 0.0lf)
+        plot_line("ref", g_ref_spec)
     }
 }
 
@@ -543,12 +656,16 @@ def setup_default_layout(dock_id : uint) {
     DockBuilderSetNodeSize(dock_id, ImVec2(vp.Size.x, vp.Size.y))
     var layers_id : uint = 0u
     var rest_id : uint = 0u
-    DockBuilderSplitNode(dock_id, ImGuiDir.Up, 0.18f, layers_id, rest_id)
+    DockBuilderSplitNode(dock_id, ImGuiDir.Up, 0.16f, layers_id, rest_id)
     var mix_id : uint = 0u
+    var mid_id : uint = 0u
+    DockBuilderSplitNode(rest_id, ImGuiDir.Down, 0.38f, mix_id, mid_id)
     var editor_id : uint = 0u
-    DockBuilderSplitNode(rest_id, ImGuiDir.Down, 0.40f, mix_id, editor_id)
+    var ref_id : uint = 0u
+    DockBuilderSplitNode(mid_id, ImGuiDir.Left, 0.60f, editor_id, ref_id)
     DockBuilderDockWindow("Layers", layers_id)
     DockBuilderDockWindow("Editor", editor_id)
+    DockBuilderDockWindow("Reference", ref_id)
     DockBuilderDockWindow("Mix", mix_id)
     DockBuilderFinish(dock_id)
 }
@@ -557,6 +674,7 @@ def start_app() {
     g_started = true
     MB_AUTO.value = true
     g_autoplay = true
+    REF_SHOW.value = true
     // seed a starter sound: the ball-on-table (thud + click), so the lab opens on a real multi-layer sound
     add_layer(modal_layer("table thud", ModalVoice(pitch = 170.0, spread = 2.4, n_modes = 2, ring = 0.05, brightness = 0.35, transient = 0.2, duration = 0.5)))
     add_layer(modal_layer("ball click", ModalVoice(pitch = 1500.0, spread = 1.6, n_modes = 4, ring = 0.05, brightness = 0.55, damp_skew = 0.9, transient = 0.6, echo_amount = 0.32, echo_delay = 0.055, duration = 0.5)))
@@ -609,9 +727,18 @@ def update() {
         dock_window(EDITOR, (text = "Editor", closable = false, flags = ImGuiWindowFlags.None)) {
             editor_panel()
         }
+        dock_window(REFERENCE, (text = "Reference", closable = false, flags = ImGuiWindowFlags.None)) {
+            reference_panel()
+        }
         dock_window(MIX, (text = "Mix", closable = false, flags = ImGuiWindowFlags.None)) {
             mix_panel()
         }
+    }
+
+    // the file dialog draws at top level (outside any window) so its path stays FILEDLG/...
+    let fdr = file_dialog_draw()
+    if (fdr == FileDialogResult.confirmed) {
+        load_reference(file_dialog_selected_path())
     }
 
     if (g_mix_dirty) {

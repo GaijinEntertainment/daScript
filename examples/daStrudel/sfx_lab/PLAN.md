@@ -110,10 +110,10 @@ gain; link them so tuning the source updates all bounces.
   layer model (docked panels, menu bar, default layout). Per-row ▶ play-layer + mute/lock; the
   selected-layer editor (sfxr/modal) with gain/delay always live. Verify each step via
   `imgui_snapshot` (panels, list rows, selection, editor, mix plot).
-- **C — inspection + comparison.** Solo/mute; the selected layer's collapsible preview
-  (its waveform/spectrum); the **Reference** panel (load/play/view) + the **reference overlay** on
-  the Mix plots; spectrum overlay of mix + per-layer. Verify via snapshot (solo state, overlay
-  series present, reference loaded).
+- **C — inspection + comparison. DONE.** Per-layer solo (additive); selected layer's collapsible
+  preview; the **Reference** panel (load wav via file dialog → `read_wav` → mono/44k; play; waveform/
+  spectrum) + **reference overlay** on the Mix plots. (Per-layer-on-mix spectrum overlay deferred to
+  polish.)
 - **D — persistence + examples.** Save/Load `.sfx`, ship the 3 example sounds, `load_sound` /
   `render_sound_file`.
 - **(final) drum re-authoring** — rebuild the strudel drum voices as `.sfx` sounds: the proof
