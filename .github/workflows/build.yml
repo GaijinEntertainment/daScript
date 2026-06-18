@@ -806,8 +806,12 @@ jobs:
 
     - name: "Build: Daslang (clang-cl / VS ClangCL toolset)"
       shell: pwsh
+      # Generator is pinned to the VS major on the runner image. GitHub migrated
+      # the windows-2025 / "latest" image from VS2022 (v17) to VS2026 (v18); on a
+      # VS2026 image "Visual Studio 17 2022" finds no instance and configure dies
+      # at project(). Bump this in lockstep with the image's VS major.
       run: |
-        cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+        cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
         if ($LASTEXITCODE -ne 0) { exit 1 }
         cmake --build build-clangcl --config Release --parallel
         if ($LASTEXITCODE -ne 0) { exit 1 }
