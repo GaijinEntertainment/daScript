@@ -126,6 +126,7 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "tri_vert", tri_vert_words())
         check_iso(t, "tri_frag", tri_frag_words())
         check_iso(t, "vindex", vindex_words())
+        check_iso(t, "draw_id", draw_id_words())
         check_iso(t, "raster_math", raster_math_words())
         check_iso(t, "catri", catri_words())
         check_iso(t, "ubo_frag", ubo_frag_words())

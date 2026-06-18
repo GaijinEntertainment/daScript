@@ -371,6 +371,16 @@ def point_size {
     gl_PointSize = 4.0f                              // BuiltIn PointSize write -> screen-space splat width
 }
 
+// vertex: gl_DrawID (BuiltIn DrawIndex Input) — the multi-draw draw-call ordinal: 0 for the first
+// vkCmdDraw / vkCmdDrawIndirect entry, 1 for the second, etc. Lets one vertex shader pick per-draw
+// data (e.g. a per-draw transform out of an SSBO) without rebinding pipeline state. Triggers the
+// DrawParameters capability emission (in core in SPIR-V 1.3).
+[vertex_shader(name="draw_id_spv"), marker(no_coverage)]
+def draw_id_vs {
+    let x = float(gl_DrawID) * 0.1f                  // BuiltIn DrawIndex read -> per-draw offset
+    gl_Position = float4(x, 0.0f, 0.0f, 1.0f)
+}
+
 // fragment: gl_PointCoord (BuiltIn PointCoord Input) — the UV inside a rasterised point primitive,
 // [0,1]^2 with (0.5, 0.5) at the centre of the sprite. Lets a fragment shader compute a circular
 // mask + soft falloff for "pretty point sprites" without uploading a texture; valid only when the
@@ -428,6 +438,12 @@ def public tri_vert_words : array<uint> {
 def public point_size_words : array<uint> {
     var w : array<uint>
     w |> push_from(point_size_spv)
+    return <- w
+}
+
+def public draw_id_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(draw_id_spv)
     return <- w
 }
 

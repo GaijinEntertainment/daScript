@@ -111,6 +111,35 @@ def test_vertex_point_size(t : T?) {
     }
 }
 
+// gl_DrawID -> BuiltIn DrawIndex on a vertex-stage Input variable + the DrawParameters capability
+// (the multi-draw draw-call ordinal isn't part of the base Shader cap, so the emitter must add the
+// capability when the builtin is referenced).
+[test]
+def test_vertex_draw_id(t : T?) {
+    t |> run("vertex: gl_DrawID (BuiltIn DrawIndex Input) + DrawParameters capability") <| @(t : T?) {
+        var words <- draw_id_words()
+        let vmodel = op_first_operand(words, SpvOp.EntryPoint)
+        t |> success(vmodel.ok && vmodel.value == uint(SpvExecutionModel.Vertex),
+            "draw_id: EntryPoint model is Vertex")
+        // gl_DrawID -> BuiltIn DrawIndex decoration on a vertex-stage Input variable
+        t |> success(has_builtin(words, SpvBuiltIn.DrawIndex),
+            "draw_id: gl_DrawID -> BuiltIn DrawIndex")
+        // DrawParameters capability emitted (the OpCapability lives in SEC_CAPS and takes the
+        // capability enumerant as its single operand). Exactly one DrawParameters OpCapability.
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.DrawParameters)),
+            "draw_id: OpCapability DrawParameters")
+        let ncap_dp = count_op_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.DrawParameters))
+        t |> success(ncap_dp == 1, "draw_id: exactly one DrawParameters cap (got {ncap_dp})")
+        // Input-storage OpVariable (the int builtin) AND an Output one (gl_Position).
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Input)),
+            "draw_id: has an Input-storage OpVariable (the DrawIndex builtin)")
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Output)),
+            "draw_id: has an Output-storage OpVariable (gl_Position)")
+        validate(t, words, "draw_id")
+        delete words
+    }
+}
+
 [test]
 def test_fragment_point_coord(t : T?) {
     t |> run("fragment: gl_PointCoord (BuiltIn PointCoord Input) for point-sprite UV") <| @(t : T?) {
