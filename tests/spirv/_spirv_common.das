@@ -622,6 +622,30 @@ def public tex_frag_words : array<uint> {
     return <- w
 }
 
+// ===== PR-C descriptor array fixture: a sampler2D[8] global -> UniformConstant OpTypeArray of
+// OpTypeSampledImage + DescriptorSet/Binding with count=8; texture(samplers[i], uv) ->
+// OpAccessChain + OpLoad + OpImageSampleImplicitLod. nonuniformEXT on the index pulls in
+// SampledImageArrayNonUniformIndexing cap + cascades NonUniform decoration onto the access-chain
+// pointer + loaded sampler (the SPIR-V propagation rule for divergent descriptor indexing).
+struct DarrPush {
+    idx : int      // offset 0; the per-invocation descriptor index
+}
+var @set = 0 @binding = 0 samplers : sampler2D[8]
+var @push_constant darr_pc : DarrPush
+var @in @location = 0 darr_uv : float2
+var @out @location = 0 darr_out : float4
+[fragment_shader(name="darr_spv"), marker(no_coverage)]
+def darr_fs {
+    let i = nonuniformEXT(darr_pc.idx)    // OpCopyObject + NonUniform decoration on the marker id
+    darr_out = texture(samplers[i], darr_uv)  // OpAccessChain (NonUniform-cascaded) + OpLoad + sample
+}
+
+def public darr_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(darr_spv)
+    return <- w
+}
+
 // ===== Phase-7.1a scalar conversions: float(int/uint), int(float/uint), uint(float/int) ->
 // OpConvertSToF/UToF/FToS/FToU + OpBitcast (int<->uint same-width reinterpret). Reuses the existing
 // int/uint/float SSBOs; every conversion opcode is exercised exactly once. =====
