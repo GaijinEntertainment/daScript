@@ -354,6 +354,8 @@ def layers_panel() {
         if (g_layers[i].locked) { marks += " [lock]"; }
         if (g_layers[i].link_source >= 0) { marks += " [link]"; }
         let lbl = "{g_layers[i].name}  ({kind}){marks}###L{i}"
+        // the row selectable spans full width; let the trailing buttons on the same line win clicks
+        SetNextItemAllowOverlap()
         if (selectable_label(LAYER_ROW[i], lbl, i == g_sel)) {
             g_sel = i
         }
