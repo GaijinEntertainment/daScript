@@ -13,6 +13,7 @@ def initialize(project_path : string) {
     register_native_path("strudel", "strudel_time", "{project_path}/strudel/strudel_time.das")
     register_native_path("strudel", "strudel_pattern", "{project_path}/strudel/strudel_pattern.das")
     register_native_path("strudel", "strudel_synth", "{project_path}/strudel/strudel_synth.das")
+    register_native_path("strudel", "strudel_sfxr", "{project_path}/strudel/strudel_sfxr.das")
     register_native_path("strudel", "strudel_scheduler", "{project_path}/strudel/strudel_scheduler.das")
     register_native_path("strudel", "strudel_mini", "{project_path}/strudel/strudel_mini.das")
     register_native_path("strudel", "strudel_scales", "{project_path}/strudel/strudel_scales.das")

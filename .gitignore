@@ -146,3 +146,5 @@ logs/
 _flatten_fuzz_*.das
 flatten_fuzz_fail_*.das
 flatten_fuzz_residual_*.das
+# sfx_lab audition output (sfxr_presets.das writes WAVs here)
+sfxr_renders/
