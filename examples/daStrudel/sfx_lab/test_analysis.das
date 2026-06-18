@@ -75,6 +75,9 @@ def main {
     let fit_wash = fit(tref, twash, RATE)
     let sh_ref = temporal_shape(tref, RATE)
     let sh_wash = temporal_shape(twash, RATE)
+    // flatness: a pure tone reads tonal (low), noise reads flat (high)
+    let flat_tone = mean_flatness(s200, RATE)
+    let flat_noise = mean_flatness(twash, RATE)
 
     to_log(LOG_INFO, "spectral self={self_sp} diff(200v4000)={diff_sp}\n")
     to_log(LOG_INFO, "centroid lo={c_lo} hi={c_hi}\n")
@@ -82,8 +85,9 @@ def main {
     to_log(LOG_INFO, "evo self={evo_self} diff(200v4000)={evo_diff}\n")
     to_log(LOG_INFO, "fit.overall(self)={f_self.overall}\n")
     to_log(LOG_INFO, "decay fast={d_fast}ms slow={d_slow}ms\n")
-    to_log(LOG_INFO, "transient self={fit_self_t}  wash overall={fit_wash.overall} (spec={fit_wash.spectral} shape={fit_wash.shape} atk={fit_wash.attack})\n")
+    to_log(LOG_INFO, "transient self={fit_self_t}  wash overall={fit_wash.overall} (spec={fit_wash.spectral} tex={fit_wash.texture} shape={fit_wash.shape} atk={fit_wash.attack})\n")
     to_log(LOG_INFO, "shape tc: ref={sh_ref.tc} wash={sh_wash.tc}  ed: ref={sh_ref.ed} wash={sh_wash.ed}  crest: ref={sh_ref.crest} wash={sh_wash.crest}\n")
+    to_log(LOG_INFO, "flatness: pure tone={flat_tone}  noise={flat_noise}\n")
 
     verify(self_sp > 0.99)
     verify(diff_sp < 0.3)          // fails if magnitude normalization didn't write back
@@ -97,5 +101,8 @@ def main {
     verify(fit_self_t > 0.99)              // identical transient -> perfect
     verify(fit_wash.overall < 0.6)         // THE fix: the sustained wash must NOT score high
     verify(fit_wash.shape < 0.5)           // shape is the structural anti-wash wall
+    verify(flat_tone < 0.3)                // a pure tone reads tonal
+    verify(flat_noise > 0.5)               // broadband noise reads flat
+    verify(flat_noise > flat_tone * 2.0)   // texture term can separate beep from impact
     to_log(LOG_INFO, "ALL CHECKS PASSED\n")
 }

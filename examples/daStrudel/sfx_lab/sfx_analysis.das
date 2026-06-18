@@ -24,6 +24,7 @@ struct SfxFeatures {
 
 struct FitScore {
     spectral : float    //!< 0..1 timbre match (time-resolved log-magnitude spectral distance)
+    texture  : float    //!< 0..1 noisiness match (spectral flatness — tonal "beep" vs noisy "impact")
     shape    : float    //!< 0..1 temporal-shape match (temporal centroid + effective duration + crest)
     attack   : float    //!< 0..1 attack-time (log-attack-time) match
     overall  : float    //!< 0..1 weighted blend per FitWeights
@@ -31,9 +32,11 @@ struct FitScore {
 
 struct FitWeights {
     //! Nature-based weighting profile for the composite fit. Default = percussive (drums): heavy
-    //! temporal-shape + attack so a sustained wash can't win on spectral fill alone.
-    spectral : float = 0.50
-    shape    : float = 0.35
+    //! temporal-shape + attack so a sustained wash can't win on spectral fill alone, plus a texture
+    //! (flatness) term so a pure-tone "beep" can't pass for a noisy "impact".
+    spectral : float = 0.40
+    texture  : float = 0.15
+    shape    : float = 0.30
     attack   : float = 0.15
 }
 
@@ -207,6 +210,7 @@ def public fit(ref, mix : array<float>; rate : int; w : FitWeights = FitWeights(
     var f = FitScore()
     if (empty(ref) || empty(mix)) return f
     f.spectral = 1.0 - spectral_dist(ref, mix, rate)
+    f.texture = 1.0 - squash(abs(mean_flatness(ref, rate) - mean_flatness(mix, rate)), 0.25)
     let ra = temporal_shape(ref, rate)
     let mi = temporal_shape(mix, rate)
     let d_tc = abs(log((ra.tc + 0.001) / (mi.tc + 0.001)))      // log-ratio (perceptual / relative)
@@ -214,7 +218,7 @@ def public fit(ref, mix : array<float>; rate : int; w : FitWeights = FitWeights(
     let d_cr = abs(log((ra.crest + 0.1) / (mi.crest + 0.1)))
     f.shape = 1.0 - (squash(d_tc, 0.7) + squash(d_ed, 0.7) + squash(d_cr, 0.7)) / 3.0
     f.attack = 1.0 - squash(abs(ra.lat - mi.lat), 0.5)          // lat is already log10(seconds)
-    f.overall = w.spectral * f.spectral + w.shape * f.shape + w.attack * f.attack
+    f.overall = w.spectral * f.spectral + w.texture * f.texture + w.shape * f.shape + w.attack * f.attack
     return f
 }
 
@@ -350,6 +354,41 @@ def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
 // smooth, bounded distance -> dissimilarity [0,1); nonzero gradient everywhere (good for hill-climb)
 def private squash(d, scale : float) : float {
     return 1.0 - exp(-d / max(scale, 1.0e-6))
+}
+
+// Energy-weighted mean spectral flatness (geometric / arithmetic mean of magnitude per frame),
+// 0 = pure tonal, 1 = noise. Weighting by frame energy ignores the silent tail. This is the term
+// that separates a pure-tone "beep" (low flatness) from a noisy membrane "impact" (high flatness).
+def public mean_flatness(buf : array<float>; rate : int) : float {
+    let n = length(buf)
+    if (n == 0) return 0.0
+    let NF = 16
+    let L = min(n, rate)
+    let hop = max(L / NF, 1)
+    var acc = 0.0
+    var wt = 0.0
+    for (fr in range(NF)) {
+        let start = fr * hop
+        break if (start >= n)
+        var mags : array<float>
+        stft_mag(buf, start, STFT_N, mags)
+        var sum_log = 0.0
+        var sum_lin = 0.0
+        let mlen = length(mags)
+        for (i in range(1, mlen)) {            // skip DC
+            let v = mags[i] + 1.0e-9
+            sum_log += log(v)
+            sum_lin += v
+        }
+        delete mags
+        let m = max(mlen - 1, 1)
+        if (sum_lin > 1.0e-6) {
+            let sfm = exp(sum_log / float(m)) / (sum_lin / float(m))
+            acc += sfm * sum_lin               // weight by frame energy (loud frames dominate)
+            wt += sum_lin
+        }
+    }
+    return wt > 1.0e-9 ? acc / wt : 0.0
 }
 
 // peak-normalized copy: gain-invariance by ONE global scalar per signal (NOT per-cell / per-frame).

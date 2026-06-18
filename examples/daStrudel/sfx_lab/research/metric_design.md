@@ -8,12 +8,19 @@ tail, so a 150 ms transient and a 2 s sustain read 97% identical. **Weights can'
 terms that explicitly measure *where energy sits in time and how sparse it is*.
 
 ## Implemented (sfx_analysis.das) — composite fit, percussive default
-`fit(ref, mix, rate, w = FitWeights())` → `FitScore{spectral, shape, attack, overall}`:
-- **spectral** (`spectral_dist`, weight 0.50): peak-normalize each signal by ONE global scalar (NOT
+`fit(ref, mix, rate, w = FitWeights())` → `FitScore{spectral, texture, shape, attack, overall}`:
+- **spectral** (`spectral_dist`, weight 0.40): peak-normalize each signal by ONE global scalar (NOT
   per-cell/per-spectrogram), time-resolved log-magnitude spectrogram, clamp cells to [−80,0] dB, mean
   |diff|. No per-spectrogram renorm → spurious energy where the ref is quiet is penalized. This alone
   closes most of the hole.
-- **shape** (weight 0.35) — the anti-wash wall (Timbre Toolbox / MPEG-7): from the raw RMS envelope,
+- **texture** (`mean_flatness`, weight 0.15) — the anti-BEEP term: energy-weighted mean spectral
+  flatness (geometric/arithmetic mean of magnitude per frame; 0 = pure tonal, 1 = noise). `squash(|Δ|,0.25)`.
+  Matches the ref's noisiness, so a pure-tone modal "beep" can't pass for a noisy membrane "impact"
+  (and a tonal ref like a cowbell still wants a tonal mix — it's a *match*, not a maximize). PROVEN: the
+  snare body was a 3-tone beep at texture 0.30; re-optimizing with this term drove the optimizer to add
+  noise + shorten the ring → texture 0.998, the body reads as an impact (overall 0.46 → 0.78), no manual
+  edit. This is the "get the tool to do it" lever.
+- **shape** (weight 0.30) — the anti-wash wall (Timbre Toolbox / MPEG-7): from the raw RMS envelope,
   **temporal centroid** (energy center-of-mass, s), **effective duration** (>40% max, s), **crest
   factor** (peak/RMS). log-ratio distances, `squash(d,0.7)=1−e^(−d/0.7)`, averaged. A wash has a LATE
   centroid + LONG duration + LOW crest and cannot fake all three.
@@ -38,7 +45,8 @@ optimizer's `eval_fit` (currently uses the percussive default).
   spectral term is single-resolution time-resolved; the small windows would give the attack more
   spectral footprint.
 - Attack-windowed spectral (0–50 ms, onset-aligned), log-mel(64) L1, MFCC anchor, spectral-flatness
-  trajectory, decay-slope term. The current 3 shape terms already forbid the wash; these add polish.
+  *trajectory* (mean flatness is done as the texture term; trajectory would catch "constant high
+  flatness" more precisely), decay-slope term. The current terms already forbid wash + beep; these add polish.
 - A pitch/harmonicity term for the Tonal preset.
 
 Sources: Parallel WaveGAN (MR-STFT), DDSP losses.py, auraloss, Masuda&Saito ISMIR'21 (spectral-alone
