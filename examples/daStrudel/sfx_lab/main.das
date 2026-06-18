@@ -344,6 +344,223 @@ def do_redo() {
     g_applying_history = false
 }
 
+// ===== auto-tuner (annealed hill-climbing / (1+lambda) ES toward the fit metric) =====
+
+let OPT_VOICE = 0      // selected layer's voice
+let OPT_POST = 1       // enabled postprocess params
+let OPT_COMBINED = 2   // all layers + enabled postprocess
+var g_opt_scope = 0
+var g_kv : array<float>    // working param vector
+var g_klo : array<float>   // per-param lower bound
+var g_khi : array<float>   // per-param upper bound
+var g_opt_result = ""
+
+def private orand(var seed : uint&) : float {
+    seed = seed * 1664525u + 1013904223u
+    return float(seed >> 8u) * (1.0 / 16777216.0)   // [0,1)
+}
+
+def private knob(writing : bool; var i : int&; var field : float&; lo, hi : float) {
+    if (writing) {
+        field = clamp(g_kv[i], lo, hi)
+    } else {
+        if (length(g_kv) < i + 1) {
+            g_kv |> resize(i + 1)
+            g_klo |> resize(i + 1)
+            g_khi |> resize(i + 1)
+        }
+        g_kv[i] = field
+        g_klo[i] = lo
+        g_khi[i] = hi
+    }
+    i++
+}
+
+// walk one layer's continuous voice params (wave / n_modes excluded — structural)
+def private voice_knobs_io(writing : bool; li : int; var i : int&) {
+    knob(writing, i, g_layers[li].gain, 0.0, 2.0)
+    if (g_layers[li].voice is sfxr) {
+        var s = g_layers[li].voice as sfxr
+        knob(writing, i, s.base_freq, 0.0, 1.0)
+        knob(writing, i, s.freq_limit, 0.0, 1.0)
+        knob(writing, i, s.freq_ramp, -1.0, 1.0)
+        knob(writing, i, s.freq_dramp, -1.0, 1.0)
+        knob(writing, i, s.duty, 0.0, 1.0)
+        knob(writing, i, s.duty_ramp, -1.0, 1.0)
+        knob(writing, i, s.vib_strength, 0.0, 1.0)
+        knob(writing, i, s.vib_speed, 0.0, 1.0)
+        knob(writing, i, s.arp_mod, -1.0, 1.0)
+        knob(writing, i, s.arp_speed, 0.0, 1.0)
+        knob(writing, i, s.repeat_speed, 0.0, 1.0)
+        knob(writing, i, s.pha_offset, -1.0, 1.0)
+        knob(writing, i, s.pha_ramp, -1.0, 1.0)
+        knob(writing, i, s.lpf_freq, 0.0, 1.0)
+        knob(writing, i, s.lpf_ramp, -1.0, 1.0)
+        knob(writing, i, s.lpf_resonance, 0.0, 1.0)
+        knob(writing, i, s.hpf_freq, 0.0, 1.0)
+        knob(writing, i, s.hpf_ramp, -1.0, 1.0)
+        knob(writing, i, s.env_attack, 0.0, 1.0)
+        knob(writing, i, s.env_sustain, 0.0, 1.0)
+        knob(writing, i, s.env_punch, 0.0, 1.0)
+        knob(writing, i, s.env_decay, 0.0, 1.0)
+        knob(writing, i, s.sound_vol, 0.0, 1.0)
+        if (writing) {
+            g_layers[li].voice = VoiceParams(sfxr = s)
+        }
+    } else {
+        var v = g_layers[li].voice as modal
+        knob(writing, i, v.pitch, 20.0, 4000.0)
+        knob(writing, i, v.spread, 1.0, 2.6)
+        knob(writing, i, v.ring, 0.005, 0.4)
+        knob(writing, i, v.brightness, 0.0, 1.0)
+        knob(writing, i, v.damp_skew, 0.0, 1.5)
+        knob(writing, i, v.transient, 0.0, 1.0)
+        knob(writing, i, v.transient_rate, 100.0, 2000.0)
+        knob(writing, i, v.echo_amount, 0.0, 1.0)
+        knob(writing, i, v.echo_delay, 0.005, 0.15)
+        knob(writing, i, v.duration, 0.05, 1.0)
+        if (writing) {
+            g_layers[li].voice = VoiceParams(modal = v)
+        }
+    }
+}
+
+// walk the enabled postprocess effects' continuous params (never toggles enabled)
+def private post_knobs_io(writing : bool; var i : int&) {
+    if (g_post.filter.enabled) {
+        knob(writing, i, g_post.filter.position, 0.0, 1.0)
+    }
+    if (g_post.bandpass.enabled) {
+        knob(writing, i, g_post.bandpass.freq, 20.0, 12000.0)
+        knob(writing, i, g_post.bandpass.q, 0.1, 10.0)
+    }
+    if (g_post.drive.enabled) {
+        knob(writing, i, g_post.drive.drive, 0.0, 8.0)
+    }
+    if (g_post.crush.enabled) {
+        knob(writing, i, g_post.crush.bits, 1.0, 16.0)
+    }
+    if (g_post.comp.enabled) {
+        knob(writing, i, g_post.comp.threshold, -60.0, 0.0)
+        knob(writing, i, g_post.comp.ratio, 1.0, 20.0)
+        knob(writing, i, g_post.comp.knee, 0.0, 24.0)
+        knob(writing, i, g_post.comp.attack, 0.001, 0.1)
+        knob(writing, i, g_post.comp.release, 0.01, 0.5)
+    }
+    if (g_post.chorus.enabled) {
+        knob(writing, i, g_post.chorus.rate, 0.05, 8.0)
+        knob(writing, i, g_post.chorus.depth, 0.0, 12.0)
+        knob(writing, i, g_post.chorus.feedback, 0.0, 0.9)
+        knob(writing, i, g_post.chorus.delay_ms, 1.0, 50.0)
+        knob(writing, i, g_post.chorus.wet, 0.0, 1.0)
+    }
+    if (g_post.phaser.enabled) {
+        knob(writing, i, g_post.phaser.rate, 0.05, 8.0)
+        knob(writing, i, g_post.phaser.depth, 0.0, 1.0)
+        knob(writing, i, g_post.phaser.center, 100.0, 5000.0)
+        knob(writing, i, g_post.phaser.sweep, 0.0, 2400.0)
+    }
+    if (g_post.tremolo.enabled) {
+        knob(writing, i, g_post.tremolo.rate, 0.1, 16.0)
+        knob(writing, i, g_post.tremolo.depth, 0.0, 1.0)
+    }
+    if (g_post.delay.enabled) {
+        knob(writing, i, g_post.delay.time, 0.01, 1.0)
+        knob(writing, i, g_post.delay.feedback, 0.0, 0.95)
+    }
+    if (g_post.reverb.enabled) {
+        knob(writing, i, g_post.reverb.wet, 0.0, 1.0)
+        knob(writing, i, g_post.reverb.decay, 0.1, 3.0)
+        knob(writing, i, g_post.reverb.lp_start, 2000.0, 18000.0)
+        knob(writing, i, g_post.reverb.lp_end, 500.0, 8000.0)
+    }
+}
+
+def private knobs_io(writing : bool) {
+    var i = 0
+    if (g_opt_scope == OPT_VOICE) {
+        if (g_sel >= 0 && g_sel < length(g_layers)) {
+            voice_knobs_io(writing, g_sel, i)
+        }
+    } elif (g_opt_scope == OPT_COMBINED) {
+        for (li in range(length(g_layers))) {
+            voice_knobs_io(writing, li, i)
+        }
+        post_knobs_io(writing, i)
+    } else {
+        post_knobs_io(writing, i)
+    }
+}
+
+// render the current model and return the overall fit (the optimizer objective)
+def private eval_fit() : float {
+    if (empty(g_ref)) return 0.0
+    var mix <- render_sound(g_layers)
+    apply_post(mix, g_post, float(SR))
+    let f = fit(g_ref, mix, SR)
+    delete mix
+    return f.overall
+}
+
+def optimize(scope : int; iterations : int) : float {
+    g_opt_scope = scope
+    g_kv |> clear()
+    g_klo |> clear()
+    g_khi |> clear()
+    knobs_io(false)   // gather current params + bounds
+    let n = length(g_kv)
+    if (n == 0 || empty(g_ref)) return -1.0
+    var best : array<float>
+    best := g_kv
+    var best_fit = eval_fit()
+    var seed = 0x51ED2C7Fu
+    var sigma = 0.18
+    let LAMBDA = 6
+    for (_it in range(iterations)) {
+        var improved = false
+        for (_c in range(LAMBDA)) {
+            for (k in range(n)) {
+                let span = g_khi[k] - g_klo[k]
+                let delta = (orand(seed) * 2.0 - 1.0) * sigma * span
+                g_kv[k] = clamp(best[k] + delta, g_klo[k], g_khi[k])
+            }
+            knobs_io(true)
+            let f = eval_fit()
+            if (f > best_fit) {
+                best_fit = f
+                best := g_kv
+                improved = true
+            }
+        }
+        if (!improved) {
+            sigma *= 0.7
+            if (sigma < 0.01) break
+        }
+    }
+    g_kv := best
+    knobs_io(true)   // apply the winner
+    delete best
+    g_mix_dirty = true
+    g_edit_dirty = true   // one undoable entry for the whole optimize
+    return best_fit
+}
+
+def run_optimize(scope : int) {
+    if (empty(g_ref)) {
+        g_opt_result = "load a reference first"
+        return
+    }
+    let before = eval_fit()
+    let after = optimize(scope, OPT_ITERS.value)
+    if (after < 0.0) {
+        g_opt_result = "nothing to tune (enable effects / select a layer)"
+        return
+    }
+    g_post_reload = true
+    g_sel_loaded = -1
+    g_opt_result = "fit {int(before * 100.0)}% -> {int(after * 100.0)}%"
+}
+
 def rebuild_layer_preview() {
     if (g_sel < 0 || g_sel >= length(g_layers)) {
         g_lyr_wave |> clear()
@@ -751,6 +968,25 @@ def mix_header() {
 
 def mix_panel() {
     mix_header()
+    if (g_have_fit) {
+        if (button(OPT_VOICE_BTN, (text = "opt voice"))) {
+            run_optimize(OPT_VOICE)
+        }
+        same_line(OPT_SL1)
+        if (button(OPT_FX_BTN, (text = "opt fx"))) {
+            run_optimize(OPT_POST)
+        }
+        same_line(OPT_SL2)
+        if (button(OPT_ALL_BTN, (text = "opt all"))) {
+            run_optimize(OPT_COMBINED)
+        }
+        same_line(OPT_SL3)
+        OPT_ITERS.bounds = (4, 80)
+        slider_int(OPT_ITERS, (text = "iters"))
+        if (!empty(g_opt_result)) {
+            text(OPT_RESULT, (text = g_opt_result))
+        }
+    }
     plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
         setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("mix", g_mix_wave)
@@ -955,6 +1191,7 @@ def start_app() {
     add_layer(modal_layer("ball click", ModalVoice(pitch = 1500.0, spread = 1.6, n_modes = 4, ring = 0.05, brightness = 0.55, damp_skew = 0.9, transient = 0.6, echo_amount = 0.32, echo_delay = 0.055, duration = 0.5)))
     g_sel = 0
     g_play_pending = false
+    OPT_ITERS.value = 16
     reset_history()
 }
 
@@ -1358,6 +1595,29 @@ def sfx_undo(_input : JsonValue?) : JsonValue? {
 [live_command(description = "SFX lab: redo the last undone edit. Returns fit.")]
 def sfx_redo(_input : JsonValue?) : JsonValue? {
     do_redo()
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
+}
+
+struct OptArgs {
+    scope : string = "all"
+    iters : int = 16
+}
+
+[live_command(description = "SFX lab: auto-tune toward the reference fit. Args: scope (voice|post|all), iters. Returns fit.")]
+def sfx_optimize(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<OptArgs>)
+    var sc = OPT_COMBINED
+    if (args.scope == "voice") {
+        sc = OPT_VOICE
+    } elif (args.scope == "post") {
+        sc = OPT_POST
+    }
+    optimize(sc, max(args.iters, 1))
+    g_post_reload = true
+    g_sel_loaded = -1
     if (g_mix_dirty) {
         rebuild_mix()
     }
