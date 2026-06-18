@@ -645,8 +645,28 @@ jobs:
           mingw-w64-clang-x86_64-ninja
           mingw-w64-clang-x86_64-openssl
           mingw-w64-clang-x86_64-glfw
+          mingw-w64-clang-x86_64-sccache
           bison
           git
+
+    # sccache (compiler cache) for the mingw lane. mingw builds on Ninja, which
+    # honors CMAKE_<LANG>_COMPILER_LAUNCHER (the VS-generator clang-cl lane can't,
+    # which is why only this lane gets it). Use the msys2-NATIVE sccache (installed
+    # above), not the hostedtoolcache one: a native-Windows sccache fails to
+    # CreateProcess msys2's clang.exe (the compiler's runtime DLLs aren't on
+    # sccache's PATH). Local-disk backend in one actions/cache slot, same approach
+    # as the build matrix. Fixed key (single config); PRs restore read-only, master
+    # refreshes the slot after Build.
+    - name: "Configure sccache (local-disk backend)"
+      shell: bash
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-mingw-clang64-release
 
     - name: "Build: Daslang (clang-mingw64)"
       run: |
@@ -656,9 +676,27 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
           -DDAS_CLANG_BIND_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=OFF
         cmake --build ./build-mingw --parallel
+        sccache --show-stats || true
+
+    # On master, overwrite the fixed cache slot with fresh objects (GHA caches
+    # are immutable, so delete then save). PRs are read-only.
+    - name: "Refresh sccache slot"
+      if: github.ref == 'refs/heads/master'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh cache delete "sccache-mingw-clang64-release" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: github.ref == 'refs/heads/master'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-mingw-clang64-release
 
     - name: "Test: interpreter sweep"
       run: |
