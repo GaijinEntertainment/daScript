@@ -341,6 +341,19 @@ def load_sound(path : string; var doc : Sound) : bool {
     return sscan_json(text, doc)
 }
 
+def sound_to_json(doc : Sound) : string {
+    //! Serialize a sound to a JSON string (for in-memory snapshots, e.g. an undo stack).
+    return sprint_json(doc, false)
+}
+
+def sound_from_json(text : string; var doc : Sound) : bool {
+    //! Parse a sound from a JSON string. Returns false on empty/invalid input.
+    if (empty(text)) {
+        return false
+    }
+    return sscan_json(text, doc)
+}
+
 def render_sound_file(path : string) : array<float> {
     //! Game-facing one-call: load a .sfx and render it to a mono buffer (empty on failure).
     var doc = Sound()

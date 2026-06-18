@@ -5,6 +5,7 @@
 //
 // Run: daslang -load_module <dasImgui> -load_module <dasImguiImplot> examples/daStrudel/sfx_lab/main.das
 options gen2
+options _allow_imgui_legacy = true   // raw GetActiveID (host-agnostic) for the undo coalesce key
 
 require imgui/imgui_harness
 require imgui/imgui_containers_builtin
@@ -58,6 +59,18 @@ var g_ref_spectro : array<float>
 var g_post = PostChain()
 var g_post_reload = true          // push g_post -> the postprocess sliders on next frame
 var g_sound_path = ""             // last opened/saved .sfx path (for sfx_save with no arg)
+
+// undo/redo: each entry is a serialized sound state + the widget id that produced it
+// (consecutive edits with the same nonzero id coalesce, so a slider drag = one step)
+struct EditSnap {
+    json : string
+    key  : uint
+}
+let UNDO_CAP = 60
+var g_undo : array<EditSnap>
+var g_undo_cursor = -1
+var g_edit_dirty = false          // a user edit happened this frame; record at frame end
+var g_applying_history = false    // guard: don't record while restoring a snapshot
 
 // which file-dialog operation is in flight (the dialog is shared)
 let DLG_NONE = 0
@@ -265,6 +278,70 @@ def do_open_sound(path : string) {
     if (!empty(doc.mimic_target)) {
         load_reference(doc.mimic_target)
     }
+    reset_history()
+}
+
+// ===== undo / redo =====
+
+def snapshot_json() : string {
+    var doc = Sound()
+    doc.mimic_target = g_ref_path
+    doc.layers := g_layers
+    doc.post = g_post
+    return sound_to_json(doc)
+}
+
+def restore_snapshot(j : string) {
+    var doc = Sound()
+    if (!sound_from_json(j, doc)) return
+    g_layers := doc.layers
+    g_post = doc.post
+    g_post_reload = true
+    g_sel = clamp(g_sel, 0, max(length(g_layers) - 1, 0))
+    g_sel_loaded = -1
+    g_mix_dirty = true
+    g_lyr_dirty = true
+}
+
+def reset_history() {
+    g_undo |> clear()
+    g_undo_cursor = -1
+    g_edit_dirty = false
+    g_undo |> push(EditSnap(json = snapshot_json(), key = 0u))
+    g_undo_cursor = 0
+}
+
+// record the current state; coalesce when the producing widget id matches the top entry
+def record_edit(key : uint) {
+    if (g_applying_history) return
+    if (length(g_undo) > g_undo_cursor + 1) {   // drop the redo branch
+        g_undo |> resize(g_undo_cursor + 1)
+    }
+    if (key != 0u && g_undo_cursor >= 0 && g_undo[g_undo_cursor].key == key) {
+        g_undo[g_undo_cursor] = EditSnap(json = snapshot_json(), key = key)
+    } else {
+        g_undo |> push(EditSnap(json = snapshot_json(), key = key))
+        if (length(g_undo) > UNDO_CAP) {
+            g_undo |> erase(0)
+        }
+        g_undo_cursor = length(g_undo) - 1
+    }
+}
+
+def do_undo() {
+    if (g_undo_cursor <= 0) return
+    g_undo_cursor--
+    g_applying_history = true
+    restore_snapshot(g_undo[g_undo_cursor].json)
+    g_applying_history = false
+}
+
+def do_redo() {
+    if (g_undo_cursor >= length(g_undo) - 1) return
+    g_undo_cursor++
+    g_applying_history = true
+    restore_snapshot(g_undo[g_undo_cursor].json)
+    g_applying_history = false
 }
 
 def rebuild_layer_preview() {
@@ -391,6 +468,7 @@ def add_layer(lyr : Layer) {
     g_sel_loaded = -1
     g_mix_dirty = true
     g_lyr_dirty = true
+    g_edit_dirty = true
     g_play_pending = g_autoplay
 }
 
@@ -420,6 +498,7 @@ def delete_layer(idx : int) {
     g_sel_loaded = -1
     g_mix_dirty = true
     g_lyr_dirty = true
+    g_edit_dirty = true
 }
 
 def clear_all() {
@@ -428,6 +507,7 @@ def clear_all() {
     g_sel_loaded = -1
     g_mix_dirty = true
     g_lyr_dirty = true
+    g_edit_dirty = true
 }
 
 // ===== panels =====
@@ -472,11 +552,13 @@ def layers_panel() {
         if (icon_button(SOLO_ROW[i], (glyph = "solo", tip = "Solo this layer", size = 16.0f))) {
             g_layers[i].solo = !g_layers[i].solo
             g_mix_dirty = true
+            g_edit_dirty = true
         }
         same_line(ROW_SL2[i])
         if (icon_button(MUTE_ROW[i], (glyph = g_layers[i].enabled ? "volume" : "mute", tip = g_layers[i].enabled ? "Mute this layer" : "Unmute this layer", size = 16.0f))) {
             g_layers[i].enabled = !g_layers[i].enabled
             g_mix_dirty = true
+            g_edit_dirty = true
         }
         same_line(ROW_SL3[i])
         if (icon_button(PLAY_ROW[i], (glyph = "play", tip = "Play this layer", size = 16.0f))) {
@@ -502,14 +584,17 @@ def editor_panel() {
     if (slider_float(GAIN, (text = "gain"))) {
         g_layers[g_sel].gain = GAIN.value
         g_mix_dirty = true
+        g_edit_dirty = true
     }
     DELAY.bounds = (0.0f, 1.0f)
     if (slider_float(DELAY, (text = "onset delay (s)"))) {
         g_layers[g_sel].delay = DELAY.value
         g_mix_dirty = true
+        g_edit_dirty = true
     }
     if (checkbox(LOCK, (text = "locked (voice read-only)"))) {
         g_layers[g_sel].locked = LOCK.value
+        g_edit_dirty = true
     }
     same_line(EDIT_SL)
     if (icon_button(EDITPLAY, (glyph = "play", tip = "Play this layer"))) {
@@ -536,6 +621,7 @@ def editor_panel() {
         if (changed) {
             g_mix_dirty = true
             g_lyr_dirty = true
+            g_edit_dirty = true
         }
     }
 
@@ -808,6 +894,7 @@ def postprocess_panel() {
     }
     if (ch) {
         g_mix_dirty = true
+        g_edit_dirty = true
     }
 }
 
@@ -868,6 +955,7 @@ def start_app() {
     add_layer(modal_layer("ball click", ModalVoice(pitch = 1500.0, spread = 1.6, n_modes = 4, ring = 0.05, brightness = 0.55, damp_skew = 0.9, transient = 0.6, echo_amount = 0.32, echo_delay = 0.055, duration = 0.5)))
     g_sel = 0
     g_play_pending = false
+    reset_history()
 }
 
 [export]
@@ -907,6 +995,16 @@ def update() {
                     filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.sfx"))
             }
         }
+        menu(EDIT_MENU, "Edit", true) {
+            if (menu_item(MI_UNDO, (text = "Undo  (Cmd+Z)"))) {
+                do_undo()
+                MI_UNDO.value = false
+            }
+            if (menu_item(MI_REDO, (text = "Redo  (Cmd+Shift+Z)"))) {
+                do_redo()
+                MI_REDO.value = false
+            }
+        }
         menu(PLAY_MENU, "Play", true) {
             if (menu_item(MI_PLAY, (text = "Play mix"))) {
                 play_mix()
@@ -916,6 +1014,16 @@ def update() {
         }
     }
     g_autoplay = MB_AUTO.value
+
+    // keyboard: Cmd+Z undo, Cmd+Shift+Z redo (skip while a text field has focus)
+    let io & = unsafe(GetIO())
+    if (!io.WantTextInput && io.KeySuper && IsKeyPressed(ImGuiKey.Z, false)) {
+        if (io.KeyShift) {
+            do_redo()
+        } else {
+            do_undo()
+        }
+    }
 
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
@@ -940,6 +1048,12 @@ def update() {
         dock_window(POSTPROC, (text = "Postprocess", closable = false, flags = ImGuiWindowFlags.None)) {
             postprocess_panel()
         }
+    }
+
+    // record one undo entry per frame that had a user edit; GetActiveID() coalesces slider drags
+    if (g_edit_dirty) {
+        record_edit(GetActiveID())
+        g_edit_dirty = false
     }
 
     // the file dialog draws at top level (outside any window) so its path stays FILEDLG/...
@@ -1139,6 +1253,7 @@ def sfx_set_layer(input : JsonValue?) : JsonValue? {
     g_sel = idx
     g_sel_loaded = -1   // force the editor sliders to reload from the edited model
     g_mix_dirty = true
+    g_edit_dirty = true
     rebuild_mix()
     return make_report()
 }
@@ -1200,6 +1315,7 @@ def sfx_set_post(input : JsonValue?) : JsonValue? {
     overlay_post(input)
     g_post_reload = true
     g_mix_dirty = true
+    g_edit_dirty = true
     rebuild_mix()
     return make_report()
 }
@@ -1227,5 +1343,23 @@ def sfx_add_layer(input : JsonValue?) : JsonValue? {
         add_layer(sfxr_layer(args.name, SfxrSound()))
     }
     rebuild_mix()
+    return make_report()
+}
+
+[live_command(description = "SFX lab: undo the last edit. Returns fit.")]
+def sfx_undo(_input : JsonValue?) : JsonValue? {
+    do_undo()
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
+}
+
+[live_command(description = "SFX lab: redo the last undone edit. Returns fit.")]
+def sfx_redo(_input : JsonValue?) : JsonValue? {
+    do_redo()
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
     return make_report()
 }
