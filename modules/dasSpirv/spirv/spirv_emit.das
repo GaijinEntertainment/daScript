@@ -391,6 +391,18 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         let vid = alloc_id(m)
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(storage))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
+        // Flat decoration. Vulkan mandates Flat on any integer/uint varying (no valid interpolation
+        // mode exists for integers — the driver returns garbage without it), so emit it automatically
+        // for those. Floats default to perspective-correct smooth interpolation; honour an explicit
+        // @flat annotation when the user wants flat-shaded floats (low-poly stylised look, provoking-
+        // vertex picks per primitive). Reflection bit not added — Flat is purely a SPIR-V decoration,
+        // it doesn't change the descriptor or pipeline layout.
+        let bt = v._type.baseType
+        let is_int_kind = scalar_class(bt) >= 0 && scalar_class(bt) <= 1
+        let want_flat = is_int_kind || (v.annotation |> find_arg("flat") is tBool)
+        if (want_flat) {
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Flat))
+        }
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)
         return
