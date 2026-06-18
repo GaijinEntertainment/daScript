@@ -15,6 +15,7 @@ require implot
 require audio/audio_boost
 require audio/audio_wav
 require strudel/strudel_sfx
+require sfx_icons
 require daslib/fio
 require math
 
@@ -48,8 +49,6 @@ var g_audio : AudioSystemChannels
 // per-row widget state (indexed by layer position) — must be declared at module scope
 var private LAYER_ROW : table<int; ClickState>
 var private SOLO_ROW : table<int; ClickState>
-var private MUTE_ROW : table<int; ClickState>
-var private PLAY_ROW : table<int; ClickState>
 var private ROW_SL1 : table<int; EmptyMarkerState>
 var private ROW_SL2 : table<int; EmptyMarkerState>
 var private ROW_SL3 : table<int; EmptyMarkerState>
@@ -413,15 +412,15 @@ def layers_panel() {
         add_layer(modal_layer("modal {length(g_layers) + 1}", ModalVoice()))
     }
     same_line(TB2)
-    if (button(DUP_BTN, (text = "duplicate"))) {
+    if (icon_button("tb_dup", "duplicate")) {
         duplicate_layer(g_sel, false)
     }
     same_line(TB3)
-    if (button(DUPLINK_BTN, (text = "dup linked"))) {
+    if (button(DUPLINK_BTN, (text = "link"))) {
         duplicate_layer(g_sel, true)
     }
     same_line(TB4)
-    if (button(DEL_BTN, (text = "delete"))) {
+    if (icon_button("tb_del", "delete")) {
         delete_layer(g_sel)
     }
     separator(LSEP)
@@ -444,13 +443,12 @@ def layers_panel() {
             g_mix_dirty = true
         }
         same_line(ROW_SL2[i])
-        let on_lbl = (g_layers[i].enabled ? "on" : "off") + "###mute{i}"
-        if (button(MUTE_ROW[i], (text = on_lbl))) {
+        if (icon_button("mute{i}", g_layers[i].enabled ? "volume" : "mute", 16.0f)) {
             g_layers[i].enabled = !g_layers[i].enabled
             g_mix_dirty = true
         }
         same_line(ROW_SL3[i])
-        if (button(PLAY_ROW[i], (text = "play###pl{i}"))) {
+        if (icon_button("play{i}", "play", 16.0f)) {
             play_layer(i)
         }
     }
@@ -483,7 +481,7 @@ def editor_panel() {
         g_layers[g_sel].locked = LOCK.value
     }
     same_line(EDIT_SL)
-    if (button(EDIT_PLAY, (text = "play layer"))) {
+    if (icon_button("editplay", "play")) {
         play_layer(g_sel)
     }
     separator(ESEP)
@@ -627,12 +625,12 @@ def mix_panel() {
 }
 
 def reference_panel() {
-    if (button(REF_LOAD, (text = "Load wav..."))) {
+    if (icon_button("refload", "import")) {
         file_dialog_open(FileDialogConfig(title = "Load reference audio", start_dir = "",
             filters <- file_filters("Audio (*.wav)|wav|All files|"), mode = FileDialogMode.open, max_selection = 0))
     }
     same_line(REF_SL1)
-    if (button(REF_PLAY, (text = "play reference"))) {
+    if (icon_button("refplay", "play")) {
         play_buf_copy(g_ref)
     }
     same_line(REF_SL2)
