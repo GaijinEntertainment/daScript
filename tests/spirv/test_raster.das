@@ -140,3 +140,34 @@ def test_fragment_math(t : T?) {
         delete words
     }
 }
+
+// Flat decoration: Vulkan mandates Flat on any integer / uint varying — int can't interpolate, so
+// without it the driver returns garbage. The emitter auto-applies Flat to int/uint @in/@out, and
+// honours an explicit `@flat` on float varyings (low-poly stylised look). The negative control is a
+// plain float varying with no @flat — it must NOT pick up Flat.
+[test]
+def test_vertex_flat(t : T?) {
+    t |> run("vertex: int @out is auto-Flat; @flat float @out is Flat; plain float @out is not") <| @(t : T?) {
+        var words <- flat_vert_words()
+        // exactly two Flat decorations (mat_id + flat_val); plain smooth_val stays unflagged
+        let nflat = count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Flat))
+        t |> success(nflat == 2, "flat_vert: 2 Flat decorations (got {nflat})")
+        // each Location is still present (Flat decoration sits alongside, not in place of, Location)
+        t |> success(has_location(words, 0u), "flat_vert: Location 0 (mat_id) still present")
+        t |> success(has_location(words, 1u), "flat_vert: Location 1 (flat_val) still present")
+        t |> success(has_location(words, 2u), "flat_vert: Location 2 (smooth_val) still present")
+        validate(t, words, "flat_vert")
+        delete words
+    }
+}
+
+[test]
+def test_fragment_flat(t : T?) {
+    t |> run("fragment: int @in is auto-Flat; @flat float @in is Flat; plain float @in is not") <| @(t : T?) {
+        var words <- flat_frag_words()
+        let nflat = count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Flat))
+        t |> success(nflat == 2, "flat_frag: 2 Flat decorations (got {nflat})")
+        validate(t, words, "flat_frag")
+        delete words
+    }
+}
