@@ -61,9 +61,10 @@ let PRIMITIVES_MODULE_NAME = "shader_dsl_primitives"
 // named `__::<scope>`<name>`<hash>` (backtick == 96). A concrete builtin is already bare.
 [macro_function]
 def native_bare_name(fullname : string) : string {
-    let t1 = find(fullname, 96, 0)
+    let bt = 96  // '`'
+    let t1 = find(fullname, bt, 0)
     if (t1 < 0) { return fullname }
-    let t2 = find(fullname, 96, t1 + 1)
+    let t2 = find(fullname, bt, t1 + 1)
     return t2 < 0 ? slice(fullname, t1 + 1) : slice(fullname, t1 + 1, t2)
 }
 
