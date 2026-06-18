@@ -156,7 +156,9 @@ def play_mix() {
 
 def play_layer(idx : int) {
     if (idx < 0 || idx >= length(g_layers)) return
+    let g = g_layers[idx].gain
     var b <- render_voice(g_layers[idx].voice)
+    for (s in b) { s *= g }   // the per-layer audition must honor the layer's gain (gain 0 = silent)
     play_buf_copy(b)
     delete b
 }

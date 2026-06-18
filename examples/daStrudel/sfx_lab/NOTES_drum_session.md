@@ -77,6 +77,13 @@ rimshot/cowbell.)
 - **The optimizer can drive a layer silent** (lpf_freq → 0, sound_vol → 0) since those are in its
   knob set — a latent footgun for the live "optimize" too. The batch flags it; the app doesn't.
 
+## Deferred / nice-to-have
+- **Wide-band low-volume noise floor.** Neither the kick nor the snare estimate captures the
+  quiet broadband noise present in the reference (its nature is unclear — possibly room/recording
+  noise, breath, or a very-low-level wide noise bed under the hit). Boris is OK shipping without it
+  as long as the rest of the sound fits, but it'd be a real nice touch if we ever model it
+  (candidate: a very-low-gain full-band noise layer, or a noise-floor term once the main fit is solid).
+
 ## Files
 - `sounds/{sd,hh,oh,cp,tom_low,tom_high,ride,crash,rimshot,cowbell,tambourine}.sfx` — the estimates.
 - `batch_drums.das` — headless "tune every drum" (reusable; faithful copy of the app optimizer).
