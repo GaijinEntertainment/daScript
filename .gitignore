@@ -148,3 +148,5 @@ flatten_fuzz_fail_*.das
 flatten_fuzz_residual_*.das
 # sfx_lab audition output (sfxr_presets.das writes WAVs here)
 sfxr_renders/
+# Dear ImGui auto-saved window layout (written to CWD by imgui apps)
+imgui.ini

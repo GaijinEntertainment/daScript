@@ -68,7 +68,8 @@ def private rnd_i(var seed : uint&; n : int) : int {
 def private p3(x : float) : float => x * x * x
 def private p5(x : float) : float => x * x * x * x * x
 
-def private wave_of(i : int) : SfxrWave {
+def sfxr_wave_of(i : int) : SfxrWave {
+    //! Map an integer index (0..4) to its SfxrWave, for UI combos / serialization.
     if (i == 1) return SfxrWave.sawtooth
     if (i == 2) return SfxrWave.sine
     if (i == 3) return SfxrWave.noise
@@ -285,9 +286,9 @@ def sfxr_pickup_coin(var seed : uint&) : SfxrSound {
 def sfxr_laser_shoot(var seed : uint&) : SfxrSound {
     //! Laser / shoot: fast downward pitch slide, often square/saw with duty motion.
     var s = SfxrSound()
-    s.wave = wave_of(rnd_i(seed, 2))
+    s.wave = sfxr_wave_of(rnd_i(seed, 2))
     if (s.wave == SfxrWave.sine && rnd_i(seed, 1) != 0) {
-        s.wave = wave_of(rnd_i(seed, 1))
+        s.wave = sfxr_wave_of(rnd_i(seed, 1))
     }
     s.base_freq = 0.5 + frnd(seed, 0.5)
     s.freq_limit = s.base_freq - 0.2 - frnd(seed, 0.6)
@@ -379,7 +380,7 @@ def sfxr_powerup(var seed : uint&) : SfxrSound {
 def sfxr_hit_hurt(var seed : uint&) : SfxrSound {
     //! Hit / hurt: short noisy or square burst with a steep downward slide.
     var s = SfxrSound()
-    s.wave = wave_of(rnd_i(seed, 2))
+    s.wave = sfxr_wave_of(rnd_i(seed, 2))
     if (s.wave == SfxrWave.sine) { s.wave = SfxrWave.noise; }
     if (s.wave == SfxrWave.square) { s.duty = frnd(seed, 0.6); }
     s.base_freq = 0.2 + frnd(seed, 0.6)
@@ -408,7 +409,7 @@ def sfxr_jump(var seed : uint&) : SfxrSound {
 def sfxr_blip_select(var seed : uint&) : SfxrSound {
     //! Blip / select: tiny UI tick, square or saw with a high-pass edge.
     var s = SfxrSound()
-    s.wave = wave_of(rnd_i(seed, 1))
+    s.wave = sfxr_wave_of(rnd_i(seed, 1))
     if (s.wave == SfxrWave.square) { s.duty = frnd(seed, 0.6); }
     s.base_freq = 0.2 + frnd(seed, 0.4)
     s.env_attack = 0.0
