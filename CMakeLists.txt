@@ -74,6 +74,27 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
+# Disable vcpkg's per-target applocal deploy project-wide.
+#
+# When built through the vcpkg toolchain on Windows, VCPKG_APPLOCAL_DEPS
+# defaults to ON, which appends a POST_BUILD "vcpkg z-applocal" step to every
+# executable / shared library. Since all of our binaries emit into the single
+# shared bin/, that means dozens of targets (the ~40 integration tutorials, the
+# test exes, the modules) each concurrently re-copy the same runtime DLLs into
+# bin/. Under Ninja's parallel link those copies collide on Windows with
+# "The process cannot access the file because it is being used by another
+# process" — a flaky build failure (observed on win32 Release).
+#
+# That deploy is pure redundant work for this project: our own DLLs
+# (libDaScriptDyn*.dll, ...) build directly into bin/, and every module that
+# needs a third-party DLL deploys it itself with an idempotent, single-target
+# copy_if_different (openssl via dasHV, glfw3.dll via dasGlfw). openssl is the
+# only vcpkg-installed package in any workflow, and it is covered by dasHV — so
+# nothing relies on vcpkg's applocal pass. Turning it off removes the race for
+# all targets and loses no deployed dependency. No-op on non-Windows / non-vcpkg
+# builds, where the variable is unused.
+set(VCPKG_APPLOCAL_DEPS OFF)
+
 SET(LINUX_UUID FALSE)
 
 IF(NOT DAS_FLEX_BISON_DISABLED)
