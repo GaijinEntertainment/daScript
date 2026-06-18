@@ -27,4 +27,10 @@ def test_handle_value_move_return(t : T?) {
         let y = make_big()
         t |> equal(sink(y), 1)
     }
+    // reading the moved-in value must match a freshly constructed one. before the
+    // fix, the register-returned value was a bogus pointer, so this crashed.
+    t |> run("move-returned value is readable") @(t : T?) {
+        let y = make_big()
+        t |> equal("{y}", "{BigEntityId()}")
+    }
 }
