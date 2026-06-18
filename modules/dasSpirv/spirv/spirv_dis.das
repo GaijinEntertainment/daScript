@@ -139,8 +139,9 @@ def public count_op_operand_at(words : array<uint>; op : SpvOp; idx : int; value
 // words, and ids (id_main + interface globals) are all allocated in the unchanged module-assembly half,
 // so they are stable across the port and compare raw.
 def public op_operand_is_literal(opName : string; idx : int) : bool {
-    if (opName == "OpEntryPoint" || opName == "OpCapability" || opName == "OpMemoryModel") return true
-    if (opName == "OpExtension") return true   // all operand words encode the extension-name string
+    // OpExtension's operand words encode the extension-name string (LSB-first bytes, NUL-terminated),
+    // so every operand is a literal -- group it with the other all-operand-literal opcodes.
+    if (opName == "OpEntryPoint" || opName == "OpCapability" || opName == "OpMemoryModel" || opName == "OpExtension") return true
     if (opName == "OpExecutionMode" || opName == "OpDecorate" || opName == "OpMemberDecorate" || opName == "OpExtInstImport") return idx >= 1
     if (opName == "OpConstant") return idx == 2
     if (opName == "OpTypeInt") return idx == 1 || idx == 2

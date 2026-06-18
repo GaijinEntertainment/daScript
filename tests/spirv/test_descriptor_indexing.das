@@ -28,7 +28,7 @@ def private has_extension(words : array<uint>; want : string) : bool {
     var found = false
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (found || opcode != uint(SpvOp.Extension)) return
-        var name = build_string() $(var wr) {
+        let name = build_string() $(var wr) {
             for (k in range(n)) {
                 let wd = w[s + k]
                 for (i in range(4)) {
