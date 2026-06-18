@@ -96,7 +96,8 @@ Parity or near-parity with strudel.cc:
      - ``strudel_pattern``
      - ``sine``/``cosine``/``saw``/``tri``/``square``/``isaw``/``itri``
        and their bipolar ``*2`` variants, ``perlin``, ``rand``/``irand``,
-       ``run``, ``range``
+       ``run``, ``range``, and the generic ``signal(fn)`` constructor
+       (an arbitrary time-to-value function)
    * - Synthesis
      - ``strudel_synth``
      - oscillators (``sine``, ``sawtooth``, ``square``, ``triangle``,
@@ -370,6 +371,41 @@ disambiguation.
 - Tutorial: :ref:`tutorial_dastrudel_hrtf_position`
 - Demo: ``examples/daStrudel/hrtf/``
 - Engine reference: :ref:`ma_hrtf <handle-audio-ma_hrtf>`
+
+
+Host-driven / adaptive control
+------------------------------
+
+**Extension:** daStrudel runs **in-process inside a host program** (a game, a
+tool), not only a browser REPL - so the host can drive any pattern parameter
+from live runtime state.
+
+The key primitive is ``signal(fn : lambda<(t : double) : float>)``: a control
+signal built from an arbitrary time-to-value function.  Point it at a host
+variable and the value is read live on each cycle query, so flipping the
+variable re-shapes the running pattern.  Combined with the pattern-valued
+setters (``gain``, ``lpf``, ...), this gates or morphs layers straight from
+host state:
+
+.. code-block:: das
+
+   var DRUMS_ON = false                 // host flag, flipped at runtime
+   drums |> gain(signal(@(t : double) => DRUMS_ON ? 1.0 : 0.0))
+
+One continuous ``stack`` whose layers are gated by host flags is the whole of
+*vertical-layering adaptive music*: a switch is one variable write, picked up
+on the next cycle boundary, so the change lands cleanly with no click and no
+crossfade machinery.  Whole patterns can also be added or dropped live with
+``strudel_add_track`` / ``strudel_remove_track``.  The host drives playback
+from its own loop with ``strudel_tick`` (main thread), or bakes a fixed render
+offline (no audio device) via the ``examples/daStrudel/features`` harness
+(``--wav`` / ``--duration``).
+
+The result is the basis for interactive / game-adaptive audio: the host emits
+state, control signals read it, and the single running pattern adapts - all in
+one daslang context, no REPL and no external sequencer.  See the
+``examples/daStrudel/strudel_sf2_live/`` demo and the state-driven game music
+in ``examples/games/river_run/rr_audio.das``.
 
 
 .. _strudel_cc_naming:
