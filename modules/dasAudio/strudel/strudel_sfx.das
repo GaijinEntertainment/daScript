@@ -198,8 +198,21 @@ struct PostState {
 // Apply the enabled effects, in chain order, to a mono buffer in place (rate = sample rate, Hz).
 // Effects run on an interleaved stereo working copy; the result is folded back to mono.
 def apply_post(var mono : array<float>; p : PostChain; rate : float) {
+    let n0 = length(mono)
+    if (n0 == 0 || !any_enabled(p)) return
+    // extend the buffer with silence so the reverb / delay tail isn't cut off
+    var tail = 0
+    if (p.reverb.enabled) {
+        tail = max(tail, int(p.reverb.decay * rate * 1.5))
+    }
+    if (p.delay.enabled) {
+        let echoes = min(log(0.001) / log(max(p.delay.feedback, 0.02)), 30.0)
+        tail = max(tail, int(p.delay.time * rate * echoes))
+    }
+    if (tail > 0) {
+        mono |> resize(n0 + tail)
+    }
     let n = length(mono)
-    if (n == 0 || !any_enabled(p)) return
     var st : array<float>
     st |> resize(n * 2)
     for (i in range(n)) {
