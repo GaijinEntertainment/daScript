@@ -17,6 +17,9 @@ require audio/audio_wav
 require strudel/strudel_sfx
 require imgui/imgui_icons
 require minfft
+require sfx_analysis
+require live/live_commands
+require daslib/json_boost
 require daslib/fio
 require math
 
@@ -39,6 +42,10 @@ var g_ref_spec : array<float>
 var g_ref_name = "(no reference loaded)"
 var g_ref_path = ""              // full path of the loaded reference (saved as mimic_target)
 var g_show_ref = true            // overlay the reference on the mix plots
+var g_fit : FitScore             // current reference-vs-mix fit (valid when g_have_fit)
+var g_ref_feat : SfxFeatures
+var g_mix_feat : SfxFeatures
+var g_have_fit = false
 
 // which file-dialog operation is in flight (the dialog is shared)
 let DLG_NONE = 0
@@ -152,7 +159,20 @@ def rebuild_mix() {
     delete eff
     downsample(g_mix, g_mix_wave, 2000)
     compute_spectrum(g_mix, g_mix_spec)
+    recompute_fit()
     g_mix_dirty = false
+}
+
+// reference-vs-mix features + fit; valid only when both a reference and a mix exist
+def recompute_fit() {
+    if (empty(g_ref) || empty(g_mix)) {
+        g_have_fit = false
+        return
+    }
+    g_ref_feat = analyze(g_ref, SR)
+    g_mix_feat = analyze(g_mix, SR)
+    g_fit = fit(g_ref, g_mix, SR)
+    g_have_fit = true
 }
 
 // ===== reference target =====
@@ -204,6 +224,7 @@ def load_reference(path : string) {
     g_ref_path = path
     g_show_ref = true
     REF_SHOW.value = true
+    recompute_fit()
 }
 
 def do_save_sound(path : string) {
@@ -609,6 +630,12 @@ def modal_editor() : bool {
 }
 
 def mix_panel() {
+    if (g_have_fit) {
+        text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%   shape {int(g_fit.envelope * 100.0)}%)"))
+        text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)"))
+    } else {
+        text(FIT_TXT, (text = "fit: load a reference to compare"))
+    }
     plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
         setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         plot_line("mix", g_mix_wave)
@@ -791,4 +818,48 @@ def main() {
         update()
     }
     shutdown()
+}
+
+// ===== live commands (so the signal is observable headlessly, not just on screen) =====
+
+struct SfxReport {
+    ref_loaded : bool
+    ref_name   : string
+    ref        : SfxFeatures
+    mix        : SfxFeatures
+    fit        : FitScore
+    ref_spec   : array<float>   // ~48-pt downsampled dB spectrum
+    mix_spec   : array<float>
+}
+
+def private spec48(src : array<float>) : array<float> {
+    var d : array<float>
+    downsample(src, d, 48)
+    return <- d
+}
+
+def private make_report() : JsonValue? {
+    return JV(SfxReport(ref_loaded = g_have_fit, ref_name = g_ref_name,
+        ref = g_ref_feat, mix = g_mix_feat, fit = g_fit,
+        ref_spec <- spec48(g_ref_spec), mix_spec <- spec48(g_mix_spec)))
+}
+
+[live_command(description = "SFX lab: reference-vs-mix features + fit score + downsampled spectra")]
+def sfx_report(_input : JsonValue?) : JsonValue? {
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
+}
+
+struct LoadRefArgs {
+    path : string
+}
+
+[live_command(description = "SFX lab: load a reference wav by path, then report fit. Args: path")]
+def sfx_load_ref(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<LoadRefArgs>)
+    if (empty(args.path)) return JV("missing path")
+    load_reference(args.path)
+    return make_report()
 }
