@@ -450,6 +450,13 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     // Vulkan deferred-rendering subpasses to read the previous subpass's color/depth at the same
     // fragment coordinate (the int2(0,0) is an OFFSET relative to gl_FragCoord, not an absolute pos).
     if (is_subpass_input_type(v._type)) {
+        // SubpassData images + the InputAttachment capability are fragment-only per the Vulkan
+        // spec; reject the global at emit time with a clean message rather than letting spirv-val
+        // surface it as a structural error.
+        if (stage != ShaderStage.Fragment) {
+            errors |> push("subpassInput '{vname}' is fragment-only (Vulkan subpass-input attachments)")
+            return
+        }
         let img = type_image(m, type_float(m, 32u), SpvDim.SubpassData, 0u, 2u, SpvImageFormat.Unknown)
         let pt = type_pointer(m, SpvStorageClass.UniformConstant, img)
         let vid = alloc_id(m)
@@ -2108,6 +2115,10 @@ class SpirvEmit : AstVisitor {
         // "this fragment" -- which is the only useful subpass-input sampling pattern (subpasses share
         // pixel locality with the previous pass).
         if (name == "subpassLoad") {
+            if (ctx.stage != ShaderStage.Fragment) {
+                errs |> push("subpassLoad is fragment-only (Vulkan subpass-input attachments)")
+                return expr
+            }
             if (length(expr.arguments) != 1) {
                 errs |> push("subpassLoad expects (input)")
                 return expr
