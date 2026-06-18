@@ -354,9 +354,9 @@ def layers_panel() {
         if (g_layers[i].locked) { marks += " [lock]"; }
         if (g_layers[i].link_source >= 0) { marks += " [link]"; }
         let lbl = "{g_layers[i].name}  ({kind}){marks}###L{i}"
-        // the row selectable spans full width; let the trailing buttons on the same line win clicks
-        SetNextItemAllowOverlap()
-        if (selectable_label(LAYER_ROW[i], lbl, i == g_sel)) {
+        // limit the selectable to the name column so its hit-box doesn't sit under the row buttons
+        let name_w = max(GetContentRegionAvail().x - 130.0, 80.0)
+        if (selectable_label(LAYER_ROW[i], lbl, i == g_sel, ImGuiSelectableFlags.None, float2(name_w, 0.0))) {
             g_sel = i
         }
         same_line(ROW_SL1[i])
