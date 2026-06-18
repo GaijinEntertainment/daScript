@@ -393,9 +393,11 @@ host state:
    drums |> gain(signal(@(t : double) => DRUMS_ON ? 1.0 : 0.0))
 
 One continuous ``stack`` whose layers are gated by host flags is the whole of
-*vertical-layering adaptive music*: a switch is one variable write, picked up
-on the next cycle boundary, so the change lands cleanly with no click and no
-crossfade machinery.  Whole patterns can also be added or dropped live with
+*vertical-layering adaptive music* - a switch is one variable write, no
+crossfade machinery.  The flag is sampled per query (at each event's onset), so
+a flip takes effect on the next scheduler query as upcoming events are
+scheduled - sub-cycle, not aligned to an exact cycle boundary.  Whole patterns
+can also be added or dropped live with
 ``strudel_add_track`` / ``strudel_remove_track``.  The host drives playback
 from its own loop with ``strudel_tick`` (main thread), or bakes a fixed render
 offline (no audio device) via the ``examples/daStrudel/features`` harness
