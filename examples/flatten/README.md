@@ -22,8 +22,8 @@ call-free code.
 | Path | What |
 |---|---|
 | `shaders/user_shaders/`, `shaders/user_shaders_2d/` | The real EdenSpark sample shaders (3D + 2D post-fx), **unedited**. |
-| `shaders/features/` | Loop-unroll feature fixtures (array-literal / parallel multi-iterator / `urange` sources). The backend bans `ExprFor`, so these compile **only** because flatten unrolls them — flatten is load-bearing, not transparent. |
-| `backend/shader_dsl_primitives.das` | The `[hint]`/`[stub]` leaf primitives + I/O contract structs (`PbrInput`/`PbrOutput`). |
+| `shaders/features/` | Feature fixtures: loop-unroll source forms (array-literal / parallel multi-iterator / `urange`) that compile **only** because flatten unrolls them, plus `angle_spin.shader` exercising the native `radians`/`degrees` → `mul` lowering. flatten is load-bearing, not transparent. |
+| `backend/shader_dsl_primitives.das` | I/O contract structs (`PbrInput`/`PbrOutput`) + the leaf primitives. The component-wise math ops are the native daslang `math` builtins (`require math public`); only the engine-specific leaves (`tex2d`/`noise`/`frac`/`remap`/`one_minus`/`fresnel`/`unpack_normal`) remain `[hint]` stubs. |
 | `backend/shader_dsl_boost.das` | The validator + graph IR builder + the `[pixel_shader]` annotation. **This is where flatten is wired in.** |
 | `backend/shader_graph_ir_builder.das` | Print-only stand-in for the engine's native `sg_ir_*` graph sink — dumps human-readable opcodes. |
 | `backend/shader_dsl.das` | Re-exporter: `require engine.render.shader_dsl` pulls in the two modules above. |
@@ -32,10 +32,13 @@ call-free code.
 ## How flatten plugs in
 
 The `[pixel_shader]` annotation's `patch` hook calls `flatten_function(func, HINT_WHITELIST)`
-*before* validation (`backend/shader_dsl_boost.das`). `HINT_WHITELIST` is the set of
-backend primitive names — flatten keeps those calls as leaves and inlines/lowers
-everything else. The backend then walks the branchless result. For the capability
-tier the backend also maps `ExprOp3 → Select` (and comparison ops → mask nodes) to
+*before* validation (`backend/shader_dsl_boost.das`). `HINT_WHITELIST` is the set of leaf
+primitive names — flatten keeps those calls as leaves and inlines/lowers everything else.
+The leaves are the native `math` builtins (mapped to opcodes by name via `NATIVE_OPCODE`)
+plus the engine-specific `[hint]` stubs. `radians`/`degrees` carry no opcode: `flatten_opt`
+lowers each to a `mul` (`radians(x) → x * K`), and an adjacent const factor merges
+(`degrees(x) * C → x * (K*C)`). The backend then walks the branchless result. For the
+capability tier it also maps `ExprOp3 → Select` (and comparison ops → mask nodes) to
 consume flatten's `?:` output.
 
 ## Two tiers

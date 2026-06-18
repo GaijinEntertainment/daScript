@@ -595,6 +595,12 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
     delete current
 }
 
+// radians/degrees are each exactly one float32 multiply by these conversion constants —
+// the bit pattern the C++ helpers (aot_builtin_math.h radians_float/degrees_float) fold to,
+// verified bit-identical to evaluating the builtin at 1.0 (0x3c8efa35 / 0x42652ee0).
+let private DEG_TO_RAD = 0.017453292f
+let private RAD_TO_DEG = 57.295776f
+
 class private FoldVisitor : AstVisitor {
     changed : bool
     noFastMath : bool
@@ -755,6 +761,21 @@ class private FoldVisitor : AstVisitor {
             if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
                 changed = true
                 return folded
+            }
+        }
+        // Lower radians/degrees to their defining multiply (`x * K`) so an adjacent const
+        // factor merges (`degrees(x) * C → x * (K*C)`, via reassoc) and a backend needs no
+        // radians/degrees opcode — only `mul`. Bit-exact (K = the builtin at 1.0); a const
+        // arg already folded to a literal above. `x * scalarK` covers float and float-vector
+        // (vec*scalar is native, matching the C++ v_mul-by-splat form).
+        if (that.func != null && that.func.flags.builtIn && length(that.arguments) == 1
+                && is_float_family(expr_bt(that.arguments[0]))) {
+            let nm = psh_simple_name("{that.func.name}")
+            if (nm == "radians" || nm == "degrees") {
+                changed = true
+                let k = nm == "radians" ? DEG_TO_RAD : RAD_TO_DEG
+                return new ExprOp2(at = that.at, op := "*", left = that.arguments[0],
+                    right = new ExprConstFloat(at = that.at, value = k))
             }
         }
         // DISASSEMBLE mad (and, under `expandLerp`, lerp) into raw arithmetic so the folds,

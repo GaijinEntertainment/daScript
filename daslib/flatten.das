@@ -50,6 +50,7 @@ let private STD_WHITELIST : table<string> <- {
     "min", "max", "abs", "clamp", "saturate", "sign", "floor", "ceil", "round", "trunc", "frac",
     "sqrt", "rsqrt", "pow", "exp", "exp2", "log", "log2",
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sincos",
+    "radians", "degrees",   // lowered to `x * K` by flatten_opt (no opcode needed)
     "dot", "cross", "length", "normalize", "distance", "reflect", "refract",
     "lerp", "mix", "step", "smooth_step", "rcp", "mad",
     "float2", "float3", "float4", "int2", "int3", "int4", "uint2", "uint3", "uint4"

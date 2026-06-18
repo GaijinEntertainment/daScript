@@ -57,6 +57,17 @@ def clean_mangled_names(s : string) : string {
 let DEBUG_AT = false
 let PRIMITIVES_MODULE_NAME = "shader_dsl_primitives"
 
+// Bare function name from a (possibly mangled) symbol: an OR-type / generic instance is
+// named `__::<scope>`<name>`<hash>` (backtick == 96). A concrete builtin is already bare.
+[macro_function]
+def native_bare_name(fullname : string) : string {
+    let bt = 96  // '`'
+    let t1 = find(fullname, bt, 0)
+    if (t1 < 0) { return fullname }
+    let t2 = find(fullname, bt, t1 + 1)
+    return t2 < 0 ? slice(fullname, t1 + 1) : slice(fullname, t1 + 1, t2)
+}
+
 // Per-contract I/O struct names in PRIMITIVES_MODULE_NAME.
 // Add a row here when introducing a new contract.
 let CONTRACT_INPUT_STRUCTS : table<string; string> = {
@@ -68,17 +79,32 @@ let CONTRACT_OUTPUT_STRUCTS : table<string; string> = {
     "unlit" => "UnlitOutput"
 }
 
-// Leaf primitives flatten must KEEP (not inline). These are the shader DSL's
-// [hint] primitives plus the vector constructors the backend lowers directly.
-// flatten matches by call name, so list function names (not the hint typeIds).
+// Leaf primitives flatten must KEEP (not inline). The native core math builtins
+// (mapped to opcodes via NATIVE_OPCODE) plus the engine-specific [hint] stubs and
+// the vector constructors the backend lowers directly. flatten matches by call name,
+// so list function names. `smooth_step` is absent — it is a native alias that flatten
+// INLINES to `smoothstep`. radians/degrees survive cycle 1 but carry no opcode:
+// flatten_opt lowers them to `x * K` (a `mul`) before the backend ever sees them.
 let HINT_WHITELIST : table<string> <- {
     "tex2d", "noise",
     "abs", "min", "max", "clamp", "saturate", "frac", "floor", "ceil", "mad", "lerp",
     "sqrt", "pow", "sin", "cos", "atan2", "log", "exp", "sign",
     "dot", "cross", "length", "normalize", "fresnel",
-    "remap", "one_minus", "step", "smooth_step", "unpack_normal",
+    "remap", "one_minus", "step", "smoothstep", "radians", "degrees", "unpack_normal",
     "float", "int",
     "float2", "float3", "float4", "int2", "int3", "int4"
+}
+
+// Native core math builtins → shader-graph opcode. These carry no [hint] annotation
+// (they are daslang `math` builtins, not DSL stubs), so the validator maps them by
+// name. dot/length/normalize are width-dependent and resolved separately (below).
+let NATIVE_OPCODE : table<string; string> <- {
+    "abs" => "abs", "min" => "min", "max" => "max", "clamp" => "clamp", "saturate" => "sat",
+    "floor" => "floor", "ceil" => "ceil", "sign" => "sign",
+    "sqrt" => "sqrt", "pow" => "pow", "sin" => "sin", "cos" => "cos", "atan2" => "atan2",
+    "log" => "log", "exp" => "exp",
+    "lerp" => "lerp", "mad" => "mad", "step" => "step", "smoothstep" => "smoothStep",
+    "cross" => "cross_f3"
 }
 
 // Surviving intrinsics that can't run in the per-draw preshader (texture sample / procedural
@@ -861,6 +887,36 @@ class ValidateShaderVisitor : AstVisitor {
                 register_node(expr, irNode)
                 return
             }
+        }
+        // Native core math builtins (no [hint]): map the bare name to its opcode.
+        // dot/length/normalize resolve to a width-specific opcode from the operand.
+        let fn = native_bare_name("{expr.func.name}")
+        var nativeOp = NATIVE_OPCODE?[fn] ?? ""
+        if (nativeOp == "" && !empty(expr.arguments)) {
+            // dot/length/normalize: width-specific opcode, ONLY for an exact float2/3/4 operand
+            // (and arity). Any other type leaves nativeOp empty so an unrelated overload — e.g.
+            // length(string)/length(array) — falls through to the "unsupported function call"
+            // rejection rather than silently emitting len_f3 (fail-closed).
+            let w = expr.arguments[0]._type.baseType
+            let nargs = expr.arguments.length()
+            if (fn == "dot" && nargs == 2) {
+                nativeOp = w == Type.tFloat2 ? DotF2 : (w == Type.tFloat3 ? DotF3 : (w == Type.tFloat4 ? DotF4 : ""))
+            } elif (fn == "length" && nargs == 1) {
+                nativeOp = w == Type.tFloat2 ? LenF2 : (w == Type.tFloat3 ? LenF3 : (w == Type.tFloat4 ? LenF4 : ""))
+            } elif (fn == "normalize" && nargs == 1) {
+                nativeOp = w == Type.tFloat2 ? NormF2 : (w == Type.tFloat3 ? NormF3 : (w == Type.tFloat4 ? NormF4 : ""))
+            }
+        }
+        if (nativeOp != "") {
+            var irNode = begin_op(expr, nativeOp, kind)
+            for (arg in expr.arguments) {
+                add_arg(irNode, arg)
+            }
+            if (!expr.func.result.isVoid) {
+                irNode.outputs.push(add_pin(expr))
+            }
+            register_node(expr, irNode)
+            return
         }
         // Scalar `float(x)` cast — identity in the float-only shader graph. Useful
         // after loop unrolling, where an int loop index participates in float math
