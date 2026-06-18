@@ -1010,60 +1010,69 @@ def mix_header() {
     }
 }
 
-def mix_panel() {
-    mix_header()
-    if (g_have_fit) {
-        if (button(OPT_VOICE_BTN, (text = "opt voice"))) {
-            run_optimize(OPT_VOICE)
-        }
-        same_line(OPT_SL1)
-        if (button(OPT_FX_BTN, (text = "opt fx"))) {
-            run_optimize(OPT_POST)
-        }
-        same_line(OPT_SL2)
-        if (button(OPT_ALL_BTN, (text = "opt all"))) {
-            run_optimize(OPT_COMBINED)
-        }
-        same_line(OPT_SL3)
-        if (button(OPT_DISC_BTN, (text = "+ discover modal"))) {
-            run_discover()
-        }
-        same_line(OPT_SL4)
-        OPT_ITERS.bounds = (4, 80)
-        slider_int(OPT_ITERS, (text = "iters"))
-        if (!empty(g_opt_result)) {
-            text(OPT_RESULT, (text = g_opt_result))
-        }
+// shared opt-button row (only meaningful once a reference is loaded)
+def opt_row() {
+    if (button(OPT_VOICE_BTN, (text = "opt voice"))) {
+        run_optimize(OPT_VOICE)
     }
-    plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
-        plot_line("mix", g_mix_wave)
-        if (g_show_ref && !empty(g_ref_wave)) {
-            plot_line("reference", g_ref_wave)
-        }
+    same_line(OPT_SL1)
+    if (button(OPT_FX_BTN, (text = "opt fx"))) {
+        run_optimize(OPT_POST)
     }
-    plot(MIX_SPEC, (title = "mix spectrum (dB)", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
-        plot_line("mix", g_mix_spec)
-        if (g_show_ref && !empty(g_ref_spec)) {
-            plot_line("reference", g_ref_spec)
-        }
+    same_line(OPT_SL2)
+    if (button(OPT_ALL_BTN, (text = "opt all"))) {
+        run_optimize(OPT_COMBINED)
+    }
+    same_line(OPT_SL3)
+    if (button(OPT_DISC_BTN, (text = "+ discover modal"))) {
+        run_discover()
+    }
+    same_line(OPT_SL4)
+    OPT_ITERS.bounds = (4, 80)
+    slider_int(OPT_ITERS, (text = "iters"))
+    if (!empty(g_opt_result)) {
+        text(OPT_RESULT, (text = g_opt_result))
     }
 }
 
-// spectrum-over-time: STFT magnitude (dB) as a color heatmap, time on X, freq on Y (high at top)
-def spectro_panel() {
+// Unified preview: shared play + fit + opt-row on top, the different views in tabs underneath
+// (waveform/spectrum vs spectrum-over-time spectrogram). Replaces the separate Mix + Spectrogram
+// docks, which duplicated the play button and fit readout.
+def preview_panel() {
     mix_header()
-    plot(SPEC_MIX, (title = "mix - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
-        if (!empty(g_mix_spectro)) {
-            plot_heatmap("mix", g_mix_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
-        }
+    if (g_have_fit) {
+        opt_row()
     }
-    plot(SPEC_REF, (title = "reference - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
-        setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
-        if (!empty(g_ref_spectro)) {
-            plot_heatmap("ref", g_ref_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
+    tab_bar(PV_TABS, (text = "preview", flags = ImGuiTabBarFlags.None)) {
+        tab_item(PV_TAB_WAVE, (text = "Wave + Spectrum", closable = false, flags = ImGuiTabItemFlags.None)) {
+            plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+                setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                plot_line("mix", g_mix_wave)
+                if (g_show_ref && !empty(g_ref_wave)) {
+                    plot_line("reference", g_ref_wave)
+                }
+            }
+            plot(MIX_SPEC, (title = "mix spectrum (dB)", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+                setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                plot_line("mix", g_mix_spec)
+                if (g_show_ref && !empty(g_ref_spec)) {
+                    plot_line("reference", g_ref_spec)
+                }
+            }
+        }
+        tab_item(PV_TAB_SPECTRO, (text = "Spectrogram", closable = false, flags = ImGuiTabItemFlags.None)) {
+            plot(SPEC_MIX, (title = "mix - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+                setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                if (!empty(g_mix_spectro)) {
+                    plot_heatmap("mix", g_mix_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
+                }
+            }
+            plot(SPEC_REF, (title = "reference - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+                setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                if (!empty(g_ref_spectro)) {
+                    plot_heatmap("ref", g_ref_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
+                }
+            }
         }
     }
 }
@@ -1223,8 +1232,7 @@ def setup_default_layout(dock_id : uint) {
     DockBuilderDockWindow("Layers", layers_id)
     DockBuilderDockWindow("Editor", editor_id)
     DockBuilderDockWindow("Reference", ref_id)
-    DockBuilderDockWindow("Mix", mix_id)
-    DockBuilderDockWindow("Spectrogram", mix_id)
+    DockBuilderDockWindow("Preview", mix_id)
     DockBuilderDockWindow("Postprocess", editor_id)
     DockBuilderFinish(dock_id)
 }
@@ -1324,11 +1332,8 @@ def update() {
         dock_window(REFERENCE, (text = "Reference", closable = false, flags = ImGuiWindowFlags.None)) {
             reference_panel()
         }
-        dock_window(MIX, (text = "Mix", closable = false, flags = ImGuiWindowFlags.None)) {
-            mix_panel()
-        }
-        dock_window(SPECTRO, (text = "Spectrogram", closable = false, flags = ImGuiWindowFlags.None)) {
-            spectro_panel()
+        dock_window(PREVIEW, (text = "Preview", closable = false, flags = ImGuiWindowFlags.None)) {
+            preview_panel()
         }
         dock_window(POSTPROC, (text = "Postprocess", closable = false, flags = ImGuiWindowFlags.None)) {
             postprocess_panel()
