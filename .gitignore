@@ -9,6 +9,7 @@ benchdata.db
 
 # build artifacts
 build/
+build-ninja/
 build-track/
 build-rwdi/
 build-asan/

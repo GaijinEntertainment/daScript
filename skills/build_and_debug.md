@@ -31,6 +31,16 @@ This skill uses `bin/Release/daslang.exe` in examples below (the dominant local-
 - For incremental builds after editing a single `.cpp` file, expect ~2-5 minutes. For changes touching headers, expect longer
 - **MSVC `C1001` / `LNK1000` during "Generating code"** (Windows) — link-time codegen (LTCG) choking on a **stale incremental database** (`.ipdb`/`.iobj`) in a long-lived `build/`, *not* a code bug. The line `"no usable IPDB/IOBJ from previous compilation … fall back to full compilation"` on a clean retry confirms it. Fix: clean-rebuild just the offending target — `cmake --build build --target <name> --clean-first` — rather than nuking `build/`. Commonly triggered when a config change (e.g. flipping a `DAS_*_DISABLED` flag) forces a recompile of an object whose stale LTCG state no longer matches.
 
+### Shared OpenSSL cache (Windows/MSVC) — the big first-build lever
+
+On **Windows/MSVC**, the dominant cost of a *fresh* build dir is **dasHV building OpenSSL 3.5.1 from source** (~15 min of the clean build): `modules/dasHV/CMakeLists.txt` defaults `OPENSSL_ROOT_DIR` to `${CMAKE_BINARY_DIR}/openssl` (per build dir), so every new `build*/` and every worktree rebuilds it. The configure prints which path it took — `dasHV: … building 3.5.1 from source` vs `dasHV: using prebuilt OpenSSL <version> (include: <dir>) - skipping source build`.
+
+To build OpenSSL **once and reuse it everywhere**, point it at a shared cache (it's an `IF(NOT OpenSSL_FOUND)` gate — first build populates the dir, all later builds `find_package` → skip):
+- **Env (covers CLI + VS Code):** set `DASLANG_OPENSSL_DIR=%LOCALAPPDATA%/daslang/openssl` once in your environment.
+- **Per-configure:** `cmake … -DOPENSSL_ROOT_DIR=<shared-dir>`.
+
+The default (no env, no flag) stays per-build-dir, so **CI is unchanged** — its lanes use vcpkg (`vcpkg install openssl` + the vcpkg toolchain) or a cached from-source `build-clangcl/openssl` for the same effect. Linux/macOS use the system OpenSSL (brew/apt/mingw sysroot), so this is MSVC-only.
+
 ## Debugging runtime crashes
 
 - **Always check the exit code** after running `daslang` — a crash may produce no output, looking like a silent success

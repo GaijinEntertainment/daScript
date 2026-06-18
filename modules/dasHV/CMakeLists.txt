@@ -12,9 +12,20 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		# Both are MSVC-only — perl invokes OpenSSL's MSVC-flavored config and
 		# nmake is the MSVC make tool. clang-mingw / gcc-mingw take the ELSE
 		# branch below and pick up the system OpenSSL from the mingw sysroot.
-		set(OPENSSL_ROOT_DIR "${CMAKE_BINARY_DIR}/openssl")
-		find_package(OpenSSL QUIET PATHS ${OPENSSL_ROOT_DIR})
+		# OPENSSL_ROOT_DIR defaults to a build-dir-local openssl/, but honors an
+		# override (env DASLANG_OPENSSL_DIR, or -DOPENSSL_ROOT_DIR) so OpenSSL can
+		# be built once into a shared per-machine cache and reused across build
+		# dirs / worktrees instead of rebuilt per build dir. CI sets neither, so
+		# its per-build-dir path (and the build-clangcl/openssl cache) is unchanged.
+		if(NOT OPENSSL_ROOT_DIR AND DEFINED ENV{DASLANG_OPENSSL_DIR})
+			set(OPENSSL_ROOT_DIR "$ENV{DASLANG_OPENSSL_DIR}")
+		endif()
+		if(NOT OPENSSL_ROOT_DIR)
+			set(OPENSSL_ROOT_DIR "${CMAKE_BINARY_DIR}/openssl")
+		endif()
+		find_package(OpenSSL QUIET PATHS "${OPENSSL_ROOT_DIR}")
 		IF(NOT OpenSSL_FOUND)
+			MESSAGE(STATUS "dasHV: OpenSSL not found at ${OPENSSL_ROOT_DIR} - building 3.5.1 from source (one-time per OPENSSL_ROOT_DIR)")
 			# Build openssl from sources
 			if(${CMAKE_SIZEOF_VOID_P} EQUAL 8)
 				set(OPENSSL_ARCH "VC-WIN64A")
@@ -53,6 +64,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 			list(APPEND OPENSSL_LIBRARIES_FILES Crypt32.lib)
 			SET(OPENSSL_FROM_SOURCES TRUE)
 		ELSE()
+			MESSAGE(STATUS "dasHV: using prebuilt OpenSSL ${OPENSSL_VERSION} (include: ${OPENSSL_INCLUDE_DIR}) - skipping source build")
 			SET(OPENSSL_LIBRARIES_FILES OpenSSL::Crypto OpenSSL::SSL)
 		ENDIF()
 
