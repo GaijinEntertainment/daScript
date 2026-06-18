@@ -61,6 +61,8 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 
 **Configuration.** Configure `.mcp.json` with `"command"` pointing at the daslang binary (`bin/Release/daslang.exe` on Windows MSVC, `build/daslang` on Linux/macOS, `bin/daslang` for the installed SDK), `"args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and Claude Code permissions.
 
+**Fresh checkouts / worktrees.** `.mcp.json`, `sgconfig.yml`, `bin/`, and the tree-sitter grammar lib are all gitignored, so a new `git worktree add` (or clone) has no daslang MCP at all. Bootstrap it with `daslang utils/mcp/setup.das -- --root <worktree>` — it builds a worktree-local binary (+ grammar), copies the platform `sgconfig.yml`, and merges a `daslang` entry into `.mcp.json` (adds no new secrets; existing servers, including any secret env blocks, are preserved as-is). `--no-build` skips the build. Restart the session to pick it up.
+
 **`"defer_loading": false`.** The repo's `.mcp.json` sets this on the `daslang` server entry so tool schemas load at session start instead of being deferred (deferred = caller has to `ToolSearch select:<tool>` before each first call). When the harness honors the flag, this removes the per-call ToolSearch friction. When it doesn't (currently the upstream behavior — see [Issue #26844](https://github.com/anthropics/claude-code/issues/26844)), the flag is harmless and tools fall back to the deferred path; CLAUDE.md's "MCP-first search" rule documents that workflow.
 
 **Tests:** run `dastest/dastest.das -- --test utils/mcp/test_tools.das` through the daslang binary.

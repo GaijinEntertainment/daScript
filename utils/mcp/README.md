@@ -108,6 +108,37 @@ claude mcp add daslang -- ./bin/daslang utils/mcp/main.das
 
 Claude Code starts and stops the server automatically with each session.
 
+### Fresh checkouts and worktrees
+
+A new `git worktree add` (or a fresh clone) does **not** carry the files the MCP
+server needs: `.mcp.json`, `sgconfig.yml`, a built `bin/` binary, and the
+tree-sitter grammar shared lib are all gitignored, so a Claude session opened in
+a worktree silently has zero daslang tools. Bootstrap one with:
+
+```bash
+# run from ANY existing daslang binary, pointed at the target worktree
+bin/Release/daslang.exe utils/mcp/setup.das -- --root <worktree-abs-path>   # Windows MSVC
+./bin/daslang           utils/mcp/setup.das -- --root <worktree-abs-path>   # Linux / macOS
+daslang                 utils/mcp/setup.das -- --root <worktree-abs-path>   # when daslang is on PATH
+```
+
+`setup.das` builds a worktree-local `daslang` (+ the `tree_sitter_daslang`
+grammar), copies the platform `sgconfig.yml` template, and writes/merges
+`.mcp.json` with the `daslang` server entry. It adds no new secrets, and
+preserves any existing server entries (e.g. `github`, including their env
+blocks) as-is. Pass `--no-build` to only wire the
+config to an already-built binary. On Windows it also points the build at a
+shared OpenSSL cache (`%LOCALAPPDATA%/daslang/openssl`; override with
+`--openssl-dir`) so OpenSSL is built once instead of ~15 min per worktree.
+Restart the session in the worktree afterward to pick up the server.
+
+> **`das_root` is derived from the binary, not the cwd** (`src/misc/sysos.cpp`):
+> daslang resolves its root (daslib, modules) from the directory above `bin/`.
+> `setup.das` therefore points `.mcp.json` at the **worktree-local** binary so
+> file resolution stays inside the worktree. If you ever wire a *shared* binary
+> from another checkout, pass `-dasroot <worktree>` in `args` or every tool will
+> read the wrong tree.
+
 ## Architecture
 
 - Each tool invocation runs in a **separate thread** (`new_thread`) with its own context/heap — when the thread ends, its memory is freed without GC
