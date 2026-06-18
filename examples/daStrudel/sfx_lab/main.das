@@ -47,6 +47,13 @@ var g_ref_feat : SfxFeatures
 var g_mix_feat : SfxFeatures
 var g_have_fit = false
 
+// spectrogram (spectrum-over-time) — STFT dB heatmap, SPEC_BINS x SPEC_FRAMES row-major
+let SPEC_FRAMES = 64
+let SPEC_BINS = 48
+let SPEC_FMAX = 8000.0
+var g_mix_spectro : array<float>
+var g_ref_spectro : array<float>
+
 // which file-dialog operation is in flight (the dialog is shared)
 let DLG_NONE = 0
 let DLG_REF = 1
@@ -159,6 +166,7 @@ def rebuild_mix() {
     delete eff
     downsample(g_mix, g_mix_wave, 2000)
     compute_spectrum(g_mix, g_mix_spec)
+    g_mix_spectro <- spectrogram(g_mix, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
     recompute_fit()
     g_mix_dirty = false
 }
@@ -220,6 +228,7 @@ def load_reference(path : string) {
     delete samples
     downsample(g_ref, g_ref_wave, 2000)
     compute_spectrum(g_ref, g_ref_spec)
+    g_ref_spectro <- spectrogram(g_ref, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
     g_ref_name = "{base_name(path)}  ({sr} Hz, {ch} ch)"
     g_ref_path = path
     g_show_ref = true
@@ -630,6 +639,10 @@ def modal_editor() : bool {
 }
 
 def mix_panel() {
+    if (icon_button(MIX_PLAY, (glyph = "play", tip = "Play the mix"))) {
+        play_mix()
+    }
+    same_line(MIX_SL)
     if (g_have_fit) {
         text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%   shape {int(g_fit.envelope * 100.0)}%)"))
         text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)"))
@@ -648,6 +661,22 @@ def mix_panel() {
         plot_line("mix", g_mix_spec)
         if (g_show_ref && !empty(g_ref_spec)) {
             plot_line("reference", g_ref_spec)
+        }
+    }
+}
+
+// spectrum-over-time: STFT magnitude (dB) as a color heatmap, time on X, freq on Y (high at top)
+def spectro_panel() {
+    plot(SPEC_MIX, (title = "mix - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+        setup_axes("time", "freq", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        if (!empty(g_mix_spectro)) {
+            plot_heatmap("mix", g_mix_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
+        }
+    }
+    plot(SPEC_REF, (title = "reference - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
+        setup_axes("time", "freq", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        if (!empty(g_ref_spectro)) {
+            plot_heatmap("ref", g_ref_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
         }
     }
 }
@@ -694,6 +723,7 @@ def setup_default_layout(dock_id : uint) {
     DockBuilderDockWindow("Editor", editor_id)
     DockBuilderDockWindow("Reference", ref_id)
     DockBuilderDockWindow("Mix", mix_id)
+    DockBuilderDockWindow("Spectrogram", mix_id)
     DockBuilderFinish(dock_id)
 }
 
@@ -746,14 +776,15 @@ def update() {
                     filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.sfx"))
             }
         }
-        if (icon_button(MB_PLAY, (glyph = "play", tip = "Play the full mix"))) {
-            play_mix()
+        menu(PLAY_MENU, "Play", true) {
+            if (menu_item(MI_PLAY, (text = "Play mix"))) {
+                play_mix()
+                MI_PLAY.value = false
+            }
+            checkbox(MB_AUTO, (text = "autoplay"))
         }
-        same_line(MB_SL1)
-        if (checkbox(MB_AUTO, (text = "autoplay"))) {
-        }
-        g_autoplay = MB_AUTO.value
     }
+    g_autoplay = MB_AUTO.value
 
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
@@ -771,6 +802,9 @@ def update() {
         }
         dock_window(MIX, (text = "Mix", closable = false, flags = ImGuiWindowFlags.None)) {
             mix_panel()
+        }
+        dock_window(SPECTRO, (text = "Spectrogram", closable = false, flags = ImGuiWindowFlags.None)) {
+            spectro_panel()
         }
     }
 
@@ -822,14 +856,27 @@ def main() {
 
 // ===== live commands (so the signal is observable headlessly, not just on screen) =====
 
+struct SpecPeak {
+    hz : float
+    db : float
+}
+
 struct SfxReport {
     ref_loaded : bool
     ref_name   : string
     ref        : SfxFeatures
     mix        : SfxFeatures
     fit        : FitScore
-    ref_spec   : array<float>   // ~48-pt downsampled dB spectrum
+    ref_spec   : array<float>      // ~48-pt downsampled dB spectrum (broad shape)
     mix_spec   : array<float>
+    ref_peaks  : array<SpecPeak>   // top dB peaks from the full-res FFT (precise)
+    mix_peaks  : array<SpecPeak>
+    ref_energy : array<float>      // peak-normalized RMS over time (the falloff shape)
+    mix_energy : array<float>
+    ref_centroid_t : array<float>  // spectral centroid (Hz) per time frame (pitch sweep)
+    mix_centroid_t : array<float>
+    ref_ms     : float             // buffer duration, ms (time scale for the curves)
+    mix_ms     : float
 }
 
 def private spec48(src : array<float>) : array<float> {
@@ -838,10 +885,33 @@ def private spec48(src : array<float>) : array<float> {
     return <- d
 }
 
+// top `count` local-maximum peaks (freq + dB) from a full-resolution dB spectrum.
+def private top_peaks(spec : array<float>; count : int) : array<SpecPeak> {
+    var peaks : array<SpecPeak>
+    let n = length(spec)
+    if (n < 3) return <- peaks
+    let hz_per_bin = float(SR) / 2048.0   // compute_spectrum uses N = 2048
+    for (i in range(1, n - 1)) {
+        if (spec[i] > spec[i - 1] && spec[i] >= spec[i + 1]) {
+            peaks |> push(SpecPeak(hz = float(i) * hz_per_bin, db = spec[i]))
+        }
+    }
+    peaks |> sort() $(a, b : SpecPeak) => a.db > b.db
+    if (length(peaks) > count) {
+        peaks |> resize(count)
+    }
+    return <- peaks
+}
+
 def private make_report() : JsonValue? {
     return JV(SfxReport(ref_loaded = g_have_fit, ref_name = g_ref_name,
         ref = g_ref_feat, mix = g_mix_feat, fit = g_fit,
-        ref_spec <- spec48(g_ref_spec), mix_spec <- spec48(g_mix_spec)))
+        ref_spec <- spec48(g_ref_spec), mix_spec <- spec48(g_mix_spec),
+        ref_peaks <- top_peaks(g_ref_spec, 6), mix_peaks <- top_peaks(g_mix_spec, 6),
+        ref_energy <- energy_curve(g_ref, 40), mix_energy <- energy_curve(g_mix, 40),
+        ref_centroid_t <- centroid_curve(g_ref, SR, 24), mix_centroid_t <- centroid_curve(g_mix, SR, 24),
+        ref_ms = float(length(g_ref)) / float(SR) * 1000.0,
+        mix_ms = float(length(g_mix)) / float(SR) * 1000.0))
 }
 
 [live_command(description = "SFX lab: reference-vs-mix features + fit score + downsampled spectra")]
@@ -861,5 +931,80 @@ def sfx_load_ref(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<LoadRefArgs>)
     if (empty(args.path)) return JV("missing path")
     load_reference(args.path)
+    return make_report()
+}
+
+[live_command(description = "SFX lab: open a .sfx sound by path (replaces layers, loads its mimic reference), then report fit. Args: path")]
+def sfx_open(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<LoadRefArgs>)
+    if (empty(args.path)) return JV("missing path")
+    do_open_sound(args.path)
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
+}
+
+// Edit a layer's voice params live — pass ANY subset of keys, only those are applied
+// (the rest keep their current value). Covers one slider or a batch in one call.
+// Keys: index (default = selected), gain, delay; modal: pitch/spread/n_modes/ring/
+// brightness/damp_skew/transient/transient_rate/echo_amount/echo_delay/duration;
+// sfxr: wave + env_attack/env_sustain/env_punch/env_decay/base_freq/freq_limit/
+// freq_ramp/freq_dramp/duty/duty_ramp/vib_strength/vib_speed/arp_mod/arp_speed/
+// repeat_speed/pha_offset/pha_ramp/lpf_freq/lpf_ramp/lpf_resonance/hpf_freq/hpf_ramp/sound_vol.
+[live_command(description = "SFX lab: set a layer's voice params (partial — only the keys you pass). Args: index? + any of the gain/delay/modal/sfxr fields. Returns fit.")]
+def sfx_set_layer(input : JsonValue?) : JsonValue? {
+    let idx = (input ?[ "index"]) ?? g_sel
+    if (idx < 0 || idx >= length(g_layers)) return JV("bad layer index")
+    var lyr = g_layers[idx]
+    lyr.gain = (input ?[ "gain"]) ?? lyr.gain
+    lyr.delay = (input ?[ "delay"]) ?? lyr.delay
+    if (lyr.voice is modal) {
+        var v = lyr.voice as modal
+        v.pitch = (input ?[ "pitch"]) ?? v.pitch
+        v.spread = (input ?[ "spread"]) ?? v.spread
+        v.n_modes = (input ?[ "n_modes"]) ?? v.n_modes
+        v.ring = (input ?[ "ring"]) ?? v.ring
+        v.brightness = (input ?[ "brightness"]) ?? v.brightness
+        v.damp_skew = (input ?[ "damp_skew"]) ?? v.damp_skew
+        v.transient = (input ?[ "transient"]) ?? v.transient
+        v.transient_rate = (input ?[ "transient_rate"]) ?? v.transient_rate
+        v.echo_amount = (input ?[ "echo_amount"]) ?? v.echo_amount
+        v.echo_delay = (input ?[ "echo_delay"]) ?? v.echo_delay
+        v.duration = (input ?[ "duration"]) ?? v.duration
+        lyr.voice = VoiceParams(modal = v)
+    } elif (lyr.voice is sfxr) {
+        var s = lyr.voice as sfxr
+        s.wave = sfxr_wave_of((input ?[ "wave"]) ?? int(s.wave))
+        s.env_attack = (input ?[ "env_attack"]) ?? s.env_attack
+        s.env_sustain = (input ?[ "env_sustain"]) ?? s.env_sustain
+        s.env_punch = (input ?[ "env_punch"]) ?? s.env_punch
+        s.env_decay = (input ?[ "env_decay"]) ?? s.env_decay
+        s.base_freq = (input ?[ "base_freq"]) ?? s.base_freq
+        s.freq_limit = (input ?[ "freq_limit"]) ?? s.freq_limit
+        s.freq_ramp = (input ?[ "freq_ramp"]) ?? s.freq_ramp
+        s.freq_dramp = (input ?[ "freq_dramp"]) ?? s.freq_dramp
+        s.duty = (input ?[ "duty"]) ?? s.duty
+        s.duty_ramp = (input ?[ "duty_ramp"]) ?? s.duty_ramp
+        s.vib_strength = (input ?[ "vib_strength"]) ?? s.vib_strength
+        s.vib_speed = (input ?[ "vib_speed"]) ?? s.vib_speed
+        s.arp_mod = (input ?[ "arp_mod"]) ?? s.arp_mod
+        s.arp_speed = (input ?[ "arp_speed"]) ?? s.arp_speed
+        s.repeat_speed = (input ?[ "repeat_speed"]) ?? s.repeat_speed
+        s.pha_offset = (input ?[ "pha_offset"]) ?? s.pha_offset
+        s.pha_ramp = (input ?[ "pha_ramp"]) ?? s.pha_ramp
+        s.lpf_freq = (input ?[ "lpf_freq"]) ?? s.lpf_freq
+        s.lpf_ramp = (input ?[ "lpf_ramp"]) ?? s.lpf_ramp
+        s.lpf_resonance = (input ?[ "lpf_resonance"]) ?? s.lpf_resonance
+        s.hpf_freq = (input ?[ "hpf_freq"]) ?? s.hpf_freq
+        s.hpf_ramp = (input ?[ "hpf_ramp"]) ?? s.hpf_ramp
+        s.sound_vol = (input ?[ "sound_vol"]) ?? s.sound_vol
+        lyr.voice = VoiceParams(sfxr = s)
+    }
+    g_layers[idx] = lyr
+    g_sel = idx
+    g_sel_loaded = -1   // force the editor sliders to reload from the edited model
+    g_mix_dirty = true
+    rebuild_mix()
     return make_report()
 }

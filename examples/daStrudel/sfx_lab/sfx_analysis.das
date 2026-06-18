@@ -11,6 +11,8 @@ require math
 
 let private TWO_PI = 6.28318530717958647692
 let private FFT_N = 4096
+let private STFT_N = 1024            // smaller window for time-resolved analysis
+let private INV_LN10 = 0.43429448190325176
 
 struct SfxFeatures {
     peak     : float    //!< max |sample|, 0..1
@@ -191,4 +193,87 @@ def public fit(ref, mix : array<float>; rate : int) : FitScore {
     let sp = spectral_fit(ref, mix)
     let en = envelope_fit(ref, mix, rate)
     return FitScore(spectral = sp, envelope = en, overall = 0.6 * sp + 0.4 * en)
+}
+
+// ===== time-resolved analysis (energy / centroid over time, spectrogram) =====
+
+// Hann-windowed magnitude spectrum of `nfft` samples at `start` (zero-padded past the end).
+def private stft_mag(buf : array<float>; start, nfft : int; var mags : array<float>) {
+    var win : array<float>
+    win |> resize(nfft)
+    let n = length(buf)
+    for (i in range(nfft)) {
+        let idx = start + i
+        if (idx < n) {
+            let w = 0.5 - 0.5 * cos(TWO_PI * float(i) / float(nfft - 1))
+            win[i] = buf[idx] * w
+        } else {
+            win[i] = 0.0
+        }
+    }
+    var cplx : array<float2>
+    fft_real_forward(win, cplx)
+    fft_calculate_magnitudes(cplx, mags)
+    delete win
+    delete cplx
+}
+
+// peak-normalized RMS energy over `npts` frames across the whole buffer (the falloff shape).
+def public energy_curve(buf : array<float>; npts : int) : array<float> {
+    return <- rms_env_abs(buf, length(buf), npts)
+}
+
+// spectral centroid (Hz) per time frame — exposes a pitch sweep (centroid moving over time).
+def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float> {
+    var out : array<float>
+    out |> resize(nframes)
+    let n = length(buf)
+    if (n == 0) return <- out
+    let hop = max((n - STFT_N) / max(nframes - 1, 1), 1)
+    let last = max(n - 1, 0)
+    for (f in range(nframes)) {
+        let start = min(f * hop, last)
+        var mags : array<float>
+        stft_mag(buf, start, STFT_N, mags)
+        var num = 0.0
+        var den = 0.0
+        for (i in range(length(mags))) {
+            num += float(i) * float(rate) / float(STFT_N) * mags[i]
+            den += mags[i]
+        }
+        out[f] = den > 1.0e-9 ? num / den : 0.0
+        delete mags
+    }
+    return <- out
+}
+
+// STFT magnitude in dB, row-major [nbins rows (freq, HIGH at row 0 / top) x nframes cols (time)],
+// covering 0..fmax Hz — ready to hand straight to plot_heatmap.
+def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
+    var out : array<float>
+    out |> resize(nbins * nframes)
+    let n = length(buf)
+    if (n == 0) return <- out
+    let hop = max((n - STFT_N) / max(nframes - 1, 1), 1)
+    let binmax = max(int(fmax * float(STFT_N) / float(rate)), 1)
+    let last = max(n - 1, 0)
+    for (f in range(nframes)) {
+        let start = min(f * hop, last)
+        var mags : array<float>
+        stft_mag(buf, start, STFT_N, mags)
+        let mlen = length(mags)
+        for (r in range(nbins)) {
+            let frac_hi = 1.0 - float(r) / float(nbins)
+            let frac_lo = 1.0 - float(r + 1) / float(nbins)
+            let b0 = clamp(int(frac_lo * float(binmax)), 0, mlen - 1)
+            let b1 = clamp(int(frac_hi * float(binmax)), b0 + 1, mlen)
+            var m = 0.0
+            for (b in range(b0, b1)) {
+                m = max(m, mags[b])
+            }
+            out[r * nframes + f] = 20.0 * log(m / float(STFT_N) + 1.0e-9) * INV_LN10
+        }
+        delete mags
+    }
+    return <- out
 }

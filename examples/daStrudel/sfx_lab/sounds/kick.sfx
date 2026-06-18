@@ -1,0 +1,30 @@
+{
+  "version":1,
+  "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/bd.wav",
+  "layers":[
+    {
+      "name":"kick body",
+      "voice":{
+        "modal":{
+          "pitch":86,
+          "spread":1.10000002,
+          "n_modes":1,
+          "ring":0.180000007,
+          "brightness":0.200000003,
+          "damp_skew":0.699999988,
+          "transient":0.150000006,
+          "transient_rate":600,
+          "echo_amount":0,
+          "echo_delay":0.0399999991,
+          "duration":0.400000006
+        }
+      },
+      "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    }
+  ]
+}
