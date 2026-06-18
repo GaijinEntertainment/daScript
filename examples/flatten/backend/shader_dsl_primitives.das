@@ -98,8 +98,10 @@ def frac(x : float4) : float4 {}
 // ---- smoothstep: keep the engine `smooth_step` spelling as a native alias ----
 // The EdenSpark shaders spell it `smooth_step`; core spells it `smoothstep`. A thin
 // native alias (NOT a stub) keeps the shaders unedited — flatten inlines it to the
-// core call, which the backend maps to the SmoothStep opcode.
-def smooth_step(mn, mx, x : float)  => smoothstep(mn, mx, x)
+// core call, which the backend maps to the SmoothStep opcode. The scalar form keeps the
+// old stub's `float | int` surface (auto-promote int edges to float) for the same reason
+// as the lerp compat overload above.
+def smooth_step(mn : float | int; mx : float | int; x : float | int) => smoothstep(float(mn), float(mx), float(x))
 def smooth_step(mn, mx, x : float2) => smoothstep(mn, mx, x)
 def smooth_step(mn, mx, x : float3) => smoothstep(mn, mx, x)
 def smooth_step(mn, mx, x : float4) => smoothstep(mn, mx, x)
