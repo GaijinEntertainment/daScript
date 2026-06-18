@@ -320,4 +320,6 @@ Most layout is obvious from `ls`. Non-obvious ones worth knowing:
 
 The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, program introspection, and live-reload control. **Prefer MCP tools** over manual compilation and grep — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl.
 
+**Fresh worktree/clone with no daslang MCP tools?** `.mcp.json`, `sgconfig.yml`, `bin/`, and the tree-sitter grammar lib are all gitignored, so a `git worktree add` (or clone) starts with zero daslang tools. Bootstrap it from any existing daslang binary: `daslang utils/mcp/setup.das -- --root <worktree>` builds a worktree-local binary (+ grammar), copies the platform `sgconfig.yml`, and merges a `daslang` entry into `.mcp.json` (writes no secrets, preserves `github` etc.). `--no-build` wires config to an already-built binary. Restart the session in the worktree to pick it up. Details: **`skills/mcp_tools.md`**.
+
 Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
