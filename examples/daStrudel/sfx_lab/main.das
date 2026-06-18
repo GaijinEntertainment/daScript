@@ -15,7 +15,7 @@ require implot
 require audio/audio_boost
 require audio/audio_wav
 require strudel/strudel_sfx
-require sfx_icons
+require imgui/imgui_icons
 require minfft
 require daslib/fio
 require math
@@ -58,6 +58,8 @@ var g_audio : AudioSystemChannels
 // per-row widget state (indexed by layer position) — must be declared at module scope
 var private LAYER_ROW : table<int; ClickState>
 var private SOLO_ROW : table<int; ClickState>
+var private MUTE_ROW : table<int; ClickState>
+var private PLAY_ROW : table<int; ClickState>
 var private ROW_SL1 : table<int; EmptyMarkerState>
 var private ROW_SL2 : table<int; EmptyMarkerState>
 var private ROW_SL3 : table<int; EmptyMarkerState>
@@ -400,15 +402,15 @@ def layers_panel() {
         add_layer(modal_layer("modal {length(g_layers) + 1}", ModalVoice()))
     }
     same_line(TB2)
-    if (icon_button("tb_dup", "duplicate")) {
+    if (icon_button(TB_DUP, (glyph = "duplicate", tip = "Duplicate selected layer"))) {
         duplicate_layer(g_sel, false)
     }
     same_line(TB3)
-    if (button(DUPLINK_BTN, (text = "link"))) {
+    if (icon_button(TB_DUPLINK, (glyph = "link", tip = "Duplicate linked (mirrors the source voice)"))) {
         duplicate_layer(g_sel, true)
     }
     same_line(TB4)
-    if (icon_button("tb_del", "delete")) {
+    if (icon_button(TB_DEL, (glyph = "delete", tip = "Delete selected layer"))) {
         delete_layer(g_sel)
     }
     separator(LSEP)
@@ -418,6 +420,7 @@ def layers_panel() {
         if (!g_layers[i].enabled) { marks += " [mute]"; }
         if (g_layers[i].locked) { marks += " [lock]"; }
         if (g_layers[i].link_source >= 0) { marks += " [link]"; }
+        if (g_layers[i].solo) { marks += " [S]"; }
         let lbl = "{g_layers[i].name}  ({kind}){marks}###L{i}"
         // limit the selectable to the name column so its hit-box doesn't sit under the row buttons
         let name_w = max(GetContentRegionAvail().x - 180.0, 80.0)
@@ -425,18 +428,17 @@ def layers_panel() {
             g_sel = i
         }
         same_line(ROW_SL1[i])
-        let solo_lbl = (g_layers[i].solo ? "[S]" : "S") + "###solo{i}"
-        if (button(SOLO_ROW[i], (text = solo_lbl))) {
+        if (icon_button(SOLO_ROW[i], (glyph = "solo", tip = "Solo this layer", size = 16.0f))) {
             g_layers[i].solo = !g_layers[i].solo
             g_mix_dirty = true
         }
         same_line(ROW_SL2[i])
-        if (icon_button("mute{i}", g_layers[i].enabled ? "volume" : "mute", 16.0f)) {
+        if (icon_button(MUTE_ROW[i], (glyph = g_layers[i].enabled ? "volume" : "mute", tip = g_layers[i].enabled ? "Mute this layer" : "Unmute this layer", size = 16.0f))) {
             g_layers[i].enabled = !g_layers[i].enabled
             g_mix_dirty = true
         }
         same_line(ROW_SL3[i])
-        if (icon_button("play{i}", "play", 16.0f)) {
+        if (icon_button(PLAY_ROW[i], (glyph = "play", tip = "Play this layer", size = 16.0f))) {
             play_layer(i)
         }
     }
@@ -469,7 +471,7 @@ def editor_panel() {
         g_layers[g_sel].locked = LOCK.value
     }
     same_line(EDIT_SL)
-    if (icon_button("editplay", "play")) {
+    if (icon_button(EDITPLAY, (glyph = "play", tip = "Play this layer"))) {
         play_layer(g_sel)
     }
     separator(ESEP)
@@ -508,8 +510,19 @@ def editor_panel() {
     }
 }
 
+def private wave_icon(idx : int) : string {
+    // map the wave combo index to its oscillator glyph
+    if (idx == 1) { return "wave-saw" }
+    elif (idx == 2) { return "wave-sine" }
+    elif (idx == 3) { return "wave-noise" }
+    elif (idx == 4) { return "wave-triangle" }
+    return "wave-square"
+}
+
 def sfxr_editor() : bool {
     var ch = false
+    icon(wave_icon(WAVE_COMBO.value), 18.0f)
+    same_line()
     if (combo(WAVE_COMBO, (text = "wave", items <- ["square", "sawtooth", "sine", "noise", "triangle"]))) { ch = true; }
     collapsing_header(H_ENV, (text = "Envelope", closable = false, flags = ImGuiTreeNodeFlags.DefaultOpen)) {
         SL_ATTACK.bounds = (0.0f, 1.0f)
@@ -613,13 +626,13 @@ def mix_panel() {
 }
 
 def reference_panel() {
-    if (icon_button("refload", "import")) {
+    if (icon_button(REFLOAD, (glyph = "import", tip = "Load a reference wav to mimic"))) {
         g_dialog_mode = DLG_REF
         file_dialog_open(FileDialogConfig(title = "Load reference audio", start_dir = "",
             filters <- file_filters("Audio (*.wav)|wav|All files|"), mode = FileDialogMode.open, max_selection = 0))
     }
     same_line(REF_SL1)
-    if (icon_button("refplay", "play")) {
+    if (icon_button(REFPLAY, (glyph = "play", tip = "Play the reference"))) {
         play_buf_copy(g_ref)
     }
     same_line(REF_SL2)
@@ -706,7 +719,7 @@ def update() {
                     filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.sfx"))
             }
         }
-        if (button(MB_PLAY, (text = "Play mix"))) {
+        if (icon_button(MB_PLAY, (glyph = "play", tip = "Play the full mix"))) {
             play_mix()
         }
         same_line(MB_SL1)
