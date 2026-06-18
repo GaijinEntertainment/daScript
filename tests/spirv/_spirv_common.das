@@ -837,6 +837,28 @@ def public fragshadow_words : array<uint> {
     return <- w
 }
 
+// ===== MRT: multiple @location outputs in a fragment shader (G-buffer prep for tutorial 10's
+// deferred rendering). Each `var @out @location = N` global is its own Output OpVariable with a
+// distinct Location decoration; the entry-point interface lists all of them. This locks in the
+// per-global Location model so a future MRT-breaking change in spirv_emit.das gets caught here
+// instead of in a downstream tutorial. =====
+var @in @location = 0 mrt_uv : float2
+var @out @location = 0 mrt_position : float4
+var @out @location = 1 mrt_normal   : float4
+var @out @location = 2 mrt_albedo   : float4
+[fragment_shader(name="mrt_spv"), marker(no_coverage)]
+def mrt {
+    mrt_position = float4(mrt_uv.x, mrt_uv.y, 0.0f, 1.0f)   // OpStore -> mrt_position (location 0)
+    mrt_normal   = float4(0.0f, 1.0f, 0.0f, 0.0f)            // OpStore -> mrt_normal   (location 1)
+    mrt_albedo   = float4(0.8f, 0.2f, 0.4f, 1.0f)            // OpStore -> mrt_albedo   (location 2)
+}
+
+def public mrt_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mrt_spv)
+    return <- w
+}
+
 // ===== Phase-10.5 compute-tier fixtures: shared memory + barriers + atomics =====
 // cshared: a workgroup-shared scratch array (`@workgroup`, GLSL `shared` -> Workgroup OpVariable),
 // the control + shared-memory sync (barrier() -> OpControlBarrier, memoryBarrierShared() ->
