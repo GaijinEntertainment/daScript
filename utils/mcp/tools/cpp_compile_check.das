@@ -70,15 +70,24 @@ def private obj_str(m : JsonValue?; key : string) : string {
     return v.value as _string
 }
 
+// Re-quote an argv element that contains whitespace, so joining the `arguments`
+// fallback into a command string round-trips back through split_ws + the shell.
+def private shell_quote_arg(s : string) : string {
+    if (empty(s)) return "\"\""
+    if (starts_with(s, "\"") || (find(s, " ") < 0 && find(s, "\t") < 0)) return s
+    return "\"{s}\""
+}
+
 // `command` (a single shell string) is what CMake emits; some other tools
-// (Bear, compdb) emit an `arguments` array instead — join it as a fallback.
+// (Bear, compdb) emit an `arguments` array instead — join it as a fallback,
+// re-quoting elements with spaces so the rejoin round-trips through split_ws.
 def private entry_command(m : JsonValue?) : string {
     let c = obj_str(m, "command")
     if (!empty(c)) return c
     if (m == null || !(m.value is _object)) return ""
     let argv = (m.value as _object)?["arguments"] ?? null
     if (argv == null || !(argv.value is _array)) return ""
-    let parts <- [for (a in argv.value as _array); a.value as _string; where a != null && a.value is _string]
+    let parts <- [for (a in argv.value as _array); shell_quote_arg(a.value as _string); where a != null && a.value is _string]
     return join(parts, " ")
 }
 
@@ -153,9 +162,11 @@ def private split_ws(s : string) : array<string> {
     return <- out
 }
 
-// MSVC / clang-cl drivers emit /Fo for the object output; GNU drivers emit -o.
+// Detect by the compiler, not a "/Fo" substring (a GNU include path like
+// .../Foo/... would false-match). cl.exe and clang-cl are the MSVC drivers.
 def private command_is_msvc(cmd : string) : bool {
-    return find(cmd, "/Fo") >= 0
+    let comp = to_lower(base_name(compiler_of(cmd)))
+    return comp == "cl.exe" || comp == "cl" || comp == "clang-cl.exe" || comp == "clang-cl"
 }
 
 def private compiler_of(cmd : string) : string {
@@ -286,6 +297,7 @@ def do_cpp_compile_check(file : string; build_dir : string = ""; json : bool = f
 def do_cpp_build_info(file : string; build_dir : string = "") : string {
     if (empty(file)) return make_tool_result("'file' argument is required", true)
     let abs_file = resolve_path(file)
+    if (!fexist(abs_file)) return make_tool_result("file not found: {file}", true)
     let db_path = cpp_locate_compile_db(build_dir)
     if (empty(db_path)) return make_tool_result(no_db_message(), true)
     var entries : array<CompileEntry>

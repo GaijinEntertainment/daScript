@@ -2448,6 +2448,7 @@ def test_cpp_compile_check(t : T?) {
         var is_error = false
         parse_result(do_cpp_compile_check("src/misc/sysos.cpp", "", true), text, is_error)
         if (!has_compile_db(text)) return
+        if (find(text, "no compile DB entry") >= 0) return  // DB present but TU absent (alt build dir)
         t |> success(find(text, "\"success\"") >= 0, "json has success field -- text={text}")
         t |> success(find(text, "\"file\"") >= 0, "json has file field -- text={text}")
     }
@@ -2463,6 +2464,7 @@ def test_cpp_build_info(t : T?) {
             t->log("no compile_commands.json — skipping cpp_build_info assertions")
             return
         }
+        if (find(text, "no compile DB entry") >= 0) return  // DB present but sysos.cpp absent (alt build dir)
         t |> success(find(text, "compiler:") >= 0, "shows compiler -- text={text}")
         t |> success(find(text, "syntax-only command") >= 0, "shows derived syntax-only command -- text={text}")
         t |> success(find(text, "/Zs") >= 0 || find(text, "-fsyntax-only") >= 0, "appends a syntax-only flag -- text={text}")
