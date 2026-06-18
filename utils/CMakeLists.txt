@@ -148,35 +148,3 @@ ADD_CUSTOM_TARGET(run_utils_tests
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Running utils tests"
 )
-
-# Install utility executables (OPTIONAL — only present when -exe targets are built).
-# UTIL_BIN_DIR uses CMAKE_CFG_INTDIR which doesn't resolve at install time on
-# multi-config generators. Use install(CODE) with CMAKE_INSTALL_CONFIG_NAME.
-# Same generator-keyed split as UTIL_BIN_DIR above — under MSVC+Ninja the exes
-# are in plain bin/, and bin/${CMAKE_INSTALL_CONFIG_NAME} would miss them all.
-if(_DAS_UTILS_MULTI_CONFIG)
-    set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin/\${CMAKE_INSTALL_CONFIG_NAME}")
-else()
-    set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin")
-endif()
-# `daslang -exe` writes its output via fopen("wb") which gives 0644 on Linux/
-# macOS — no executable bit. file(INSTALL) defaults to preserving source perms,
-# so without explicit FILE_PERMISSIONS the installed copy is non-executable
-# and users must `chmod +x` before running. v0.6.2-RC3 Linux bundle shipped
-# this way (all 8 daslang -exe outputs were `-rw-r--r--`).
-foreach(util ${DAS_UTILS})
-    install(CODE "
-        set(_util_exe \"${_UTIL_INSTALL_PATTERN}/${util}.exe\")
-        if(EXISTS \"\${_util_exe}\")
-            file(INSTALL \"\${_util_exe}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${DAS_INSTALL_BINDIR}\"
-                FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-        endif()
-    ")
-endforeach()
-install(CODE "
-    set(_util_exe \"${_UTIL_INSTALL_PATTERN}/dastest.exe\")
-    if(EXISTS \"\${_util_exe}\")
-        file(INSTALL \"\${_util_exe}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${DAS_INSTALL_BINDIR}\"
-            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-    endif()
-")

@@ -82,22 +82,14 @@ COMPILE_TESTS=(
 # with `--help` because daslang itself intercepts `--help` and prints its own
 # usage even after the `--` separator, swallowing the script's CLI surface.
 EXE_PRESENCE_TESTS=(
-    "aot|dasexe"
-    "benchctl|dasexe"
     "das-fmt|cpp"
-    "dascov|dasexe"
     "daslang-live|cpp"
-    "daspkg|dasexe"
-    "dastest|dasexe"
-    "detect-dupe|dasexe"
-    "hygiene|dasexe"
-    "mcp|dasexe"
 )
 
-# Stdio launch test for mcp.exe — it's a JSON-RPC server, so the only safe
-# "did it actually start" probe is to feed empty stdin and check for a clean
-# exit. The bundled mcp.exe prints "Starting daslang MCP server" then
-# "stdin closed, shutting down" within ~1s.
+# Stdio launch test for the mcp JSON-RPC server (run from source via daslang —
+# the exe is no longer bundled): the only safe "did it actually start" probe is
+# to feed empty stdin and check for a clean exit. It prints "Starting daslang
+# MCP server" then "stdin closed, shutting down" within ~1s.
 
 PASS=0
 FAIL=0
@@ -155,8 +147,6 @@ done
 
 echo
 echo "Runtime launch:"
-run_check "mcp.exe (empty stdin)" bash -c \
-    "'$BUNDLE/bin/mcp${DASEXE_SUFFIX}' < /dev/null"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
 
