@@ -54,6 +54,11 @@ let SPEC_FMAX = 8000.0
 var g_mix_spectro : array<float>
 var g_ref_spectro : array<float>
 
+// postprocess effect chain (applied to the mix before analysis), persisted in the .sfx
+var g_post = PostChain()
+var g_post_reload = true          // push g_post -> the postprocess sliders on next frame
+var g_sound_path = ""             // last opened/saved .sfx path (for sfx_save with no arg)
+
 // which file-dialog operation is in flight (the dialog is shared)
 let DLG_NONE = 0
 let DLG_REF = 1
@@ -164,6 +169,7 @@ def rebuild_mix() {
     }
     g_mix <- render_sound(eff)
     delete eff
+    apply_post(g_mix, g_post, float(SR))   // postprocess before analysis, so the metrics see it
     downsample(g_mix, g_mix_wave, 2000)
     compute_spectrum(g_mix, g_mix_spec)
     g_mix_spectro <- spectrogram(g_mix, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
@@ -240,13 +246,18 @@ def do_save_sound(path : string) {
     var doc = Sound()
     doc.mimic_target = g_ref_path
     doc.layers := g_layers
+    doc.post = g_post
     save_sound(path, doc)
+    g_sound_path = path
 }
 
 def do_open_sound(path : string) {
     var doc = Sound()
     if (!load_sound(path, doc)) return
     g_layers := doc.layers
+    g_post = doc.post
+    g_post_reload = true
+    g_sound_path = path
     g_sel = 0
     g_sel_loaded = -1
     g_mix_dirty = true
@@ -687,6 +698,119 @@ def spectro_panel() {
     }
 }
 
+// push g_post -> the postprocess widget states (called when the chain changes externally)
+def sync_post_to_sliders() {
+    PFX_FILT_EN.value = g_post.filter.enabled
+    PFX_FILT_POS.value = g_post.filter.position
+    PFX_BP_EN.value = g_post.bandpass.enabled
+    PFX_BP_FREQ.value = g_post.bandpass.freq
+    PFX_BP_Q.value = g_post.bandpass.q
+    PFX_DR_EN.value = g_post.drive.enabled
+    PFX_DR_AMT.value = g_post.drive.drive
+    PFX_CR_EN.value = g_post.crush.enabled
+    PFX_CR_BITS.value = g_post.crush.bits
+    PFX_CR_COARSE.value = g_post.crush.coarse
+    PFX_CMP_EN.value = g_post.comp.enabled
+    PFX_CMP_THR.value = g_post.comp.threshold
+    PFX_CMP_RATIO.value = g_post.comp.ratio
+    PFX_CH_EN.value = g_post.chorus.enabled
+    PFX_CH_RATE.value = g_post.chorus.rate
+    PFX_CH_DEPTH.value = g_post.chorus.depth
+    PFX_CH_WET.value = g_post.chorus.wet
+    PFX_PH_EN.value = g_post.phaser.enabled
+    PFX_PH_RATE.value = g_post.phaser.rate
+    PFX_PH_DEPTH.value = g_post.phaser.depth
+    PFX_TR_EN.value = g_post.tremolo.enabled
+    PFX_TR_RATE.value = g_post.tremolo.rate
+    PFX_TR_DEPTH.value = g_post.tremolo.depth
+    PFX_DL_EN.value = g_post.delay.enabled
+    PFX_DL_TIME.value = g_post.delay.time
+    PFX_DL_FB.value = g_post.delay.feedback
+    PFX_RV_EN.value = g_post.reverb.enabled
+    PFX_RV_WET.value = g_post.reverb.wet
+    PFX_RV_DECAY.value = g_post.reverb.decay
+}
+
+def postprocess_panel() {
+    if (g_post_reload) {
+        sync_post_to_sliders()
+        g_post_reload = false
+    }
+    var ch = false
+    text(PFX_HINT, (text = "effects run on the mix before analysis; all off by default"))
+    collapsing_header(PFX_FILT_H, (text = "Filter (DJ)", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_FILT_EN, (text = "enable###pfilt"))) { g_post.filter.enabled = PFX_FILT_EN.value; ch = true; }
+        PFX_FILT_POS.bounds = (0.0f, 1.0f)
+        if (slider_float(PFX_FILT_POS, (text = "position (LPF<->HPF)"))) { g_post.filter.position = PFX_FILT_POS.value; ch = true; }
+    }
+    collapsing_header(PFX_BP_H, (text = "Bandpass", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_BP_EN, (text = "enable###pbp"))) { g_post.bandpass.enabled = PFX_BP_EN.value; ch = true; }
+        PFX_BP_FREQ.bounds = (20.0f, 12000.0f)
+        if (slider_float(PFX_BP_FREQ, (text = "freq (Hz)"))) { g_post.bandpass.freq = PFX_BP_FREQ.value; ch = true; }
+        PFX_BP_Q.bounds = (0.1f, 10.0f)
+        if (slider_float(PFX_BP_Q, (text = "Q"))) { g_post.bandpass.q = PFX_BP_Q.value; ch = true; }
+    }
+    collapsing_header(PFX_DR_H, (text = "Drive (waveshaper)", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_DR_EN, (text = "enable###pdr"))) { g_post.drive.enabled = PFX_DR_EN.value; ch = true; }
+        PFX_DR_AMT.bounds = (0.0f, 8.0f)
+        if (slider_float(PFX_DR_AMT, (text = "drive"))) { g_post.drive.drive = PFX_DR_AMT.value; ch = true; }
+    }
+    collapsing_header(PFX_CR_H, (text = "Bitcrush", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_CR_EN, (text = "enable###pcr"))) { g_post.crush.enabled = PFX_CR_EN.value; ch = true; }
+        PFX_CR_BITS.bounds = (1.0f, 16.0f)
+        if (slider_float(PFX_CR_BITS, (text = "bits"))) { g_post.crush.bits = PFX_CR_BITS.value; ch = true; }
+        PFX_CR_COARSE.bounds = (0, 16)
+        if (slider_int(PFX_CR_COARSE, (text = "downsample"))) { g_post.crush.coarse = PFX_CR_COARSE.value; ch = true; }
+    }
+    collapsing_header(PFX_CMP_H, (text = "Compressor", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_CMP_EN, (text = "enable###pcmp"))) { g_post.comp.enabled = PFX_CMP_EN.value; ch = true; }
+        PFX_CMP_THR.bounds = (-60.0f, 0.0f)
+        if (slider_float(PFX_CMP_THR, (text = "threshold (dB)"))) { g_post.comp.threshold = PFX_CMP_THR.value; ch = true; }
+        PFX_CMP_RATIO.bounds = (1.0f, 20.0f)
+        if (slider_float(PFX_CMP_RATIO, (text = "ratio"))) { g_post.comp.ratio = PFX_CMP_RATIO.value; ch = true; }
+    }
+    collapsing_header(PFX_CH_H, (text = "Chorus", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_CH_EN, (text = "enable###pch"))) { g_post.chorus.enabled = PFX_CH_EN.value; ch = true; }
+        PFX_CH_RATE.bounds = (0.05f, 8.0f)
+        if (slider_float(PFX_CH_RATE, (text = "rate (Hz)"))) { g_post.chorus.rate = PFX_CH_RATE.value; ch = true; }
+        PFX_CH_DEPTH.bounds = (0.0f, 12.0f)
+        if (slider_float(PFX_CH_DEPTH, (text = "depth (ms)"))) { g_post.chorus.depth = PFX_CH_DEPTH.value; ch = true; }
+        PFX_CH_WET.bounds = (0.0f, 1.0f)
+        if (slider_float(PFX_CH_WET, (text = "wet"))) { g_post.chorus.wet = PFX_CH_WET.value; ch = true; }
+    }
+    collapsing_header(PFX_PH_H, (text = "Phaser", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_PH_EN, (text = "enable###pph"))) { g_post.phaser.enabled = PFX_PH_EN.value; ch = true; }
+        PFX_PH_RATE.bounds = (0.05f, 8.0f)
+        if (slider_float(PFX_PH_RATE, (text = "rate (Hz)"))) { g_post.phaser.rate = PFX_PH_RATE.value; ch = true; }
+        PFX_PH_DEPTH.bounds = (0.0f, 1.0f)
+        if (slider_float(PFX_PH_DEPTH, (text = "depth"))) { g_post.phaser.depth = PFX_PH_DEPTH.value; ch = true; }
+    }
+    collapsing_header(PFX_TR_H, (text = "Tremolo", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_TR_EN, (text = "enable###ptr"))) { g_post.tremolo.enabled = PFX_TR_EN.value; ch = true; }
+        PFX_TR_RATE.bounds = (0.1f, 16.0f)
+        if (slider_float(PFX_TR_RATE, (text = "rate (Hz)"))) { g_post.tremolo.rate = PFX_TR_RATE.value; ch = true; }
+        PFX_TR_DEPTH.bounds = (0.0f, 1.0f)
+        if (slider_float(PFX_TR_DEPTH, (text = "depth"))) { g_post.tremolo.depth = PFX_TR_DEPTH.value; ch = true; }
+    }
+    collapsing_header(PFX_DL_H, (text = "Delay", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_DL_EN, (text = "enable###pdl"))) { g_post.delay.enabled = PFX_DL_EN.value; ch = true; }
+        PFX_DL_TIME.bounds = (0.01f, 1.0f)
+        if (slider_float(PFX_DL_TIME, (text = "time (s)"))) { g_post.delay.time = PFX_DL_TIME.value; ch = true; }
+        PFX_DL_FB.bounds = (0.0f, 0.95f)
+        if (slider_float(PFX_DL_FB, (text = "feedback"))) { g_post.delay.feedback = PFX_DL_FB.value; ch = true; }
+    }
+    collapsing_header(PFX_RV_H, (text = "Reverb (room)", closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        if (checkbox(PFX_RV_EN, (text = "enable###prv"))) { g_post.reverb.enabled = PFX_RV_EN.value; ch = true; }
+        PFX_RV_WET.bounds = (0.0f, 1.0f)
+        if (slider_float(PFX_RV_WET, (text = "wet"))) { g_post.reverb.wet = PFX_RV_WET.value; ch = true; }
+        PFX_RV_DECAY.bounds = (0.1f, 3.0f)
+        if (slider_float(PFX_RV_DECAY, (text = "decay (s)"))) { g_post.reverb.decay = PFX_RV_DECAY.value; ch = true; }
+    }
+    if (ch) {
+        g_mix_dirty = true
+    }
+}
+
 def reference_panel() {
     if (icon_button(REFLOAD, (glyph = "import", tip = "Load a reference wav to mimic"))) {
         g_dialog_mode = DLG_REF
@@ -730,6 +854,7 @@ def setup_default_layout(dock_id : uint) {
     DockBuilderDockWindow("Reference", ref_id)
     DockBuilderDockWindow("Mix", mix_id)
     DockBuilderDockWindow("Spectrogram", mix_id)
+    DockBuilderDockWindow("Postprocess", editor_id)
     DockBuilderFinish(dock_id)
 }
 
@@ -811,6 +936,9 @@ def update() {
         }
         dock_window(SPECTRO, (text = "Spectrogram", closable = false, flags = ImGuiWindowFlags.None)) {
             spectro_panel()
+        }
+        dock_window(POSTPROC, (text = "Postprocess", closable = false, flags = ImGuiWindowFlags.None)) {
+            postprocess_panel()
         }
     }
 
@@ -1013,4 +1141,74 @@ def sfx_set_layer(input : JsonValue?) : JsonValue? {
     g_mix_dirty = true
     rebuild_mix()
     return make_report()
+}
+
+// overlay only the postprocess keys present in `input` (nested per-effect objects) onto g_post
+def private overlay_post(input : JsonValue?) {
+    let f = input ?[ "filter"]
+    g_post.filter.enabled = (f ?[ "enabled"]) ?? g_post.filter.enabled
+    g_post.filter.position = (f ?[ "position"]) ?? g_post.filter.position
+    let bp = input ?[ "bandpass"]
+    g_post.bandpass.enabled = (bp ?[ "enabled"]) ?? g_post.bandpass.enabled
+    g_post.bandpass.freq = (bp ?[ "freq"]) ?? g_post.bandpass.freq
+    g_post.bandpass.q = (bp ?[ "q"]) ?? g_post.bandpass.q
+    let dr = input ?[ "drive"]
+    g_post.drive.enabled = (dr ?[ "enabled"]) ?? g_post.drive.enabled
+    g_post.drive.drive = (dr ?[ "drive"]) ?? g_post.drive.drive
+    let cr = input ?[ "crush"]
+    g_post.crush.enabled = (cr ?[ "enabled"]) ?? g_post.crush.enabled
+    g_post.crush.bits = (cr ?[ "bits"]) ?? g_post.crush.bits
+    g_post.crush.coarse = (cr ?[ "coarse"]) ?? g_post.crush.coarse
+    let cm = input ?[ "comp"]
+    g_post.comp.enabled = (cm ?[ "enabled"]) ?? g_post.comp.enabled
+    g_post.comp.threshold = (cm ?[ "threshold"]) ?? g_post.comp.threshold
+    g_post.comp.ratio = (cm ?[ "ratio"]) ?? g_post.comp.ratio
+    g_post.comp.knee = (cm ?[ "knee"]) ?? g_post.comp.knee
+    g_post.comp.attack = (cm ?[ "attack"]) ?? g_post.comp.attack
+    g_post.comp.release = (cm ?[ "release"]) ?? g_post.comp.release
+    let chx = input ?[ "chorus"]
+    g_post.chorus.enabled = (chx ?[ "enabled"]) ?? g_post.chorus.enabled
+    g_post.chorus.rate = (chx ?[ "rate"]) ?? g_post.chorus.rate
+    g_post.chorus.depth = (chx ?[ "depth"]) ?? g_post.chorus.depth
+    g_post.chorus.feedback = (chx ?[ "feedback"]) ?? g_post.chorus.feedback
+    g_post.chorus.delay_ms = (chx ?[ "delay_ms"]) ?? g_post.chorus.delay_ms
+    g_post.chorus.wet = (chx ?[ "wet"]) ?? g_post.chorus.wet
+    let ph = input ?[ "phaser"]
+    g_post.phaser.enabled = (ph ?[ "enabled"]) ?? g_post.phaser.enabled
+    g_post.phaser.rate = (ph ?[ "rate"]) ?? g_post.phaser.rate
+    g_post.phaser.depth = (ph ?[ "depth"]) ?? g_post.phaser.depth
+    g_post.phaser.center = (ph ?[ "center"]) ?? g_post.phaser.center
+    g_post.phaser.sweep = (ph ?[ "sweep"]) ?? g_post.phaser.sweep
+    let tr = input ?[ "tremolo"]
+    g_post.tremolo.enabled = (tr ?[ "enabled"]) ?? g_post.tremolo.enabled
+    g_post.tremolo.rate = (tr ?[ "rate"]) ?? g_post.tremolo.rate
+    g_post.tremolo.depth = (tr ?[ "depth"]) ?? g_post.tremolo.depth
+    let dl = input ?[ "delay"]
+    g_post.delay.enabled = (dl ?[ "enabled"]) ?? g_post.delay.enabled
+    g_post.delay.time = (dl ?[ "time"]) ?? g_post.delay.time
+    g_post.delay.feedback = (dl ?[ "feedback"]) ?? g_post.delay.feedback
+    let rv = input ?[ "reverb"]
+    g_post.reverb.enabled = (rv ?[ "enabled"]) ?? g_post.reverb.enabled
+    g_post.reverb.wet = (rv ?[ "wet"]) ?? g_post.reverb.wet
+    g_post.reverb.decay = (rv ?[ "decay"]) ?? g_post.reverb.decay
+    g_post.reverb.lp_start = (rv ?[ "lp_start"]) ?? g_post.reverb.lp_start
+    g_post.reverb.lp_end = (rv ?[ "lp_end"]) ?? g_post.reverb.lp_end
+}
+
+[live_command(description = "SFX lab: set postprocess chain params (partial nested JSON per effect, e.g. reverb.enabled / reverb.wet / comp.threshold). Returns fit.")]
+def sfx_set_post(input : JsonValue?) : JsonValue? {
+    overlay_post(input)
+    g_post_reload = true
+    g_mix_dirty = true
+    rebuild_mix()
+    return make_report()
+}
+
+[live_command(description = "SFX lab: save the current sound (layers + reference + postprocess) to a .sfx. Args: path (optional; defaults to the last opened/saved path).")]
+def sfx_save(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<LoadRefArgs>)
+    let path = empty(args.path) ? g_sound_path : args.path
+    if (empty(path)) return JV("no path: open or save a sound first, or pass a path arg")
+    do_save_sound(path)
+    return JV("saved {path}")
 }
