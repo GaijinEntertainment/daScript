@@ -125,6 +125,24 @@ def public imageSize(img : image2D) : int2 {
     return int2(0, 0)
 }
 
+// ===== subpass input attachments (Vulkan deferred-rendering rail) =====
+// subpassInput is an opaque marker for a Vulkan subpass input attachment: a per-fragment read of a
+// previous subpass's color or depth attachment, sampled at the SAME fragment coordinate (no UV).
+// Lowers to OpTypeImage with Dim=SubpassData (Sampled=2, format=Unknown) + an InputAttachmentIndex
+// decoration. The host binds it as VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT. Requires the
+// InputAttachment capability. The shader declares it with `@input_attachment_index = N` alongside
+// the usual `@set` / `@binding` slots:
+//     var @set = 0 @binding = 0 @input_attachment_index = 0 subpass_color : subpassInput
+// subpassLoad samples it at the current fragment (no coord operand on the daslang side; the int2
+// (0,0) is emitted internally as the OpImageRead coordinate). Returns float4 even for depth inputs
+// -- the depth value lands in .x.
+struct subpassInput {}
+
+[unused_argument(i), sideeffects]
+def public subpassLoad(i : subpassInput) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
 // ===== fragment realism =====
 // discard() abandons the current fragment (OpKill). It is a block terminator, so it must be the last
 // statement on its control-flow path (typically `if (cond) { discard() }`); fragment-only.

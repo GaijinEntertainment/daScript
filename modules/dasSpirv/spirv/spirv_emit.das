@@ -36,6 +36,7 @@ struct GlobalInfo {
     is_storage_image : bool         // a read-write storage image (UniformConstant OpTypeImage); used via imageLoad/imageStore
     is_separate_image : bool        // a standalone sampled image (texture2D, OpTypeImage); combined at the call via OpSampledImage
     is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
+    is_subpass_input : bool         // a subpass-input attachment (UniformConstant OpTypeImage Dim=SubpassData); used via subpassLoad
     elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type)
     is_constant : bool              // a module-scope `let X = <const>` folded to an OpConstant; references resolve to const_id directly (no OpVariable / OpLoad)
     const_id   : uint               // the OpConstant result-id (when is_constant)
@@ -60,6 +61,7 @@ struct EmitCtx {
     stage         : ShaderStage                 // the shader stage (texture() implicit-LOD sampling is fragment-only)
     uses_frag_depth : bool                      // gl_FragDepth referenced (Output-only, so = written) -> emit DepthReplacing
     image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
+    input_attachment_cap : bool                 // OpCapability InputAttachment already emitted (subpassLoad)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
@@ -322,6 +324,15 @@ def private storage_image_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
     return (ok = false, dim = SpvDim._2D)
 }
 
+// subpassInput is the opaque marker for a Vulkan subpass input attachment. Same recognition pattern
+// as sampler/image globals -- a tStructure named "subpassInput" -> Dim=SubpassData OpTypeImage in
+// UniformConstant storage (sampled=2, no format), decorated with InputAttachmentIndex, sampled via
+// subpassLoad -> OpImageRead with an int2(0,0) coord.
+def private is_subpass_input_type(t : TypeDecl?) : bool {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return false
+    return "{t.structType.name}" == "subpassInput"
+}
+
 // Exactly the type set emit_type lowers without panicking: a scalar/vector (scalar_class >= 0), bool,
 // a matrix, or a fixed array of those. Lets the @workgroup path reject an unsupported shared type with
 // a clean diagnostic instead of crashing in emit_type (struct/handle/dynamic-array shared vars).
@@ -429,6 +440,38 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = img, is_storage_image = true))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
             kind = SpirvDescriptorKind.storage_image, count = 1, stages = stage_flag(stage)))
+        return
+    }
+    // subpass input attachment: a global of the opaque subpassInput type. OpTypeImage with Dim=
+    // SubpassData (Sampled=2, no format), UniformConstant storage, decorated with both Descriptor-
+    // Set/Binding (like any other descriptor) AND InputAttachmentIndex (from @input_attachment_index).
+    // Sampled only via subpassLoad() -- which emits OpImageRead with an internal int2(0,0) coord.
+    // Requires the InputAttachment capability (emitted once via ensure_input_attachment). Used by
+    // Vulkan deferred-rendering subpasses to read the previous subpass's color/depth at the same
+    // fragment coordinate (the int2(0,0) is an OFFSET relative to gl_FragCoord, not an absolute pos).
+    if (is_subpass_input_type(v._type)) {
+        let img = type_image(m, type_float(m, 32u), SpvDim.SubpassData, 0u, 2u, SpvImageFormat.Unknown)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, img)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        let iax = v.annotation |> find_arg("input_attachment_index") ?as tInt ?? -1
+        if (set < 0 || binding < 0) {
+            errors |> push("subpassInput '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        if (iax < 0) {
+            errors |> push("subpassInput '{vname}' must specify @input_attachment_index = N (non-negative)")
+            return
+        }
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.InputAttachmentIndex), uint(iax))
+        ensure_input_attachment(m, ctx)
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant, value_type = img, is_subpass_input = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.input_attachment, count = 1, stages = stage_flag(stage)))
         return
     }
     // separate image + sampler (Vulkan's split model): a texture2D is a standalone sampled OpTypeImage,
@@ -564,7 +607,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             return
         }
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, a constant `let`, or a sampler type e.g. sampler2D)")
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, a constant `let`, or an opaque type e.g. sampler2D / image2D / subpassInput)")
 }
 
 // ===== member index of a struct field by name =====
@@ -773,6 +816,14 @@ def private ensure_image_query(var m : SpirvModule; var ctx : EmitCtx) {
     if (ctx.image_query_cap) return
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.ImageQuery))
     ctx.image_query_cap = true
+}
+
+// Subpass-input attachments (OpTypeImage Dim=SubpassData) require the InputAttachment capability.
+// Same emit-once + ctx-flag dedupe pattern as ensure_image_query.
+def private ensure_input_attachment(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.input_attachment_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.InputAttachment))
+    ctx.input_attachment_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
@@ -2046,6 +2097,37 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, imgval, gi.var_id)
             let coord = value_of(expr.arguments[1])
             if (coord == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ImageRead, rt, res, imgval, coord)
+            e2id[k] = res
+            return expr
+        }
+        // subpassLoad(input) : float4: OpLoad the SubpassData image + OpImageRead at int2(0, 0). For a
+        // SubpassData image the coordinate is an OFFSET from gl_FragCoord (not absolute), so (0,0) is
+        // "this fragment" -- which is the only useful subpass-input sampling pattern (subpasses share
+        // pixel locality with the previous pass).
+        if (name == "subpassLoad") {
+            if (length(expr.arguments) != 1) {
+                errs |> push("subpassLoad expects (input)")
+                return expr
+            }
+            let ig = global_var_of(expr.arguments[0])
+            if (ig == null) {
+                errs |> push("subpassLoad: argument must be a subpassInput global")
+                return expr
+            }
+            let gi = ctx.globals?[intptr(ig)] ?? GlobalInfo()
+            if (!gi.is_subpass_input) {
+                errs |> push("subpassLoad: '{ig.name}' is not a subpassInput")
+                return expr
+            }
+            let imgval = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, imgval, gi.var_id)
+            let it = type_int(bm, 32u, 1u)
+            let ivec = type_vector(bm, it, 2)
+            let zero = const_int(bm, 0)
+            let coord = const_composite(bm, ivec, [zero, zero])
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ImageRead, rt, res, imgval, coord)
