@@ -381,6 +381,17 @@ def draw_id_vs {
     gl_Position = float4(x, 0.0f, 0.0f, 1.0f)
 }
 
+// vertex: nonuniformEXT(idx) — VK_EXT_descriptor_indexing marker. Lowers to OpCopyObject (fresh result
+// id) + OpDecorate NonUniform on the new id; triggers the OpCapability ShaderNonUniform + the
+// OpExtension "SPV_EXT_descriptor_indexing" once-per-module. The descriptor-array indexing path that
+// actually consumes the marked value lands in a separate slice; this fixture just exercises the marker
+// emission + cap + extension.
+[vertex_shader(name="nuext_spv"), marker(no_coverage)]
+def nuext_vs {
+    let i = nonuniformEXT(gl_VertexIndex)            // identity passthrough -> OpCopyObject + NonUniform decoration
+    gl_Position = float4(float(i), 0.0f, 0.0f, 1.0f)
+}
+
 // fragment: gl_PointCoord (BuiltIn PointCoord Input) — the UV inside a rasterised point primitive,
 // [0,1]^2 with (0.5, 0.5) at the centre of the sprite. Lets a fragment shader compute a circular
 // mask + soft falloff for "pretty point sprites" without uploading a texture; valid only when the
@@ -444,6 +455,12 @@ def public point_size_words : array<uint> {
 def public draw_id_words : array<uint> {
     var w : array<uint>
     w |> push_from(draw_id_spv)
+    return <- w
+}
+
+def public nuext_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(nuext_spv)
     return <- w
 }
 
@@ -1414,6 +1431,18 @@ def public phase10_6_emitter_opcodes : table<uint> {
 def public phase11_fn_emitter_opcodes : table<uint> {
     var s <- phase10_6_emitter_opcodes()
     for (op in [SpvOp.FunctionCall, SpvOp.FunctionParameter, SpvOp.ReturnValue]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// PR-B (bindless prereq: nonuniformEXT + NonUniform decoration) adds two opcodes: OpExtension (the
+// SPV_EXT_descriptor_indexing declaration; the first non-cap module-prologue extension we emit) and
+// OpCopyObject (the fresh-id alias the marker decorates so NonUniform doesn't leak onto every other
+// consumer of the same input SSA value). NonUniform itself rides on the existing OpDecorate.
+def public bindless_nu_emitter_opcodes : table<uint> {
+    var s <- phase11_fn_emitter_opcodes()
+    for (op in [SpvOp.Extension, SpvOp.CopyObject]) {
         s |> insert(uint(op))
     }
     return <- s

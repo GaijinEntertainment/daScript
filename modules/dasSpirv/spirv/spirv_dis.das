@@ -140,6 +140,7 @@ def public count_op_operand_at(words : array<uint>; op : SpvOp; idx : int; value
 // so they are stable across the port and compare raw.
 def public op_operand_is_literal(opName : string; idx : int) : bool {
     if (opName == "OpEntryPoint" || opName == "OpCapability" || opName == "OpMemoryModel") return true
+    if (opName == "OpExtension") return true   // all operand words encode the extension-name string
     if (opName == "OpExecutionMode" || opName == "OpDecorate" || opName == "OpMemberDecorate" || opName == "OpExtInstImport") return idx >= 1
     if (opName == "OpConstant") return idx == 2
     if (opName == "OpTypeInt") return idx == 1 || idx == 2

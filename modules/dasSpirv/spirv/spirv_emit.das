@@ -63,6 +63,7 @@ struct EmitCtx {
     image_query_cap : bool                      // OpCapability ImageQuery already emitted (textureSize)
     input_attachment_cap : bool                 // OpCapability InputAttachment already emitted (subpassLoad)
     draw_parameters_cap : bool                  // OpCapability DrawParameters already emitted (gl_DrawID)
+    descriptor_indexing_cap : bool              // OpCapability ShaderNonUniform + OpExtension "SPV_EXT_descriptor_indexing" already emitted (nonuniformEXT, descriptor arrays)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
@@ -858,6 +859,20 @@ def private ensure_draw_parameters(var m : SpirvModule; var ctx : EmitCtx) {
     if (ctx.draw_parameters_cap) return
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.DrawParameters))
     ctx.draw_parameters_cap = true
+}
+
+// Descriptor indexing (Vulkan VK_EXT_descriptor_indexing): nonuniformEXT() emits the NonUniform
+// decoration, and descriptor arrays index OpAccessChain into a runtime-sized resource pool. Both
+// flavours require the ShaderNonUniform capability and the SPV_EXT_descriptor_indexing extension at
+// SPIR-V <= 1.4 (in core at 1.5). Emit-once + ctx-flag dedupe; OpExtension goes to SEC_EXT (which
+// concatenates between SEC_CAPS and the body).
+def private ensure_descriptor_indexing(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.descriptor_indexing_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.ShaderNonUniform))
+    var nm <- string_words("SPV_EXT_descriptor_indexing")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm)
+    delete nm
+    ctx.descriptor_indexing_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
@@ -1854,6 +1869,27 @@ class SpirvEmit : AstVisitor {
                 emit_n(bm, SEC_FUNCS, ainfo.op, ops)
                 delete ops
             }
+            e2id[k] = res
+            return expr
+        }
+        // nonuniformEXT(x): the VK_EXT_descriptor_indexing marker. Emits OpCopyObject to give the
+        // value a fresh result id, then OpDecorate <new_id> NonUniform so the marker scopes to this
+        // use only (decorating the input id would leak NonUniform onto every other consumer of the
+        // same SSA value). The actual access-chain into a descriptor array reads the marked id and
+        // inherits NonUniform via SPIR-V's propagation rules -- the indexing path is PR-C's slice;
+        // here we just prove the marker + cap + extension fire correctly.
+        if (name == "nonuniformEXT") {
+            if (length(expr.arguments) != 1) {
+                errs |> push("nonuniformEXT expects 1 argument")
+                return expr
+            }
+            let v = value_of(expr.arguments[0])
+            if (v == 0u) return expr
+            ensure_descriptor_indexing(bm, *ctx)
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.CopyObject, rt, res, v)
+            emit(bm, SEC_DECOR, SpvOp.Decorate, res, uint(SpvDecoration.NonUniform))
             e2id[k] = res
             return expr
         }

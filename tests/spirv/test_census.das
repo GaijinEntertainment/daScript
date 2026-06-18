@@ -46,6 +46,7 @@ def test_opcode_census(t : T?) {
         add_set(present, point_size_words())
         add_set(present, point_coord_words())
         add_set(present, draw_id_words())
+        add_set(present, nuext_words())
         add_set(present, vindex_words())
         add_set(present, raster_math_words())
         add_set(present, catri_words())
@@ -73,7 +74,7 @@ def test_opcode_census(t : T?) {
         add_set(present, userfn_words())
         add_set(present, userfn_ref_words())
         add_set(present, userfn_global_words())
-        var declared <- phase11_fn_emitter_opcodes()
+        var declared <- bindless_nu_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }
