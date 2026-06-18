@@ -13,6 +13,7 @@ let private TWO_PI = 6.28318530717958647692
 let private FFT_N = 4096
 let private STFT_N = 1024            // smaller window for time-resolved analysis
 let private INV_LN10 = 0.43429448190325176
+let private INV_LN2 = 1.4426950408889634
 let private SPEC_FMIN = 30.0         // spectrogram low-frequency edge (log axis)
 
 struct SfxFeatures {
@@ -24,6 +25,7 @@ struct SfxFeatures {
 
 struct FitScore {
     spectral : float    //!< 0..1 timbre match (time-resolved log-magnitude spectral distance)
+    pitch    : float    //!< 0..1 dominant-peak alignment (fundamental / partials, in semitones)
     texture  : float    //!< 0..1 noisiness match (spectral flatness — tonal "beep" vs noisy "impact")
     shape    : float    //!< 0..1 temporal-shape match (temporal centroid + effective duration + crest)
     attack   : float    //!< 0..1 attack-time (log-attack-time) match
@@ -31,12 +33,14 @@ struct FitScore {
 }
 
 struct FitWeights {
-    //! Nature-based weighting profile for the composite fit. Default = percussive (drums): heavy
-    //! temporal-shape + attack so a sustained wash can't win on spectral fill alone, plus a texture
-    //! (flatness) term so a pure-tone "beep" can't pass for a noisy "impact".
-    spectral : float = 0.40
+    //! Nature-based weighting profile for the composite fit. Default = percussive (drums). The terms
+    //! close the three structural holes: a sustained wash can't win on spectral fill (shape), a
+    //! pure-tone "beep" can't pass for a noisy "impact" (texture), and the tonal energy can't sit at
+    //! the wrong pitch (pitch — the dominant peaks must line up with the reference's).
+    spectral : float = 0.30
+    pitch    : float = 0.20
     texture  : float = 0.15
-    shape    : float = 0.30
+    shape    : float = 0.20
     attack   : float = 0.15
 }
 
@@ -210,6 +214,7 @@ def public fit(ref, mix : array<float>; rate : int; w : FitWeights = FitWeights(
     var f = FitScore()
     if (empty(ref) || empty(mix)) return f
     f.spectral = 1.0 - spectral_dist(ref, mix, rate)
+    f.pitch = pitch_match(ref, mix, rate)
     f.texture = 1.0 - squash(abs(mean_flatness(ref, rate) - mean_flatness(mix, rate)), 0.25)
     let ra = temporal_shape(ref, rate)
     let mi = temporal_shape(mix, rate)
@@ -218,7 +223,7 @@ def public fit(ref, mix : array<float>; rate : int; w : FitWeights = FitWeights(
     let d_cr = abs(log((ra.crest + 0.1) / (mi.crest + 0.1)))
     f.shape = 1.0 - (squash(d_tc, 0.7) + squash(d_ed, 0.7) + squash(d_cr, 0.7)) / 3.0
     f.attack = 1.0 - squash(abs(ra.lat - mi.lat), 0.5)          // lat is already log10(seconds)
-    f.overall = w.spectral * f.spectral + w.texture * f.texture + w.shape * f.shape + w.attack * f.attack
+    f.overall = w.spectral * f.spectral + w.pitch * f.pitch + w.texture * f.texture + w.shape * f.shape + w.attack * f.attack
     return f
 }
 
@@ -354,6 +359,67 @@ def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
 // smooth, bounded distance -> dissimilarity [0,1); nonzero gradient everywhere (good for hill-climb)
 def private squash(d, scale : float) : float {
     return 1.0 - exp(-d / max(scale, 1.0e-6))
+}
+
+struct SpecPeakHz {
+    hz  : float
+    mag : float
+}
+
+// Top-K spectral peaks (local maxima above -34 dB rel max) from the onset-window FFT, strongest first.
+def public top_peaks(buf : array<float>; rate, k : int) : array<SpecPeakHz> {
+    var out : array<SpecPeakHz>
+    if (empty(buf)) return <- out
+    let pk = peak_of(buf)
+    let start = onset_index(buf, pk)
+    var mags : array<float>
+    mag_spectrum(buf, start, mags)
+    let mlen = length(mags)
+    var mmax = 0.0
+    for (m in mags) {
+        mmax = max(mmax, m)
+    }
+    if (mmax < 1.0e-9) {
+        delete mags
+        return <- out
+    }
+    let thresh = mmax * 0.02
+    var cand <- [for (i in range(1, mlen - 1));
+        SpecPeakHz(hz = float(i) * float(rate) / float(FFT_N), mag = mags[i]);
+        where mags[i] > thresh && mags[i] > mags[i - 1] && mags[i] > mags[i + 1]]
+    delete mags
+    cand |> sort() $(a, b) => a.mag > b.mag
+    out <- [for (i in range(min(k, length(cand)))); cand[i]]
+    delete cand
+    return <- out
+}
+
+// Dominant-peak alignment [0,1]: for each reference peak (weighted by its magnitude), find the nearest
+// mix peak in log-frequency (semitones) and penalize the gap. Anchors the fundamental + partials so the
+// tonal energy can't drift to the wrong pitch (the snare-body-as-cowbell / rimshot-octave-drop failure).
+def public pitch_match(a, b : array<float>; rate : int) : float {
+    var pa <- top_peaks(a, rate, 6)
+    var pb <- top_peaks(b, rate, 6)
+    if (empty(pa) || empty(pb)) {
+        let both_empty = empty(pa) && empty(pb)
+        delete pa
+        delete pb
+        return both_empty ? 1.0 : 0.0
+    }
+    var num = 0.0
+    var den = 0.0
+    for (p in pa) {
+        var best = 48.0
+        for (q in pb) {
+            let st = abs(12.0 * log(p.hz / q.hz) * INV_LN2)   // semitone distance
+            best = min(best, st)
+        }
+        num += p.mag * squash(best, 3.0)                      // 3 semitones = ~0.63 dissimilarity
+        den += p.mag
+    }
+    delete pa
+    delete pb
+    return den > 1.0e-9 ? 1.0 - num / den : 0.0
 }
 
 // Energy-weighted mean spectral flatness (geometric / arithmetic mean of magnitude per frame),

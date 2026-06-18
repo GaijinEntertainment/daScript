@@ -78,6 +78,9 @@ def main {
     // flatness: a pure tone reads tonal (low), noise reads flat (high)
     let flat_tone = mean_flatness(s200, RATE)
     let flat_noise = mean_flatness(twash, RATE)
+    // pitch: same tone aligns, octave-plus apart does not
+    let pitch_self = pitch_match(s200, s200, RATE)
+    let pitch_diff = pitch_match(s200, s4000, RATE)
 
     to_log(LOG_INFO, "spectral self={self_sp} diff(200v4000)={diff_sp}\n")
     to_log(LOG_INFO, "centroid lo={c_lo} hi={c_hi}\n")
@@ -88,6 +91,7 @@ def main {
     to_log(LOG_INFO, "transient self={fit_self_t}  wash overall={fit_wash.overall} (spec={fit_wash.spectral} tex={fit_wash.texture} shape={fit_wash.shape} atk={fit_wash.attack})\n")
     to_log(LOG_INFO, "shape tc: ref={sh_ref.tc} wash={sh_wash.tc}  ed: ref={sh_ref.ed} wash={sh_wash.ed}  crest: ref={sh_ref.crest} wash={sh_wash.crest}\n")
     to_log(LOG_INFO, "flatness: pure tone={flat_tone}  noise={flat_noise}\n")
+    to_log(LOG_INFO, "pitch: self={pitch_self}  diff(200v4000)={pitch_diff}\n")
 
     verify(self_sp > 0.99)
     verify(diff_sp < 0.3)          // fails if magnitude normalization didn't write back
@@ -104,5 +108,7 @@ def main {
     verify(flat_tone < 0.3)                // a pure tone reads tonal
     verify(flat_noise > 0.5)               // broadband noise reads flat
     verify(flat_noise > flat_tone * 2.0)   // texture term can separate beep from impact
+    verify(pitch_self > 0.9)               // same fundamental -> aligned
+    verify(pitch_diff < 0.4)               // an octave-plus apart -> pitch term penalizes
     to_log(LOG_INFO, "ALL CHECKS PASSED\n")
 }

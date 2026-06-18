@@ -8,8 +8,9 @@ tail, so a 150 ms transient and a 2 s sustain read 97% identical. **Weights can'
 terms that explicitly measure *where energy sits in time and how sparse it is*.
 
 ## Implemented (sfx_analysis.das) — composite fit, percussive default
-`fit(ref, mix, rate, w = FitWeights())` → `FitScore{spectral, texture, shape, attack, overall}`:
-- **spectral** (`spectral_dist`, weight 0.40): peak-normalize each signal by ONE global scalar (NOT
+`fit(ref, mix, rate, w = FitWeights())` → `FitScore{spectral, pitch, texture, shape, attack, overall}`.
+Percussive weights: spectral .30 / pitch .20 / texture .15 / shape .20 / attack .15.
+- **spectral** (`spectral_dist`, weight 0.30): peak-normalize each signal by ONE global scalar (NOT
   per-cell/per-spectrogram), time-resolved log-magnitude spectrogram, clamp cells to [−80,0] dB, mean
   |diff|. No per-spectrogram renorm → spurious energy where the ref is quiet is penalized. This alone
   closes most of the hole.
@@ -20,7 +21,17 @@ terms that explicitly measure *where energy sits in time and how sparse it is*.
   snare body was a 3-tone beep at texture 0.30; re-optimizing with this term drove the optimizer to add
   noise + shorten the ring → texture 0.998, the body reads as an impact (overall 0.46 → 0.78), no manual
   edit. This is the "get the tool to do it" lever.
-- **shape** (weight 0.30) — the anti-wash wall (Timbre Toolbox / MPEG-7): from the raw RMS envelope,
+- **pitch** (`pitch_match`, weight 0.20) — the anti-WRONG-PITCH term: top-6 spectral peaks (onset
+  window) of each signal; for every reference peak (weighted by magnitude) find the nearest mix peak in
+  log-frequency and `squash(semitones, 3.0)`. Anchors the fundamental + partials so the tonal energy
+  can't sit at the wrong pitch. PROVEN: the "improved" noisy snare body had drifted to 603 Hz (a
+  cowbell pitch — it literally sounded like a cowbell); without a pitch anchor the coarse level-invariant
+  spectral term couldn't tell 603 from the ref's 129. With this term, re-optimizing pulled the body to
+  ~215–223 Hz (snare range), pitch 0.44 → 0.77. Note the overall *drops* (0.78 → 0.58) because the 0.78
+  was the cowbell-pitch GAMING the metric; the honest right-pitch score is lower until the optimizer
+  reconciles all five terms (needs more iters / seeding). Same drift hit rimshot (→85 Hz) + cowbell
+  (unison collapse) — this term addresses all of them.
+- **shape** (weight 0.20) — the anti-wash wall (Timbre Toolbox / MPEG-7): from the raw RMS envelope,
   **temporal centroid** (energy center-of-mass, s), **effective duration** (>40% max, s), **crest
   factor** (peak/RMS). log-ratio distances, `squash(d,0.7)=1−e^(−d/0.7)`, averaged. A wash has a LATE
   centroid + LONG duration + LOW crest and cannot fake all three.
