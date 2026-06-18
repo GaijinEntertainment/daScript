@@ -19,6 +19,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Emit build/compile_commands.json (per-TU compiler flags). Honored by the
+# Ninja and Makefile generators; the Visual Studio generator ignores it (use a
+# side Ninja dir on Windows). Powers the MCP cpp_compile_check / cpp_build_info
+# tools (utils/mcp/tools/cpp_compile_check.das).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)

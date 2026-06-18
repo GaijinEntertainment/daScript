@@ -1,6 +1,6 @@
 # daslang MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 28 daslang compiler-backed tools to AI coding assistants like Claude Code — compilation diagnostics, program introspection, AOT generation, live-reload control, and more.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes daslang compiler-backed tools to AI coding assistants like Claude Code — compilation diagnostics, program introspection, AOT generation, C++ source intelligence, live-reload control, and more.
 
 ## Tools
 
@@ -29,6 +29,22 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed. Conditional on `sg` CLI |
 | `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
+
+### C++ Source & Build Tools
+
+Parse-aware (tree-sitter-cpp) source search plus compiler-backed build tools. The compile tools read the CMake compile database (`build/compile_commands.json`); see the note below.
+
+| Tool | Description |
+|---|---|
+| `cpp_grep_usage` | Parse-aware C++ identifier search across `.cpp/.h/.hpp/.cc` files using ast-grep + tree-sitter-cpp. Skips comments and strings. Searches `src/`, `include/`, `modules/` by default |
+| `cpp_find_symbol` | Search C++ symbol DECLARATIONS by name + kind (`function`/`class`/`struct`/`enum`/`union`/`typedef`/`namespace`/`macro`). Best-effort; macro-expanded declarations are invisible to ast-grep |
+| `cpp_outline` | List C++ declarations in a file or glob, grouped by file with containment (methods under their class). Works on broken code; no compile DB needed |
+| `cpp_goto_definition` | Up to 5 plausible definition locations for a cursor position. Approximate — no scope resolution or overload disambiguation |
+| `cpp_compile_check` | Syntax-check a C++ translation unit using the real compiler off `compile_commands.json` (`cl /Zs` on MSVC, `-fsyntax-only` on clang/gcc). Inherits the build's flags incl. `/WX`. Optional `json` for a structured `CppCompileResult`; optional `build_dir` |
+| `cpp_build_info` | Return the compiler, build directory, full compile command, and derived syntax-only command for a TU. Answers "what command line compiles this file" |
+| `cpp_format_file` | Format a C++ file in place with clang-format, but only when a `.clang-format` is discoverable by walking up from the file. No-op-with-message otherwise (the daScript tree ships none) |
+
+**Compile DB requirement.** `cpp_compile_check` / `cpp_build_info` need `build/compile_commands.json`. The top-level `CMakeLists.txt` sets `CMAKE_EXPORT_COMPILE_COMMANDS ON`, but only the **Ninja and Makefile** generators honor it — the **Visual Studio generator does not emit the DB**, so on Windows use a side Ninja build dir (the tools probe `build/`, `build-ninja/`, then `build*/`; pass `build_dir` to override). Headers aren't translation units (not in the DB) — pass a `.cpp`/`.cc` that includes them. On **MSVC**, the DB omits system include paths (read from the `INCLUDE` env var), so launch the MCP server from a Visual Studio developer environment (`vcvars64`); clang/gcc find system headers automatically.
 
 ### Duplicate Detection
 
@@ -176,6 +192,13 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__grep_usage",
       "mcp__daslang__outline",
       "mcp__daslang__aot",
+      "mcp__daslang__cpp_grep_usage",
+      "mcp__daslang__cpp_find_symbol",
+      "mcp__daslang__cpp_outline",
+      "mcp__daslang__cpp_goto_definition",
+      "mcp__daslang__cpp_compile_check",
+      "mcp__daslang__cpp_build_info",
+      "mcp__daslang__cpp_format_file",
       "mcp__daslang__live_launch",
       "mcp__daslang__live_status",
       "mcp__daslang__live_error",

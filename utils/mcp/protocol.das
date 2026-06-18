@@ -36,6 +36,8 @@ require tools/cpp_grep_usage public
 require tools/cpp_find_symbol public
 require tools/cpp_outline public
 require tools/cpp_goto_definition public
+require tools/cpp_compile_check public
+require tools/cpp_format_file public
 require tools/aot public
 require tools/lint_tool public
 require tools/detect_duplicates public
@@ -452,6 +454,33 @@ def handle_tools_list(id_json : string) : string {
         ))
     }
     result.tools |> emplace(make_tool(
+        "cpp_compile_check",
+        "Syntax-check a C++ translation unit using the project's compile_commands.json (clangd-free). Takes the TU's exact flags from the compile DB, strips the codegen tail, and runs cl /Zs (MSVC) or -fsyntax-only (clang/gcc). Requires a CMake build configured with CMAKE_EXPORT_COMPILE_COMMANDS=ON (Ninja/Makefiles emit it; the Visual Studio generator does NOT — use a side Ninja build dir on Windows). On MSVC the spawned compiler needs a developer environment (INCLUDE/LIB from vcvars), since the compile DB omits system include paths. Headers aren't translation units — pass a .cpp/.cc that includes them.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the C++ translation unit (.cpp/.cc/.cxx), repo-relative or absolute"),
+            "build_dir" => PropertySchema(_type = "string", description = "Build directory, or a direct path to compile_commands.json. Empty -> probe build/, build-ninja/, then build*/ under the repo root."),
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (CppCompileResult with file, success, errors, warnings)")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
+        "cpp_build_info",
+        "Return the compiler, build directory, full compile command, and derived syntax-only command for a C++ translation unit, read from the project's compile_commands.json. Answers 'what command line compiles this file'. Same compile-DB requirement as cpp_compile_check.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the C++ translation unit (.cpp/.cc/.cxx), repo-relative or absolute"),
+            "build_dir" => PropertySchema(_type = "string", description = "Build directory, or a direct path to compile_commands.json. Empty -> probe build/, build-ninja/, then build*/ under the repo root.")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
+        "cpp_format_file",
+        "Format a C++ file in place with clang-format, but ONLY when a .clang-format is discoverable by walking up from the file. The daScript tree ships none, so this is a no-op-with-message there; it's for external C++ consumers that carry a .clang-format. Requires clang-format on PATH.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the C++ file to format, repo-relative or absolute")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
         "aot",
         "Generate AOT (ahead-of-time) C++ code for a daScript file or a single function. Without 'function', returns the full AOT output. With 'function', returns C++ for that function only. If multiple functions match, returns the list of matches.",
         {
@@ -685,6 +714,12 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project, projec
         return do_cpp_outline(arg1, arg2, arg3)
     } elif (tool_name == "cpp_goto_definition") {
         return do_cpp_goto_definition(arg1, arg2, arg3)
+    } elif (tool_name == "cpp_compile_check") {
+        return do_cpp_compile_check(arg1, arg2, arg3 == "true")
+    } elif (tool_name == "cpp_build_info") {
+        return do_cpp_build_info(arg1, arg2)
+    } elif (tool_name == "cpp_format_file") {
+        return do_cpp_format_file(arg1)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project, project_root, load_modules)
     } elif (tool_name == "lint") {
@@ -874,6 +909,18 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         if (empty(arg1)) return jsonrpc::error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
+    } elif (name == "cpp_compile_check") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) return jsonrpc::error(id_json, -32602, "missing 'file' argument")
+        arg2 = get_string_arg(args, "build_dir")
+        arg3 = get_string_arg(args, "json")
+    } elif (name == "cpp_build_info") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) return jsonrpc::error(id_json, -32602, "missing 'file' argument")
+        arg2 = get_string_arg(args, "build_dir")
+    } elif (name == "cpp_format_file") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) return jsonrpc::error(id_json, -32602, "missing 'file' argument")
     } elif (name == "list_modules") {
         arg1 = get_string_arg(args, "json")
     } elif (name == "aot") {
