@@ -394,7 +394,11 @@ namespace das {
                 DAS_ASSERT(!expr->returnInBlock);
             }
             if ( expr->subexpr ) {
-                if ( expr->subexpr->rtti_isMakeLocal() ) {
+                // only route a make-local return through CMRES when the function returns via
+                // CMRES; a register-returned (non-cmres) function has no result buffer, so
+                // writing the make-local through one segfaults — build a normal local instead.
+                bool makeLocalCMRES = expr->returnInBlock || !func || func->copyOnReturn || func->moveOnReturn;
+                if ( expr->subexpr->rtti_isMakeLocal() && makeLocalCMRES ) {
                     uint32_t sz = sizeof(void *);
                     expr->refStackTop = allocateStack(sz);
                     expr->takeOverRightStack = true;

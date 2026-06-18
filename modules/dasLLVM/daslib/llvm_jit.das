@@ -3989,7 +3989,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeVariant
     def override preVisitExprMakeVariant(expr : ExprMakeVariant?) : void {
         var mkv_ptr : LLVMOpaqueValue?
-        if (expr.makeFlags.useCMRES) {
+        if (return_by_cmres(expr)) {
             mkv_ptr = get_cmres_param()
             mkv_ptr = LLVMBuildPointerCast(g_builder, mkv_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
@@ -4110,7 +4110,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
         var mks_ptr : LLVMOpaqueValue?
-        if (expr.makeFlags.useCMRES) {
+        if (return_by_cmres(expr)) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
@@ -4261,7 +4261,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeArray
     def override preVisitExprMakeArray(expr : ExprMakeArray?) : void {
         var mks_ptr : LLVMOpaqueValue?
-        if (expr.makeFlags.useCMRES) {
+        if (return_by_cmres(expr)) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
@@ -4338,7 +4338,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeTuple
     def override preVisitExprMakeTuple(expr : ExprMakeTuple?) : void {
         var mks_ptr : LLVMOpaqueValue?
-        if (expr.makeFlags.useCMRES) {
+        if (return_by_cmres(expr)) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
@@ -6828,6 +6828,19 @@ class public LlvmJitVisitor : AstVisitor {
             failed("not in block or function")
             return null
         }
+    }
+
+    // does a make-expression with useCMRES actually write into the function's cmres result?
+    // a make-expression may carry useCMRES while the enclosing function returns in a register
+    // (e.g. a register-sized handled value type) — then there is no cmres param to write into.
+    def return_by_cmres(expr : ExprMakeLocal?) : bool {
+        if (!expr.makeFlags.useCMRES) return false
+        if (thisBlock != null) {
+            return isCMRESType(thisBlock.returnType)
+        } elif (thisFunc != null) {
+            return isCMRES(thisFunc)
+        }
+        return false
     }
 
     def get_cmres_param : LLVMOpaqueValue ? {
