@@ -889,10 +889,12 @@ def editor_panel() {
     collapsing_header(PREVIEW_H, (text = "layer preview", closable = false, flags = ImGuiTreeNodeFlags.None)) {
         plot(PV_WAVE, (title = "layer waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
             setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+            setup_legend(ImPlotLocation.NorthEast)
             plot_line("layer", g_lyr_wave)
         }
         plot(PV_SPEC, (title = "layer spectrum (dB)", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
             setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+            setup_legend(ImPlotLocation.NorthEast)
             plot_line("layer", g_lyr_spec)
         }
     }
@@ -1047,6 +1049,7 @@ def preview_panel() {
         tab_item(PV_TAB_WAVE, (text = "Wave + Spectrum", closable = false, flags = ImGuiTabItemFlags.None)) {
             plot(MIX_WAVE, (title = "mix waveform", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
                 setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                setup_legend(ImPlotLocation.NorthEast)   // top-right: keep the legend off the onset (left)
                 plot_line("mix", g_mix_wave)
                 if (g_show_ref && !empty(g_ref_wave)) {
                     plot_line("reference", g_ref_wave)
@@ -1054,6 +1057,7 @@ def preview_panel() {
             }
             plot(MIX_SPEC, (title = "mix spectrum (dB)", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
                 setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                setup_legend(ImPlotLocation.NorthEast)
                 plot_line("mix", g_mix_spec)
                 if (g_show_ref && !empty(g_ref_spec)) {
                     plot_line("reference", g_ref_spec)
@@ -1063,12 +1067,14 @@ def preview_panel() {
         tab_item(PV_TAB_SPECTRO, (text = "Spectrogram", closable = false, flags = ImGuiTabItemFlags.None)) {
             plot(SPEC_MIX, (title = "mix - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
                 setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                setup_legend(ImPlotLocation.NorthEast)
                 if (!empty(g_mix_spectro)) {
                     plot_heatmap("mix", g_mix_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
                 }
             }
             plot(SPEC_REF, (title = "reference - spectrum over time", size = float2(-1.0f, 150.0f), flags = ImPlotFlags.None)) {
                 setup_axes("time", "freq (log)", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+                setup_legend(ImPlotLocation.NorthEast)
                 if (!empty(g_ref_spectro)) {
                     plot_heatmap("ref", g_ref_spectro, SPEC_BINS, SPEC_FRAMES, -90.0lf, -20.0lf, "")
                 }
@@ -1207,10 +1213,12 @@ def reference_panel() {
     text(REF_NAME, (text = g_ref_name))
     plot(REF_WAVE, (title = "reference waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
         setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        setup_legend(ImPlotLocation.NorthEast)
         plot_line("ref", g_ref_wave)
     }
     plot(REF_SPEC, (title = "reference spectrum (dB)", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
         setup_axes("bin", "dB", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
+        setup_legend(ImPlotLocation.NorthEast)
         plot_line("ref", g_ref_spec)
     }
 }
