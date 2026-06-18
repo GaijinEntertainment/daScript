@@ -114,8 +114,10 @@ gain; link them so tuning the source updates all bounces.
   preview; the **Reference** panel (load wav via file dialog → `read_wav` → mono/44k; play; waveform/
   spectrum) + **reference overlay** on the Mix plots. (Per-layer-on-mix spectrum overlay deferred to
   polish.)
-- **D — persistence + examples.** Save/Load `.sfx`, ship the 3 example sounds, `load_sound` /
-  `render_sound_file`.
+- **D — persistence + examples. DONE.** `.sfx` = JSON (`sprint_json`/`sscan_json` on a `Sound`
+  doc = layers + `mimic_target` ref path; the voice variant encodes per-layer kind). File menu
+  Open/Save via the dialog; `save_sound`/`load_sound`/`render_sound_file` in the lib for games;
+  3 example sounds shipped in `sounds/` (bone/marble/ball-on-table).
 - **(final) drum re-authoring** — rebuild the strudel drum voices as `.sfx` sounds: the proof
   the tool is real. Separate pass.
 

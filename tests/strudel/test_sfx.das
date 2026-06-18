@@ -99,3 +99,33 @@ def test_link_mirrors_source(t : T?) {
     t |> success(same, "linked layer mirrors source voice params")
     t |> success(sound[1].delay == 0.12, "linked layer keeps its own delay")
 }
+
+[test]
+def test_save_load_roundtrip(t : T?) {
+    var sd = 9u
+    var doc = Sound()
+    doc.mimic_target = "/tmp/ref.wav"
+    doc.layers |> push(modal_layer("thud", ModalVoice(pitch = 170.0, n_modes = 2)))
+    var zap = sfxr_layer("zap", sfxr_pickup_coin(sd))
+    zap.gain = 0.5
+    zap.delay = 0.25
+    zap.solo = true
+    doc.layers |> push(zap)
+
+    let path = "/tmp/_sfx_roundtrip_test.sfx"
+    t |> success(save_sound(path, doc), "save ok")
+    var back = Sound()
+    t |> success(load_sound(path, back), "load ok")
+    t |> equal(length(back.layers), 2)
+    t |> equal(back.mimic_target, "/tmp/ref.wav")
+    t |> success(back.layers[0].voice is modal, "layer 0 is modal")
+    if (back.layers[0].voice is modal) {
+        t |> equal((back.layers[0].voice as modal).pitch, 170.0)
+    }
+    t |> success(back.layers[1].voice is sfxr, "layer 1 is sfxr")
+    t |> equal(back.layers[1].gain, 0.5)
+    t |> equal(back.layers[1].delay, 0.25)
+    t |> success(back.layers[1].solo, "solo flag round-trips")
+    let buf <- render_sound(back.layers)
+    t |> success(peak(buf) > 0.02, "loaded sound renders audible")
+}

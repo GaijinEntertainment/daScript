@@ -9,6 +9,7 @@ module strudel_sfx shared public
 
 require strudel/strudel_sfxr public
 require strudel/strudel_modal public
+require daslib/fio
 require math
 
 let SFX_SAMPLE_RATE = 44100
@@ -87,6 +88,39 @@ def render_sound(layers : array<Layer>) : array<float> {
         for (x in out) {
             x *= g
         }
+    }
+    return <- out
+}
+
+// ===== persistence (.sfx = JSON) =====
+
+struct Sound {
+    //! A saved sound: the layer stack + an optional reference-target path to mimic.
+    version : int = 1
+    mimic_target : string         //!< path of an external wav to compare against (never embedded)
+    layers : array<Layer>
+}
+
+def save_sound(path : string; doc : Sound) : bool {
+    //! Write a sound to a .sfx (JSON) file. The voice variant encodes the per-layer kind.
+    return fwrite(path, sprint_json(doc, true))
+}
+
+def load_sound(path : string; var doc : Sound) : bool {
+    //! Read a .sfx (JSON) file into `doc`. Returns false on a missing/invalid file.
+    let text = fread(path)
+    if (empty(text)) {
+        return false
+    }
+    return sscan_json(text, doc)
+}
+
+def render_sound_file(path : string) : array<float> {
+    //! Game-facing one-call: load a .sfx and render it to a mono buffer (empty on failure).
+    var doc = Sound()
+    var out : array<float>
+    if (load_sound(path, doc)) {
+        out <- render_sound(doc.layers)
     }
     return <- out
 }

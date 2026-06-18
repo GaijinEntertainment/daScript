@@ -45,5 +45,7 @@ The sound generators live in `modules/dasAudio/strudel/` and are reusable on the
 
 - `strudel_sfxr` — faithful sfxr-style subtractive voice (`render_sfxr`, presets, randomize/mutate).
 - `strudel_modal` — modal impact voice for struck/resonant sounds (`render_modal_voice`).
-- `strudel_sfx` — the multi-layer model: `Layer` (sfxr or modal voice + gain + delay) and
-  `render_sound(layers)`. Reusable by games (load a saved sound and render it).
+- `strudel_sfx` — the multi-layer model: `Layer` (sfxr or modal voice + gain + delay),
+  `render_sound(layers)`, and `.sfx` persistence (`save_sound`/`load_sound`/`render_sound_file`,
+  a `Sound` doc = layers + an optional `mimic_target` reference path). A game loads a saved sound
+  with `render_sound_file("foo.sfx")`. Example sounds live in `sounds/*.sfx` (File ▸ Open).

@@ -1,0 +1,54 @@
+{
+  "version":1,
+  "mimic_target":"",
+  "layers":[
+    {
+      "name":"table thud",
+      "voice":{
+        "modal":{
+          "pitch":170,
+          "spread":2.4000001,
+          "n_modes":2,
+          "ring":0.0500000007,
+          "brightness":0.349999994,
+          "damp_skew":0.699999988,
+          "transient":0.200000003,
+          "transient_rate":600,
+          "echo_amount":0,
+          "echo_delay":0.0399999991,
+          "duration":0.5
+        }
+      },
+      "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    },
+    {
+      "name":"ball click",
+      "voice":{
+        "modal":{
+          "pitch":1500,
+          "spread":1.60000002,
+          "n_modes":4,
+          "ring":0.0500000007,
+          "brightness":0.550000012,
+          "damp_skew":0.899999976,
+          "transient":0.600000024,
+          "transient_rate":600,
+          "echo_amount":0.319999993,
+          "echo_delay":0.0549999997,
+          "duration":0.5
+        }
+      },
+      "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    }
+  ]
+}

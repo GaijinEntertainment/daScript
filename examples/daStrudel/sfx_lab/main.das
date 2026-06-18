@@ -37,7 +37,15 @@ var g_ref : array<float>         // loaded reference target (mono @ SR)
 var g_ref_wave : array<float>
 var g_ref_spec : array<float>
 var g_ref_name = "(no reference loaded)"
+var g_ref_path = ""              // full path of the loaded reference (saved as mimic_target)
 var g_show_ref = true            // overlay the reference on the mix plots
+
+// which file-dialog operation is in flight (the dialog is shared)
+let DLG_NONE = 0
+let DLG_REF = 1
+let DLG_SAVE = 2
+let DLG_OPEN = 3
+var g_dialog_mode = DLG_NONE
 var g_seed = 0x1234567u
 var g_autoplay = true
 var g_mix_dirty = true
@@ -191,8 +199,29 @@ def load_reference(path : string) {
     downsample(g_ref, g_ref_wave, 2000)
     compute_spectrum(g_ref, g_ref_spec)
     g_ref_name = "{base_name(path)}  ({sr} Hz, {ch} ch)"
+    g_ref_path = path
     g_show_ref = true
     REF_SHOW.value = true
+}
+
+def do_save_sound(path : string) {
+    var doc = Sound()
+    doc.mimic_target = g_ref_path
+    doc.layers := g_layers
+    save_sound(path, doc)
+}
+
+def do_open_sound(path : string) {
+    var doc = Sound()
+    if (!load_sound(path, doc)) return
+    g_layers := doc.layers
+    g_sel = 0
+    g_sel_loaded = -1
+    g_mix_dirty = true
+    g_lyr_dirty = true
+    if (!empty(doc.mimic_target)) {
+        load_reference(doc.mimic_target)
+    }
 }
 
 def rebuild_layer_preview() {
@@ -585,6 +614,7 @@ def mix_panel() {
 
 def reference_panel() {
     if (icon_button("refload", "import")) {
+        g_dialog_mode = DLG_REF
         file_dialog_open(FileDialogConfig(title = "Load reference audio", start_dir = "",
             filters <- file_filters("Audio (*.wav)|wav|All files|"), mode = FileDialogMode.open, max_selection = 0))
     }
@@ -663,6 +693,18 @@ def update() {
                 clear_all()
                 MI_NEW.value = false
             }
+            if (menu_item(MI_OPEN, (text = "Open sound..."))) {
+                MI_OPEN.value = false
+                g_dialog_mode = DLG_OPEN
+                file_dialog_open(FileDialogConfig(title = "Open sound", start_dir = "",
+                    filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.open, max_selection = 0))
+            }
+            if (menu_item(MI_SAVE, (text = "Save sound..."))) {
+                MI_SAVE.value = false
+                g_dialog_mode = DLG_SAVE
+                file_dialog_open(FileDialogConfig(title = "Save sound", start_dir = "",
+                    filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.sfx"))
+            }
         }
         if (button(MB_PLAY, (text = "Play mix"))) {
             play_mix()
@@ -695,7 +737,15 @@ def update() {
     // the file dialog draws at top level (outside any window) so its path stays FILEDLG/...
     let fdr = file_dialog_draw()
     if (fdr == FileDialogResult.confirmed) {
-        load_reference(file_dialog_selected_path())
+        let picked = file_dialog_selected_path()
+        if (g_dialog_mode == DLG_REF) {
+            load_reference(picked)
+        } elif (g_dialog_mode == DLG_OPEN) {
+            do_open_sound(picked)
+        } elif (g_dialog_mode == DLG_SAVE) {
+            do_save_sound(picked)
+        }
+        g_dialog_mode = DLG_NONE
     }
 
     if (g_mix_dirty) {

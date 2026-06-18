@@ -1,0 +1,30 @@
+{
+  "version":1,
+  "mimic_target":"",
+  "layers":[
+    {
+      "name":"bone",
+      "voice":{
+        "modal":{
+          "pitch":1120,
+          "spread":1.54999995,
+          "n_modes":4,
+          "ring":0.0700000003,
+          "brightness":0.550000012,
+          "damp_skew":0.800000012,
+          "transient":0.550000012,
+          "transient_rate":600,
+          "echo_amount":0.180000007,
+          "echo_delay":0.0350000001,
+          "duration":0.449999988
+        }
+      },
+      "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    }
+  ]
+}
