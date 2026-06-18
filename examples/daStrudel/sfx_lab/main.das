@@ -1003,7 +1003,7 @@ def mix_header() {
     }
     same_line(MIX_SL)
     if (g_have_fit) {
-        text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%   shape {int(g_fit.envelope * 100.0)}%)"))
+        text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%   shape {int(g_fit.shape * 100.0)}%   attack {int(g_fit.attack * 100.0)}%)"))
         text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)"))
     } else {
         text(FIT_TXT, (text = "fit: load a reference to compare"))
