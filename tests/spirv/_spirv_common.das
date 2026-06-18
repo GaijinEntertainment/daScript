@@ -392,6 +392,33 @@ def raster_math {
     m_out = float4(c, c, c, 1.0f)                 // CompositeConstruct
 }
 
+// vertex / fragment Flat-decoration fixtures: integer varyings auto-Flat (Vulkan spec mandate —
+// the driver can't interpolate ints, so the emitter MUST decorate them), and an explicit @flat on a
+// float varying forces flat-shading (a stylised-look knob). flat_vert/flat_frag cover both: an int
+// passthrough (`mat_id`) which should emit Flat without the user asking, and a float passthrough
+// (`flat_val`) carrying @flat which should also emit Flat. The plain float `smooth_val` carries no
+// @flat and must NOT pick up the decoration — that's the negative control.
+var @out @location = 0 mat_id : int                   // int Output -> auto-Flat
+var @flat @out @location = 1 flat_val : float          // float Output + @flat -> Flat
+var @out @location = 2 smooth_val : float              // float Output, no @flat -> no Flat
+[vertex_shader(name="flat_vert_spv"), marker(no_coverage)]
+def flat_vert {
+    mat_id = gl_VertexIndex
+    flat_val = float(gl_VertexIndex) * 0.5f
+    smooth_val = float(gl_VertexIndex) * 0.25f
+    gl_Position = float4(0.0f, 0.0f, 0.0f, 1.0f)
+}
+
+var @in @location = 0 fi_mat_id : int                  // int Input -> auto-Flat
+var @flat @in @location = 1 fi_flat_val : float        // float Input + @flat -> Flat
+var @in @location = 2 fi_smooth_val : float            // float Input, no @flat -> no Flat
+var @out @location = 0 flat_color : float4
+[fragment_shader(name="flat_frag_spv"), marker(no_coverage)]
+def flat_frag {
+    let m = float(fi_mat_id)
+    flat_color = float4(m, fi_flat_val, fi_smooth_val, 1.0f)
+}
+
 def public tri_vert_words : array<uint> {
     var w : array<uint>
     w |> push_from(tri_vert_spv)
@@ -425,6 +452,18 @@ def public vindex_words : array<uint> {
 def public raster_math_words : array<uint> {
     var w : array<uint>
     w |> push_from(raster_math_spv)
+    return <- w
+}
+
+def public flat_vert_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(flat_vert_spv)
+    return <- w
+}
+
+def public flat_frag_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(flat_frag_spv)
     return <- w
 }
 
