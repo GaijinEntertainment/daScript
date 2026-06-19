@@ -396,13 +396,13 @@ def seed_from_ref() {
     mv.pitch = sf.fundamental > 20.0 ? clamp(sf.fundamental, 20.0, 4000.0) : 200.0
     mv.spread = clamp(sf.spread, 1.0, 2.6)
     mv.n_modes = clamp(sf.n_modes, 1, 8)
-    mv.ring = clamp(sf.decay_ms / 1000.0 * 0.6, 0.005, 0.4)
+    mv.ring = clamp(sf.decay_ms / 1000.0 * 0.6, 0.005, 2.0)
     mv.brightness = clamp(sf.flatness + 0.3, 0.1, 0.95)
     mv.damp_skew = 0.7
     mv.transient = clamp((sf.crest - 2.0) / 12.0, 0.1, 0.9)
     mv.transient_rate = 800.0
     mv.echo_delay = 0.04
-    mv.duration = clamp(sf.decay_ms / 1000.0 * 1.8, 0.05, 1.0)
+    mv.duration = clamp(sf.decay_ms / 1000.0 * 1.8, 0.05, 3.0)
     var layers : array<Layer>
     layers |> emplace(modal_layer("body", mv))
     if (sf.flatness > 0.12) {                       // noisy drum -> add a noise layer (wires / wash)
@@ -562,14 +562,14 @@ def private voice_knobs_io(writing : bool; li : int; var i : int&) {
         var v = g_layers[li].voice as modal
         knob(writing, i, v.pitch, 20.0, 4000.0)
         knob(writing, i, v.spread, 1.0, 2.6)
-        knob(writing, i, v.ring, 0.005, 0.4)
+        knob(writing, i, v.ring, 0.005, 2.0)
         knob(writing, i, v.brightness, 0.0, 1.0)
         knob(writing, i, v.damp_skew, 0.0, 1.5)
         knob(writing, i, v.transient, 0.0, 1.0)
         knob(writing, i, v.transient_rate, 100.0, 2000.0)
         knob(writing, i, v.echo_amount, 0.0, 1.0)
         knob(writing, i, v.echo_delay, 0.005, 0.15)
-        knob(writing, i, v.duration, 0.05, 1.0)
+        knob(writing, i, v.duration, 0.05, 3.0)
         if (writing) {
             g_layers[li].voice = VoiceParams(modal = v)
         }
@@ -1128,7 +1128,7 @@ def modal_editor() : bool {
     if (slider_float(M_SPREAD, (text = "spread"))) { ch = true; }
     M_NMODES.bounds = (1, 8)
     if (slider_int(M_NMODES, (text = "modes"))) { ch = true; }
-    M_RING.bounds = (0.005f, 0.4f)
+    M_RING.bounds = (0.005f, 2.0f)
     if (slider_float(M_RING, (text = "ring (s)"))) { ch = true; }
     M_BRIGHT.bounds = (0.0f, 1.0f)
     if (slider_float(M_BRIGHT, (text = "brightness"))) { ch = true; }
@@ -1142,7 +1142,7 @@ def modal_editor() : bool {
     if (slider_float(M_ECHOAMT, (text = "echo amount"))) { ch = true; }
     M_ECHODELAY.bounds = (0.005f, 0.15f)
     if (slider_float(M_ECHODELAY, (text = "echo delay (s)"))) { ch = true; }
-    M_DUR.bounds = (0.05f, 1.0f)
+    M_DUR.bounds = (0.05f, 3.0f)
     if (slider_float(M_DUR, (text = "duration (s)"))) { ch = true; }
     return ch
 }

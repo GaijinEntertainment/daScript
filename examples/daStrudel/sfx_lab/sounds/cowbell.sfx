@@ -4,23 +4,60 @@
   "comment":"analysis",
   "layers":[
     {
-      "name":"cowbell",
+      "name":"body",
       "voice":{
         "modal":{
-          "pitch":923.945679,
-          "spread":1.00089324,
-          "n_modes":2,
-          "ring":0.00499999989,
-          "brightness":0.805900991,
-          "damp_skew":0.680362523,
-          "transient":0.572110891,
-          "transient_rate":1022.5011,
-          "echo_amount":0.253218591,
-          "echo_delay":0.0654280856,
-          "duration":0.997598946
+          "pitch":411.398987,
+          "spread":1.97244549,
+          "n_modes":6,
+          "ring":0.064433381,
+          "brightness":0.615411699,
+          "damp_skew":0.537005484,
+          "transient":0.997667551,
+          "transient_rate":925.155457,
+          "echo_amount":0.0204473771,
+          "echo_delay":0.0115509192,
+          "duration":0.824293137
         }
       },
       "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    },
+    {
+      "name":"noise",
+      "voice":{
+        "sfxr":{
+          "wave":"noise",
+          "sound_vol":0.767351091,
+          "env_attack":0.0615698099,
+          "env_sustain":0.00881724991,
+          "env_punch":0.330949813,
+          "env_decay":0,
+          "base_freq":0.231556475,
+          "freq_limit":0.0479448698,
+          "freq_ramp":-0.196377039,
+          "freq_dramp":0.0495277122,
+          "vib_strength":0.0108595509,
+          "vib_speed":0.00278434157,
+          "arp_mod":0.209362566,
+          "arp_speed":0.279198527,
+          "duty":0.117745265,
+          "duty_ramp":-0.165739641,
+          "repeat_speed":0.269191027,
+          "pha_offset":-0.346278906,
+          "pha_ramp":0.307851851,
+          "lpf_freq":0.714318216,
+          "lpf_ramp":-0.217766881,
+          "lpf_resonance":0.00679336023,
+          "hpf_freq":0.0657577366,
+          "hpf_ramp":-0.267074615
+        }
+      },
+      "gain":0.207423776,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -31,12 +68,12 @@
   "post":{
     "filter":{
       "enabled":false,
-      "position":0.5
+      "position":0.27700001
     },
     "bandpass":{
-      "enabled":false,
-      "freq":1000,
-      "q":1
+      "enabled":true,
+      "freq":2241.64307,
+      "q":0.616767406
     },
     "drive":{
       "enabled":false,
@@ -71,9 +108,9 @@
       "sweep":2000
     },
     "tremolo":{
-      "enabled":false,
-      "rate":5,
-      "depth":0.5
+      "enabled":true,
+      "rate":0.511457205,
+      "depth":0.861706018
     },
     "delay":{
       "enabled":false,
@@ -81,11 +118,12 @@
       "feedback":0.300000012
     },
     "reverb":{
-      "enabled":false,
-      "wet":0.300000012,
-      "decay":0.400000006,
-      "lp_start":12000,
-      "lp_end":2000
+      "enabled":true,
+      "wet":0.743400455,
+      "decay":0.805067599,
+      "lp_start":14859.5771,
+      "lp_end":530.348328
     }
-  }
+  },
+  "master_gain":1.41254842
 }

@@ -1,63 +1,39 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/rimshot.wav",
-  "comment":"analysis",
+  "comment":"not from render",
   "layers":[
     {
-      "name":"rim tok",
-      "voice":{
-        "modal":{
-          "pitch":85.6169281,
-          "spread":1.9869808,
-          "n_modes":2,
-          "ring":0.103273742,
-          "brightness":0.858052671,
-          "damp_skew":1.33951247,
-          "transient":0.845649302,
-          "transient_rate":234.271912,
-          "echo_amount":0.495599121,
-          "echo_delay":0.0601520166,
-          "duration":0.0500000007
-        }
-      },
-      "gain":1,
-      "delay":0,
-      "enabled":true,
-      "solo":false,
-      "locked":false,
-      "link_source":-1
-    },
-    {
-      "name":"rim click",
+      "name":"clap",
       "voice":{
         "sfxr":{
           "wave":"noise",
-          "sound_vol":0.537368894,
-          "env_attack":0.0958039612,
-          "env_sustain":0.159732223,
-          "env_punch":0.319858044,
-          "env_decay":0.0119829699,
-          "base_freq":0.800308764,
-          "freq_limit":0.0489482172,
-          "freq_ramp":0.00323368795,
-          "freq_dramp":0.349166065,
-          "vib_strength":0.147295371,
-          "vib_speed":0.442285299,
-          "arp_mod":-0.531054795,
-          "arp_speed":0.0671301335,
-          "duty":0.0156043507,
-          "duty_ramp":0.312409341,
-          "repeat_speed":0.160007685,
-          "pha_offset":-0.0805677399,
-          "pha_ramp":-0.0725803301,
-          "lpf_freq":0.679781139,
-          "lpf_ramp":-0.446399063,
-          "lpf_resonance":0.313675284,
-          "hpf_freq":0.0497173481,
-          "hpf_ramp":-0.222751126
+          "sound_vol":0.502025366,
+          "env_attack":0.0460000001,
+          "env_sustain":0,
+          "env_punch":0.370999992,
+          "env_decay":0.228044584,
+          "base_freq":0.984000027,
+          "freq_limit":0.116999999,
+          "freq_ramp":1,
+          "freq_dramp":0.972000003,
+          "vib_strength":0.0117532564,
+          "vib_speed":0.00292557618,
+          "arp_mod":0.258247644,
+          "arp_speed":0.00972916186,
+          "duty":0.00166530837,
+          "duty_ramp":0.271263361,
+          "repeat_speed":0.0411952883,
+          "pha_offset":-0.0420002416,
+          "pha_ramp":0.0120464358,
+          "lpf_freq":1,
+          "lpf_ramp":-0.0711646304,
+          "lpf_resonance":0,
+          "hpf_freq":0.0443818346,
+          "hpf_ramp":0.0526211187
         }
       },
-      "gain":0.400000006,
+      "gain":1.005,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -67,13 +43,13 @@
   ],
   "post":{
     "filter":{
-      "enabled":false,
-      "position":0.5
+      "enabled":true,
+      "position":0.869000018
     },
     "bandpass":{
-      "enabled":false,
-      "freq":1000,
-      "q":1
+      "enabled":true,
+      "freq":118.128143,
+      "q":3.77616072
     },
     "drive":{
       "enabled":false,
@@ -118,11 +94,12 @@
       "feedback":0.300000012
     },
     "reverb":{
-      "enabled":false,
-      "wet":0.300000012,
-      "decay":0.400000006,
-      "lp_start":12000,
-      "lp_end":2000
+      "enabled":true,
+      "wet":0.257999986,
+      "decay":0.691999972,
+      "lp_start":7656.86035,
+      "lp_end":500
     }
-  }
+  },
+  "master_gain":22.5877743
 }
