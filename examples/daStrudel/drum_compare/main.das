@@ -5,13 +5,19 @@ options no_global_variables = false
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-// Interactive drum pad comparison: synth vs SF2 (Musyng Kite).
+// Interactive drum pad comparison: synth (the sfx_lab .sfx drums, via strudel_synth render_*)
+// vs SF2 (Stolen Soundfont — the same one the .sfx were tuned against).
 // Click pads to hear drums. Press S to toggle synth/SF2 mode.
 // Usage: daslang.exe examples/daStrudel/drum_compare/main.das
 
 require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_ttf
+require live/glfw_live
+require live/opengl_live
+require live/live_commands
+require live/live_api
+require live_host
 require audio/audio_boost
 require strudel/strudel_synth
 require strudel/strudel_sf2
@@ -45,8 +51,11 @@ def fs_drum {
 
 [vertex_buffer]
 struct Vertex {
-    xy   : float2
+    // field order MUST match the shader's attribute locations. The DSL assigns @location
+    // alphabetically (v_color=0, v_position=1), and bind_vertex_buffer binds by field order —
+    // so color (loc 0) must come first, position (loc 1) second, or the inputs get swapped.
     rgba : float4
+    xy   : float2
 }
 
 // ─── Drawing helpers ───
@@ -92,7 +101,7 @@ var g_sf2_cache : table<int; array<float>>  // sf2_key → pre-rendered stereo P
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
     var st : FStat
-    for (name in fixed_array("Musyng Kite.sf2", "GeneralUser GS v1.471.sf2", "FluidR3_GM.sf2")) {
+    for (name in fixed_array("Stolen Soundfont v2.08.2 (rev.3).sf2", "Musyng Kite.sf2", "GeneralUser GS v1.471.sf2", "FluidR3_GM.sf2")) {
         if (stat("{dir}/{name}", st)) {
             return "{dir}/{name}"
         }
@@ -351,8 +360,15 @@ var g_has_sf2 = false
 var g_program : uint
 var g_vao : uint
 var g_vbo : uint
+var g_ebo : uint          // element buffer — Mac core profile renders our geometry via glDrawElements, not glDrawArrays
 var g_font : Font
-var g_window : GLFWwindow?
+// live-harness state (daslang-live owns the window via live_window — no own glfwCreateWindow)
+var g_asch : AudioSystemChannels
+var g_audio_init = false
+var g_sf2_loaded = false
+var g_prev_mouse = false          // mouse-button edge detection (polled, not callback)
+var g_prev_s = false
+var g_prev_keys : bool[12]
 
 let PAD_RADIUS = 50.0
 let PAD_COLORS = fixed_array(
@@ -426,32 +442,16 @@ def hit_test(mx, my : float) : int {
 // ─── Main ───
 
 [export]
-def main {
-    if (glfwInit() == 0) {
-        panic("can't init glfw")
-    }
-    defer() {
-        glfwTerminate()
-    }
-    glfwInitOpenGL(3, 3)
-    g_window = glfwCreateWindow(860, 600, "Drum Compare: Synth vs SF2", null, null)
-    if (g_window == null) {
-        panic("can't create window")
-    }
-    defer() {
-        glfwDestroyWindow(g_window)
-    }
-    glfwMakeContextCurrent(g_window)
-
-    // shaders
+def create_gl_objects() {
     g_program = create_shader_program(@@vs_drum, @@fs_drum)
     glGenVertexArrays(1, safe_addr(g_vao))
     glBindVertexArray(g_vao)
     glGenBuffers(1, safe_addr(g_vbo))
     glBindBuffer(GL_ARRAY_BUFFER, g_vbo)
+    let dummy : Vertex[3]
+    glBufferData(GL_ARRAY_BUFFER, dummy, GL_DYNAMIC_DRAW)   // allocate before configuring attribs (Mac core profile)
     bind_vertex_buffer(null, type<Vertex>)
-
-    // font
+    glGenBuffers(1, safe_addr(g_ebo))
     create_ttf_objects()
     g_font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])
     if (!!empty(g_font.bitmap.bytes)) {
@@ -460,180 +460,189 @@ def main {
     if (!empty(g_font.bitmap.bytes)) {
         upload_font_texture(g_font)
     }
+}
 
-    // pads
+[export]
+def init() {
+    live_create_window("Drum Compare: Synth vs SF2", 860, 600)
+    create_gl_objects()
     init_pads()
+    if (!g_audio_init) {
+        g_asch = audio_system_create()
+        g_audio_init = true
+    }
+}
 
-    // mouse callback
-    unsafe {
-        glfwSetMouseButtonCallback(g_window) <| @(w, button, action, mods) {
-            if (button == int(GLFW_MOUSE_BUTTON_1) && action == int(GLFW_PRESS)) {
-                let cxy = glfwGetCursorPos(g_window)
-                let mx = float(cxy.x)
-                let my = float(cxy.y)
-                let pad = hit_test(mx, my)
-                if (pad >= 0) {
-                    play_drum(pad)
-                }
-                // check mode toggle button area (bottom center)
-                let btn_x = 430.0
-                let btn_y = 560.0
-                if (abs(mx - btn_x) < 100.0 && abs(my - btn_y) < 25.0 && g_has_sf2) {
-                    g_use_sf2 = !g_use_sf2
-                }
-            }
+// Loaded lazily on the first frame (after the live handshake) so init stays fast — the 1 GB sf2
+// would otherwise blow past daslang-live's 10 s startup poll and get the process reaped.
+def load_sf2_once() {
+    if (g_sf2_loaded) {
+        return
+    }
+    g_sf2_loaded = true
+    let sf2_path = find_sf2()
+    if (!empty(sf2_path)) {
+        g_sf2 = sf2_load(sf2_path)
+        if (g_sf2 != null) {
+            to_log(LOG_INFO, "Loaded SF2: {sf2_path}\n")
+            prerender_sf2_drums(*g_sf2)
+            g_has_sf2 = true
+            g_use_sf2 = false   // start in synth mode
+            to_log(LOG_INFO, "Pre-rendered {length(g_sf2_cache)} SF2 drum sounds\n")
+            analyze_synth_drums()
         }
     }
+    if (!g_has_sf2) {
+        to_log(LOG_INFO, "No SF2 found - synth mode only\n")
+    }
+    to_log(LOG_INFO, "Drum Compare - click pads / keys 1-9,0,-,= to play, S to toggle synth/SF2\n")
+}
 
-    // audio + SF2
-    with_audio_system() {
-        let sf2_path = find_sf2()
-        if (!empty(sf2_path)) {
-            g_sf2 = sf2_load(sf2_path)
-            if (g_sf2 != null) {
-                to_log(LOG_INFO, "Loaded SF2: {sf2_path}\n")
-                prerender_sf2_drums(*g_sf2)
-                g_has_sf2 = true
-                g_use_sf2 = false  // start in synth mode
-                to_log(LOG_INFO, "Pre-rendered {length(g_sf2_cache)} SF2 drum sounds\n")
-                analyze_synth_drums()
-            }
+[export]
+def update() {
+    if (!live_begin_frame()) {
+        return
+    }
+    load_sf2_once()   // one-time, deferred past the handshake (see load_sf2_once)
+    var ww, wh : int
+    glfwGetWindowSize(live_window, safe_addr(ww), safe_addr(wh))
+    let fw = float(ww)
+    let fh = float(wh)
+
+    // ---- input: polled + edge-detected (the live runtime owns the event pump) ----
+    let mdown = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
+    if (mdown && !g_prev_mouse) {
+        let cxy = glfwGetCursorPos(live_window)
+        let mx = float(cxy.x)
+        let my = float(cxy.y)
+        let pad = hit_test(mx, my)
+        if (pad >= 0) {
+            play_drum(pad)
         }
-        if (!g_has_sf2) {
-            to_log(LOG_INFO, "No SF2 found - synth mode only\n")
-        }
-
-        to_log(LOG_INFO, "Drum Compare — click pads to play, S to toggle synth/SF2, ESC to quit\n")
-
-        var last_time = glfwGetTime()
-
-        eval_main_loop() {
-            if (glfwWindowShouldClose(g_window) != 0) {
-                return false
-            }
-            if (glfwGetKey(g_window, int(GLFW_KEY_ESCAPE)) == int(GLFW_PRESS)) {
-                return false
-            }
-            // S key toggles mode
-            if (glfwGetKey(g_window, int(GLFW_KEY_S)) == int(GLFW_PRESS) && g_has_sf2) {
-                g_use_sf2 = !g_use_sf2
-                sleep(150u)  // debounce
-            }
-            // keyboard shortcuts: 1-9, 0, -, = for pads 0-11
-            let key_map = fixed_array(
-                int(GLFW_KEY_1), int(GLFW_KEY_2), int(GLFW_KEY_3), int(GLFW_KEY_4), int(GLFW_KEY_5),
-                int(GLFW_KEY_6), int(GLFW_KEY_7), int(GLFW_KEY_8), int(GLFW_KEY_9), int(GLFW_KEY_0),
-                int(GLFW_KEY_MINUS), int(GLFW_KEY_EQUAL)
-            )
-            for (i in range(12)) {
-                if (glfwGetKey(g_window, key_map[i]) == int(GLFW_PRESS)) {
-                    play_drum(i)
-                    sleep(100u)  // debounce
-                }
-            }
-
-            glfwPollEvents()
-
-            // delta time for flash decay
-            let now = glfwGetTime()
-            let dt = float(now - last_time)
-            last_time = now
-
-            // decay flash
-            for (pad in g_pads) {
-                pad.flash = max(0.0, pad.flash - dt * 4.0)
-            }
-
-            // render
-            var dw, dh : int
-            glfwGetFramebufferSize(g_window, dw, dh)
-            glViewport(0, 0, dw, dh)
-            glClearColor(0.12, 0.12, 0.14, 1.0)
-            glClear(GL_COLOR_BUFFER_BIT)
-
-            glEnable(GL_BLEND)
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-            // orthographic projection (pixel coordinates, Y down from top)
-            let fw = float(dw)
-            let fh = float(dh)
-            v_projection = ortho_rh(0.0, fw, fh, 0.0, -1.0, 1.0)
-
-            glUseProgram(g_program)
-            vs_drum_bind_uniform(g_program)
-
-            var verts : array<Vertex>
-            verts |> reserve(12 * 48 * 3 + 100)
-
-            // draw pads
-            for (pad in g_pads) {
-                // flash brightens the color
-                let bright = 1.0 + pad.flash * 0.8
-                let c = float4(
-                    min(pad.color.x * bright, 1.0),
-                    min(pad.color.y * bright, 1.0),
-                    min(pad.color.z * bright, 1.0),
-                    pad.color.w
-                )
-                push_circle(verts, pad.cx, pad.cy, PAD_RADIUS, c, 48)
-                // dark outline
-                let outline = float4(pad.color.x * 0.4, pad.color.y * 0.4, pad.color.z * 0.4, 1.0)
-                push_circle(verts, pad.cx, pad.cy, PAD_RADIUS + 3.0, outline, 48)
-                // redraw pad on top (simple outline effect)
-                push_circle(verts, pad.cx, pad.cy, PAD_RADIUS, c, 48)
-            }
-
-            // mode toggle button background
-            let btn_cx = fw * 0.5
-            let btn_cy = fh - 50.0
-            let mode_color = g_use_sf2 ? float4(0.2, 0.5, 0.8, 1.0) : float4(0.3, 0.7, 0.3, 1.0)
-            push_quad(verts, btn_cx - 100.0, btn_cy - 20.0, btn_cx + 100.0, btn_cy + 20.0, mode_color)
-
-            // upload and draw
-            glBindVertexArray(g_vao)
-            glBindBuffer(GL_ARRAY_BUFFER, g_vbo)
-            glBufferData(GL_ARRAY_BUFFER, verts, GL_DYNAMIC_DRAW)
-            glDrawArrays(GL_TRIANGLES, 0, length(verts))
-            delete verts
-
-            // draw text titles
-            if (!empty(g_font.bitmap.bytes)) {
-                for (pad in g_pads) {
-                    var lbl <- g_font |> create_quads(pad.title)
-                    let dim = quads_dim(lbl)
-                    let text_w = dim.vmax.x - dim.vmin.x
-                    let sx = int(pad.cx - text_w * 0.5)
-                    let sy = int(pad.cy + PAD_RADIUS + 8.0)
-                    g_font |> draw_quads_2d(lbl, dw, dh, sx, sy, float3(0.8, 0.8, 0.85))
-                    delete lbl
-                }
-                // mode title
-                let mode_text = g_use_sf2 ? "SF2 (Musyng Kite)" : "SYNTH (808-style)"
-                var mode_lbl <- g_font |> create_quads(mode_text)
-                let mode_dim = quads_dim(mode_lbl)
-                let mode_tw = mode_dim.vmax.x - mode_dim.vmin.x
-                let mode_sx = int(btn_cx - mode_tw * 0.5)
-                let mode_sy = int(btn_cy - 7.0)
-                g_font |> draw_quads_2d(mode_lbl, dw, dh, mode_sx, mode_sy, float3(1.0, 1.0, 1.0))
-                delete mode_lbl
-                // instructions
-                let help_text = g_has_sf2 ? "Click pads | Keys 1-9,0,-,= | S=toggle mode | ESC=quit" : "Click pads | Keys 1-9,0,-,= | ESC=quit"
-                var help_lbl <- g_font |> create_quads(help_text)
-                let help_dim = quads_dim(help_lbl)
-                let help_tw = help_dim.vmax.x - help_dim.vmin.x
-                g_font |> draw_quads_2d(help_lbl, dw, dh, int(fw * 0.5 - help_tw * 0.5), int(fh - 10.0), float3(0.5, 0.5, 0.55))
-                delete help_lbl
-            }
-
-            glfwSwapBuffers(g_window)
-            return true
+        let bx = fw * 0.5
+        let by = fh - 50.0
+        if (abs(mx - bx) < 100.0 && abs(my - by) < 22.0 && g_has_sf2) {
+            g_use_sf2 = !g_use_sf2
         }
     }
+    g_prev_mouse = mdown
 
-    // cleanup
+    let sdown = glfwGetKey(live_window, int(GLFW_KEY_S)) == int(GLFW_PRESS)
+    if (sdown && !g_prev_s && g_has_sf2) {
+        g_use_sf2 = !g_use_sf2
+    }
+    g_prev_s = sdown
+
+    let key_map = fixed_array(
+        int(GLFW_KEY_1), int(GLFW_KEY_2), int(GLFW_KEY_3), int(GLFW_KEY_4), int(GLFW_KEY_5),
+        int(GLFW_KEY_6), int(GLFW_KEY_7), int(GLFW_KEY_8), int(GLFW_KEY_9), int(GLFW_KEY_0),
+        int(GLFW_KEY_MINUS), int(GLFW_KEY_EQUAL)
+    )
+    for (i in range(12)) {
+        let kd = glfwGetKey(live_window, key_map[i]) == int(GLFW_PRESS)
+        if (kd && !g_prev_keys[i]) {
+            play_drum(i)
+        }
+        g_prev_keys[i] = kd
+    }
+
+    // ---- flash decay ----
+    let dt = get_dt()
+    for (pad in g_pads) {
+        pad.flash = max(0.0, pad.flash - dt * 4.0)
+    }
+
+    // ---- render ----
+    var dw, dh : int
+    live_get_framebuffer_size(dw, dh)
+    glViewport(0, 0, dw, dh)
+    glClearColor(0.12, 0.12, 0.14, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glDisable(GL_CULL_FACE)   // our y-flipped ortho reverses winding; don't let a live-set cull state drop the tris
+    glDisable(GL_DEPTH_TEST)
+
+    // projection in LOGICAL window points (matches pad coords + cursor); viewport is framebuffer px
+    v_projection = ortho_rh(0.0, fw, fh, 0.0, -1.0, 1.0)
+    glUseProgram(g_program)
+    vs_drum_bind_uniform(g_program)
+
+    var verts : array<Vertex>
+    verts |> reserve(12 * 48 * 3 + 100)
+    for (pad in g_pads) {
+        let bright = 1.0 + pad.flash * 0.8
+        let c = float4(min(pad.color.x * bright, 1.0), min(pad.color.y * bright, 1.0), min(pad.color.z * bright, 1.0), pad.color.w)
+        let outline = float4(pad.color.x * 0.4, pad.color.y * 0.4, pad.color.z * 0.4, 1.0)
+        push_circle(verts, pad.cx, pad.cy, PAD_RADIUS + 3.0, outline, 48)
+        push_circle(verts, pad.cx, pad.cy, PAD_RADIUS, c, 48)
+    }
+    let btn_cx = fw * 0.5
+    let btn_cy = fh - 50.0
+    let mode_color = g_use_sf2 ? float4(0.2, 0.5, 0.8, 1.0) : float4(0.3, 0.7, 0.3, 1.0)
+    push_quad(verts, btn_cx - 100.0, btn_cy - 20.0, btn_cx + 100.0, btn_cy + 20.0, mode_color)
+
+    let n = length(verts)
+    glBindVertexArray(g_vao)
+    glBindBuffer(GL_ARRAY_BUFFER, g_vbo)
+    glBufferData(GL_ARRAY_BUFFER, verts, GL_DYNAMIC_DRAW)
+    bind_vertex_buffer(null, type<Vertex>)
+    var idx : array<uint>   // sequential indices: glDrawElements(0..n-1) == glDrawArrays(0,n), but indexed draws actually render here
+    idx |> resize(n)
+    for (i in range(n)) {
+        idx[i] = uint(i)
+    }
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ebo)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx, GL_DYNAMIC_DRAW)
+    glUseProgram(g_program)
+    glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_INT, null)
+    delete idx
+    delete verts
+
+    // text labels — pass LOGICAL window size so they align with the logically-projected pads
+    if (!empty(g_font.bitmap.bytes)) {
+        for (pad in g_pads) {
+            var lbl <- g_font |> create_quads(pad.title)
+            let dim = quads_dim(lbl)
+            let tw = dim.vmax.x - dim.vmin.x
+            g_font |> draw_quads_2d(lbl, ww, wh, int(pad.cx - tw * 0.5), int(pad.cy + PAD_RADIUS + 8.0), float3(0.8, 0.8, 0.85))
+            delete lbl
+        }
+        let mode_text = g_use_sf2 ? "SF2 (Stolen Soundfont)" : "SYNTH (sfx_lab .sfx)"
+        var mode_lbl <- g_font |> create_quads(mode_text)
+        let mode_dim = quads_dim(mode_lbl)
+        let mode_tw = mode_dim.vmax.x - mode_dim.vmin.x
+        g_font |> draw_quads_2d(mode_lbl, ww, wh, int(btn_cx - mode_tw * 0.5), int(btn_cy - 7.0), float3(1.0, 1.0, 1.0))
+        delete mode_lbl
+        let help_text = g_has_sf2 ? "Click pads | Keys 1-9,0,-,= | S=toggle mode" : "Click pads | Keys 1-9,0,-,="
+        var help_lbl <- g_font |> create_quads(help_text)
+        let help_dim = quads_dim(help_lbl)
+        let help_tw = help_dim.vmax.x - help_dim.vmin.x
+        g_font |> draw_quads_2d(help_lbl, ww, wh, int(fw * 0.5 - help_tw * 0.5), int(fh - 10.0), float3(0.5, 0.5, 0.55))
+        delete help_lbl
+    }
+    live_end_frame()   // present — glfwSwapBuffers (the missing swap; window stayed black without it)
+}
+
+[export]
+def shutdown() {
     if (g_sf2 != null) {
         unsafe { delete g_sf2; }
     }
     glDeleteVertexArrays(1, safe_addr(g_vao))
     glDeleteBuffers(1, safe_addr(g_vbo))
+    if (g_audio_init) {
+        audio_system_finalize(g_asch.command, g_asch.next_sid)
+        g_audio_init = false
+    }
+    live_destroy_window()
+}
+
+[export]
+def main {
+    init()
+    while (!exit_requested()) {
+        update()
+    }
+    shutdown()
 }
