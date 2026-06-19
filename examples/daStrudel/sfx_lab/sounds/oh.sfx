@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/oh.wav",
+  "comment":"analysis",
   "layers":[
     {
       "name":"body",

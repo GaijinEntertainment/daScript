@@ -332,6 +332,7 @@ struct Sound {
     //! A saved sound: the layer stack + an optional reference-target path to mimic.
     version : int = 1
     mimic_target : string         //!< path of an external wav to compare against (never embedded)
+    comment : string = ""         //!< freeform label shown at the top of the editor (e.g. "analysis" / "from render")
     layers : array<Layer>
     post : PostChain = PostChain()  //!< postprocess effect chain applied to the mix
     master_gain : float = 1.0       //!< output gain applied AFTER render (so the file plays at the audited / reference level)

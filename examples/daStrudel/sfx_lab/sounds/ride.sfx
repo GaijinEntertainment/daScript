@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/ride.wav",
+  "comment":"analysis",
   "layers":[
     {
       "name":"ride bell",

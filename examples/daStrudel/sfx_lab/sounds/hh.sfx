@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/hh.wav",
+  "comment":"analysis",
   "layers":[
     {
       "name":"body",
@@ -35,7 +36,7 @@
           "env_attack":0.0357194021,
           "env_sustain":0.0175023973,
           "env_punch":0.399853855,
-          "env_decay":0.130785972,
+          "env_decay":0.202999994,
           "base_freq":0.675788105,
           "freq_limit":0.0462780073,
           "freq_ramp":0.809726,
@@ -124,5 +125,5 @@
       "lp_end":2772.10278
     }
   },
-  "master_gain":0.145580038
+  "master_gain":0.100571796
 }

@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/hh.wav",
+  "comment":"from render",
   "layers":[
     {
       "name":"metal",

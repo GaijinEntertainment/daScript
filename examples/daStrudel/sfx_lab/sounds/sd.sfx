@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/sd.wav",
+  "comment":"analysis",
   "layers":[
     {
       "name":"snare body",
@@ -35,7 +36,7 @@
           "env_attack":0.100997776,
           "env_sustain":0.0132367322,
           "env_punch":0.696247637,
-          "env_decay":0.213114306,
+          "env_decay":0.263000011,
           "base_freq":0.324433833,
           "freq_limit":0.0767877698,
           "freq_ramp":0.261093944,
@@ -109,11 +110,11 @@
     },
     "comp":{
       "enabled":true,
-      "threshold":-16.016058,
-      "ratio":15.8149166,
-      "knee":14.0874405,
-      "attack":0.023088377,
-      "release":0.233151913
+      "threshold":-18.4983444,
+      "ratio":16.2461662,
+      "knee":15.0214138,
+      "attack":0.0269267429,
+      "release":0.262837291
     },
     "chorus":{
       "enabled":false,
@@ -142,11 +143,11 @@
     },
     "reverb":{
       "enabled":true,
-      "wet":0.430620283,
-      "decay":0.689943433,
-      "lp_start":2118.96289,
-      "lp_end":5140.3418
+      "wet":0.444009423,
+      "decay":0.816894352,
+      "lp_start":2000,
+      "lp_end":5640.13086
     }
   },
-  "master_gain":0.534321606
+  "master_gain":0.557099998
 }

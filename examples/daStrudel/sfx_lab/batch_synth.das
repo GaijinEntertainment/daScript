@@ -359,16 +359,19 @@ def do_synth(name : string; iters : int) {
     g_sel = 0
     let before = eval_fit()
     let after = optimize(OPT_COMBINED, iters)
-    // loudness-match master_gain to the GM reference
-    let gm <- load_wav_mono("{REFDIR}{name}.wav")
+    // loudness-match master_gain to the GM reference (the kick's GM file is bd.wav)
+    let refname = name == "kick" ? "bd" : name
+    let refpath = "{REFDIR}{refname}.wav"
+    let gm <- load_wav_mono(refpath)
     let gm_rms = rms_of(gm)
     var mix <- render_sound(g_layers)
     apply_post(mix, g_post, float(SR))
     let mix_rms = rms_of(mix)
-    let mg = clamp(mix_rms > 1.0e-6 ? gm_rms / mix_rms : 1.0, 0.05, 1.12)
+    let mg = clamp(mix_rms > 1.0e-6 && gm_rms > 1.0e-6 ? gm_rms / mix_rms : 1.0, 0.05, 1.12)
     delete mix
     var doc = Sound()
-    doc.mimic_target = "{REFDIR}{name}.wav"
+    doc.mimic_target = refpath
+    doc.comment = "from render"
     doc.layers := g_layers
     doc.post = g_post
     doc.master_gain = mg

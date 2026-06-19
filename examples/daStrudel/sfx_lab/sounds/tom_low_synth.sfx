@@ -1,6 +1,7 @@
 {
   "version":1,
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/tom_low.wav",
+  "comment":"from render",
   "layers":[
     {
       "name":"body",
@@ -19,7 +20,7 @@
           "duration":0.65329051
         }
       },
-      "gain":1,
+      "gain":0.374000013,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -31,32 +32,32 @@
       "voice":{
         "sfxr":{
           "wave":"noise",
-          "sound_vol":0.469257414,
-          "env_attack":0.0523854271,
-          "env_sustain":0.0464459956,
-          "env_punch":0.366742641,
-          "env_decay":0.13745454,
-          "base_freq":0.274903864,
-          "freq_limit":0.00986493099,
-          "freq_ramp":-0.0902081802,
-          "freq_dramp":0.014939527,
-          "vib_strength":0.0530379638,
-          "vib_speed":0.0428289324,
-          "arp_mod":-0.0231533367,
-          "arp_speed":0.00383400847,
-          "duty":0,
-          "duty_ramp":-0.0164274387,
-          "repeat_speed":0.00727614108,
-          "pha_offset":0.130451024,
-          "pha_ramp":-0.108386725,
-          "lpf_freq":0.651146472,
-          "lpf_ramp":0.130869433,
-          "lpf_resonance":0.0111907618,
-          "hpf_freq":0.112711877,
-          "hpf_ramp":-0.067292437
+          "sound_vol":0.680697262,
+          "env_attack":0.0170133188,
+          "env_sustain":0,
+          "env_punch":0.31063506,
+          "env_decay":0.122000001,
+          "base_freq":0.299505293,
+          "freq_limit":0.0344526917,
+          "freq_ramp":-0.0101502687,
+          "freq_dramp":0.116527304,
+          "vib_strength":0.0160137229,
+          "vib_speed":0.229155526,
+          "arp_mod":0.451896757,
+          "arp_speed":0.000810562633,
+          "duty":0.227575958,
+          "duty_ramp":-0.0969072953,
+          "repeat_speed":0.328498453,
+          "pha_offset":0.403564453,
+          "pha_ramp":-0.176177502,
+          "lpf_freq":0.39883548,
+          "lpf_ramp":0.231637597,
+          "lpf_resonance":0.0670418739,
+          "hpf_freq":0.00407451298,
+          "hpf_ramp":0.459686965
         }
       },
-      "gain":0.300000012,
+      "gain":0.0930000022,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -117,12 +118,12 @@
       "feedback":0.300000012
     },
     "reverb":{
-      "enabled":false,
-      "wet":0.300000012,
-      "decay":0.400000006,
-      "lp_start":12000,
-      "lp_end":2000
+      "enabled":true,
+      "wet":0.242739916,
+      "decay":2.74570012,
+      "lp_start":11812.8633,
+      "lp_end":500
     }
   },
-  "master_gain":0.397953361
+  "master_gain":1.05786288
 }

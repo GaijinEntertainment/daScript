@@ -83,7 +83,8 @@ var g_dialog_mode = DLG_NONE
 var g_seed = 0x1234567u
 var g_autoplay = true
 var g_match_loudness = true       // match the mix's level to the reference's RMS (audition + baked into export)
-var g_master_gain = 1.0           // output gain (post-render), baked into the saved .sfx as Sound.master_gain
+var g_master_gain = 1.0           // export gain (post-render, clip-safe), baked into the saved .sfx as Sound.master_gain
+var g_match_ratio = 1.0           // audition gain: the TRUE mix->reference RMS ratio (uncapped; peak-limited at play time)
 var g_mix_dirty = true
 var g_lyr_dirty = true
 var g_play_pending = false       // autoplay the mix after the next rebuild (set by discrete actions)
@@ -151,40 +152,81 @@ def private play_buf_copy(buf : array<float>) {
     play_sound_from_pcm(SR, 1, tmp)
 }
 
-def private rms_of(buf : array<float>) : float {
+// RMS over the ACTIVE span only (onset .. last sample above -34 dB of peak), ignoring trailing
+// silence/decay-tail. Full-buffer RMS is distorted by however much dead tail a sound carries, so
+// two sounds of different length can't be loudness-matched by it — this measures energy density of
+// the part you actually hear, consistently for both reference and mix.
+def private active_rms(buf : array<float>) : float {
     if (empty(buf)) return 0.0
-    var acc = 0.0
+    var pk = 0.0
     for (s in buf) {
-        acc += s * s
+        pk = max(pk, abs(s))
     }
-    return sqrt(acc / float(length(buf)))
+    if (pk < 1.0e-6) return 0.0
+    let thr = pk * 0.02   // -34 dB
+    var first = -1
+    var last = 0
+    for (i in range(length(buf))) {
+        if (abs(buf[i]) > thr) {
+            if (first < 0) {
+                first = i
+            }
+            last = i
+        }
+    }
+    if (first < 0) return 0.0
+    var acc = 0.0
+    for (i in range(first, last + 1)) {
+        acc += buf[i] * buf[i]
+    }
+    return sqrt(acc / float(last - first + 1))
 }
 
-// Recompute the master gain so the mix sits at the reference's RMS (energy). The mix is
-// peak-normalized at render, so this gain is what makes BOTH playback AND the exported .sfx
-// (Sound.master_gain) sit at the reference / original level — what we audit is what we export.
-// Only updates while matching is on and a ref is loaded; otherwise the current master gain
-// (from the loaded sound, or 1.0) is kept. Clamped so 0.89-peak * gain stays < 1 (no clip).
-def update_master_gain() {
+// Recompute the two loudness gains from the current (post-applied) mix vs the reference:
+//   g_match_ratio  = the TRUE mix->reference RMS ratio (uncapped) — used for AUDITION; play_mix
+//                    applies it then peak-limits, so what you hear always sits at the reference's
+//                    level no matter how the mix is tweaked (both windows stay level-locked).
+//   g_master_gain  = the EXPORT gain baked into the .sfx; capped so the raw render (no limiter in
+//                    render_sound_file) can't clip on playback.
+// Both reset to 1.0 when matching is off / no reference — so "off" is genuinely raw, audition AND
+// export alike.
+def update_levels() {
+    g_match_ratio = 1.0
+    g_master_gain = 1.0
     if (!g_match_loudness || empty(g_ref) || empty(g_mix)) return
-    let mr = rms_of(g_mix)
-    if (mr > 1.0e-6) {
-        g_master_gain = clamp(rms_of(g_ref) / mr, 0.05, 1.12)
+    let mr = active_rms(g_mix)
+    if (mr <= 1.0e-6) return
+    g_match_ratio = active_rms(g_ref) / mr
+    var pk = 0.0
+    for (s in g_mix) {
+        pk = max(pk, abs(s))
     }
+    let ceil = pk > 1.0e-6 ? 0.99 / pk : 1.12   // clip-safe ceiling for the baked export gain
+    g_master_gain = min(g_match_ratio, ceil)
 }
 
 def play_mix() {
     if (g_mix_dirty) {
         rebuild_mix()
     }
-    if (g_master_gain == 1.0) {
+    if (g_match_ratio == 1.0) {
         play_buf_copy(g_mix)
         return
     }
     var tmp : array<float>
     tmp := g_mix
     for (s in tmp) {
-        s *= g_master_gain
+        s *= g_match_ratio
+    }
+    var pk = 0.0
+    for (s in tmp) {
+        pk = max(pk, abs(s))
+    }
+    if (pk > 0.99) {            // matched to reference RMS, but never let the audition clip
+        let lim = 0.99 / pk
+        for (s in tmp) {
+            s *= lim
+        }
     }
     play_sound_from_pcm(SR, 1, tmp)
 }
@@ -224,7 +266,7 @@ def rebuild_mix() {
     compute_spectrum(g_mix, g_mix_spec)
     g_mix_spectro <- spectrogram(g_mix, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
     recompute_fit()
-    update_master_gain()   // re-match the export/playback level to the reference as the mix changes
+    update_levels()   // re-match the audition + export levels to the reference as the mix changes
     g_mix_dirty = false
 }
 
@@ -291,12 +333,13 @@ def load_reference(path : string) {
     g_show_ref = true
     REF_SHOW.value = true
     recompute_fit()
-    update_master_gain()   // match the level to the freshly-loaded reference
+    update_levels()   // match the audition + export levels to the freshly-loaded reference
 }
 
 def do_save_sound(path : string) {
     var doc = Sound()
     doc.mimic_target = g_ref_path
+    doc.comment = SOUND_COMMENT.value   // freeform label (which lineage / variant this is)
     doc.layers := g_layers
     doc.post = g_post
     doc.master_gain = g_master_gain   // bake the audited level so the exported .sfx plays the same
@@ -328,6 +371,8 @@ def do_open_sound(path : string) {
     g_post_reload = true
     g_master_gain = doc.master_gain   // restore the baked level (re-matched live below if a ref loads)
     g_sound_path = path
+    SOUND_COMMENT.pending_value = doc.comment   // push the label into the top-of-panel editor
+    SOUND_COMMENT.has_pending = true
     g_sel = 0
     g_sel_loaded = -1
     g_mix_dirty = true
@@ -1110,8 +1155,8 @@ def mix_header() {
     same_line(MIX_SL)
     if (g_have_fit) {
         text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%  pitch {int(g_fit.pitch * 100.0)}%  texture {int(g_fit.texture * 100.0)}%  shape {int(g_fit.shape * 100.0)}%  attack {int(g_fit.attack * 100.0)}%)"))
-        let mdb = 20.0 * log(max(g_master_gain, 1.0e-6)) * 0.43429448190325176
-        let mtxt = g_match_loudness ? "level {int(mdb)} dB (baked into export)" : "level off (export raw)"
+        let mdb = 20.0 * log(max(g_match_ratio, 1.0e-6)) * 0.43429448190325176
+        let mtxt = g_match_loudness ? "matched {int(mdb)} dB to reference (audition + export)" : "raw level (audition + export)"
         text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)    [{mtxt}]"))
     } else {
         text(FIT_TXT, (text = "fit: load a reference to compare"))
@@ -1152,6 +1197,7 @@ def opt_row() {
 // (waveform/spectrum vs spectrum-over-time spectrogram). Replaces the separate Mix + Spectrogram
 // docks, which duplicated the play button and fit readout.
 def preview_panel() {
+    input_text(SOUND_COMMENT, (text = "label"))   // freeform caption at the very top (which variant this is)
     mix_header()
     if (g_have_fit) {
         opt_row()
@@ -1440,7 +1486,10 @@ def update() {
         }
     }
     g_autoplay = MB_AUTO.value
-    g_match_loudness = MB_MATCH.value
+    if (MB_MATCH.value != g_match_loudness) {   // toggling match must re-level immediately
+        g_match_loudness = MB_MATCH.value
+        g_mix_dirty = true
+    }
 
     // keyboard: Cmd+Z undo, Cmd+Shift+Z redo (skip while a text field has focus)
     let io & = unsafe(GetIO())

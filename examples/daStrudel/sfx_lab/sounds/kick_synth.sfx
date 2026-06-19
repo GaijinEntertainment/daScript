@@ -1,6 +1,7 @@
 {
   "version":1,
-  "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/kick.wav",
+  "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/bd.wav",
+  "comment":"from render",
   "layers":[
     {
       "name":"body",
@@ -124,5 +125,5 @@
       "lp_end":2000
     }
   },
-  "master_gain":0.0500000007
+  "master_gain":0.453276098
 }
