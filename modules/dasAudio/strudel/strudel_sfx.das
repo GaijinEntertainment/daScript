@@ -334,6 +334,7 @@ struct Sound {
     mimic_target : string         //!< path of an external wav to compare against (never embedded)
     layers : array<Layer>
     post : PostChain = PostChain()  //!< postprocess effect chain applied to the mix
+    master_gain : float = 1.0       //!< output gain applied AFTER render (so the file plays at the audited / reference level)
 }
 
 def save_sound(path : string; doc : Sound) : bool {
@@ -384,6 +385,11 @@ def render_sound_file(path : string) : array<float> {
     if (load_sound(path, doc)) {
         out <- render_sound(doc.layers)
         apply_post(out, doc.post, float(SFX_SAMPLE_RATE))
+        if (doc.master_gain != 1.0) {
+            for (s in out) {
+                s *= doc.master_gain
+            }
+        }
     }
     return <- out
 }

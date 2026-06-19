@@ -82,7 +82,8 @@ let DLG_IMP_VOICE = 5
 var g_dialog_mode = DLG_NONE
 var g_seed = 0x1234567u
 var g_autoplay = true
-var g_match_loudness = true       // scale the mix's playback to the reference's RMS (fair A/B audition)
+var g_match_loudness = true       // match the mix's level to the reference's RMS (audition + baked into export)
+var g_master_gain = 1.0           // output gain (post-render), baked into the saved .sfx as Sound.master_gain
 var g_mix_dirty = true
 var g_lyr_dirty = true
 var g_play_pending = false       // autoplay the mix after the next rebuild (set by discrete actions)
@@ -159,28 +160,31 @@ def private rms_of(buf : array<float>) : float {
     return sqrt(acc / float(length(buf)))
 }
 
-// Playback gain so the mix matches the reference's RMS (energy). The mix is peak-normalized to
-// -1 dBFS at render, so it plays louder than the ref; this scales it to the ref's loudness for a
-// fair ear A/B. Audition-only — the fit stays level-invariant and the saved sound is untouched.
-def loudness_match_gain() : float {
-    if (!g_match_loudness || empty(g_ref) || empty(g_mix)) return 1.0
+// Recompute the master gain so the mix sits at the reference's RMS (energy). The mix is
+// peak-normalized at render, so this gain is what makes BOTH playback AND the exported .sfx
+// (Sound.master_gain) sit at the reference / original level — what we audit is what we export.
+// Only updates while matching is on and a ref is loaded; otherwise the current master gain
+// (from the loaded sound, or 1.0) is kept. Clamped so 0.89-peak * gain stays < 1 (no clip).
+def update_master_gain() {
+    if (!g_match_loudness || empty(g_ref) || empty(g_mix)) return
     let mr = rms_of(g_mix)
-    return mr > 1.0e-6 ? clamp(rms_of(g_ref) / mr, 0.05, 4.0) : 1.0
+    if (mr > 1.0e-6) {
+        g_master_gain = clamp(rms_of(g_ref) / mr, 0.05, 1.12)
+    }
 }
 
 def play_mix() {
     if (g_mix_dirty) {
         rebuild_mix()
     }
-    let g = loudness_match_gain()
-    if (g == 1.0) {
+    if (g_master_gain == 1.0) {
         play_buf_copy(g_mix)
         return
     }
     var tmp : array<float>
     tmp := g_mix
     for (s in tmp) {
-        s *= g
+        s *= g_master_gain
     }
     play_sound_from_pcm(SR, 1, tmp)
 }
@@ -220,6 +224,7 @@ def rebuild_mix() {
     compute_spectrum(g_mix, g_mix_spec)
     g_mix_spectro <- spectrogram(g_mix, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
     recompute_fit()
+    update_master_gain()   // re-match the export/playback level to the reference as the mix changes
     g_mix_dirty = false
 }
 
@@ -286,6 +291,7 @@ def load_reference(path : string) {
     g_show_ref = true
     REF_SHOW.value = true
     recompute_fit()
+    update_master_gain()   // match the level to the freshly-loaded reference
 }
 
 def do_save_sound(path : string) {
@@ -293,6 +299,7 @@ def do_save_sound(path : string) {
     doc.mimic_target = g_ref_path
     doc.layers := g_layers
     doc.post = g_post
+    doc.master_gain = g_master_gain   // bake the audited level so the exported .sfx plays the same
     save_sound(path, doc)
     g_sound_path = path
 }
@@ -319,6 +326,7 @@ def do_open_sound(path : string) {
     g_layers := doc.layers
     g_post = doc.post
     g_post_reload = true
+    g_master_gain = doc.master_gain   // restore the baked level (re-matched live below if a ref loads)
     g_sound_path = path
     g_sel = 0
     g_sel_loaded = -1
@@ -1100,8 +1108,8 @@ def mix_header() {
     same_line(MIX_SL)
     if (g_have_fit) {
         text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%  pitch {int(g_fit.pitch * 100.0)}%  texture {int(g_fit.texture * 100.0)}%  shape {int(g_fit.shape * 100.0)}%  attack {int(g_fit.attack * 100.0)}%)"))
-        let mdb = 20.0 * log(max(loudness_match_gain(), 1.0e-6)) * 0.43429448190325176
-        let mtxt = g_match_loudness ? "loudness-match {int(mdb)} dB" : "loudness-match off"
+        let mdb = 20.0 * log(max(g_master_gain, 1.0e-6)) * 0.43429448190325176
+        let mtxt = g_match_loudness ? "level {int(mdb)} dB (baked into export)" : "level off (export raw)"
         text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)    [{mtxt}]"))
     } else {
         text(FIT_TXT, (text = "fit: load a reference to compare"))
