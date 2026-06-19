@@ -212,7 +212,7 @@ def apply_post(var mono : array<float>; p : PostChain; rate : float) {
         tail = max(tail, int(p.reverb.decay * rate * 1.5))
     }
     if (p.delay.enabled) {
-        let echoes = min(log(0.001) / log(max(p.delay.feedback, 0.02)), 30.0)
+        let echoes = min(log(0.001) / log(clamp(p.delay.feedback, 0.02, 0.95)), 30.0)
         tail = max(tail, int(p.delay.time * rate * echoes))
     }
     if (tail > 0) {

@@ -79,8 +79,9 @@ def sfxr_wave_of(i : int) : SfxrWave {
 
 // ===== Synthesis =====
 
-def render_sfxr(snd : SfxrSound; sample_rate : int = SFXR_SAMPLE_RATE) : array<float> {
-    //! Render a sound to a mono buffer in [-1,1]. Deterministic: identical params yield identical output.
+def render_sfxr(snd : SfxrSound) : array<float> {
+    //! Render a sound to a mono buffer in [-1,1] at SFXR_SAMPLE_RATE (44100, the model's native rate).
+    //! Deterministic: identical params yield identical output.
     var seed = 0x9E3779B9u
 
     // ---- reset (sfxr ResetSample, full) ----

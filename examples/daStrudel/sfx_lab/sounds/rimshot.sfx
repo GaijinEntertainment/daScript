@@ -1,6 +1,6 @@
 {
   "version":1,
-  "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/rimshot.wav",
+  "mimic_target":"drum_refs/rimshot.wav",
   "comment":"not from render",
   "layers":[
     {

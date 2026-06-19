@@ -3,6 +3,7 @@ options indenting = 4
 
 require dastest/testing_boost
 require strudel/strudel_sfx
+require daslib/fio
 require math
 require strings
 
@@ -105,7 +106,7 @@ def test_link_mirrors_source(t : T?) {
 def test_save_load_roundtrip(t : T?) {
     var sd = 9u
     var doc = Sound()
-    doc.mimic_target = "/tmp/ref.wav"
+    doc.mimic_target = "ref.wav"
     doc.layers |> push(modal_layer("thud", ModalVoice(pitch = 170.0, n_modes = 2)))
     var zap = sfxr_layer("zap", sfxr_pickup_coin(sd))
     zap.gain = 0.5
@@ -113,12 +114,18 @@ def test_save_load_roundtrip(t : T?) {
     zap.solo = true
     doc.layers |> push(zap)
 
-    let path = "/tmp/_sfx_roundtrip_test.sfx"
+    // hermetic, portable temp path (no hard-coded /tmp — fails on Windows CI)
+    let tmp = create_temp_directory_result("sfx_roundtrip")
+    t |> success(tmp is value, "temp dir created")
+    if (!(tmp is value)) {
+        return
+    }
+    let path = path_join(unsafe(tmp.value), "roundtrip.sfx")
     t |> success(save_sound(path, doc), "save ok")
     var back = Sound()
     t |> success(load_sound(path, back), "load ok")
     t |> equal(length(back.layers), 2)
-    t |> equal(back.mimic_target, "/tmp/ref.wav")
+    t |> equal(back.mimic_target, "ref.wav")
     t |> success(back.layers[0].voice is modal, "layer 0 is modal")
     if (back.layers[0].voice is modal) {
         t |> equal((back.layers[0].voice as modal).pitch, 170.0)
