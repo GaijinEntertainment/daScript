@@ -1,5 +1,7 @@
 options gen2
 
+module cpp_common
+
 require common public
 require grep_usage public
 require outline public

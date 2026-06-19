@@ -1,5 +1,7 @@
 options gen2
 
+module grep_usage
+
 require common public
 require daslib/json
 require daslib/json_boost

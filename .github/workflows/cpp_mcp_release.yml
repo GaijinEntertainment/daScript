@@ -1,0 +1,112 @@
+name: cpp-mcp release
+
+# Builds the standalone C++-only MCP server (cpp-mcp) as a self-contained AOT
+# bundle per platform and, on a release, uploads each as a release asset.
+#
+# Triggers:
+#   * pull_request (only when the cpp-mcp surface changes) — builds + smoke-tests
+#     on linux only, NO upload. Catches breakage at PR time (the cpp-mcp target
+#     is OFF in the normal build matrix, so nothing else compiles it).
+#   * workflow_dispatch — full matrix build + smoke, NO upload. Manual validation.
+#   * release: prereleased — full matrix, uploads cpp-mcp-<os>-<arch>.<ext>
+#     alongside the daslang SDK bundles.
+#
+# The build is intentionally lean: cpp_main.das requires only daslib + builtin
+# modules, so every external module (dasHV/OpenSSL, GLFW, Audio, ...) is disabled
+# — no vcpkg/openssl/apt module deps, and a ~360-step build instead of 2000+.
+on:
+  pull_request:
+    paths:
+      - 'utils/mcp/**'
+      - 'utils/common/**'
+      - 'tree-sitter-daslang/*.yml'   # ast-grep rule files the bundle ships
+      - 'ci/make_cpp_mcp_bundle.sh'
+      - 'ci/smoke_test_cpp_mcp.sh'
+      - '.github/workflows/cpp_mcp_release.yml'
+      - 'CMakeLists.txt'
+  workflow_dispatch:
+  release:
+    types: [prereleased]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      # Vary the matrix by event: a PR builds only linux (a cheap, cross-platform-
+      # agnostic gate); dispatch/release build all four. The selection lives here
+      # because the `matrix` context is NOT available in a job-level `if` (only
+      # github/needs/vars/inputs are), whereas `github` IS available in strategy.
+      matrix:
+        include: ${{ fromJSON( github.event_name == 'pull_request' && '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"}]' || '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"},{"name":"linux-arm64","runner":"ubuntu-24.04-arm-fat","asset":"cpp-mcp-linux-arm64","ext":"tar.gz"},{"name":"darwin-arm64","runner":"macos-14","asset":"cpp-mcp-darwin-arm64","ext":"tar.gz"},{"name":"windows-x64","runner":"windows-latest","asset":"cpp-mcp-windows-x64","ext":"zip"}]' ) }}
+
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure + build cpp-mcp
+        run: |
+          set -eux
+          # cpp_main.das needs no external module -> disable them all (no OpenSSL,
+          # no GLFW/X11 deps) and skip tests/tutorials/aot-examples + flex/bison
+          # (the committed parser is used).
+          MODULES_OFF="-DDAS_HV_DISABLED=ON -DDAS_LLVM_DISABLED=ON -DDAS_AUDIO_DISABLED=ON"
+          MODULES_OFF="$MODULES_OFF -DDAS_GLFW_DISABLED=ON -DDAS_PUGIXML_DISABLED=ON -DDAS_SQLITE_DISABLED=ON"
+          MODULES_OFF="$MODULES_OFF -DDAS_STBIMAGE_DISABLED=ON -DDAS_STDDLG_DISABLED=ON -DDAS_CLANG_BIND_DISABLED=ON"
+          MODULES_OFF="$MODULES_OFF -DDAS_TREE_SITTER_DISABLED=ON"
+          LEAN="-DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON -DDAS_FLEX_BISON_DISABLED=ON"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            # Match release.yml: clang avoids GCC's -Wchanges-meaning on
+            # AOT-generated structs being treated as an error.
+            export CC=clang CXX=clang++
+          fi
+          cmake --no-warn-unused-cli -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DDAS_BUILD_CPP_MCP=ON $MODULES_OFF $LEAN
+          cmake --build build --target cpp-mcp --parallel
+
+      - name: Assemble bundle
+        run: bash ci/make_cpp_mcp_bundle.sh dist/cpp-mcp
+
+      - name: Smoke-test bundle
+        run: bash ci/smoke_test_cpp_mcp.sh dist/cpp-mcp
+
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p artifacts
+          # Package from inside dist/ so the zip root is `cpp-mcp/` (matching the
+          # tarball's `-C dist cpp-mcp`), not `dist/cpp-mcp/`.
+          cd dist && 7z a "../artifacts/${{ matrix.asset }}.zip" cpp-mcp
+
+      - name: Package (tar.gz)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          tar -czf "artifacts/${{ matrix.asset }}.${{ matrix.ext }}" -C dist cpp-mcp
+
+      - name: Upload workflow artifact (dispatch / PR inspection)
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: artifacts/${{ matrix.asset }}.${{ matrix.ext }}
+          if-no-files-found: error
+
+      - name: Upload release asset
+        if: github.event_name == 'release' && github.event.action == 'prereleased'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "artifacts/${{ matrix.asset }}.${{ matrix.ext }}" --clobber

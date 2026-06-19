@@ -32,6 +32,7 @@ require tools/cpp_outline public
 require tools/cpp_goto_definition public
 require tools/cpp_compile_check public
 require tools/cpp_format_file public
+require tools/cpp_status public
 require tools/aot public
 require tools/lint_tool public
 require tools/program_log public
@@ -2496,6 +2497,37 @@ def test_cpp_format_file(t : T?) {
         parse_result(do_cpp_format_file("src/zzz_nonexistent_xyz.cpp"), text, is_error)
         t |> success(is_error, "missing file -> error -- text={text}")
         t |> success(find(text, "file not found") >= 0, "reports file not found -- text={text}")
+    }
+}
+
+[test]
+def test_cpp_status(t : T?) {
+    // Pure env detection — no compilation, no external deps required. Whatever the
+    // environment, the report (or JSON) is produced and is not an error.
+    t |> run("text report names each diagnosed dependency") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_status("", false), text, is_error)
+        t |> success(!is_error, "status is not an error -- text={text}")
+        t |> success(find(text, "cpp-mcp server status") >= 0, "has report header -- text={text}")
+        t |> success(find(text, "ast-grep") >= 0, "reports ast-grep -- text={text}")
+        t |> success(find(text, "compile DB") >= 0, "reports compile DB -- text={text}")
+        t |> success(find(text, "clang-format") >= 0, "reports clang-format -- text={text}")
+    }
+    t |> run("json mode returns structured fields") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_status("", true), text, is_error)
+        t |> success(!is_error, "json status is not an error -- text={text}")
+        t |> success(find(text, "das_root") >= 0, "json has das_root -- text={text}")
+        t |> success(find(text, "ast_grep_available") >= 0, "json has ast_grep_available -- text={text}")
+    }
+    t |> run("explicit build_dir is honored for the compile-DB probe") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_status("build-ninja", true), text, is_error)
+        t |> success(!is_error, "build_dir status is not an error -- text={text}")
+        t |> success(find(text, "compile_db") >= 0, "json reports compile_db field -- text={text}")
     }
 }
 

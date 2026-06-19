@@ -1,5 +1,7 @@
 options gen2
 
+module outline
+
 require common public
 require grep_usage public
 require daslib/json

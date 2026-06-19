@@ -1,6 +1,8 @@
 options gen2
 options rtti
 
+module common
+
 require daslib/json_boost public
 require daslib/strings_boost public
 require daslib/ast public

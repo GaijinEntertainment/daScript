@@ -11,6 +11,8 @@
 options gen2
 options rtti
 
+module protocol_core
+
 require tools/common public
 require daslib/json
 require daslib/json_boost public
@@ -95,10 +97,15 @@ def handle_initialize(id_json : string) : string {
     return jsonrpc::response(id_json, sprint_json(result, false))
 }
 
-struct MakeFileTool {
-    name : string
+// Declared dependency-first (PropertySchema -> InputSchema -> MakeFileTool):
+// the AOT C++ emitter writes structs in declaration order, and a by-value
+// member needs its type complete first, so MakeFileTool (which holds an
+// InputSchema by value) must come after InputSchema, which must come after
+// PropertySchema (held by value inside its `properties` table).
+struct PropertySchema {
+    @rename = "type" _type : string
     description : string
-    inputSchema : InputSchema
+    @optional items : PropertySchema?
 }
 
 struct InputSchema {
@@ -107,10 +114,10 @@ struct InputSchema {
     required : array<string>
 }
 
-struct PropertySchema {
-    @rename = "type" _type : string
+struct MakeFileTool {
+    name : string
     description : string
-    @optional items : PropertySchema?
+    inputSchema : InputSchema
 }
 
 let PROJECT_PROP = PropertySchema(_type = "string", description = "Path to a .das_project file for custom module resolution")
