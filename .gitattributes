@@ -8,6 +8,12 @@ daslib/_aot_generated/*.cpp binary
 # Shell scripts must keep LF endings even when checked out under autocrlf=true.
 *.sh text eol=lf
 
+# Windows batch launchers must keep CRLF — cmd.exe mis-parses an LF-only .cmd
+# (it runs each line's tail as a command). Force CRLF so an editor or a checkout
+# under autocrlf=input can't silently break the daslang MCP vcvars launcher.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 # dasClangBind generated bindings: emit LF on every platform. The mingw
 # CI worker re-runs bind_clangbind.das to detect regen drift; without
 # eol=lf, autocrlf-true on the Windows runner checks out CRLF and the

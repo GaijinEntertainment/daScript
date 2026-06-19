@@ -220,4 +220,4 @@ Don't reach for this until you've ruled out modeling the data as a struct/varian
 - daslib sources: [daslib/json.das](daslib/json.das), [daslib/json_boost.das](daslib/json_boost.das)
 - Tests with usage patterns: [tests/json/test_sprint_json.das](tests/json/test_sprint_json.das), [tests/json/test_sscan_json.das](tests/json/test_sscan_json.das)
 - Real custom `JV` overloads: [daslib/dap.das](daslib/dap.das), [daslib/refactor.das](daslib/refactor.das)
-- Real `sprint_json` users: [utils/daspkg/lockfile.das](utils/daspkg/lockfile.das), [daslib/debug.das](daslib/debug.das), [utils/mcp/protocol.das](utils/mcp/protocol.das)
+- Real `sprint_json` users: [utils/daspkg/lockfile.das](utils/daspkg/lockfile.das), [daslib/debug.das](daslib/debug.das), [utils/mcp/protocol_core.das](utils/mcp/protocol_core.das)

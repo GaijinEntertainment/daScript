@@ -58,6 +58,33 @@ Parse-aware (tree-sitter-cpp) source search plus compiler-backed build tools. Th
 
 Alternatively, launch Claude Code itself from an *x64 Native Tools Command Prompt for VS* (the server inherits the environment). clang/gcc find their system headers automatically, so this is Windows/MSVC-only — on Linux/macOS point `.mcp.json` straight at the daslang binary.
 
+### Two servers: full (`main.das`) and C++-only (`cpp_main.das`)
+
+The server has two entry points over the same dispatch core (`protocol_core.das`):
+
+- **`main.das`** — the full tool set (everything above).
+- **`cpp_main.das`** — only the cpp/agnostic subset: `grep_usage`, `outline`, the seven `cpp_*` tools, and `shutdown`. None of the daslang compiler-backed tools (compile / lint / AOT / introspection / live-reload) are registered, so a C++-only project gets a focused tool list without the daslang toolchain.
+
+Register one or both. On **Windows** the same launcher serves both — the server script is the launcher's first argument:
+
+```json
+"mcpServers": {
+  "daslang":     { "command": "cmd", "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd"],                 "defer_loading": false },
+  "daslang-cpp": { "command": "cmd", "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd", "cpp_main.das"], "defer_loading": false }
+}
+```
+
+On **Linux/macOS** point each entry at the binary directly (no launcher needed):
+
+```json
+"mcpServers": {
+  "daslang":     { "command": "./bin/daslang", "args": ["utils/mcp/main.das"] },
+  "daslang-cpp": { "command": "./bin/daslang", "args": ["utils/mcp/cpp_main.das"] }
+}
+```
+
+Tools are namespaced by server, so the cpp server's tools appear as `mcp__daslang-cpp__cpp_compile_check` etc. A future `cpp-mcp` AOT binary will ship `cpp_main.das` as a standalone executable for C++-only consumers; the interpreted form above is the same server.
+
 ### Duplicate Detection
 
 | Tool | Description |
@@ -171,7 +198,8 @@ Restart the session in the worktree afterward to pick up the server.
 
 - Each tool invocation runs in a **separate thread** (`new_thread`) with its own context/heap — when the thread ends, its memory is freed without GC
 - **Exception:** `live_*` tools run on the main thread (they use `system()` and `sleep()` which don't work well from `new_thread`)
-- Protocol logic lives in `protocol.das`, the entry point is `main.das`
+- Dispatch + JSON-RPC framing live in `protocol_core.das`. Tools are described by a data-driven registry (`array<ToolDef>`): `registry_das.das` registers the daslang compiler-backed tools, `registry_cpp.das` the cpp/agnostic subset. Adding a tool = one `ToolDef` entry.
+- Two entry points share that dispatch: **`main.das`** registers the full set; **`cpp_main.das`** registers only the cpp/agnostic subset (ast-grep search/outline + the C++ build tools + `shutdown`), for C++-focused consumers that don't want the daslang toolchain in their tool list.
 - Heap is collected after each request when over threshold (1 MB)
 - Tool handlers are modular: each tool lives in `tools/*.das`, MCP-specific shared utilities in `tools/common.das`. The general "comma/newline list of files / globs → file array" expander (`expand_glob`, `parse_file_list`) lives in `daslib/fio`
 

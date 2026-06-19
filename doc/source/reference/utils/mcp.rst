@@ -415,6 +415,41 @@ clang/gcc find their system headers automatically, so this is
 Windows/MSVC-only --- on Linux/macOS point ``.mcp.json`` straight at the
 daslang binary.
 
+
+Two servers: full and C++-only
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two entry points share the dispatch core (``protocol_core.das``):
+``main.das`` registers the full tool set; ``cpp_main.das`` registers only
+the cpp/agnostic subset (``grep_usage``, ``outline``, the seven ``cpp_*``
+tools, and ``shutdown``) --- none of the daslang compiler-backed tools, so a
+C++-only project gets a focused tool list. Register either or both. On
+Windows the same launcher serves both, with the server script as its first
+argument:
+
+.. code-block:: json
+
+   {
+     "mcpServers": {
+       "daslang": {
+         "command": "cmd",
+         "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd"],
+         "defer_loading": false
+       },
+       "daslang-cpp": {
+         "command": "cmd",
+         "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd", "cpp_main.das"],
+         "defer_loading": false
+       }
+     }
+   }
+
+On Linux/macOS point each entry straight at the binary
+(``"args": ["utils/mcp/cpp_main.das"]`` for the cpp server). Tools are
+namespaced by server, so the cpp server's tools appear as
+``mcp__daslang-cpp__cpp_compile_check`` etc. A future ``cpp-mcp`` AOT binary
+will ship ``cpp_main.das`` as a standalone executable for C++-only consumers.
+
 Duplicate detection
 -------------------
 
@@ -540,8 +575,15 @@ Architecture
 
 - Each tool invocation runs in a **separate thread** with its own
   context/heap -- when the thread ends, its memory is freed without GC.
-- Protocol logic lives in ``protocol.das``, the entry point is
-  ``main.das``.
+- Dispatch + JSON-RPC framing live in ``protocol_core.das``. Tools are
+  described by a data-driven registry (``array<ToolDef>``):
+  ``registry_das.das`` registers the daslang compiler-backed tools,
+  ``registry_cpp.das`` the cpp/agnostic subset. Adding a tool = one
+  ``ToolDef`` entry.
+- Two entry points share that dispatch: ``main.das`` registers the full
+  set; ``cpp_main.das`` registers only the cpp/agnostic subset (ast-grep
+  search/outline + the C++ build tools + ``shutdown``), for C++-focused
+  consumers.
 - Heap is collected after each request when over threshold (1 MB).
 - Tool handlers are modular: each tool lives in ``tools/*.das``,
   shared utilities in ``tools/common.das``.
