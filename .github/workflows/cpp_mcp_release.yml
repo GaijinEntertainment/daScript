@@ -19,6 +19,7 @@ on:
     paths:
       - 'utils/mcp/**'
       - 'utils/common/**'
+      - 'tree-sitter-daslang/*.yml'   # ast-grep rule files the bundle ships
       - 'ci/make_cpp_mcp_bundle.sh'
       - 'ci/smoke_test_cpp_mcp.sh'
       - '.github/workflows/cpp_mcp_release.yml'
