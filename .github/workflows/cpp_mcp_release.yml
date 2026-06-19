@@ -33,30 +33,15 @@ defaults:
 
 jobs:
   build:
-    # On a PR, only the linux cell runs (cheap cross-platform-agnostic gate);
-    # dispatch/release run the full matrix.
-    if: github.event_name != 'pull_request' || matrix.name == 'linux-x86_64'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
+      # Vary the matrix by event: a PR builds only linux (a cheap, cross-platform-
+      # agnostic gate); dispatch/release build all four. The selection lives here
+      # because the `matrix` context is NOT available in a job-level `if` (only
+      # github/needs/vars/inputs are), whereas `github` IS available in strategy.
       matrix:
-        include:
-          - name: linux-x86_64
-            runner: ubuntu-latest
-            asset: cpp-mcp-linux-x86_64
-            ext: tar.gz
-          - name: linux-arm64
-            runner: ubuntu-24.04-arm
-            asset: cpp-mcp-linux-arm64
-            ext: tar.gz
-          - name: darwin-arm64
-            runner: macos-14
-            asset: cpp-mcp-darwin-arm64
-            ext: tar.gz
-          - name: windows-x64
-            runner: windows-latest
-            asset: cpp-mcp-windows-x64
-            ext: zip
+        include: ${{ fromJSON( github.event_name == 'pull_request' && '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"}]' || '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"},{"name":"linux-arm64","runner":"ubuntu-24.04-arm","asset":"cpp-mcp-linux-arm64","ext":"tar.gz"},{"name":"darwin-arm64","runner":"macos-14","asset":"cpp-mcp-darwin-arm64","ext":"tar.gz"},{"name":"windows-x64","runner":"windows-latest","asset":"cpp-mcp-windows-x64","ext":"zip"}]' ) }}
 
     steps:
       - name: SCM Checkout
