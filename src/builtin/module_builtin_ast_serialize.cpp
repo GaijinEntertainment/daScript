@@ -1562,7 +1562,7 @@ namespace das {
 
     void SerializeVisitor::serializeMakeArray ( ExprMakeArray * expr ) {
         serializeMakeLocal(expr);
-        ser << expr->recordType << expr->values << expr->gen2;
+        ser << expr->recordType << expr->values << expr->gen2 << expr->makeArrayOnHeap;
     }
 
     void SerializeVisitor::preVisitExpression ( Expression * expr ) {
@@ -2705,7 +2705,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 92;   // 92: Variable::access_info added (issue #3090)
+        static constexpr uint32_t currentVersion = 93;   // 93: ExprMakeArray::makeArrayOnHeap added
         return currentVersion;
     }
 

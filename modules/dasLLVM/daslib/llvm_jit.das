@@ -244,6 +244,11 @@ struct TableWalkState {
 class public LlvmJitVisitor : AstVisitor {
     adapter : VisitorAdapter?
     e2v : table<Expression?; LLVMOpaqueValue?>
+    // makeArrayOnHeap literals: stack of arr.data buffer bases for heap make-arrays currently being
+    // built. getE(expr) holds the Array struct (the expression result); the top of this stack is where
+    // element make-local cmres writes go, mirroring interp's abiCMRES redirect in SimNode_MakeArrayHeap.
+    // LIFO matches visitor recursion, so nested `[[..],[..]]` just push/pop (no per-expr bookkeeping).
+    heapMkaData : array<LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
@@ -3481,6 +3486,18 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_UNLOCK), params, "")
     }
 
+    def build_array_resize(array_ptr : LLVMOpaqueValue?; count : int; stride : int; at : LineInfo) {
+        var params = fixed_array(
+            array_ptr,                                                               // array (already voidptr)
+            types.ConstI32(uint64(count)),                                           // newSize
+            types.ConstI32(uint64(stride)),                                          // stride
+            get_context_param(),                                                     // context
+            LLVMConstPointerNull(types.LLVMVoidPtrType())                            // at
+        )
+        var typ = g_fn_types[FN_JIT_ARRAY_RESIZE]
+        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_RESIZE), params, "")
+    }
+
     def build_iter_first(at : LineInfo; iter_ptr, data_ptr : LLVMOpaqueValue?) {
         let vdata_ptr = LLVMBuildPointerCast(g_builder, data_ptr, types.LLVMVoidPtrType(), "")
         var params = fixed_array(
@@ -4261,7 +4278,10 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeArray
     def override preVisitExprMakeArray(expr : ExprMakeArray?) : void {
         var mks_ptr : LLVMOpaqueValue?
-        if (return_by_cmres(expr)) {
+        // makeArrayOnHeap: the Array struct lives in the make-array's own stack slot (interp's
+        // SimNode_MakeArrayHeap returns stackTop, not the function cmres). The cmres flag set in
+        // allocate_stack only directs element writes — handled here via heapMkaData. So always alloca.
+        if (return_by_cmres(expr) && !expr.makeArrayOnHeap) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
@@ -4282,6 +4302,17 @@ class public LlvmJitVisitor : AstVisitor {
                 mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}_at_{int(expr.at.line)}_")
             }
         }
+        if (expr.makeArrayOnHeap) {
+            // build the dynamic array<T> on the heap directly (mirrors interp SimNode_MakeArrayHeap):
+            // zero the Array header, size it once, then point the per-element stores at arr.data so they
+            // land straight in the heap buffer (no stack T[N] + copy).
+            LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(expr._type.sizeOf), uint(expr._type.alignOf))
+            build_array_resize(mks_ptr, expr.values |> length, expr.makeType.stride, expr.at)
+            var dataPtr = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), mks_ptr, "mka_heap_data_{expr.at.line}")
+            setE(expr, mks_ptr)
+            heapMkaData |> push(dataPtr)
+            return
+        }
         let stride = expr.makeType.stride
         if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
             let total = expr.values |> length
@@ -4295,12 +4326,17 @@ class public LlvmJitVisitor : AstVisitor {
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : void {
         let stride = expr.makeType.stride
         let offset =  index * stride
+        // heap literals fill arr.data (top of heapMkaData), not the Array struct held in getE(expr)
         var v_ptr = getE(expr)
+        if (expr.makeArrayOnHeap) { v_ptr = heapMkaData |> back() }
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make array index, but no pointer")
         let record_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "ema_ind_{index}_{expr.at.line}")
         if (init |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?> init)
-            if (!expr.makeFlags.useCMRES) {
+            // heap literals set useCMRES (allocate_stack) but, like interp's per-element
+            // extraLocalOffset, the element make-local must write at arr.data+offset — so use the
+            // same extraOffset+setE placement the non-CMRES path uses instead of a cmres redirect.
+            if (!expr.makeFlags.useCMRES || expr.makeArrayOnHeap) {
                 val.extraOffset = uint(offset) // + expr.extraOffset
                 setE(init, v_ptr)
             }
@@ -4313,6 +4349,7 @@ class public LlvmJitVisitor : AstVisitor {
         let stride = expr.makeType.stride
         let offset =  index * stride
         var v_ptr = getE(expr)
+        if (expr.makeArrayOnHeap) { v_ptr = heapMkaData |> back() }
         v_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "[{index}]")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.recordType), "")
         if (init |> isMakeLocal) {
@@ -4330,6 +4367,9 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMakeArray(expr : ExprMakeArray?) : ExpressionPtr {
+        if (expr.makeArrayOnHeap) {
+            heapMkaData |> pop() // children done; parent heap literal (if any) resumes on top
+        }
         var v_ptr = getE(expr)
         setE(expr, LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr._type), ""))
         return expr
@@ -6835,6 +6875,8 @@ class public LlvmJitVisitor : AstVisitor {
     // (e.g. a register-sized handled value type) — then there is no cmres param to write into.
     def return_by_cmres(expr : ExprMakeLocal?) : bool {
         if (!expr.makeFlags.useCMRES) return false
+        if (!(heapMkaData |> empty)) return true
+
         if (thisBlock != null) {
             return isCMRESType(thisBlock.returnType)
         } elif (thisFunc != null) {
@@ -6844,6 +6886,11 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def get_cmres_param : LLVMOpaqueValue ? {
+        // While building a heap array literal (makeArrayOnHeap), cmres-based element make-locals must
+        // target arr.data (top of heapMkaData), not the enclosing function's cmres param.
+        if (!(heapMkaData |> empty)) {
+            return heapMkaData |> back()
+        }
         if (thisBlock != null) {
             return LLVMGetParam(ffunc, uint(thisBlock.arguments |> length + 2))
         } elif (thisFunc != null) {

@@ -60,6 +60,7 @@ let public FN_JIT_ARRAY_LOCK        = "jit_array_lock"
 let public FN_JIT_ARRAY_UNLOCK      = "jit_array_unlock"
 let public FN_JIT_TABLE_LOCK        = "jit_table_lock"
 let public FN_JIT_TABLE_UNLOCK      = "jit_table_unlock"
+let public FN_JIT_ARRAY_RESIZE      = "jit_array_resize"
 let public FN_JIT_STR_CMP           = "jit_str_cmp"
 let public FN_JIT_STR_CAT           = "jit_str_cat"
 let public FN_JIT_PROLOGUE          = "jit_prologue"
@@ -613,6 +614,20 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
     LLVMAddAttributesToFunction(jit_array_unlock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0, 2), nocapture)
+    // void builtin_array_resize ( Array & array, int newSize, int stride, Context * context, LineInfoArg * at )
+    var jit_array_resize = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_RESIZE,
+        LLVMFunctionType(g_prim_t.t_void,
+            fixed_array<LLVMTypeRef>(
+                g_prim_t.LLVMVoidPtrType(), // arr
+                g_prim_t.t_int32,           // newSize
+                g_prim_t.t_int32,           // stride
+                g_prim_t.LLVMVoidPtrType(), // ctx
+                g_prim_t.LLVMVoidPtrType(), // lineInfo
+            )
+        ))
+    LLVMAddGlobalMapping(g_engine, jit_array_resize, get_jit_array_resize())
+    LLVMAddAttributesToFunction(jit_array_resize, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgumentRange(jit_array_resize, urange(0, 1), nocapture)
 
     // void jit_table_lock ( Table & tab, Context * context, LineInfoArg * at )
     var jit_table_lock = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_LOCK,

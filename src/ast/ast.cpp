@@ -2883,6 +2883,7 @@ namespace das {
             cexpr->recordType = new TypeDecl(*recordType);
         }
         cexpr->gen2 = gen2;
+        cexpr->makeArrayOnHeap = makeArrayOnHeap;
         return cexpr;
     }
 

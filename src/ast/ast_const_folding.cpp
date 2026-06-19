@@ -228,8 +228,22 @@ namespace das {
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "call"); return Visitor::visit(expr); }
-            expr->noSideEffects = (expr->func->sideEffectFlags==0);
-            expr->noNativeSideEffects = (expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0;
+            uint32_t sef = expr->func->sideEffectFlags;
+            expr->noSideEffects = (sef==0);
+            // A call whose ONLY effect is modifyArgument, and whose every argument is a freshly-built
+            // make-local rvalue, is side-effect-free at this site: the writes land on temporaries the
+            // expression itself constructs and nothing else can observe. The function keeps its
+            // modifyArgument flag for callers that pass real lvalues. This is what makes move-through
+            // wrappers over array/table literals (to_array_move / to_table_move) pure.
+            if ( !expr->noSideEffects && !expr->arguments.empty()
+                    && (sef & ~uint32_t(SideEffects::modifyArgument))==0 ) {
+                bool allTemp = true;
+                for ( auto & a : expr->arguments ) {
+                    if ( !a->rtti_isMakeLocal() ) { allTemp = false; break; }
+                }
+                expr->noSideEffects = allTemp;
+            }
+            expr->noNativeSideEffects = (sef & uint32_t(SideEffects::inferredSideEffects))==0;
             if ( expr->noSideEffects ) {
                 for ( auto & arg : expr->arguments ) {
                     expr->noSideEffects &= arg->noSideEffects;

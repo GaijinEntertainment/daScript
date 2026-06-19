@@ -64,6 +64,7 @@ namespace das {
         bool savedFoldingForStaticIf = true;    // preVisit(ExprIfThenElse) / visit(ExprIfThenElse) save-restore (block hooks skipped for static_if)
         bool savedFoldingForStaticAssert = true; // preVisit(ExprStaticAssert) / visit(ExprStaticAssert) save-restore
         bool disableAot = false;
+        bool noHeapArrayLiterals = false;       // options no_heap_array_literals: disable building gen2 [..]/{..} literals directly on the heap
         bool multiContext = false;
         bool standaloneContext = false;
         Expression *lastEnuValue = nullptr;

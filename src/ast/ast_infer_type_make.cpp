@@ -1468,7 +1468,17 @@ namespace das {
         }
         uint32_t resDim = uint32_t(expr->values.size());
         TypeDeclPtr resT = nullptr;
-        if (expr->gen2) {
+        if (expr->gen2 && expr->makeArrayOnHeap) {
+            // heap array literal: type directly as array<T> (not the stack fixed array); codegen
+            // builds it on the heap, and to_array_move/to_table_move resolve their array<T> overload.
+            resT = new TypeDecl(Type::tArray);
+            resT->at = expr->at;
+            resT->constant = false;
+            resT->removeConstant = true;
+            resT->firstType = new TypeDecl(*expr->recordType);
+            resT->firstType->ref = false;
+            resT->firstType->constant = false;
+        } else if (expr->gen2) {
             // wrap outermost - element count is the outer dimension (old dim.push_back was inner-first, latent order bug)
             resT = makeFixedArrayTypeDecl(int32_t(resDim), new TypeDecl(*expr->makeType));
         } else if (resDim != 1 || expr->makeType->baseType==Type::tFixedArray) {

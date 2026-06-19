@@ -3056,6 +3056,34 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    // Heap array literal: build an array<T> directly on the heap. The result slot (stackTop) holds
+    // the Array value; we reserve the buffer, point abiCMRES at it so the CMRES element-write
+    // children fill it in place (no stack T[N] + copy), then publish size. Used for flagged
+    // gen2 array literals feeding to_array_move / to_table_move (see makeArrayOnHeap).
+    struct SimNode_MakeArrayHeap : SimNode_Block {
+        DAS_PTR_NODE;
+        SimNode_MakeArrayHeap ( const LineInfo & at, uint32_t sp, uint32_t count, uint32_t str )
+            : SimNode_Block(at), stackTop(sp), arrayCount(count), stride(str) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            Array * arr = (Array *)(context.stack.sp() + stackTop);
+            memset(arr, 0, sizeof(Array));
+            array_resize(context, *arr, arrayCount, stride, true, &debugInfo);
+            void * saveCMRES = context.abiCMRES;
+            context.abiCMRES = arr->data;
+            SimNode ** __restrict tail = list + total;
+            SimNode ** __restrict body = list;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                if (context.stopFlags) break;
+            }
+            context.abiCMRES = saveCMRES;
+            return (char *) arr;
+        }
+        uint32_t stackTop, arrayCount, stride;
+    };
+
     struct SimNode_ReturnLocalCMRes : SimNode_Block {
         SimNode_ReturnLocalCMRes ( const LineInfo & at )
             : SimNode_Block(at) {}

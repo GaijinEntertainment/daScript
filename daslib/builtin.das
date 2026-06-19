@@ -1403,6 +1403,13 @@ def to_array(var arr : array<auto(TT)>) : array<TT -const -#> {
     return <- arr
 }
 
+def to_array_move(var a : array<auto(TT)>) : array<TT -const> {
+    //! Already an `array` — move it through unchanged. Chosen at compile time over the fixed-array
+    //! overload for gen2 literals the inferer built directly on the heap (makeArrayOnHeap), so
+    //! `[..]` / `array<T>(..)` skip the stack `T[N]` + bulk copy.
+    return <- a
+}
+
 def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>

@@ -903,7 +903,7 @@ namespace das
                 auto & fields = mks->structs[index];
                 // adjust var for index
                 if ( mks->useCMRES ) {
-                    fakeVariable->stackTop = mks->extraOffset + index*stride;
+                    fakeVariable->extraLocalOffset = mks->extraOffset + index*stride;
                 } else if ( mks->useStackRef ) {
                     if ( total > 1 ) {
                         indexExpr->value = cast<int32_t>::from(index);
@@ -946,6 +946,7 @@ namespace das
             fakeVariable->type = new TypeDecl(*mks->type);
             if ( mks->useCMRES ) {
                 fakeVariable->aliasCMRES = true;
+                fakeVariable->extraLocalOffset = mks->extraOffset;
             } else if ( mks->useStackRef ) {
                 fakeVariable->stackTop = mks->stackTop + mks->extraOffset;
                 fakeVariable->type->ref = true;
@@ -1050,7 +1051,13 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprMakeArray * expr) {
         const auto &at = expr->at;
         SimNode_Block * block;
-        if ( expr->useCMRES ) {
+        if ( expr->makeArrayOnHeap ) {
+            // build array<T> on the heap; CMRES-style children fill arr.data in place (allocate_stack
+            // set useCMRES so sv_simulateLocal below emits the CMRES element writes).
+            uint32_t stride = expr->recordType->getSizeOf();
+            uint32_t count = uint32_t(expr->values.size());
+            block = context.code->makeNode<SimNode_MakeArrayHeap>(at, expr->stackTop, count, stride);
+        } else if ( expr->useCMRES ) {
             block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
         } else {
             block = context.code->makeNode<SimNode_MakeLocal>(at, expr->stackTop);
@@ -2424,6 +2431,8 @@ namespace das
                                                     expr->variable->stackTop, extraOffset + expr->variable->extraLocalOffset);
                 }
             } else if ( expr->variable->aliasCMRES ) {
+                // extraOffset already includes the var's extraLocalOffset (passed by the caller),
+                // which for fake CMRES-alias vars carries the make-struct element slot offset.
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetCMResOfsR2V>(r2vType->getR2VType(), at, extraOffset);
                 } else {

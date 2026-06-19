@@ -96,6 +96,7 @@ namespace das {
         debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
         enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding", !prog->policies.no_infer_time_folding);
         disableAot = prog->options.getBoolOption("no_aot", false);
+        noHeapArrayLiterals = prog->options.getBoolOption("no_heap_array_literals", false);
         multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
         standaloneContext = prog->options.getBoolOption("standalone_context", prog->policies.standalone_context);
         checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
@@ -5701,7 +5702,19 @@ namespace das {
                   "use let _ = " + call->name + "(...)", "",
                   call->at, CompilationError::invalid_function_result_discarded);
         }
-        // super() constructor rewrite is done in visit(ExprCall*), once argument types are inferred
+        // Array/table literal: `[..]` / `array<T>(..)` parse to to_array_move(ExprMakeArray), and
+        // `{..}` table literals to to_table_move(ExprMakeArray of tuples). Flag the gen2 make_array
+        // (here, in preVisit, BEFORE the child is type-inferred) so it builds a heap `array<T>`
+        // directly instead of a stack `T[N]` that to_array_move/to_table_move then copies. The
+        // type carries the decision: to_array_move/to_table_move resolve their `array<T>` overload
+        // at compile time (no runtime check). Only the gen2 literal shape is flagged.
+        if ((call->name == "to_array_move" || call->name == "to_table_move")
+                && call->arguments.size() == 1 && call->arguments[0]->rtti_isMakeArray()) {
+            auto mka = static_cast<ExprMakeArray*>(call->arguments[0]);
+            if (mka->gen2 && !noHeapArrayLiterals) {
+                mka->makeArrayOnHeap = true;
+            }
+        }
     }
     void InferTypes::preVisitCallArg(ExprCall *call, Expression *arg, bool last) {
         Visitor::preVisitCallArg(call, arg, last);

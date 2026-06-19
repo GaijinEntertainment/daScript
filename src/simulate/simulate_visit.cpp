@@ -878,6 +878,17 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_MakeArrayHeap::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(MakeArrayHeap);
+        V_SP(stackTop);
+        V_ARG(arrayCount);
+        V_ARG(stride);
+        V_BLOCK();
+        V_FINAL();
+        V_END();
+    }
+
     SimNode * SimNode_ReturnLocalCMRes::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(ReturnLocalCMRes);
