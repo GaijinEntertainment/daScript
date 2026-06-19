@@ -1,0 +1,24 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("sfx-lab")
+    package_description("Procedural sound-effect workbench (sfxr + modal voices) with a dasImgui/ImPlot GUI")
+    package_author("borisbat")
+    package_license("MIT")
+    package_tag("audio")
+    package_tag("gui")
+    package_tag("tool")
+}
+
+[export]
+def dependencies(version : string) {
+    require_package("dasImgui")
+    require_package("dasImguiImplot")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+}

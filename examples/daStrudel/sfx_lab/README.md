@@ -24,20 +24,24 @@ or the whole mix, and watch the rendered **waveform + spectrum** (ImPlot) update
 ## Running the GUI
 
 The GUI depends on two external modules — [dasImgui](https://github.com/borisbat/dasImgui)
-and [dasImguiImplot](https://github.com/borisbat/dasImguiImplot) — loaded with `-load_module`
-(same pattern as the other dasImgui examples; not built by CI). Build both first (see their
-READMEs), then:
+and [dasImguiImplot](https://github.com/borisbat/dasImguiImplot) — declared as package
+dependencies in `.das_package`. Install them once with `daspkg` (clones + builds the C++
+shared modules into `modules/`):
 
 ```
-daslang \
-  -load_module <path>/dasImgui \
-  -load_module <path>/dasImguiImplot \
-  examples/daStrudel/sfx_lab/main.das
+cd examples/daStrudel/sfx_lab
+daslang ../../utils/daspkg/main.das -- install
+```
+
+Then run the tool — no `-load_module` flags needed:
+
+```
+daslang -project_root . main.das
 ```
 
 It runs standalone (windowed), headless (`-- --headless --headless-frames N`), and live
-(`daslang-live …` for `imgui_snapshot` / playwright inspection) identically — audio is wired
-in `init()` so every mode has sound.
+(`daslang-live -project_root . main.das` for `imgui_snapshot` / playwright inspection)
+identically — audio is wired in `init()` so every mode has sound.
 
 ## Engine
 
