@@ -16,8 +16,6 @@ require strudel/strudel_sfxr
 require strudel/strudel_synth
 require sfx_analysis
 require audio/audio_wav
-require daslib/json
-require daslib/fio
 require math
 
 let SR = 44100

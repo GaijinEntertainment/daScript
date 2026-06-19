@@ -12,8 +12,7 @@ require strudel/strudel_modal
 require strudel/strudel_sfxr
 require sfx_analysis
 require audio/audio_wav
-require daslib/json
-require daslib/fio
+require strings
 require math
 
 let SR = 44100
@@ -243,10 +242,11 @@ def do_drum(name : string; iters : int) {
     doc.post = g_post
     save_sound(path, doc)
     // report + mute-guard
-    var muted = ""
-    for (li in range(length(g_layers))) {
-        if (layer_peak(li) < 1.0e-4) {
-            muted += " [MUTED:{g_layers[li].name}]"
+    let muted = build_string() $(var writer) {
+        for (li in range(length(g_layers))) {
+            if (layer_peak(li) < 1.0e-4) {
+                writer |> write(" [MUTED:{g_layers[li].name}]")
+            }
         }
     }
     to_log(LOG_INFO, "{name}: {int(before*100.0)}% -> {int(after*100.0)}%  ({length(g_layers)} layers){muted}\n")

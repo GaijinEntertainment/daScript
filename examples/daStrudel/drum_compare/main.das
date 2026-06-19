@@ -14,7 +14,7 @@ require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_ttf
 require live/glfw_live
-require live/opengl_live
+require live/opengl_live  // nolint:STYLE030 — side-effect require: registers the screenshot/record live commands
 require live/live_commands
 require live/live_api
 require live_host
@@ -119,7 +119,7 @@ def render_sf2_drum(sf2 : SF2File; key, velocity : int; duration : float) : arra
         return <- empty
     }
     let zones = sf2_find_zones(sf2, preset_idx, key, velocity)
-    if (length(zones) == 0) {
+    if (empty(zones)) {
         var empty : array<float>
         return <- empty
     }
@@ -152,7 +152,7 @@ def render_sf2_drum(sf2 : SF2File; key, velocity : int; duration : float) : arra
             excl_classes |> push(excl)
         }
     }
-    if (length(voices) == 0) {
+    if (empty(voices)) {
         var empty : array<float>
         return <- empty
     }
@@ -164,14 +164,14 @@ def render_sf2_drum(sf2 : SF2File; key, velocity : int; duration : float) : arra
     while (frame < total_frames) {
         let frames = min(chunk_size, total_frames - frame)
         if (!note_off_sent && frame >= note_off_frame) {
-            for (i in range(length(voices))) {
-                unsafe { ma_sf2_voice_note_off(addr(voices[i])); }
+            for (v in voices) {
+                unsafe { ma_sf2_voice_note_off(addr(v)); }
             }
             note_off_sent = true
         }
-        for (i in range(length(voices))) {
+        for (v in voices) {
             unsafe {
-                ma_sf2_voice_render(addr(voices[i]), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
+                ma_sf2_voice_render(addr(v), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
             }
         }
         frame += frames
@@ -296,7 +296,7 @@ def prerender_sf2_drums(sf2 : SF2File) {
     to_log(LOG_INFO, "SF2 drum durations:\n")
     for (i in range(length(keys))) {
         var pcm <- render_sf2_drum(sf2, keys[i], 127, render_dur[i])
-        if (length(pcm) > 0) {
+        if (!empty(pcm)) {
             let dur = measure_audible_duration(pcm)
             to_log(LOG_INFO, "  {names[i]} (key {keys[i]}): {dur}s\n")
             analyze_spectrum(names[i], pcm)
@@ -510,11 +510,11 @@ def update() {
     let fh = float(wh)
 
     // ---- input: polled + edge-detected (the live runtime owns the event pump) ----
-    let mdown = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
+    let mdown = glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS
     if (mdown && !g_prev_mouse) {
         let cxy = glfwGetCursorPos(live_window)
-        let mx = float(cxy.x)
-        let my = float(cxy.y)
+        let mx = cxy.x
+        let my = cxy.y
         let pad = hit_test(mx, my)
         if (pad >= 0) {
             play_drum(pad)
@@ -527,19 +527,19 @@ def update() {
     }
     g_prev_mouse = mdown
 
-    let sdown = glfwGetKey(live_window, int(GLFW_KEY_S)) == int(GLFW_PRESS)
+    let sdown = glfwGetKey(live_window, GLFW_KEY_S) == GLFW_PRESS
     if (sdown && !g_prev_s && g_has_sf2) {
         g_use_sf2 = !g_use_sf2
     }
     g_prev_s = sdown
 
     let key_map = fixed_array(
-        int(GLFW_KEY_1), int(GLFW_KEY_2), int(GLFW_KEY_3), int(GLFW_KEY_4), int(GLFW_KEY_5),
-        int(GLFW_KEY_6), int(GLFW_KEY_7), int(GLFW_KEY_8), int(GLFW_KEY_9), int(GLFW_KEY_0),
-        int(GLFW_KEY_MINUS), int(GLFW_KEY_EQUAL)
+        GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_5,
+        GLFW_KEY_6, GLFW_KEY_7, GLFW_KEY_8, GLFW_KEY_9, GLFW_KEY_0,
+        GLFW_KEY_MINUS, GLFW_KEY_EQUAL
     )
     for (i in range(12)) {
-        let kd = glfwGetKey(live_window, key_map[i]) == int(GLFW_PRESS)
+        let kd = glfwGetKey(live_window, key_map[i]) == GLFW_PRESS
         if (kd && !g_prev_keys[i]) {
             play_drum(i)
         }

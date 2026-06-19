@@ -7,7 +7,7 @@ options indenting = 4
 
 require strudel/strudel_sfx
 require daslib/fio
-require math
+require strings
 
 let DIR = "/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/sounds/"
 let OUT = "/tmp/drums_gen.das"
@@ -33,15 +33,17 @@ def main {
         DrumExport(sfx = "cowbell", func = "render_cowbell", pitched = false),
         DrumExport(sfx = "tambourine", func = "render_tambourine", pitched = false)
     ]
-    var all = ""
-    for (d in drums) {
-        var doc = Sound()
-        if (!load_sound("{DIR}{d.sfx}.sfx", doc)) {
-            to_log(LOG_ERROR, "{d.sfx}: load failed\n")
-            continue
+    let all = build_string() $(var writer) {
+        for (d in drums) {
+            var doc = Sound()
+            if (!load_sound("{DIR}{d.sfx}.sfx", doc)) {
+                to_log(LOG_ERROR, "{d.sfx}: load failed\n")
+                continue
+            }
+            writer |> write(emit_das(doc, d.func, d.pitched))
+            writer |> write("\n")
+            to_log(LOG_INFO, "{d.func}: {length(doc.layers)} layers\n")
         }
-        all += emit_das(doc, d.func, d.pitched) + "\n"
-        to_log(LOG_INFO, "{d.func}: {length(doc.layers)} layers\n")
     }
     if (fwrite(OUT, all)) {
         to_log(LOG_INFO, "wrote {OUT}\n")
