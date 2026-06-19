@@ -1324,13 +1324,19 @@ if (NOT ${DAS_TOOLS_DISABLED})
         # Feed the graph in via DAS_AOT_EXTRA_DEPENDS BEFORE the DAS_AOT call so it
         # lands in the generated command's DEPENDS list (clean builds unaffected;
         # this only fixes local incremental iteration). Scoped: unset right after.
-        # GLOB (not GLOB_RECURSE) over only the dirs cpp_main can require -- top-level
-        # utils/mcp + tools/ + utils/common -- so the tests/ fixtures and other
-        # nested files don't needlessly re-trigger the expensive AOT codegen.
+        # cpp_main's require graph = its (stable) top-level server files, listed
+        # explicitly so the full-server / test / setup peers (main.das,
+        # registry_das.das, test_tools.das, setup.das) don't re-trigger the AOT;
+        # plus the tool modules (GLOB, so a new cpp tool tracks automatically) and
+        # utils/common. NOT GLOB_RECURSE -> tests/ fixtures stay out.
         file(GLOB CPP_MCP_DAS_DEPS CONFIGURE_DEPENDS
-            ${PROJECT_SOURCE_DIR}/utils/mcp/*.das
             ${PROJECT_SOURCE_DIR}/utils/mcp/tools/*.das
             ${PROJECT_SOURCE_DIR}/utils/common/*.das)
+        list(APPEND CPP_MCP_DAS_DEPS
+            ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_main.das
+            ${PROJECT_SOURCE_DIR}/utils/mcp/protocol_core.das
+            ${PROJECT_SOURCE_DIR}/utils/mcp/registry_cpp.das
+            ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_search_config.das)
         set(DAS_AOT_EXTRA_DEPENDS ${CPP_MCP_DAS_DEPS})
         DAS_AOT("utils/mcp/cpp_main.das" CPP_MCP_AOT_GENERATED_SRC cpp_mcp_dasAotStub daslang)
         unset(DAS_AOT_EXTRA_DEPENDS)
