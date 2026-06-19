@@ -185,20 +185,41 @@ def private round_up(off, a : int) : int {
 //! works; for float3x3 / float3x4 the daslang storage is packed (3-wide columns) while std140 pads
 //! each column to vec4, so bind code must repack per-column. **Use `matrix_width` to choose**:
 //! `matrix_width == 4` → safe to memcpy the field; `matrix_width < 4` → repack per column.
+//!
+//! **Composite fields** (`is_array` / `is_struct`) carry the std140 layout of nested data but
+//! cannot be written by a single host-side `write_field(ptr, offset, value)` call. Host bind
+//! macros should detect `is_composite` and either recurse member-by-member using the published
+//! `offset` + `array_stride` / nested layout, or skip with a clear "manual bind required" message.
 struct public BlockField {
-    name         : string //!< field name as declared in the daslang struct
-    offset       : int    //!< std140 byte offset from the block base
-    size         : int    //!< std140 base size of the field (matrices: 16 * cols)
-    is_matrix    : bool   //!< true if this field is a matrix (MatrixStride 16 in SPIR-V); see struct docstring re: repack
-    matrix_width : int    //!< matrix column-vector width — 4 for float4x4 (memcpy-safe); 3 for float3x3/3x4 (per-column repack)
-    matrix_cols  : int    //!< matrix column count (only valid when is_matrix); 0 otherwise
+    name              : string //!< field name as declared in the daslang struct
+    offset            : int    //!< std140 byte offset from the block base
+    size              : int    //!< std140 base size of the field (matrices: 16 * cols; composites: total laid-out bytes)
+    is_matrix         : bool   //!< true if this field is a matrix (MatrixStride 16 in SPIR-V); see struct docstring re: repack
+    matrix_width      : int    //!< matrix column-vector width — 4 for float4x4 (memcpy-safe); 3 for float3x3/3x4 (per-column repack)
+    matrix_cols       : int    //!< matrix column count (only valid when is_matrix); 0 otherwise
+    is_array          : bool   //!< true if this field is a fixed-array (scalar / vector / nested-struct elements)
+    array_count       : int    //!< number of array elements (only valid when is_array)
+    array_stride      : int    //!< per-element byte stride (std140 rounds each element up to 16); 0 otherwise
+    is_struct         : bool   //!< true if this field is a nested struct (laid out non-Block at the published offset)
+    is_composite      : bool   //!< convenience flag — true when is_array OR is_struct (host bind macros can't write this with a flat overload)
+}
+
+// std140 element stride for a fixed-array element type. Scalars/vectors round up to vec4 (16 bytes);
+// nested-struct elements take their std140 struct-size rounded up to the struct alignment (which is
+// already a multiple of 16 by std140's struct rule). Matrix elements and nested-array elements are
+// out of PR-G scope and rejected by the caller before reaching here.
+def private std140_array_element_stride(bt : Type) : int {
+    return round_up(std140_size(bt), 16)
 }
 
 //! Compute the std140 layout of one interface block. Pure: takes a Structure?, fills `fields` with
-//! per-field offsets / sizes / matrix flags, returns the block total size and max member alignment.
-//! Used by build_block_struct (SPIR-V type emit) and by host-side bind macros. Rejects bool and
-//! non-numeric fields fail-closed (no physical std140 layout). `sname` is only used in error messages.
-//! `fields` is cleared at entry so reuse across calls and partial-failure returns can't bleed.
+//! per-field offsets / sizes / matrix and composite flags, returns the block total size and max
+//! member alignment. Used by build_block_struct (SPIR-V type emit) and by host-side bind macros.
+//! Rejects bool and non-numeric fields fail-closed (no physical std140 layout). `sname` is only used
+//! in error messages. `fields` is cleared at entry so reuse across calls and partial-failure returns
+//! can't bleed. Supported field shapes: 32-bit scalar / vector / matrix; fixed-array of those (PR-G,
+//! std140 ArrayStride = element-size rounded to 16); nested struct (PR-G, recursive). Array of
+//! struct (PR-G), array of matrix, and runtime-arrays (use `@ssbo` for those) are out of scope.
 //! [macro_function]: callable from a backend's bind-gen macro at compile time, mirrors generate_spirv.
 [macro_function]
 def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>) : tuple<ok : bool; size : int; align : int> {
@@ -210,6 +231,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
     var off = 0
     var max_align = 0
     for (fld in st.fields) {
+        // matrix field (terminal)
         let mi = matrix_info(fld._type)
         if (mi.ok) {
             off = round_up(off, 16)
@@ -219,9 +241,89 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
             max_align = max(max_align, 16)
             continue
         }
+        // nested struct field (PR-G): recurse. Base alignment = round_up(inner_align, 16);
+        // size = round_up(inner_size, base_align). The inner field list isn't propagated up
+        // (host bind macros that recurse must re-invoke compute_block_layout on the nested
+        // Structure?). is_composite=true signals "no flat write_field overload exists".
+        if (fld._type != null && fld._type.baseType == Type.tStructure && fld._type.structType != null) {
+            var inner : array<BlockField>
+            let inner_layout = compute_block_layout("{sname}.{fld.name}", fld._type.structType, inner, errors)
+            delete inner
+            if (!inner_layout.ok) {
+                fields |> clear
+                return (ok = false, size = 0, align = 0)
+            }
+            let struct_align = round_up(inner_layout.align, 16)
+            off = round_up(off, struct_align)
+            let struct_size = round_up(inner_layout.size, struct_align)
+            fields |> emplace(BlockField(name := string(fld.name), offset = off, size = struct_size,
+                is_matrix = false, matrix_width = 0, matrix_cols = 0,
+                is_array = false, array_count = 0, array_stride = 0,
+                is_struct = true, is_composite = true))
+            off += struct_size
+            max_align = max(max_align, struct_align)
+            continue
+        }
+        // fixed-array field (PR-G): element kind decides stride. Scalar/vector elements stride by
+        // their size rounded up to 16 (the std140 array padding rule — every array slot is at
+        // least vec4-wide). Nested-struct elements stride by their laid-out struct size. Matrix
+        // elements and nested-array elements (array of array) are rejected; wrap in a struct.
+        if (fld._type != null && fld._type.baseType == Type.tFixedArray && fld._type.firstType != null) {
+            let et = fld._type.firstType
+            let nelem = fld._type.fixedDim
+            if (nelem <= 0) {
+                errors |> push("interface block '{sname}' field '{fld.name}': array must have positive count (got {nelem})")
+                fields |> clear
+                return (ok = false, size = 0, align = 0)
+            }
+            // scalar / vector element
+            if (et.baseType != Type.tStructure && et.baseType != Type.tFixedArray && !matrix_info(et).ok) {
+                let ebt = et.baseType
+                if (scalar_class(ebt) < 0) {
+                    errors |> push("interface block '{sname}' field '{fld.name}': array element type {ebt} is not supported (only 32-bit int/uint/float scalars, their vectors, or nested structs of those)")
+                    fields |> clear
+                    return (ok = false, size = 0, align = 0)
+                }
+                let stride = std140_array_element_stride(ebt)
+                off = round_up(off, 16)        // std140 array base alignment is 16
+                let total = stride * nelem
+                fields |> emplace(BlockField(name := string(fld.name), offset = off, size = total,
+                    is_matrix = false, matrix_width = 0, matrix_cols = 0,
+                    is_array = true, array_count = nelem, array_stride = stride,
+                    is_struct = false, is_composite = true))
+                off += total
+                max_align = max(max_align, 16)
+                continue
+            }
+            // array-of-struct element
+            if (et.baseType == Type.tStructure && et.structType != null) {
+                var inner : array<BlockField>
+                let inner_layout = compute_block_layout("{sname}.{fld.name}[]", et.structType, inner, errors)
+                delete inner
+                if (!inner_layout.ok) {
+                    fields |> clear
+                    return (ok = false, size = 0, align = 0)
+                }
+                let struct_align = round_up(inner_layout.align, 16)
+                let stride = round_up(inner_layout.size, struct_align)
+                off = round_up(off, struct_align)
+                let total = stride * nelem
+                fields |> emplace(BlockField(name := string(fld.name), offset = off, size = total,
+                    is_matrix = false, matrix_width = 0, matrix_cols = 0,
+                    is_array = true, array_count = nelem, array_stride = stride,
+                    is_struct = true, is_composite = true))
+                off += total
+                max_align = max(max_align, struct_align)
+                continue
+            }
+            errors |> push("interface block '{sname}' field '{fld.name}': array element type {et.baseType} is not supported (only scalar/vector or nested-struct elements; matrix-of-array and array-of-array are out of scope)")
+            fields |> clear
+            return (ok = false, size = 0, align = 0)
+        }
+        // terminal scalar / vector field
         let fbt = fld._type.baseType
         if (scalar_class(fbt) < 0) {
-            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, and matrices; bool has no physical interface-block layout in Vulkan)")
+            errors |> push("interface block '{sname}' field '{fld.name}': type {fbt} is not supported (only 32-bit int/uint/float scalars, their vectors, matrices, fixed-arrays of those, and nested structs of those; bool has no physical interface-block layout in Vulkan)")
             fields |> clear
             return (ok = false, size = 0, align = 0)
         }
@@ -235,14 +337,14 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
     return (ok = true, size = off, align = max_align)
 }
 
-// Build a laid-out interface struct from a daslang struct's fields. 32-bit scalar/vector/matrix
-// members are supported; nested structs and arrays are not yet. `as_block` toggles the Block decoration
-// (true for @uniform/@push_constant blocks, false for an SSBO runtime-array element struct).
-// Member offsets are identical under std140 and std430 for these flat member kinds — the two layouts
-// only diverge on array/nested-struct members (rejected here) and on the final struct-size rounding,
-// which the caller does via the returned `align` (max member base alignment). `size` is the offset
-// past the last member (the push-constant range size); `align` lets the SSBO caller round it up to
-// the std430 array stride.
+// Build a laid-out interface struct from a daslang struct's fields. Supported member shapes:
+// 32-bit scalar / vector / matrix; fixed-array of scalar / vector / nested struct (std140
+// ArrayStride decoration on the OpTypeArray); nested struct (recursive non-Block OpTypeStruct with
+// its own Offset cascade). `as_block` toggles the Block decoration on the *outer* struct (true for
+// @uniform/@push_constant blocks, false for an SSBO runtime-array element struct); recursively-built
+// nested structs are always emitted non-Block. Returns the OpTypeStruct id plus the std140 size
+// (offset past the last member) and the struct's max-member alignment (which the SSBO caller rounds
+// the struct size up to before using it as the OpTypeRuntimeArray's stride).
 def private build_block_struct(var m : SpirvModule; sname : string; st : Structure?; as_block : bool; var errors : array<string>) : tuple<ok : bool; type_id : uint; size : int; align : int> {
     var fields : array<BlockField>
     let layout = compute_block_layout(sname, st, fields, errors)
@@ -256,6 +358,41 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
     var fi = 0
     for (fld in st.fields) {
         let f = fields[fi]
+        // composite field: fixed-array or nested struct — build its SPIR-V type recursively. Plain
+        // emit_type(fld._type) doesn't lower tStructure (would panic) and would emit a strideless
+        // OpTypeArray for a fixed-array member (invalid in a Block). Layout was already validated
+        // by compute_block_layout above; here we just construct the matching type ids.
+        if (f.is_array) {
+            let et = fld._type.firstType
+            var elem_type : uint = 0u
+            if (et.baseType == Type.tStructure && et.structType != null) {
+                let inner = build_block_struct(m, "{sname}.{f.name}[]", et.structType, false, errors)
+                if (!inner.ok) {
+                    delete members; delete offsets; delete mat_strides; delete fields
+                    return (ok = false, type_id = 0u, size = 0, align = 0)
+                }
+                elem_type = inner.type_id
+            } else {
+                elem_type = emit_type(m, et)
+            }
+            members |> push(type_array_strided(m, elem_type, f.array_count, f.array_stride))
+            offsets |> push(f.offset)
+            mat_strides |> push(0)
+            fi++
+            continue
+        }
+        if (f.is_struct) {
+            let inner = build_block_struct(m, "{sname}.{f.name}", fld._type.structType, false, errors)
+            if (!inner.ok) {
+                delete members; delete offsets; delete mat_strides; delete fields
+                return (ok = false, type_id = 0u, size = 0, align = 0)
+            }
+            members |> push(inner.type_id)
+            offsets |> push(f.offset)
+            mat_strides |> push(0)
+            fi++
+            continue
+        }
         members |> push(emit_type(m, fld._type))
         offsets |> push(f.offset)
         // std140 matrix: ColMajor, each column padded to vec4 (MatrixStride 16) — see BlockField docs.
@@ -1543,7 +1680,30 @@ class SpirvEmit : AstVisitor {
         }
         let bv = global_var_of(expr.subexpr)
         if (bv == null) {
-            errs |> push("indexing is only supported on a global ssbo array or a local fixed array for now")
+            // PR-G: indexing a fixed-array field inside a Block (ubo.lights[i] / ubo.material.kernel[i]).
+            // The subexpr is a chained ExprField whose e2ptr is a pointer to the array. Chain a
+            // single index off it; the storage class is inherited from the root global. For a
+            // struct element, plain emit_type would panic (it doesn't lower tStructure) and would
+            // also not return the laid-out (deduped) type — so re-acquire it via build_block_struct,
+            // which is idempotent under the type/decoration dedup pools.
+            if (key_exists(e2ptr, intptr(expr.subexpr))) {
+                let idx = value_of(expr.index)
+                if (idx == 0u) return expr   // index failed to lower (error already pushed)
+                let base = ptr_of(expr.subexpr)
+                let rv = root_global_of(expr.subexpr)
+                let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
+                let storage = rgi.var_id != 0u ? rgi.storage : SpvStorageClass.StorageBuffer
+                let rname = rv != null ? string(rv.name) : "(?)"
+                let pointee = field_pointee_type(bm, expr._type, "{rname}[]")
+                if (pointee == 0u) return expr
+                let ptr_t = type_pointer(bm, storage, pointee)
+                let res = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, base.id, idx)
+                e2ptr[k] = res
+                e2pty[k] = pointee
+                return expr
+            }
+            errs |> push("indexing is only supported on a global ssbo array, a local fixed array, or an array field inside a @uniform/@push_constant/@ssbo block")
             return expr
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
@@ -1789,9 +1949,59 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // Compute the OpAccessChain pointee type-id for a Block-member access. Scalars/vectors/matrices
+    // pass through emit_type. Nested structs and fixed-arrays need their LAID-OUT type ids (with
+    // Offset / MatrixStride / ArrayStride decorations) — produced by recursing through
+    // build_block_struct (idempotent under the type/decoration dedup pools). Used by both
+    // visitExprField (direct + chained branches) and any other site that needs a Block-member
+    // pointee type. `sname` is only used in error messages emitted by the recursion.
+    def field_pointee_type(var bm : SpirvModule; ft : TypeDecl?; sname : string) : uint {
+        if (ft == null) {
+            errs |> push("internal: null field type at {sname}")
+            return 0u
+        }
+        // matrices come back through emit_type -> type_matrix correctly; only tStructure and
+        // tFixedArray need the layout-aware path.
+        if (ft.baseType == Type.tStructure && ft.structType != null) {
+            let inner = build_block_struct(bm, sname, ft.structType, false, errs)
+            if (!inner.ok) return 0u
+            return inner.type_id
+        }
+        if (ft.baseType == Type.tFixedArray && ft.firstType != null) {
+            let et = ft.firstType
+            let nelem = ft.fixedDim
+            var elem_type : uint = 0u
+            if (et.baseType == Type.tStructure && et.structType != null) {
+                let inner = build_block_struct(bm, "{sname}[]", et.structType, false, errs)
+                if (!inner.ok) return 0u
+                elem_type = inner.type_id
+            } else {
+                elem_type = emit_type(bm, et)
+            }
+            // std140 element stride: scalar/vector rounds up to vec4; struct element strides by its
+            // laid-out size rounded to the struct alignment. matrix-of-array is out of PR-G scope.
+            var stride = 0
+            if (et.baseType == Type.tStructure && et.structType != null) {
+                var probe : array<BlockField>
+                var perrs : array<string>
+                let pl = compute_block_layout("{sname}[]", et.structType, probe, perrs)
+                delete probe
+                delete perrs
+                if (!pl.ok) return 0u
+                let salign = round_up(pl.align, 16)
+                stride = round_up(pl.size, salign)
+            } else {
+                stride = round_up(std140_size(et.baseType), 16)
+            }
+            return type_array_strided(bm, elem_type, nelem, stride)
+        }
+        return emit_type(bm, ft)
+    }
+
     // ----- member of a Block global (ubo.color) -> OpAccessChain by field index -> pointer -----
-    // Two shapes: a direct block global (ubo.color), and a field of an indexed SSBO struct element
-    // (particles[i].pos) where expr.value is the ExprAt's element pointer — chain the field off it.
+    // Two shapes: a direct block global (ubo.color), and a field of an indexed / nested chain (e.g.
+    // particles[i].pos, or ubo.outer.inner under PR-G) where expr.value is the previous step's
+    // pointer — chain the field off it in the *root global's* storage class.
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
@@ -1809,11 +2019,16 @@ class SpirvEmit : AstVisitor {
                     errs |> push("member access '.{expr.name}': no such field")
                     return expr
                 }
-                // chain the field pointer in the element pointer's storage class (StorageBuffer for an SSBO)
-                let av = expr.value ?as ExprAt
-                let rgi = av != null ? (ctx.globals?[intptr(global_var_of(av.subexpr))] ?? GlobalInfo()) : GlobalInfo()
+                // chain the field pointer in the root global's storage class (StorageBuffer for an
+                // SSBO, Uniform for a UBO, PushConstant for @push_constant). Walking the whole chain
+                // via root_global_of catches deeply nested forms (ubo.outer.inner under PR-G); the
+                // pre-PR-G code only handled ExprAt-rooted chains and defaulted everything else to
+                // StorageBuffer, which mismatched the base pointer's type for Uniform/PushConstant.
+                let rv = root_global_of(expr.value)
+                let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
                 let storage = rgi.var_id != 0u ? rgi.storage : SpvStorageClass.StorageBuffer
-                let pointee = emit_type(bm, expr._type)
+                let pointee = field_pointee_type(bm, expr._type, "{est.name}.{expr.name}")
+                if (pointee == 0u) return expr
                 let ptr_t = type_pointer(bm, storage, pointee)
                 let res = alloc_id(bm)
                 emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, base.id, const_uint(bm, uint(midx)))
@@ -1834,7 +2049,8 @@ class SpirvEmit : AstVisitor {
             errs |> push("member access '.{expr.name}': no such field on '{bv.name}'")
             return expr
         }
-        let pointee = emit_type(bm, expr._type)
+        let pointee = field_pointee_type(bm, expr._type, "{bv.name}.{expr.name}")
+        if (pointee == 0u) return expr
         let ptr_t = type_pointer(bm, gi.storage, pointee)
         let res = alloc_id(bm)
         emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, const_uint(bm, uint(midx)))

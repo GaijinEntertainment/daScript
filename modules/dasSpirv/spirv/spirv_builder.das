@@ -309,6 +309,27 @@ def public type_array(var m : SpirvModule; elem : uint; len : int) : uint {
     return id
 }
 
+// A fixed-size array type with an ArrayStride decoration — required when the array appears as a
+// member of a Block-decorated struct (std140/std430 layout). The stride is part of the dedup key so
+// the same (elem,len) pair used at two different strides stays as two distinct types.
+def public type_array_strided(var m : SpirvModule; elem : uint; len : int; stride : int) : uint {
+    if (len <= 0) {
+        panic("type_array_strided: length must be positive, got {len}")
+    }
+    if (stride <= 0) {
+        panic("type_array_strided: ArrayStride must be positive, got {stride}")
+    }
+    let key = "arr{elem}_n{len}_s{stride}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let len_id = const_uint(m, uint(len))
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeArray, id, elem, len_id)
+    emit(m, SEC_DECOR, SpvOp.Decorate, id, uint(SpvDecoration.ArrayStride), uint(stride))
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 // A composite (vector / array / struct) constant from already-emitted constituent constant ids.
 // Deduped by type + constituents — two identical composites collapse to one OpConstantComposite.
 def public const_composite(var m : SpirvModule; type_id : uint; parts : array<uint>) : uint {
