@@ -9,7 +9,8 @@
 // stdout IS the JSON-RPC framing pipe. On a clean compile (the shipped state)
 // nothing is written to it before main() takes over, and cpp_main's own
 // logger_install_hook keeps the server's diagnostics off stdout. Compile /
-// simulate diagnostics (only on a broken build) go to the global TextPrinter.
+// simulate diagnostics (only on a broken build) are buffered and flushed to
+// stderr — never stdout.
 //
 // Teardown mirrors the daslang tool's main (utils/daScript/main.cpp): the
 // context is a heap ContextPtr destroyed *before* Module::Shutdown, which
@@ -80,7 +81,11 @@ int main(int argc, char * argv[]) {
     // alive; destroying it after Module::Shutdown is an access violation
     // (matches the daslang tool / 13_aot.cpp ordering).
     {
-        TextPrinter tout;
+        // A buffer, NOT TextPrinter: TextPrinter writes to stdout, which IS the
+        // JSON-RPC framing pipe (corrupting it). Compile/simulate diagnostics
+        // accumulate here and flush to stderr at the end of this scope (only a
+        // broken build produces any).
+        TextWriter tout;
         auto access = make_smart<FsFileAccess>();
         ModuleGroup dummyGroup;
 
@@ -112,6 +117,11 @@ int main(int argc, char * argv[]) {
             for (auto & err : program->errors) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
             }
+        }
+        // Flush any buffered diagnostics to stderr — never stdout (the pipe).
+        if (!tout.empty()) {
+            fputs(tout.c_str(), stderr);
+            fflush(stderr);
         }
     }
 

@@ -8,9 +8,20 @@ require grep_usage
 require cpp_compile_check
 require cpp_format_file
 require daslib/fio
-require daslib/json
-require daslib/json_boost
 require strings
+
+// Serialization shape for the `json=true` mode. sprint_json reflects a plain
+// struct into clean JSON (unlike a JsonValue, whose internals it would reflect).
+struct private CppStatusResult {
+    das_root : string
+    ast_grep : string
+    ast_grep_available : bool
+    compile_db : string
+    compile_db_found : bool
+    clang_format : string
+    clang_format_available : bool
+    msvc_include_env : bool
+}
 
 // Self-diagnosis for a freshly-installed bundle: report which external
 // dependencies the cpp/agnostic tools need (ast-grep, a compile_commands.json,
@@ -25,7 +36,7 @@ def do_cpp_status(as_json : bool) : string {
     let has_include = has_env_variable("INCLUDE")   // MSVC: cpp_compile_check needs vcvars' INCLUDE
 
     if (as_json) {
-        return make_tool_result(sprint_json(JV((
+        return make_tool_result(sprint_json(CppStatusResult(
             das_root = root,
             ast_grep = sg,
             ast_grep_available = !empty(sg),
@@ -33,8 +44,7 @@ def do_cpp_status(as_json : bool) : string {
             compile_db_found = !empty(db),
             clang_format = cf,
             clang_format_available = !empty(cf),
-            msvc_include_env = has_include
-        )), false))
+            msvc_include_env = has_include), false))
     }
 
     let report = build_string() $(var w) {

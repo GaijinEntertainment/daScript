@@ -148,6 +148,7 @@ def build_cpp_tools(var reg : array<ToolDef>) {
                 "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON instead of the text report")
             },
             []),
+        arg_names <- ["json"],
         main_thread = true,
         handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_cpp_status(arg1 == "true")))
 }
