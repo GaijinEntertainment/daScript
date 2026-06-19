@@ -8,6 +8,7 @@ module strudel_synth shared public
 
 require strudel/strudel_event
 require strudel/strudel_samples
+require strudel/strudel_sfx        // generated drum render_* call the sfx engine
 require audio
 require math
 
@@ -58,447 +59,150 @@ def private adsr(t, attack, decay, sustain, release, duration : float) : float {
     return 0.0
 }
 
-// ─── Drum Room (convolution reverb baked into rendered buffer) ───
-
-// Apply convolution reverb to a mono buffer. amount=0.0 is dry, 1.0 is full wet.
-// Uses a synthetic impulse response (noise with exponential decay + lowpass sweep).
-def private apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : float = 0.4) {
-    if (amount <= 0.0) return
-    let n = length(samples)
-    // Create a short convolution reverb for the drum room
-    // decay=0.4s gives a nice small room, lpFreqStart=12kHz→lpFreqEnd=2kHz darkens the tail
-    var rev = new ConvolutionReverb
-    conv_reverb_init(rev, SAMPLE_RATE, decay_sec, 12000.0, 2000.0, 0.005, ConvReverbQuality.high, 0)
-    // Process mono → mono
-    var wet : array<float>
-    wet |> resize(n)
-    unsafe {
-        conv_reverb_process_mono(rev, addr(samples[0]), addr(wet[0]), n)
-    }
-    conv_reverb_uninit(rev)
-    unsafe { delete rev; }
-    // Mix wet into dry
-    for (i in range(n)) {
-        samples[i] += wet[i] * amount
-    }
-    delete wet
-}
-
-// Add a single slapback echo at a given delay (in seconds) with given gain.
-def private apply_slapback(var samples : array<float>; delay_sec : float = 0.035; echo_gain : float = 0.4) {
-    let delay_samples = int(delay_sec * float(SAMPLE_RATE))
-    let n = length(samples)
-    for (i in range(delay_samples, n)) {
-        samples[i] += samples[i - delay_samples] * echo_gain
-    }
-}
 
 // ─── Drum Synthesis ───
+// Generated from the sfx_lab .sfx sounds by emit_das (examples/daStrudel/sfx_lab). Each builds
+// its layer stack + post and calls the sfx engine, conformed to (duration, gain) @ 48 kHz.
+// To re-tune a drum: edit its sounds/<name>.sfx in the lab, then File -> Export .das render function.
 
-def render_bd(duration : float; gain : float) : array<float> {
-    //! Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
-    //! Combines a pitched sine body with a fast pitch sweep, a bandpass beater click and a rimshot-like snap, then applies a short room.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phase = 0.0
-    var seed = 22222u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    // bandpass for subtle beater click
-    var attack_bp = BiquadState()
-    biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
-    // rimshot-style snap for beater attack
-    var snap_bp = BiquadState()
-    biquad_bandpass(snap_bp, 800.0, 0.8, float(SAMPLE_RATE))
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // --- body: sine with very fast pitch sweep ---
-        let freq = 58.0 + 80.0 * exp(-t * 300.0)
-        phase += tp * freq * iSr
-        let osc = sin(phase)
-        // clean sine body
-        let body = osc * exp(-t * 10.0) * 1.1
-        // --- beater click at 1.5kHz ---
-        let n = noise(seed)
-        let click = biquad_process(attack_bp, n) * exp(-t * 250.0) * 0.25
-        // --- rimshot-style snap, a third longer than actual rimshot ---
-        let impulse = biquad_process(snap_bp, n) * exp(-t * 40.0) * 1.05
-        // combine
-        samples[i] = (body + click + impulse) * gain
-    }
-    apply_room(samples, 0.15)
-    return <- samples
+def render_bd(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("kick body", ModalVoice(pitch = 92.19005, spread = 1, n_modes = 1, ring = 0.10411456, brightness = 0.0003617294, damp_skew = 0.54129374, transient = 0.3057839, transient_rate = 746.62, echo_amount = 0.084564, echo_delay = 0.04126666, duration = 0.62035507))
+    l0.gain = 2
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("noise top", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.8125142, env_attack = 0.19729611, env_sustain = 0, env_punch = 0.019216271, env_decay = 0, base_freq = 0.19114257, freq_limit = 0.008770883, freq_ramp = -0.69378364, freq_dramp = 0.16200626, vib_strength = 0.15152553, vib_speed = 0.27849677, arp_mod = 1, arp_speed = 0.17929535, duty = 0.91913927, duty_ramp = 0.0121489465, repeat_speed = 0.16007021, pha_offset = 0.24446183, pha_ramp = -0.23262447, lpf_freq = 0.40080133, lpf_ramp = 0.58750004, lpf_resonance = 0.27288863, hpf_freq = 0.034394234, hpf_ramp = 0.8949298))
+    l1.gain = 0.378
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(reverb = FxReverb(enabled = true, wet = 0.4114426, decay = 1.8850778, lp_start = 10776.892, lp_end = 1141.2772)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.716628)
 }
 
-def render_sd(duration : float; gain : float) : array<float> {
-    //! Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phase = 0.0
-    var seed = 12345u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    // snare wires: HPF at 1.5kHz to get the sizzle
-    var wire_hpf = BiquadState()
-    biquad_highpass(wire_hpf, 1500.0, float(SAMPLE_RATE))
-    var phase2 = 0.0
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // two tonal bodies — batter head (~220Hz) and resonant head (~330Hz)
-        let freq1 = 220.0 + 60.0 * exp(-t * 200.0)
-        phase += tp * freq1 * iSr
-        let freq2 = 330.0 + 40.0 * exp(-t * 200.0)
-        phase2 += tp * freq2 * iSr
-        let tone = (sin(phase) * 0.5 + sin(phase2) * 0.1) * exp(-t * 12.0)
-        // snare wires: HPF'd noise, longer decay than tone
-        let n = noise(seed)
-        let wires = biquad_process(wire_hpf, n) * exp(-t * 10.0) * 0.5
-        // initial stick hit: broadband impulse
-        let hit = n * exp(-t * 150.0) * 0.4
-        samples[i] = (tone + wires + hit) * gain
-    }
-    apply_room(samples, 0.05, 0.5)
-    return <- samples
+def render_sd(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("snare body", ModalVoice(pitch = 132.6518, spread = 2.5196228, n_modes = 2, ring = 0.041626297, brightness = 0.5621451, damp_skew = 0.91521007, transient = 0.04814431, transient_rate = 1089.8298, echo_delay = 0.016666325, duration = 0.92530364))
+    l0.gain = 0.918
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("snare wires", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.3353221, env_attack = 0.100997776, env_sustain = 0.013236732, env_punch = 0.69624764, env_decay = 0.263, base_freq = 0.32443383, freq_limit = 0.07678777, freq_ramp = 0.26109394, freq_dramp = -0.16964206, vib_strength = 0.19371475, vib_speed = 0.12917374, arp_mod = 0.57104796, arp_speed = 0.3427923, duty = 0.0036578178, duty_ramp = 0.09432789, pha_offset = 0.33797556, pha_ramp = -0.05845314, lpf_freq = 0.9671906, lpf_ramp = -0.098088905, lpf_resonance = 0.07413985, hpf_freq = 0.064527355, hpf_ramp = -0.030188851))
+    l1.gain = 0.527
+    layers |> emplace(l1)
+    var l2 = modal_layer("snare ring", ModalVoice(pitch = 907.405, spread = 1.1649027, n_modes = 3, ring = 0.05589971, brightness = 0.58914346, damp_skew = 1.4808201, transient = 0.49322706, transient_rate = 1017.0395, echo_amount = 0.26977468, echo_delay = 0.09883809, duration = 0.7440903))
+    l2.gain = 0.209
+    layers |> emplace(l2)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(comp = FxComp(enabled = true, threshold = -18.498344, ratio = 16.246166, knee = 15.021414, attack = 0.026926743, release = 0.2628373), reverb = FxReverb(enabled = true, wet = 0.44400942, decay = 0.81689435, lp_start = 2000, lp_end = 5640.131)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.5571)
 }
 
-def render_hh(duration : float; gain : float) : array<float> {
-    //! Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples <- render_metallic(duration, gain * 0.7, 18.0)
-    // add tonal component (~200Hz) like SF2 — the "bell" of the hi-hat
-    var phase = 0.0
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    let inc = tp * 180.0 * iSr
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        phase += inc
-        samples[i] += sin(phase) * exp(-t * 30.0) * gain * 0.25
-    }
-    apply_room(samples, 0.1)
-    return <- samples
+def render_hh(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("body", ModalVoice(pitch = 83.480896, spread = 1.875554, n_modes = 6, ring = 0.13597746, brightness = 0.9672969, damp_skew = 0.46194708, transient = 0.9719281, transient_rate = 1041.986, echo_amount = 0.273, echo_delay = 0.067, duration = 0.57802224))
+    l0.gain = 0.391
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("noise", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.7981047, env_attack = 0.035719402, env_sustain = 0.017502397, env_punch = 0.39985386, env_decay = 0.203, base_freq = 0.6757881, freq_limit = 0.046278007, freq_ramp = 0.809726, freq_dramp = -0.42988, vib_strength = 0.014422701, vib_speed = 0.32112327, arp_mod = 0.011038069, arp_speed = 0.016891815, duty = 0.70870906, duty_ramp = -0.1761131, repeat_speed = 0.13810815, pha_offset = 0.17985052, pha_ramp = 0.6097818, lpf_freq = 0.7834988, lpf_ramp = 0.40151978, lpf_resonance = 0.065687366, hpf_freq = 0.29279754, hpf_ramp = 0.7709224))
+    l1.gain = 0.8433876
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(filter = FxFilter(enabled = true, position = 0.8385528), phaser = FxPhaser(enabled = true, rate = 7.753262, depth = 0.23392326, center = 100, sweep = 2185.921), reverb = FxReverb(enabled = true, wet = 0.18446012, decay = 0.8129592, lp_start = 10354.649, lp_end = 2772.1028)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.1005718)
 }
 
-def render_cp(duration : float; gain : float) : array<float> {
-    //! Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var seed = 11111u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    var bpf = BiquadState()
-    biquad_bandpass(bpf, 1100.0, 2.0, float(SAMPLE_RATE))
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // sharp attack + medium decay
-        let env = exp(-t * 29.0)
-        let n = noise(seed)
-        let main = biquad_process(bpf, n) * 2.8
-        let bright = n * exp(-t * 40.0) * 0.25  // metallic edge
-        samples[i] = (main + bright) * env * gain
-    }
-    apply_room(samples, 0.15, 1.0)
-    return <- samples
+def render_oh(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("body", ModalVoice(pitch = 262.051, spread = 1.265, n_modes = 8, ring = 0.16779672, brightness = 1, damp_skew = 1.003, transient = 0.76751196, transient_rate = 587.8487, echo_amount = 0.031908553, echo_delay = 0.117, duration = 0.6184743))
+    l0.gain = 0.853
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("noise", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.6028352, env_attack = 0.06774744, env_sustain = 0.09199185, env_punch = 0.44888717, env_decay = 0.18753469, base_freq = 0.41506052, freq_limit = 0.35775602, freq_ramp = 0.39196032, freq_dramp = -0.20300886, vib_strength = 0.2862102, vib_speed = 0.63817817, arp_mod = -0.36608765, arp_speed = 0.09586534, duty = 0.6536455, duty_ramp = -0.03319117, repeat_speed = 0.12912789, pha_offset = 0.56369853, pha_ramp = 0.1393801, lpf_freq = 0.82449687, lpf_ramp = -0.3242288, lpf_resonance = 0.117011495, hpf_freq = 0.5928842, hpf_ramp = 0.48898622))
+    l1.gain = 0.881
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(filter = FxFilter(enabled = true, position = 0.41517052), drive = FxDrive(enabled = true, drive = 0.8361627), phaser = FxPhaser(enabled = true, rate = 5.297644, depth = 0.22305954, center = 576.8732, sweep = 2080.2576), reverb = FxReverb(enabled = true, wet = 0.7004094, decay = 0.9636621, lp_start = 13392, lp_end = 2913.0295)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.0696671)
 }
 
-// ─── Biquad Filter ───
-
-struct private BiquadState {
-    x1 : float = 0.0
-    x2 : float = 0.0
-    y1 : float = 0.0
-    y2 : float = 0.0
-    a0 : float = 1.0
-    a1 : float = 0.0
-    a2 : float = 0.0
-    b1 : float = 0.0
-    b2 : float = 0.0
+def render_cp(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = sfxr_layer("clap", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.50202537, env_attack = 0.04863984, env_sustain = 0, env_punch = 0.36572674, env_decay = 0.22804458, base_freq = 0.4899924, freq_ramp = -0.10181666, freq_dramp = 0.06617436, vib_strength = 0.011753256, vib_speed = 0.0029255762, arp_mod = 0.25824764, arp_speed = 0.009729162, duty = 0.0016653084, duty_ramp = 0.27126336, repeat_speed = 0.04119529, pha_offset = -0.04200024, pha_ramp = 0.012046436, lpf_ramp = -0.07116463, hpf_freq = 0.044381835, hpf_ramp = 0.05262112))
+    layers |> emplace(l0)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(bandpass = FxBandpass(enabled = true, freq = 1070.3005, q = 1.7945414), reverb = FxReverb(enabled = true, wet = 0.241, decay = 0.91671735, lp_start = 5777.9414, lp_end = 1906.6681)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.5125848)
 }
 
-def private biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
-    let w0 = TWO_PI * freq / sample_rate
-    let cs = cos(w0)
-    let sn = sin(w0)
-    let alpha = sn / (2.0 * 0.707)  // Q = 0.707 (Butterworth)
-    let norm = 1.0 / (1.0 + alpha)
-    bq.a0 = (1.0 + cs) * 0.5 * norm
-    bq.a1 = -(1.0 + cs) * norm
-    bq.a2 = bq.a0
-    bq.b1 = -2.0 * cs * norm
-    bq.b2 = (1.0 - alpha) * norm
+def render_tom(duration, gain, base_freq : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("body", ModalVoice(pitch = 1 * base_freq, spread = 1.5352107, n_modes = 3, ring = 0.13079655, brightness = 0.223, damp_skew = 0.5194714, transient = 0.44619122, transient_rate = 338.28003, echo_amount = 0.12818907, echo_delay = 0.050528653, duration = 0.6532905))
+    l0.gain = 0.374
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("click", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.68069726, env_attack = 0.017013319, env_sustain = 0, env_punch = 0.31063506, env_decay = 0.122, base_freq = 0.2995053, freq_limit = 0.03445269, freq_ramp = -0.010150269, freq_dramp = 0.116527304, vib_strength = 0.016013723, vib_speed = 0.22915553, arp_mod = 0.45189676, arp_speed = 0.00081056263, duty = 0.22757596, duty_ramp = -0.096907295, repeat_speed = 0.32849845, pha_offset = 0.40356445, pha_ramp = -0.1761775, lpf_freq = 0.39883548, lpf_ramp = 0.2316376, lpf_resonance = 0.067041874, hpf_freq = 0.004074513, hpf_ramp = 0.45968696))
+    l1.gain = 0.093
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(comp = FxComp(enabled = true, threshold = -11.062325, ratio = 3.2656035, knee = 12.965193, attack = 0.001, release = 0.07535656), reverb = FxReverb(enabled = true, wet = 0.18924627, decay = 2.7724564, lp_start = 9273.734, lp_end = 574.92474)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.71737325)
 }
 
-def private biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
-    let w0 = TWO_PI * freq / sample_rate
-    let cs = cos(w0)
-    let sn = sin(w0)
-    let alpha = sn / (2.0 * q)
-    let norm = 1.0 / (1.0 + alpha)
-    bq.a0 = alpha * norm
-    bq.a1 = 0.0
-    bq.a2 = -alpha * norm
-    bq.b1 = -2.0 * cs * norm
-    bq.b2 = (1.0 - alpha) * norm
+def render_crash(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("bell", ModalVoice(pitch = 343.965, spread = 1.2489982, n_modes = 2, ring = 0.27278978, brightness = 0.77337474, damp_skew = 0.23000792, transient = 0.45617875, transient_rate = 801.6456, echo_amount = 0.009444692, echo_delay = 0.032232385, duration = 1.7827468))
+    l0.gain = 0.419
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("wash", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.36487252, env_attack = 0.08991354, env_sustain = 0.26309496, env_punch = 0.074205264, env_decay = 0.4370825, base_freq = 0.2836753, freq_limit = 0.038351007, freq_ramp = -0.01767661, freq_dramp = 0.06892679, vib_strength = 0.036719434, vib_speed = 0.028221305, arp_mod = 0.23257561, arp_speed = 0.22157943, duty = 0.09078055, duty_ramp = 0.0073036714, repeat_speed = 0.11616688, pha_offset = -0.10262833, pha_ramp = 0.32091796, lpf_freq = 0.7735541, lpf_ramp = -0.07247121, lpf_resonance = 0.18061708, hpf_freq = 0.46778846, hpf_ramp = 0.17977096))
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(reverb = FxReverb(enabled = true, wet = 0.790473, decay = 2.0615287, lp_start = 5006.515, lp_end = 3199.1077)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.16021894)
 }
 
-def private biquad_process(var bq : BiquadState; x : float) : float {
-    let y = bq.a0 * x + bq.a1 * bq.x1 + bq.a2 * bq.x2 - bq.b1 * bq.y1 - bq.b2 * bq.y2
-    bq.x2 = bq.x1
-    bq.x1 = x
-    bq.y2 = bq.y1
-    bq.y1 = y
-    return y
+def render_ride(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("body", ModalVoice(pitch = 260.59442, spread = 1.9402999, n_modes = 6, ring = 0.72374016, brightness = 0.91424954, damp_skew = 0.39226624, transient = 0.9157878, transient_rate = 1428.7157, echo_amount = 0.3951541, echo_delay = 0.12949422, duration = 2.91224))
+    l0.gain = 1.732
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("noise", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.85335475, env_attack = 0.01885143, env_sustain = 0.64399797, env_punch = 0.8266965, env_decay = 0.9358731, base_freq = 0.94963217, freq_limit = 0.16316509, freq_ramp = -0.9105514, freq_dramp = -0.49644652, vib_strength = 0.6346296, vib_speed = 0.037927777, arp_mod = 0.59178555, duty = 0.8468766, duty_ramp = -0.57930696, repeat_speed = 0.080499634, pha_offset = 0.8598438, pha_ramp = 0.07920793, lpf_freq = 0.50055075, lpf_ramp = -0.72643226, lpf_resonance = 0.2777733, hpf_freq = 0.7852516, hpf_ramp = 1))
+    l1.gain = 1.254
+    layers |> emplace(l1)
+    var l2 = modal_layer("discover", ModalVoice(pitch = 375.35406, spread = 1.6241328, n_modes = 3, ring = 0.26532784, brightness = 0.8192871, damp_skew = 0.16306561, transient = 0.64571667, transient_rate = 117.49198, echo_amount = 0.9544771, echo_delay = 0.06452382, duration = 0.17131767))
+    l2.gain = 1.23
+    layers |> emplace(l2)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(phaser = FxPhaser(enabled = true, rate = 3.8757129, depth = 0.22463433, center = 2308.9856, sweep = 1507.2904), tremolo = FxTremolo(enabled = true, rate = 8.172751, depth = 0.89493424), reverb = FxReverb(enabled = true, wet = 0.6909106, decay = 2.96094, lp_start = 15040.056, lp_end = 2945.922)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.26458737)
 }
 
-// ─── Metallic Oscillator Bank (808-style hi-hat/cymbal) ───
-
-// 6 square-wave oscillators at inharmonic ratios produce metallic timbre.
-// Used by hi-hat, ride, crash, and tambourine.
-let private HH_FREQS = fixed_array(205.3, 304.4, 369.6, 522.7, 540.0, 800.0)
-
-def private render_metallic(duration : float; gain : float; decay_rate : float; hpf_freq : float = 5000.0; noise_mix : float = 0.3) : array<float> {
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phases : float[6]
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    // two bandpass stages at ~3.4kHz and ~7.1kHz (808 circuit) + HPF
-    var bp1 = BiquadState()
-    biquad_bandpass(bp1, 3400.0, 1.5, float(SAMPLE_RATE))
-    var bp2 = BiquadState()
-    biquad_bandpass(bp2, 7100.0, 2.0, float(SAMPLE_RATE))
-    var hpf = BiquadState()
-    biquad_highpass(hpf, hpf_freq, float(SAMPLE_RATE))
-    var seed = 67890u
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        let env = exp(-t * decay_rate)
-        var mix = 0.0
-        for (j in range(6)) {
-            phases[j] += tp * HH_FREQS[j] * iSr
-            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)  // square wave
-        }
-        mix *= (1.0 / 6.0)
-        // filter through bandpass stages (parallel, like 808 circuit)
-        let filtered = biquad_process(bp1, mix) + biquad_process(bp2, mix) * 0.8
-        // add noise for body
-        let n = noise(seed) * noise_mix
-        // HPF the combined signal
-        let out = biquad_process(hpf, filtered + n)
-        samples[i] = out * env * gain * 2.5  // boost to compensate for filtering
-    }
-    return <- samples
+def render_rimshot(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = sfxr_layer("clap", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.50202537, env_attack = 0.046, env_sustain = 0, env_punch = 0.371, env_decay = 0.22804458, base_freq = 0.984, freq_limit = 0.117, freq_ramp = 1, freq_dramp = 0.972, vib_strength = 0.011753256, vib_speed = 0.0029255762, arp_mod = 0.25824764, arp_speed = 0.009729162, duty = 0.0016653084, duty_ramp = 0.27126336, repeat_speed = 0.04119529, pha_offset = -0.04200024, pha_ramp = 0.012046436, lpf_ramp = -0.07116463, hpf_freq = 0.044381835, hpf_ramp = 0.05262112))
+    l0.gain = 1.005
+    layers |> emplace(l0)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(filter = FxFilter(enabled = true, position = 0.869), bandpass = FxBandpass(enabled = true, freq = 118.12814, q = 3.7761607), reverb = FxReverb(enabled = true, wet = 0.258, decay = 0.692, lp_start = 7656.8604, lp_end = 500)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 22.587774)
 }
 
-// ─── Additional Drum Synthesis ───
-
-def render_oh(duration : float; gain : float) : array<float> {
-    //! Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
-    var samples <- render_metallic(duration, gain, 8.0)
-    apply_room(samples, 0.1)
-    return <- samples
+def render_cowbell(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("body", ModalVoice(pitch = 411.399, spread = 1.9724455, n_modes = 6, ring = 0.06443338, brightness = 0.6154117, damp_skew = 0.5370055, transient = 0.99766755, transient_rate = 925.15546, echo_amount = 0.020447377, echo_delay = 0.011550919, duration = 0.82429314))
+    layers |> emplace(l0)
+    var l1 = sfxr_layer("noise", SfxrSound(wave = SfxrWave.noise, sound_vol = 0.7673511, env_attack = 0.06156981, env_sustain = 0.00881725, env_punch = 0.3309498, env_decay = 0, base_freq = 0.23155648, freq_limit = 0.04794487, freq_ramp = -0.19637704, freq_dramp = 0.049527712, vib_strength = 0.010859551, vib_speed = 0.0027843416, arp_mod = 0.20936257, arp_speed = 0.27919853, duty = 0.117745265, duty_ramp = -0.16573964, repeat_speed = 0.26919103, pha_offset = -0.3462789, pha_ramp = 0.30785185, lpf_freq = 0.7143182, lpf_ramp = -0.21776688, lpf_resonance = 0.00679336, hpf_freq = 0.06575774, hpf_ramp = -0.2670746))
+    l1.gain = 0.20742378
+    layers |> emplace(l1)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(bandpass = FxBandpass(enabled = true, freq = 2241.643, q = 0.6167674), tremolo = FxTremolo(enabled = true, rate = 0.5114572, depth = 0.861706), reverb = FxReverb(enabled = true, wet = 0.74340045, decay = 0.8050676, lp_start = 14859.577, lp_end = 530.3483)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 1.4125484)
 }
 
-def render_tom(duration : float; gain : float; base_freq : float) : array<float> {
-    //! Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
-    //! Used for tom_low (~80 Hz) and tom_high (~175 Hz).
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phase = 0.0
-    var seed = 33333u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    var attack_bp = BiquadState()
-    biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
-    var impulse_lp = BiquadState()
-    biquad_bandpass(impulse_lp, 1200.0, 0.5, float(SAMPLE_RATE))
-    var phase2 = 0.0
-    var phase3 = 0.0
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // body: sine with fast pitch sweep
-        let freq = base_freq + base_freq * 1.2 * exp(-t * 200.0)
-        phase += tp * freq * iSr
-        // second partial: drumhead overtone at ~1.6x (inharmonic)
-        let freq2 = base_freq * 1.6 + base_freq * 0.45 * exp(-t * 200.0)
-        phase2 += tp * freq2 * iSr
-        // third partial: higher drumhead mode at ~2.5x, faster decay
-        let freq3 = base_freq * 1.9 + base_freq * 0.14 * exp(-t * 200.0)
-        phase3 += tp * freq3 * iSr
-        // resonant head arrives ~15ms after batter head — creates distinct 2nd peak
-        let p2_onset = 0.045
-        let p2_env = t > p2_onset ? exp(-(t - p2_onset) * 10.0) : 0.0
-        let body = (sin(phase) * 0.7 * exp(-t * 8.0) + sin(phase2) * 0.25 * p2_env + sin(phase3) * 0.2 * exp(-t * 12.0))
-        // beater click
-        let n = noise(seed)
-        let click = biquad_process(attack_bp, n) * exp(-t * 250.0) * 0.3
-        // stick impulse
-        let impulse = biquad_process(impulse_lp, n) * exp(-t * 200.0) * 0.8
-        samples[i] = (body + click + impulse) * gain
-    }
-    apply_room(samples, 0.05, 0.7)
-    return <- samples
+def render_tambourine(duration, gain : float) : array<float> {
+    var layers : array<Layer>
+    var l0 = modal_layer("tamb jingle", ModalVoice(pitch = 4000, spread = 1.6022093, n_modes = 6, ring = 0.019, brightness = 0.937, damp_skew = 0.084890395, transient = 0.48216662, transient_rate = 139.9605, echo_amount = 0.42, duration = 1.345))
+    l0.gain = 0.972
+    layers |> emplace(l0)
+    var out <- render_sound(layers)
+    apply_post(out, PostChain(bandpass = FxBandpass(enabled = true, freq = 2948.5562, q = 0.7541728), crush = FxCrush(enabled = true, bits = 4.0084352, coarse = 0), reverb = FxReverb(enabled = true, wet = 0.247, decay = 0.992, lp_start = 12394.796, lp_end = 500)), 44100.0)
+    return <- sfx_conform(out, 44100, 48000, duration, gain * 0.62163943)
 }
 
-def render_ride(duration : float; gain : float) : array<float> {
-    //! Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phases : float[6]
-    var bell_phase1 = 0.0
-    var bell_phase2 = 0.0
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    var hpf = BiquadState()
-    biquad_highpass(hpf, 200.0, float(SAMPLE_RATE))
-    let bell_inc1 = tp * 340.0 * iSr
-    let bell_inc2 = tp * 387.0 * iSr
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // bell tone: two inharmonic frequencies (~340 + ~387 Hz), long sustain
-        bell_phase1 += bell_inc1
-        bell_phase2 += bell_inc2
-        let bell = (sin(bell_phase1) * 0.5 + sin(bell_phase2) * 0.4) * exp(-t * 15.0)
-        // metallic shimmer: oscillator bank through HPF, faster decay
-        var mix = 0.0
-        for (j in range(6)) {
-            phases[j] += tp * HH_FREQS[j] * iSr
-            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)
-        }
-        mix *= (1.0 / 6.0)
-        let shimmer = biquad_process(hpf, mix) * exp(-t * 3.0) * 0.25
-        samples[i] = (bell + shimmer) * gain * 0.33
-    }
-    apply_room(samples, 0.10, 0.3)
-    return <- samples
-}
 
-def render_crash(duration : float; gain : float) : array<float> {
-    //! Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phases : float[6]
-    var bell_phase1 = 0.0
-    var bell_phase2 = 0.0
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    var hpf = BiquadState()
-    biquad_highpass(hpf, 4000.0, float(SAMPLE_RATE))
-    let bell_inc1 = tp * 180.0 * iSr
-    let bell_inc2 = tp * 248.0 * iSr
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        // bell tone: short attack, medium decay
-        bell_phase1 += bell_inc1
-        bell_phase2 += bell_inc2
-        let bell = (sin(bell_phase1) * 0.25 + sin(bell_phase2) * 0.15) * exp(-t * 8.0)
-        // metallic wash: shimmer with faster decay than ride
-        var mix = 0.0
-        for (j in range(6)) {
-            phases[j] += tp * HH_FREQS[j] * iSr
-            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)
-        }
-        mix *= (1.0 / 6.0)
-        let shimmer = biquad_process(hpf, mix) * exp(-t * 4.0) * 0.8
-        samples[i] = (bell + shimmer) * gain * 0.5
-    }
-    apply_room(samples, 0.1, 0.2)
-    return <- samples
-}
-
-def render_rimshot(duration : float; gain : float) : array<float> {
-    //! Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phase1 = 0.0
-    var seed = 44444u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    let inc1 = tp * 200.0 * iSr
-    var snap_bp = BiquadState()
-    biquad_bandpass(snap_bp, 800.0, 0.8, float(SAMPLE_RATE))
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        let n = noise(seed)
-        // sharp filtered noise snap — the main sound
-        let snap = biquad_process(snap_bp, n) * exp(-t * 60.0) * 1.8
-        // very short tonal ping for pitch
-        phase1 += inc1
-        let body = sin(phase1) * exp(-t * 80.0) * 0.6
-        // high transient click
-        let click = n * exp(-t * 400.0) * 0.8
-        samples[i] = (snap + body + click) * gain
-    }
-    apply_room(samples, 0.1, 0.7)
-    return <- samples
-}
-
-def render_cowbell(duration : float; gain : float) : array<float> {
-    //! Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var phase1 = 0.0
-    var phase2 = 0.0
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    let tp = TWO_PI
-    let inc1 = tp * 375.0 * iSr
-    let inc2 = tp * 504.0 * iSr
-    var bpf = BiquadState()
-    biquad_bandpass(bpf, 850.0, 4.0, float(SAMPLE_RATE))
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        phase1 += inc1
-        phase2 += inc2
-        let sq1 = sin(phase1) >= 0.0 ? 1.0 : -1.0
-        let sq2 = sin(phase2) >= 0.0 ? 1.0 : -1.0
-        // first strike: both tones
-        let hit1 = biquad_process(bpf, (sq1 + sq2) * 0.5) * exp(-t * 20.0)
-        // second strike: higher tone only, ~8ms later
-        let onset2 = 0.008
-        let hit2 = t > onset2 ? sq2 * exp(-(t - onset2) * 40.0) * 0.4 : 0.0
-        samples[i] = (hit1 + hit2) * gain * 0.5
-    }
-    apply_room(samples, 0.1, 0.3)
-    return <- samples
-}
-
-def render_tambourine(duration : float; gain : float) : array<float> {
-    //! Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
-    let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var seed = 55555u
-    let iSr = 1.0 / float(SAMPLE_RATE)
-    var hpf = BiquadState()
-    biquad_highpass(hpf, 6300.0, float(SAMPLE_RATE))
-    var bp1 = BiquadState()
-    biquad_bandpass(bp1, 3800.0, 8.0, float(SAMPLE_RATE))
-    var bp2 = BiquadState()
-    biquad_bandpass(bp2, 8800.0, 8.0, float(SAMPLE_RATE))
-    for (i in range(nsamples)) {
-        let t = float(i) * iSr
-        let env = exp(-t * 15.0)
-        let n = noise(seed)
-        let hp = biquad_process(hpf, n)
-        let jingle = biquad_process(bp1, n) * 0.3 + biquad_process(bp2, n) * 0.3
-        // two hits: initial strike + delayed jingle at ~30ms
-        let onset2 = 0.2
-        let env2 = t > onset2 ? exp(-(t - onset2) * 20.0) : 0.0
-        let hit1 = (hp * 0.4 + jingle) * env * 0.65
-        let hit2 = (hp * 0.3 + jingle * 0.7) * env2 * 0.3
-        samples[i] = (hit1 + hit2) * gain
-    }
-    apply_room(samples, 0.5)
-    return <- samples
-}
 
 // ─── Oscillators ───
 
