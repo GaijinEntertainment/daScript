@@ -2474,8 +2474,8 @@ def test_cpp_build_info(t : T?) {
         var is_error = false
         parse_result(do_cpp_build_info("src/misc/sysos.cpp", ""), text, is_error)
         if (!has_compile_db(text)) return
-        // protocol.das is a .das file — never a C++ translation unit in the DB.
-        parse_result(do_cpp_build_info("utils/mcp/protocol.das", ""), text, is_error)
+        // protocol_core.das is a .das file — never a C++ translation unit in the DB.
+        parse_result(do_cpp_build_info("utils/mcp/protocol_core.das", ""), text, is_error)
         t |> success(is_error, "non-cpp file -> error -- text={text}")
         t |> success(find(text, "no compile DB entry") >= 0, "reports no entry -- text={text}")
     }

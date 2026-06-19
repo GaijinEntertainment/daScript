@@ -81,5 +81,5 @@ The ``compact_json_whitespace`` helper flattens pretty-printed
 
 In-tree consumers include
 :doc:`/reference/utils/daslang_live` (stdio JSON-RPC transport for live
-commands) and the daslang MCP server (``utils/mcp/protocol.das``). For a
+commands) and the daslang MCP server (``utils/mcp/protocol_core.das``). For a
 complete pedagogical client+server pair, see ``examples/mcp/echo/``.

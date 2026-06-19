@@ -1639,10 +1639,17 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 
 # Install MCP server (stdio transport, no dasHV dependency)
+#   main.das        — full server entry point
+#   cpp_main.das    — cpp/agnostic-subset entry point
+#   protocol_core.das + registry_das.das + registry_cpp.das — shared dispatch + tool registry
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/main.das
-    ${PROJECT_SOURCE_DIR}/utils/mcp/protocol.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_main.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/protocol_core.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/registry_das.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/registry_cpp.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_search_config.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/daslang-mcp-msvc.cmd
     ${PROJECT_SOURCE_DIR}/utils/mcp/README.md
     DESTINATION utils/mcp
 )

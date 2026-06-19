@@ -10,7 +10,7 @@ side: request/notification/batch builders, response parsers.
 
 This is a teaching example — for the real production usage, see
 [modules/dasLiveHost/live/live_api_stdio.das](../../../modules/dasLiveHost/live/live_api_stdio.das)
-(live-command server) and [utils/mcp/protocol.das](../../../utils/mcp/protocol.das)
+(live-command server) and [utils/mcp/protocol_core.das](../../../utils/mcp/protocol_core.das)
 (MCP server).
 
 ## Run
