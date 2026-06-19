@@ -395,30 +395,44 @@ def render_sound_file(path : string) : array<float> {
     return <- out
 }
 
+let SFX_FADE_IN_SAMPLES = 16     //!< ~0.3 ms onset ramp — kills the start click without softening the attack
+let SFX_FADE_OUT_SAMPLES = 256   //!< ~5 ms tail ramp — guarantees a zero-ending (no end click)
+
 def sfx_conform(buf : array<float>; src_rate, dst_rate : int; duration, gain : float) : array<float> {
-    //! Resample `buf` from src_rate to dst_rate (linear), conform it to `duration` seconds
-    //! (truncate if longer, zero-pad if shorter) and scale by `gain`. This is what lets an
-    //! exported `.sfx` render function — which builds its sound at the engine's native rate
-    //! (44100) — drop into a host running at a different rate with the standard drum signature
-    //! `(duration, gain) : array<float>`.
+    //! Resample `buf` from src_rate to dst_rate (linear), scale by `gain`, and bracket it with a
+    //! tiny fade-in / fade-out so it neither clicks on attack nor on release. The sound plays its
+    //! FULL natural length (a one-shot must ring out — truncating a still-live signal makes a pop);
+    //! `duration` only EXTENDS the buffer via zero-pad when the caller asks for longer than natural.
+    //! This is what lets an exported `.sfx` render function — built at the engine's native rate
+    //! (44100) — drop into a host at another rate with the standard `(duration, gain)` drum signature.
     let n = length(buf)
-    let want = max(int(duration * float(dst_rate)), 0)
     var out : array<float>
-    out |> resize(want)
-    if (n == 0 || want == 0) {
+    if (n == 0) {
         return <- out
     }
+    let rlen = max(int(float(n) * float(dst_rate) / float(src_rate)), 1)   // resampled natural length
+    let want = max(int(duration * float(dst_rate)), 0)
+    let out_len = max(rlen, want)   // never below natural; pad to `want` if the caller wants longer
+    out |> resize(out_len)
     let ratio = float(src_rate) / float(dst_rate)
-    for (i in range(want)) {
+    for (i in range(rlen)) {
         let pos = float(i) * ratio
         let i0 = int(pos)
         if (i0 >= n) {
-            break   // past the source end — remaining samples stay zero (pad)
+            break
         }
         let frac = pos - float(i0)
         let a = buf[i0]
         let b = buf[min(i0 + 1, n - 1)]
         out[i] = (a + (b - a) * frac) * gain
+    }
+    let fi = min(SFX_FADE_IN_SAMPLES, rlen)
+    for (i in range(fi)) {
+        out[i] *= float(i) / float(fi)
+    }
+    let fo = min(SFX_FADE_OUT_SAMPLES, rlen)
+    for (i in range(fo)) {
+        out[rlen - 1 - i] *= float(i) / float(fo)
     }
     return <- out
 }
