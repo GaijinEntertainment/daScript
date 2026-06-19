@@ -86,7 +86,9 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           mkdir -p artifacts
-          7z a "artifacts/${{ matrix.asset }}.zip" ./dist/cpp-mcp
+          # Package from inside dist/ so the zip root is `cpp-mcp/` (matching the
+          # tarball's `-C dist cpp-mcp`), not `dist/cpp-mcp/`.
+          cd dist && 7z a "../artifacts/${{ matrix.asset }}.zip" cpp-mcp
 
       - name: Package (tar.gz)
         if: runner.os != 'Windows'
