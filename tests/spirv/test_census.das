@@ -54,6 +54,7 @@ def test_opcode_census(t : T?) {
         add_set(present, ubo_frag_words())
         add_set(present, mvp_vert_words())
         add_set(present, pc_frag_words())
+        add_set(present, ubo_nested_words())
         add_set(present, tex_frag_words())
         add_set(present, conv_words())
         add_set(present, storimg_words())

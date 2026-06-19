@@ -605,6 +605,44 @@ def public pc_frag_words : array<uint> {
     return <- w
 }
 
+// ===== PR-G nested-block fixture: a UBO whose fields span the THREE composite shapes the pre-PR-G
+// emitter rejected — a fixed-array of vec4 (ArrayStride 16), a nested struct (laid out non-Block at
+// offset 48 / aligned to 16), and an array of struct (per-element ArrayStride 32). Every composite
+// is read in the body so the OpAccessChain cascades (block -> field -> element -> sub-field) all
+// land, including the ubo.lights[i].field shape that exercises both the storage-class fix in
+// visitExprField and the chained-pointer branch in visitExprAt. =====
+struct NMaterial {
+    base_color : float4     // offset 0
+    roughness  : float      // offset 16
+    metallic   : float      // offset 20
+}                           // size 24, std140 align 16, padded to 32
+
+struct NLight {
+    pos   : float4          // offset 0
+    color : float4          // offset 16
+}                           // size 32, std140 align 16
+
+struct NestedUBO {
+    palette  : float4[3]    // offset 0,  ArrayStride 16, total 48
+    material : NMaterial    // offset 48 (aligned to 16), laid-out size 32
+    lights   : NLight[2]    // offset 80, ArrayStride 32, total 64
+}
+var @uniform @binding = 0 nubo : NestedUBO
+var @out @location = 0 nu_out : float4
+[fragment_shader(name="ubo_nested_spv"), marker(no_coverage)]
+def ubo_nested_frag {
+    let p = nubo.palette[0]                                 // array-of-vec4 element
+    let m = nubo.material.base_color * nubo.material.roughness  // nested-struct member
+    let l = nubo.lights[1].pos + nubo.lights[1].color       // array-of-struct member chain
+    nu_out = p + m + l
+}
+
+def public ubo_nested_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(ubo_nested_spv)
+    return <- w
+}
+
 // ===== Phase-4d combined image sampler fixture: a sampler2D global -> OpTypeImage +
 // OpTypeSampledImage in UniformConstant storage + DescriptorSet/Binding; texture(tex, uv) ->
 // OpLoad the sampled image + OpImageSampleImplicitLod (fragment-only, uses derivatives). =====
