@@ -3292,8 +3292,14 @@ class public CppAot : AstVisitor {
         if (!needTempSrc(expr)) {
             write(*ss, "{tabs()}{describeCppType(expr._type,DescribeConfig(skip_ref=true,cross_platform=cross_platform))} {mkaName(expr)};\n");
         }
-        if (!expr.makeFlags.initAllFields) {
+        if (!expr.makeFlags.initAllFields || expr.makeArrayOnHeap) {
             write(*ss, "{tabs()}das_zero({mkaName(expr)});\n");
+        }
+        if (expr.makeArrayOnHeap) {
+            // build the dynamic array<T> on the heap directly (mirrors interp SimNode_MakeArrayHeap):
+            // size it once, then the per-element writes below land straight into the heap buffer.
+            let elem_str = describeCppType(expr.recordType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+            write(*ss, "{tabs()}builtin_array_resize({mkaName(expr)},{length(expr.values)},sizeof({elem_str}),__context__,nullptr);\n");
         }
     }
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {

@@ -1244,6 +1244,8 @@ namespace das {
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,
+    // codegen
+        "no_heap_array_literals",       Type::tBool,
     // logging
         "log",                          Type::tBool,
         "log_optimization_passes",      Type::tBool,

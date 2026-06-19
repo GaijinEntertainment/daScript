@@ -75,6 +75,12 @@ Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the la
 | `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs unlocked struct elements |
 | `test02.das` | push vs push_clone — int and struct with string field (10K elements, pre-reserved) |
 
+## core/array_literal/
+
+| File | Description |
+|---|---|
+| `build.das` | array/table literal build cost — `[..]` / `array<T>(..)` / `{..}` built directly on the heap (no stack `T[N]` + memcpy), for ints, structs, and tables |
+
 ## core/array_lock/
 
 | File | Description |

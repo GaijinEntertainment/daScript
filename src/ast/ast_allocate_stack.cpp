@@ -806,7 +806,9 @@ namespace das {
                     logs << "\t" << cStackTop << "\t" << sz
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
-                applySetRefSp(expr, false, false, cStackTop, 0);
+                // heap array literal: slot holds the array<T> value (sizeof Array); element writes
+                // go into the heap buffer via cmres (set to arr.data by SimNode_MakeArrayHeap).
+                applySetRefSp(expr, false, expr->makeArrayOnHeap, cStackTop, 0);
                 expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
