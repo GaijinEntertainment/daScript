@@ -394,3 +394,31 @@ def render_sound_file(path : string) : array<float> {
     }
     return <- out
 }
+
+def sfx_conform(buf : array<float>; src_rate, dst_rate : int; duration, gain : float) : array<float> {
+    //! Resample `buf` from src_rate to dst_rate (linear), conform it to `duration` seconds
+    //! (truncate if longer, zero-pad if shorter) and scale by `gain`. This is what lets an
+    //! exported `.sfx` render function — which builds its sound at the engine's native rate
+    //! (44100) — drop into a host running at a different rate with the standard drum signature
+    //! `(duration, gain) : array<float>`.
+    let n = length(buf)
+    let want = max(int(duration * float(dst_rate)), 0)
+    var out : array<float>
+    out |> resize(want)
+    if (n == 0 || want == 0) {
+        return <- out
+    }
+    let ratio = float(src_rate) / float(dst_rate)
+    for (i in range(want)) {
+        let pos = float(i) * ratio
+        let i0 = int(pos)
+        if (i0 >= n) {
+            break   // past the source end — remaining samples stay zero (pad)
+        }
+        let frac = pos - float(i0)
+        let a = buf[i0]
+        let b = buf[min(i0 + 1, n - 1)]
+        out[i] = (a + (b - a) * frac) * gain
+    }
+    return <- out
+}
