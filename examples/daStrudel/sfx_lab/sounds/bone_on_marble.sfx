@@ -1,0 +1,30 @@
+{
+  "version":1,
+  "mimic_target":"",
+  "layers":[
+    {
+      "name":"marble",
+      "voice":{
+        "modal":{
+          "pitch":1950,
+          "spread":1.5,
+          "n_modes":4,
+          "ring":0.0900000036,
+          "brightness":0.620000005,
+          "damp_skew":0.699999988,
+          "transient":0.5,
+          "transient_rate":600,
+          "echo_amount":0.219999999,
+          "echo_delay":0.0399999991,
+          "duration":0.5
+        }
+      },
+      "gain":1,
+      "delay":0,
+      "enabled":true,
+      "solo":false,
+      "locked":false,
+      "link_source":-1
+    }
+  ]
+}
