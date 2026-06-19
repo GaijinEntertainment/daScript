@@ -3,23 +3,23 @@
   "mimic_target":"/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/tom_high.wav",
   "layers":[
     {
-      "name":"tom body",
+      "name":"body",
       "voice":{
         "modal":{
-          "pitch":148.654114,
-          "spread":1.47343743,
-          "n_modes":2,
-          "ring":0.138174832,
-          "brightness":0.400367856,
-          "damp_skew":0.721358359,
-          "transient":0.224994496,
-          "transient_rate":960.910095,
-          "echo_amount":0.12105263,
-          "echo_delay":0.0475104824,
-          "duration":0.476340771
+          "pitch":166.261337,
+          "spread":1.0286783,
+          "n_modes":3,
+          "ring":0.287641048,
+          "brightness":0.488727897,
+          "damp_skew":0.620039225,
+          "transient":0.510202348,
+          "transient_rate":473.02359,
+          "echo_amount":0.0670863986,
+          "echo_delay":0.0690432414,
+          "duration":0.691207528
         }
       },
-      "gain":1,
+      "gain":1.245,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -27,36 +27,23 @@
       "link_source":-1
     },
     {
-      "name":"tom sweep",
+      "name":"discover",
       "voice":{
-        "sfxr":{
-          "wave":"sine",
-          "sound_vol":0.466595024,
-          "env_attack":0.10902597,
-          "env_sustain":0.164522827,
-          "env_punch":0.214027062,
-          "env_decay":0.336656451,
-          "base_freq":0.101116963,
-          "freq_limit":0.0155186504,
-          "freq_ramp":-0.380612969,
-          "freq_dramp":0.0917669758,
-          "vib_strength":0.0734901056,
-          "vib_speed":0.0832275748,
-          "arp_mod":-0.191584021,
-          "arp_speed":0.0230952576,
-          "duty":0,
-          "duty_ramp":-0.137005568,
-          "repeat_speed":0,
-          "pha_offset":0.0343944356,
-          "pha_ramp":-0.219403714,
-          "lpf_freq":0.98551929,
-          "lpf_ramp":0.299706399,
-          "lpf_resonance":0.000446540769,
-          "hpf_freq":0.105311729,
-          "hpf_ramp":-0.0176825449
+        "modal":{
+          "pitch":263.996887,
+          "spread":1.47448325,
+          "n_modes":3,
+          "ring":0.0387636125,
+          "brightness":0.929430187,
+          "damp_skew":1.05616748,
+          "transient":0.107476987,
+          "transient_rate":431.608337,
+          "echo_amount":0.718000233,
+          "echo_delay":0.0937435552,
+          "duration":0.46656552
         }
       },
-      "gain":0.5,
+      "gain":0.224000007,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -67,12 +54,12 @@
   "post":{
     "filter":{
       "enabled":false,
-      "position":0.5
+      "position":0.493999988
     },
     "bandpass":{
-      "enabled":false,
-      "freq":1000,
-      "q":1
+      "enabled":true,
+      "freq":1343.83594,
+      "q":1.22111189
     },
     "drive":{
       "enabled":false,
@@ -100,11 +87,11 @@
       "wet":0.5
     },
     "phaser":{
-      "enabled":false,
-      "rate":1,
-      "depth":0.5,
-      "center":1000,
-      "sweep":2000
+      "enabled":true,
+      "rate":4.51627302,
+      "depth":0.825000882,
+      "center":2338.03076,
+      "sweep":1664.25281
     },
     "tremolo":{
       "enabled":false,
@@ -117,11 +104,12 @@
       "feedback":0.300000012
     },
     "reverb":{
-      "enabled":false,
-      "wet":0.300000012,
-      "decay":0.400000006,
-      "lp_start":12000,
-      "lp_end":2000
+      "enabled":true,
+      "wet":0.478659272,
+      "decay":0.929260015,
+      "lp_start":13351.2471,
+      "lp_end":2286.20142
     }
-  }
+  },
+  "master_gain":1.12
 }
