@@ -734,6 +734,16 @@ src/parser/ds2_lexer.cpp
 src/parser/lex2.yy.h
 )
 
+# Funnel the bison/flex generation through ONE custom target. libDaScript
+# AND libDaScriptDyn both list PARSER_GENERATED_SRC, so with MSBuild's per-
+# vcxproj parallelism each library independently triggers the custom commands
+# and they race on the shared output files (ds_parser.hpp / ds_lexer.cpp /
+# ds2_*) -- "Device or resource busy" from bison and C1083 "Permission
+# denied" from cl on the same file. A single parser_generated target both
+# libraries depend on serialises the generation once before either library
+# compiles, while the libraries themselves still compile in parallel.
+add_custom_target(parser_generated DEPENDS ${PARSER_GENERATED_SRC})
+
 SET(PARSER_SRC
 src/parser/ds_parser.ypp
 src/parser/ds_lexer.lpp
@@ -1169,6 +1179,16 @@ SETUP_LIBDASCRIPT(libDaScriptDyn_runtime ON ON LIBDASCRIPT_RUNTIME_SRC DAS_EXPOR
 
 SETUP_LIBDASCRIPT(libDaScript OFF OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
 SETUP_LIBDASCRIPT(libDaScriptDyn ON OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
+
+# Make both compiler libraries wait for the single parser_generated target so
+# the bison/flex custom commands run exactly once per build (see definition
+# above PARSER_GENERATED_SRC). Without this both vcxprojs race over the
+# shared ds_parser.hpp / ds_lexer.cpp / ds2_* outputs under MSBuild's
+# per-project parallelism, intermittently failing with "Device or resource
+# busy" (bison can't open the .hpp the other proc is writing) and C1083
+# "Permission denied" (cl can't open the .cpp bison's still writing).
+add_dependencies(libDaScript parser_generated)
+add_dependencies(libDaScriptDyn parser_generated)
 
 # Heap leak tracking: permanently enabled in RelWithDebInfo only.
 # DAS_FREE_LIST=0 forces the reuse cache off so every aligned allocation reaches
