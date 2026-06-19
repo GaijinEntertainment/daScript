@@ -82,6 +82,7 @@ let DLG_IMP_VOICE = 5
 var g_dialog_mode = DLG_NONE
 var g_seed = 0x1234567u
 var g_autoplay = true
+var g_match_loudness = true       // scale the mix's playback to the reference's RMS (fair A/B audition)
 var g_mix_dirty = true
 var g_lyr_dirty = true
 var g_play_pending = false       // autoplay the mix after the next rebuild (set by discrete actions)
@@ -149,11 +150,39 @@ def private play_buf_copy(buf : array<float>) {
     play_sound_from_pcm(SR, 1, tmp)
 }
 
+def private rms_of(buf : array<float>) : float {
+    if (empty(buf)) return 0.0
+    var acc = 0.0
+    for (s in buf) {
+        acc += s * s
+    }
+    return sqrt(acc / float(length(buf)))
+}
+
+// Playback gain so the mix matches the reference's RMS (energy). The mix is peak-normalized to
+// -1 dBFS at render, so it plays louder than the ref; this scales it to the ref's loudness for a
+// fair ear A/B. Audition-only — the fit stays level-invariant and the saved sound is untouched.
+def loudness_match_gain() : float {
+    if (!g_match_loudness || empty(g_ref) || empty(g_mix)) return 1.0
+    let mr = rms_of(g_mix)
+    return mr > 1.0e-6 ? clamp(rms_of(g_ref) / mr, 0.05, 4.0) : 1.0
+}
+
 def play_mix() {
     if (g_mix_dirty) {
         rebuild_mix()
     }
-    play_buf_copy(g_mix)
+    let g = loudness_match_gain()
+    if (g == 1.0) {
+        play_buf_copy(g_mix)
+        return
+    }
+    var tmp : array<float>
+    tmp := g_mix
+    for (s in tmp) {
+        s *= g
+    }
+    play_sound_from_pcm(SR, 1, tmp)
 }
 
 def play_layer(idx : int) {
@@ -1071,7 +1100,9 @@ def mix_header() {
     same_line(MIX_SL)
     if (g_have_fit) {
         text(FIT_TXT, (text = "fit {int(g_fit.overall * 100.0)}%   (timbre {int(g_fit.spectral * 100.0)}%  pitch {int(g_fit.pitch * 100.0)}%  texture {int(g_fit.texture * 100.0)}%  shape {int(g_fit.shape * 100.0)}%  attack {int(g_fit.attack * 100.0)}%)"))
-        text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)"))
+        let mdb = 20.0 * log(max(loudness_match_gain(), 1.0e-6)) * 0.43429448190325176
+        let mtxt = g_match_loudness ? "loudness-match {int(mdb)} dB" : "loudness-match off"
+        text(FIT_TXT2, (text = "ref: {int(g_ref_feat.centroid)}Hz / {int(g_ref_feat.decay_ms)}ms    mix: {int(g_mix_feat.centroid)}Hz / {int(g_mix_feat.decay_ms)}ms   (centroid / decay)    [{mtxt}]"))
     } else {
         text(FIT_TXT, (text = "fit: load a reference to compare"))
     }
@@ -1318,6 +1349,7 @@ def start_app() {
     g_started = true
     MB_AUTO.value = true
     g_autoplay = true
+    MB_MATCH.value = true
     REF_SHOW.value = true
     // seed a starter sound: the ball-on-table (thud + click), so the lab opens on a real multi-layer sound
     add_layer(modal_layer("table thud", ModalVoice(pitch = 170.0, spread = 2.4, n_modes = 2, ring = 0.05, brightness = 0.35, transient = 0.2, duration = 0.5)))
@@ -1393,9 +1425,11 @@ def update() {
                 MI_PLAY.value = false
             }
             checkbox(MB_AUTO, (text = "autoplay"))
+            checkbox(MB_MATCH, (text = "match reference loudness"))
         }
     }
     g_autoplay = MB_AUTO.value
+    g_match_loudness = MB_MATCH.value
 
     // keyboard: Cmd+Z undo, Cmd+Shift+Z redo (skip while a text field has focus)
     let io & = unsafe(GetIO())
