@@ -1307,6 +1307,50 @@ if (NOT ${DAS_TOOLS_DISABLED})
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
+    # cpp-mcp: standalone AOT C++-only MCP server (gated, OFF by default).
+    # Statically links libDaScript + the AOT-compiled cpp_main.das into one
+    # self-contained binary (no shared modules). The cpp tools still shell out
+    # to ast-grep / cl at runtime (environmental); the ast-grep rules YAML is
+    # read from the SDK tree via getDasRoot(), so the binary lands in bin/.
+    option(DAS_BUILD_CPP_MCP "Build the standalone AOT cpp-only MCP server (cpp-mcp)" OFF)
+    if(DAS_BUILD_CPP_MCP)
+        SET(CPP_MCP_AOT_GENERATED_SRC)
+        add_custom_target(cpp_mcp_dasAotStub)
+        DAS_AOT("utils/mcp/cpp_main.das" CPP_MCP_AOT_GENERATED_SRC cpp_mcp_dasAotStub daslang)
+        # DAS_AOT only tracks cpp_main.das + daslib/*.das as inputs; cpp_main's own
+        # require graph (protocol_core / registry_cpp / tools/*.das / utils/common)
+        # is invisible to it, so edits there would NOT regenerate the AOT C++.
+        # Append the graph as explicit deps of the generated output (clean builds
+        # are unaffected; this only fixes local incremental iteration).
+        file(GLOB_RECURSE CPP_MCP_DAS_DEPS CONFIGURE_DEPENDS
+            ${PROJECT_SOURCE_DIR}/utils/mcp/*.das
+            ${PROJECT_SOURCE_DIR}/utils/common/*.das)
+        add_custom_command(OUTPUT ${CPP_MCP_AOT_GENERATED_SRC} APPEND
+            DEPENDS ${CPP_MCP_DAS_DEPS})
+        add_executable(cpp-mcp
+            ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_mcp_main.cpp
+            ${CPP_MCP_AOT_GENERATED_SRC}
+        )
+        target_sources(cpp-mcp PRIVATE src/misc/alloc_tracker_overrides.cpp)
+        # cpp_main.das requires only daslib + builtin modules (jobque / json /
+        # fio / logger / strings), all of which live in libDaScript. It pulls NO
+        # external module (dasHV / SQLITE / GLFW / ...), so they are deliberately
+        # NOT linked -> a lean, dependency-light binary. For a cpp-mcp-only build,
+        # also pass -DDAS_HV_DISABLED=ON (and friends) so they are never built.
+        TARGET_LINK_LIBRARIES(cpp-mcp libDaScript ${SRC_LIBRARIES})
+        ADD_DEPENDENCIES(cpp-mcp libDaScript daslang cpp_mcp_dasAotStub)
+        target_include_directories(cpp-mcp PRIVATE ${NEED_MODULES_PATH})
+        SETUP_CPP11(cpp-mcp)
+        SETUP_BIN_RPATH(cpp-mcp)
+        SET_TARGET_PROPERTIES(cpp-mcp PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
+        # Strip the shipped binary (Linux/macOS); on MSVC symbols live in a side PDB.
+        if(NOT MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+            add_custom_command(TARGET cpp-mcp POST_BUILD
+                COMMAND ${CMAKE_STRIP} $<TARGET_FILE:cpp-mcp>
+                COMMENT "Stripping cpp-mcp")
+        endif()
+    endif()
+
     # daslang-live: live-reloading application host
     SET(DAS_LIVE_MAIN_SRC
         ${PROJECT_SOURCE_DIR}/utils/daslang-live/main.cpp

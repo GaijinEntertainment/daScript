@@ -1,6 +1,8 @@
 options gen2
 options rtti
 
+module registry_cpp
+
 require protocol_core public
 require tools/grep_usage public
 require tools/outline public
@@ -10,6 +12,7 @@ require tools/cpp_outline public
 require tools/cpp_goto_definition public
 require tools/cpp_compile_check public
 require tools/cpp_format_file public
+require tools/cpp_status public
 
 // The cpp/agnostic subset shared by main.das and cpp_main.das: ast-grep-backed
 // .das + .cpp search/outline plus the compile-DB-driven C++ build tools. None
@@ -137,4 +140,14 @@ def build_cpp_tools(var reg : array<ToolDef>) {
         required <- ["file"],
         arg_names <- ["file"],
         handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_cpp_format_file(arg1)))
+    reg |> emplace(ToolDef(
+        tool <- make_tool(
+            "cpp_status",
+            "Report which external dependencies the cpp/agnostic tools need (ast-grep, a compile_commands.json, clang-format, and the MSVC vcvars INCLUDE env) and whether each is present — so a freshly-installed bundle can self-diagnose why a tool is missing or failing. No compilation, no side effects.",
+            {
+                "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON instead of the text report")
+            },
+            []),
+        main_thread = true,
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_cpp_status(arg1 == "true")))
 }

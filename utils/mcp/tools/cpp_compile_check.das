@@ -1,5 +1,7 @@
 options gen2
 
+module cpp_compile_check
+
 require common public
 require daslib/json
 require daslib/json_boost

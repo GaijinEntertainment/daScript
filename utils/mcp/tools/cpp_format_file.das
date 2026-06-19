@@ -1,5 +1,7 @@
 options gen2
 
+module cpp_format_file
+
 require common public
 require daslib/json_boost
 

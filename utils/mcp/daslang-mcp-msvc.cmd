@@ -49,13 +49,26 @@ rem Prefer the single-config (Ninja) binary, fall back to the MSVC Release layou
 set "DASLANG=%MCPDIR%..\..\bin\daslang.exe"
 if not exist "%DASLANG%" set "DASLANG=%MCPDIR%..\..\bin\Release\daslang.exe"
 
-rem First arg selects the server script (main.das full / cpp_main.das cpp-only);
-rem any further args are forwarded to the server script.
+rem First arg selects the server. A *.exe selects a prebuilt server binary in
+rem bin/ (the AOT cpp-mcp) run directly; otherwise it's an interpreted .das
+rem script handed to daslang.exe. Defaults to main.das (the full server).
+rem Any further args are forwarded to the chosen server.
 set "MCPSCRIPT=%~1"
 if not defined MCPSCRIPT (
     "%DASLANG%" "%MCPDIR%main.das"
     exit /b %ERRORLEVEL%
 )
+rem Goto (not a parenthesized block) so MCPBIN's set + use are sequential
+rem statements -- this script has no EnableDelayedExpansion, so %MCPBIN%
+rem read inside an `if ( ... )` block would expand stale (pre-set).
+if /i "%MCPSCRIPT:~-4%"==".exe" goto runexe
 shift
 "%DASLANG%" "%MCPDIR%%MCPSCRIPT%" %1 %2 %3 %4 %5 %6 %7 %8
+exit /b %ERRORLEVEL%
+
+:runexe
+set "MCPBIN=%MCPDIR%..\..\bin\%MCPSCRIPT%"
+if not exist "%MCPBIN%" set "MCPBIN=%MCPDIR%..\..\bin\Release\%MCPSCRIPT%"
+shift
+"%MCPBIN%" %1 %2 %3 %4 %5 %6 %7 %8
 exit /b %ERRORLEVEL%
