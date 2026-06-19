@@ -366,6 +366,59 @@ struct SpecPeakHz {
     mag : float
 }
 
+struct SeedFeatures {
+    //! Reference features for analysis-driven layer seeding (start the optimizer CLOSE).
+    fundamental : float   //!< Hz, lowest strong partial (0 if no clear pitch)
+    spread      : float   //!< geometric partial ratio (inharmonicity), 1..2.6
+    n_modes     : int     //!< number of detected partials, 1..8
+    flatness    : float   //!< 0 tonal .. 1 noise (drives modal-vs-noise balance)
+    decay_ms    : float   //!< envelope decay (peak to -20 dB), ms
+    centroid    : float   //!< spectral centroid (brightness), Hz
+    crest       : float   //!< peak/RMS (attack sharpness)
+}
+
+// Extract seed features from a reference one-shot: fundamental + partial structure (top_peaks),
+// noisiness (mean_flatness), decay/centroid (analyze), attack sharpness (temporal_shape). The
+// app maps these onto a modal body + noise layer so the optimizer starts in the right basin.
+def public analyze_seed(buf : array<float>; rate : int) : SeedFeatures {
+    var sf = SeedFeatures()
+    if (empty(buf)) return sf
+    let f = analyze(buf, rate)
+    sf.flatness = mean_flatness(buf, rate)
+    sf.decay_ms = f.decay_ms
+    sf.centroid = f.centroid
+    sf.crest = temporal_shape(buf, rate).crest
+    sf.spread = 1.7
+    sf.n_modes = 3
+    var peaks <- top_peaks(buf, rate, 6)
+    if (!empty(peaks)) {
+        // fundamental = lowest-freq peak among the 3 strongest (avoids picking a loud high partial)
+        let top3 = min(3, length(peaks))
+        var fund = peaks[0].hz
+        for (i in range(top3)) {
+            if (peaks[i].hz < fund) {
+                fund = peaks[i].hz
+            }
+        }
+        sf.fundamental = fund
+        sf.n_modes = clamp(length(peaks), 1, 8)
+        peaks |> sort() $(a, b) => a.hz < b.hz
+        var logsum = 0.0
+        var cnt = 0
+        for (i in range(1, length(peaks))) {
+            if (peaks[i - 1].hz > 1.0) {
+                logsum += log(peaks[i].hz / peaks[i - 1].hz)
+                cnt++
+            }
+        }
+        if (cnt > 0) {
+            sf.spread = clamp(exp(logsum / float(cnt)), 1.0, 2.6)
+        }
+    }
+    delete peaks
+    return sf
+}
+
 // Top-K spectral peaks (local maxima above -34 dB rel max) from the onset-window FFT, strongest first.
 def public top_peaks(buf : array<float>; rate, k : int) : array<SpecPeakHz> {
     var out : array<SpecPeakHz>

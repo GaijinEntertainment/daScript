@@ -350,6 +350,20 @@ def load_sound(path : string; var doc : Sound) : bool {
     return sscan_json(text, doc)
 }
 
+def save_layer(path : string; lyr : Layer) : bool {
+    //! Write a single voice layer to a .voice (JSON) file — share/reuse one voice across sounds.
+    return fwrite(path, sprint_json(lyr, true))
+}
+
+def load_layer(path : string; var lyr : Layer) : bool {
+    //! Read a single voice layer from a .voice (JSON) file. Returns false on a missing/invalid file.
+    let text = fread(path)
+    if (empty(text)) {
+        return false
+    }
+    return sscan_json(text, lyr)
+}
+
 def sound_to_json(doc : Sound) : string {
     //! Serialize a sound to a JSON string (for in-memory snapshots, e.g. an undo stack).
     return sprint_json(doc, false)

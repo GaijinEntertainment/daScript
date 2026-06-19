@@ -77,6 +77,8 @@ let DLG_NONE = 0
 let DLG_REF = 1
 let DLG_SAVE = 2
 let DLG_OPEN = 3
+let DLG_EXP_VOICE = 4
+let DLG_IMP_VOICE = 5
 var g_dialog_mode = DLG_NONE
 var g_seed = 0x1234567u
 var g_autoplay = true
@@ -266,6 +268,22 @@ def do_save_sound(path : string) {
     g_sound_path = path
 }
 
+def do_export_voice(path : string) {
+    if (g_sel < 0 || g_sel >= length(g_layers)) return
+    save_layer(path, g_layers[g_sel])
+}
+
+def do_import_voice(path : string) {
+    var lyr = Layer()
+    if (!load_layer(path, lyr)) return
+    add_layer(lyr)            // selects it at the end
+    g_sel_loaded = -1
+    g_mix_dirty = true
+    g_lyr_dirty = true
+    g_edit_dirty = true       // one undoable step
+    recompute_fit()
+}
+
 def do_open_sound(path : string) {
     var doc = Sound()
     if (!load_sound(path, doc)) return
@@ -281,6 +299,53 @@ def do_open_sound(path : string) {
         load_reference(doc.mimic_target)
     }
     reset_history()
+}
+
+// Analysis-driven seeding: read the reference's fundamental / decay / noisiness / brightness and
+// build a modal body (+ a noise layer for noisy drums) starting CLOSE to the target, so the local
+// optimizer only has to polish instead of climbing from an arbitrary seed. Undoable (one step).
+def seed_from_ref() {
+    if (empty(g_ref)) {
+        g_opt_result = "load a reference first"
+        return
+    }
+    let sf = analyze_seed(g_ref, SR)
+    var mv = ModalVoice()
+    mv.pitch = sf.fundamental > 20.0 ? clamp(sf.fundamental, 20.0, 4000.0) : 200.0
+    mv.spread = clamp(sf.spread, 1.0, 2.6)
+    mv.n_modes = clamp(sf.n_modes, 1, 8)
+    mv.ring = clamp(sf.decay_ms / 1000.0 * 0.6, 0.005, 0.4)
+    mv.brightness = clamp(sf.flatness + 0.3, 0.1, 0.95)
+    mv.damp_skew = 0.7
+    mv.transient = clamp((sf.crest - 2.0) / 12.0, 0.1, 0.9)
+    mv.transient_rate = 800.0
+    mv.echo_delay = 0.04
+    mv.duration = clamp(sf.decay_ms / 1000.0 * 1.8, 0.05, 1.0)
+    var layers : array<Layer>
+    layers |> emplace(modal_layer("body", mv))
+    if (sf.flatness > 0.12) {                       // noisy drum -> add a noise layer (wires / wash)
+        var s = SfxrSound()
+        s.wave = SfxrWave.noise
+        s.base_freq = clamp(sf.centroid / 12000.0, 0.1, 0.9)
+        s.env_attack = 0.0
+        s.env_sustain = clamp(sf.decay_ms / 1000.0 * 0.1, 0.0, 0.3)
+        s.env_punch = 0.2
+        s.env_decay = clamp(sf.decay_ms / 1000.0 * 1.2, 0.02, 0.9)
+        s.hpf_freq = clamp(sf.centroid / 12000.0 * 0.6, 0.0, 0.7)
+        s.lpf_freq = 1.0
+        s.sound_vol = 0.6
+        var nl = sfxr_layer("noise", s)
+        nl.gain = clamp(sf.flatness * 1.3, 0.1, 0.9)
+        layers |> emplace(nl)
+    }
+    g_layers <- layers
+    g_sel = 0
+    g_sel_loaded = -1
+    g_mix_dirty = true
+    g_lyr_dirty = true
+    g_edit_dirty = true       // one undoable step (Cmd+Z restores the prior layers)
+    recompute_fit()
+    g_opt_result = "seeded: {int(mv.pitch)}Hz, {sf.flatness > 0.12 ? "body+noise" : "body"} (flat {int(sf.flatness * 100.0)}%)"
 }
 
 // ===== undo / redo =====
@@ -1014,6 +1079,10 @@ def mix_header() {
 
 // shared opt-button row (only meaningful once a reference is loaded)
 def opt_row() {
+    if (button(OPT_SEED_BTN, (text = "seed"))) {
+        seed_from_ref()       // analysis-seed the layers from the reference (start close)
+    }
+    same_line(OPT_SL0)
     if (button(OPT_VOICE_BTN, (text = "opt voice"))) {
         run_optimize(OPT_VOICE)
     }
@@ -1295,6 +1364,18 @@ def update() {
                 file_dialog_open(FileDialogConfig(title = "Save sound", start_dir = "",
                     filters <- file_filters("Sound (*.sfx)|sfx|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.sfx"))
             }
+            if (menu_item(MI_IMP_VOICE, (text = "Import voice..."))) {
+                MI_IMP_VOICE.value = false
+                g_dialog_mode = DLG_IMP_VOICE
+                file_dialog_open(FileDialogConfig(title = "Import voice", start_dir = "",
+                    filters <- file_filters("Voice (*.voice)|voice|All files|"), mode = FileDialogMode.open, max_selection = 0))
+            }
+            if (menu_item(MI_EXP_VOICE, (text = "Export selected voice..."))) {
+                MI_EXP_VOICE.value = false
+                g_dialog_mode = DLG_EXP_VOICE
+                file_dialog_open(FileDialogConfig(title = "Export voice", start_dir = "",
+                    filters <- file_filters("Voice (*.voice)|voice|All files|"), mode = FileDialogMode.save, max_selection = 1, default_name = "untitled.voice"))
+            }
         }
         menu(EDIT_MENU, "Edit", true) {
             if (menu_item(MI_UNDO, (text = "Undo  (Cmd+Z)"))) {
@@ -1364,6 +1445,10 @@ def update() {
             do_open_sound(picked)
         } elif (g_dialog_mode == DLG_SAVE) {
             do_save_sound(picked)
+        } elif (g_dialog_mode == DLG_EXP_VOICE) {
+            do_export_voice(picked)
+        } elif (g_dialog_mode == DLG_IMP_VOICE) {
+            do_import_voice(picked)
         }
         g_dialog_mode = DLG_NONE
     }
@@ -1625,6 +1710,35 @@ def sfx_save(input : JsonValue?) : JsonValue? {
     if (empty(path)) return JV("no path: open or save a sound first, or pass a path arg")
     do_save_sound(path)
     return JV("saved {path}")
+}
+
+[live_command(description = "SFX lab: analysis-seed the layers from the loaded reference (modal body + noise layer), then report fit.")]
+def sfx_seed(_input : JsonValue?) : JsonValue? {
+    seed_from_ref()
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
+}
+
+[live_command(description = "SFX lab: export the selected voice layer to a .voice file. Args: path")]
+def sfx_export_voice(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<LoadRefArgs>)
+    if (empty(args.path)) return JV("pass a path arg")
+    if (g_sel < 0 || g_sel >= length(g_layers)) return JV("no layer selected")
+    do_export_voice(args.path)
+    return JV("exported voice to {args.path}")
+}
+
+[live_command(description = "SFX lab: import a .voice file as a new layer, then report fit. Args: path")]
+def sfx_import_voice(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<LoadRefArgs>)
+    if (empty(args.path)) return JV("pass a path arg")
+    do_import_voice(args.path)
+    if (g_mix_dirty) {
+        rebuild_mix()
+    }
+    return make_report()
 }
 
 struct AddLayerArgs {

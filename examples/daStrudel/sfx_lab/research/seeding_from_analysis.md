@@ -1,5 +1,13 @@
 # Analysis → synth-param seeding (research distillation, 2026-06-18)
 
+> **IMPLEMENTED** (sfx_analysis `analyze_seed` + main.das `seed_from_ref`, the "seed" button +
+> `sfx_seed` live command). A pragmatic subset of the pipeline below: flatness gate (noise vs tonal),
+> lowest-strong-peak fundamental, geometric spread from partials, decay→ring, crest→transient, plus a
+> noise layer for noisy drums. Proven on the snare: seed lands the body at 129 Hz (matching the ref),
+> then optimize reaches a right-pitched noisy snare (pitch 0.82, texture 0.73) instead of drifting to a
+> cowbell. The decay/attack extraction is still coarse (shape/attack lag) — refine with EDR + per-band
+> decay (§3) when needed.
+
 Goal: from a recorded one-shot, extract params to SEED the layers CLOSE before the local fitter
 refines. (The "analysis" step we kept deferring — Boris's "fitter can't get you there from way
 off" is the trigger.) One STFT up front feeds almost everything. Maps onto our ModalVoice
