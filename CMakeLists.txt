@@ -147,7 +147,9 @@ find_package(Threads REQUIRED)
 FILE(GLOB DAS_AOT_DASLIB_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/daslib/*.das")
 
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
-    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS})
+    # DAS_AOT_EXTRA_DEPENDS lets a caller add inputs (e.g. the entry file's own
+    # require graph) that this macro can't discover; empty for normal callers.
+    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
     set(all_outputs "")
     # Per-batch arg buffer; chunked to keep each invocation under Windows'
     # 32K command-line limit when worktree paths are long.
@@ -1316,17 +1318,18 @@ if (NOT ${DAS_TOOLS_DISABLED})
     if(DAS_BUILD_CPP_MCP)
         SET(CPP_MCP_AOT_GENERATED_SRC)
         add_custom_target(cpp_mcp_dasAotStub)
-        DAS_AOT("utils/mcp/cpp_main.das" CPP_MCP_AOT_GENERATED_SRC cpp_mcp_dasAotStub daslang)
         # DAS_AOT only tracks cpp_main.das + daslib/*.das as inputs; cpp_main's own
         # require graph (protocol_core / registry_cpp / tools/*.das / utils/common)
         # is invisible to it, so edits there would NOT regenerate the AOT C++.
-        # Append the graph as explicit deps of the generated output (clean builds
-        # are unaffected; this only fixes local incremental iteration).
+        # Feed the graph in via DAS_AOT_EXTRA_DEPENDS BEFORE the DAS_AOT call so it
+        # lands in the generated command's DEPENDS list (clean builds unaffected;
+        # this only fixes local incremental iteration). Scoped: unset right after.
         file(GLOB_RECURSE CPP_MCP_DAS_DEPS CONFIGURE_DEPENDS
             ${PROJECT_SOURCE_DIR}/utils/mcp/*.das
             ${PROJECT_SOURCE_DIR}/utils/common/*.das)
-        add_custom_command(OUTPUT ${CPP_MCP_AOT_GENERATED_SRC} APPEND
-            DEPENDS ${CPP_MCP_DAS_DEPS})
+        set(DAS_AOT_EXTRA_DEPENDS ${CPP_MCP_DAS_DEPS})
+        DAS_AOT("utils/mcp/cpp_main.das" CPP_MCP_AOT_GENERATED_SRC cpp_mcp_dasAotStub daslang)
+        unset(DAS_AOT_EXTRA_DEPENDS)
         add_executable(cpp-mcp
             ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_mcp_main.cpp
             ${CPP_MCP_AOT_GENERATED_SRC}

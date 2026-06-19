@@ -67,8 +67,15 @@ shift
 exit /b %ERRORLEVEL%
 
 :runexe
-set "MCPBIN=%MCPDIR%..\..\bin\%MCPSCRIPT%"
-if not exist "%MCPBIN%" set "MCPBIN=%MCPDIR%..\..\bin\Release\%MCPSCRIPT%"
+rem Use the basename only (%~nx1) so a path-y arg can't corrupt the bin\ prefix
+rem (e.g. a full path would otherwise yield ...\bin\C:\foo\cpp-mcp.exe).
+set "MCPEXE=%~nx1"
+set "MCPBIN=%MCPDIR%..\..\bin\%MCPEXE%"
+if not exist "%MCPBIN%" set "MCPBIN=%MCPDIR%..\..\bin\Release\%MCPEXE%"
+if not exist "%MCPBIN%" (
+    echo cpp-mcp launcher: binary "%MCPEXE%" not found under "%MCPDIR%..\..\bin\" 1>&2
+    exit /b 1
+)
 shift
 "%MCPBIN%" %1 %2 %3 %4 %5 %6 %7 %8
 exit /b %ERRORLEVEL%

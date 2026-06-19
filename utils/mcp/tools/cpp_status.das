@@ -52,10 +52,11 @@ def do_cpp_status(as_json : bool) : string {
         w |> write("  das root:      {root}\n")
         if (!empty(sg)) {
             w |> write("  ast-grep:      {sg}\n")
-            w |> write("                 -> grep_usage / outline / cpp_grep_usage / cpp_find_symbol / cpp_outline / cpp_goto_definition ENABLED\n")
+            w |> write("                 -> C++ tools ENABLED: cpp_grep_usage / cpp_find_symbol / cpp_outline / cpp_goto_definition (the bundle ships their rule YAMLs)\n")
+            w |> write("                 -> .das tools (grep_usage / outline) ALSO need the tree-sitter-daslang grammar + an sgconfig.yml\n")
         } else {
             w |> write("  ast-grep:      NOT FOUND\n")
-            w |> write("                 -> those 6 tools are disabled; install ast-grep (sg) on PATH and restart\n")
+            w |> write("                 -> grep_usage / outline / cpp_grep_usage / cpp_find_symbol / cpp_outline / cpp_goto_definition disabled; install ast-grep (sg) on PATH and restart\n")
         }
         if (!empty(db)) {
             w |> write("  compile DB:    {db}\n")
