@@ -6,17 +6,17 @@
       "name":"kick body",
       "voice":{
         "modal":{
-          "pitch":85.1395493,
-          "spread":1.16202533,
+          "pitch":92.1900482,
+          "spread":1,
           "n_modes":1,
-          "ring":0.044301752,
-          "brightness":0.0042583351,
-          "damp_skew":0.545381963,
-          "transient":0.407892853,
-          "transient_rate":763.359558,
-          "echo_amount":0.232092321,
-          "echo_delay":0.0452096164,
-          "duration":0.587664843
+          "ring":0.104114562,
+          "brightness":0.000361729413,
+          "damp_skew":0.54129374,
+          "transient":0.305783898,
+          "transient_rate":746.619995,
+          "echo_amount":0.0845640004,
+          "echo_delay":0.0412666611,
+          "duration":0.62035507
         }
       },
       "gain":2,
@@ -31,32 +31,32 @@
       "voice":{
         "sfxr":{
           "wave":"noise",
-          "sound_vol":0.917164683,
-          "env_attack":0.179652393,
-          "env_sustain":0.0152267404,
-          "env_punch":0.197620019,
+          "sound_vol":0.812514186,
+          "env_attack":0.197296113,
+          "env_sustain":0,
+          "env_punch":0.0192162711,
           "env_decay":0,
-          "base_freq":0.397563159,
-          "freq_limit":0.106944039,
-          "freq_ramp":-0.366272539,
-          "freq_dramp":-0.115772367,
-          "vib_strength":0.00475952402,
-          "vib_speed":0.0375331454,
-          "arp_mod":0.464537442,
-          "arp_speed":0.0925831944,
-          "duty":0.651675045,
-          "duty_ramp":-0.287315458,
-          "repeat_speed":0.243864834,
-          "pha_offset":0.414235115,
-          "pha_ramp":-0.640736461,
-          "lpf_freq":0,
-          "lpf_ramp":0.141491652,
-          "lpf_resonance":0,
-          "hpf_freq":0.0859197602,
-          "hpf_ramp":0.598021865
+          "base_freq":0.191142574,
+          "freq_limit":0.00877088308,
+          "freq_ramp":-0.693783641,
+          "freq_dramp":0.162006259,
+          "vib_strength":0.151525527,
+          "vib_speed":0.278496772,
+          "arp_mod":1,
+          "arp_speed":0.179295346,
+          "duty":0.919139266,
+          "duty_ramp":0.0121489465,
+          "repeat_speed":0.160070211,
+          "pha_offset":0.244461834,
+          "pha_ramp":-0.232624471,
+          "lpf_freq":0.400801331,
+          "lpf_ramp":0.587500036,
+          "lpf_resonance":0.272888631,
+          "hpf_freq":0.0343942344,
+          "hpf_ramp":0.894929826
         }
       },
-      "gain":0.122000001,
+      "gain":0.377999991,
       "delay":0,
       "enabled":true,
       "solo":false,
@@ -118,10 +118,11 @@
     },
     "reverb":{
       "enabled":true,
-      "wet":0.483727217,
-      "decay":1.97176385,
-      "lp_start":13411.335,
-      "lp_end":2619.02197
+      "wet":0.411442608,
+      "decay":1.88507783,
+      "lp_start":10776.8916,
+      "lp_end":1141.27722
     }
-  }
+  },
+  "master_gain":0.716628015
 }
