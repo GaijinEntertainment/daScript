@@ -376,11 +376,13 @@ def seed_from_ref() {
         layers |> emplace(nl)
     }
     g_layers <- layers
+    g_post = PostChain()      // fresh estimate: start with a clean post chain (don't inherit the previous drum's effects)
+    g_post_reload = true
     g_sel = 0
     g_sel_loaded = -1
     g_mix_dirty = true
     g_lyr_dirty = true
-    g_edit_dirty = true       // one undoable step (Cmd+Z restores the prior layers)
+    g_edit_dirty = true       // one undoable step (Cmd+Z restores the prior layers + post)
     recompute_fit()
     g_opt_result = "seeded: {int(mv.pitch)}Hz, {sf.flatness > 0.12 ? "body+noise" : "body"} (flat {int(sf.flatness * 100.0)}%)"
 }
