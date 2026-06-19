@@ -46,6 +46,7 @@ def main {
     emit_golden(dir, "point_coord", point_coord_words())
     emit_golden(dir, "draw_id", draw_id_words())
     emit_golden(dir, "nuext", nuext_words())
+    emit_golden(dir, "darr", darr_words())
     emit_golden(dir, "vindex", vindex_words())
     emit_golden(dir, "raster_math", raster_math_words())
     emit_golden(dir, "catri", catri_words())

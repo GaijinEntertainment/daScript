@@ -47,6 +47,7 @@ def test_opcode_census(t : T?) {
         add_set(present, point_coord_words())
         add_set(present, draw_id_words())
         add_set(present, nuext_words())
+        add_set(present, darr_words())
         add_set(present, vindex_words())
         add_set(present, raster_math_words())
         add_set(present, catri_words())

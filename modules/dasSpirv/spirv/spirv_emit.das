@@ -37,7 +37,9 @@ struct GlobalInfo {
     is_separate_image : bool        // a standalone sampled image (texture2D, OpTypeImage); combined at the call via OpSampledImage
     is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
     is_subpass_input : bool         // a subpass-input attachment (UniformConstant OpTypeImage Dim=SubpassData); used via subpassLoad
-    elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type)
+    is_sampler_array : bool         // a fixed-count descriptor array of combined image samplers (sampler2D[N], etc.) -- UniformConstant OpTypeArray of OpTypeSampledImage; accessed via samplers[idx] -> OpAccessChain
+    arr_count  : int                // descriptor-array element count (when is_sampler_array; > 0); 0 for non-array
+    elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type) OR descriptor-array element type-id (sampled-image / image / sampler)
     is_constant : bool              // a module-scope `let X = <const>` folded to an OpConstant; references resolve to const_id directly (no OpVariable / OpLoad)
     const_id   : uint               // the OpConstant result-id (when is_constant)
 }
@@ -64,6 +66,8 @@ struct EmitCtx {
     input_attachment_cap : bool                 // OpCapability InputAttachment already emitted (subpassLoad)
     draw_parameters_cap : bool                  // OpCapability DrawParameters already emitted (gl_DrawID)
     descriptor_indexing_cap : bool              // OpCapability ShaderNonUniform + OpExtension "SPV_EXT_descriptor_indexing" already emitted (nonuniformEXT, descriptor arrays)
+    sampled_image_nu_cap : bool                 // OpCapability SampledImageArrayNonUniformIndexing already emitted (NonUniform-indexed sampler descriptor array)
+    nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
@@ -121,6 +125,7 @@ def finalize(var c : EmitCtx) {
     }
     delete c.user_order
     delete c.call_temps
+    delete c.nonuniform_ids
 }
 
 // ===== builtin name -> SpvBuiltIn + storage class + the stage it's legal in =====
@@ -414,6 +419,50 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = storage, value_type = vt, is_ssbo = false))
         ctx.interface_ids |> push(vid)
         return
+    }
+    // descriptor array of combined image samplers (sampler2D[N], samplerCube[N], etc.) -- the
+    // VK_EXT_descriptor_indexing surface that lets one shader index a pool of resources by a
+    // per-invocation value. Lowers to UniformConstant OpTypeArray of OpTypeSampledImage, sampled via
+    // texture(arr[i], uv) -> OpAccessChain + OpLoad + OpImageSample*. PR-C scope is fixed-count only;
+    // runtime-sized arrays (sampler2D[]) need RuntimeDescriptorArray + variable-descriptor-count
+    // binding plumbing and ship in a follow-up. Other resource-array flavours (image2D[N], texture2D
+    // [N], sampler[N], subpassInput[N]) likewise follow.
+    if (v._type != null && v._type.baseType == Type.tFixedArray && v._type.firstType != null) {
+        let esi = sampler_info(v._type.firstType)
+        if (esi.ok) {
+            // post-0.6.3 tFixedArray is structural: one node per dim, fixedDim is THIS level's count.
+            // Multi-dim sampler arrays are not a Vulkan thing (descriptors are 1-D), so reject any
+            // outer fixed-array whose element is itself a fixed-array.
+            if (v._type.firstType.baseType == Type.tFixedArray) {
+                errors |> push("sampler descriptor array '{vname}' must be single-dimensional; got nested fixed-arrays")
+                return
+            }
+            if (v._type.fixedDim <= 0) {
+                errors |> push("sampler descriptor array '{vname}' must have positive count (got {v._type.fixedDim})")
+                return
+            }
+            let n = v._type.fixedDim
+            let img = type_image(m, type_float(m, 32u), esi.dim, esi.arrayed, 1u, SpvImageFormat.Unknown, esi.depth)
+            let simg = type_sampled_image(m, img)
+            let arr = type_array(m, simg, n)
+            let pt = type_pointer(m, SpvStorageClass.UniformConstant, arr)
+            let vid = alloc_id(m)
+            emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+            let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+            let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+            if (set < 0 || binding < 0) {
+                errors |> push("sampler descriptor array '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+                return
+            }
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+            ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant,
+                value_type = arr, is_sampler_array = true, arr_count = n, elem_type = simg))
+            let kind = esi.depth != 0u ? SpirvDescriptorKind.comparison_sampler : SpirvDescriptorKind.combined_image_sampler
+            reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+                kind = kind, count = n, stages = stage_flag(stage)))
+            return
+        }
     }
     // combined image sampler: a global of an opaque sampler type (sampler2D) -> UniformConstant
     // OpTypeSampledImage + DescriptorSet/Binding. Used only via texture(); not in the entry interface.
@@ -875,6 +924,16 @@ def private ensure_descriptor_indexing(var m : SpirvModule; var ctx : EmitCtx) {
     ctx.descriptor_indexing_cap = true
 }
 
+// A NonUniform-indexed sampler descriptor array additionally requires the per-resource-type
+// capability. SampledImageArrayNonUniformIndexing covers combined image samplers (the sampler2D[N]
+// surface PR-C ships). Other descriptor-array flavours (storage images, SSBOs, UBOs, input
+// attachments) carry their own per-resource caps -- they will land alongside their array surface.
+def private ensure_sampled_image_array_nonuniform(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.sampled_image_nu_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.SampledImageArrayNonUniformIndexing))
+    ctx.sampled_image_nu_cap = true
+}
+
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
 // variant by operand class; the rest are float-only. Operand class comes from arg 0 (vectors
 // classify by lane kind, so length/normalize/cross/etc. read as float-class). ok=false => not a
@@ -1249,6 +1308,67 @@ class SpirvEmit : AstVisitor {
         errs |> push("internal: no rvalue available for {e.__rtti}")
         return 0u
     }
+    // Resolve a sampler/sampler-array argument to a loaded sampled-image SSA id. Handles BOTH
+    // the scalar form `texture(my_sampler, uv)` (gi.is_sampler) AND the descriptor-array form
+    // `texture(my_arr[idx], uv)` (gi.is_sampler_array): emits OpAccessChain + OpLoad and cascades
+    // the NonUniform decoration when the index value carries it (PR-C bindless rail). Returns
+    // `sg_type` resolved to the ELEMENT sampler type so downstream sampler_info(sg_type) gets the
+    // right Dim / Arrayed / Depth -- the caller does not need to know array vs scalar.
+    def resolve_sampler_arg(arg : ExpressionPtr; intrinsic_name : string) : tuple<sg : Variable const?; sg_type : TypeDecl?; simg : uint; ok : bool> {
+        var bm & = unsafe(*m)
+        let direct = global_var_of(arg)
+        if (direct != null) {
+            let gi = ctx.globals?[intptr(direct)] ?? GlobalInfo()
+            if (gi.is_sampler) {
+                let simg_id = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg_id, gi.var_id)
+                return (sg = direct, sg_type = direct._type, simg = simg_id, ok = true)
+            }
+            if (gi.is_sampler_array) {
+                errs |> push("{intrinsic_name}: '{direct.name}' is a descriptor array; index into it with [idx]")
+                return (sg = null, sg_type = null, simg = 0u, ok = false)
+            }
+            errs |> push("{intrinsic_name}: '{direct.name}' is not a sampler")
+            return (sg = null, sg_type = null, simg = 0u, ok = false)
+        }
+        let at = arg ?as ExprAt
+        if (at == null) {
+            errs |> push("{intrinsic_name}: first argument must be a sampler global or a descriptor-array element (samplers[idx])")
+            return (sg = null, sg_type = null, simg = 0u, ok = false)
+        }
+        let arr_g = global_var_of(at.subexpr)
+        if (arr_g == null) {
+            errs |> push("{intrinsic_name}: descriptor-array index must target a sampler-array global")
+            return (sg = null, sg_type = null, simg = 0u, ok = false)
+        }
+        let gi = ctx.globals?[intptr(arr_g)] ?? GlobalInfo()
+        if (!gi.is_sampler_array) {
+            errs |> push("{intrinsic_name}: '{arr_g.name}' is not a sampler descriptor array")
+            return (sg = null, sg_type = null, simg = 0u, ok = false)
+        }
+        let idx = value_of(at.index)
+        if (idx == 0u) return (sg = null, sg_type = null, simg = 0u, ok = false)
+        let elem_ptr_t = type_pointer(bm, SpvStorageClass.UniformConstant, gi.elem_type)
+        let elem_ptr = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.AccessChain, elem_ptr_t, elem_ptr, gi.var_id, idx)
+        // NonUniform cascade: NonUniform on the index propagates to the access-chain pointer AND
+        // the loaded sampler value. The per-resource SampledImageArrayNonUniformIndexing cap rides
+        // along; the base ShaderNonUniform cap + SPV_EXT_descriptor_indexing extension already
+        // arrived with the nonuniformEXT marker (PR-B).
+        let idx_nu = ctx.nonuniform_ids |> key_exists(idx)
+        if (idx_nu) {
+            ensure_sampled_image_array_nonuniform(bm, *ctx)
+            emit(bm, SEC_DECOR, SpvOp.Decorate, elem_ptr, uint(SpvDecoration.NonUniform))
+            ctx.nonuniform_ids |> insert(elem_ptr)
+        }
+        let simg_id = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, gi.elem_type, simg_id, elem_ptr)
+        if (idx_nu) {
+            emit(bm, SEC_DECOR, SpvOp.Decorate, simg_id, uint(SpvDecoration.NonUniform))
+            ctx.nonuniform_ids |> insert(simg_id)
+        }
+        return (sg = arr_g, sg_type = arr_g._type.firstType, simg = simg_id, ok = true)
+    }
     def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
         let k = intptr(e)
         if (key_exists(e2ptr, k)) return (id = e2ptr?[k] ?? 0u, pty = e2pty?[k] ?? 0u)
@@ -1440,8 +1560,17 @@ class SpirvEmit : AstVisitor {
             e2pty[k] = pointee
             return expr
         }
+        // descriptor array of samplers (sampler2D[N], etc.): the ExprAt is read STRUCTURALLY by the
+        // texture/textureLod/textureCompare/textureSize/texelFetch handler (resolve_sampler_arg),
+        // which emits the OpAccessChain + OpLoad and cascades NonUniform when warranted. Skip
+        // emission here -- leaving no e2id/e2ptr entry is fine because the call-site walks the AST
+        // directly; any other consumer (which doesn't exist for an opaque sampler value) would
+        // surface a clean "no rvalue available" fail-closed.
+        if (gi.is_sampler_array) {
+            return expr
+        }
         if (!gi.is_ssbo) {
-            errs |> push("only ssbo or @workgroup array indexing is supported for now")
+            errs |> push("only ssbo, @workgroup, or sampler descriptor-array indexing is supported for now")
             return expr
         }
         let idx = value_of(expr.index)
@@ -1875,9 +2004,9 @@ class SpirvEmit : AstVisitor {
         // nonuniformEXT(x): the VK_EXT_descriptor_indexing marker. Emits OpCopyObject to give the
         // value a fresh result id, then OpDecorate <new_id> NonUniform so the marker scopes to this
         // use only (decorating the input id would leak NonUniform onto every other consumer of the
-        // same SSA value). The actual access-chain into a descriptor array reads the marked id and
-        // inherits NonUniform via SPIR-V's propagation rules -- the indexing path is PR-C's slice;
-        // here we just prove the marker + cap + extension fire correctly.
+        // same SSA value). The marked id is recorded in ctx.nonuniform_ids so the descriptor-array
+        // access path (texture(arr[i], uv)) can detect the marker on its index value and cascade
+        // the NonUniform decoration onto the access-chain pointer + the loaded sampler.
         if (name == "nonuniformEXT") {
             if (length(expr.arguments) != 1) {
                 errs |> push("nonuniformEXT expects 1 argument")
@@ -1890,6 +2019,7 @@ class SpirvEmit : AstVisitor {
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.CopyObject, rt, res, v)
             emit(bm, SEC_DECOR, SpvOp.Decorate, res, uint(SpvDecoration.NonUniform))
+            ctx.nonuniform_ids |> insert(res)
             e2id[k] = res
             return expr
         }
@@ -1921,25 +2051,15 @@ class SpirvEmit : AstVisitor {
                 errs |> push("textureSize expects (sampler, lod)")
                 return expr
             }
-            let sg = global_var_of(expr.arguments[0])
-            if (sg == null) {
-                errs |> push("textureSize: first argument must be a sampler global")
-                return expr
-            }
-            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-            if (!gi.is_sampler) {
-                errs |> push("textureSize: '{sg.name}' is not a sampler")
-                return expr
-            }
+            let rs = resolve_sampler_arg(expr.arguments[0], "textureSize")
+            if (!rs.ok) return expr
             ensure_image_query(bm, *ctx)
-            let simg = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
-            let si = sampler_info(sg._type)
+            let si = sampler_info(rs.sg_type)
             // reconstruct the SAME image type classify_global built for this sampler so OpImage's
             // result type matches the sampled image's image type -- depth included (type_image dedups on it)
             let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
+            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, rs.simg)
             let lod = value_of(expr.arguments[1])
             if (lod == 0u) return expr
             let rt = emit_type(bm, expr._type)
@@ -1961,30 +2081,26 @@ class SpirvEmit : AstVisitor {
                 errs |> push("textureCompare: implicit-LOD depth-compare sampling is only valid in a fragment shader")
                 return expr
             }
-            let sg = global_var_of(expr.arguments[0])
-            if (sg == null) {
-                errs |> push("textureCompare: first argument must be a sampler2DShadow global")
+            let rs = resolve_sampler_arg(expr.arguments[0], "textureCompare")
+            if (!rs.ok) return expr
+            if (sampler_info(rs.sg_type).depth == 0u) {
+                errs |> push("textureCompare: '{rs.sg.name}' is not a sampler2DShadow (depth-compare sampler)")
                 return expr
             }
-            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-            if (!gi.is_sampler || sampler_info(sg._type).depth == 0u) {
-                errs |> push("textureCompare: '{sg.name}' is not a sampler2DShadow (depth-compare sampler)")
-                return expr
-            }
-            let simg = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
             let uv = value_of(expr.arguments[1])
             let dref = value_of(expr.arguments[2])
             if (uv == 0u || dref == 0u) return expr
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
-            var ops <- [rt, res, simg, uv, dref]
+            var ops <- [rt, res, rs.simg, uv, dref]
             emit_n(bm, SEC_FUNCS, SpvOp.ImageSampleDrefImplicitLod, ops)
             delete ops
             e2id[k] = res
             return expr
         }
-        // texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod
+        // texture(sampler, uv): OpLoad the sampled image + OpImageSampleImplicitLod. Descriptor-array
+        // form texture(arr[idx], uv) goes through resolve_sampler_arg, which emits the OpAccessChain +
+        // OpLoad and cascades NonUniform when the index carries it (PR-C bindless rail).
         if (name == "texture") {
             if (length(expr.arguments) != 2) {
                 errs |> push("texture expects (sampler, uv)")
@@ -1994,23 +2110,13 @@ class SpirvEmit : AstVisitor {
                 errs |> push("texture() implicit-LOD sampling is only valid in a fragment shader")
                 return expr
             }
-            let sg = global_var_of(expr.arguments[0])
-            if (sg == null) {
-                errs |> push("texture: first argument must be a sampler global")
-                return expr
-            }
-            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-            if (!gi.is_sampler) {
-                errs |> push("texture: '{sg.name}' is not a sampler")
-                return expr
-            }
-            let simg = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let rs = resolve_sampler_arg(expr.arguments[0], "texture")
+            if (!rs.ok) return expr
             let uv = value_of(expr.arguments[1])
             if (uv == 0u) return expr
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, simg, uv)
+            emit(bm, SEC_FUNCS, SpvOp.ImageSampleImplicitLod, rt, res, rs.simg, uv)
             e2id[k] = res
             return expr
         }
@@ -2021,24 +2127,14 @@ class SpirvEmit : AstVisitor {
                 errs |> push("textureLod expects (sampler, uv, lod)")
                 return expr
             }
-            let sg = global_var_of(expr.arguments[0])
-            if (sg == null) {
-                errs |> push("textureLod: first argument must be a sampler global")
-                return expr
-            }
-            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-            if (!gi.is_sampler) {
-                errs |> push("textureLod: '{sg.name}' is not a sampler")
-                return expr
-            }
-            let simg = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let rs = resolve_sampler_arg(expr.arguments[0], "textureLod")
+            if (!rs.ok) return expr
             let uv = value_of(expr.arguments[1])
             let lod = value_of(expr.arguments[2])
             if (uv == 0u || lod == 0u) return expr
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
-            var ops <- [rt, res, simg, uv, uint(SpvImageOperands.Lod), lod]
+            var ops <- [rt, res, rs.simg, uv, uint(SpvImageOperands.Lod), lod]
             emit_n(bm, SEC_FUNCS, SpvOp.ImageSampleExplicitLod, ops)
             delete ops
             e2id[k] = res
@@ -2051,25 +2147,15 @@ class SpirvEmit : AstVisitor {
                 errs |> push("texelFetch expects (sampler, coord, lod)")
                 return expr
             }
-            let sg = global_var_of(expr.arguments[0])
-            if (sg == null) {
-                errs |> push("texelFetch: first argument must be a sampler global")
-                return expr
-            }
-            let gi = ctx.globals?[intptr(sg)] ?? GlobalInfo()
-            if (!gi.is_sampler) {
-                errs |> push("texelFetch: '{sg.name}' is not a sampler")
-                return expr
-            }
-            let simg = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, gi.value_type, simg, gi.var_id)
+            let rs = resolve_sampler_arg(expr.arguments[0], "texelFetch")
+            if (!rs.ok) return expr
             // extract the underlying image (same dedup key classify_global used for the sampler)
-            let si = sampler_info(sg._type)
+            let si = sampler_info(rs.sg_type)
             // reconstruct the SAME image type classify_global built for this sampler so OpImage's
             // result type matches the sampled image's image type -- depth included (type_image dedups on it)
             let img_type = type_image(bm, type_float(bm, 32u), si.dim, si.arrayed, 1u, SpvImageFormat.Unknown, si.depth)
             let img = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, simg)
+            emit(bm, SEC_FUNCS, SpvOp.Image, img_type, img, rs.simg)
             let coord = value_of(expr.arguments[1])
             let lod = value_of(expr.arguments[2])
             if (coord == 0u || lod == 0u) return expr
