@@ -440,6 +440,7 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_15_midi_files.rst
    tutorials/daStrudel_16_live_reloading.rst
    tutorials/daStrudel_17_hrtf_position.rst
+   tutorials/daStrudel_18_sfx_lab.rst
 
 .. _tutorials_jsonrpc:
 
