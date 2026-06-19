@@ -1139,6 +1139,7 @@ def opt_row() {
     }
     same_line(OPT_SL4)
     OPT_ITERS.bounds = (4, 80)
+    SetNextItemWidth(120.0f)   // compact, so the "iters" label isn't pushed off the panel edge
     slider_int(OPT_ITERS, (text = "iters"))
     if (!empty(g_opt_result)) {
         text(OPT_RESULT, (text = g_opt_result))
