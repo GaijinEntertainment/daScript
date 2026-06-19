@@ -2507,7 +2507,7 @@ def test_cpp_status(t : T?) {
     t |> run("text report names each diagnosed dependency") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_status(false), text, is_error)
+        parse_result(do_cpp_status("", false), text, is_error)
         t |> success(!is_error, "status is not an error -- text={text}")
         t |> success(find(text, "cpp-mcp server status") >= 0, "has report header -- text={text}")
         t |> success(find(text, "ast-grep") >= 0, "reports ast-grep -- text={text}")
@@ -2517,10 +2517,17 @@ def test_cpp_status(t : T?) {
     t |> run("json mode returns structured fields") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_status(true), text, is_error)
+        parse_result(do_cpp_status("", true), text, is_error)
         t |> success(!is_error, "json status is not an error -- text={text}")
         t |> success(find(text, "das_root") >= 0, "json has das_root -- text={text}")
         t |> success(find(text, "ast_grep_available") >= 0, "json has ast_grep_available -- text={text}")
+    }
+    t |> run("explicit build_dir is honored for the compile-DB probe") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_status("build-ninja", true), text, is_error)
+        t |> success(!is_error, "build_dir status is not an error -- text={text}")
+        t |> success(find(text, "compile_db") >= 0, "json reports compile_db field -- text={text}")
     }
 }
 

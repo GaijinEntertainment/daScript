@@ -145,10 +145,11 @@ def build_cpp_tools(var reg : array<ToolDef>) {
             "cpp_status",
             "Report which external dependencies the cpp/agnostic tools need (ast-grep, a compile_commands.json, clang-format, and the MSVC vcvars INCLUDE env) and whether each is present — so a freshly-installed bundle can self-diagnose why a tool is missing or failing. No compilation, no side effects.",
             {
+                "build_dir" => PropertySchema(_type = "string", description = "Build directory (or a path to compile_commands.json) to check. Empty -> probe the server root's build/, build-ninja/, build*/. Pass your project's build dir when running cpp-mcp as a standalone bundle against an external project, or the compile DB check reports the server root, not your project."),
                 "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON instead of the text report")
             },
             []),
-        arg_names <- ["json"],
+        arg_names <- ["build_dir", "json"],
         main_thread = true,
-        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_cpp_status(arg1 == "true")))
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_cpp_status(arg1, arg2 == "true")))
 }

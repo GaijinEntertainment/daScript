@@ -63,7 +63,9 @@ bundled `utils/` and `daslib/`** (or pass `--root <bundle-dir>`).
    ```
 
 3. Restart your MCP client and call **`cpp_status`** — it reports exactly which
-   dependencies are present and which tools that enables.
+   dependencies are present and which tools that enables. When checking the
+   compile DB for an external project, pass `build_dir` (your project's build
+   directory); without it, `cpp_status` probes the bundle root, not your project.
 
 ## Tools
 
