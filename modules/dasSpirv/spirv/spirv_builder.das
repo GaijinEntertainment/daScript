@@ -28,11 +28,11 @@ struct public SpirvModule {
     sections   : array<array<uint>>      // one word-buffer per SEC_*
     type_pool  : table<string; uint>     // dedup key -> type result-id (Phase 1+)
     const_pool : table<string; uint>     // dedup key -> constant result-id (Phase 1+)
+    version    : uint                    // SPIR-V version word for the header (default 1.3; bumped to 1.4 for mesh/task)
 }
 
 def public make_module() : SpirvModule {
-    var m : SpirvModule
-    m.next_id = 1u
+    var m = SpirvModule(next_id = 1u, version = SPV_VERSION_1_3)
     resize(m.sections, SECTION_COUNT)
     return <- m
 }
@@ -459,7 +459,7 @@ def public const_float(var m : SpirvModule; v : float) : uint {
 // ===== finalize: header (5 words) ++ sections in layout order =====
 def public module_words(m : SpirvModule) : array<uint> {
     // header: magic, version, generator, id-bound (all result-ids < next_id), schema (0)
-    var out <- [SPV_MAGIC, SPV_VERSION_1_3, SPV_GENERATOR_MAGIC, m.next_id, 0u]
+    var out <- [SPV_MAGIC, m.version, SPV_GENERATOR_MAGIC, m.next_id, 0u]
     for (s in m.sections) {
         out |> push_from(s)
     }

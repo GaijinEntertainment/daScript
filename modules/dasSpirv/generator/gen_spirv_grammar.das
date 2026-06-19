@@ -116,6 +116,7 @@ def main {
         w |> write("let public SPV_MAGIC = {magic}u\n")
         w |> write("let public SPV_VERSION_1_0 = 0x00010000u\n")
         w |> write("let public SPV_VERSION_1_3 = 0x00010300u\n")
+        w |> write("let public SPV_VERSION_1_4 = 0x00010400u\n")
         w |> write("let public SPV_VERSION_1_6 = 0x00010600u\n")
         // dasSpirv generator magic (0 = unregistered/unknown; legal per the SPIR-V spec).
         w |> write("let public SPV_GENERATOR_MAGIC = 0u\n\n")

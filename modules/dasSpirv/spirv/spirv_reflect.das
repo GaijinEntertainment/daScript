@@ -29,6 +29,8 @@ bitfield SpirvStageFlags {
     vertex      //!< used in the vertex stage
     fragment    //!< used in the fragment stage
     compute     //!< used in the compute stage
+    mesh        //!< used in the mesh stage (VK_EXT_mesh_shader)
+    task        //!< used in the task / amplification stage (VK_EXT_mesh_shader)
 }
 
 //! One descriptor binding (a UBO / SSBO / combined image sampler) at a (set, binding) slot.
@@ -56,12 +58,12 @@ struct SpirvReflection {
     push_constants : array<SpirvPushConstantRange>  //!< push-constant ranges
 }
 
-// 'RFL4' — wire-format magic + version. Bump on any layout OR descriptor-kind change to encode/
+// 'RFL5' — wire-format magic + version. Bump on any layout OR descriptor-kind change to encode/
 // decode_reflection, so an older consumer rejects a newer stream loudly instead of mis-mapping an
 // unknown SpirvDescriptorKind (kind_from_int falls back to uniform_buffer). RFL2 = Phase 7
 // (storage_image / sampled_image / sampler); RFL3 = Phase 10.4 (comparison_sampler);
-// RFL4 = input_attachment (subpassInput, this commit).
-let REFLECTION_MAGIC = 0x52464C34u
+// RFL4 = input_attachment (subpassInput); RFL5 = mesh / task stage bits (this commit).
+let REFLECTION_MAGIC = 0x52464C35u
 
 def finalize(var r : SpirvReflection) {
     delete r.bindings

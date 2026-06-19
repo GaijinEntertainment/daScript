@@ -156,3 +156,19 @@ class SpirvVertexShader : SpirvShader {
 class SpirvFragmentShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.Fragment
 }
+
+// [mesh_shader] / [task_shader] (VK_EXT_mesh_shader). PR-D scope is the scaffolding — execution model
+// + capabilities + execution modes + SetMeshOutputsEXT / EmitMeshTasksEXT prologue intrinsics. The
+// per-vertex / per-primitive output array surface (gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT,
+// ...) lands in PR-E together with the array-of-builtin classifier. PR-D hardcodes the OutputVertices
+// + OutputPrimitivesEXT counts at 64 each and topology to triangles; PR-E exposes them as annotation
+// args.
+[function_macro(name="mesh_shader")]
+class SpirvMeshShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Mesh
+}
+
+[function_macro(name="task_shader")]
+class SpirvTaskShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Task
+}
