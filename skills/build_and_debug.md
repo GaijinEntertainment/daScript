@@ -6,7 +6,7 @@ The repo builds on **Windows, Linux, macOS, iOS, Android, and WASM** (CI runs th
 
 ## Build & run
 
-- **Build system:** CMake. On Windows the default generator is MSVC (Visual Studio 2022); on Linux/macOS use Ninja or Make; on Android/iOS/WASM see the platform docs.
+- **Build system:** CMake. On Windows the default generator is MSVC (Visual Studio 2026 / v18, matching the CI runner image — see `.github/workflows/msvc.yml` and `build.yml`); on Linux/macOS use Ninja or Make; on Android/iOS/WASM see the platform docs. If you have an older `build/` directory configured against VS 2022 (v17), delete + reconfigure — CMake's `CMAKE_GENERATOR_INSTANCE` is sticky per-build-dir.
 - **Generate**:
   - Windows: `cmake -B build` (default generator is MSVC; creates `build/DAS.sln`)
   - Linux/macOS: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` (or omit `-G Ninja` to use the system default)

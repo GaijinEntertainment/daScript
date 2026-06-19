@@ -84,9 +84,11 @@ Release shared modules. Run it in a separate clone or worktree only:
 
 ```powershell
 # SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
-cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
 cmake --build build-clangcl --config Release --parallel
 ```
+
+(The generator string MUST match the installed VS major. CI runs the `windows-2025` / "latest" runner image, which GitHub migrated to VS 2026 / v18 in mid-2026. Locally you need Visual Studio 2026 (Community, Pro, or Build Tools) installed side-by-side; the older `"Visual Studio 17 2022"` generator still works on VS 2022 instances if you're stuck on the older toolchain, but CI runs only on v18 and a build-with-v17 / CI-with-v18 mismatch hides clang-cl regressions.)
 
 Manual single-file check (what the gate automates):
 
