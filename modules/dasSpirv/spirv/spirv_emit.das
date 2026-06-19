@@ -200,7 +200,7 @@ struct public BlockField {
     is_array          : bool   //!< true if this field is a fixed-array (scalar / vector / nested-struct elements)
     array_count       : int    //!< number of array elements (only valid when is_array)
     array_stride      : int    //!< per-element byte stride (std140 rounds each element up to 16); 0 otherwise
-    is_struct         : bool   //!< true if this field is a nested struct (laid out non-Block at the published offset)
+    is_struct         : bool   //!< the struct-element marker. True when the field is a nested struct (`is_array=false`) OR a fixed-array whose elements are nested structs (`is_array=true` — disambiguate via is_array). Host bind macros that handle composites recurse into the inner Structure via compute_block_layout in either case.
     is_composite      : bool   //!< convenience flag — true when is_array OR is_struct (host bind macros can't write this with a flat overload)
 }
 
@@ -217,9 +217,11 @@ def private std140_array_element_stride(bt : Type) : int {
 //! member alignment. Used by build_block_struct (SPIR-V type emit) and by host-side bind macros.
 //! Rejects bool and non-numeric fields fail-closed (no physical std140 layout). `sname` is only used
 //! in error messages. `fields` is cleared at entry so reuse across calls and partial-failure returns
-//! can't bleed. Supported field shapes: 32-bit scalar / vector / matrix; fixed-array of those (PR-G,
-//! std140 ArrayStride = element-size rounded to 16); nested struct (PR-G, recursive). Array of
-//! struct (PR-G), array of matrix, and runtime-arrays (use `@ssbo` for those) are out of scope.
+//! can't bleed. Supported field shapes (PR-G complete): 32-bit scalar / vector / matrix; nested
+//! struct (recursive); fixed-array of scalar / vector (std140 ArrayStride = element-size rounded to
+//! 16); fixed-array of nested struct (ArrayStride = laid-out struct size rounded to struct
+//! alignment). Out of scope (clean rejection): matrix-of-array, array-of-array, runtime arrays
+//! (use `@ssbo` for those).
 //! [macro_function]: callable from a backend's bind-gen macro at compile time, mirrors generate_spirv.
 [macro_function]
 def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>) : tuple<ok : bool; size : int; align : int> {
@@ -1980,13 +1982,14 @@ class SpirvEmit : AstVisitor {
             }
             // std140 element stride: scalar/vector rounds up to vec4; struct element strides by its
             // laid-out size rounded to the struct alignment. matrix-of-array is out of PR-G scope.
+            // The struct-element probe routes its diagnostics through the visitor's `errs` so a
+            // layout failure here surfaces the same detailed message a direct classify_global path
+            // would (was a local array that swallowed errors).
             var stride = 0
             if (et.baseType == Type.tStructure && et.structType != null) {
                 var probe : array<BlockField>
-                var perrs : array<string>
-                let pl = compute_block_layout("{sname}[]", et.structType, probe, perrs)
+                let pl = compute_block_layout("{sname}[]", et.structType, probe, errs)
                 delete probe
-                delete perrs
                 if (!pl.ok) return 0u
                 let salign = round_up(pl.align, 16)
                 stride = round_up(pl.size, salign)
