@@ -9,7 +9,7 @@ require strudel/strudel_sfx
 require daslib/fio
 require strings
 
-let DIR = "/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/sounds/"
+let DIR = "{get_das_root()}/examples/daStrudel/sfx_lab/sounds/"
 let OUT = "/tmp/drums_gen.das"
 
 struct DrumExport {

@@ -16,7 +16,7 @@ require strings
 require math
 
 let SR = 44100
-let DIR = "/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/sounds/"
+let DIR = "{get_das_root()}/examples/daStrudel/sfx_lab/sounds/"
 
 let OPT_VOICE = 0
 let OPT_POST = 1

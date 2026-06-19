@@ -20,8 +20,8 @@ require math
 
 let SR = 44100
 let SYNTH_SR = 48000   // strudel_synth renders at 48 kHz
-let DIR = "/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/sounds/"
-let REFDIR = "/Users/borisbatkin/Work/daScript/examples/daStrudel/sfx_lab/drum_refs/"
+let DIR = "{get_das_root()}/examples/daStrudel/sfx_lab/sounds/"
+let REFDIR = "{get_das_root()}/examples/daStrudel/sfx_lab/drum_refs/"
 
 let OPT_VOICE = 0
 let OPT_POST = 1
