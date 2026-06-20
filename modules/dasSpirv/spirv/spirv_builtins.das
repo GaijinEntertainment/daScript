@@ -229,3 +229,19 @@ def public memoryBarrierShared() : void {}
 // way (OpAtomicCompareExchange). The lock-free CAS primitive.
 [unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : int &; compare, value : int) : int { return mem }
 [unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint { return mem }
+
+// ===== mesh + task shader minimum intrinsics (VK_EXT_mesh_shader) =====
+// SetMeshOutputsEXT(vertex_count, primitive_count): the mesh-shader prologue. The SPV_EXT_mesh_shader
+// spec requires this call once per workgroup at workgroup-uniform control flow BEFORE any access to
+// gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT or any other per-vertex/per-primitive output --
+// it tells the implementation how much output storage to allocate. Mesh-stage-only; stub body never
+// runs. Per-vertex/per-primitive output array surfaces land in PR-E.
+[unused_argument(vertex_count, primitive_count), sideeffects]
+def public SetMeshOutputsEXT(vertex_count : uint; primitive_count : uint) : void {}
+
+// EmitMeshTasksEXT(x, y, z): the task-shader (amplification) workgroup terminator. Dispatches the
+// listed grid of mesh shader workgroups (x*y*z) downstream of THIS task workgroup. Per the spec it
+// ALSO terminates the current task workgroup (behaves like OpReturn / OpKill), so anything after the
+// call on the same control-flow path is unreachable. Task-stage-only; stub body never runs.
+[unused_argument(x, y, z), sideeffects]
+def public EmitMeshTasksEXT(x : uint; y : uint; z : uint) : void {}

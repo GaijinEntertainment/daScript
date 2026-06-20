@@ -1509,3 +1509,48 @@ def public bindless_nu_emitter_opcodes : table<uint> {
     }
     return <- s
 }
+
+// ===== PR-D minimal mesh + task fixtures (VK_EXT_mesh_shader scaffolding) =====
+// PR-D ships just enough to land the cap + extension + execution-model + execution-modes per stage
+// and the two prologue intrinsics (SetMeshOutputsEXT / EmitMeshTasksEXT). The actual per-vertex /
+// per-primitive output array surface arrives in PR-E together with the array-of-builtin classifier
+// and annotation args for OutputVertices / OutputPrimitivesEXT / output_topology. PR-D hardcodes
+// the counts at 64 + triangles topology — enough for a 0-vertex / 0-primitive mesh shader to
+// spirv-val cleanly. SetMeshOutputsEXT(0u, 0u) lets the mesh fixture produce ZERO geometry but stay
+// valid; EmitMeshTasksEXT(1u, 1u, 1u) dispatches one downstream mesh workgroup (the minimum that
+// exercises the terminator semantics).
+
+[mesh_shader(local_size_x=1, name="mesh_empty_spv"), marker(no_coverage)]
+def mesh_empty {
+    SetMeshOutputsEXT(0u, 0u)            // mesh-shader prologue — required before any output access
+}
+
+[task_shader(local_size_x=1, name="task_empty_spv"), marker(no_coverage)]
+def task_empty {
+    EmitMeshTasksEXT(1u, 1u, 1u)         // dispatch one mesh workgroup + terminate THIS task workgroup
+}
+
+def public mesh_empty_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mesh_empty_spv)
+    return <- w
+}
+
+def public task_empty_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(task_empty_spv)
+    return <- w
+}
+
+// PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
+// OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
+// extension ride on the already-declared OpCapability / OpExtension; OutputVertices /
+// OutputPrimitivesEXT / OutputTrianglesEXT / LocalSize all ride on the already-declared
+// OpExecutionMode.
+def public mesh_stage_emitter_opcodes : table<uint> {
+    var s <- bindless_nu_emitter_opcodes()
+    for (op in [SpvOp.SetMeshOutputsEXT, SpvOp.EmitMeshTasksEXT]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}

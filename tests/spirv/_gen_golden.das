@@ -79,4 +79,8 @@ def main {
     emit_golden(dir, "userfn", userfn_words())
     emit_golden(dir, "userfn_ref", userfn_ref_words())
     emit_golden(dir, "userfn_global", userfn_global_words())
+    // PR-D mesh + task stage scaffolding (VK_EXT_mesh_shader): empty mesh + empty task.
+    // Forward-regression freeze.
+    emit_golden(dir, "mesh_empty", mesh_empty_words())
+    emit_golden(dir, "task_empty", task_empty_words())
 }

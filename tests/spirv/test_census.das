@@ -76,7 +76,9 @@ def test_opcode_census(t : T?) {
         add_set(present, userfn_words())
         add_set(present, userfn_ref_words())
         add_set(present, userfn_global_words())
-        var declared <- bindless_nu_emitter_opcodes()
+        add_set(present, mesh_empty_words())
+        add_set(present, task_empty_words())
+        var declared <- mesh_stage_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }

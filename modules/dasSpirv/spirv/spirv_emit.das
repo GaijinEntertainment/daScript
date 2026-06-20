@@ -19,10 +19,15 @@ require daslib/ast_boost
 
 // The shader stage drives the entry-point execution model + execution mode and which builtins
 // are legal. Vertex needs no execution mode; Fragment needs OriginUpperLeft; Compute needs LocalSize.
+// Mesh + Task (VK_EXT_mesh_shader) pull in the MeshShadingEXT capability + SPV_EXT_mesh_shader
+// extension; both need LocalSize and Mesh additionally needs OutputVertices + OutputPrimitivesEXT
+// + an output-topology mode (PR-D hardcodes OutputTrianglesEXT; Lines / Points arrive in PR-E).
 enum public ShaderStage {
     Compute
     Vertex
     Fragment
+    Mesh
+    Task
 }
 
 // ===== per-global classification =====
@@ -67,6 +72,7 @@ struct EmitCtx {
     draw_parameters_cap : bool                  // OpCapability DrawParameters already emitted (gl_DrawID)
     descriptor_indexing_cap : bool              // OpCapability ShaderNonUniform + OpExtension "SPV_EXT_descriptor_indexing" already emitted (nonuniformEXT, descriptor arrays)
     sampled_image_nu_cap : bool                 // OpCapability SampledImageArrayNonUniformIndexing already emitted (NonUniform-indexed sampler descriptor array)
+    mesh_shading_cap : bool                     // OpCapability MeshShadingEXT + OpExtension "SPV_EXT_mesh_shader" already emitted (mesh / task stages)
     nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
@@ -156,6 +162,8 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
 def private stage_name(stage : ShaderStage) : string {
     if (stage == ShaderStage.Vertex) return "vertex"
     if (stage == ShaderStage.Fragment) return "fragment"
+    if (stage == ShaderStage.Mesh) return "mesh"
+    if (stage == ShaderStage.Task) return "task"
     return "compute"
 }
 
@@ -444,6 +452,8 @@ def private ssbo_element_layout(var m : SpirvModule; sname : string; et : TypeDe
 def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
     if (stage == ShaderStage.Vertex) return SpirvStageFlags.vertex
     if (stage == ShaderStage.Fragment) return SpirvStageFlags.fragment
+    if (stage == ShaderStage.Mesh) return SpirvStageFlags.mesh
+    if (stage == ShaderStage.Task) return SpirvStageFlags.task
     return SpirvStageFlags.compute
 }
 
@@ -1071,6 +1081,18 @@ def private ensure_sampled_image_array_nonuniform(var m : SpirvModule; var ctx :
     if (ctx.sampled_image_nu_cap) return
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.SampledImageArrayNonUniformIndexing))
     ctx.sampled_image_nu_cap = true
+}
+
+// Mesh / task stages (VK_EXT_mesh_shader): OpCapability MeshShadingEXT + OpExtension
+// "SPV_EXT_mesh_shader". Emit-once + ctx-flag dedupe; the cap also gates SetMeshOutputsEXT /
+// EmitMeshTasksEXT and the MeshEXT / TaskEXT execution models below.
+def private ensure_mesh_shading(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.mesh_shading_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.MeshShadingEXT))
+    var nm <- string_words("SPV_EXT_mesh_shader")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm)
+    delete nm
+    ctx.mesh_shading_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
@@ -2135,6 +2157,58 @@ class SpirvEmit : AstVisitor {
                 return expr
             }
             emit(bm, SEC_FUNCS, SpvOp.Kill)
+            ctx.terminated = true
+            return expr
+        }
+        // SetMeshOutputsEXT(vertex_count, primitive_count): mesh-shader prologue. SPV_EXT_mesh_shader
+        // requires this call once per workgroup at workgroup-uniform control flow BEFORE any write to
+        // a per-vertex or per-primitive output array -- it declares how much output storage to
+        // allocate. (0, 0) is the valid empty-mesh form (emits OpSetMeshOutputsEXT %uint_0 %uint_0):
+        // PR-D's empty-mesh fixture uses it to land the cap / extension / execution modes without the
+        // per-vertex output array (which arrives in PR-E). Two uint operands, no result.
+        if (name == "SetMeshOutputsEXT") {
+            if (ctx.stage != ShaderStage.Mesh) {
+                errs |> push("SetMeshOutputsEXT is only valid in a mesh shader")
+                return expr
+            }
+            if (length(expr.arguments) != 2) {
+                errs |> push("SetMeshOutputsEXT expects (vertex_count, primitive_count)")
+                return expr
+            }
+            let nv = value_of(expr.arguments[0])
+            let np = value_of(expr.arguments[1])
+            // value_of returns an SSA result-id; 0 is the failed-to-emit sentinel, not a zero count
+            // (a literal 0u lowers to a valid OpConstant id). Fail closed rather than drop the prologue.
+            if (nv == 0u || np == 0u) {
+                errs |> push("SetMeshOutputsEXT: could not evaluate the vertex / primitive count operand")
+                return expr
+            }
+            emit(bm, SEC_FUNCS, SpvOp.SetMeshOutputsEXT, nv, np)
+            return expr
+        }
+        // EmitMeshTasksEXT(x, y, z): task-shader (amplification) workgroup terminator. Dispatches an
+        // x*y*z grid of mesh workgroups and ENDS the task workgroup (per the spec the call behaves
+        // like OpReturn / OpKill), so set ctx.terminated = true so the visitor rejects anything after
+        // it on the same control-flow path.
+        if (name == "EmitMeshTasksEXT") {
+            if (ctx.stage != ShaderStage.Task) {
+                errs |> push("EmitMeshTasksEXT is only valid in a task shader")
+                return expr
+            }
+            if (length(expr.arguments) != 3) {
+                errs |> push("EmitMeshTasksEXT expects (group_count_x, group_count_y, group_count_z)")
+                return expr
+            }
+            let gx = value_of(expr.arguments[0])
+            let gy = value_of(expr.arguments[1])
+            let gz = value_of(expr.arguments[2])
+            // value_of returns an SSA result-id; 0 is the failed-to-emit sentinel. Fail closed rather
+            // than drop the workgroup terminator.
+            if (gx == 0u || gy == 0u || gz == 0u) {
+                errs |> push("EmitMeshTasksEXT: could not evaluate a group-count operand")
+                return expr
+            }
+            emit(bm, SEC_FUNCS, SpvOp.EmitMeshTasksEXT, gx, gy, gz)
             ctx.terminated = true
             return expr
         }
@@ -3279,6 +3353,8 @@ def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : User
 def private execution_model(stage : ShaderStage) : SpvExecutionModel {
     if (stage == ShaderStage.Vertex) return SpvExecutionModel.Vertex
     if (stage == ShaderStage.Fragment) return SpvExecutionModel.Fragment
+    if (stage == ShaderStage.Mesh) return SpvExecutionModel.MeshEXT
+    if (stage == ShaderStage.Task) return SpvExecutionModel.TaskEXT
     return SpvExecutionModel.GLCompute
 }
 
@@ -3292,12 +3368,24 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     // failed attempt) must not accumulate stale bindings / ranges from a previous call.
     reflection.stage = stage_flag(stage)
     reflection.entry_point := "main"
-    reflection.local_size = stage == ShaderStage.Compute ? local_size : int3(1, 1, 1)
+    // Mesh + Task workgroups are sized like compute via LocalSize, so the reflected local_size
+    // mirrors the actual workgroup dispatch dims, not (1,1,1).
+    let is_workgroupy = stage == ShaderStage.Compute || stage == ShaderStage.Mesh || stage == ShaderStage.Task
+    reflection.local_size = is_workgroupy ? local_size : int3(1, 1, 1)
     reflection.bindings |> clear()
     reflection.push_constants |> clear()
 
     emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
     emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
+    // Mesh / task stages pull in the mesh-shading capability + the SPV_EXT_mesh_shader extension.
+    // Do this BEFORE the entry point so the capabilities section is closed and the extension is
+    // visible by the time spirv-val checks the entry point's execution model. SPV_EXT_mesh_shader
+    // requires SPIR-V >= 1.4, so the module header version is bumped from the 1.3 default; the other
+    // stages stay at 1.3 (a 1.4 header would force every global into the entry-point interface).
+    if (stage == ShaderStage.Mesh || stage == ShaderStage.Task) {
+        m.version = SPV_VERSION_1_4
+        ensure_mesh_shading(m, ctx)
+    }
 
     collect_dependencies(fn) $(vfun, vvar) {
         for (v in vvar) {
@@ -3326,14 +3414,23 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     delete ep
 
     // Compute pins the workgroup size; Fragment fixes the framebuffer origin; Vertex needs none.
-    if (stage == ShaderStage.Compute) {
+    // Mesh + Task stages need LocalSize too; Mesh additionally needs OutputVertices,
+    // OutputPrimitivesEXT, and an output-topology mode (OutputTrianglesEXT / OutputLinesEXT /
+    // OutputPoints) — all three are MANDATORY per the SPV_EXT_mesh_shader spec.
+    if (stage == ShaderStage.Compute || stage == ShaderStage.Mesh || stage == ShaderStage.Task) {
         let lx = local_size.x > 0 ? uint(local_size.x) : 1u
         let ly = local_size.y > 0 ? uint(local_size.y) : 1u
         let lz = local_size.z > 0 ? uint(local_size.z) : 1u
         var em <- [id_main, uint(SpvExecutionMode.LocalSize), lx, ly, lz]
         emit_n(m, SEC_EXECMODE, SpvOp.ExecutionMode, em)
         delete em
-    } elif (stage == ShaderStage.Fragment) {
+    }
+    if (stage == ShaderStage.Mesh) {
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputVertices), 64u)
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputPrimitivesEXT), 64u)
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputTrianglesEXT))
+    }
+    if (stage == ShaderStage.Fragment) {
         emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OriginUpperLeft))
         // gl_FragDepth referenced (detected by classify_global above; Output-only, so a reference is a
         // write) -> the shader replaces the fixed-function depth.
