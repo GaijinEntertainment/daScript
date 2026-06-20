@@ -43,6 +43,8 @@ var g_ref_wave : array<float>
 var g_ref_spec : array<float>
 var g_ref_name = "(no reference loaded)"
 var g_ref_path = ""              // full path of the loaded reference (saved as mimic_target)
+var g_trim_init = false          // one-time init of the trim-gate slider value
+var g_trim_info = ""             // last trim result (ms trimmed off each end), shown under the ref name
 var g_show_ref = true            // overlay the reference on the mix plots
 var g_fit : FitScore             // current reference-vs-mix fit (valid when g_have_fit)
 var g_ref_feat : SfxFeatures
@@ -316,6 +318,16 @@ def private load_to_mono44k(src : array<float>; src_rate, src_ch : int) : array<
     return <- out
 }
 
+//! Recompute the reference's derived data (waveform, spectrum, spectrogram, fit, levels) after the
+//! samples in g_ref change — shared by load_reference and trim_reference.
+def private refresh_reference() {
+    downsample(g_ref, g_ref_wave, 2000)
+    compute_spectrum(g_ref, g_ref_spec)
+    g_ref_spectro <- spectrogram(g_ref, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
+    recompute_fit()
+    update_levels()   // match the audition + export levels to the reference
+}
+
 def load_reference(path : string) {
     var samples : array<float>
     var sr = SR
@@ -327,15 +339,45 @@ def load_reference(path : string) {
     }
     g_ref <- load_to_mono44k(samples, sr, ch)
     delete samples
-    downsample(g_ref, g_ref_wave, 2000)
-    compute_spectrum(g_ref, g_ref_spec)
-    g_ref_spectro <- spectrogram(g_ref, SR, SPEC_FRAMES, SPEC_BINS, SPEC_FMAX)
     g_ref_name = "{base_name(path)}  ({sr} Hz, {ch} ch)"
     g_ref_path = path
+    g_trim_info = ""
     g_show_ref = true
     REF_SHOW.value = true
-    recompute_fit()
-    update_levels()   // match the audition + export levels to the freshly-loaded reference
+    refresh_reference()
+}
+
+//! Trim leading + trailing near-silence from the loaded reference (button-triggered, both ends).
+//! The gate is TRIM_DB dB below peak; raise it to cut a soft attack/whoosh, lower it to keep more.
+//! Reports the ms cut off each end in g_trim_info. Re-trimming at the same gate is a no-op.
+def trim_reference() {
+    let n = length(g_ref)
+    return if (n == 0)
+    var pk = 0.0
+    for (s in g_ref) {
+        pk = max(pk, abs(s))
+    }
+    return if (pk <= 0.0)
+    let thr = pk * pow(10.0, TRIM_DB.value / 20.0)
+    var lo = 0
+    while (lo < n && abs(g_ref[lo]) < thr) {
+        lo++
+    }
+    var hi = n - 1
+    while (hi > lo && abs(g_ref[hi]) < thr) {
+        hi--
+    }
+    return if (lo >= hi || (lo == 0 && hi == n - 1))   // all below the gate, or nothing to trim
+    var trimmed : array<float>
+    trimmed |> reserve(hi - lo + 1)
+    for (i in range(lo, hi + 1)) {
+        trimmed |> push(g_ref[i])
+    }
+    g_ref <- trimmed
+    refresh_reference()
+    let lead_ms = int(double(lo) / double(SR) * 1000.0lf)
+    let tail_ms = int(double(n - 1 - hi) / double(SR) * 1000.0lf)
+    g_trim_info = "trimmed -{lead_ms}ms lead / -{tail_ms}ms tail  (gate {int(TRIM_DB.value)} dB)"
 }
 
 def do_save_sound(path : string) {
@@ -382,7 +424,7 @@ def do_export_das(path : string) {
     if (length(leaf) > 4 && leaf |> ends_with(".das")) {
         leaf = slice(leaf, 0, length(leaf) - 4)
     }
-    var doc <- current_sound()
+    let doc <- current_sound()
     fwrite(path, emit_das(doc, leaf, false))
 }
 
@@ -1387,10 +1429,23 @@ def reference_panel() {
     if (icon_button(REFPLAY, (glyph = "play", tip = "Play the reference"))) {
         play_buf_copy(g_ref)
     }
+    same_line()
+    if (button(REFTRIM, (text = "trim silence"))) {
+        trim_reference()
+    }
     same_line(REF_SL2)
     checkbox(REF_SHOW, (text = "overlay on mix"))
     g_show_ref = REF_SHOW.value
     text(REF_NAME, (text = g_ref_name))
+    if (!g_trim_init) {
+        TRIM_DB.value = -24.0
+        g_trim_init = true
+    }
+    TRIM_DB.bounds = (-60.0f, -6.0f)
+    slider_float(TRIM_DB, (text = "trim gate (dB below peak)"))
+    if (!empty(g_trim_info)) {
+        text(REF_TRIMINFO, (text = g_trim_info))
+    }
     plot(REF_WAVE, (title = "reference waveform", size = float2(-1.0f, 120.0f), flags = ImPlotFlags.None)) {
         setup_axes("sample", "amp", ImPlotAxisFlags.AutoFit, ImPlotAxisFlags.AutoFit)
         setup_legend(ImPlotLocation.NorthEast)
@@ -1865,7 +1920,7 @@ struct ExportDasArgs {
 def sfx_export_das(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<ExportDasArgs>)
     if (empty(args.path)) return JV("pass a path arg")
-    var doc <- current_sound()
+    let doc <- current_sound()
     let src = emit_das(doc, args.name, args.pitched)
     if (!fwrite(args.path, src)) return JV("write failed: {args.path}")
     return JV("exported {args.name} ({length(g_layers)} layers) to {args.path}")
