@@ -336,7 +336,8 @@ def private norm_db(var s : array<float>) {
 // blind spots of the single-window linear-cosine spectral_fit.
 def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
     if (empty(a) || empty(b)) return 0.0
-    let L = min(min(length(a), length(b)), rate)   // shared absolute window, up to ~1 s
+    let longer = max(length(a), length(b))           // shared absolute window: span the LONGER, zero-pad the shorter
+    let L = min(longer, rate)                          // up to ~1 s
     let NF = 32
     let NB = 40
     let FMAX = 12000.0
@@ -614,7 +615,8 @@ def public spectral_dist(a, b : array<float>; rate : int) : float {
     if (empty(a) || empty(b)) return 1.0
     var na <- peak_normalized(a)
     var nb <- peak_normalized(b)
-    let L = min(min(length(na), length(nb)), rate)
+    let longer = max(length(na), length(nb))         // span the LONGER (zero-pad the shorter's tail) so a duration mismatch is penalized, not truncated away
+    let L = min(longer, rate)                          // capped at ~1 s
     let NF = 32
     let NB = 40
     let FMAX = 12000.0
