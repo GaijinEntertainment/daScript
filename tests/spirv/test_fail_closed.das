@@ -59,5 +59,8 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_badret", "return type tDouble is not supported")
         // subpass input attachments + subpassLoad are fragment-only
         check_rejects(t, "_fc_subpass_stage", "subpassInput 'fc_subpass' is fragment-only")
+        // mesh-shader output config: bad topology string (parsed in patch) + non-positive count (emit gate)
+        check_rejects(t, "_fc_mesh_topology", "output_topology must be")
+        check_rejects(t, "_fc_mesh_count", "max_vertices must be > 0")
     }
 }

@@ -1542,6 +1542,34 @@ def public task_empty_words : array<uint> {
     return <- w
 }
 
+// ===== PR-E mesh output configuration fixtures (max_vertices / max_primitives / output_topology) =====
+// The [mesh_shader] output args drive the OutputVertices / OutputPrimitivesEXT counts and the topology
+// execution mode (the PR-D fixtures above take the 64 / 64 / triangles defaults). mesh_lines exercises
+// non-default counts (96 / 32) + OutputLinesEXT; mesh_points exercises OutputPoints (48 / 16). The body
+// stays the zero-output prologue so both spirv-val cleanly. No NEW opcodes — the topology / counts are
+// OpExecutionMode operands, so the declared census set is unchanged.
+[mesh_shader(local_size_x=1, max_vertices=96, max_primitives=32, output_topology="lines", name="mesh_lines_spv"), marker(no_coverage)]
+def mesh_lines {
+    SetMeshOutputsEXT(0u, 0u)
+}
+
+[mesh_shader(local_size_x=1, max_vertices=48, max_primitives=16, output_topology="points", name="mesh_points_spv"), marker(no_coverage)]
+def mesh_points {
+    SetMeshOutputsEXT(0u, 0u)
+}
+
+def public mesh_lines_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mesh_lines_spv)
+    return <- w
+}
+
+def public mesh_points_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mesh_points_spv)
+    return <- w
+}
+
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
 // extension ride on the already-declared OpCapability / OpExtension; OutputVertices /
