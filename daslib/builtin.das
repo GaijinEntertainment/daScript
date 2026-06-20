@@ -412,6 +412,46 @@ def push_from(var Arr : array<auto(numT)>; varr : numT[] -#) {
     }
 }
 
+//! Append a *nested* source: an `array<array<...numT>>` flattened into `Arr`,
+//! one array level per recursion (any depth). The single-level overloads above
+//! out-specialize this untyped form, so a flat `array<numT>` (and the
+//! numT-is-array base) take the bulk path; this fires only for deeper nesting.
+[unused_argument(Arr, src)]
+def push_from(var Arr : array<auto(numT)>; src) {
+    static_if (typeinfo is_array(src)) {
+        for (x in src) {
+            Arr |> push_from(x)
+        }
+    } else {
+        concept_assert(false, "push_from: source is not an array (or nested array) of the element type")
+    }
+}
+
+//! Append several flat source arrays in one call — one combined `reserve(Σ)`
+//! up front, then unrolls to the single-source overload per arg. A *nested*
+//! source (`array<array<...>>`) goes through the recursive `push_from(Arr, src)`
+//! overload above, not this fixed-arity form (its params are `array<numT>`).
+def push_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b))
+    Arr |> push_from(a)
+    Arr |> push_from(b)
+}
+
+def push_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>; c : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b) + long_length(c))
+    Arr |> push_from(a)
+    Arr |> push_from(b)
+    Arr |> push_from(c)
+}
+
+def push_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>; c : array<numT>; d : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b) + long_length(c) + long_length(d))
+    Arr |> push_from(a)
+    Arr |> push_from(b)
+    Arr |> push_from(c)
+    Arr |> push_from(d)
+}
+
 //! Append every element of source array `varr` to `Arr` via clone (`:=`).
 //! Reserves the combined length up front. Each slot is zero-initialized
 //! before clone (matches single-element ``push_clone`` semantics).
@@ -474,6 +514,45 @@ def push_clone_from(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
     } else {
         concept_assert(false, "can't push_clone value, which can't be cloned")
     }
+}
+
+//! Append a *nested* source via clone — `array<array<...numT>>` flattened into
+//! `Arr`, one array level per recursion (any depth). Single-level overloads
+//! out-specialize this untyped form; fires only for deeper nesting.
+[unused_argument(Arr, src)]
+def push_clone_from(var Arr : array<auto(numT)>; src) {
+    static_if (typeinfo is_array(src)) {
+        for (x in src) {
+            Arr |> push_clone_from(x)
+        }
+    } else {
+        concept_assert(false, "push_clone_from: source is not an array (or nested array) of the element type")
+    }
+}
+
+//! Append several flat source arrays in one call via clone — one combined
+//! `reserve(Σ)` up front, then unrolls to the single-source overload per arg.
+//! Nested sources go through the recursive `push_clone_from(Arr, src)` overload
+//! above, not this fixed-arity form.
+def push_clone_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b))
+    Arr |> push_clone_from(a)
+    Arr |> push_clone_from(b)
+}
+
+def push_clone_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>; c : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b) + long_length(c))
+    Arr |> push_clone_from(a)
+    Arr |> push_clone_from(b)
+    Arr |> push_clone_from(c)
+}
+
+def push_clone_from(var Arr : array<auto(numT)>; a : array<numT>; b : array<numT>; c : array<numT>; d : array<numT>) {
+    Arr |> reserve(long_length(Arr) + long_length(a) + long_length(b) + long_length(c) + long_length(d))
+    Arr |> push_clone_from(a)
+    Arr |> push_clone_from(b)
+    Arr |> push_clone_from(c)
+    Arr |> push_clone_from(d)
 }
 
 //! Move every element of source array `varr` into `Arr` (`<-`).

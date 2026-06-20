@@ -207,6 +207,14 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - **Unqualified** `foo(x)`: resolves in the **defining** module — caller’s overloads NOT visible.
 - This is why `:=` and `delete` emit `_::clone` / `_::finalize`
 
+### Recursive flatten / variadic generics (untyped param)
+
+A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) — e.g. a flattening `push_from(dest, src)` — uses an **untyped** source param (`def f(var dest : array<auto(T)>; src)`, NOT `array<auto(TT)>`) plus `static_if (typeinfo is_array(src)) { for (x in src) f(dest, x) } else { <base> }`. **ADD it alongside** the concrete single-level overload (`array<numT>`); the concrete one out-specializes a bare untyped param, so flat sources take the fast/bulk path and the recursive form fires only for deeper nesting — zero change/risk to the existing overload. (Live example: variadic `push_from`/`push_clone_from` in `daslib/builtin.das`.)
+
+- **`array<numT>` and `array<auto(TT)>` are EQUALLY specialized** → two such same-name overloads are *ambiguous* (`error[30341] too many matching functions`). A bare untyped `src` is *less* specialized than `array<numT>`, so the concrete one wins — that's why the recursive param is untyped, not `array<auto(TT)>`. (Whether an alias should out-specialize a non-alias is an open compiler question.)
+- **Compile-time type equality:** there is **no** `typeinfo is_same_type(A, B)` (typeinfo traits take one arg). Use `typeinfo stripped_typename(x) == typeinfo stripped_typename(y)` (pattern from `daslib/algorithm.das`).
+- **`-#` / `==const` on ≥2 same-`numT` array params breaks matching** (rejects a plain `array<int>&`) — use plain `array<numT>` for fixed-arity multi-source params (`f(dest; a : array<numT>; b : array<numT>)`).
+
 ### Dot as pseudo-pipe
 
 `a.foo(b)` is sugar for `foo(a, b)` — but **only when `a` is a struct/class value** (chains: `a.foo().bar(x)` ≡ `bar(foo(a), x)`).
