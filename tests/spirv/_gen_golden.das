@@ -91,4 +91,5 @@ def main {
     // PR-F mesh user + per-primitive-builtin outputs + the fragment gl_PrimitiveID read.
     emit_golden(dir, "mesh_outs", mesh_outs_words())
     emit_golden(dir, "prim_frag", prim_frag_words())
+    emit_golden(dir, "pp_frag", pp_frag_words())
 }

@@ -248,12 +248,25 @@ def test_mesh_user_outputs(t : T?) {
             "mesh_outs: gl_MeshPrimitivesEXT member 0 is BuiltIn PrimitiveId")
         t |> success(op_has_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.PerPrimitiveEXT)),
             "mesh_outs: gl_MeshPrimitivesEXT member 0 is PerPrimitiveEXT")
-        // five outputs in the interface: gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT,
-        // gl_MeshPrimitivesEXT, mo_vcolor, mo_pcolor.
+        // a per-vertex int varying (mo_id) must be Flat — matches the auto-Flat fragment-side int input.
+        t |> success(op_has_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Flat)),
+            "mesh_outs: per-vertex int varying is Flat")
+        // six outputs in the interface: gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT,
+        // gl_MeshPrimitivesEXT, mo_vcolor, mo_pcolor, mo_id.
         let niface = entry_point_interface_count(words)
-        t |> success(niface == 5, "mesh_outs: OpEntryPoint interface lists all 5 outputs (got {niface})")
+        t |> success(niface == 6, "mesh_outs: OpEntryPoint interface lists all 6 outputs (got {niface})")
         validate(t, words, "mesh_outs")
         delete words
+        // pp_frag: a fragment reading a @per_primitive @in WITHOUT gl_PrimitiveID — the PerPrimitiveEXT
+        // decoration alone must still pull in the MeshShadingEXT cap (-> 1.4), else the blob is invalid.
+        var ppwords <- pp_frag_words()
+        t |> success(ppwords[1] == SPV_VERSION_1_4, "pp_frag: SPIR-V header version is 1.4 (PerPrimitiveEXT needs MeshShadingEXT)")
+        t |> success(op_has_operand_at(ppwords, SpvOp.Capability, 0, uint(SpvCapability.MeshShadingEXT)),
+            "pp_frag: OpCapability MeshShadingEXT")
+        t |> success(op_has_operand_at(ppwords, SpvOp.Decorate, 1, uint(SpvDecoration.PerPrimitiveEXT)),
+            "pp_frag: @per_primitive @in is PerPrimitiveEXT-decorated")
+        validate(t, ppwords, "pp_frag")
+        delete ppwords
         // prim_frag: the fragment side reads gl_PrimitiveID — BuiltIn PrimitiveId + Flat (int input) +
         // the MeshShadingEXT capability (-> SPIR-V 1.4).
         var fwords <- prim_frag_words()

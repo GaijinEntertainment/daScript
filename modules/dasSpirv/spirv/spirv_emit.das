@@ -600,6 +600,7 @@ def private classify_mesh_output(var m : SpirvModule; var ctx : EmitCtx; v : Var
         emit(m, SEC_TYPES, SpvOp.TypeStruct, blk, i32)
         emit(m, SEC_DECOR, SpvOp.Decorate, blk, uint(SpvDecoration.Block))
         emit(m, SEC_DECOR, SpvOp.MemberDecorate, blk, 0u, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PrimitiveId))
+        ensure_per_primitive(m, ctx)
         emit(m, SEC_DECOR, SpvOp.MemberDecorate, blk, 0u, uint(SpvDecoration.PerPrimitiveEXT))
         let arr = type_array(m, blk, n)
         let pt = type_pointer(m, SpvStorageClass.Output, arr)
@@ -641,8 +642,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // reading it pulls in MeshShadingEXT + SPV_EXT_mesh_shader (→ SPIR-V 1.4), same as the mesh stage.
         // It is an integer fragment Input, so it MUST be Flat (no interpolation for ints; VUID-…-Flat-04744).
         if (bi.bi == SpvBuiltIn.PrimitiveId) {
-            ensure_mesh_shading(m, ctx)
-            m.version = SPV_VERSION_1_4
+            ensure_per_primitive(m, ctx)
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Flat))
         }
         return
@@ -692,7 +692,16 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             emit(m, SEC_TYPES, SpvOp.Variable, apt, avid, uint(SpvStorageClass.Output))
             emit(m, SEC_DECOR, SpvOp.Decorate, avid, uint(SpvDecoration.Location), uint(loc))
             if (is_per_prim) {
+                ensure_per_primitive(m, ctx)
                 emit(m, SEC_DECOR, SpvOp.Decorate, avid, uint(SpvDecoration.PerPrimitiveEXT))
+            }
+            // Same Flat rule as scalar stage I/O, keyed on the ELEMENT type: an int/uint varying (or an
+            // explicit @flat) must be Flat so it matches the fragment-side scalar input (where Flat is
+            // auto-applied for integers); without it the output/input interface decorations mismatch.
+            let elem_bt = v._type.firstType.baseType
+            let elem_is_int = scalar_class(elem_bt) >= 0 && scalar_class(elem_bt) <= 1
+            if (elem_is_int || (v.annotation |> find_arg("flat") is tBool)) {
+                emit(m, SEC_DECOR, SpvOp.Decorate, avid, uint(SpvDecoration.Flat))
             }
             ctx.globals |> insert(intptr(v), GlobalInfo(var_id = avid, storage = SpvStorageClass.Output, value_type = arr, elem_type = elem_t, is_mesh_output = true))
             ctx.interface_ids |> push(avid)
@@ -704,8 +713,11 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(storage))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
         // A fragment @per_primitive @in is the per-fragment side of a mesh per-primitive output: it must
-        // carry the matching PerPrimitiveEXT decoration so the rasteriser feeds it per-primitive (flat).
+        // carry the matching PerPrimitiveEXT decoration so the rasteriser feeds it per-primitive. The
+        // fragment stage doesn't otherwise enable mesh-shading, so a @per_primitive @in alone must pull in
+        // the MeshShadingEXT capability (-> SPIR-V 1.4) that PerPrimitiveEXT requires.
         if (is_in && is_per_prim) {
+            ensure_per_primitive(m, ctx)
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.PerPrimitiveEXT))
         }
         // Flat decoration. Vulkan mandates Flat on any integer/uint varying (no valid interpolation
@@ -1248,6 +1260,14 @@ def private ensure_mesh_shading(var m : SpirvModule; var ctx : EmitCtx) {
     emit_n(m, SEC_EXT, SpvOp.Extension, nm)
     delete nm
     ctx.mesh_shading_cap = true
+}
+
+// Emitting a PerPrimitiveEXT decoration requires the MeshShadingEXT capability + SPV_EXT_mesh_shader,
+// which require SPIR-V >= 1.4. The mesh stage already enables both, but a FRAGMENT reading a
+// @per_primitive @in (or gl_PrimitiveID) does not — so every PerPrimitiveEXT site routes through here.
+def private ensure_per_primitive(var m : SpirvModule; var ctx : EmitCtx) {
+    ensure_mesh_shading(m, ctx)
+    m.version = SPV_VERSION_1_4
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U

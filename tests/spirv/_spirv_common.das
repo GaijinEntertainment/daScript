@@ -1488,6 +1488,7 @@ def public mesh_tri_words : array<uint> {
 // Output arrays + Block + Decorate / MemberDecorate / AccessChain / Store are all already declared.
 var @out @location = 0 mo_vcolor : array<float3>                 // per-vertex varying (smooth)
 var @per_primitive @out @location = 1 mo_pcolor : array<float3>  // per-primitive (flat, PerPrimitiveEXT)
+var @out @location = 2 mo_id : array<int>                       // per-vertex int varying -> auto-Flat
 [mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_outs_spv"), marker(no_coverage)]
 def mesh_outs {
     SetMeshOutputsEXT(3u, 1u)
@@ -1499,6 +1500,7 @@ def mesh_outs {
     mo_vcolor[1] = float3(0.0, 1.0, 0.0)
     mo_vcolor[2] = float3(0.0, 0.0, 1.0)
     mo_pcolor[0] = float3(1.0, 1.0, 0.0)                         // per-primitive flat color
+    mo_id[0] = 0; mo_id[1] = 1; mo_id[2] = 2                     // per-vertex int (must be Flat)
     gl_MeshPrimitivesEXT[0].gl_PrimitiveID = 7                   // per-primitive builtin id
 }
 
@@ -1515,6 +1517,19 @@ def prim_frag {
 
 def public prim_frag_words : array<uint> {
     return clone_to_move(prim_frag_spv)
+}
+
+// pp_frag reads a @per_primitive @in varying WITHOUT gl_PrimitiveID: the PerPrimitiveEXT decoration
+// alone must still pull in the MeshShadingEXT capability (-> SPIR-V 1.4), or the blob is invalid.
+var @per_primitive @in @location = 1 pp_in : float3
+var @out @location = 0 pp_out : float4
+[fragment_shader(name="pp_frag_spv"), marker(no_coverage)]
+def pp_frag {
+    pp_out = float4(pp_in, 1.0)
+}
+
+def public pp_frag_words : array<uint> {
+    return clone_to_move(pp_frag_spv)
 }
 
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
