@@ -207,6 +207,7 @@ static CompileResult compile_script(const string & fn) {
     policies.rtti = true;
     policies.track_allocations = trackAllocations;
 
+    double t_compile = get_time_sec();
     result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
     if (!result.program) {
         result.errors = "failed to compile " + fn;
@@ -225,7 +226,13 @@ static CompileResult compile_script(const string & fn) {
         return result;
     }
 
+    // [startup] timing — bisect a slow boot (seen on starved macOS CI runners). compile =
+    // parse+infer+codegen; simulate = context creation, which runs module [init] (the libhv
+    // HTTP server starts here). A 40s stall localizes to one of these spans, or to init() below.
+    tout << "daslang-live: [startup] compile took " << int((get_time_sec() - t_compile) * 1000.0) << " ms\n";
+    double t_simulate = get_time_sec();
     result.ctx = SimulateWithErrReport(result.program, tout);
+    tout << "daslang-live: [startup] simulate took " << int((get_time_sec() - t_simulate) * 1000.0) << " ms (incl. module [init]; HTTP server starts here)\n";
     // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
     {
         auto & root = gc_root::gc_get_thread_root();
@@ -323,6 +330,7 @@ static void set_watched_files(Context * ctx) {
 // --- Main lifecycle loop ---
 
 static int run_lifecycle(const string & fn) {
+    double t_launch = get_time_sec();
     auto cr = compile_script(fn);
 
     Context * ctx = cr.ctx ? cr.ctx.get() : nullptr;
@@ -380,7 +388,9 @@ static int run_lifecycle(const string & fn) {
         ctx->restart();
 
         // Call init()
+        double t_init = get_time_sec();
         ctx->evalWithCatch(fnInit, nullptr);
+        tout << "daslang-live: [startup] init() took " << int((get_time_sec() - t_init) * 1000.0) << " ms\n";
         if (auto ex = ctx->getException()) {
             string msg = string("EXCEPTION in init(): ") + ex + " at " + ctx->exceptionAt.describe();
             tout << msg << "\n";
@@ -395,6 +405,7 @@ static int run_lifecycle(const string & fn) {
     double startTime = lastTime;
     int frameCount = 0;
     double fpsTimer = lastTime;
+    bool firstFrameLogged = false;   // [startup] one-shot: time to first rendered frame (host serve-ready)
 
     // Main loop
     while (!(dll_exit_requested && dll_exit_requested())) {
@@ -444,6 +455,11 @@ static int run_lifecycle(const string & fn) {
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_store) dll_clear_store();
                 ctx_had_exception = true;
+            }
+            if (!firstFrameLogged && !ctx_had_exception) {
+                firstFrameLogged = true;
+                tout << "daslang-live: [startup] first frame rendered, serve-ready "
+                     << int((get_time_sec() - t_launch) * 1000.0) << " ms after launch\n";
             }
         }
         // Avoid busy-spinning when there's no context or paused
