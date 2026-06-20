@@ -1511,14 +1511,20 @@ local-GPU behavioral proof through dasVulkan.
   `"points"` → `OutputTrianglesEXT` / `OutputLinesEXT` / `OutputPoints`) as `[mesh_shader]` annotation
   args (PR-D hardcoded 64 / 64 / triangles). Split out of the original PR-E so the **novel**
   array-of-builtin work below lands on its own reviewable diff.
-- **PR-E2. Array-of-builtin output classification.** The **novel surface**: per-vertex / per-primitive
-  Output **arrays of builtins** (`gl_MeshVerticesEXT[]` → BuiltIn Position per-vertex;
-  `gl_PrimitiveTriangleIndicesEXT[]` → uvec3 array). Every existing builtin is scalar/vec — this is new
-  ground in `classify_global` / `builtin_info`. Consumes PR-E's `max_vertices` / `max_primitives`
-  counts to size the output arrays. The intrinsics (`OpSetMeshOutputsEXT` / `OpEmitMeshTasksEXT`)
-  landed in PR-D; the counts + topology in PR-E. *(next mesh slice)*
-- **PR-F. `PerPrimitiveEXT` decoration + polish.** Grammar has the enumerant; emit on per-primitive
-  outputs. Task-shader payload via `TaskPayloadWorkgroupEXT` storage class.
+- **PR-E2. Array-of-builtin output classification.** *LANDED (2026-06-20, PR #3223, branch `bbatkin/dasspirv-mesh-arrays`)*
+  The **novel surface**: per-vertex / per-primitive Output **arrays of builtins** (`gl_MeshVerticesEXT[]`
+  → BuiltIn Position per-vertex; `gl_PrimitiveTriangleIndicesEXT[]` → uvec3 array). First array-of-builtin /
+  Block-of-builtin path in `classify_global` / `builtin_info`; the `[i].gl_Position` two-level chain reuses
+  the existing `visitExprField` path. Consumes PR-E's counts to size the arrays.
+- **PR-F. Mesh user + per-primitive-builtin outputs.** *LANDED (2026-06-20, PR #3228, branch `bbatkin/dasspirv-mesh-user-outputs`)*
+  The three Tutorial-13 color rails: per-vertex `@out` varying + `@per_primitive @out` (`PerPrimitiveEXT`)
+  + `gl_MeshPrimitivesEXT[i].gl_PrimitiveID` (per-primitive builtin Block) + fragment `gl_PrimitiveID`
+  Input. spirv-val forced three fixes (PerPrimitiveEXT as a member deco in a Block; `MeshShadingEXT` cap
+  for a fragment reading PrimitiveId → 1.4; `Flat` on the int fragment input).
+- **PR-G. Task→mesh payload + per-primitive-block breadth.** `TaskPayloadWorkgroupEXT` storage class
+  (the cluster-culling task→mesh handoff — the "task" half of Tutorial 13), plus the remaining
+  per-primitive-block members (`gl_Layer` / `gl_ViewportIndex` / `gl_CullPrimitiveEXT`), lines/points
+  index arrays, and `gl_PointSize` / clip / cull per-vertex extras. *(next mesh slice)*
 
 ### Independent — shipped-surface gaps surfaced by the audit (no tutorial dependency, fold in opportunistically)
 
@@ -1561,9 +1567,10 @@ PR-C: descriptor arrays                                (medium; unblocks bindles
        └─ then Tutorial 12 path opens
 PR-D: mesh/task stage scaffolding                      (LANDED 2026-06-19; cap + exec modes + intrinsics)
 PR-E: mesh output config (annotation args)             (LANDED 2026-06-19; counts + topology)
-PR-E2: array-of-builtin output classify                (next; novel surface)
-PR-F: PerPrimitiveEXT + polish
-       └─ then Tutorial 13 path opens
+PR-E2: array-of-builtin output classify                (LANDED 2026-06-20; novel surface)
+PR-F: mesh user + per-primitive-builtin outputs        (LANDED 2026-06-20; the 3 color rails)
+       └─ next mesh slice: task→mesh payload (TaskPayloadWorkgroupEXT) + per-primitive-block breadth
+       └─ then Tutorial 13 path opens (cluster-cull task → meshlet mesh → fragment)
 PR-G: UBO/SSBO nested struct + array-in-struct         (LANDED 2026-06-18)
 PR-H: plan-doc archival sweep                          (no code; deletes PHASE6/7/8/9.md)
 ```
