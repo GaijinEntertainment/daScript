@@ -58,6 +58,44 @@ def private has_execution_mode(words : array<uint>; mode : SpvExecutionMode) : b
     return op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(mode))
 }
 
+// Operand count (excluding word0) of the FIRST instruction with opcode `op`, or -1 if none.
+// Used to tell OpEmitMeshTasksEXT's 4-operand payload form (gx, gy, gz, payload) from the 3-operand
+// no-payload form.
+def private inst_operand_count(words : array<uint>; op : SpvOp) : int {
+    var cnt = -1
+    foreach_inst(words) $(opcode : uint; _w : array<uint>; _s, n : int) {
+        if (cnt >= 0 || opcode != uint(op)) return
+        cnt = n
+    }
+    return cnt
+}
+
+// Result id (operand 1) of the FIRST OpVariable whose storage class (operand 2) is
+// TaskPayloadWorkgroupEXT -- i.e. the @task_payload variable's id.
+def private task_payload_variable_id(words : array<uint>) : tuple<ok : bool; value : uint> {
+    var res = (ok = false, value = 0u)
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (res.ok || opcode != uint(SpvOp.Variable)) return
+        if (n > 2 && w[s + 2] == uint(SpvStorageClass.TaskPayloadWorkgroupEXT)) {
+            res = (ok = true, value = w[s + 1])
+        }
+    }
+    return res
+}
+
+// The payload id carried by OpEmitMeshTasksEXT: its optional 4th operand (index 3), present only in the
+// payload form. Returns ok=false when the terminator is the 3-operand (no-payload) form.
+def private emit_mesh_tasks_payload_id(words : array<uint>) : tuple<ok : bool; value : uint> {
+    var res = (ok = false, value = 0u)
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (res.ok || opcode != uint(SpvOp.EmitMeshTasksEXT)) return
+        if (n > 3) {
+            res = (ok = true, value = w[s + 3])
+        }
+    }
+    return res
+}
+
 // Read the operand at `opIdx` (0-based operand index, after word0 — same convention as
 // op_has_operand_at) of the OpExecutionMode whose mode literal (operand 1) equals `mode`. The count
 // for OutputVertices / OutputPrimitivesEXT sits at operand index 2 (operand 0 is the entry-point id,
@@ -279,5 +317,50 @@ def test_mesh_user_outputs(t : T?) {
             "prim_frag: gl_PrimitiveID is Flat (mandatory for an int fragment input)")
         validate(t, fwords, "prim_frag")
         delete fwords
+    }
+}
+
+[test]
+def test_mesh_task_payload(t : T?) {
+    t |> run("[task_shader]/[mesh_shader] @task_payload: TaskPayloadWorkgroupEXT + EmitMeshTasksEXT 4-operand + mesh read") <| @(t : T?) {
+        // task half: writes the payload (count + tint + survivor list) and dispatches `count` mesh
+        // workgroups, carrying the payload id as EmitMeshTasksEXT's optional 4th operand.
+        var twords <- task_payload_words()
+        t |> success(op_has_operand_at(twords, SpvOp.EntryPoint, 0, uint(SpvExecutionModel.TaskEXT)),
+            "task_payload: OpEntryPoint TaskEXT")
+        // @task_payload -> exactly one TaskPayloadWorkgroupEXT (5402) OpVariable (operand 2 = storage class).
+        t |> success(op_has_operand_at(twords, SpvOp.Variable, 2, uint(SpvStorageClass.TaskPayloadWorkgroupEXT)),
+            "task_payload: @task_payload -> TaskPayloadWorkgroupEXT OpVariable (storage 5402)")
+        let ntp = count_op_operand_at(twords, SpvOp.Variable, 2, uint(SpvStorageClass.TaskPayloadWorkgroupEXT))
+        t |> success(ntp == 1, "task_payload: exactly one TaskPayloadWorkgroupEXT variable (got {ntp})")
+        // the dispatch terminator carries the payload: OpEmitMeshTasksEXT in its 4-operand form
+        // (gx, gy, gz, payload) rather than the 3-operand no-payload form.
+        t |> success(has_op(twords, SpvOp.EmitMeshTasksEXT), "task_payload: emits OpEmitMeshTasksEXT")
+        let nops = inst_operand_count(twords, SpvOp.EmitMeshTasksEXT)
+        t |> success(nops == 4, "task_payload: OpEmitMeshTasksEXT is the 4-operand payload form (got {nops})")
+        // the payload variable id (operand 1 of OpVariable) is exactly the 4th operand (index 3) of the
+        // terminator -- i.e. the dispatch really carries THIS payload, not some other id.
+        let pvar = task_payload_variable_id(twords)
+        let pterm = emit_mesh_tasks_payload_id(twords)
+        t |> success(pvar.ok && pterm.ok && pvar.value == pterm.value,
+            "task_payload: EmitMeshTasksEXT 4th operand == the payload variable id (var={pvar.value} term={pterm.value})")
+        validate(t, twords, "task_payload")
+        delete twords
+        // mesh half: declares the SAME struct and reads its slice (survivors[gl_LocalInvocationIndex]) +
+        // the scalar/vector fields. A workgroup-grid builtin (LocalInvocationIndex) in a MESH shader is the
+        // gap PR-G closed; the read is an OpAccessChain into the TaskPayloadWorkgroupEXT variable + OpLoad.
+        var mwords <- mesh_payload_words()
+        t |> success(op_has_operand_at(mwords, SpvOp.EntryPoint, 0, uint(SpvExecutionModel.MeshEXT)),
+            "mesh_payload: OpEntryPoint MeshEXT")
+        t |> success(op_has_operand_at(mwords, SpvOp.Variable, 2, uint(SpvStorageClass.TaskPayloadWorkgroupEXT)),
+            "mesh_payload: @task_payload -> TaskPayloadWorkgroupEXT OpVariable (storage 5402)")
+        // the workgroup-grid builtin used to index the survivor list (was compute-only; now valid in mesh).
+        t |> success(op_has_operand_pair(mwords, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.LocalInvocationIndex)),
+            "mesh_payload: gl_LocalInvocationIndex -> BuiltIn LocalInvocationIndex (workgroup builtin in mesh)")
+        // member access into the payload: OpAccessChain (member/element select) + OpLoad (read).
+        t |> success(has_op(mwords, SpvOp.AccessChain), "mesh_payload: payload read emits OpAccessChain")
+        t |> success(has_op(mwords, SpvOp.Load), "mesh_payload: payload read emits OpLoad")
+        validate(t, mwords, "mesh_payload")
+        delete mwords
     }
 }

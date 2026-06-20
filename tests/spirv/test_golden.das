@@ -189,5 +189,10 @@ def test_golden_disassembly(t : T?) {
         check(t, "mesh_outs", mesh_outs_words())
         check(t, "prim_frag", prim_frag_words())
         check(t, "pp_frag", pp_frag_words())
+        // PR-G task -> mesh payload (visitor baseline): the @task_payload TaskPayloadWorkgroupEXT variable,
+        // the task writes + EmitMeshTasksEXT 4-operand form, and the mesh survivor-list read. byte-identical
+        // check() pins the plain-struct member ids + the payload access-chain order.
+        check(t, "task_payload", task_payload_words())
+        check(t, "mesh_payload", mesh_payload_words())
     }
 }
