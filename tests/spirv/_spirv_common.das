@@ -1479,6 +1479,44 @@ def public mesh_tri_words : array<uint> {
     return clone_to_move(mesh_tri_spv)
 }
 
+// ===== PR-F mesh user + per-primitive-builtin outputs (the three Tutorial-13 color rails) =====
+// mesh_outs writes all three mesh->fragment color paths: a per-vertex @out varying (mo_vcolor[i],
+// smooth/interpolated), a @per_primitive @out user output (mo_pcolor[i], flat, PerPrimitiveEXT-decorated
+// on the variable), and the per-primitive builtin gl_MeshPrimitivesEXT[i].gl_PrimitiveID (a Block whose
+// member 0 is BuiltIn PrimitiveId + PerPrimitiveEXT). prim_frag reads that id back as a fragment Input
+// builtin (MeshShadingEXT cap -> SPIR-V 1.4, Flat-decorated since it is an int input). No NEW opcodes --
+// Output arrays + Block + Decorate / MemberDecorate / AccessChain / Store are all already declared.
+var @out @location = 0 mo_vcolor : array<float3>                 // per-vertex varying (smooth)
+var @per_primitive @out @location = 1 mo_pcolor : array<float3>  // per-primitive (flat, PerPrimitiveEXT)
+[mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_outs_spv"), marker(no_coverage)]
+def mesh_outs {
+    SetMeshOutputsEXT(3u, 1u)
+    gl_MeshVerticesEXT[0].gl_Position = float4(-0.5, -0.5, 0.0, 1.0)
+    gl_MeshVerticesEXT[1].gl_Position = float4(0.5, -0.5, 0.0, 1.0)
+    gl_MeshVerticesEXT[2].gl_Position = float4(0.0, 0.5, 0.0, 1.0)
+    gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)
+    mo_vcolor[0] = float3(1.0, 0.0, 0.0)                         // per-vertex smooth color
+    mo_vcolor[1] = float3(0.0, 1.0, 0.0)
+    mo_vcolor[2] = float3(0.0, 0.0, 1.0)
+    mo_pcolor[0] = float3(1.0, 1.0, 0.0)                         // per-primitive flat color
+    gl_MeshPrimitivesEXT[0].gl_PrimitiveID = 7                   // per-primitive builtin id
+}
+
+def public mesh_outs_words : array<uint> {
+    return clone_to_move(mesh_outs_spv)
+}
+
+var @out @location = 0 pf_color : float4
+[fragment_shader(name="prim_frag_spv"), marker(no_coverage)]
+def prim_frag {
+    let id = float(gl_PrimitiveID)                              // read the per-primitive id (Flat int Input)
+    pf_color = float4(id * 0.1, 0.0, 0.0, 1.0)
+}
+
+def public prim_frag_words : array<uint> {
+    return clone_to_move(prim_frag_spv)
+}
+
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
 // extension ride on the already-declared OpCapability / OpExtension; OutputVertices /

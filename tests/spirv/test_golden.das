@@ -184,5 +184,9 @@ def test_golden_disassembly(t : T?) {
         // PR-E2 array-of-builtin output (visitor baseline): per-vertex gl_Position Block + triangle
         // index array. byte-identical check() pins the Block struct + two-level access-chain id order.
         check(t, "mesh_tri", mesh_tri_words())
+        // PR-F mesh user + per-primitive-builtin outputs (visitor baseline): per-vertex varying +
+        // per-primitive output + gl_MeshPrimitivesEXT block; prim_frag = the fragment gl_PrimitiveID read.
+        check(t, "mesh_outs", mesh_outs_words())
+        check(t, "prim_frag", prim_frag_words())
     }
 }

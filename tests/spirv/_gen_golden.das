@@ -88,4 +88,7 @@ def main {
     emit_golden(dir, "mesh_points", mesh_points_words())
     // PR-E2 array-of-builtin output: one-triangle per-vertex Position + triangle index array.
     emit_golden(dir, "mesh_tri", mesh_tri_words())
+    // PR-F mesh user + per-primitive-builtin outputs + the fragment gl_PrimitiveID read.
+    emit_golden(dir, "mesh_outs", mesh_outs_words())
+    emit_golden(dir, "prim_frag", prim_frag_words())
 }

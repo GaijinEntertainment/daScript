@@ -177,6 +177,10 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
     if (name == "gl_FragCoord") return (ok = true, bi = SpvBuiltIn.FragCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
     if (name == "gl_FragDepth") return (ok = true, bi = SpvBuiltIn.FragDepth, storage = SpvStorageClass.Output, req = ShaderStage.Fragment)
     if (name == "gl_PointCoord") return (ok = true, bi = SpvBuiltIn.PointCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
+    // gl_PrimitiveID: fragment Input (the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT).
+    // In a mesh pipeline it is NOT fixed-function-generated, so reading it pulls in the MeshShadingEXT
+    // capability on the fragment module (handled at classification).
+    if (name == "gl_PrimitiveID") return (ok = true, bi = SpvBuiltIn.PrimitiveId, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
     return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
 }
 
@@ -580,6 +584,31 @@ def private classify_mesh_output(var m : SpirvModule; var ctx : EmitCtx; v : Var
         ctx.interface_ids |> push(vid)
         return
     }
+    if (vname == "gl_MeshPrimitivesEXT") {
+        // per-primitive builtin Block (the per-primitive analog of gl_MeshVerticesEXT). PR-F ships just
+        // gl_PrimitiveID; gl_Layer / gl_ViewportIndex / gl_CullPrimitiveEXT are follow-up members.
+        let n = ctx.mesh_max_primitives
+        if (n <= 0) {
+            errors |> push("gl_MeshPrimitivesEXT: max_primitives must be > 0 (got {n})")
+            return
+        }
+        // Block { gl_PrimitiveID : int } — member 0 = BuiltIn PrimitiveId + PerPrimitiveEXT (a Builtin
+        // PrimitiveId in a mesh shader MUST carry PerPrimitiveEXT, VUID-PrimitiveId-PrimitiveId-07040;
+        // in a Block both ride as MEMBER decorations alongside the BuiltIn).
+        let i32 = type_int(m, 32u, 1u)
+        let blk = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.TypeStruct, blk, i32)
+        emit(m, SEC_DECOR, SpvOp.Decorate, blk, uint(SpvDecoration.Block))
+        emit(m, SEC_DECOR, SpvOp.MemberDecorate, blk, 0u, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PrimitiveId))
+        emit(m, SEC_DECOR, SpvOp.MemberDecorate, blk, 0u, uint(SpvDecoration.PerPrimitiveEXT))
+        let arr = type_array(m, blk, n)
+        let pt = type_pointer(m, SpvStorageClass.Output, arr)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Output))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Output, value_type = arr, elem_type = blk, is_mesh_output = true))
+        ctx.interface_ids |> push(vid)
+        return
+    }
 }
 
 // ===== global variable classification + emission =====
@@ -608,12 +637,20 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         if (bi.bi == SpvBuiltIn.DrawIndex) {
             ensure_draw_parameters(m, ctx)
         }
+        // gl_PrimitiveID in a fragment of a mesh pipeline: the id is not fixed-function-generated, so
+        // reading it pulls in MeshShadingEXT + SPV_EXT_mesh_shader (→ SPIR-V 1.4), same as the mesh stage.
+        // It is an integer fragment Input, so it MUST be Flat (no interpolation for ints; VUID-…-Flat-04744).
+        if (bi.bi == SpvBuiltIn.PrimitiveId) {
+            ensure_mesh_shading(m, ctx)
+            m.version = SPV_VERSION_1_4
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Flat))
+        }
         return
     }
     // mesh per-vertex / per-primitive Output arrays (gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT):
     // recognized by name BEFORE the @ssbo array path below (their daslang type is array<...>, which the
     // SSBO path would otherwise claim). Sized from the [mesh_shader] output config on ctx.
-    if (vname == "gl_MeshVerticesEXT" || vname == "gl_PrimitiveTriangleIndicesEXT") {
+    if (vname == "gl_MeshVerticesEXT" || vname == "gl_PrimitiveTriangleIndicesEXT" || vname == "gl_MeshPrimitivesEXT") {
         classify_mesh_output(m, ctx, v, vname, stage, errors)
         return
     }
@@ -636,11 +673,41 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             return
         }
         let storage = is_in ? SpvStorageClass.Input : SpvStorageClass.Output
+        let is_per_prim = v.annotation |> find_arg("per_primitive") is tBool
+        // Mesh per-vertex / per-primitive USER output: in a mesh shader an @out varying is declared as
+        // an ARRAY (out array<float3> v_color, written v_color[i] = …) and lowers to a bare Output
+        // array sized by max_vertices (per-vertex) or max_primitives (@per_primitive), Location-decorated
+        // (+ PerPrimitiveEXT). The matching fragment @in is the per-fragment scalar — the rasteriser
+        // expands the array. Same is_mesh_output access path as gl_MeshVerticesEXT[i].
+        if (is_out && stage == ShaderStage.Mesh && v._type.baseType == Type.tArray) {
+            let count = is_per_prim ? ctx.mesh_max_primitives : ctx.mesh_max_vertices
+            if (count <= 0) {
+                errors |> push("mesh output '{vname}': max_{is_per_prim ? "primitives" : "vertices"} must be > 0 (got {count})")
+                return
+            }
+            let elem_t = emit_type(m, v._type.firstType)
+            let arr = type_array(m, elem_t, count)
+            let apt = type_pointer(m, SpvStorageClass.Output, arr)
+            let avid = alloc_id(m)
+            emit(m, SEC_TYPES, SpvOp.Variable, apt, avid, uint(SpvStorageClass.Output))
+            emit(m, SEC_DECOR, SpvOp.Decorate, avid, uint(SpvDecoration.Location), uint(loc))
+            if (is_per_prim) {
+                emit(m, SEC_DECOR, SpvOp.Decorate, avid, uint(SpvDecoration.PerPrimitiveEXT))
+            }
+            ctx.globals |> insert(intptr(v), GlobalInfo(var_id = avid, storage = SpvStorageClass.Output, value_type = arr, elem_type = elem_t, is_mesh_output = true))
+            ctx.interface_ids |> push(avid)
+            return
+        }
         let vt = emit_type(m, v._type)
         let pt = type_pointer(m, storage, vt)
         let vid = alloc_id(m)
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(storage))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
+        // A fragment @per_primitive @in is the per-fragment side of a mesh per-primitive output: it must
+        // carry the matching PerPrimitiveEXT decoration so the rasteriser feeds it per-primitive (flat).
+        if (is_in && is_per_prim) {
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.PerPrimitiveEXT))
+        }
         // Flat decoration. Vulkan mandates Flat on any integer/uint varying (no valid interpolation
         // mode exists for integers — the driver returns garbage without it), so emit it automatically
         // for those. Floats default to perspective-correct smooth interpolation; honour an explicit

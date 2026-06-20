@@ -26,6 +26,7 @@ var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-d
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
 var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
 var gl_PointCoord           : float2    // BuiltIn PointCoord (Input) — UV within the rasterised point primitive, [0,1]^2; valid only when POINT_LIST topology is rendered
+var gl_PrimitiveID          : int       // BuiltIn PrimitiveId (Input, fragment) — the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT[i].gl_PrimitiveID
 
 // ===== descriptor indexing =====
 // nonuniformEXT marks an index value as varying across invocations within a wavefront/subgroup
@@ -259,3 +260,14 @@ struct gl_MeshPerVertexEXT {
 }
 var gl_MeshVerticesEXT             : array<gl_MeshPerVertexEXT>
 var gl_PrimitiveTriangleIndicesEXT : array<uint3>
+
+// gl_MeshPrimitivesEXT is the per-primitive builtin output block (the per-primitive analog of
+// gl_MeshVerticesEXT): an array (sized by max_primitives) of a block whose gl_PrimitiveID the fragment
+// can read (`in int gl_PrimitiveID`). Written `gl_MeshPrimitivesEXT[i].gl_PrimitiveID = …`. The emitter
+// recognizes it by name and emits the real PerPrimitiveEXT-decorated Output array; the daslang decls
+// exist only so the indexing + field access typecheck. (gl_Layer / gl_ViewportIndex / gl_CullPrimitiveEXT
+// join the block in a follow-up.) gl_PrimitiveID is also a fragment Input builtin (read per fragment).
+struct gl_MeshPerPrimitiveEXT {
+    gl_PrimitiveID : int
+}
+var gl_MeshPrimitivesEXT : array<gl_MeshPerPrimitiveEXT>
