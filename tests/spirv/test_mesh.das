@@ -58,9 +58,10 @@ def private has_execution_mode(words : array<uint>; mode : SpvExecutionMode) : b
     return op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(mode))
 }
 
-// Read the operand at absolute index `opIdx` of the OpExecutionMode whose mode literal (operand 1)
-// equals `mode`. The count for OutputVertices / OutputPrimitivesEXT sits at operand index 2 (operand 0
-// is the entry-point id, operand 1 the mode literal). Returns the first matching mode's operand.
+// Read the operand at `opIdx` (0-based operand index, after word0 — same convention as
+// op_has_operand_at) of the OpExecutionMode whose mode literal (operand 1) equals `mode`. The count
+// for OutputVertices / OutputPrimitivesEXT sits at operand index 2 (operand 0 is the entry-point id,
+// operand 1 the mode literal). Returns the first matching mode's operand.
 def private exec_mode_operand(words : array<uint>; mode : SpvExecutionMode; opIdx : int) : tuple<found : bool; value : uint> {
     var res = (found = false, value = 0u)
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {

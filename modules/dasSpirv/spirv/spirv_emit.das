@@ -42,9 +42,9 @@ enum public MeshOutputTopology {
 }
 
 struct public MeshOutputConfig {
-    max_vertices   = 64
-    max_primitives = 64
-    topology       = MeshOutputTopology.triangles
+    max_vertices   : int               = 64
+    max_primitives : int               = 64
+    topology       : MeshOutputTopology = MeshOutputTopology.triangles
 }
 
 // ===== per-global classification =====
