@@ -273,6 +273,393 @@ def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     }
 }
 
+// ===== concat — 3 sources =====
+
+[unused_argument(tt)]
+def private concat3_impl(var a; var b; var c; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat3_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat3_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates three arrays
+    return <- concat3_impl_const(a, b, c, type<TT -const -&>, length(a) + length(b) + length(c))
+}
+
+def concat_to_array(var a, b, c : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates three iterators and returns an array
+    return <- concat3_impl(a, b, c, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates three iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c : array<auto(TT)>) {
+    //! Concatenates three arrays in place
+    a.reserve(length(a) + length(b) + length(c))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+}
+
+// ===== concat — 4 sources =====
+
+[unused_argument(tt)]
+def private concat4_impl(var a; var b; var c; var d; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat4_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat4_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c, d : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates four arrays
+    return <- concat4_impl_const(a, b, c, d, type<TT -const -&>, length(a) + length(b) + length(c) + length(d))
+}
+
+def concat_to_array(var a, b, c, d : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates four iterators and returns an array
+    return <- concat4_impl(a, b, c, d, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c, d : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates four iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c, <- d) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        for (itD in d) {
+            static_if (typeinfo can_copy(itD)) { yield itD } else { yield <- clone_to_move(itD) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c, d : array<auto(TT)>) {
+    //! Concatenates four arrays in place
+    a.reserve(length(a) + length(b) + length(c) + length(d))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+    a |> push_clone_from(d)
+}
+
+// ===== concat — 5 sources =====
+
+[unused_argument(tt)]
+def private concat5_impl(var a; var b; var c; var d; var e; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    for (it in e) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat5_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat5_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c, d, e : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates five arrays
+    return <- concat5_impl_const(a, b, c, d, e, type<TT -const -&>, length(a) + length(b) + length(c) + length(d) + length(e))
+}
+
+def concat_to_array(var a, b, c, d, e : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates five iterators and returns an array
+    return <- concat5_impl(a, b, c, d, e, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c, d, e : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates five iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c, <- d, <- e) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        for (itD in d) {
+            static_if (typeinfo can_copy(itD)) { yield itD } else { yield <- clone_to_move(itD) }
+        }
+        for (itE in e) {
+            static_if (typeinfo can_copy(itE)) { yield itE } else { yield <- clone_to_move(itE) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c, d, e : array<auto(TT)>) {
+    //! Concatenates five arrays in place
+    a.reserve(length(a) + length(b) + length(c) + length(d) + length(e))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+    a |> push_clone_from(d)
+    a |> push_clone_from(e)
+}
+
+// ===== concat — 6 sources =====
+
+[unused_argument(tt)]
+def private concat6_impl(var a; var b; var c; var d; var e; var f; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    for (it in e) { r.push_clone(it) } // nolint:PERF022
+    for (it in f) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat6_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat6_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c, d, e, f : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates six arrays
+    return <- concat6_impl_const(a, b, c, d, e, f, type<TT -const -&>, length(a) + length(b) + length(c) + length(d) + length(e) + length(f))
+}
+
+def concat_to_array(var a, b, c, d, e, f : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates six iterators and returns an array
+    return <- concat6_impl(a, b, c, d, e, f, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c, d, e, f : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates six iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c, <- d, <- e, <- f) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        for (itD in d) {
+            static_if (typeinfo can_copy(itD)) { yield itD } else { yield <- clone_to_move(itD) }
+        }
+        for (itE in e) {
+            static_if (typeinfo can_copy(itE)) { yield itE } else { yield <- clone_to_move(itE) }
+        }
+        for (itF in f) {
+            static_if (typeinfo can_copy(itF)) { yield itF } else { yield <- clone_to_move(itF) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c, d, e, f : array<auto(TT)>) {
+    //! Concatenates six arrays in place
+    a.reserve(length(a) + length(b) + length(c) + length(d) + length(e) + length(f))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+    a |> push_clone_from(d)
+    a |> push_clone_from(e)
+    a |> push_clone_from(f)
+}
+
+// ===== concat — 7 sources =====
+
+[unused_argument(tt)]
+def private concat7_impl(var a; var b; var c; var d; var e; var f; var g; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    for (it in e) { r.push_clone(it) } // nolint:PERF022
+    for (it in f) { r.push_clone(it) } // nolint:PERF022
+    for (it in g) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat7_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat7_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c, d, e, f, g : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates seven arrays
+    return <- concat7_impl_const(a, b, c, d, e, f, g, type<TT -const -&>, length(a) + length(b) + length(c) + length(d) + length(e) + length(f) + length(g))
+}
+
+def concat_to_array(var a, b, c, d, e, f, g : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates seven iterators and returns an array
+    return <- concat7_impl(a, b, c, d, e, f, g, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c, d, e, f, g : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates seven iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c, <- d, <- e, <- f, <- g) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        for (itD in d) {
+            static_if (typeinfo can_copy(itD)) { yield itD } else { yield <- clone_to_move(itD) }
+        }
+        for (itE in e) {
+            static_if (typeinfo can_copy(itE)) { yield itE } else { yield <- clone_to_move(itE) }
+        }
+        for (itF in f) {
+            static_if (typeinfo can_copy(itF)) { yield itF } else { yield <- clone_to_move(itF) }
+        }
+        for (itG in g) {
+            static_if (typeinfo can_copy(itG)) { yield itG } else { yield <- clone_to_move(itG) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c, d, e, f, g : array<auto(TT)>) {
+    //! Concatenates seven arrays in place
+    a.reserve(length(a) + length(b) + length(c) + length(d) + length(e) + length(f) + length(g))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+    a |> push_clone_from(d)
+    a |> push_clone_from(e)
+    a |> push_clone_from(f)
+    a |> push_clone_from(g)
+}
+
+// ===== concat — 8 sources =====
+
+[unused_argument(tt)]
+def private concat8_impl(var a; var b; var c; var d; var e; var f; var g; var h; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    var r : array<TT -const -&>
+    if (reserveSize > 0) {
+        r.reserve(reserveSize)
+    }
+    for (it in a) { r.push_clone(it) } // nolint:PERF022
+    for (it in b) { r.push_clone(it) } // nolint:PERF022
+    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    for (it in e) { r.push_clone(it) } // nolint:PERF022
+    for (it in f) { r.push_clone(it) } // nolint:PERF022
+    for (it in g) { r.push_clone(it) } // nolint:PERF022
+    for (it in h) { r.push_clone(it) } // nolint:PERF022
+    return <- r
+}
+
+[unused_argument(tt)]
+def private concat8_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); h : auto(ARGH); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    return <- concat8_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), unsafe(reinterpret<ARGH -const>(h)), type<TT -const -&>, reserveSize)
+}
+
+def concat(a, b, c, d, e, f, g, h : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates eight arrays
+    return <- concat8_impl_const(a, b, c, d, e, f, g, h, type<TT -const -&>, length(a) + length(b) + length(c) + length(d) + length(e) + length(f) + length(g) + length(h))
+}
+
+def concat_to_array(var a, b, c, d, e, f, g, h : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates eight iterators and returns an array
+    return <- concat8_impl(a, b, c, d, e, f, g, h, type<TT -const -&>, 0)
+}
+
+def concat(var a, b, c, d, e, f, g, h : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Concatenates eight iterators
+    return generator<TT -const -&> capture(<- a, <- b, <- c, <- d, <- e, <- f, <- g, <- h) {
+        for (itA in a) {
+            static_if (typeinfo can_copy(itA)) { yield itA } else { yield <- clone_to_move(itA) }
+        }
+        for (itB in b) {
+            static_if (typeinfo can_copy(itB)) { yield itB } else { yield <- clone_to_move(itB) }
+        }
+        for (itC in c) {
+            static_if (typeinfo can_copy(itC)) { yield itC } else { yield <- clone_to_move(itC) }
+        }
+        for (itD in d) {
+            static_if (typeinfo can_copy(itD)) { yield itD } else { yield <- clone_to_move(itD) }
+        }
+        for (itE in e) {
+            static_if (typeinfo can_copy(itE)) { yield itE } else { yield <- clone_to_move(itE) }
+        }
+        for (itF in f) {
+            static_if (typeinfo can_copy(itF)) { yield itF } else { yield <- clone_to_move(itF) }
+        }
+        for (itG in g) {
+            static_if (typeinfo can_copy(itG)) { yield itG } else { yield <- clone_to_move(itG) }
+        }
+        for (itH in h) {
+            static_if (typeinfo can_copy(itH)) { yield itH } else { yield <- clone_to_move(itH) }
+        }
+        return false
+    }
+}
+
+def concat_inplace(var a : array<auto(TT)>, b, c, d, e, f, g, h : array<auto(TT)>) {
+    //! Concatenates eight arrays in place
+    a.reserve(length(a) + length(b) + length(c) + length(d) + length(e) + length(f) + length(g) + length(h))
+    a |> push_clone_from(b)
+    a |> push_clone_from(c)
+    a |> push_clone_from(d)
+    a |> push_clone_from(e)
+    a |> push_clone_from(f)
+    a |> push_clone_from(g)
+    a |> push_clone_from(h)
+}
+
 def reverse_inplace(var buffer : array<auto(TT)>) {
     //! Reverses an array in place
     let l = length(buffer)
