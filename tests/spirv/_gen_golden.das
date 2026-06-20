@@ -83,4 +83,7 @@ def main {
     // Forward-regression freeze.
     emit_golden(dir, "mesh_empty", mesh_empty_words())
     emit_golden(dir, "task_empty", task_empty_words())
+    // PR-E mesh output config: non-default counts + lines / points topology.
+    emit_golden(dir, "mesh_lines", mesh_lines_words())
+    emit_golden(dir, "mesh_points", mesh_points_words())
 }

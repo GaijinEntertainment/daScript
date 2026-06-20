@@ -177,5 +177,9 @@ def test_golden_disassembly(t : T?) {
         // check() pins the opcode AND id-allocation order of the prologue intrinsics.
         check(t, "mesh_empty", mesh_empty_words())
         check(t, "task_empty", task_empty_words())
+        // PR-E mesh output config fixtures (visitor baseline): non-default counts + OutputLinesEXT /
+        // OutputPoints topology. byte-identical check() pins the OpExecutionMode operands.
+        check(t, "mesh_lines", mesh_lines_words())
+        check(t, "mesh_points", mesh_points_words())
     }
 }

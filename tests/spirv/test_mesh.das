@@ -58,6 +58,20 @@ def private has_execution_mode(words : array<uint>; mode : SpvExecutionMode) : b
     return op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(mode))
 }
 
+// Read the operand at absolute index `opIdx` of the OpExecutionMode whose mode literal (operand 1)
+// equals `mode`. The count for OutputVertices / OutputPrimitivesEXT sits at operand index 2 (operand 0
+// is the entry-point id, operand 1 the mode literal). Returns the first matching mode's operand.
+def private exec_mode_operand(words : array<uint>; mode : SpvExecutionMode; opIdx : int) : tuple<found : bool; value : uint> {
+    var res = (found = false, value = 0u)
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (res.found || opcode != uint(SpvOp.ExecutionMode)) return
+        if (n > opIdx && w[s + 1] == uint(mode)) {
+            res = (found = true, value = w[s + opIdx])
+        }
+    }
+    return res
+}
+
 [test]
 def test_mesh_stage_scaffolding(t : T?) {
     t |> run("[mesh_shader] empty: cap + ext + execution model + execution modes + SetMeshOutputsEXT") <| @(t : T?) {
@@ -127,5 +141,33 @@ def test_task_stage_scaffolding(t : T?) {
             "task_empty: exactly one OpEmitMeshTasksEXT (got {count_op(words, SpvOp.EmitMeshTasksEXT)})")
         validate(tt, words, "task_empty")
         delete words
+    }
+}
+
+[test]
+def test_mesh_output_config(t : T?) {
+    t |> run("[mesh_shader] output config: max_vertices / max_primitives / output_topology -> execution modes") <| @(t : T?) {
+        // mesh_lines: max_vertices=96, max_primitives=32, output_topology="lines".
+        var lwords <- mesh_lines_words()
+        let lv = exec_mode_operand(lwords, SpvExecutionMode.OutputVertices, 2)
+        t |> success(lv.found && lv.value == 96u, "mesh_lines: OutputVertices count == 96 (found={lv.found} value={lv.value})")
+        let lp = exec_mode_operand(lwords, SpvExecutionMode.OutputPrimitivesEXT, 2)
+        t |> success(lp.found && lp.value == 32u, "mesh_lines: OutputPrimitivesEXT count == 32 (found={lp.found} value={lp.value})")
+        t |> success(has_execution_mode(lwords, SpvExecutionMode.OutputLinesEXT), "mesh_lines: ExecutionMode OutputLinesEXT")
+        t |> success(!has_execution_mode(lwords, SpvExecutionMode.OutputTrianglesEXT), "mesh_lines: NO OutputTrianglesEXT (topology is lines)")
+        t |> success(!has_execution_mode(lwords, SpvExecutionMode.OutputPoints), "mesh_lines: NO OutputPoints")
+        validate(t, lwords, "mesh_lines")
+        delete lwords
+        // mesh_points: max_vertices=48, max_primitives=16, output_topology="points".
+        var pwords <- mesh_points_words()
+        let pv = exec_mode_operand(pwords, SpvExecutionMode.OutputVertices, 2)
+        t |> success(pv.found && pv.value == 48u, "mesh_points: OutputVertices count == 48 (found={pv.found} value={pv.value})")
+        let pp = exec_mode_operand(pwords, SpvExecutionMode.OutputPrimitivesEXT, 2)
+        t |> success(pp.found && pp.value == 16u, "mesh_points: OutputPrimitivesEXT count == 16 (found={pp.found} value={pp.value})")
+        t |> success(has_execution_mode(pwords, SpvExecutionMode.OutputPoints), "mesh_points: ExecutionMode OutputPoints")
+        t |> success(!has_execution_mode(pwords, SpvExecutionMode.OutputTrianglesEXT), "mesh_points: NO OutputTrianglesEXT (topology is points)")
+        t |> success(!has_execution_mode(pwords, SpvExecutionMode.OutputLinesEXT), "mesh_points: NO OutputLinesEXT")
+        validate(t, pwords, "mesh_points")
+        delete pwords
     }
 }

@@ -97,10 +97,33 @@ class SpirvShader : AstFunctionAnnotation {
         local_size.y = args |> find_arg("local_size_y") ?as tInt ?? 1
         local_size.z = args |> find_arg("local_size_z") ?as tInt ?? 1
         var err : array<string>
+        // Mesh-shader output configuration (max_vertices / max_primitives / output_topology). Only the
+        // mesh stage carries these; other stages keep the defaults, which generate_spirv ignores. The
+        // topology string is validated here — the only place the annotation args are visible — and a bad
+        // value pushes a clean error so the blob is never installed; the counts are validated downstream
+        // at the emit gate in generate_spirv.
+        var mv = 64
+        var mp = 64
+        var topology = MeshOutputTopology.triangles
+        if (shader_stage() == ShaderStage.Mesh) {
+            mv = args |> find_arg("max_vertices") ?as tInt ?? 64
+            mp = args |> find_arg("max_primitives") ?as tInt ?? 64
+            let topo = args |> find_arg("output_topology") ?as tString ?? "triangles"
+            if (topo == "triangles") {
+                topology = MeshOutputTopology.triangles
+            } elif (topo == "lines") {
+                topology = MeshOutputTopology.lines
+            } elif (topo == "points") {
+                topology = MeshOutputTopology.points
+            } else {
+                err |> push("mesh_shader: output_topology must be \"triangles\", \"lines\", or \"points\" (got \"{topo}\")")
+            }
+        }
+        let mesh_cfg = MeshOutputConfig(max_vertices = mv, max_primitives = mp, topology = topology)
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
             var refl : SpirvReflection
-            var words <- generate_spirv(func, err, shader_stage(), local_size, refl)
+            var words <- generate_spirv(func, err, shader_stage(), local_size, mesh_cfg, refl)
             if (err |> empty()) {
                 glob.init = build_uint_array_literal(words, func.at)
                 // Fill the companion reflection global in the same patch pass (gated on the blob's
@@ -157,12 +180,12 @@ class SpirvFragmentShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.Fragment
 }
 
-// [mesh_shader] / [task_shader] (VK_EXT_mesh_shader). PR-D scope is the scaffolding — execution model
-// + capabilities + execution modes + SetMeshOutputsEXT / EmitMeshTasksEXT prologue intrinsics. The
-// per-vertex / per-primitive output array surface (gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT,
-// ...) lands in PR-E together with the array-of-builtin classifier. PR-D hardcodes the OutputVertices
-// + OutputPrimitivesEXT counts at 64 each and topology to triangles; PR-E exposes them as annotation
-// args.
+// [mesh_shader] / [task_shader] (VK_EXT_mesh_shader). Execution model + capabilities + execution modes
+// + SetMeshOutputsEXT / EmitMeshTasksEXT prologue intrinsics. The mesh output is configured via the
+// annotation args max_vertices / max_primitives (default 64 each -> OutputVertices / OutputPrimitivesEXT)
+// and output_topology ("triangles" | "lines" | "points", default "triangles" -> OutputTrianglesEXT /
+// OutputLinesEXT / OutputPoints). The per-vertex / per-primitive output array surface (gl_MeshVerticesEXT,
+// gl_PrimitiveTriangleIndicesEXT, ...) and the array-of-builtin classifier land in a follow-up slice.
 [function_macro(name="mesh_shader")]
 class SpirvMeshShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.Mesh

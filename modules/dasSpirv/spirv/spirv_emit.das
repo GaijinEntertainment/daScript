@@ -21,13 +21,30 @@ require daslib/ast_boost
 // are legal. Vertex needs no execution mode; Fragment needs OriginUpperLeft; Compute needs LocalSize.
 // Mesh + Task (VK_EXT_mesh_shader) pull in the MeshShadingEXT capability + SPV_EXT_mesh_shader
 // extension; both need LocalSize and Mesh additionally needs OutputVertices + OutputPrimitivesEXT
-// + an output-topology mode (PR-D hardcodes OutputTrianglesEXT; Lines / Points arrive in PR-E).
+// + an output-topology mode (triangles / lines / points), all configurable via the [mesh_shader] args.
 enum public ShaderStage {
     Compute
     Vertex
     Fragment
     Mesh
     Task
+}
+
+// Mesh-shader output configuration, parsed from the [mesh_shader] annotation args
+// (max_vertices / max_primitives / output_topology) and threaded into generate_spirv. Drives the
+// OutputVertices + OutputPrimitivesEXT counts and the output-topology execution mode
+// (OutputTrianglesEXT / OutputLinesEXT / OutputPoints). The defaults (64 / 64 / triangles) match
+// PR-D's hardcode, so a [mesh_shader] with no output args emits an unchanged blob.
+enum public MeshOutputTopology {
+    triangles
+    lines
+    points
+}
+
+struct public MeshOutputConfig {
+    max_vertices   = 64
+    max_primitives = 64
+    topology       = MeshOutputTopology.triangles
 }
 
 // ===== per-global classification =====
@@ -3359,7 +3376,7 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 }
 
 [macro_function]
-def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; var reflection : SpirvReflection) : array<uint> {
+def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; mesh_config : MeshOutputConfig; var reflection : SpirvReflection) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
     ctx.stage = stage
@@ -3426,9 +3443,29 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         delete em
     }
     if (stage == ShaderStage.Mesh) {
-        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputVertices), 64u)
-        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputPrimitivesEXT), 64u)
-        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputTrianglesEXT))
+        // OutputVertices / OutputPrimitivesEXT counts + the output topology come from the [mesh_shader]
+        // annotation (defaults 64 / 64 / triangles). Fail-closed: a non-positive count can't size an
+        // output array, so reject it here at the emit gate; clamp the (then-discarded) blob to 1 so it
+        // still disassembles cleanly.
+        var mv = mesh_config.max_vertices
+        var mp = mesh_config.max_primitives
+        if (mv <= 0) {
+            errors |> push("mesh_shader: max_vertices must be > 0 (got {mv})")
+            mv = 1
+        }
+        if (mp <= 0) {
+            errors |> push("mesh_shader: max_primitives must be > 0 (got {mp})")
+            mp = 1
+        }
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputVertices), uint(mv))
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OutputPrimitivesEXT), uint(mp))
+        var topo_mode = SpvExecutionMode.OutputTrianglesEXT
+        if (mesh_config.topology == MeshOutputTopology.lines) {
+            topo_mode = SpvExecutionMode.OutputLinesEXT
+        } elif (mesh_config.topology == MeshOutputTopology.points) {
+            topo_mode = SpvExecutionMode.OutputPoints
+        }
+        emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(topo_mode))
     }
     if (stage == ShaderStage.Fragment) {
         emit(m, SEC_EXECMODE, SpvOp.ExecutionMode, id_main, uint(SpvExecutionMode.OriginUpperLeft))
