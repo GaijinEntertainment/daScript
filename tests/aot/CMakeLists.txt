@@ -210,6 +210,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_modal.das
         tests/strudel/test_sfx.das
         tests/audio/test_hrtf_budget.das
+        tests/audio/test_wav.das
     )
 ENDIF()
 

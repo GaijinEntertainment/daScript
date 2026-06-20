@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 
 module audio_wav shared private
-//! WAV file reading and writing (16-bit PCM format).
+//! WAV file reading (16/24/32-bit integer PCM) and writing (16-bit PCM).
 
 require daslib/fio
 require math
@@ -28,13 +28,14 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
     var fmt_channels = 0
     var fmt_rate = 0
     var fmt_bits = 0
+    var fmt_format = 1
     var data_offset = 0
     var data_size = 0
     while (cursor < length(raw) - 8) {
         let chunk_id = read_wav_tag(raw, cursor)
         let chunk_size = read_wav_u32(raw, cursor)
         if (chunk_id == "fmt ") {
-            cursor += 2
+            fmt_format = read_wav_u16(raw, cursor)
             fmt_channels = read_wav_u16(raw, cursor)
             fmt_rate = int(read_wav_u32(raw, cursor))
             cursor += 4
@@ -52,21 +53,34 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
             cursor ++
         }
     }
-    if (data_offset == 0 || fmt_bits != 16) return false
+    // integer PCM only — format 1, or extensible (0xFFFE) which is PCM in practice. Float (format 3) is not supported yet.
+    return false if (data_offset == 0 || (fmt_format != 1 && fmt_format != int(0xFFFE)))
+    let bytes_per = fmt_bits / 8
+    return false if (bytes_per != 2 && bytes_per != 3 && bytes_per != 4)   // 16 / 24 / 32-bit PCM
     sample_rate = fmt_rate
     channels = fmt_channels
-    let num_samples = data_size / 2
+    let num_samples = data_size / bytes_per
     samples |> resize(num_samples)
     var c = data_offset
     for (i in range(num_samples)) {
-        let lo = int(raw[c])
-        let hi = int(raw[c + 1])
-        var v = lo | (hi << 8)
-        if (v >= int(0x8000)) {
-            v -= int(0x10000)
+        if (bytes_per == 2) {
+            var v = int(raw[c]) | (int(raw[c + 1]) << 8)
+            if (v >= int(0x8000)) {
+                v -= int(0x10000)
+            }
+            samples[i] = float(v) / 32768.0
+        } elif (bytes_per == 3) {
+            var v = int(raw[c]) | (int(raw[c + 1]) << 8) | (int(raw[c + 2]) << 16)
+            if (v >= int(0x800000)) {
+                v -= int(0x1000000)
+            }
+            samples[i] = float(v) / 8388608.0
+        } else {
+            // 32-bit: pack as unsigned then reinterpret to signed via int(), avoiding shift overflow on the sign bit
+            let u = uint(raw[c]) | (uint(raw[c + 1]) << 8u) | (uint(raw[c + 2]) << 16u) | (uint(raw[c + 3]) << 24u)
+            samples[i] = float(int(u)) / 2147483648.0
         }
-        samples[i] = float(v) / 32768.0
-        c += 2
+        c += bytes_per
     }
     return true
 }
