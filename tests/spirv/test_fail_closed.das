@@ -70,5 +70,8 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_primid_stage", "is only available in the fragment stage")
         // a mesh @out array<T> with an unsupported element type (double) fails closed, not crash emit_type
         check_rejects(t, "_fc_mesh_out_badtype", "not a supported varying type")
+        // @task_payload outside a task/mesh stage, and a payload with a nested-struct field
+        check_rejects(t, "_fc_payload_stage", "is only valid in a task or mesh shader")
+        check_rejects(t, "_fc_payload_nested", "nested-struct payload fields are not yet supported")
     }
 }

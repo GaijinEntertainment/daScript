@@ -92,4 +92,8 @@ def main {
     emit_golden(dir, "mesh_outs", mesh_outs_words())
     emit_golden(dir, "prim_frag", prim_frag_words())
     emit_golden(dir, "pp_frag", pp_frag_words())
+    // PR-G task -> mesh payload (TaskPayloadWorkgroupEXT): the task writes + EmitMeshTasksEXT 4-operand
+    // form, the mesh reads its survivor-list slice.
+    emit_golden(dir, "task_payload", task_payload_words())
+    emit_golden(dir, "mesh_payload", mesh_payload_words())
 }

@@ -1532,6 +1532,56 @@ def public pp_frag_words : array<uint> {
     return clone_to_move(pp_frag_spv)
 }
 
+// ===== PR-G task -> mesh payload (TaskPayloadWorkgroupEXT) =====
+// The cluster-cull task half of a meshlet pipeline. The task workgroup decides which meshlets survive
+// (a count + a survivor-index list) plus a shared per-cluster tint, writes them into a @task_payload
+// struct, and EmitMeshTasksEXT dispatches `count` mesh workgroups -- the payload variable id rides
+// along as EmitMeshTasksEXT's optional 4th operand (the 3-operand form when there is no payload). The
+// mesh shader declares the SAME struct (a separate global -- each shader is its own SPIR-V module;
+// Vulkan matches them by layout, not name) and reads its slice indexed by gl_LocalInvocationIndex, a
+// workgroup-grid builtin now valid in the mesh stage. The payload is a PLAIN logical struct:
+// TaskPayloadWorkgroupEXT storage (5402), NO Block / Offset / ArrayStride -- scalar / vector / fixed-array
+// members all lower via emit_type. No NEW opcodes: TypeStruct / Variable / AccessChain / Store / Load are
+// already declared and EmitMeshTasksEXT entered the census in PR-D, so the declared census set is unchanged.
+struct MeshletPayload {
+    count      : uint           // surviving meshlet count -- drives the mesh dispatch (EmitMeshTasksEXT x)
+    base_color : float3         // shared per-cluster tint (a vector payload field)
+    survivors  : uint[8]        // surviving meshlet indices (the fixed-array survivor list)
+}
+
+var @task_payload mp_task : MeshletPayload
+[task_shader(local_size_x=1, name="task_payload_spv"), marker(no_coverage)]
+def task_payload {
+    mp_task.count = 3u                          // scalar payload write
+    mp_task.base_color = float3(0.2, 0.4, 0.8)  // vector payload write
+    mp_task.survivors[0] = 5u                   // fixed-array payload writes
+    mp_task.survivors[1] = 9u
+    mp_task.survivors[2] = 14u
+    EmitMeshTasksEXT(mp_task.count, 1u, 1u)     // dispatch `count` mesh workgroups + carry the payload id
+}
+
+var @task_payload mp_mesh : MeshletPayload
+[mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_payload_spv"), marker(no_coverage)]
+def mesh_payload {
+    SetMeshOutputsEXT(3u, 1u)
+    let slot = gl_LocalInvocationIndex          // workgroup-grid builtin -- now valid in the mesh stage
+    let meshlet = mp_mesh.survivors[slot]       // read the payload survivor list, indexed by the builtin
+    let tint = mp_mesh.base_color               // read the payload vector
+    let n = mp_mesh.count                       // read the payload scalar
+    gl_MeshVerticesEXT[0].gl_Position = float4(float(meshlet) * 0.1, float(n) * 0.1, tint.x, 1.0)
+    gl_MeshVerticesEXT[1].gl_Position = float4(0.5, -0.5, tint.y, 1.0)
+    gl_MeshVerticesEXT[2].gl_Position = float4(0.0, 0.5, tint.z, 1.0)
+    gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)
+}
+
+def public task_payload_words : array<uint> {
+    return clone_to_move(task_payload_spv)
+}
+
+def public mesh_payload_words : array<uint> {
+    return clone_to_move(mesh_payload_spv)
+}
+
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
 // extension ride on the already-declared OpCapability / OpExtension; OutputVertices /
