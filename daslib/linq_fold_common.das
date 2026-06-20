@@ -700,8 +700,10 @@ var linqCalls = {
     "chunk" => LinqCall(name = "chunk"),
     "chunk_to_array" => LinqCall(name = "chunk"),
 // concatenation operations
-    "concat" => LinqCall(name = "concat", recursive = [1], inplace = true),
-    "concat_to_array" => LinqCall(name = "concat", recursive = [1], inplace = true),
+    // recursive covers every appended source (args 1..7 — N-ary concat goes to 8);
+    // the walker's `i < arg count` guard makes the extra indices safe at low arity.
+    "concat" => LinqCall(name = "concat", recursive = [1, 2, 3, 4, 5, 6, 7], inplace = true),
+    "concat_to_array" => LinqCall(name = "concat", recursive = [1, 2, 3, 4, 5, 6, 7], inplace = true),
     "prepend" => LinqCall(name = "prepend", inplace = true),
     "prepend_to_array" => LinqCall(name = "prepend", inplace = true),
     "append" => LinqCall(name = "append", inplace = true),
@@ -1619,8 +1621,7 @@ def emit_accumulator_lane(
     let isDoubleAccType = accType != null && accType.baseType == Type.tDouble
     var spec = build_accumulator_spec(opName, accName, cntName, firstName, accType, at)
     if (spec.returnExpr == null) return null
-    var perElementStmts : array<Expression?>
-    perElementStmts |> push_from <| build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
+    var perElementStmts <- build_accumulator_perelement_stmts(opName, accName, valBindName, firstName, cntName, valueExpr, workhorse, isDoubleAccType)
     var tailStmts : array<Expression?>
     tailStmts |> push <| qmacro_expr() {
         return $e(spec.returnExpr)
@@ -2945,8 +2946,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             var dLess = (oc.orderName == "order_by_descending"
                 ? qmacro(_::less($i(bestKeyName), $i(xkeyName)))
                 : qmacro(_::less($i(xkeyName), $i(bestKeyName))))
-            var dPerElement : array<Expression?>
-            dPerElement |> push_from <| qmacro_block_to_array() {
+            var dPerElement <- qmacro_block_to_array() {
                 let $i(xkeyName) = $e(keyBody)
                 if (!$i(seenName)) {
                     $i(bestKeyName) = $i(xkeyName)
@@ -3105,8 +3105,7 @@ def private build_surrogate_materialize_loop(var ctx : EmitCtx; bufName, outBufN
         : qmacro($i(matItName)))
     var matHandle = (handleIsTuple ? qmacro($i(surrName)._1) : qmacro($i(surrName)))
     var matStmt = ctx.src->materialize_handle(matHandle, matItName, at)
-    var stmts : array<Expression?>
-    stmts |> push_from <| qmacro_block_to_array() {
+    var stmts <- qmacro_block_to_array() {
         $i(outBufName) |> reserve(length($i(bufName)))
         for ($i(surrName) in $i(bufName)) {
             var $i(matItName) = default<$t(rowType)>
@@ -3903,8 +3902,7 @@ def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; 
     }
     // Tail: collect survivors, sort by descending seq, materialize (deferred) or emit the stored element.
     var seqDescCmp = build_surrogate_cmp(true, at)
-    var tail : array<Expression?>
-    tail |> push_from <| qmacro_block_to_array() {
+    var tail <- qmacro_block_to_array() {
         var $i(pairsName) : array<$t(surrType)>
         $i(pairsName) |> reserve(length($i(tabName)))
         for ($i(svName) in values($i(tabName))) {
@@ -6184,8 +6182,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
         pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, isGroupJoin, "ajoin", at)
     }
     if (pieces == null) return null
-    var allStmts : array<Expression?>
-    allStmts |> push_from(pieces.preludeStmts)
+    var allStmts := pieces.preludeStmts
     if (!probeMode) {
         allStmts |> push <| qmacro_expr() {
             var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
