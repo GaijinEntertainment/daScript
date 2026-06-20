@@ -1521,10 +1521,11 @@ local-GPU behavioral proof through dasVulkan.
   + `gl_MeshPrimitivesEXT[i].gl_PrimitiveID` (per-primitive builtin Block) + fragment `gl_PrimitiveID`
   Input. spirv-val forced three fixes (PerPrimitiveEXT as a member deco in a Block; `MeshShadingEXT` cap
   for a fragment reading PrimitiveId → 1.4; `Flat` on the int fragment input).
-- **PR-G. Task→mesh payload + per-primitive-block breadth.** `TaskPayloadWorkgroupEXT` storage class
-  (the cluster-culling task→mesh handoff — the "task" half of Tutorial 13), plus the remaining
-  per-primitive-block members (`gl_Layer` / `gl_ViewportIndex` / `gl_CullPrimitiveEXT`), lines/points
-  index arrays, and `gl_PointSize` / clip / cull per-vertex extras. *(next mesh slice)*
+- **Next mesh slice — task→mesh payload + per-primitive-block breadth.** `TaskPayloadWorkgroupEXT`
+  storage class (the cluster-culling task→mesh handoff — the "task" half of Tutorial 13), plus the
+  remaining per-primitive-block members (`gl_Layer` / `gl_ViewportIndex` / `gl_CullPrimitiveEXT`),
+  lines/points index arrays, and `gl_PointSize` / clip / cull per-vertex extras. (Label intentionally
+  letterless — "PR-G" is already the landed UBO/SSBO slice below; this gets its PR number when cut.)
 
 ### Independent — shipped-surface gaps surfaced by the audit (no tutorial dependency, fold in opportunistically)
 
