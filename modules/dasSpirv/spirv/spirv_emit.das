@@ -94,6 +94,7 @@ struct EmitCtx {
     mesh_max_vertices : int                     // mesh-output array sizing (from MeshOutputConfig): gl_MeshVerticesEXT length
     mesh_max_primitives : int                   // mesh-output array sizing: gl_PrimitiveTriangleIndicesEXT length
     mesh_topology : MeshOutputTopology          // declared output topology; the index-array builtin must match it (triangles -> gl_PrimitiveTriangleIndicesEXT)
+    task_payload_id : uint                      // the @task_payload TaskPayloadWorkgroupEXT variable id (0 = none); EmitMeshTasksEXT appends it as the 4th operand
     nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
@@ -612,12 +613,50 @@ def private classify_mesh_output(var m : SpirvModule; var ctx : EmitCtx; v : Var
     }
 }
 
+// Emit a PLAIN struct type (each field via emit_type, NO Block / Offset / ArrayStride decorations) for a
+// logical storage class. Used for the @task_payload (TaskPayloadWorkgroupEXT) struct, which -- unlike a
+// UBO/SSBO Block -- has natural layout. Member type-ids come from emit_type so they match the
+// field_pointee_type the is_block member-access path uses. Fields must be emittable (scalar / vector /
+// matrix / fixed array); returns 0 + a pushed error otherwise.
+def private build_plain_struct(var m : SpirvModule; sname : string; st : Structure?; var errors : array<string>) : uint {
+    if (st == null || empty(st.fields)) {
+        errors |> push("@task_payload '{sname}' must be a struct with at least one field")
+        return 0u
+    }
+    var members : array<uint>
+    for (fld in st.fields) {
+        // Scalar / vector / matrix / fixed-array-of-those all lower plainly via emit_type (no Block /
+        // Offset / ArrayStride). Nested-struct fields would need a recursive PLAIN struct (build_block_struct
+        // adds offsets, which TaskPayloadWorkgroupEXT must not have), so reject those fail-closed for now.
+        if (!is_emittable_value_type(fld._type)) {
+            errors |> push("@task_payload '{sname}': field '{fld.name}' must be a scalar / vector / matrix / fixed array of those (nested-struct payload fields are not yet supported)")
+            delete members
+            return 0u
+        }
+        members |> push(emit_type(m, fld._type))
+    }
+    let id = alloc_id(m)
+    var ops <- [id]
+    ops |> push_from(members)
+    emit_n(m, SEC_TYPES, SpvOp.TypeStruct, ops)
+    delete ops
+    delete members
+    return id
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
     let bi = builtin_info(vname)
     if (bi.ok) {
-        if (bi.req != stage) {
+        // The workgroup-grid builtins (gl_GlobalInvocationID / gl_LocalInvocationID / gl_WorkGroupID /
+        // gl_NumWorkGroups / gl_LocalInvocationIndex, all req=Compute in builtin_info) are equally valid
+        // in MESH and TASK shaders -- those stages are workgroup-dispatched (LocalSize) too, and a real
+        // mesh/task shader needs them to index its slice of the work (e.g. the payload survivor-list).
+        let workgroup_builtin = bi.req == ShaderStage.Compute
+        let stage_ok = (bi.req == stage ||
+            (workgroup_builtin && (stage == ShaderStage.Mesh || stage == ShaderStage.Task)))
+        if (!stage_ok) {
             errors |> push("builtin '{vname}' is only available in the {stage_name(bi.req)} stage, not {stage_name(stage)}")
             return
         }
@@ -990,6 +1029,31 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         let vid = alloc_id(m)
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Workgroup))
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Workgroup, value_type = vt, is_ssbo = false))
+        return
+    }
+    // task -> mesh payload: @task_payload struct -> a TaskPayloadWorkgroupEXT OpVariable (a logical
+    // storage class, plain struct, no Block / Offset). The TASK shader writes it and EmitMeshTasksEXT
+    // carries its id to the dispatched mesh workgroups; the MESH shader declares the same struct and reads
+    // it. Member access reuses the is_block path (OpAccessChain by field index in the payload's storage).
+    // Mesh + task stages only; one payload per shader (the last @task_payload wins ctx.task_payload_id,
+    // which is fine -- a shader declares exactly one).
+    if (v.annotation |> find_arg("task_payload") is tBool) {
+        if (stage != ShaderStage.Task && stage != ShaderStage.Mesh) {
+            errors |> push("@task_payload '{vname}' is only valid in a task or mesh shader")
+            return
+        }
+        if (v._type.baseType != Type.tStructure || v._type.structType == null) {
+            errors |> push("@task_payload '{vname}' must be a struct")
+            return
+        }
+        let st = build_plain_struct(m, vname, v._type.structType, errors)
+        if (st == 0u) return
+        let pt = type_pointer(m, SpvStorageClass.TaskPayloadWorkgroupEXT, st)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.TaskPayloadWorkgroupEXT))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.TaskPayloadWorkgroupEXT, value_type = st, is_block = true))
+        ctx.interface_ids |> push(vid)
+        ctx.task_payload_id = vid
         return
     }
     // module-scope constant: an immutable `let X = <const-expr>` referenced by the shader body. Fold the
@@ -1900,7 +1964,7 @@ class SpirvEmit : AstVisitor {
                 let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
                 let storage = rgi.var_id != 0u ? rgi.storage : SpvStorageClass.StorageBuffer
                 let rname = rv != null ? string(rv.name) : "(?)"
-                let pointee = field_pointee_type(bm, expr._type, "{rname}[]")
+                let pointee = field_pointee_type(bm, expr._type, "{rname}[]", storage)
                 if (pointee == 0u) return expr
                 let ptr_t = type_pointer(bm, storage, pointee)
                 let res = alloc_id(bm)
@@ -2165,10 +2229,16 @@ class SpirvEmit : AstVisitor {
     // build_block_struct (idempotent under the type/decoration dedup pools). Used by both
     // visitExprField (direct + chained branches) and any other site that needs a Block-member
     // pointee type. `sname` is only used in error messages emitted by the recursion.
-    def field_pointee_type(var bm : SpirvModule; ft : TypeDecl?; sname : string) : uint {
+    def field_pointee_type(var bm : SpirvModule; ft : TypeDecl?; sname : string; storage : SpvStorageClass) : uint {
         if (ft == null) {
             errs |> push("internal: null field type at {sname}")
             return 0u
+        }
+        // TaskPayloadWorkgroupEXT is a PLAIN logical storage class (no Block / Offset / ArrayStride), so a
+        // field type lowers via emit_type -- the SAME id build_plain_struct used for the member, so the
+        // OpAccessChain types match. (Block storages below take the std140/std430 strided path.)
+        if (storage == SpvStorageClass.TaskPayloadWorkgroupEXT) {
+            return emit_type(bm, ft)
         }
         // matrices come back through emit_type -> type_matrix correctly; only tStructure and
         // tFixedArray need the layout-aware path.
@@ -2238,7 +2308,7 @@ class SpirvEmit : AstVisitor {
                 let rv = root_global_of(expr.value)
                 let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
                 let storage = rgi.var_id != 0u ? rgi.storage : SpvStorageClass.StorageBuffer
-                let pointee = field_pointee_type(bm, expr._type, "{est.name}.{expr.name}")
+                let pointee = field_pointee_type(bm, expr._type, "{est.name}.{expr.name}", storage)
                 if (pointee == 0u) return expr
                 let ptr_t = type_pointer(bm, storage, pointee)
                 let res = alloc_id(bm)
@@ -2260,7 +2330,7 @@ class SpirvEmit : AstVisitor {
             errs |> push("member access '.{expr.name}': no such field on '{bv.name}'")
             return expr
         }
-        let pointee = field_pointee_type(bm, expr._type, "{bv.name}.{expr.name}")
+        let pointee = field_pointee_type(bm, expr._type, "{bv.name}.{expr.name}", gi.storage)
         if (pointee == 0u) return expr
         let ptr_t = type_pointer(bm, gi.storage, pointee)
         let res = alloc_id(bm)
@@ -2394,7 +2464,14 @@ class SpirvEmit : AstVisitor {
                 errs |> push("EmitMeshTasksEXT: could not evaluate a group-count operand")
                 return expr
             }
-            emit(bm, SEC_FUNCS, SpvOp.EmitMeshTasksEXT, gx, gy, gz)
+            // SPV_EXT_mesh_shader: OpEmitMeshTasksEXT takes an OPTIONAL 4th operand, the
+            // TaskPayloadWorkgroupEXT variable handed to the dispatched mesh workgroups. Append it when
+            // the task shader declared a @task_payload; otherwise the 3-operand form (no payload).
+            if (ctx.task_payload_id != 0u) {
+                emit(bm, SEC_FUNCS, SpvOp.EmitMeshTasksEXT, gx, gy, gz, ctx.task_payload_id)
+            } else {
+                emit(bm, SEC_FUNCS, SpvOp.EmitMeshTasksEXT, gx, gy, gz)
+            }
             ctx.terminated = true
             return expr
         }
