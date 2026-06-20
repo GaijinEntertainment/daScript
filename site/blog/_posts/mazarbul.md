@@ -2,8 +2,8 @@
 title: Drums. Drums. They are coming.
 date: 2026-06-19 22:43:20
 tags:
-    daScript
-    strudel
+    - daScript
+    - strudel
 ---
 
 It's all about the beat.
