@@ -680,6 +680,13 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // (+ PerPrimitiveEXT). The matching fragment @in is the per-fragment scalar — the rasteriser
         // expands the array. Same is_mesh_output access path as gl_MeshVerticesEXT[i].
         if (is_out && stage == ShaderStage.Mesh && v._type.baseType == Type.tArray) {
+            // Fail-closed: the element must be an emittable varying type (scalar / vector / matrix), or
+            // emit_type would panic on it (e.g. array<double> / array<SomeStruct>) -- mirror the
+            // @workgroup guard so an unsupported element type is a clean compile error, not a crash.
+            if (!is_emittable_value_type(v._type.firstType)) {
+                errors |> push("mesh output '{vname}': array element type is not a supported varying type (scalar / vector / matrix)")
+                return
+            }
             let count = is_per_prim ? ctx.mesh_max_primitives : ctx.mesh_max_vertices
             if (count <= 0) {
                 errors |> push("mesh output '{vname}': max_{is_per_prim ? "primitives" : "vertices"} must be > 0 (got {count})")
