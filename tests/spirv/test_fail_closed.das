@@ -62,5 +62,9 @@ def test_fail_closed_rejections(t : T?) {
         // mesh-shader output config: bad topology string (parsed in patch) + non-positive count (emit gate)
         check_rejects(t, "_fc_mesh_topology", "output_topology must be")
         check_rejects(t, "_fc_mesh_count", "max_vertices must be > 0")
+        // mesh-output arrays: a per-vertex/per-primitive output outside a mesh stage, and a triangle
+        // index array under a non-triangle output topology
+        check_rejects(t, "_fc_mesh_vertices_stage", "is only available in a mesh shader")
+        check_rejects(t, "_fc_mesh_indices_topology", "requires output_topology")
     }
 }

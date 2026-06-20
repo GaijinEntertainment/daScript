@@ -245,3 +245,17 @@ def public SetMeshOutputsEXT(vertex_count : uint; primitive_count : uint) : void
 // call on the same control-flow path is unreachable. Task-stage-only; stub body never runs.
 [unused_argument(x, y, z), sideeffects]
 def public EmitMeshTasksEXT(x : uint; y : uint; z : uint) : void {}
+
+// ===== mesh per-vertex / per-primitive output arrays (VK_EXT_mesh_shader) =====
+// gl_MeshVerticesEXT is the per-vertex output: an array (sized by the [mesh_shader] max_vertices arg)
+// of a block whose gl_Position lands in clip space. gl_PrimitiveTriangleIndicesEXT is the per-primitive
+// connectivity: an array (sized by max_primitives) of uint3, each a triangle's three indices into the
+// vertex array. The emitter recognizes BOTH by name in classify_global and emits the real Output arrays
+// (sized from the config, BuiltIn-decorated); the daslang `array<>` decls exist only so
+// `gl_MeshVerticesEXT[i].gl_Position = ...` and `gl_PrimitiveTriangleIndicesEXT[i] = uint3(...)`
+// typecheck. Mesh-stage-only; never executed — only the AST is read.
+struct gl_MeshPerVertexEXT {
+    gl_Position : float4
+}
+var gl_MeshVerticesEXT             : array<gl_MeshPerVertexEXT>
+var gl_PrimitiveTriangleIndicesEXT : array<uint3>

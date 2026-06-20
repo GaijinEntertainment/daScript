@@ -1570,6 +1570,29 @@ def public mesh_points_words : array<uint> {
     return <- w
 }
 
+// ===== PR-E2 per-vertex / per-primitive output arrays (the array-of-builtin classifier) =====
+// mesh_tri emits ONE triangle: three per-vertex gl_Position writes through gl_MeshVerticesEXT[i] (an
+// Output array of a Block { vec4 } whose member 0 is BuiltIn Position) + one per-primitive connectivity
+// write through gl_PrimitiveTriangleIndicesEXT[i] (an Output uvec3 array, BuiltIn-decorated). This is
+// the first array-of-builtin / Block-of-builtin path in classify_global; the two-level access chain
+// (array index, then member 0 for the vertex block) is the new ground. No NEW opcodes — TypeStruct /
+// TypeArray / Decorate / MemberDecorate / AccessChain / Store are all already declared — so the census
+// set is unchanged. spirv-val (vulkan1.3) proves the per-vertex Block + index-array shape is valid.
+[mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_tri_spv"), marker(no_coverage)]
+def mesh_tri {
+    SetMeshOutputsEXT(3u, 1u)                                          // 3 vertices, 1 primitive
+    gl_MeshVerticesEXT[0].gl_Position = float4(-0.5, -0.5, 0.0, 1.0)   // per-vertex Block member 0 (Position)
+    gl_MeshVerticesEXT[1].gl_Position = float4(0.5, -0.5, 0.0, 1.0)
+    gl_MeshVerticesEXT[2].gl_Position = float4(0.0, 0.5, 0.0, 1.0)
+    gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)             // per-primitive triangle connectivity
+}
+
+def public mesh_tri_words : array<uint> {
+    var w : array<uint>
+    w |> push_from(mesh_tri_spv)
+    return <- w
+}
+
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
 // extension ride on the already-declared OpCapability / OpExtension; OutputVertices /

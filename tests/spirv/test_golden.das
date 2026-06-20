@@ -181,5 +181,8 @@ def test_golden_disassembly(t : T?) {
         // OutputPoints topology. byte-identical check() pins the OpExecutionMode operands.
         check(t, "mesh_lines", mesh_lines_words())
         check(t, "mesh_points", mesh_points_words())
+        // PR-E2 array-of-builtin output (visitor baseline): per-vertex gl_Position Block + triangle
+        // index array. byte-identical check() pins the Block struct + two-level access-chain id order.
+        check(t, "mesh_tri", mesh_tri_words())
     }
 }
