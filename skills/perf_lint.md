@@ -114,7 +114,7 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF006 | `push`/`emplace` in loop without `reserve()` | Medium | repeated reallocations; `reserve()` before loop |
 | PERF007 | `string(das_string)` in comparison | Medium | unnecessary allocation; das_string supports == directly |
 | PERF008 | `get_ptr(x)` for `is`/`as` type checks | Low | unnecessary; smart_ptr supports type checks directly |
-| PERF009 | `var x <- expr; return <- x` | Low | redundant move-init; use `return <- expr` directly |
+| PERF009 | `var x <- expr; return <- x` (move-init) **or** `var x := src; return <- x` (clone-init, lowered to `<- clone_to_move(...)`) | Low | move flavor → `return <- expr`; clone flavor → `return clone_to_move(src)` (NOT `return <- src`, which would move/destroy the source). `pending_move_is_clone` flag (set when `v.init` is an `ExprCall` to `clone_to_move`) selects the message. Composes with STYLE032 (`push_from`→`:=`). |
 | PERF010 | `get_ptr(x) == null` | Low | unnecessary; smart_ptr supports == null directly |
 | PERF011 | `get_ptr(x).field` | Low | unnecessary; smart_ptr auto-dereferences for field access |
 | PERF012 | `find(string(das_string), ...)` | Medium | unnecessary allocation; use `peek(das_string)` instead |

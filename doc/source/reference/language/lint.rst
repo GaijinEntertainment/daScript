@@ -699,6 +699,10 @@ PERF009 — redundant move-init variable immediately returned
 The value is moved in and then immediately moved out. Simplify to
 ``return <- expr()``.
 
+The clone-init flavor — ``var x := src; return <- x`` (lowered to
+``<- clone_to_move(...)``) — collapses to ``return clone_to_move(src)``, **not**
+``return <- src`` (which would move/destroy the clone source).
+
 .. code-block:: das
 
     // Bad — redundant variable
@@ -707,6 +711,13 @@ The value is moved in and then immediately moved out. Simplify to
 
     // Good — direct return
     return <- make_thing()
+
+    // Bad — redundant clone-init
+    var result := src                       // PERF009 (clone variant)
+    return <- result
+
+    // Good — clone and move in one
+    return clone_to_move(src)
 
 PERF010 — unnecessary ``get_ptr()`` for null comparison
 =========================================================
@@ -1903,6 +1914,35 @@ STYLE021 (the ``JV((k1=..., k2=...))`` form is the stronger suggestion).
     // Good
     var t <- { "a" => 1, "b" => 2 }
     var s <- { 5, 7 }
+
+.. _style032:
+
+STYLE032 — array ``var`` filled by a single ``push_from`` is a clone
+======================================================================
+
+An empty ``var w : array<T>`` immediately followed by a single
+``w |> push_from(src)`` (or ``push_clone_from(src)``) where ``src`` is itself
+an ``array<T>`` is just a verbose clone of ``src``. ``:=`` clones the whole
+array (each element, for ``push_clone_from``) in one step:
+
+.. code-block:: das
+
+    // Bad
+    var w : array<uint>
+    w |> push_from(src)                         // STYLE032
+    return <- w
+
+    // Good
+    var w := src
+    return <- w
+
+    // Even better, when w is immediately returned (see PERF009 clone variant)
+    return clone_to_move(src)
+
+Only the immediately-following statement is inspected, and a C-array
+(fixed-array) source stays silent — ``var w := cArray`` would not yield an
+``array<T>``. An intervening ``reserve`` / guard, a non-empty initializer, or a
+single-element ``push`` all keep the rule quiet.
 
 -----
 Tests

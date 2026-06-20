@@ -38,6 +38,7 @@ module style_lint shared private
 //!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
 //!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
+//!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign)
 
 require daslib/ast_boost
 require daslib/is_local
@@ -875,6 +876,7 @@ class StyleLintVisitor : AstVisitor {
             check_style021_jv_table_init(blk, expr as ExprLet)
             check_style027_for_loop_comprehension(blk, expr as ExprLet)
             check_style031_table_init(blk, expr as ExprLet)
+            check_style032_clone_init(blk, expr as ExprLet)
         }
     }
 
@@ -1450,6 +1452,44 @@ class StyleLintVisitor : AstVisitor {
         }
         if (!(arg is ExprVar)) return false
         return (arg as ExprVar).variable == target
+    }
+
+    // --- STYLE032: array<T> empty default-init then a single bulk push_from → clone-init ---
+
+    def check_style032_clone_init(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        if (idx < 0 || idx + 1 >= n) return
+        let nextStmt = blk.list[idx + 1]
+        if (nextStmt == null || nextStmt.genFlags.generated || !(nextStmt is ExprCall)) return
+        let call = nextStmt as ExprCall
+        for (v in elet.variables) {
+            // Only flag uninitialized array<T> locals filled by a single bulk clone-copy.
+            if (v.init != null
+                || v.flags.generated || v.flags.inScope
+                || v._type == null || v._type.baseType != Type.tArray
+                || !is_array_clone_init_call(call, v)) continue
+            style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source — use `var {v.name} := SRC` (clone-assign)", v.at)
+        }
+    }
+
+    def is_array_clone_init_call(call : ExprCall?; target : Variable?) : bool {
+        //! `target |> push_from(SRC)` / `push_clone_from(SRC)` (exactly 2 args, arg[0] ==
+        //! target) where SRC is itself an `array<T>`. Into a fresh-empty target this bulk
+        //! copy/clone is exactly `var target := SRC`. A C-array source (tFixedArray) has no
+        //! clean `:=` rewrite (it would not yield an array<T>), so it stays silent.
+        if ((!is_named_target_call(call, target, 2, "push_from")
+             && !is_named_target_call(call, target, 2, "push_clone_from"))
+            || length(call.arguments) != 2) return false
+        let src = call.arguments[1]
+        return src != null && src._type != null && src._type.baseType == Type.tArray
     }
 
     // --- STYLE031: table<K;V> / table<K> var then contiguous insert/[]= instead of literal ---
