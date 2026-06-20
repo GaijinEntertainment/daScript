@@ -321,10 +321,10 @@ def render_index(posts: list[Entry], md) -> str:
     for p in posts:
         md.reset()
         excerpt_html = md.convert(p.excerpt_md) if p.excerpt_md else ''
-        tag = p.tags[0] if p.tags else p.tag
+        tags_html = '<br>'.join(html.escape(t) for t in p.tags) if p.tags else html.escape(p.tag)
         items.append(f"""        <div class="forge-blog-item">
             <div class="forge-blog-item__date">{html.escape(p.date)}</div>
-            <div class="forge-blog-item__tag">{html.escape(tag)}</div>
+            <div class="forge-blog-item__tag">{tags_html}</div>
             <div>
                 <div class="forge-blog-item__title"><a href="{p.slug}.html">{html.escape(p.title)}</a></div>
                 <div class="forge-blog-item__excerpt">{excerpt_html}</div>
