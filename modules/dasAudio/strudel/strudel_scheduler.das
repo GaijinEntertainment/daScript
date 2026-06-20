@@ -121,6 +121,14 @@ struct OrbitBus {
         //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
         //! Most recently applied delay feedback amount (-1 = uninitialized).
+    gain                  : float = 1.0
+        //! Continuous output level for this orbit (1.0 = unity). Multiplied into every routed
+        //! voice's gain each chunk, so it has no per-note latency — unlike a per-hap gain, which
+        //! is frozen at note onset. Ramped by fade_orbit / advanced by advance_orbit_gains.
+    target_gain           : float = 1.0
+        //! Fade target for `gain`.
+    fade_speed            : float = 0.0
+        //! Per-second ramp rate toward `target_gain` (0 = settled / snapped).
 }
 
 //! Bridges the pattern engine and audio output.
@@ -180,6 +188,52 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
     if (sched.orbit_buses[orbit] == null) {
         sched.orbit_buses[orbit] = new OrbitBus()
+    }
+}
+
+//! Continuous output level for an orbit (1.0 when no bus exists). Read once per voice per chunk;
+//! also for introspection / tests.
+def orbit_gain(sched : Scheduler; orbit : int) : float {
+    if (orbit < 0 || orbit >= length(sched.orbit_buses)) return 1.0
+    let bus = sched.orbit_buses[orbit]
+    return bus == null ? 1.0 : bus.gain
+}
+
+//! Fade orbit `orbit`'s continuous output level to `target_gain` over `time` seconds (0 = snap).
+//! The orbit is a sub-bus: every voice routed to it fades with no per-note latency. Levels above
+//! 1.0 amplify. Advanced once per audio chunk by advance_orbit_gains (called from tick).
+def fade_orbit(var sched : Scheduler; orbit : int; target_gain : float; time : float) {
+    if (orbit < 0) return
+    ensure_orbit(sched, orbit)
+    var bus = sched.orbit_buses[orbit]
+    bus.target_gain = target_gain
+    if (time > 0.0) {
+        bus.fade_speed = abs(bus.target_gain - bus.gain) / time
+    } else {
+        bus.gain = target_gain
+        bus.fade_speed = 0.0
+    }
+}
+
+//! Set an orbit's continuous output level immediately (no ramp).
+def set_orbit_gain(var sched : Scheduler; orbit : int; gain : float) {
+    fade_orbit(sched, orbit, gain, 0.0)
+}
+
+//! Advance every orbit's gain ramp one chunk of `dt` seconds toward its target (mirrors the
+//! per-track fade in strudel_player). Called once per tick before voice rendering.
+def advance_orbit_gains(var sched : Scheduler; dt : float) {
+    for (bus in sched.orbit_buses) {
+        if (bus == null || bus.fade_speed <= 0.0) continue
+        if (bus.gain < bus.target_gain) {
+            bus.gain = min(bus.gain + bus.fade_speed * dt, bus.target_gain)
+        } elif (bus.gain > bus.target_gain) {
+            bus.gain = max(bus.gain - bus.fade_speed * dt, bus.target_gain)
+        }
+        if (abs(bus.gain - bus.target_gain) < 0.0001) {
+            bus.gain = bus.target_gain
+            bus.fade_speed = 0.0
+        }
     }
 }
 
@@ -551,7 +605,9 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
                 unsafe { ma_sf2_voice_note_off(addr(sched.sf2_voices[si])); }
             }
             let saved_atten = sched.sf2_voices[si].attenuation
-            sched.sf2_voices[si].attenuation = saved_atten * meta.gain
+            // per-hap gain (meta.gain) and the continuous per-orbit level both ride the attenuation,
+            // re-applied every chunk (restored below) — so an orbit fade has no per-note latency.
+            sched.sf2_voices[si].attenuation = saved_atten * meta.gain * orbit_gain(sched, meta.orbit)
             let reverb_send = meta.reverb_send
             let chorus_send = meta.chorus_send
             let delay_send_amt = meta.delay_send
@@ -758,6 +814,9 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
         let orb = sched.osc_voices[i].orbit
         let has_fx = sched.osc_voices[i].fx.active
         let hrtf_active = sched.osc_voices[i].hrtf_active
+        // fold the orbit's continuous level into this voice's gain for the chunk (restored below)
+        let saved_osc_gain = sched.osc_voices[i].gain
+        sched.osc_voices[i].gain = saved_osc_gain * orbit_gain(sched, orb)
         var reverb_buf : array<float>?
         var delay_buf : array<float>?
         var chorus_buf : array<float>?
@@ -839,6 +898,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
             var empty_c : array<float>
             osc_render_chunk_routed(sched.osc_voices[i], output, reverb_buf, delay_buf, chorus_buf, empty_r, empty_d, empty_c, chunkFrames)
         }
+        sched.osc_voices[i].gain = saved_osc_gain
         if (sched.osc_voices[i].finished) {
             if (sched.osc_voices[i].hrtf_l != null) {
                 ma_hrtf_uninit(sched.osc_voices[i].hrtf_l)
@@ -1081,6 +1141,8 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
 
     // prepare per-orbit send buffers
     prepare_orbit_buses(sched, chunkSamples)
+    // advance per-orbit gain ramps one chunk so voices read this chunk's level
+    advance_orbit_gains(sched, chunk_seconds)
 
     // mix all pre-rendered voices into the output using ma_volume_mixer (gain + pan per voice)
     if (!sched.mixer_ready) {
@@ -1090,6 +1152,9 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
     var i = length(sched.voices) - 1
     while (i >= 0) {
         var voice = sched.voices[i]
+        // fold the orbit's continuous level into this voice's gain for the chunk (restored below)
+        let saved_voice_gain = voice.gain
+        voice.gain = saved_voice_gain * orbit_gain(sched, voice.orbit)
         let voiceLen = length(voice.samples)
         let dstStart = max(0, -voice.position)
         let srcStart = max(0, voice.position)
@@ -1199,6 +1264,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                 }
             }
         }
+        voice.gain = saved_voice_gain
         voice.position += chunkSamples
         if (voice.position >= voiceLen) {
             if (sched.voices[i].hrtf_l != null) {

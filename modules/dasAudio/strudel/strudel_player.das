@@ -352,6 +352,28 @@ def public strudel_fade_track(idx : int; target_gain : float; time : float) {
     }
 }
 
+def public strudel_fade_orbit(track_idx, orbit : int; target_gain : float; time : float) {
+    //! Fade an orbit's continuous output level to target_gain over `time` seconds on the given track
+    //! (time=0 snaps). Orbits are sub-buses: this fades every voice routed to `orbit` with no
+    //! per-note latency — unlike a per-hap gain(), which is frozen at note onset. Levels > 1.0 amplify.
+    if (track_idx >= 0 && track_idx < length(g_tracks) && g_tracks[track_idx] != null) {
+        fade_orbit(g_tracks[track_idx].sched, orbit, target_gain, time)
+    }
+}
+
+def public strudel_set_orbit_gain(track_idx, orbit : int; gain : float) {
+    //! Set an orbit's continuous output level immediately (no ramp) on the given track.
+    strudel_fade_orbit(track_idx, orbit, gain, 0.0)
+}
+
+def public strudel_orbit_gain(track_idx, orbit : int) : float {
+    //! Current continuous output level for an orbit on the given track (1.0 when unset).
+    if (track_idx >= 0 && track_idx < length(g_tracks) && g_tracks[track_idx] != null) {
+        return orbit_gain(g_tracks[track_idx].sched, orbit)
+    }
+    return 1.0
+}
+
 // Find track by name — NOT supported in new API. User maintains their own name->index mapping.
 // Use the index returned by strudel_add_track.
 
