@@ -18,7 +18,7 @@ jobs:
   ###########################################################
   pre_job:
   ###########################################################
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -46,19 +46,19 @@ jobs:
 
         include:
           - target: linux
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             build_system: cmake
             cmake_generator: Ninja
 
           - target: darwin15
             architecture: arm64
-            runner: macos-15-xlarge
+            runner: macos-15
             architecture_string: arm64
             build_system: cmake
             cmake_generator: Ninja
 
           - target: windows
-            runner: windows-latest-fat
+            runner: windows-latest
             build_system: cmake
             cmake_generator: Ninja
             architecture_string: x64

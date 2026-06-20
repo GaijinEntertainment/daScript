@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ windows-latest-fat ]
+        target: [ windows-latest ]
         cmake_configuration: [ Debug, Release ]
 
     steps:
@@ -46,7 +46,7 @@ jobs:
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: Configure CMake
-      # Generator pinned to the VS major on the windows-latest-fat image. GitHub
+      # Generator pinned to the VS major on the windows-latest image. GitHub
       # migrated it from VS2022 (v17) to VS2026 (v18); bump in lockstep (see
       # build.yml's build_windows_clangcl). On a mismatch, configure dies at
       # project() with "could not find any instance of Visual Studio".
