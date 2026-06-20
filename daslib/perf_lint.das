@@ -154,6 +154,10 @@ class PerfLintVisitor : AstVisitor {
     // PERF009: track last move-initialized variable for redundant return detection
     @do_not_delete pending_move_var : Variable?
     @safe_when_uninitialized pending_move_at : LineInfo
+    // PERF009: true when the pending var was clone-initialized (`var x := expr`,
+    // lowered to `<- clone_to_move(...)`) — the collapse is `return clone_to_move`,
+    // not `return <- expr` (which would move/destroy the source).
+    pending_move_is_clone : bool = false
     // PERF018: per-for-loop index-only candidates; arr_path (string) and the
     // owning ExprFor (for `.at` at warn time) live in parallel arrays kept in
     // lockstep with perf018_stack. at_qualifying_pushes records how many
@@ -715,21 +719,24 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0 && v != null && is_clone_init_call(v.init)) {
             perf024_candidates |> push(Perf024Candidate(v = v, safe_uses = 0, disqualified = false))
         }
-        // PERF009: track last move-initialized variable (only explicit `var x <- expr`)
+        // PERF009: track last move-initialized variable. Two flavors:
+        //   `var x <- expr`  → collapse to `return <- expr`
+        //   `var x := expr`  → compiler-lowered to `<- clone_to_move(...)`; collapse
+        //                      to `return clone_to_move(expr)` (a plain `return <- x`
+        //                      would move/destroy the clone source).
         if (last && v.flags.init_via_move && v.init != null) {
             var dominated_by_clone = false
-            // Exclude compiler-lowered `:=` (clone_to_move) on non-copyable types
             var ini = v.init
             if (ini is ExprCall) {
                 let ecall = ini as ExprCall
-                if (ecall.func != null && ecall.func.fromGeneric != null) {
-                    dominated_by_clone = ecall.func.fromGeneric.name == "clone_to_move"
+                if (ecall.func != null) {
+                    let fname = string(ecall.func.fromGeneric != null ? ecall.func.fromGeneric.name : ecall.func.name)
+                    dominated_by_clone = fname == "clone_to_move"
                 }
             }
-            if (!dominated_by_clone) {
-                pending_move_var = v
-                pending_move_at = expr.at
-            }
+            pending_move_var = v
+            pending_move_at = expr.at
+            pending_move_is_clone = dominated_by_clone
         }
     }
 
@@ -746,7 +753,11 @@ class PerfLintVisitor : AstVisitor {
                         sub = (sub as ExprRef2Value.subexpr)
                     }
                     if (sub is ExprVar && (sub as ExprVar.variable) == pending_move_var) {
-                        perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at)
+                        if (pending_move_is_clone) {
+                            perf_warning("PERF009: redundant clone into variable immediately returned; use return clone_to_move(expr) directly", pending_move_at)
+                        } else {
+                            perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at)
+                        }
                     }
                 }
             }
