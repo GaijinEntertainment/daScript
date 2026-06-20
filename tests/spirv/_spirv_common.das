@@ -30,9 +30,7 @@ def square {
 
 // A fresh, caller-owned copy of the captured words (the global itself must not be mutated/moved).
 def public square_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(square_spv)
-    return <- w
+    return clone_to_move(square_spv)
 }
 
 // ===== Phase-2 arithmetic fixtures: exercise every binary/unary scalar op the emitter supports.
@@ -72,21 +70,15 @@ def farith {
 }
 
 def public uarith_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(uarith_spv)
-    return <- w
+    return clone_to_move(uarith_spv)
 }
 
 def public iarith_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(iarith_spv)
-    return <- w
+    return clone_to_move(iarith_spv)
 }
 
 def public farith_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(farith_spv)
-    return <- w
+    return clone_to_move(farith_spv)
 }
 
 // ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
@@ -151,21 +143,15 @@ def fctrl {
 }
 
 def public uctrl_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(uctrl_spv)
-    return <- w
+    return clone_to_move(uctrl_spv)
 }
 
 def public ictrl_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(ictrl_spv)
-    return <- w
+    return clone_to_move(ictrl_spv)
 }
 
 def public fctrl_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(fctrl_spv)
-    return <- w
+    return clone_to_move(fctrl_spv)
 }
 
 // ===== Phase-2 loop fixtures: while + range-for (OpLoopMerge 4-block) with break/continue. The
@@ -203,15 +189,11 @@ def floop {
 }
 
 def public wloop_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(wloop_spv)
-    return <- w
+    return clone_to_move(wloop_spv)
 }
 
 def public floop_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(floop_spv)
-    return <- w
+    return clone_to_move(floop_spv)
 }
 
 // ===== Phase-6 control-flow coverage fixtures (added during the AstVisitor port). Each targets a
@@ -300,27 +282,19 @@ def rfor {
 }
 
 def public nloop_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(nloop_spv)
-    return <- w
+    return clone_to_move(nloop_spv)
 }
 
 def public echain_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(echain_spv)
-    return <- w
+    return clone_to_move(echain_spv)
 }
 
 def public eret_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(eret_spv)
-    return <- w
+    return clone_to_move(eret_spv)
 }
 
 def public rfor_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(rfor_spv)
-    return <- w
+    return clone_to_move(rfor_spv)
 }
 
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
@@ -441,63 +415,43 @@ def flat_frag {
 }
 
 def public tri_vert_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(tri_vert_spv)
-    return <- w
+    return clone_to_move(tri_vert_spv)
 }
 
 def public point_size_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(point_size_spv)
-    return <- w
+    return clone_to_move(point_size_spv)
 }
 
 def public draw_id_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(draw_id_spv)
-    return <- w
+    return clone_to_move(draw_id_spv)
 }
 
 def public nuext_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(nuext_spv)
-    return <- w
+    return clone_to_move(nuext_spv)
 }
 
 def public point_coord_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(point_coord_spv)
-    return <- w
+    return clone_to_move(point_coord_spv)
 }
 
 def public tri_frag_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(tri_frag_spv)
-    return <- w
+    return clone_to_move(tri_frag_spv)
 }
 
 def public vindex_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(vindex_spv)
-    return <- w
+    return clone_to_move(vindex_spv)
 }
 
 def public raster_math_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(raster_math_spv)
-    return <- w
+    return clone_to_move(raster_math_spv)
 }
 
 def public flat_vert_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(flat_vert_spv)
-    return <- w
+    return clone_to_move(flat_vert_spv)
 }
 
 def public flat_frag_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(flat_frag_spv)
-    return <- w
+    return clone_to_move(flat_frag_spv)
 }
 
 // ===== const arrays + dynamic indexing: the gl_VertexIndex hardcoded-triangle vertex shader.
@@ -513,9 +467,7 @@ def catri {
 }
 
 def public catri_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(catri_spv)
-    return <- w
+    return clone_to_move(catri_spv)
 }
 
 // ===== Phase-4a UBO fixture: a @uniform struct read through OpAccessChain by field index. The
@@ -551,9 +503,7 @@ def ubo_frag {
 }
 
 def public ubo_frag_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(ubo_frag_spv)
-    return <- w
+    return clone_to_move(ubo_frag_spv)
 }
 
 // ===== Phase-4b matrix fixture: a UBO with two float4x4 -> MVP transform. Matrices are tHandle
@@ -580,9 +530,7 @@ def mvp_vert {
 }
 
 def public mvp_vert_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mvp_vert_spv)
-    return <- w
+    return clone_to_move(mvp_vert_spv)
 }
 
 // ===== Phase-4c push-constant fixture: a @push_constant struct -> PushConstant storage + Block,
@@ -600,9 +548,7 @@ def pc_frag {
 }
 
 def public pc_frag_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(pc_frag_spv)
-    return <- w
+    return clone_to_move(pc_frag_spv)
 }
 
 // ===== PR-G nested-block fixture: a UBO whose fields span the THREE composite shapes the pre-PR-G
@@ -638,9 +584,7 @@ def ubo_nested_frag {
 }
 
 def public ubo_nested_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(ubo_nested_spv)
-    return <- w
+    return clone_to_move(ubo_nested_spv)
 }
 
 // ===== Phase-4d combined image sampler fixture: a sampler2D global -> OpTypeImage +
@@ -655,9 +599,7 @@ def tex_frag {
 }
 
 def public tex_frag_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(tex_frag_spv)
-    return <- w
+    return clone_to_move(tex_frag_spv)
 }
 
 // ===== PR-C descriptor array fixture: a sampler2D[8] global -> UniformConstant OpTypeArray of
@@ -679,9 +621,7 @@ def darr_fs {
 }
 
 def public darr_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(darr_spv)
-    return <- w
+    return clone_to_move(darr_spv)
 }
 
 // ===== Phase-7.1a scalar conversions: float(int/uint), int(float/uint), uint(float/int) ->
@@ -699,9 +639,7 @@ def conv {
 }
 
 def public conv_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(conv_spv)
-    return <- w
+    return clone_to_move(conv_spv)
 }
 
 // ===== Phase-7.1b storage image: an image2D global -> UniformConstant OpTypeImage (Rgba8, sampled=2)
@@ -717,9 +655,7 @@ def storimg {
 }
 
 def public storimg_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(storimg_spv)
-    return <- w
+    return clone_to_move(storimg_spv)
 }
 
 // ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
@@ -736,9 +672,7 @@ def texlod {
 }
 
 def public texlod_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(texlod_spv)
-    return <- w
+    return clone_to_move(texlod_spv)
 }
 
 // ===== Phase-7.3 additional sampler dimensionalities: samplerCube (Dim Cube), sampler3D (Dim 3D),
@@ -758,9 +692,7 @@ def dims_frag {
 }
 
 def public dims_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(dims_spv)
-    return <- w
+    return clone_to_move(dims_spv)
 }
 
 // ===== Phase-7.4 separate image + sampler: a texture2D (standalone OpTypeImage) and a sampler
@@ -776,9 +708,7 @@ def septex_frag {
 }
 
 def public septex_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(septex_spv)
-    return <- w
+    return clone_to_move(septex_spv)
 }
 
 // ===== Phase-8.1 ternary cond ? a : b -> OpSelect (branchless). A scalar select uses the scalar bool
@@ -795,9 +725,7 @@ def tern {
 }
 
 def public tern_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(tern_spv)
-    return <- w
+    return clone_to_move(tern_spv)
 }
 
 // ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
@@ -816,9 +744,7 @@ def vecarith {
 }
 
 def public vecarith_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(vecarith_spv)
-    return <- w
+    return clone_to_move(vecarith_spv)
 }
 
 // ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
@@ -850,9 +776,7 @@ def mathx {
 }
 
 def public mathx_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mathx_spv)
-    return <- w
+    return clone_to_move(mathx_spv)
 }
 
 // ===== Phase-10.1 SSBO std430 vector elements: array<float2/3/4> runtime arrays. The std430 ArrayStride
@@ -888,15 +812,11 @@ def ssbostruct {
 }
 
 def public ssbovec_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(ssbovec_spv)
-    return <- w
+    return clone_to_move(ssbovec_spv)
 }
 
 def public ssbostruct_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(ssbostruct_spv)
-    return <- w
+    return clone_to_move(ssbostruct_spv)
 }
 
 // ===== Phase-10.2 composite/global swizzle: multi-component swizzle of a bare global (the Phase-8
@@ -917,9 +837,7 @@ def gswizzle {
 }
 
 def public gswizzle_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(gswizzle_spv)
-    return <- w
+    return clone_to_move(gswizzle_spv)
 }
 
 // ===== Phase-10.3 fragment realism: discard (OpKill), screen-space derivatives (OpDPdx/OpDPdy/
@@ -945,9 +863,7 @@ def fragx {
 }
 
 def public fragx_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(fragx_spv)
-    return <- w
+    return clone_to_move(fragx_spv)
 }
 
 // ===== Phase-10.4 depth-compare (shadow) sampling: a sampler2DShadow sampled via textureCompare
@@ -966,9 +882,7 @@ def fragshadow {
 }
 
 def public fragshadow_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(fragshadow_spv)
-    return <- w
+    return clone_to_move(fragshadow_spv)
 }
 
 // ===== MRT: multiple @location outputs in a fragment shader (G-buffer prep for tutorial 10's
@@ -988,9 +902,7 @@ def mrt {
 }
 
 def public mrt_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mrt_spv)
-    return <- w
+    return clone_to_move(mrt_spv)
 }
 
 // ===== Subpass input attachment: a Vulkan deferred-rendering rail (tutorial 10 lighting subpass).
@@ -1007,9 +919,7 @@ def subpass_load_frag {
 }
 
 def public subpass_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(subpass_spv)
-    return <- w
+    return clone_to_move(subpass_spv)
 }
 
 // ===== Phase-10.5 compute-tier fixtures: shared memory + barriers + atomics =====
@@ -1057,15 +967,11 @@ def catomics {
 }
 
 def public cshared_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(cshared_spv)
-    return <- w
+    return clone_to_move(cshared_spv)
 }
 
 def public catomics_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(catomics_spv)
-    return <- w
+    return clone_to_move(catomics_spv)
 }
 
 // ===== Phase-10.6 storage-image size query + module-scope shader constants =====
@@ -1105,15 +1011,11 @@ def modconst {
 }
 
 def public imgquery_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(imgquery_spv)
-    return <- w
+    return clone_to_move(imgquery_spv)
 }
 
 def public modconst_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(modconst_spv)
-    return <- w
+    return clone_to_move(modconst_spv)
 }
 
 // ===== Phase-11 user-defined shader functions: OpFunction / OpFunctionCall + ref-param copy-in/out =====
@@ -1180,21 +1082,15 @@ def userfn_global {
 }
 
 def public userfn_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(userfn_spv)
-    return <- w
+    return clone_to_move(userfn_spv)
 }
 
 def public userfn_ref_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(userfn_ref_spv)
-    return <- w
+    return clone_to_move(userfn_ref_spv)
 }
 
 def public userfn_global_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(userfn_global_spv)
-    return <- w
+    return clone_to_move(userfn_global_spv)
 }
 
 // ===== spirv-val gate =====
@@ -1531,15 +1427,11 @@ def task_empty {
 }
 
 def public mesh_empty_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mesh_empty_spv)
-    return <- w
+    return clone_to_move(mesh_empty_spv)
 }
 
 def public task_empty_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(task_empty_spv)
-    return <- w
+    return clone_to_move(task_empty_spv)
 }
 
 // ===== PR-E mesh output configuration fixtures (max_vertices / max_primitives / output_topology) =====
@@ -1559,15 +1451,32 @@ def mesh_points {
 }
 
 def public mesh_lines_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mesh_lines_spv)
-    return <- w
+    return clone_to_move(mesh_lines_spv)
 }
 
 def public mesh_points_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mesh_points_spv)
-    return <- w
+    return clone_to_move(mesh_points_spv)
+}
+
+// ===== PR-E2 per-vertex / per-primitive output arrays (the array-of-builtin classifier) =====
+// mesh_tri emits ONE triangle: three per-vertex gl_Position writes through gl_MeshVerticesEXT[i] (an
+// Output array of a Block { vec4 } whose member 0 is BuiltIn Position) + one per-primitive connectivity
+// write through gl_PrimitiveTriangleIndicesEXT[i] (an Output uvec3 array, BuiltIn-decorated). This is
+// the first array-of-builtin / Block-of-builtin path in classify_global; the two-level access chain
+// (array index, then member 0 for the vertex block) is the new ground. No NEW opcodes — TypeStruct /
+// TypeArray / Decorate / MemberDecorate / AccessChain / Store are all already declared — so the census
+// set is unchanged. spirv-val (vulkan1.3) proves the per-vertex Block + index-array shape is valid.
+[mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_tri_spv"), marker(no_coverage)]
+def mesh_tri {
+    SetMeshOutputsEXT(3u, 1u)                                          // 3 vertices, 1 primitive
+    gl_MeshVerticesEXT[0].gl_Position = float4(-0.5, -0.5, 0.0, 1.0)   // per-vertex Block member 0 (Position)
+    gl_MeshVerticesEXT[1].gl_Position = float4(0.5, -0.5, 0.0, 1.0)
+    gl_MeshVerticesEXT[2].gl_Position = float4(0.0, 0.5, 0.0, 1.0)
+    gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)             // per-primitive triangle connectivity
+}
+
+def public mesh_tri_words : array<uint> {
+    return clone_to_move(mesh_tri_spv)
 }
 
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and

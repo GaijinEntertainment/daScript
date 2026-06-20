@@ -60,6 +60,7 @@ struct GlobalInfo {
     is_separate_sampler : bool      // a standalone sampler (OpTypeSampler)
     is_subpass_input : bool         // a subpass-input attachment (UniformConstant OpTypeImage Dim=SubpassData); used via subpassLoad
     is_sampler_array : bool         // a fixed-count descriptor array of combined image samplers (sampler2D[N], etc.) -- UniformConstant OpTypeArray of OpTypeSampledImage; accessed via samplers[idx] -> OpAccessChain
+    is_mesh_output : bool           // a mesh per-vertex / per-primitive Output array (gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT); a BARE Output array indexed by a single AccessChain (no member-0 SSBO indirection), pointee from elem_type
     arr_count  : int                // descriptor-array element count (when is_sampler_array; > 0); 0 for non-array
     elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type) OR descriptor-array element type-id (sampled-image / image / sampler)
     is_constant : bool              // a module-scope `let X = <const>` folded to an OpConstant; references resolve to const_id directly (no OpVariable / OpLoad)
@@ -90,6 +91,9 @@ struct EmitCtx {
     descriptor_indexing_cap : bool              // OpCapability ShaderNonUniform + OpExtension "SPV_EXT_descriptor_indexing" already emitted (nonuniformEXT, descriptor arrays)
     sampled_image_nu_cap : bool                 // OpCapability SampledImageArrayNonUniformIndexing already emitted (NonUniform-indexed sampler descriptor array)
     mesh_shading_cap : bool                     // OpCapability MeshShadingEXT + OpExtension "SPV_EXT_mesh_shader" already emitted (mesh / task stages)
+    mesh_max_vertices : int                     // mesh-output array sizing (from MeshOutputConfig): gl_MeshVerticesEXT length
+    mesh_max_primitives : int                   // mesh-output array sizing: gl_PrimitiveTriangleIndicesEXT length
+    mesh_topology : MeshOutputTopology          // declared output topology; the index-array builtin must match it (triangles -> gl_PrimitiveTriangleIndicesEXT)
     nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
@@ -518,6 +522,66 @@ def private is_emittable_value_type(t : TypeDecl?) : bool {
     return scalar_class(bt) >= 0 || bt == Type.tBool
 }
 
+// gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT — the mesh per-vertex / per-primitive Output
+// arrays (VK_EXT_mesh_shader). Unlike the scalar builtins these are ARRAYS of a builtin, sized from
+// the [mesh_shader] output config (stashed on ctx):
+//   gl_MeshVerticesEXT             -> Output array[max_vertices] of a Block { vec4 } whose member 0 is
+//                                     BuiltIn Position (so gl_MeshVerticesEXT[i].gl_Position writes clip pos)
+//   gl_PrimitiveTriangleIndicesEXT -> Output array[max_primitives] of uvec3, BuiltIn-decorated on the var
+// Both are BARE Output arrays (is_mesh_output): an `[i]` index is a single AccessChain off the variable
+// (no member-0 SSBO indirection), and the per-vertex block's gl_Position field chains member 0 via the
+// generic visitExprField path. The daslang `array<>` decls in spirv_builtins exist only so the indexing
+// + field access typecheck; the real SPIR-V sizing comes from the config, not the (empty) daslang array.
+def private classify_mesh_output(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; vname : string; stage : ShaderStage; var errors : array<string>) {
+    if (stage != ShaderStage.Mesh) {
+        errors |> push("mesh output '{vname}' is only available in a mesh shader, not {stage_name(stage)}")
+        return
+    }
+    if (vname == "gl_MeshVerticesEXT") {
+        let n = ctx.mesh_max_vertices
+        if (n <= 0) {
+            errors |> push("gl_MeshVerticesEXT: max_vertices must be > 0 (got {n})")
+            return
+        }
+        // per-vertex Block { gl_Position : vec4 } — member 0 = BuiltIn Position, Block-decorated.
+        let f4 = type_vector(m, type_float(m, 32u), 4)
+        let blk = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.TypeStruct, blk, f4)
+        emit(m, SEC_DECOR, SpvOp.Decorate, blk, uint(SpvDecoration.Block))
+        emit(m, SEC_DECOR, SpvOp.MemberDecorate, blk, 0u, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.Position))
+        let arr = type_array(m, blk, n)
+        let pt = type_pointer(m, SpvStorageClass.Output, arr)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Output))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Output, value_type = arr, elem_type = blk, is_mesh_output = true))
+        ctx.interface_ids |> push(vid)
+        return
+    }
+    if (vname == "gl_PrimitiveTriangleIndicesEXT") {
+        // PR-E2 ships triangles only; the line (uvec2) / point (uint) index arrays + their topology
+        // arrive in a follow-up. Reject a mismatch fail-closed rather than emit indices the declared
+        // topology can't consume.
+        if (ctx.mesh_topology != MeshOutputTopology.triangles) {
+            errors |> push("gl_PrimitiveTriangleIndicesEXT requires output_topology=\"triangles\" (lines / points index arrays land in a follow-up)")
+            return
+        }
+        let n = ctx.mesh_max_primitives
+        if (n <= 0) {
+            errors |> push("gl_PrimitiveTriangleIndicesEXT: max_primitives must be > 0 (got {n})")
+            return
+        }
+        let u3 = type_vector(m, type_uint(m), 3)
+        let arr = type_array(m, u3, n)
+        let pt = type_pointer(m, SpvStorageClass.Output, arr)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Output))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PrimitiveTriangleIndicesEXT))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.Output, value_type = arr, elem_type = u3, is_mesh_output = true))
+        ctx.interface_ids |> push(vid)
+        return
+    }
+}
+
 // ===== global variable classification + emission =====
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
@@ -544,6 +608,13 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         if (bi.bi == SpvBuiltIn.DrawIndex) {
             ensure_draw_parameters(m, ctx)
         }
+        return
+    }
+    // mesh per-vertex / per-primitive Output arrays (gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT):
+    // recognized by name BEFORE the @ssbo array path below (their daslang type is array<...>, which the
+    // SSBO path would otherwise claim). Sized from the [mesh_shader] output config on ctx.
+    if (vname == "gl_MeshVerticesEXT" || vname == "gl_PrimitiveTriangleIndicesEXT") {
+        classify_mesh_output(m, ctx, v, vname, stage, errors)
         return
     }
     // stage I/O: @in / @out user variables carry an explicit @location. They become Input/Output
@@ -1748,14 +1819,18 @@ class SpirvEmit : AstVisitor {
             return expr
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
-        // @workgroup shared fixed-array: a BARE array global (not wrapped in a Block struct), so the
-        // access chain is a single index off the variable -- no member-0 indirection like an SSBO.
-        if (gi.storage == SpvStorageClass.Workgroup) {
+        // BARE array global (not wrapped in a Block struct), so the access chain is a single index off
+        // the variable -- no member-0 indirection like an SSBO. Two flavours: @workgroup shared arrays
+        // and the mesh per-vertex / per-primitive Output arrays (gl_MeshVerticesEXT[i] /
+        // gl_PrimitiveTriangleIndicesEXT[i]). The mesh per-vertex element is a Block struct that
+        // emit_type can't lower, so use the classified elem_type; @workgroup scalar/vector elements
+        // lower fine via emit_type.
+        if (gi.storage == SpvStorageClass.Workgroup || gi.is_mesh_output) {
             let idx = value_of(expr.index)
             if (idx == 0u) return expr   // index failed to lower (error already pushed)
-            let pointee = emit_type(bm, expr._type)
+            let pointee = (gi.is_mesh_output && gi.elem_type != 0u) ? gi.elem_type : emit_type(bm, expr._type)
             let res = alloc_id(bm)
-            let ptr_t = type_pointer(bm, SpvStorageClass.Workgroup, pointee)
+            let ptr_t = type_pointer(bm, gi.storage, pointee)
             emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, gi.var_id, idx)
             e2ptr[k] = res
             e2pty[k] = pointee
@@ -3403,6 +3478,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         m.version = SPV_VERSION_1_4
         ensure_mesh_shading(m, ctx)
     }
+    // Mesh per-vertex / per-primitive Output arrays (gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT)
+    // are sized from the [mesh_shader] output config; classify_global reads these off ctx when it
+    // emits the array types. Only the mesh stage has these outputs (task dispatches, it doesn't emit
+    // geometry).
+    ctx.mesh_max_vertices = mesh_config.max_vertices
+    ctx.mesh_max_primitives = mesh_config.max_primitives
+    ctx.mesh_topology = mesh_config.topology
 
     collect_dependencies(fn) $(vfun, vvar) {
         for (v in vvar) {

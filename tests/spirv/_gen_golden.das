@@ -86,4 +86,6 @@ def main {
     // PR-E mesh output config: non-default counts + lines / points topology.
     emit_golden(dir, "mesh_lines", mesh_lines_words())
     emit_golden(dir, "mesh_points", mesh_points_words())
+    // PR-E2 array-of-builtin output: one-triangle per-vertex Position + triangle index array.
+    emit_golden(dir, "mesh_tri", mesh_tri_words())
 }

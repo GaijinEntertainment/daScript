@@ -73,6 +73,31 @@ def private exec_mode_operand(words : array<uint>; mode : SpvExecutionMode; opId
     return res
 }
 
+// Count the EntryPoint's interface ids (the trailing operands after the null-terminated entry name).
+// OpEntryPoint operands: 0 = execution model, 1 = entry-point id, 2.. = the name string (packed
+// LSB-first, NUL-terminated, so the first operand word carrying a zero byte is the terminator), then
+// one operand per interface variable. Used to assert the mesh outputs are listed (SPIR-V 1.4 requires
+// every referenced global in the interface).
+def private entry_point_interface_count(words : array<uint>) : int {
+    var count = -1
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (count >= 0 || opcode != uint(SpvOp.EntryPoint)) return
+        var i = 2
+        var name_done = false
+        while (i < n && !name_done) {
+            let wd = w[s + i]
+            for (b in range(4)) {
+                if (((wd >> uint(b * 8)) & 0xFFu) == 0u) {
+                    name_done = true
+                }
+            }
+            i++
+        }
+        count = n - i
+    }
+    return count
+}
+
 [test]
 def test_mesh_stage_scaffolding(t : T?) {
     t |> run("[mesh_shader] empty: cap + ext + execution model + execution modes + SetMeshOutputsEXT") <| @(t : T?) {
@@ -170,5 +195,38 @@ def test_mesh_output_config(t : T?) {
         t |> success(!has_execution_mode(pwords, SpvExecutionMode.OutputLinesEXT), "mesh_points: NO OutputLinesEXT")
         validate(t, pwords, "mesh_points")
         delete pwords
+    }
+}
+
+[test]
+def test_mesh_output_arrays(t : T?) {
+    t |> run("[mesh_shader] per-vertex/per-primitive output arrays: gl_MeshVerticesEXT + gl_PrimitiveTriangleIndicesEXT") <| @(t : T?) {
+        var words <- mesh_tri_words()
+        // per-vertex output block: an OpTypeStruct decorated Block whose member 0 is BuiltIn Position.
+        t |> success(op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.Position)),
+            "mesh_tri: per-vertex block member 0 is BuiltIn Position")
+        t |> success(op_has_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Block)),
+            "mesh_tri: per-vertex block is Block-decorated")
+        // per-primitive index array: the variable itself is BuiltIn PrimitiveTriangleIndicesEXT.
+        t |> success(op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(SpvBuiltIn.PrimitiveTriangleIndicesEXT)),
+            "mesh_tri: index array is BuiltIn PrimitiveTriangleIndicesEXT")
+        // output sizing matches the [mesh_shader] args (3 vertices, 1 primitive, triangles).
+        let mv = exec_mode_operand(words, SpvExecutionMode.OutputVertices, 2)
+        t |> success(mv.found && mv.value == 3u, "mesh_tri: OutputVertices == 3 (found={mv.found} value={mv.value})")
+        let mp = exec_mode_operand(words, SpvExecutionMode.OutputPrimitivesEXT, 2)
+        t |> success(mp.found && mp.value == 1u, "mesh_tri: OutputPrimitivesEXT == 1 (found={mp.found} value={mp.value})")
+        t |> success(has_execution_mode(words, SpvExecutionMode.OutputTrianglesEXT), "mesh_tri: ExecutionMode OutputTrianglesEXT")
+        // prologue + the four stores (3 per-vertex positions + 1 per-primitive index triple).
+        t |> success(has_op(words, SpvOp.SetMeshOutputsEXT), "mesh_tri: emits OpSetMeshOutputsEXT")
+        t |> success(count_op(words, SpvOp.Store) >= 4,
+            "mesh_tri: >= 4 OpStore (3 positions + 1 index, got {count_op(words, SpvOp.Store)})")
+        // mesh entry point + both mesh outputs listed in its interface (SPIR-V 1.4 requires every
+        // referenced global in the interface; the shader references exactly the two mesh-output arrays).
+        t |> success(op_has_operand_at(words, SpvOp.EntryPoint, 0, uint(SpvExecutionModel.MeshEXT)),
+            "mesh_tri: OpEntryPoint MeshEXT")
+        let niface = entry_point_interface_count(words)
+        t |> success(niface == 2, "mesh_tri: OpEntryPoint interface lists both mesh outputs (got {niface})")
+        validate(t, words, "mesh_tri")
+        delete words
     }
 }
