@@ -1,0 +1,1 @@
+Bulk-appends two source arrays ``a`` and ``b`` to ``Arr`` via copy in one call, reserving the combined length up front so the whole append makes a single allocation. Companion overloads take three or four sources; a nested ``array<array<...>>`` source is flattened by the recursive ``push_from(Arr, src)`` overload instead.
