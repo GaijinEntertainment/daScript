@@ -66,5 +66,9 @@ def test_fail_closed_rejections(t : T?) {
         // index array under a non-triangle output topology
         check_rejects(t, "_fc_mesh_vertices_stage", "is only available in a mesh shader")
         check_rejects(t, "_fc_mesh_indices_topology", "requires output_topology")
+        // gl_PrimitiveID is a fragment-only Input builtin (reading it in a vertex shader is rejected)
+        check_rejects(t, "_fc_primid_stage", "is only available in the fragment stage")
+        // a mesh @out array<T> with an unsupported element type (double) fails closed, not crash emit_type
+        check_rejects(t, "_fc_mesh_out_badtype", "not a supported varying type")
     }
 }
