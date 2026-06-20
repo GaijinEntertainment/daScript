@@ -124,7 +124,7 @@ struct OrbitBus {
     gain                  : float = 1.0
         //! Continuous output level for this orbit (1.0 = unity). Multiplied into every routed
         //! voice's gain each chunk, so it has no per-note latency — unlike a per-hap gain, which
-        //! is frozen at note onset. Ramped by scheduler_fade_orbit / advanced by advance_orbit_gains.
+        //! is frozen at note onset. Ramped by fade_orbit / advanced by advance_orbit_gains.
     target_gain           : float = 1.0
         //! Fade target for `gain`.
     fade_speed            : float = 0.0
@@ -191,20 +191,18 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
 }
 
-// Continuous output level for an orbit (1.0 when no bus exists). Read once per voice per chunk.
-def private orbit_gain(sched : Scheduler; orbit : int) : float {
+//! Continuous output level for an orbit (1.0 when no bus exists). Read once per voice per chunk;
+//! also for introspection / tests.
+def orbit_gain(sched : Scheduler; orbit : int) : float {
     if (orbit < 0 || orbit >= length(sched.orbit_buses)) return 1.0
     let bus = sched.orbit_buses[orbit]
     return bus == null ? 1.0 : bus.gain
 }
 
-//! Continuous output level for an orbit (1.0 when no bus exists) — introspection / tests.
-def scheduler_orbit_gain(sched : Scheduler; orbit : int) : float => orbit_gain(sched, orbit)
-
 //! Fade orbit `orbit`'s continuous output level to `target_gain` over `time` seconds (0 = snap).
 //! The orbit is a sub-bus: every voice routed to it fades with no per-note latency. Levels above
 //! 1.0 amplify. Advanced once per audio chunk by advance_orbit_gains (called from tick).
-def scheduler_fade_orbit(var sched : Scheduler; orbit : int; target_gain : float; time : float) {
+def fade_orbit(var sched : Scheduler; orbit : int; target_gain : float; time : float) {
     if (orbit < 0) return
     ensure_orbit(sched, orbit)
     var bus = sched.orbit_buses[orbit]
@@ -218,8 +216,8 @@ def scheduler_fade_orbit(var sched : Scheduler; orbit : int; target_gain : float
 }
 
 //! Set an orbit's continuous output level immediately (no ramp).
-def scheduler_set_orbit_gain(var sched : Scheduler; orbit : int; gain : float) {
-    scheduler_fade_orbit(sched, orbit, gain, 0.0)
+def set_orbit_gain(var sched : Scheduler; orbit : int; gain : float) {
+    fade_orbit(sched, orbit, gain, 0.0)
 }
 
 //! Advance every orbit's gain ramp one chunk of `dt` seconds toward its target (mirrors the

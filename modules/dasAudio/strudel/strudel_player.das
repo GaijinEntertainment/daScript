@@ -357,7 +357,7 @@ def public strudel_fade_orbit(track_idx, orbit : int; target_gain : float; time 
     //! (time=0 snaps). Orbits are sub-buses: this fades every voice routed to `orbit` with no
     //! per-note latency — unlike a per-hap gain(), which is frozen at note onset. Levels > 1.0 amplify.
     if (track_idx >= 0 && track_idx < length(g_tracks) && g_tracks[track_idx] != null) {
-        scheduler_fade_orbit(g_tracks[track_idx].sched, orbit, target_gain, time)
+        fade_orbit(g_tracks[track_idx].sched, orbit, target_gain, time)
     }
 }
 
@@ -369,7 +369,7 @@ def public strudel_set_orbit_gain(track_idx, orbit : int; gain : float) {
 def public strudel_orbit_gain(track_idx, orbit : int) : float {
     //! Current continuous output level for an orbit on the given track (1.0 when unset).
     if (track_idx >= 0 && track_idx < length(g_tracks) && g_tracks[track_idx] != null) {
-        return scheduler_orbit_gain(g_tracks[track_idx].sched, orbit)
+        return orbit_gain(g_tracks[track_idx].sched, orbit)
     }
     return 1.0
 }

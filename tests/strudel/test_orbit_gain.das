@@ -26,29 +26,29 @@ def private tick_chunks_rms(var sched : Scheduler; var pat : Pattern; bank : Sam
 def test_orbit_gain_ramp(t : T?) {
     t |> run("orbit gain ramps linearly to target, then settles") @(t : T?) {
         var inscope sched : Scheduler
-        t |> numericEqual(scheduler_orbit_gain(sched, 3), 1.0)   // unset orbit reads unity
-        scheduler_fade_orbit(sched, 3, 0.0, 0.5)                 // 1.0 -> 0.0 over 0.5s
-        t |> numericEqual(scheduler_orbit_gain(sched, 3), 1.0)   // fade armed, not advanced yet
+        t |> numericEqual(orbit_gain(sched, 3), 1.0)   // unset orbit reads unity
+        fade_orbit(sched, 3, 0.0, 0.5)                 // 1.0 -> 0.0 over 0.5s
+        t |> numericEqual(orbit_gain(sched, 3), 1.0)   // fade armed, not advanced yet
         advance_orbit_gains(sched, 0.25)
-        t |> numericEqual(scheduler_orbit_gain(sched, 3), 0.5)   // halfway
+        t |> numericEqual(orbit_gain(sched, 3), 0.5)   // halfway
         advance_orbit_gains(sched, 0.25)
-        t |> numericEqual(scheduler_orbit_gain(sched, 3), 0.0)   // arrived
+        t |> numericEqual(orbit_gain(sched, 3), 0.0)   // arrived
         advance_orbit_gains(sched, 0.25)
-        t |> numericEqual(scheduler_orbit_gain(sched, 3), 0.0)   // settled, stays put
-        t |> numericEqual(scheduler_orbit_gain(sched, 1), 1.0)   // unrelated orbit unaffected
+        t |> numericEqual(orbit_gain(sched, 3), 0.0)   // settled, stays put
+        t |> numericEqual(orbit_gain(sched, 1), 1.0)   // unrelated orbit unaffected
     }
     t |> run("fade up past unity amplifies; overshoot clamps to target") @(t : T?) {
         var inscope sched : Scheduler
-        scheduler_fade_orbit(sched, 2, 3.0, 1.0)                 // 1.0 -> 3.0 over 1s
+        fade_orbit(sched, 2, 3.0, 1.0)                 // 1.0 -> 3.0 over 1s
         advance_orbit_gains(sched, 0.5)
-        t |> numericEqual(scheduler_orbit_gain(sched, 2), 2.0)
+        t |> numericEqual(orbit_gain(sched, 2), 2.0)
         advance_orbit_gains(sched, 1.0)                          // would overshoot -> clamp
-        t |> numericEqual(scheduler_orbit_gain(sched, 2), 3.0)
+        t |> numericEqual(orbit_gain(sched, 2), 3.0)
     }
     t |> run("time=0 snaps the level instantly") @(t : T?) {
         var inscope sched : Scheduler
-        scheduler_set_orbit_gain(sched, 0, 0.25)
-        t |> numericEqual(scheduler_orbit_gain(sched, 0), 0.25)
+        set_orbit_gain(sched, 0, 0.25)
+        t |> numericEqual(orbit_gain(sched, 0), 0.25)
     }
 }
 
@@ -61,7 +61,7 @@ def test_orbit_gain_attenuates_output(t : T?) {
         let bank : SampleBank
         let loud = tick_chunks_rms(sched, pat, bank, 4, 0.0, 0.05)
         t |> success(loud > 0.001, "orbit at unity should be audible")
-        scheduler_set_orbit_gain(sched, 1, 0.0)
+        set_orbit_gain(sched, 1, 0.0)
         let silent = tick_chunks_rms(sched, pat, bank, 4, 0.2, 0.05)
         t |> success(silent < loud * 0.05, "muted orbit should drop to near silence")
     }
@@ -72,7 +72,7 @@ def test_orbit_gain_attenuates_output(t : T?) {
         let bank : SampleBank
         let full = tick_chunks_rms(sched, pat, bank, 2, 0.0, 0.05)
         t |> success(full > 0.001, "unity orbit should be audible")
-        scheduler_set_orbit_gain(sched, 2, 0.25)
+        set_orbit_gain(sched, 2, 0.25)
         let quarter = tick_chunks_rms(sched, pat, bank, 2, 0.1, 0.05)
         t |> success(quarter > 0.0, "0.25 level should still be audible")
         t |> success(quarter < full * 0.5, "0.25 level should be markedly quieter than unity")

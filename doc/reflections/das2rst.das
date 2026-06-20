@@ -1545,7 +1545,7 @@ def document_module_strudel_scheduler(_root : string) {
     var mod = find_module("strudel_scheduler")
     var groups <- array<DocGroup>(
         group_by_regex("Orbit effects", mod, %regex~(init_reverb|init_delay|get_orbit_reverb|get_orbit_delay|get_orbit_chorus)$%%),
-        group_by_regex("Orbit levels", mod, %regex~(scheduler_fade_orbit|scheduler_set_orbit_gain|scheduler_orbit_gain|advance_orbit_gains)$%%),
+        group_by_regex("Orbit levels", mod, %regex~(fade_orbit|set_orbit_gain|orbit_gain|advance_orbit_gains)$%%),
         group_by_regex("Reverb quality override", mod, %regex~(set_force_reverb_quality|set_force_reverb_stages)$%%),
         group_by_regex("Scheduler lifecycle", mod, %regex~(tick|shutdown_scheduler|finalize)$%%)
     )
