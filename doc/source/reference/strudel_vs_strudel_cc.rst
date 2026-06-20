@@ -246,6 +246,13 @@ reverb/delay through SuperDirt differently.
 share a reverb, in daslang they need the same ``orbit`` number.
 If you want independent reverbs/choruses per voice, split orbits.
 
+Beyond effects, each orbit also carries a **continuous output level** — a
+per-orbit gain applied to every routed voice each audio block, ramped smoothly
+by ``strudel_fade_orbit(track, orbit, level, seconds)`` (or set instantly with
+``strudel_set_orbit_gain``).  Because it scales the bus rather than each note,
+it has no per-onset latency; see *Host-driven / adaptive control* below for why
+that matters for layer crossfades.
+
 Reverb quality
 --------------
 
@@ -396,8 +403,29 @@ One continuous ``stack`` whose layers are gated by host flags is the whole of
 *vertical-layering adaptive music* - a switch is one variable write, no
 crossfade machinery.  The flag is sampled per query (at each event's onset), so
 a flip takes effect on the next scheduler query as upcoming events are
-scheduled - sub-cycle, not aligned to an exact cycle boundary.  Whole patterns
-can also be added or dropped live with
+scheduled - sub-cycle, not aligned to an exact cycle boundary.
+
+That per-onset sampling is the catch for **sparse** layers: a sustained pad or
+a drone whose notes are seconds apart only re-reads the flag when its *next*
+note onsets, so a gate change can lag audibly.  The fix is to fade the layer's
+**orbit level** instead of its per-note gain.  Route the layer to its own orbit
+and ramp that orbit's continuous output level:
+
+.. code-block:: das
+
+   let DRONE_ORBIT = 6
+   drone |> orbit(DRONE_ORBIT)                       // layer rides its own sub-bus
+   strudel_fade_orbit(track, DRONE_ORBIT, 0.0, 0.3)  // fade out over 0.3s, smoothly
+
+Because the orbit level scales every routed voice each audio block (not at note
+onset), the fade is heard immediately and continuously, no matter how sparse the
+notes are - a true crossfade in ~``seconds`` with no extra track or scheduler.
+``strudel_set_orbit_gain`` snaps instantly; levels above ``1.0`` amplify.  Rule
+of thumb: **dense** layers (a busy drum bus) switch cleanly with signal-gating;
+**sparse / sustained** layers (pads, drones, sparkle) want an orbit fade.  Either
+way it stays one ``stack`` / one track.
+
+Whole patterns can also be added or dropped live with
 ``strudel_add_track`` / ``strudel_remove_track``.  The host drives playback
 from its own loop with ``strudel_tick`` (main thread), or bakes a fixed render
 offline (no audio device) via the ``examples/daStrudel/features`` harness
