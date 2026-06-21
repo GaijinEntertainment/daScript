@@ -1418,6 +1418,19 @@ def private glsl_ext_op(name : string; cls : int) : tuple<ok : bool; op : GLSLst
     return (ok = false, op = GLSLstd450.Round)
 }
 
+//! GLSL.std.450 ops where a scalar operand is allowed against a vector result and the SPIR-V spec
+//! requires it to match the result type — mix/clamp/min/max/step/smoothstep. SPIR-V has no implicit
+//! scalar broadcast, so the emitter must splat such a scalar to the result width (e.g. daslang
+//! lerp(vec, vec, float) -> FMix wants a vector t). Ops NOT here (pow, atan2, distance, …) require
+//! their operands to match exactly and must not be touched.
+def private ext_op_broadcasts_scalar(op : GLSLstd450) : bool {
+    return (op == GLSLstd450.FMix
+        || op == GLSLstd450.FClamp || op == GLSLstd450.SClamp || op == GLSLstd450.UClamp
+        || op == GLSLstd450.FMin   || op == GLSLstd450.SMin   || op == GLSLstd450.UMin
+        || op == GLSLstd450.FMax   || op == GLSLstd450.SMax   || op == GLSLstd450.UMax
+        || op == GLSLstd450.Step   || op == GLSLstd450.SmoothStep)
+}
+
 // ===== compile-time constants: scalars, all-const vector constructors, const arrays =====
 // Produces a deduped OpConstant / OpConstantComposite for a fully-constant expression. Used for
 // array literals (which must be constant initializers for now) and their constituents. ok=false =>
@@ -3020,11 +3033,28 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             var ops <- [rt, res, set, uint(ge.op)]
+            // SPIR-V has no implicit scalar->vector broadcast. For the ops that allow a scalar operand
+            // against a vector result (mix/clamp/min/max/step/smoothstep), splat any scalar operand to
+            // the result width via OpCompositeConstruct so the OpExtInst is valid. This is what makes
+            // daslang lerp(vec, vec, float) emit correctly instead of an invalid (scalar-t) FMix.
+            let result_n = component_count(expr._type.baseType)
+            let broadcast = result_n > 1 && ext_op_broadcasts_scalar(ge.op)
             for (a in expr.arguments) {
-                let aid = value_of(a)
+                var aid = value_of(a)
                 if (aid == 0u) {
                     delete ops
                     return expr
+                }
+                if (broadcast && component_count(a._type.baseType) == 1) {
+                    let sres = alloc_id(bm)
+                    var cons <- [rt, sres]
+                    cons |> reserve(2 + result_n)
+                    for (_l in range(result_n)) {
+                        cons |> push(aid)
+                    }
+                    emit_n(bm, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+                    delete cons
+                    aid = sres
                 }
                 ops |> push(aid)
             }
