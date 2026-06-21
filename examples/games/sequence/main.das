@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 
 require live/glfw_live
 require live/opengl_live
@@ -1553,6 +1554,7 @@ def main() {
     var frame_count = 0
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
         frame_count ++
         if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
             break

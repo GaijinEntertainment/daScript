@@ -1,0 +1,1 @@
+Total bytes the context's string heap has reserved from the OS (aligned), including currently-free space. Pair with string_heap_bytes_allocated (the live bytes in use) to gauge how full the string heap is — e.g. to decide whether a collection would reclaim much.

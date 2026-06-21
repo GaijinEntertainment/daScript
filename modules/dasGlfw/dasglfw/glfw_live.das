@@ -101,6 +101,7 @@ def public live_begin_frame() : bool {
         request_exit()
         return false
     }
+    advance_frame_clock()   // standalone: compute this frame's dt once so get_dt() is stable all frame (no-op under the live host)
     return true
 }
 
@@ -108,6 +109,26 @@ def public live_end_frame() {
     //! Swaps buffers. Call after rendering.
     if (live_window != null) {
         glfwSwapBuffers(live_window)
+    }
+}
+
+def public maybe_collect_gc() {
+    //! Standalone-loop GC. Call once per frame after your update/render: the daslang-live host
+    //! collects the heap for you, but a standalone `def main` loop must do it itself. Collects a heap
+    //! only when it is mostly FREE (cheap compaction — little live data to walk), so it is fine to
+    //! call every frame. The string heap fills faster, so it gets the lower threshold and is checked
+    //! first. Requires `options gc` + `options persistent_heap` on the program (heap_collect throws
+    //! otherwise).
+    let s_used = string_heap_bytes_allocated()
+    let s_total = string_heap_total_allocated()
+    if (s_total > 0ul && s_used * 3ul < s_total * 2ul) {        // string heap > 1/3 unused
+        unsafe(heap_collect(true, false))
+        return
+    }
+    let h_used = heap_bytes_allocated()
+    let h_total = heap_total_allocated()
+    if (h_total > 0ul && h_used * 3ul < h_total) {              // heap > 2/3 unused
+        unsafe(heap_collect(true, false))
     }
 }
 
@@ -403,7 +424,7 @@ def mouse_play(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Stop synthetic playback and clear the timeline.")]
-def mouse_stop(input : JsonValue?) : JsonValue? {
+def mouse_stop(_input : JsonValue?) : JsonValue? {
     let was_playing = playing
     let released    = length(synth_held_buttons)
     release_held_buttons()
@@ -423,7 +444,7 @@ struct MouseStatusResult {
 }
 
 [live_command(description="Synthetic-mouse playback status.")]
-def mouse_status(input : JsonValue?) : JsonValue? {
+def mouse_status(_input : JsonValue?) : JsonValue? {
     let elapsed = playing ? int((get_uptime() - play_start_t) * 1000.0) : 0
     return JV(MouseStatusResult(
         playing       = playing,
@@ -636,49 +657,49 @@ def private mod_name_to_bit(name : string) : int {
 // event with `keycode == 0` (text-input widgets still receive it via
 // CharCallback).
 def private needs_shift_ascii(c : int) : bool {
-    if (c >= int('A') && c <= int('Z')) return true   // nolint:PERF014 (uppercase-only, is_alpha would also match lowercase)
+    if (c >= 'A' && c <= 'Z') return true   // nolint:PERF014 (uppercase-only, is_alpha would also match lowercase)
     // shifted punctuation on a US layout. Listed as char literals (not a single
     // string) so the parser doesn't treat `{` / `}` as interpolation delimiters.
-    return (c == int('~') || c == int('!') || c == int('@') || c == int('#')
-         || c == int('$') || c == int('%') || c == int('^') || c == int('&')
-         || c == int('*') || c == int('(') || c == int(')') || c == int('_')
-         || c == int('+') || c == int('{') || c == int('}') || c == int('|')
-         || c == int(':') || c == int('"') || c == int('<') || c == int('>')
-         || c == int('?'))
+    return (c == '~' || c == '!' || c == '@' || c == '#'
+         || c == '$' || c == '%' || c == '^' || c == '&'
+         || c == '*' || c == '(' || c == ')' || c == '_'
+         || c == '+' || c == '{' || c == '}' || c == '|'
+         || c == ':' || c == '"' || c == '<' || c == '>'
+         || c == '?')
 }
 
 def private base_keycode_ascii(c : int) : int {
     // letters — distinguishing case to compute the right keycode offset
-    if (c >= int('A') && c <= int('Z')) return GLFW_KEY_A + (c - int('A'))   // nolint:PERF014 (need uppercase-only offset)
-    if (c >= int('a') && c <= int('z')) return GLFW_KEY_A + (c - int('a'))   // nolint:PERF014 (need lowercase-only offset)
+    if (c >= 'A' && c <= 'Z') return GLFW_KEY_A + (c - 'A')   // nolint:PERF014 (need uppercase-only offset)
+    if (c >= 'a' && c <= 'z') return GLFW_KEY_A + (c - 'a')   // nolint:PERF014 (need lowercase-only offset)
     // digits 0-9 → GLFW_KEY_0..9
-    if (c >= int('0') && c <= int('9')) return GLFW_KEY_0 + (c - int('0'))   // nolint:PERF014 (need digit-only offset)
+    if (c >= '0' && c <= '9') return GLFW_KEY_0 + (c - '0')   // nolint:PERF014 (need digit-only offset)
     // shifted digit row: ! @ # $ % ^ & * ( )  → keys 1 2 3 4 5 6 7 8 9 0
-    if (c == int('!')) return GLFW_KEY_1
-    if (c == int('@')) return GLFW_KEY_2
-    if (c == int('#')) return GLFW_KEY_3
-    if (c == int('$')) return GLFW_KEY_4
-    if (c == int('%')) return GLFW_KEY_5
-    if (c == int('^')) return GLFW_KEY_6
-    if (c == int('&')) return GLFW_KEY_7
-    if (c == int('*')) return GLFW_KEY_8
-    if (c == int('(')) return GLFW_KEY_9
-    if (c == int(')')) return GLFW_KEY_0
+    if (c == '!') return GLFW_KEY_1
+    if (c == '@') return GLFW_KEY_2
+    if (c == '#') return GLFW_KEY_3
+    if (c == '$') return GLFW_KEY_4
+    if (c == '%') return GLFW_KEY_5
+    if (c == '^') return GLFW_KEY_6
+    if (c == '&') return GLFW_KEY_7
+    if (c == '*') return GLFW_KEY_8
+    if (c == '(') return GLFW_KEY_9
+    if (c == ')') return GLFW_KEY_0
     // punctuation
-    if (c == int(' ')) return GLFW_KEY_SPACE
-    if (c == int('\n')) return GLFW_KEY_ENTER
-    if (c == int('\t')) return GLFW_KEY_TAB
-    if (c == int(',') || c == int('<')) return GLFW_KEY_COMMA
-    if (c == int('.') || c == int('>')) return GLFW_KEY_PERIOD
-    if (c == int('/') || c == int('?')) return GLFW_KEY_SLASH
-    if (c == int(';') || c == int(':')) return GLFW_KEY_SEMICOLON
-    if (c == int('\'') || c == int('"')) return GLFW_KEY_APOSTROPHE
-    if (c == int('-') || c == int('_')) return GLFW_KEY_MINUS
-    if (c == int('=') || c == int('+')) return GLFW_KEY_EQUAL
-    if (c == int('[') || c == int('{')) return GLFW_KEY_LEFT_BRACKET
-    if (c == int(']') || c == int('}')) return GLFW_KEY_RIGHT_BRACKET
-    if (c == int('\\') || c == int('|')) return GLFW_KEY_BACKSLASH
-    if (c == int('`') || c == int('~')) return GLFW_KEY_GRAVE_ACCENT
+    if (c == ' ') return GLFW_KEY_SPACE
+    if (c == '\n') return GLFW_KEY_ENTER
+    if (c == '\t') return GLFW_KEY_TAB
+    if (c == ',' || c == '<') return GLFW_KEY_COMMA
+    if (c == '.' || c == '>') return GLFW_KEY_PERIOD
+    if (c == '/' || c == '?') return GLFW_KEY_SLASH
+    if (c == ';' || c == ':') return GLFW_KEY_SEMICOLON
+    if (c == '\'' || c == '"') return GLFW_KEY_APOSTROPHE
+    if (c == '-' || c == '_') return GLFW_KEY_MINUS
+    if (c == '=' || c == '+') return GLFW_KEY_EQUAL
+    if (c == '[' || c == '{') return GLFW_KEY_LEFT_BRACKET
+    if (c == ']' || c == '}') return GLFW_KEY_RIGHT_BRACKET
+    if (c == '\\' || c == '|') return GLFW_KEY_BACKSLASH
+    if (c == '`' || c == '~') return GLFW_KEY_GRAVE_ACCENT
     return 0
 }
 
@@ -749,7 +770,7 @@ def key_chord(input : JsonValue?) : JsonValue? {
     // resolve target keycode: prefer a single ASCII char (uppercase letter / digit / symbol).
     var target_kc = 0
     if (length(args.key) == 1) {
-        target_kc = base_keycode_ascii(int(first_character(args.key)))
+        target_kc = base_keycode_ascii(first_character(args.key))
     }
     return JV((error = "unsupported chord key", key = args.key)) if (target_kc == 0)
     var mod_bits = 0
@@ -834,7 +855,7 @@ def key_play(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Stop synthetic key playback and clear the timeline. Releases any keys still synth-held (e.g. modifiers from an interrupted key_chord) so ImGui doesn't inherit stuck modifier state.")]
-def key_stop(input : JsonValue?) : JsonValue? {
+def key_stop(_input : JsonValue?) : JsonValue? {
     let was_playing = key_playing
     let released    = length(synth_held_keys)
     release_held_keys()
@@ -853,7 +874,7 @@ struct KeyStatusResult {
 }
 
 [live_command(description="Synthetic-keyboard playback status.")]
-def key_status(input : JsonValue?) : JsonValue? {
+def key_status(_input : JsonValue?) : JsonValue? {
     let elapsed = key_playing ? int((get_uptime() - key_play_start_t) * 1000.0) : 0
     return JV(KeyStatusResult(
         playing        = key_playing,

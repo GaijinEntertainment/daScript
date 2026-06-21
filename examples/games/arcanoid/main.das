@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 // arcanoid live
 require glfw/glfw_boost
 require live/glfw_live
@@ -9,13 +10,13 @@ require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-require live/decs_live
-require live/opengl_live
+require live/decs_live    // nolint:STYLE030 — load-bearing for decs entity serialization across live reloads
+require live/opengl_live  // nolint:STYLE030 — load-bearing for OpenGL resource live-reload
 require live/live_commands
 require live/live_api
-require live/live_watch_boost
+require live/live_watch_boost // nolint:STYLE030 — load-bearing for live file-watch side-effects
 require live/live_vars
-require live/audio_live
+require live/audio_live   // nolint:STYLE030 — load-bearing for audio buffer persistence across reloads
 require daslib/json
 require daslib/json_boost
 require daslib/math_boost
@@ -24,7 +25,7 @@ require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live
+require strudel/strudel_live // nolint:STYLE030 — load-bearing for strudel audio live-reload side-effects
 require daslib/strings_boost
 require live_host
 
@@ -386,12 +387,12 @@ def gen_rounded_cube(bevel : float; sectors : int = 16; stacks : int = 8) {
         let k2 = k1 + sectors + 1
         for (j in range(sectors)) {
             if (i != 0) {
-                frag.indices |> push(k1 + j)
+                frag.indices |> push(k1 + j) // nolint:STYLE012 — conditional appends inside loop; literal move-assign would change behavior
                 frag.indices |> push(k1 + j + 1)
                 frag.indices |> push(k2 + j)
             }
             if (i != stacks - 1) {
-                frag.indices |> push(k1 + j + 1)
+                frag.indices |> push(k1 + j + 1) // nolint:STYLE012 — conditional appends inside loop; literal move-assign would change behavior
                 frag.indices |> push(k2 + j + 1)
                 frag.indices |> push(k2 + j)
             }
@@ -496,7 +497,7 @@ def draw_walls() {
 def draw_shield() {
     if (shield_timer > 0.0) {
         let alpha = min(shield_timer / 2.0, 1.0)  // fade out in last 2 seconds
-        let pulse = 0.7 + 0.3 * sin(float(get_uptime()) * 6.0)
+        let pulse = 0.7 + 0.3 * sin(get_uptime() * 6.0)
         let color = BONUS_COLORS[int(BonusType.shield)] * pulse
         draw_box(
             float3(0.0, WALL_HEIGHT * 0.25, SHIELD_Z),
@@ -721,10 +722,10 @@ def reset_powerups() {
 var @live paddle_x = 0.0
 
 def update_paddle(dt : float) {
-    if (glfwGetKey(live_window, int(GLFW_KEY_LEFT)) == int(GLFW_PRESS)) {
+    if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
         paddle_x += PADDLE_SPEED * dt
     }
-    if (glfwGetKey(live_window, int(GLFW_KEY_RIGHT)) == int(GLFW_PRESS)) {
+    if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
         paddle_x -= PADDLE_SPEED * dt
     }
     let pw = current_paddle_w()
@@ -878,7 +879,7 @@ def spawn_bricks() {
     let total_w = float(BRICK_COLS) * (BRICK_W + BRICK_GAP) - BRICK_GAP
     let x_offset = -total_w * 0.5 + BRICK_W * 0.5
     let total = BRICK_ROWS * BRICK_COLS
-    create_entities`Brick(total) $(eid : EntityId; i : int; var b : Brick) {
+    create_entities`Brick(total) $(_eid : EntityId; i : int; var b : Brick) {
         let row = i / BRICK_COLS
         let col = i % BRICK_COLS
         b.pos = float3(x_offset + float(col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP))
@@ -914,7 +915,7 @@ def draw_bricks(br : Brick) {
 def update_bonuses(eid : EntityId; var bn : Bonus) {
     bn.pos.z -= BONUS_FALL_SPEED * tick_dt
     // Rotate Y for visual flair
-    bn.pos.y = BONUS_SIZE * 0.5 + sin(float(get_uptime()) * 4.0) * 0.1
+    bn.pos.y = BONUS_SIZE * 0.5 + sin(get_uptime() * 4.0) * 0.1
     // Check paddle collection
     let pw = current_paddle_w()
     let px_min = paddle_x - pw * 0.5 - BONUS_SIZE * 0.5
@@ -936,7 +937,7 @@ def update_bonuses(eid : EntityId; var bn : Bonus) {
 [decs(stage=draw)]
 def draw_bonuses(bn : Bonus) {
     // Draw as small rotating cube
-    let angle = float(get_uptime()) * 3.0
+    let angle = get_uptime() * 3.0
     v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
     f_Color = float4(bn.color, 1.0)
     vs_arcanoid_bind_uniform(program)
@@ -1029,8 +1030,8 @@ def spawn_trail_dots() {
     query() $(b : Ball) {
         ball_positions |> push(b.pos)
     }
-    if (length(ball_positions) > 0) {
-        create_entities`Trail(length(ball_positions)) $(eid : EntityId; i : int; var tr : Trail) {
+    if (!empty(ball_positions)) {
+        create_entities`Trail(length(ball_positions)) $(_eid : EntityId; i : int; var tr : Trail) {
             tr.pos = ball_positions[i]
             tr.lifetime = 0.15
         }
@@ -1077,7 +1078,7 @@ def draw_shadow_scene() {
         draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), SHADOW_COLOR)
     }
     // Bonuses (with rotation matching the main draw)
-    let angle = float(get_uptime()) * 3.0
+    let angle = get_uptime() * 3.0
     query() $(bn : Bonus) {
         v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
         f_Color = float4(SHADOW_COLOR, 0.5)
@@ -1134,7 +1135,7 @@ struct GameStatusResult {
 }
 
 [live_command(description="Show score, lives, ball/brick counts")]
-def cmd_game_status(input : JsonValue?) : JsonValue? {
+def cmd_game_status(_input : JsonValue?) : JsonValue? {
     var result = GameStatusResult()
     query() $(b : Ball) { result.balls++; }
     query() $(br : Brick) { result.bricks++; }
@@ -1148,7 +1149,7 @@ def cmd_game_status(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Spawn a new set of bricks")]
-def cmd_spawn_bricks(input : JsonValue?) : JsonValue? {
+def cmd_spawn_bricks(_input : JsonValue?) : JsonValue? {
     spawn_bricks()
     return JV(true)
 }
@@ -1172,7 +1173,7 @@ def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Dump DECS archetypes, entities, and queries")]
-def cmd_decs_dump(input : JsonValue?) : JsonValue? {
+def cmd_decs_dump(_input : JsonValue?) : JsonValue? {
     return JV(debug_dump_string())
 }
 
@@ -1198,7 +1199,7 @@ def cmd_powerup(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Reset game to initial state")]
-def cmd_reset_game(input : JsonValue?) : JsonValue? {
+def cmd_reset_game(_input : JsonValue?) : JsonValue? {
     decs::restart()
     spawn_bricks()
     commit()
@@ -1222,7 +1223,7 @@ def cmd_set_lives(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Toggle god mode (ball bounces back instead of falling)")]
-def cmd_god_mode(input : JsonValue?) : JsonValue? {
+def cmd_god_mode(_input : JsonValue?) : JsonValue? {
     god_mode = !god_mode
     return JV(god_mode)
 }
@@ -1270,7 +1271,7 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
 }
 
 def pulse_tint(base : float3) : float3 {
-    let pulse = 0.5 + 0.5 * sin(float(get_uptime()) * 4.5)
+    let pulse = 0.5 + 0.5 * sin(get_uptime() * 4.5)
     return lerp(base * 0.86, base * 1.06, pulse)
 }
 
@@ -1359,10 +1360,10 @@ def update() {
 
     let dt = get_dt()
     tick_dt = min(dt, 1.0 / 30.0) * game_speed
-    let space_pressed = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
+    let space_pressed = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     let space_just = space_pressed && !space_was_pressed
     space_was_pressed = space_pressed
-    let esc_pressed = glfwGetKey(live_window, int(GLFW_KEY_ESCAPE)) == int(GLFW_PRESS)
+    let esc_pressed = glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS
     let esc_just = esc_pressed && !esc_was_pressed
     esc_was_pressed = esc_pressed
     // Menu → start
@@ -1516,6 +1517,7 @@ def main() {
     var frame_count = 0
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
         frame_count ++
         if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
             break

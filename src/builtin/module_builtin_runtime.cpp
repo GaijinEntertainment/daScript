@@ -891,12 +891,20 @@ namespace das
         return context->heap->bytesAllocated();
     }
 
+    uint64_t heap_total_allocated ( Context * context ) {
+        return context->heap->totalAlignedMemoryAllocated();
+    }
+
     int32_t heap_depth ( Context * context ) {
         return (int32_t) context->heap->depth();
     }
 
     uint64_t string_heap_bytes_allocated ( Context * context ) {
         return context->stringHeap->bytesAllocated();
+    }
+
+    uint64_t string_heap_total_allocated ( Context * context ) {
+        return context->stringHeap->totalAlignedMemoryAllocated();
     }
 
     int32_t string_heap_depth ( Context * context ) {
@@ -2055,11 +2063,17 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
             SideEffects::modifyExternal, "heap_bytes_allocated")
                 ->arg("context");
+        addExtern<DAS_BIND_FUN(heap_total_allocated)>(*this, lib, "heap_total_allocated",
+            SideEffects::modifyExternal, "heap_total_allocated")
+                ->arg("context");
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth",
             SideEffects::modifyExternal, "heap_depth")
                 ->arg("context");
         addExtern<DAS_BIND_FUN(string_heap_bytes_allocated)>(*this, lib, "string_heap_bytes_allocated",
             SideEffects::modifyExternal, "string_heap_bytes_allocated")
+                ->arg("context");
+        addExtern<DAS_BIND_FUN(string_heap_total_allocated)>(*this, lib, "string_heap_total_allocated",
+            SideEffects::modifyExternal, "string_heap_total_allocated")
                 ->arg("context");
         addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
             SideEffects::modifyExternal, "string_heap_depth")

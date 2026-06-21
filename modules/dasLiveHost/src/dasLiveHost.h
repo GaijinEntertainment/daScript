@@ -74,6 +74,7 @@ namespace das {
     void live_request_reset();
     uint64_t live_get_reload_generation();
     bool live_is_reload();
+    void live_advance_frame_clock();
     float live_get_dt();
     float live_get_uptime();
     float live_get_fps();

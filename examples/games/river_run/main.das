@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 
 require rr_globals public
 require rr_audio
@@ -41,7 +42,7 @@ def update_camera() {
     let pitch_deg = CAM_PITCH_SLOW_DEG + (CAM_PITCH_FAST_DEG - CAM_PITCH_SLOW_DEG) * speed_t
     let cam_height = (CAM_BACK + CAM_LOOK_AHEAD) * tan(pitch_deg * PI / 180.0)
 
-    let t = float(get_uptime())
+    let t = get_uptime()
     let shake = float3(sin(t * 47.0), sin(t * 53.0), sin(t * 61.0)) * screen_shake_amount
 
     let eye = float3(cam_x, player_pos.y - CAM_BACK, cam_height) + shake
@@ -56,7 +57,7 @@ var prev_esc_pressed = false
 var prev_space_pressed = false
 
 def handle_menu_input() {
-    let space = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
+    let space = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     let space_just = space && !prev_space_pressed
     prev_space_pressed = space
 
@@ -69,7 +70,7 @@ def handle_menu_input() {
 }
 
 def handle_pause_input() {
-    let esc = glfwGetKey(live_window, int(GLFW_KEY_ESCAPE)) == int(GLFW_PRESS)
+    let esc = glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS
     let esc_just = esc && !prev_esc_pressed
     prev_esc_pressed = esc
 
@@ -145,7 +146,7 @@ def update() {
         restart_input_lock -= tick_dt
     }
 
-    let game_time = float(get_uptime())
+    let game_time = get_uptime()
 
     handle_menu_input()
     handle_pause_input()
@@ -212,7 +213,8 @@ def main() {
     var frame_count = 0
     while (!exit_requested()) {
         update()
-        frame_count += 1
+        maybe_collect_gc()
+        frame_count++
         if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
             break
         }
