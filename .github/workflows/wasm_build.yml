@@ -3,11 +3,16 @@ name: wasm_build
 on:
   push:
     branches: [master]
+  # Explicit-trigger: auto only on PR open/reopen/ready; manual re-run via
+  # workflow_dispatch (Actions "Run workflow" / `gh workflow run`). See build.yml.
   pull_request:
+    types: [opened, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Branch-name key so PR-open and manual workflow_dispatch runs share a group
+  # and cancel-in-progress dedupes them. See build.yml.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 defaults:

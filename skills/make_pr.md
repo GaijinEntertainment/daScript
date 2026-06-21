@@ -306,6 +306,15 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 
 **Squash-from-multi-commit pattern (`git reset --soft master`)**: only safe AFTER step 0 has rebased onto `origin/master`. Otherwise the soft reset collapses the gap between local `master` and origin's into your one commit. If you forgot step 0 and already pushed a leaky PR, the fix is `git fetch origin master && git rebase origin/master && git push --force-with-lease` — git's 3-way merge drops files where your "modification" matches the already-merged content on origin/master.
 
+## 7. Trigger the heavy CI on your FINAL commit before merge
+
+The heavy workflows (`build`, `extended_checks`, `wasm_build`) **only auto-run when the PR opens** — not on later pushes (explicit-trigger model; see `CLAUDE.md` → "CI runs on EXPLICIT trigger"). So:
+
+- **While iterating** (Copilot rounds, fixes): just push. Copilot review re-runs free every push (it's a ruleset check, not a runner). Do NOT expect the build matrix to re-run on its own — and that's the point (it saves the per-iteration runner cost).
+- **When the PR is final** (Copilot dry, fixes in): **manually dispatch** the heavy CI on the latest commit — Actions → each workflow → "Run workflow" on your PR branch, or `gh workflow run build.yml --ref <branch>` (also `extended_checks.yml`, `wasm_build.yml`). They run on the branch tip and report on that SHA.
+- **Merge only when the dispatched run is green on the HEAD commit.** Green is per-SHA: a run that passed on an earlier commit does NOT vouch for new commits. If you push after dispatching, re-dispatch. master isn't hard-gated on these checks (maintainer discipline) — so the discipline is: *don't merge on a stale-SHA green.*
+- A `/ci` PR-comment dispatcher is planned (needs a `CI_DISPATCH_TOKEN` PAT; `GITHUB_TOKEN` can't fire `workflow_dispatch`). Until then, use the Actions button / `gh workflow run`.
+
 ## Quick reference
 
 | Step | Tool/Command | Fix policy |
@@ -323,4 +332,5 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Wrap-up curation | `skills/task_wrap_up.md` | Optional. Add answers for cache misses, edit cached answers this PR invalidated |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
+| Trigger CI | `gh workflow run build.yml --ref <branch>` (+ `extended_checks.yml`, `wasm_build.yml`) on the FINAL commit | Heavy CI auto-runs only on PR open; dispatch manually after iterating. Merge only on a per-SHA green of HEAD |
 | Review iter | Follow `skills/pr_review_iteration.md` | One round per Copilot pass; convergence in 1-3 rounds is normal |

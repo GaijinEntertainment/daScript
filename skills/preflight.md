@@ -23,16 +23,19 @@ without `EXECUTABLE_OUTPUT_PATH`). Commands are platform-neutral unless marked.
 "WSL" means the verbatim-CI recipe in `skills/wsl_ci_repro.md` — fresh clone at
 the CI ref, never a working-tree copy.
 
-## What runs on every PR
+## What runs on a PR
+
+**Explicit-trigger model (see `CLAUDE.md`):** the heavy lanes auto-run **once, when the PR opens** (`pull_request: types:[opened, reopened, ready_for_review]`) — NOT on every subsequent push. Re-run them on the final commit with `gh workflow run <wf> --ref <branch>` (or the Actions "Run workflow" button). Copilot review re-runs free on every push.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` | every PR | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_windows_mingw`, `build_windows_clangcl` |
-| `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
-| `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
+| `build.yml` | PR open (+ manual dispatch) | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_windows_mingw`, `build_windows_clangcl` |
+| `extended_checks.yml` | PR open (+ manual dispatch) | linux + darwin15-arm64 + windows, ALL release modules ON |
+| `wasm_build.yml` | PR open (+ manual dispatch) | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
-| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | seven doc gates |
+| `doc.yml` | `paths`-gated (`doc/**` / `daslib/**` / `src/builtin/**`) — runs on every such push, NOT converted to open-only in this pass | seven doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+| `msvc.yml` | `workflow_dispatch` only | MSVC code-analysis |
 
 ## build.yml — the build matrix
 

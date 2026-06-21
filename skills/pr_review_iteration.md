@@ -2,6 +2,8 @@
 
 Use this skill after the pull request already exists. It covers the post-open loop: watching CI, triaging Copilot/human review comments, discussing verdicts with the user, applying fixes, replying, resolving threads, and re-requesting review.
 
+> **Explicit-trigger CI (important for this loop).** The heavy workflows (`build`, `extended_checks`, `wasm_build`) auto-run **only when the PR opens** — they do **NOT** re-run on later pushes (see `CLAUDE.md` → "CI runs on EXPLICIT trigger"). Consequence for iteration: **iterate on Copilot for free** (it re-runs on every push, it's a ruleset check not a runner) — push fixes, read Copilot, repeat, burning zero runner minutes. Only when the PR is converged, **manually dispatch** the heavy CI on the final commit (`gh workflow run build.yml --ref <branch>`, also `extended_checks.yml` / `wasm_build.yml`) and merge on that per-SHA green. So below, "CI re-runs on push" applies to Copilot only; the matrix is yours to fire deliberately at the end.
+
 ## 1. Watching the PR
 
 Pick a cadence — either ping the user when something interesting happens, or use `/loop` (without an interval, dynamic mode) to self-pace polls. On each tick:
@@ -25,7 +27,7 @@ If a check goes red:
 1. Identify the failing job: `gh pr checks <PR>` shows the URL; `gh run view <runID> --log-failed` fetches the log.
 2. Apply the same fix policy as Step 2 in `skills/make_pr.md`: own change → fix it; obvious pre-existing → fix it; non-obvious pre-existing → ask the user.
 3. After the fix, **re-run the gates from Step 1-5 in `skills/make_pr.md`** (lint + interpreted + AOT + Sphinx if `//!` or RST touched + format) — don't trust spot-checks. CI failures often come bundled (a missing format triggers a lint, a removed function triggers an AOT hash mismatch).
-4. Amend the squashed commit + force-push. CI re-runs automatically on push. No need to re-request review for a CI-only fix unless the diff is large.
+4. Amend the squashed commit + force-push. **Note (explicit-trigger model):** the heavy matrix does NOT re-run automatically on push — only Copilot does. To re-validate the fix you must **dispatch** the affected workflow on the new HEAD (`gh workflow run <wf> --ref <branch>`). No need to re-request review for a CI-only fix unless the diff is large.
 
 ## 3. Triaging review comments — discuss BEFORE acting
 

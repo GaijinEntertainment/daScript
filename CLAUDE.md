@@ -17,6 +17,15 @@ Full reference (per-platform generator commands, build flags, AOT debugging, exi
 - **Use GitHub MCP tools** (`mcp__github__*`) for all GitHub operations (creating PRs, listing issues, reading PRs, etc.) — they avoid shell escaping issues entirely
 - **Fallback:** If MCP tools are unavailable, use `gh` CLI with `--body-file` for any text containing backticks (they're shell escape characters in every supported shell)
 
+### CI runs on EXPLICIT trigger (not every push)
+
+The heavy CI workflows (`build`, `extended_checks`, `wasm_build`) auto-run on a PR **only when it opens** (`pull_request: types:[opened, reopened, ready_for_review]`) — **not on subsequent pushes** (no `synchronize`). This is deliberate cost control (see `skills/make_pr.md` and [[project_ci_cost_runners]]):
+
+- **Iterate for free on Copilot.** Copilot review is a ruleset check, not a runner job — it re-runs on every push at no runner cost. Push fixes, get Copilot's read, repeat, all free.
+- **Re-run the heavy CI manually when converged:** Actions → the workflow → "Run workflow" on your PR branch, or `gh workflow run build.yml --ref <branch>` (also `extended_checks.yml`, `wasm_build.yml`). A `/ci` PR-comment dispatcher is planned (needs a `CI_DISPATCH_TOKEN` PAT — `GITHUB_TOKEN` can't fire `workflow_dispatch`).
+- **Green is per-SHA.** A passing run counts only for the commit it ran on; push a new commit and the heavy checks are absent again until you re-dispatch. So **dispatch on your final commit before merging**, and merge only when that run is green. (master is not hard-gated on these checks — it's maintainer discipline; don't merge on a stale-SHA green.)
+- `doc`/`codeql` are `paths`-gated (run only when relevant files change); `msvc` is `workflow_dispatch`-only. The post-merge `push:[master]` run still validates master after each merge.
+
 ## MCP-first search
 
 Before reaching for `Bash`/`Grep`/`Read` to find a symbol or trace usages in this repo, ToolSearch the daslang MCP tool that answers the question and call it. The tools are deferred (schemas not in turn-start context) so the workflow is two calls: `ToolSearch select:mcp__daslang__<tool>` → invoke. (`defer_loading: false` in `.mcp.json` is the documented knob to flip this, but [it's currently broken upstream](https://github.com/anthropics/claude-code/issues/26844) — set it anyway, then operate as if deferred.)

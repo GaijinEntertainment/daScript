@@ -3,14 +3,24 @@ name: build
 on:
   push:
     branches: [master]
+  # Explicit-trigger model: auto-run only on the PR open/reopen/ready events,
+  # NOT on every subsequent push (no `synchronize`). Re-run manually via
+  # the Actions "Run workflow" button (`workflow_dispatch`) on your PR branch,
+  # or `gh workflow run build.yml --ref <branch>`. Copilot review (ruleset)
+  # still runs free on every push, so iterate there without burning runners.
   pull_request:
+    types: [opened, reopened, ready_for_review]
   workflow_dispatch:
 defaults:
   run:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Key off the branch name (head_ref on PRs, ref_name on push/workflow_dispatch)
+  # so a manual dispatch and the PR-open run for the same branch share a group
+  # and cancel-in-progress dedupes them (the explicit-trigger model makes manual
+  # dispatch the common re-run path).
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
