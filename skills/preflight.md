@@ -27,7 +27,7 @@ the CI ref, never a working-tree copy.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` (per-PR) | every push/PR (and any manual `workflow_dispatch`) | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master`; also any manual `workflow_dispatch` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
 | `build.yml` (nightly) | the `schedule` cron (daily 08:00 UTC) runs these *in isolation* — also fire on a manual `workflow_dispatch` | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
 
 > A manual **`workflow_dispatch`** runs the **whole** `build.yml` — every per-PR job *and* both nightly toolchains. Only the cron `schedule` runs the two toolchains alone (the per-PR jobs are gated off `schedule`).
