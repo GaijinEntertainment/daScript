@@ -14,7 +14,7 @@ require imgui/imgui_file_dialog
 require imgui/imgui_implot_boost_v2
 require implot
 require audio/audio_boost
-require audio/audio_wav
+require strudel/strudel_samples
 require strudel/strudel_sfx
 require imgui/imgui_icons
 require minfft
@@ -329,16 +329,16 @@ def private refresh_reference() {
 }
 
 def load_reference(path : string) {
-    var samples : array<float>
-    var sr = SR
-    var ch = 2
-    if (!read_wav(path, samples, sr, ch)) {
+    var s = load_audio_file(path)   // miniaudio: decodes WAV/OGG/MP3/FLAC (same loader the game uses)
+    if (empty(s.data)) {
         g_ref_name = "load failed: {base_name(path)}"
-        delete samples
+        delete s.data
         return
     }
-    g_ref <- load_to_mono44k(samples, sr, ch)
-    delete samples
+    let sr = s.sample_rate
+    let ch = s.channels
+    g_ref <- load_to_mono44k(s.data, sr, ch)
+    delete s.data
     g_ref_name = "{base_name(path)}  ({sr} Hz, {ch} ch)"
     g_ref_path = path
     g_trim_info = ""
@@ -1420,10 +1420,10 @@ def postprocess_panel() {
 }
 
 def reference_panel() {
-    if (icon_button(REFLOAD, (glyph = "import", tip = "Load a reference wav to mimic"))) {
+    if (icon_button(REFLOAD, (glyph = "import", tip = "Load a reference sound to mimic"))) {
         g_dialog_mode = DLG_REF
         file_dialog_open(FileDialogConfig(title = "Load reference audio", start_dir = "",
-            filters <- file_filters("Audio (*.wav)|wav|All files|"), mode = FileDialogMode.open, max_selection = 0))
+            filters <- file_filters("Audio (wav, ogg, mp3, flac)|wav;ogg;mp3;flac|All files|"), mode = FileDialogMode.open, max_selection = 0))
     }
     same_line(REF_SL1)
     if (icon_button(REFPLAY, (glyph = "play", tip = "Play the reference"))) {
