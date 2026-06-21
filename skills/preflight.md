@@ -27,7 +27,8 @@ the CI ref, never a working-tree copy.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` | every PR | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_windows_mingw`, `build_windows_clangcl` |
+| `build.yml` (per-PR) | every push/PR | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (nightly) | `schedule` (daily 08:00 UTC) + manual `workflow_dispatch` | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
@@ -56,9 +57,9 @@ Release-modules build → `cmake --install --prefix ./daslang_bundle --strip` �
 it when touching CMake `install(...)` rules, `ci/release_modules.txt`, or
 module loading. This is the lane that catches install-layout regressions.
 
-## build.yml — build_windows_mingw
+## build.yml — build_windows_mingw (nightly)
 
-msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
+**Runs nightly, not per-PR** (`schedule` + manual `workflow_dispatch`) — so it won't gate your PR; a break surfaces within ~24 h. To exercise it on a PR, manually dispatch `build.yml` on your branch. msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
 sweeps, plus two things no other lane runs: the `bind_clangbind.das`
 self-binder freshness check (`git diff --exit-code -- modules/dasClangBind/src/`)
 and `test_const_preproc.das`. A local msys2 mirror is possible but rarely worth
@@ -66,7 +67,9 @@ it — the 80/20 for "compiles under MSVC, breaks under clang" is a clang
 syntax-only pass on your changed C++ (see clang-cl below). If you regenerated
 dasClangBind bindings, run the self-binder locally per `skills/clang_bind_build.md`.
 
-## build.yml — build_windows_clangcl
+## build.yml — build_windows_clangcl (nightly)
+
+**Runs nightly, not per-PR** (`schedule` + manual `workflow_dispatch`) — same as mingw above; manually dispatch `build.yml` to exercise it on a PR.
 
 The preflight `cpp-syntax` gate mirrors this lane's frontend: a clang-cl `/Zs`
 pass (parse + semantic analysis + template instantiation — no codegen) on your

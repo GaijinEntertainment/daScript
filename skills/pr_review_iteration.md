@@ -10,7 +10,9 @@ Pick a cadence — either ping the user when something interesting happens, or u
 - `gh api repos/<owner>/<repo>/pulls/<PR>/comments` — inline review comments
 - `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — review-level state (`COMMENTED` / `CHANGES_REQUESTED` / `APPROVED`)
 
-**Wait for whichever comes first** — Copilot review OR CI completion. Copilot usually returns in ~5 minutes; the full CI matrix takes 20-30 minutes. Don't wait for the slower one when the faster one already gives you something to act on.
+**Wait for whichever comes first** — Copilot review OR CI completion. Copilot usually returns in ~5 minutes; the full CI matrix takes ~30 minutes. Don't wait for the slower one when the faster one already gives you something to act on.
+
+**The loop, concretely:** push → Copilot auto-reviews in ~5 min (it's a ruleset check, not a runner — free, and with `review_on_push` it fires on each *normal* push) → fix → push → repeat, **without blocking on the matrix each round**. Only once Copilot is **dry** do you wait the ~30 min for the full CI matrix, then merge on green. Iterating against Copilot's 5-min turnaround instead of CI's 30-min is the entire point — never sit through 30 min per round. (CI runs free on standard runners and auto-runs on every push, so it gates honestly. The two heavy Windows toolchain builds — `build_windows_mingw`, `build_windows_clangcl` — run **nightly**, not per-PR, so a per-PR failure is never one of those.) Note: a force-push does **not** trigger `review_on_push` — prefer normal commits during iteration (squash-merge collapses them); after a force-push, re-request Copilot manually.
 
 Cadence guidance:
 - **First poll: ~5 minutes.** Copilot review almost always lands by then. If both Copilot has left `COMMENTED` AND CI has visible progress, surface and stop.
