@@ -454,6 +454,12 @@ namespace das {
             block->stackVarTop = allocateStack(0);
             block->stackCleanVars.clear();
             if ( inStruct ) return;
+            // A block with a `finally` section runs that section on EVERY exit, including
+            // an early return that precedes a later variable's declaration. Disable stack
+            // reuse for the whole block so its locals keep distinct slots and the
+            // block-entry memzero (SimulateVisitor::visit(ExprBlock*)) stays valid when
+            // the finally fires before a variable's initializer ran.
+            if ( block->finalList.size() ) doNotOptimize++;
             if ( block->isClosure ) {
                 blocks.push_back(block);
             }
@@ -470,6 +476,7 @@ namespace das {
             pushSp();
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            if ( !inStruct && block->finalList.size() ) doNotOptimize--;
             auto top = inStruct ? stackTop : popSp().maxStack;
             block->stackVarBottom = top;
 
