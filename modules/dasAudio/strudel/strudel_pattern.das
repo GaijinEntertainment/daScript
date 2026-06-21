@@ -124,6 +124,36 @@ def private late(var pat : Pattern; offset : double) : Pattern {
     return early(pat, 0.0lf - offset)
 }
 
+// Onsets are kept only when they land in [0, n); the query is clipped to the same
+// window so the inner pattern is never queried past it.
+def playFor(var pat : Pattern; n : int | float | double) : Pattern {
+    //! Gate `pat` to its first `n` cycles (onsets in [0, n)), then silence forever. The play-once
+    //! primitive: pair with `strudel_one_shot` to fire a finite phrase on a game event.
+    let nn = numd(n)
+    return @capture(= nn, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        if (span.start >= nn || span.stop <= 0.0lf) {
+            return <- result
+        }
+        let clipped = TimeSpan(start = max(span.start, 0.0lf), stop = min(span.stop, nn))
+        var haps <- pat(clipped)
+        result |> reserve(length(haps))
+        for (h in haps) {
+            if (h.whole.start >= 0.0lf && h.whole.start < nn) {
+                result |> push(h) // nolint:PERF006
+            }
+        }
+        delete haps
+        return <- result
+    }
+}
+
+// Play `pat` exactly once (its first cycle), then silence.
+def once(var pat : Pattern) : Pattern {
+    //! Play `pat` exactly once (its first cycle), then silence forever. Shorthand for `playFor(pat, 1)`.
+    return playFor(pat, 1)
+}
+
 // ─── Composition ───
 
 // Layer patterns on top of each other (simultaneous).

@@ -438,6 +438,53 @@ one daslang context, no REPL and no external sequencer.  See the
 in ``examples/games/river_run/rr_audio.das``.
 
 
+One-shot patterns (fire-and-forget stings)
+------------------------------------------
+
+**Extension:** a strudel.cc pattern is an endless loop — it has no notion of
+"play this phrase once, then stop".  daStrudel patterns can **self-terminate**,
+and a one-shot **track** can **self-retire**, which together make a pattern
+usable as an event-triggered sound effect.
+
+There are two layers:
+
+* ``playFor(pat, n)`` / ``once(pat)`` gate a pattern to its first ``n`` cycles
+  (``once`` = ``playFor(pat, 1)``) and emit silence forever after.  This is the
+  *stop* half — purely a ``Pattern`` combinator, usable anywhere a pattern is.
+* ``strudel_one_shot(pat, gain, quant_cycles, len_cycles)`` fires ``pat`` as a
+  **self-retiring track**: it plays for ``len_cycles``, goes silent, and the
+  track auto-removes from the mix once every voice has finished ringing — so the
+  release tail is never clipped.  This is the *die* half.  It returns the track
+  index, and it is the primitive you call on a host event (a hit, a pickup, a
+  win).  ``strudel_active_tracks`` reports how many tracks are live, so a host or
+  test can ask "is a sting still ringing?".
+
+.. code-block:: das
+
+    // fire a short arpeggiated sting on a game event, quantized to the next beat
+    let sting <- (note("c5 e5 g5 c6", "triangle")
+        |> gain(0.8) |> room(0.6) |> orbit(2))
+    strudel_one_shot(sting, 1.0, 0.25, 0.5)   // gain 1.0, snap to next 1/4 beat, half a cycle long
+
+**Quantize to the beat.**  ``quant_cycles`` snaps the start to the global beat
+grid (``0`` = fire immediately; ``0.25`` = the next quarter-cycle beat), so a
+sting triggered at an arbitrary instant still lands musically in time instead of
+on the exact frame of the event.
+
+**Why this matters in a host.**  Because each one-shot is an independent track
+built fresh per call, the same mechanism scales to *parametric* SFX — vary the
+pattern per event (pitch by impact, instrument by surface) and fire a different
+sting each time, all without baking or shipping a single audio asset.  The
+continuous-control story above (``signal`` + orbit fades) covers the *sustained*
+layers of adaptive audio; one-shots cover the *discrete* events.
+
+**See also:**
+
+- Tutorial: :ref:`tutorial_dastrudel_one_shots`
+- Reference: ``strudel_one_shot`` / ``playFor`` / ``once`` /
+  ``strudel_active_tracks`` in :ref:`stdlib_strudel_section`
+
+
 .. _strudel_cc_naming:
 
 Naming map (quick reference)

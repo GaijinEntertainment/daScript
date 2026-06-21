@@ -441,6 +441,7 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_16_live_reloading.rst
    tutorials/daStrudel_17_hrtf_position.rst
    tutorials/daStrudel_18_sfx_lab.rst
+   tutorials/daStrudel_19_one_shots.rst
 
 .. _tutorials_jsonrpc:
 

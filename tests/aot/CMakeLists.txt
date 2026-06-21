@@ -209,6 +209,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_sfxr.das
         tests/strudel/test_modal.das
         tests/strudel/test_sfx.das
+        tests/strudel/test_one_shot.das
         tests/audio/test_hrtf_budget.das
         tests/audio/test_wav.das
     )

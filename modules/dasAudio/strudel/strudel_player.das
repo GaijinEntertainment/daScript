@@ -43,6 +43,8 @@ struct private StrudelTrack {
     gain        : float = 1.0
     target_gain : float = 1.0
     fade_speed  : float = 0.0
+    one_shot     : bool = false      // self-retiring fire-and-forget track (strudel_one_shot)
+    expire_cycle : double = 0.0lf    // own-timeline cycle past which it may retire (once all voices drain)
 }
 
 // --- Module globals ---
@@ -329,6 +331,59 @@ def public strudel_add_track_immediate(var pat : Pattern; gain : float = 1.0) : 
     return idx
 }
 
+def public strudel_one_shot(var pat : Pattern; gain : float = 1.0; quant_cycles : float = 0.0; len_cycles : float = 1.0) : int {
+    //! Fire `pat` ONCE as a self-retiring, fire-and-forget track: it plays for `len_cycles` cycles
+    //! (1 = its first cycle), goes silent, and the track auto-removes once every voice has finished
+    //! ringing — so the release tail is never cut. `quant_cycles` snaps the start to the global beat
+    //! grid (`g_wall_time * g_cps`): 0 = immediate (fire now), e.g. 0.25 = the next quarter-cycle beat.
+    //! Compose orbit / room / gain into `pat` (e.g. `pat |> set_orbit(2) |> set_room(0.4)`) for a sting
+    //! with its own reverb bus. Returns the track index. daStrudel's one-shot primitive for
+    //! event-triggered stings and (built fresh per call) parametric SFX.
+    var p <- playFor(pat, len_cycles)
+    let idx = g_vis_index
+    g_tracks |> push(new StrudelTrack(
+        pat <- p,
+        gain = gain,
+        target_gain = gain,
+        one_shot = true,
+        expire_cycle = double(len_cycles)
+    ))
+    var track = g_tracks[length(g_tracks) - 1]
+    // cycle 0 of this track's own timeline begins now (immediate) or on the next beat (quantized)
+    var startWall = g_wall_time
+    if (quant_cycles > 0.0) {
+        let q = double(quant_cycles)
+        let cycNow = g_wall_time * g_cps
+        let nextBeat = ceil((cycNow + 1.0e-6lf) / q) * q
+        startWall = nextBeat / g_cps
+    }
+    init_track(track, startWall)
+    track.sched.lastQueryEnd = 0.0lf   // phrase begins at its own cycle 0 (= startWall), not the global phase
+    while (length(g_track_pcm) <= idx) {
+        var empty : array<float>
+        g_track_pcm |> emplace(empty)
+    }
+    g_vis_index ++
+    return idx
+}
+
+// One-shot lifecycle: retire a self-firing track once its window has elapsed AND every voice has
+// finished ringing (release tail preserved — voices are independent finite buffers). No-op otherwise.
+def private retire_one_shot(i : int) {
+    var track = g_tracks[i]
+    if (track == null || !track.one_shot) {
+        return
+    }
+    let cyc = (g_wall_time - track.sched.startTime) * g_cps
+    if (cyc <= track.expire_cycle ||
+            !empty(track.sched.voices) || !empty(track.sched.osc_voices) || !empty(track.sched.sf2_voices)) {
+        return
+    }
+    shutdown_scheduler(track.sched)
+    unsafe { delete g_tracks[i]; }
+    g_tracks[i] = null
+}
+
 def public strudel_remove_track(idx : int) {
     //! Remove a track by index (shuts down its scheduler and sets the slot to null).
     if (idx >= 0 && idx < length(g_tracks) && g_tracks[idx] != null) {
@@ -336,6 +391,18 @@ def public strudel_remove_track(idx : int) {
         unsafe { delete g_tracks[idx]; }
         g_tracks[idx] = null
     }
+}
+
+def public strudel_active_tracks() : int {
+    //! Number of currently-live tracks (non-null slots). A one-shot counts while it plays, then
+    //! drops off once it auto-retires — handy for "is a sting still ringing?" and for tests.
+    var n = 0
+    for (tr in g_tracks) {
+        if (tr != null) {
+            n ++
+        }
+    }
+    return n
 }
 
 def public strudel_fade_track(idx : int; target_gain : float; time : float) {
@@ -501,6 +568,7 @@ def public strudel_tick() {
             unsafe { delete g_tracks[i]; }
             g_tracks[i] = null
         }
+        retire_one_shot(i)
     }
     // submit audio via lock box (no allocation — reuses g_master_pcm buffer)
     if (!empty(g_master_pcm)) {
@@ -586,6 +654,7 @@ def public strudel_tick_offline() {
             unsafe { delete g_tracks[i]; }
             g_tracks[i] = null
         }
+        retire_one_shot(i)
     }
     let chunkFrames = int(CHUNK_SEC * float(SAMPLE_RATE))
     g_wall_samples += int64(chunkFrames)
@@ -686,6 +755,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
                 unsafe { delete g_tracks[i]; }
                 g_tracks[i] = null
             }
+            retire_one_shot(i)
             i --
         }
         if (!empty(output)) {
