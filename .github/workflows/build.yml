@@ -16,11 +16,13 @@ defaults:
     shell: bash
 
 concurrency:
-  # Key off the branch name (head_ref on PRs, ref_name on push/workflow_dispatch)
-  # so a manual dispatch and the PR-open run for the same branch share a group
-  # and cancel-in-progress dedupes them (the explicit-trigger model makes manual
-  # dispatch the common re-run path).
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  # Key off head-repo + branch. head_ref/ref_name dedupes a manual dispatch
+  # against the PR-open run for the same branch (the explicit-trigger re-run
+  # path); head.repo.full_name (falling back to the base repo for dispatch/push)
+  # keeps fork PRs that share a branch name (e.g. two forks' `main`) from
+  # colliding and cancelling each other. Dispatch only targets base-repo
+  # branches, so same-repo PR-open and dispatch still share a group.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

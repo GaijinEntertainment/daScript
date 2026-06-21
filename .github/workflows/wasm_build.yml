@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Branch-name key so PR-open and manual workflow_dispatch runs share a group
-  # and cancel-in-progress dedupes them. See build.yml.
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  # head-repo + branch key: dedupes dispatch vs PR-open for the same branch,
+  # fork-collision-safe (shared branch names across forks). See build.yml.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 defaults:
