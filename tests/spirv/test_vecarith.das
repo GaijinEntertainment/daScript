@@ -32,3 +32,17 @@ def test_vector_arithmetic(t : T?) {
         delete words
     }
 }
+
+[test]
+def test_vector_times_scalar(t : T?) {
+    t |> run("vec *= scalar -> OpVectorTimesScalar (const + runtime), not a shape-mismatched OpFMul") <| @(t : T?) {
+        var words <- vts_words()
+        // Both `v *= 0.5` (const scalar -- the historical crash) and `w *= vts_in.x` (runtime scalar)
+        // must lower to OpVectorTimesScalar; a component-wise OpFMul(vec, scalar) is illegal SPIR-V.
+        t |> success(has_op(words, SpvOp.VectorTimesScalar), "vts: vec *= scalar -> OpVectorTimesScalar")
+        let nvts = count_op(words, SpvOp.VectorTimesScalar)
+        t |> success(nvts == 2, "vts: two VectorTimesScalar (const + runtime scalar) (got {nvts})")
+        validate(t, words, "vts")
+        delete words
+    }
+}

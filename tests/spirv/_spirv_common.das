@@ -747,6 +747,27 @@ def public vecarith_words : array<uint> {
     return clone_to_move(vecarith_spv)
 }
 
+// ===== vec *= scalar: a compound-assignment multiply with a vector LHS and a scalar RHS must lower to
+// OpVectorTimesScalar, NOT a component-wise OpFMul (illegal: OpFMul needs both operands == the result
+// type). The `*` binop already routed mixed shapes through emit_mul; the `*=` path used to emit
+// bo.code directly. Both a CONST scalar (the historical bug -- a folded constant went down the wrong
+// path and crashed drivers) and a RUNTIME scalar are exercised. No NEW opcodes (VectorTimesScalar is
+// already declared by the matrix fixture); spirv-val proves the shapes are legal. =====
+var @in @location = 0 vts_in : float3
+var @out @location = 0 vts_out : float3
+[fragment_shader(name="vts_spv"), marker(no_coverage)]
+def vts {
+    var v = vts_in
+    v *= 0.5            // vec3 *= CONST scalar  -> OpVectorTimesScalar
+    var w = vts_in
+    w *= vts_in.x       // vec3 *= RUNTIME scalar -> OpVectorTimesScalar
+    vts_out = v + w
+}
+
+def public vts_words : array<uint> {
+    return clone_to_move(vts_spv)
+}
+
 // ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
 // Phase 3's dot/sqrt/clamp. Keyed on the DASLANG name (lerp -> FMix, rsqrt -> InverseSqrt). Vectors are
 // built from scalar swizzles (multi-component swizzle of a global is its own gap, closed in Phase 10.2).
@@ -1477,6 +1498,34 @@ def mesh_tri {
 
 def public mesh_tri_words : array<uint> {
     return clone_to_move(mesh_tri_spv)
+}
+
+// ===== mesh shader reading a UBO: SPIR-V >= 1.4 requires EVERY global the entry point references in
+// the OpEntryPoint interface -- not only Input/Output but also the Uniform/Block descriptor. A mesh
+// shader that read a @uniform used to emit the UBO variable yet omit it from the interface -> invalid
+// blob (the first mesh-shader-with-a-descriptor, surfaced by the teapot tutorial). No NEW opcodes
+// (Uniform variable + AccessChain + Load are already declared by ubo_frag); the guard is the interface
+// count + spirv-val. =====
+struct MeshScale {
+    s : float4
+}
+var @uniform @binding = 0 mesh_ubo_u : MeshScale
+var @out @location = 0 mu_col : array<float3>
+[mesh_shader(local_size_x=1, max_vertices=3, max_primitives=1, name="mesh_ubo_spv"), marker(no_coverage)]
+def mesh_ubo {
+    SetMeshOutputsEXT(3u, 1u)
+    let k = mesh_ubo_u.s.x
+    gl_MeshVerticesEXT[0].gl_Position = float4(k, 0.0, 0.0, 1.0)
+    gl_MeshVerticesEXT[1].gl_Position = float4(0.0, k, 0.0, 1.0)
+    gl_MeshVerticesEXT[2].gl_Position = float4(0.0, 0.0, k, 1.0)
+    mu_col[0] = mesh_ubo_u.s.xyz
+    mu_col[1] = mesh_ubo_u.s.xyz
+    mu_col[2] = mesh_ubo_u.s.xyz
+    gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)
+}
+
+def public mesh_ubo_words : array<uint> {
+    return clone_to_move(mesh_ubo_spv)
 }
 
 // ===== PR-F mesh user + per-primitive-builtin outputs (the three Tutorial-13 color rails) =====

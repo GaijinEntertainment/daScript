@@ -2075,18 +2075,31 @@ class SpirvEmit : AstVisitor {
         var bm & = unsafe(*m)
         let op = "{expr.op}"
         if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
-            let bo = binop_code(compound_base(op), scalar_class(expr.left._type.baseType))
-            if (!bo.ok) {
-                errs |> push("unsupported compound assignment '{expr.op}'")
-                return expr
-            }
             let rhs = value_of(expr.right)
             let p = ptr_of(expr.left)
             if (p.id != 0u && rhs != 0u) {
                 let cur = alloc_id(bm)
                 emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
-                let res = alloc_id(bm)
-                emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs)
+                var res = 0u
+                // `*=` over mixed shapes (vector *= scalar, matrix *= …) needs OpVectorTimesScalar /
+                // OpMatrixTimes* exactly like the `*` binop — a component-wise OpFMul(vec, scalar) is
+                // illegal SPIR-V. Route multiply through emit_mul; same-shape falls back to bo.code below.
+                if (compound_base(op) == "*") {
+                    let mr = emit_mul(bm, expr, expr.left, cur, rhs, errs)
+                    if (mr.handled) {
+                        if (mr.id == 0u) return expr      // unsupported mix; error already pushed
+                        res = mr.id
+                    }
+                }
+                if (res == 0u) {
+                    let bo = binop_code(compound_base(op), scalar_class(expr.left._type.baseType))
+                    if (!bo.ok) {
+                        errs |> push("unsupported compound assignment '{expr.op}'")
+                        return expr
+                    }
+                    res = alloc_id(bm)
+                    emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs)
+                }
                 emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
             }
             return expr
@@ -3674,6 +3687,22 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     let t_void = type_void(m)
     let t_fn = type_function_void(m, t_void)
     let id_main = alloc_id(m)
+
+    // SPIR-V >= 1.4: the EntryPoint interface must list EVERY global the entry point references --
+    // not only Input/Output (the <= 1.3 rule, already pushed by classify_global) but also Uniform /
+    // StorageBuffer / PushConstant / UniformConstant / Workgroup. Append the globals not already
+    // listed, ordered by var-id (= emission order) so the blob stays byte-reproducible.
+    if (m.version >= SPV_VERSION_1_4) {
+        var listed : table<uint>
+        for (iid in ctx.interface_ids) {
+            listed |> insert(iid)
+        }
+        var extra <- [for (gi in values(ctx.globals)); gi.var_id; where gi.var_id != 0u && !key_exists(listed, gi.var_id)]
+        sort(extra)
+        ctx.interface_ids |> push_from(extra)
+        delete extra
+        delete listed
+    }
 
     var ep <- [uint(execution_model(stage)), id_main]
     var nm <- string_words("main")

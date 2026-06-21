@@ -364,3 +364,22 @@ def test_mesh_task_payload(t : T?) {
         delete mwords
     }
 }
+
+[test]
+def test_mesh_ubo_interface(t : T?) {
+    t |> run("[mesh_shader] reading a UBO: the Uniform variable is listed in the OpEntryPoint interface (SPIR-V 1.4)") <| @(t : T?) {
+        var words <- mesh_ubo_words()
+        t |> success(op_has_operand_at(words, SpvOp.EntryPoint, 0, uint(SpvExecutionModel.MeshEXT)),
+            "mesh_ubo: OpEntryPoint MeshEXT")
+        // the @uniform -> a Uniform-storage OpVariable (operand 2 = storage class).
+        t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Uniform)),
+            "mesh_ubo: @uniform -> Uniform OpVariable")
+        // SPIR-V >= 1.4 requires every referenced global in the interface, so it lists the three outputs
+        // (gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT, mu_col) AND the UBO -> 4. Before the fix the
+        // UBO was omitted (count 3) and the blob was invalid; spirv-val (below) is the other half of the guard.
+        let niface = entry_point_interface_count(words)
+        t |> success(niface == 4, "mesh_ubo: interface lists the UBO too (3 outputs + UBO = 4, got {niface})")
+        validate(t, words, "mesh_ubo")
+        delete words
+    }
+}
