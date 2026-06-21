@@ -41,7 +41,7 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
             cursor += 4
             cursor += 2
             fmt_bits = read_wav_u16(raw, cursor)
-            cursor += int(chunk_size) - 16
+            cursor += max(int(chunk_size) - 16, 0)   // never move the cursor backwards on a malformed (< 16) fmt chunk
         } elif (chunk_id == "data") {
             data_offset = cursor
             data_size = int(chunk_size)
@@ -53,12 +53,17 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
             cursor ++
         }
     }
-    // integer PCM only — format 1, or extensible (0xFFFE) which is PCM in practice. Float (format 3) is not supported yet.
-    return false if (data_offset == 0 || (fmt_format != 1 && fmt_format != int(0xFFFE)))
+    // integer PCM only (format 1). Extensible (0xFFFE) and float (format 3) are rejected: we don't parse the
+    // extensible sub-format GUID, so accepting 0xFFFE could silently mis-decode an extensible-float WAV as int.
+    return false if (data_offset == 0 || fmt_format != 1)
     let bytes_per = fmt_bits / 8
     return false if (bytes_per != 2 && bytes_per != 3 && bytes_per != 4)   // 16 / 24 / 32-bit PCM
     sample_rate = fmt_rate
     channels = fmt_channels
+    let avail = length(raw) - data_offset
+    if (data_size > avail) {
+        data_size = avail   // a truncated / over-claimed data chunk must not read past the buffer
+    }
     let num_samples = data_size / bytes_per
     samples |> resize(num_samples)
     var c = data_offset

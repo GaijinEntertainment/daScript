@@ -67,7 +67,12 @@ def test_read_wav_bit_depths(t : T?) {
         let sr = 44100
         let want = [0.0, 0.5, -0.5, 0.25, 0.999, -0.999]
         for (bits in [16, 24, 32]) {
-            let path = "das_read_wav_test_{bits}.wav"   // cwd-relative + removed after (matches tests/fio)
+            let tmp = create_temp_file_result("das_read_wav_test", ".wav")   // unique writable path (no cwd assumptions / collisions)
+            if (!(tmp is value)) {
+                t |> success(false, "temp file created ({bits}-bit)")
+                continue
+            }
+            let path = tmp as value
             let bytes <- build_wav(bits, want, sr)
             var wrote = false
             fopen(path, "wb") $(f) {
