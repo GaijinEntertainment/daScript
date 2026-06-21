@@ -38,8 +38,8 @@ module style_lint shared private
 //!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
 //!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
-//!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign)
-//!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'); into an existing array collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
+//!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign). Cloneable elements only (a copyable-but-not-cloneable element such as a lambda stays silent — ':=' would not compile)
+//!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
 
 require daslib/ast_boost
 require daslib/is_local
@@ -819,6 +819,7 @@ class StyleLintVisitor : AstVisitor {
         }
         check_style012_chain_runs(blk)
         check_style033_existing_runs(blk)
+        check_style033_existing_chain_runs(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]
@@ -1474,10 +1475,13 @@ class StyleLintVisitor : AstVisitor {
         }
         if (idx < 0 || idx + 1 >= n) return
         for (v in elet.variables) {
-            // Only flag uninitialized array<T> locals from user code.
+            // Only flag uninitialized array<T> locals from user code, and only when the
+            // element is cloneable — `:=` / concat clone the source, so a lambda array
+            // (copyable but NOT cloneable) would not compile under either suggestion.
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || v._type.baseType != Type.tArray) continue
+                || v._type == null || v._type.baseType != Type.tArray
+                || v._type.firstType == null || !v._type.firstType.canClone) continue
             // Count the contiguous run of single-source bulk clone/copy-from-array
             // calls on v. 1 => clone (STYLE032 `:=`); >=2 => concat (STYLE033).
             var count = 0
@@ -1495,17 +1499,21 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def bulk_src_matches_dest(src : Expression? const; dest : Variable? const) : bool {
+    def bulk_src_matches_elem(src : Expression? const; destElem : TypeDecl? const) : bool {
         //! A genuine bulk clone/copy: `src` is an `array<E>` whose element type E equals
-        //! `dest`'s element type. A *nested* source (`array<array<E>>` into a flat
-        //! `array<E>`, or any deeper mismatch) binds the recursive-flatten
-        //! push_from(Arr, src) overload (builtin.das) — that is a flatten, NOT a
-        //! `:=`/concat, so it must NOT match. A C-array source (tFixedArray) is not
-        //! tArray and has no clean array<T> rewrite either.
+        //! `destElem`. A *nested* source (`array<array<E>>` into a flat `array<E>`, or any
+        //! deeper mismatch) binds the recursive-flatten push_from(Arr, src) overload
+        //! (builtin.das) — that is a flatten, NOT a `:=`/concat/variadic-collapse, so it
+        //! must NOT match. A C-array source (tFixedArray) is not tArray and has no clean
+        //! array<T> rewrite either.
         if (src == null || src._type == null || src._type.baseType != Type.tArray
-            || src._type.firstType == null
-            || dest == null || dest._type == null || dest._type.firstType == null) return false
-        return describe(src._type.firstType) == describe(dest._type.firstType)
+            || src._type.firstType == null || destElem == null) return false
+        return describe(src._type.firstType) == describe(destElem)
+    }
+
+    def bulk_src_matches_dest(src : Expression? const; dest : Variable? const) : bool {
+        if (dest == null || dest._type == null) return false
+        return bulk_src_matches_elem(src, dest._type.firstType)
     }
 
     def is_array_clone_init_call(call : ExprCall?; target : Variable?) : bool {
@@ -1578,6 +1586,55 @@ class StyleLintVisitor : AstVisitor {
             if (count >= 2 && count <= MAX_VARIADIC_PUSH_ARITY
                 && !run_preceded_by_empty_array_decl(blk, i, target)) {
                 style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' — collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+            }
+            i += count
+        }
+    }
+
+    // --- STYLE033 (existing-array CHAIN form): run of >=2 into `obj.arr` / `fo[3].bar` ---
+
+    def bulk_from_chain_receiver(stmt : Expression const?; var fname : string&) : Expression const? {
+        //! Like bulk_from_call_target but for a pure-CHAIN destination (>=1 field/index link,
+        //! e.g. `obj.arr`): when stmt is `<chain> |> push_from/push_clone_from(SRC)` (2 args,
+        //! SRC an array<E> with E == chain element type — bulk append, not flatten), return the
+        //! receiver chain and set fname; else null. Plain ExprVar receivers (link_count 0) are
+        //! left to bulk_from_call_target's variable form, so the two never double-fire.
+        if (stmt == null || stmt.genFlags.generated || !(stmt is ExprCall)) return null
+        let call = stmt as ExprCall
+        if (call.func == null || call.func.fromGeneric == null
+            || length(call.arguments) != 2) return null
+        let isFrom = call.func.fromGeneric.name == "push_from"
+        let isCloneFrom = call.func.fromGeneric.name == "push_clone_from"
+        if (!isFrom && !isCloneFrom) return null
+        let recv = call.arguments[0]
+        if (recv == null || recv._type == null || recv._type.baseType != Type.tArray
+            || !is_pure_chain(recv) || chain_link_count(recv) < 1
+            || !bulk_src_matches_elem(call.arguments[1], recv._type.firstType)) return null
+        fname = isFrom ? "push_from" : "push_clone_from"
+        return recv
+    }
+
+    def check_style033_existing_chain_runs(blk : ExprBlock?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        let n = length(blk.list)
+        var i = 0
+        while (i < n) {
+            var fname = ""
+            let recv = bulk_from_chain_receiver(blk.list[i], fname)
+            if (recv == null) {
+                i++
+                continue
+            }
+            var count = 1
+            while (i + count < n) {
+                var fname2 = ""
+                let nrecv = bulk_from_chain_receiver(blk.list[i + count], fname2)
+                if (nrecv == null || fname2 != fname || !chain_equal(recv, nrecv)) break
+                count++
+            }
+            if (count >= 2 && count <= MAX_VARIADIC_PUSH_ARITY) {
+                let cd = chain_describe(recv)
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{cd}' — collapse to one variadic call `{cd} |> {fname}(s1, s2, ...)`", blk.list[i].at)
             }
             i += count
         }
