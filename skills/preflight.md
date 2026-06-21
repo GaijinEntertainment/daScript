@@ -27,7 +27,7 @@ the CI ref, never a working-tree copy.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master`; also any manual `workflow_dispatch` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
 | `build.yml` (nightly) | the `schedule` cron (daily 08:00 UTC) runs these two *in isolation* | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
