@@ -612,8 +612,11 @@ jobs:
   # next to daslang.exe so the .shared_module dlopen resolves at runtime.
   ###########################################################
     needs: pre_job
-    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI.
-    if: needs.pre_job.outputs.should_skip != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Deliberately does NOT
+    # gate on pre_job.should_skip — a nightly run must fire even when master is
+    # unchanged (skip-duplicate-actions would otherwise skip it and we'd never
+    # catch a toolchain/runner regression on an idle day).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     defaults:
       run:
@@ -772,8 +775,9 @@ jobs:
   # Runs NIGHTLY (off per-PR CI — ~26min long pole, alt-toolchain, lowest per-PR signal).
   ###########################################################
     needs: pre_job
-    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI.
-    if: needs.pre_job.outputs.should_skip != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Does NOT gate on
+    # pre_job.should_skip — a nightly run must fire even when master is unchanged.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
     - name: "SCM Checkout"

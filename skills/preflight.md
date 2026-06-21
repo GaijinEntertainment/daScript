@@ -87,7 +87,8 @@ Release shared modules. Run it in a separate clone or worktree only:
 
 ```powershell
 # SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
-cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+# Generator must match the CI lane (build.yml pins "Visual Studio 18 2026" on the VS2026 image).
+cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
 cmake --build build-clangcl --config Release --parallel
 ```
 
