@@ -1561,6 +1561,7 @@ def document_module_strudel_player(_root : string) {
         group_by_regex("Volume", mod, %regex~strudel_(set_volume|get_volume)$%%),
         group_by_regex("Asset loading", mod, %regex~strudel_(load_sound|load_sample_dir|load_sf2|get_sf2_path|has_sf2)$%%),
         group_by_regex("Track management", mod, %regex~strudel_(add_track|add_track_immediate|remove_track|fade_track)$%%),
+        group_by_regex("One-shots", mod, %regex~strudel_(one_shot|active_tracks)$%%),
         group_by_regex("Orbit levels", mod, %regex~strudel_(fade_orbit|set_orbit_gain|orbit_gain)$%%),
         group_by_regex("State serialization", mod, %regex~strudel_(save_state|restore_state|save_sf2_state|restore_sf2_state)$%%),
         group_by_regex("Debug and diagnostics", mod, %regex~strudel_(debug_memory|reset_memory_baseline|debug_sample_peaks|debug_master_peak|debug_output_peak|debug_voices)$%%)
@@ -1620,7 +1621,7 @@ def document_module_strudel_pattern(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Pattern construction", mod, %regex~(pure|silence|atom|querySpan|queryArc|patternType)$%%),
         group_by_regex("Time manipulation", mod, %regex~(fast|slow|stack|cat|fastcat|weighted_fastcat|fmap)$%%),
-        group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|euclidRot|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|chop|slice|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby)$%%),
+        group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|euclidRot|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|chop|slice|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby|playFor|once)$%%),
         group_by_regex("Setter primitives", mod, %regex~set_.*$%%),
         group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|freq|sound|cut|orbit|begin|end_pos)$%%),
         group_by_regex("Fluent control: 3D positioning (HRTF)", mod, %regex~(hrtf|hrtf_azimuth|hrtf_elevation)$%%),
