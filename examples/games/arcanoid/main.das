@@ -17,7 +17,6 @@ require live/live_api
 require live/live_watch_boost // nolint:STYLE030 — load-bearing for live file-watch side-effects
 require live/live_vars
 require live/audio_live   // nolint:STYLE030 — load-bearing for audio buffer persistence across reloads
-require daslib/json
 require daslib/json_boost
 require daslib/math_boost
 require daslib/archive

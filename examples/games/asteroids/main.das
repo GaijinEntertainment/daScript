@@ -18,7 +18,6 @@ require strudel/strudel
 require strudel/strudel_player
 require strudel/strudel_live // nolint:STYLE030 — side-effect registration for live-reload
 require daslib/math_boost
-require daslib/json // nolint:STYLE030 — side-effect registration for live-reload
 require daslib/json_boost
 require daslib/strings_boost
 require daslib/safe_addr
