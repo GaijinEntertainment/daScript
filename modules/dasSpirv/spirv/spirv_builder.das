@@ -456,6 +456,19 @@ def public const_float(var m : SpirvModule; v : float) : uint {
     return id
 }
 
+// Boolean OpConstant: OpConstantTrue / OpConstantFalse carry NO literal word (the opcode IS the
+// value), so this is type + result-id only. Keyed separately so it never collides with const_int 0/1.
+def public const_bool(var m : SpirvModule; v : bool) : uint {
+    let key = "cb_{v}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let bt = type_bool(m)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, v ? SpvOp.ConstantTrue : SpvOp.ConstantFalse, bt, id)
+    m.const_pool |> insert(key, id)
+    return id
+}
+
 // ===== finalize: header (5 words) ++ sections in layout order =====
 def public module_words(m : SpirvModule) : array<uint> {
     // header: magic, version, generator, id-bound (all result-ids < next_id), schema (0)
