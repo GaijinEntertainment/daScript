@@ -1444,6 +1444,8 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     if (ci != null) return (ok = true, id = const_int(m, ci.value))
     let cf = e ?as ExprConstFloat
     if (cf != null) return (ok = true, id = const_float(m, cf.value))
+    let cb = e ?as ExprConstBool
+    if (cb != null) return (ok = true, id = const_bool(m, cb.value))
     // unary minus on a constant: depending on fold state `-0.6` can arrive as ExprOp1("-", const)
     // rather than a folded negative literal. Fold it here so both shapes produce the same constant.
     let neg = e ?as ExprOp1
@@ -1563,14 +1565,30 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     return (ok = false, id = 0u)
 }
 
+// Splat a scalar id to a vector of `n` lanes (OpCompositeConstruct of n copies of the scalar) ->
+// the splatted vector id. SPIR-V has no implicit scalar->vector broadcast, so an integer vec*scalar
+// must build the vector explicitly before the component-wise OpIMul.
+def private splat_to_vec(var m : SpirvModule; vec_type : uint; scalar_id : uint; n : int) : uint {
+    let res = alloc_id(m)
+    var cons <- [vec_type, res]
+    cons |> reserve(2 + n)
+    for (_k in range(n)) {
+        cons |> push(scalar_id)
+    }
+    emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, cons)
+    delete cons
+    return res
+}
+
 // ===== `*` over matrices / vectors / scalars =====
 // SPIR-V splits multiplication by operand shape: OpMatrixTimesMatrix / OpMatrixTimesVector /
 // OpVectorTimesScalar. Plain component-wise FMul/IMul (the scalar binop path) only works when both
 // operands have the SAME shape, so the mixed cases are routed here first. Returns handled=false for
 // same-shape operands (let binop_code emit FMul/IMul); handled=true with id=0 on an unsupported mix
-// (error already pushed). Operands l/r are pre-emitted result-ids. Only the daslang-defined matrix
-// operators are handled (matrix*matrix, matrix*vector, and float vector*scalar either order);
-// daslang has no matrix*scalar or vector*matrix operator, so those SPIR-V ops are intentionally absent.
+// (error already pushed). Operands l/r are pre-emitted result-ids. Handled: matrix*matrix,
+// matrix*vector, float vector*scalar (OpVectorTimesScalar, either order), and integer vector*scalar
+// (splat + OpIMul, either order). daslang has no matrix*scalar or vector*matrix operator, so those
+// SPIR-V ops are intentionally absent.
 def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, r : uint; var errors : array<string>) : tuple<handled : bool; id : uint> {
     let lmat = matrix_info(op2.left._type)
     let rmat = matrix_info(op2.right._type)
@@ -1590,8 +1608,14 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
         emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, l, r)
     } elif (rcc > 1 && lcc == 1 && lcls == 2 && rcls == 2) {
         emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, r, l)   // SPIR-V wants the vector first
+    } elif (lcc > 1 && rcc == 1 && lcls == rcls && lcls >= 0 && lcls != 2) {
+        // integer vector * integer scalar: there is no OpVectorTimesScalar for ints, so splat the
+        // scalar to the vec width and do a component-wise OpIMul (sign-agnostic, valid for int + uint).
+        emit(m, SEC_FUNCS, SpvOp.IMul, rt, res, l, splat_to_vec(m, rt, r, lcc))
+    } elif (rcc > 1 && lcc == 1 && lcls == rcls && lcls >= 0 && lcls != 2) {
+        emit(m, SEC_FUNCS, SpvOp.IMul, rt, res, splat_to_vec(m, rt, l, rcc), r)
     } else {
-        errors |> push("unsupported '*' between {op2.left._type.baseType} and {op2.right._type.baseType} (integer vector/scalar mixes need a splat)")
+        errors |> push("unsupported '*' between {op2.left._type.baseType} and {op2.right._type.baseType}")
         return (handled = true, id = 0u)
     }
     return (handled = true, id = res)
@@ -1817,6 +1841,11 @@ class SpirvEmit : AstVisitor {
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
         var bm & = unsafe(*m)
         e2id[intptr(expr)] = const_float(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstBool(var expr : ExprConstBool?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_bool(bm, expr.value)
         return expr
     }
 
