@@ -20,7 +20,7 @@ jobs:
   pre_job:
   ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -48,13 +48,13 @@ jobs:
 
         include:
           - target: linux
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
 
           - target: darwin
-            runner: macos-latest-xlarge
+            runner: macos-latest
 
           - target: windows
-            runner: windows-latest-fat
+            runner: windows-latest
 
           - target: windows
             architecture: 64
@@ -173,7 +173,7 @@ jobs:
     # end-to-end (see modules/dasLLVM/README.md "Cross-compilation").
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4

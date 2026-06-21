@@ -25,7 +25,7 @@ jobs:
   pre_job:
     ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -61,24 +61,24 @@ jobs:
           - target: linux
             release_target: linux
             release_arch: x86_64
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             archive_ext: tar.gz
 
           - target: linux_arm
             release_target: linux
             release_arch: arm64
-            runner: ubuntu-24.04-arm-fat
+            runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin26
             release_target: darwin26
             release_arch: arm64
-            runner: macos-26-xlarge # Apple Silicon arm64
+            runner: macos-26 # Apple Silicon arm64
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: windows
-            runner: windows-latest-fat
+            runner: windows-latest
             archive_ext: zip
 
           - target: windows
@@ -123,7 +123,7 @@ jobs:
           # (release_arch: arm64 via the include overlay at L53-57, which applies
           # to all linux_arm cells regardless of architecture). Lifting this
           # exclude would make the ×arm64 cell build the same bundle name on the
-          # same ARM64 hardware (ubuntu-24.04-arm-fat) and clobber via the
+          # same ARM64 hardware (ubuntu-24.04-arm) and clobber via the
           # `--clobber` flag in the upload step. Wasted CI for no extra artifact.
           - target: linux_arm
             architecture: arm64

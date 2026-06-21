@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   index_sweep:
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
     - name: "SCM Checkout"

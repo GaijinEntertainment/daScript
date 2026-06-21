@@ -19,7 +19,7 @@ jobs:
   pre_job:
   ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -64,7 +64,7 @@ jobs:
           - target: linux
             release_target: linux
             release_arch: x86_64
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             archive_ext: tar.gz
             sanitizers: none
 
@@ -73,7 +73,7 @@ jobs:
           # was prohibitive for production CI. See issue #2530.
           - target: linux
             architecture: 64
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             cmake_preset: Release
             sanitizers: asan
             build_name: linux_asan
@@ -82,7 +82,7 @@ jobs:
 
           - target: linux
             architecture: 64
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             cmake_preset: Release
             sanitizers: tsan
             build_name: linux_tsan
@@ -91,7 +91,7 @@ jobs:
 
           - target: linux
             architecture: 64
-            runner: ubuntu-latest-fat
+            runner: ubuntu-latest
             cmake_preset: Release
             sanitizers: ubsan
             build_name: linux_ubsan
@@ -101,26 +101,26 @@ jobs:
           - target: linux_arm
             release_target: linux
             release_arch: arm64
-            runner: ubuntu-24.04-arm-fat
+            runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin15
             architecture: arm64
             release_target: darwin15
             release_arch: arm64
-            runner: macos-15-xlarge # Apple Silicon arm64, M2
+            runner: macos-15 # Apple Silicon arm64, M2
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin26
             release_target: darwin26
             release_arch: arm64
-            runner: macos-26-xlarge # Apple Silicon arm64, M2
+            runner: macos-26 # Apple Silicon arm64, M2
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: windows
-            runner: windows-latest-fat
+            runner: windows-latest
             archive_ext: zip
 
           - target: windows
@@ -164,7 +164,7 @@ jobs:
             architecture: 64
             cmake_preset: RelWithDebInfo
             sanitizers: none
-            runner: windows-latest-fat
+            runner: windows-latest
             archive_ext: zip
             build_system: cmake
             cmake_generator: Ninja
@@ -540,7 +540,7 @@ jobs:
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -595,7 +595,7 @@ jobs:
   # and src/builtin/module_jit.cpp (PR #2838). Without this job, a Windows-touching
   # change that compiles under MSVC but breaks mingw would only surface when a
   # maintainer rebuilds locally. Same runner pool as the MSVC matrix
-  # (windows-latest-fat), separate top-level job so mingw churn doesn't risk
+  # (windows-latest), separate top-level job so mingw churn doesn't risk
   # the much-larger MSVC entries.
   #
   # dasClangBind is enabled here — find_package(Clang 22.1) matches msys2's
@@ -604,7 +604,7 @@ jobs:
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: windows-latest-fat
+    runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
@@ -762,7 +762,7 @@ jobs:
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: windows-latest-fat
+    runs-on: windows-latest
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -855,7 +855,7 @@ jobs:
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest-fat
+    runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
