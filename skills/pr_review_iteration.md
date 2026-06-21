@@ -2,24 +2,34 @@
 
 Use this skill after the pull request already exists. It covers the post-open loop: watching CI, triaging Copilot/human review comments, discussing verdicts with the user, applying fixes, replying, resolving threads, and re-requesting review.
 
-## 1. Watching the PR
+## 1. Watching the PR — the loop
 
-Pick a cadence — either ping the user when something interesting happens, or use `/loop` (without an interval, dynamic mode) to self-pace polls. On each tick:
+**Iterate against Copilot (~5 min), not the CI matrix (~30 min).** Copilot's review is a free ruleset check that lands in ~5 minutes; the full CI matrix is free too but takes ~30. So the loop is driven by Copilot and you **never sit through a full matrix between rounds**:
 
-- `gh pr checks <PR>` — CI status (pending / pass / fail)
-- `gh api repos/<owner>/<repo>/pulls/<PR>/comments` — inline review comments
-- `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — review-level state (`COMMENTED` / `CHANGES_REQUESTED` / `APPROVED`)
+1. **Push** a commit.
+2. **Re-request Copilot** — `request_copilot_review` (or the PR's "re-request review" button). You MUST do this manually after *every* push (see the review_on_push note below).
+3. **~5 min later, act on Copilot's review:** triage each comment (Section 3), **surface your verdicts to the user and wait for greenlight**, then fix what's agreed, push, re-request. (Discuss-before-fix is non-negotiable — see Section 3.) Repeat until Copilot is **dry** — a fresh review on your current tip with no new comments and no unresolved threads.
+4. **Only once Copilot is dry, wait for CI green** (~30 min), then merge.
 
-**Wait for whichever comes first** — Copilot review OR CI completion. Copilot usually returns in ~5 minutes; the full CI matrix takes ~30 minutes. Don't wait for the slower one when the faster one already gives you something to act on.
+**CI runs the whole time — watch it, but don't block on it:**
+- **Red EARLY (while you're still looping on Copilot) is a win** — a free early signal. Jump on it immediately: fix, push, re-request Copilot (the fix is new code Copilot should see anyway).
+- **Red AFTER Copilot is dry → fix → back into the Copilot loop.** A CI fix is new code, so re-request Copilot on the fix commit; don't merge until Copilot is dry again *and* CI is green.
+- **Green early means nothing to do** — keep iterating on Copilot until it's dry.
 
-**The loop, concretely:** push → **re-request Copilot** (`request_copilot_review`, or the PR's "re-request review" button) → it returns in ~5 min, free (ruleset check, not a runner) → fix → push → re-request → repeat, **without blocking on the matrix each round**. Only once Copilot is **dry** do you wait the ~30 min for the full CI matrix, then merge on green. Iterating against Copilot's 5-min turnaround instead of CI's 30-min is the entire point — never sit through 30 min per round. (CI runs free on standard runners and auto-runs on every PR commit — via the `pull_request` trigger, which fires on each push to the PR branch — so it gates honestly. The two heavy Windows toolchain builds — `build_windows_mingw`, `build_windows_clangcl` — run **nightly**, not per-PR, so a per-PR failure is never one of those.) **You must re-request Copilot manually after each push:** `review_on_push: true` is set on the default-branch ruleset, but in testing it did **not** auto-trigger a review on subsequent pushes (neither force-push nor normal commit) — Copilot only auto-reviews once on PR open. So drive the loop with explicit re-requests.
+The two heavy Windows toolchain builds (`build_windows_mingw`, `build_windows_clangcl`) run **nightly**, not per-PR — a per-PR red is never one of those.
 
-Cadence guidance:
-- **First poll: ~5 minutes.** Copilot review almost always lands by then. If both Copilot has left `COMMENTED` AND CI has visible progress, surface and stop.
-- **If Copilot done, CI still pending:** triage the comments and start fixing while CI grinds on the rest of the matrix. Re-poll CI on amend/force-push.
-- **If Copilot still pending after 5 min:** poll again at ~10 min. Rare, but happens on long diffs.
+**Manual re-request is mandatory.** `review_on_push: true` is set on the default-branch ruleset, but in testing it did NOT auto-trigger a review on any push (force-push *or* normal commit) — Copilot only auto-reviews once, on PR open. Every subsequent round needs an explicit `request_copilot_review`. (CI itself *does* auto-run on every PR commit via the `pull_request` trigger, free on standard runners, so it gates honestly without any manual nudge.)
 
-Stop polling and surface as soon as: (a) Copilot has left a `COMMENTED`-state review (something to react to), (b) any CI check has gone red (something to fix), or (c) CI is fully green AND Copilot is done.
+**Polling cadence (use `/loop`, dynamic mode):** ~5 min (≤270s, keeps the prompt cache warm) while iterating on Copilot; switch to ~20 min once Copilot is dry and you're only waiting on the matrix.
+
+**Status commands per tick:**
+- `gh pr checks <PR>` — CI status (pending / pass / fail), or `gh api repos/<owner>/<repo>/commits/<tip>/check-runs` filtered to `status!="completed"` (pending) and `conclusion` ∈ {`failure`, `cancelled`, `timed_out`, `action_required`} (reds — don't match only `failure`; a cancelled or timed-out lane is red too)
+- `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — Copilot's latest review; check its `commit_id` matches your tip (confirms it reviewed the latest code, not a stale commit)
+- unresolved threads via GraphQL `reviewThreads(first:50){nodes{isResolved …}}` filtered to `isResolved==false`
+
+Stop polling and surface as soon as: (a) Copilot left new comments (react), (b) a CI check went red (fix), or (c) CI green AND Copilot dry (ready to merge).
+
+> **Pure-prose tail.** Prose/wording nits are **reject by default** (Section 3) — don't fix them, so the drip never starts. Each reword only hands Copilot a fresh paragraph to nit; it's self-perpetuating. Accept a wording change only when it's way off or factually wrong. (Real example: nightly-CI PR #3237 took 1 functional round then 6 prose rounds that, under this bar, should have been rejected.)
 
 ## 2. CI failure handling
 
@@ -27,7 +37,7 @@ If a check goes red:
 1. Identify the failing job: `gh pr checks <PR>` shows the URL; `gh run view <runID> --log-failed` fetches the log.
 2. Apply the same fix policy as Step 2 in `skills/make_pr.md`: own change → fix it; obvious pre-existing → fix it; non-obvious pre-existing → ask the user.
 3. After the fix, **re-run the gates from Step 1-5 in `skills/make_pr.md`** (lint + interpreted + AOT + Sphinx if `//!` or RST touched + format) — don't trust spot-checks. CI failures often come bundled (a missing format triggers a lint, a removed function triggers an AOT hash mismatch).
-4. Amend the squashed commit + force-push. CI re-runs automatically on push. No need to re-request review for a CI-only fix unless the diff is large.
+4. Push the fix. CI re-runs automatically. If Copilot was already dry, this is a "red after Copilot" — go **back into the Copilot loop** (Section 1): re-request Copilot on the fix commit and don't merge until it's dry again *and* CI is green. (A trivial CI-only fix — a format tweak with no logic change — can skip the re-request, but when in doubt, re-request; it's free and ~5 min.)
 
 ## 3. Triaging review comments — discuss BEFORE acting
 
@@ -38,17 +48,23 @@ Fetch the comments:
 gh api repos/<owner>/<repo>/pulls/<PR>/comments | jq '.[] | {id, path, line: (.line // .original_line), body}'
 ```
 
-For each comment, give the user a concise verdict:
+**Be conservative — default to reject.** Only ACCEPT a comment when it is a **real bug**, a **real issue**, or **factually incorrect** doc/comment text. REJECT everything else:
+- a bug that can never happen, or is very unlikely
+- an over-defensive guard (protecting a case that can't occur)
+- a suggestion that diverges from how the rest of the repo already does it
+- prose / wording nits — wording has to be **way off or factually wrong** to be worth a change
 
-| Verdict | Means | Example |
+Rejecting is the common case, not the exception. Give the user a concise per-comment verdict:
+
+| Verdict | Means | Action |
 |---|---|---|
-| 🔴 **Real bug** | Reviewer found a correctness issue | "take(n) before aggregate emits unbound `LIMIT ?` placeholder" |
-| 🟡 **Cosmetic accept** | Wording / consistency / doc-drift fix | "diagnostic says `_distinct()` but public API is `distinct()`" |
-| 🔴 **Reject with evidence** | Reviewer is wrong; reply with proof | "RST already matches actual emitter output (paste runtime line)" |
+| 🔴 **Real bug / real issue** | a correctness or design problem that can actually occur | accept — probe first, then fix |
+| 🟡 **Factually wrong text** | a doc/comment/diagnostic states something untrue (e.g. names `_distinct()` when the public API is `distinct()`) | accept — correct it |
+| ⚪ **Nit / unlikely / over-defensive / against-convention** | wording, style, a can't-happen guard, repo-divergent suggestion | **reject** with a one-line reason |
 
-Real-bug verdicts deserve a probe before declaring fix direction — the obvious fix isn't always the right fix. (e.g., aligning the bind-push wasn't enough for the `take(n) |> sum()` bug because the underlying SQL is degenerate; the right answer was compile-time rejection.)
+Real-bug verdicts deserve a probe before declaring fix direction — the obvious fix isn't always the right fix (e.g. aligning the bind-push wasn't enough for the `take(n) |> sum()` bug because the underlying SQL was degenerate; the right answer was compile-time rejection).
 
-Wait for the user to greenlight before applying. They may push back on individual verdicts ("reject this one too" or "let's not bundle this fix into chunk 4").
+A rejected comment still gets a reply (one-line reason, evidence if the reviewer is wrong) + a resolved thread (Section 5). Surface the verdicts and wait for the user's greenlight before applying — they may reject more ("reject this one too") or defer a fix to a later chunk.
 
 ## 4. Apply fixes + re-run gates
 
@@ -110,7 +126,7 @@ Each iteration: triage → discuss → fix → gate → amend → force-push →
 |---|---|---|
 | Watch PR | `gh pr checks`, `gh api .../comments`, `gh api .../reviews` | Surface as soon as Copilot comments, CI fails, or both CI + Copilot are done |
 | CI fail | `gh pr checks`, `gh run view --log-failed` | Fix own, fix obvious pre-existing, ask about unclear |
-| Triage comments | `gh api .../pulls/<PR>/comments` | Discuss verdicts with user before acting |
+| Triage comments | `gh api .../pulls/<PR>/comments` | **Default reject**; accept only real bugs/issues or factually wrong text. Discuss verdicts with user before acting |
 | Re-run gates | Follow Step 1-5 in `skills/make_pr.md` | Full rerun after every amend |
 | Amend/push | `git commit --amend --no-edit`, `git push --force-with-lease` | Keep squashed branch squashed |
 | Reply | `mcp__github__add_reply_to_pull_request_comment` | Every addressed comment gets a reply |
