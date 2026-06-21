@@ -8,7 +8,9 @@ on:
   schedule:
     # Nightly: runs the heavy Windows toolchain builds (mingw, clang-cl) that are
     # gated OFF per-PR/push CI below — see their `if:`. The matrix / bundle_smoke /
-    # gcc jobs are gated off `schedule`, so nightly runs ONLY the two toolchains.
+    # gcc jobs are gated off `schedule`, so the nightly cron runs ONLY the two
+    # toolchains. A manual `workflow_dispatch` is NOT gated off — it runs the
+    # FULL workflow: every per-PR job AND both toolchains.
     - cron: '0 8 * * *'
 defaults:
   run:
@@ -48,7 +50,8 @@ jobs:
   build:
   ###########################################################
     needs: pre_job
-    # Per-PR/push lane; skipped on the nightly `schedule` (only the toolchain jobs run then).
+    # Per-PR/push lane (also runs on manual `workflow_dispatch`); skipped only on
+    # the nightly `schedule` cron, when just the toolchain jobs run.
     if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
@@ -545,7 +548,7 @@ jobs:
   # still gated at release-cut time in release.yml.
   ###########################################################
     needs: pre_job
-    # Per-PR/push lane; skipped on the nightly `schedule`.
+    # Per-PR/push lane (also runs on manual `workflow_dispatch`); skipped only on the nightly `schedule` cron.
     if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
@@ -854,7 +857,7 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
   build_linux_gcc:
-  # (Per-PR/push lane; skipped on the nightly `schedule` — see if: below.)
+  # (Per-PR/push lane, also on manual `workflow_dispatch`; skipped only on the nightly `schedule` cron — see if: below.)
   ###########################################################
   # Catches gcc-only -Werror breaks at PR time. Every Linux lane in this
   # workflow builds with CC=clang CXX=clang++, so warnings that only gcc emits
