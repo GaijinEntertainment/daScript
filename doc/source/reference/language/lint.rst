@@ -1941,8 +1941,57 @@ array (each element, for ``push_clone_from``) in one step:
 
 Only the immediately-following statement is inspected, and a C-array
 (fixed-array) source stays silent — ``var w := cArray`` would not yield an
-``array<T>``. An intervening ``reserve`` / guard, a non-empty initializer, or a
-single-element ``push`` all keep the rule quiet.
+``array<T>``. A *nested* source whose element type does not match — e.g.
+``array<array<T>>`` into a flat ``array<T>`` — binds the recursive-flatten
+``push_from`` overload (a flatten, not a clone), so it stays silent too: the
+match requires the source's element type to equal the destination's. An
+intervening ``reserve`` / guard, a non-empty initializer, or a single-element
+``push`` all keep the rule quiet.
+
+.. _style033:
+
+STYLE033 — array filled by a *run* of ``push_from`` / ``push_clone_from``
+=========================================================================
+
+A run of **two or more** ``push_from(src)`` / ``push_clone_from(src)`` calls
+(each ``src`` an ``array<T>``) is the N ≥ 2 generalization of STYLE032. Into a
+**fresh-empty** array the run is a concatenation — ``concat`` expresses it as one
+expression (``concat`` lives in ``daslib/linq``, so the rewrite needs
+``require daslib/linq``). Into an **already-live** array the run collapses to a
+single variadic call:
+
+.. code-block:: das
+
+    require daslib/linq
+
+    // Bad — fresh-empty target (a concatenation)
+    var c : array<int>
+    c |> push_clone_from(a)                     // STYLE033
+    c |> push_clone_from(b)
+    return <- c
+
+    // Good
+    var c <- concat(a, b)
+    return <- c
+
+    // Bad — existing target (collapse the run)
+    dst |> push_clone_from(a)                   // STYLE033
+    dst |> push_clone_from(b)
+
+    // Good
+    dst |> push_clone_from(a, b)
+
+A single-source run stays :ref:`STYLE032 <style032>` (``var w := src``). The
+suggested shapes have arity limits — ``concat`` takes up to 8 sources and the
+variadic ``push_from`` / ``push_clone_from`` overloads up to 4 — so a longer run
+has no single-call form and stays silent. C-array sources, and *nested* sources
+that flatten (``array<array<T>>`` into a flat ``array<T>`` — the recursive-flatten
+overload, not a copy), stay silent, the same as STYLE032 (the source's element
+type must equal the destination's).
+
+The existing-array collapse matches a **plain-variable receiver** (``dst |> …``)
+only; a chain receiver (``obj.arr |> …``) is out of scope for now — a planned
+follow-up, mirroring STYLE012's separate chain form.
 
 -----
 Tests

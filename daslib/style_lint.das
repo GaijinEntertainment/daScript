@@ -39,11 +39,16 @@ module style_lint shared private
 //!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
 //!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign)
+//!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'); into an existing array collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
 
 require daslib/ast_boost
 require daslib/is_local
 require daslib/lint_config
 require strings
+
+// STYLE033 arity caps — never suggest a call shape with no matching overload.
+let MAX_CONCAT_ARITY = 8         // linq `concat` tops out at 8 sources (PR #3224)
+let MAX_VARIADIC_PUSH_ARITY = 4  // builtin push_from/push_clone_from fixed-arity 2..4 (PR #3230)
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -813,6 +818,7 @@ class StyleLintVisitor : AstVisitor {
             unsafe_block_stack |> push(0)
         }
         check_style012_chain_runs(blk)
+        check_style033_existing_runs(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]
@@ -1467,29 +1473,114 @@ class StyleLintVisitor : AstVisitor {
             }
         }
         if (idx < 0 || idx + 1 >= n) return
-        let nextStmt = blk.list[idx + 1]
-        if (nextStmt == null || nextStmt.genFlags.generated || !(nextStmt is ExprCall)) return
-        let call = nextStmt as ExprCall
         for (v in elet.variables) {
-            // Only flag uninitialized array<T> locals filled by a single bulk clone-copy.
+            // Only flag uninitialized array<T> locals from user code.
             if (v.init != null
                 || v.flags.generated || v.flags.inScope
-                || v._type == null || v._type.baseType != Type.tArray
-                || !is_array_clone_init_call(call, v)) continue
-            style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source — use `var {v.name} := SRC` (clone-assign)", v.at)
+                || v._type == null || v._type.baseType != Type.tArray) continue
+            // Count the contiguous run of single-source bulk clone/copy-from-array
+            // calls on v. 1 => clone (STYLE032 `:=`); >=2 => concat (STYLE033).
+            var count = 0
+            for (j in range(idx + 1, n)) {
+                let stmt = blk.list[j]
+                if (stmt == null || stmt.genFlags.generated || !(stmt is ExprCall)
+                    || !is_array_clone_init_call(stmt as ExprCall, v)) break
+                count++
+            }
+            if (count == 1) {
+                style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source — use `var {v.name} := SRC` (clone-assign)", v.at)
+            } elif (count >= 2 && count <= MAX_CONCAT_ARITY) {
+                style_warning("STYLE033: array<T> '{v.name}' default-initialized then filled by a run of {count} `push_from`/`push_clone_from` from arrays — that is a concatenation; use `var {v.name} <- concat(s1, s2, ...)` (needs `require daslib/linq`)", v.at)
+            }
         }
+    }
+
+    def bulk_src_matches_dest(src : Expression? const; dest : Variable? const) : bool {
+        //! A genuine bulk clone/copy: `src` is an `array<E>` whose element type E equals
+        //! `dest`'s element type. A *nested* source (`array<array<E>>` into a flat
+        //! `array<E>`, or any deeper mismatch) binds the recursive-flatten
+        //! push_from(Arr, src) overload (builtin.das) — that is a flatten, NOT a
+        //! `:=`/concat, so it must NOT match. A C-array source (tFixedArray) is not
+        //! tArray and has no clean array<T> rewrite either.
+        if (src == null || src._type == null || src._type.baseType != Type.tArray
+            || src._type.firstType == null
+            || dest == null || dest._type == null || dest._type.firstType == null) return false
+        return describe(src._type.firstType) == describe(dest._type.firstType)
     }
 
     def is_array_clone_init_call(call : ExprCall?; target : Variable?) : bool {
         //! `target |> push_from(SRC)` / `push_clone_from(SRC)` (exactly 2 args, arg[0] ==
-        //! target) where SRC is itself an `array<T>`. Into a fresh-empty target this bulk
-        //! copy/clone is exactly `var target := SRC`. A C-array source (tFixedArray) has no
-        //! clean `:=` rewrite (it would not yield an array<T>), so it stays silent.
+        //! target) where SRC is an `array<E>` with E == target's element type. Into a
+        //! fresh-empty target this bulk copy/clone is exactly `var target := SRC`.
         if ((!is_named_target_call(call, target, 2, "push_from")
              && !is_named_target_call(call, target, 2, "push_clone_from"))
             || length(call.arguments) != 2) return false
-        let src = call.arguments[1]
-        return src != null && src._type != null && src._type.baseType == Type.tArray
+        return bulk_src_matches_dest(call.arguments[1], target)
+    }
+
+    // --- STYLE033 (existing-array form): run of >=2 bulk push_from/push_clone_from ---
+
+    def bulk_from_call_target(stmt : Expression?; var fname : string&) : Variable? {
+        //! When stmt is `T |> push_from(SRC)` / `push_clone_from(SRC)` (exactly 2 args, SRC
+        //! an array<E> with E == T's element type — a genuine bulk append, not a flatten),
+        //! return T's variable and set fname to the call name; else null.
+        if (stmt == null || stmt.genFlags.generated || !(stmt is ExprCall)) return null
+        let call = stmt as ExprCall
+        if (call.func == null || call.func.fromGeneric == null
+            || length(call.arguments) != 2) return null
+        let isFrom = call.func.fromGeneric.name == "push_from"
+        let isCloneFrom = call.func.fromGeneric.name == "push_clone_from"
+        if (!isFrom && !isCloneFrom) return null
+        var arg = call.arguments[0]
+        if (arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value.subexpr)
+        }
+        if (!(arg is ExprVar)
+            || !bulk_src_matches_dest(call.arguments[1], (arg as ExprVar).variable)) return null
+        fname = isFrom ? "push_from" : "push_clone_from"
+        return (arg as ExprVar).variable
+    }
+
+    def run_preceded_by_empty_array_decl(blk : ExprBlock?; runStart : int; v : Variable?) : bool {
+        //! True when the statement just before the run is `var v : array<T>` (no init) — the
+        //! fresh-empty case, owned by check_style032_clone_init (its STYLE033 concat branch).
+        if (runStart <= 0) return false
+        let prev = blk.list[runStart - 1]
+        if (prev == null || !(prev is ExprLet)) return false
+        for (lv in (prev as ExprLet).variables) {
+            if (lv == v && lv.init == null
+                && lv._type != null && lv._type.baseType == Type.tArray) return true
+        }
+        return false
+    }
+
+    def check_style033_existing_runs(blk : ExprBlock?) : void {
+        if (current_function != null && current_function.fromGeneric != null) return
+        let n = length(blk.list)
+        var i = 0
+        while (i < n) {
+            var fname = ""
+            let target = bulk_from_call_target(blk.list[i], fname)
+            if (target == null) {
+                i++
+                continue
+            }
+            var count = 1
+            while (i + count < n) {
+                var fname2 = ""
+                let t2 = bulk_from_call_target(blk.list[i + count], fname2)
+                if (t2 != target || fname2 != fname) break
+                count++
+            }
+            // A fresh-empty decl right before the run is the concat case (STYLE032's path);
+            // here we only collapse a run into an already-live array. The variadic overload
+            // exists for 2..MAX_VARIADIC_PUSH_ARITY sources.
+            if (count >= 2 && count <= MAX_VARIADIC_PUSH_ARITY
+                && !run_preceded_by_empty_array_decl(blk, i, target)) {
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' — collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+            }
+            i += count
+        }
     }
 
     // --- STYLE031: table<K;V> / table<K> var then contiguous insert/[]= instead of literal ---
