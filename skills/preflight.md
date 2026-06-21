@@ -23,16 +23,19 @@ without `EXECUTABLE_OUTPUT_PATH`). Commands are platform-neutral unless marked.
 "WSL" means the verbatim-CI recipe in `skills/wsl_ci_repro.md` — fresh clone at
 the CI ref, never a working-tree copy.
 
-## What runs on every PR
+## What CI runs (per-PR + nightly)
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` | every PR | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_windows_mingw`, `build_windows_clangcl` |
+| `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (nightly) | the `schedule` cron (daily 08:00 UTC) runs these two *in isolation* | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | seven doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+
+> A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job *and* both nightly toolchains. Only the cron `schedule` runs the two toolchains alone (the per-PR jobs are gated off `schedule`).
 
 ## build.yml — the build matrix
 
@@ -56,7 +59,9 @@ Release-modules build → `cmake --install --prefix ./daslang_bundle --strip` �
 it when touching CMake `install(...)` rules, `ci/release_modules.txt`, or
 module loading. This is the lane that catches install-layout regressions.
 
-## build.yml — build_windows_mingw
+## build.yml — build_windows_mingw (nightly)
+
+**Runs nightly, not per-PR** — the cron `schedule` fires it, so it won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch, manually dispatch `build.yml` (note: a manual dispatch runs the *full* workflow, not just this job).
 
 msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
 sweeps, plus two things no other lane runs: the `bind_clangbind.das`
@@ -66,7 +71,9 @@ it — the 80/20 for "compiles under MSVC, breaks under clang" is a clang
 syntax-only pass on your changed C++ (see clang-cl below). If you regenerated
 dasClangBind bindings, run the self-binder locally per `skills/clang_bind_build.md`.
 
-## build.yml — build_windows_clangcl
+## build.yml — build_windows_clangcl (nightly)
+
+**Runs nightly, not per-PR** — same as mingw above; manually dispatch `build.yml` to exercise it on a branch (a manual dispatch runs the full workflow).
 
 The preflight `cpp-syntax` gate mirrors this lane's frontend: a clang-cl `/Zs`
 pass (parse + semantic analysis + template instantiation — no codegen) on your
@@ -84,7 +91,8 @@ Release shared modules. Run it in a separate clone or worktree only:
 
 ```powershell
 # SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
-cmake -B build-clangcl -G "Visual Studio 17 2022" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+# Generator must match the CI lane (build.yml pins "Visual Studio 18 2026" on the VS2026 image).
+cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
 cmake --build build-clangcl --config Release --parallel
 ```
 

@@ -5,12 +5,20 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Nightly: runs the heavy Windows toolchain builds (mingw, clang-cl) that are
+    # gated OFF per-PR/push CI below — see their `if:`. The matrix / bundle_smoke /
+    # gcc jobs are gated off `schedule`, so the nightly cron runs just the two
+    # toolchains (plus the lightweight `pre_job` setup they depend on). A manual
+    # `workflow_dispatch` is NOT gated off — it runs the FULL workflow: every
+    # per-PR job AND both toolchains.
+    - cron: '0 8 * * *'
 defaults:
   run:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,7 +51,9 @@ jobs:
   build:
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # Per-PR/push lane (also runs on manual `workflow_dispatch`); skipped only on
+    # the nightly `schedule` cron, when just the toolchain jobs run.
+    if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -539,7 +549,8 @@ jobs:
   # still gated at release-cut time in release.yml.
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # Per-PR/push lane (also runs on manual `workflow_dispatch`); skipped only on the nightly `schedule` cron.
+    if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
@@ -590,7 +601,9 @@ jobs:
   ###########################################################
   build_windows_mingw:
   ###########################################################
-  # Catches clang-mingw64 toolchain regressions at PR time. The mingw path
+  # Catches clang-mingw64 toolchain regressions NIGHTLY (moved off per-PR CI —
+  # it's a ~26min long pole and alt-toolchain coverage, lowest per-PR signal).
+  # The mingw path
   # diverges from MSVC in src/hal/debug_break.cpp, src/hal/project_specific_crash_handler.cpp,
   # and src/builtin/module_jit.cpp (PR #2838). Without this job, a Windows-touching
   # change that compiles under MSVC but breaks mingw would only surface when a
@@ -603,7 +616,11 @@ jobs:
   # next to daslang.exe so the .shared_module dlopen resolves at runtime.
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Deliberately does NOT
+    # gate on pre_job.should_skip — a nightly run must fire even when master is
+    # unchanged (skip-duplicate-actions would otherwise skip it and we'd never
+    # catch a toolchain/runner regression on an idle day).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     defaults:
       run:
@@ -759,9 +776,12 @@ jobs:
   # scrub_clang_include.cmake strips the clang dir from INCLUDE so cl falls back to
   # MSVC's stdint.h. Without this job that fix — and clang-cl buildability generally —
   # could silently rot. Same runner pool as the MSVC matrix; separate top-level job.
+  # Runs NIGHTLY (off per-PR CI — ~26min long pole, alt-toolchain, lowest per-PR signal).
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Does NOT gate on
+    # pre_job.should_skip — a nightly run must fire even when master is unchanged.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
     - name: "SCM Checkout"
@@ -838,6 +858,7 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
   build_linux_gcc:
+  # (Per-PR/push lane, also on manual `workflow_dispatch`; skipped only on the nightly `schedule` cron — see if: below.)
   ###########################################################
   # Catches gcc-only -Werror breaks at PR time. Every Linux lane in this
   # workflow builds with CC=clang CXX=clang++, so warnings that only gcc emits
@@ -854,7 +875,7 @@ jobs:
   # (core + HV/SQLITE/Audio/PUGIXML/UnitTest modules) is covered without it.
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"
