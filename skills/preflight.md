@@ -28,14 +28,14 @@ the CI ref, never a working-tree copy.
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master`; also any manual `workflow_dispatch` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
-| `build.yml` (nightly) | the `schedule` cron (daily 08:00 UTC) runs these *in isolation* — also fire on a manual `workflow_dispatch` | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
-
-> A manual **`workflow_dispatch`** runs the **whole** `build.yml` — every per-PR job *and* both nightly toolchains. Only the cron `schedule` runs the two toolchains alone (the per-PR jobs are gated off `schedule`).
+| `build.yml` (nightly) | the `schedule` cron (daily 08:00 UTC) runs these two *in isolation* | `build_windows_mingw`, `build_windows_clangcl` — the two ~26-min toolchain long-poles, gated OFF per-PR CI (alt-toolchain, lowest per-PR signal). A break here surfaces within ~24 h, not at PR time. |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | seven doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+
+> A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job *and* both nightly toolchains. Only the cron `schedule` runs the two toolchains alone (the per-PR jobs are gated off `schedule`).
 
 ## build.yml — the build matrix
 
@@ -61,7 +61,9 @@ module loading. This is the lane that catches install-layout regressions.
 
 ## build.yml — build_windows_mingw (nightly)
 
-**Runs nightly, not per-PR** — the cron `schedule` fires it, so it won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch, manually dispatch `build.yml` (note: a manual dispatch runs the *full* workflow, not just this job). msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
+**Runs nightly, not per-PR** — the cron `schedule` fires it, so it won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch, manually dispatch `build.yml` (note: a manual dispatch runs the *full* workflow, not just this job).
+
+msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
 sweeps, plus two things no other lane runs: the `bind_clangbind.das`
 self-binder freshness check (`git diff --exit-code -- modules/dasClangBind/src/`)
 and `test_const_preproc.das`. A local msys2 mirror is possible but rarely worth

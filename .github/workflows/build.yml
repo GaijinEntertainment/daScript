@@ -8,9 +8,10 @@ on:
   schedule:
     # Nightly: runs the heavy Windows toolchain builds (mingw, clang-cl) that are
     # gated OFF per-PR/push CI below — see their `if:`. The matrix / bundle_smoke /
-    # gcc jobs are gated off `schedule`, so the nightly cron runs ONLY the two
-    # toolchains. A manual `workflow_dispatch` is NOT gated off — it runs the
-    # FULL workflow: every per-PR job AND both toolchains.
+    # gcc jobs are gated off `schedule`, so the nightly cron runs just the two
+    # toolchains (plus the lightweight `pre_job` setup they depend on). A manual
+    # `workflow_dispatch` is NOT gated off — it runs the FULL workflow: every
+    # per-PR job AND both toolchains.
     - cron: '0 8 * * *'
 defaults:
   run:
