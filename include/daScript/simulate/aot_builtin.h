@@ -56,8 +56,10 @@ namespace das {
     DAS_API urange64 string_heap_allocation_stats ( Context * context );
     DAS_API uint64_t string_heap_allocation_count ( Context * context );
     DAS_API uint64_t heap_bytes_allocated ( Context * context );
+    DAS_API uint64_t heap_total_allocated ( Context * context );
     DAS_API int32_t heap_depth ( Context * context );
     DAS_API uint64_t string_heap_bytes_allocated ( Context * context );
+    DAS_API uint64_t string_heap_total_allocated ( Context * context );
     DAS_API int32_t string_heap_depth ( Context * context );
     DAS_API void string_heap_report ( Context * context, LineInfoArg * info );
     DAS_API bool is_intern_strings ( Context * context );
