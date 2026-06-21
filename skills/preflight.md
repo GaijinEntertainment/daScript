@@ -23,7 +23,7 @@ without `EXECUTABLE_OUTPUT_PATH`). Commands are platform-neutral unless marked.
 "WSL" means the verbatim-CI recipe in `skills/wsl_ci_repro.md` — fresh clone at
 the CI ref, never a working-tree copy.
 
-## What runs on every PR
+## What CI runs (per-PR + nightly)
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
