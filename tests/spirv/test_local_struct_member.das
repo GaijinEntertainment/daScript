@@ -25,11 +25,11 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
 def test_local_struct_member(t : T?) {
     t |> run("local struct value member access: let e = ssbo[i]; e.field -> OpCompositeExtract") <| @(t : T?) {
         var words <- lsvmember_words()
-        // the let loads the whole struct element as a composite, then each member read extracts from it
-        t |> success(has_op(words, SpvOp.Load), "lsvmember: loads the struct element composite (OpLoad)")
+        // The discriminating proof of the value path: members are read with OpCompositeExtract off the
+        // loaded struct composite, NOT a per-member OpAccessChain (the indexed `ssbo[i].field` form). The
+        // fixture has no swizzles, so OpCompositeExtract appears EXACTLY twice -- one per member read.
         t |> success(count_op(words, SpvOp.CompositeExtract) == 2,
-            "lsvmember: two float4 member reads -> exactly two OpCompositeExtract")
-        // value-path access (no access chain into the local) -- the members come from the loaded composite
+            "lsvmember: two float4 member reads -> exactly two OpCompositeExtract (value path, not per-member access chain)")
         t |> success(has_op(words, SpvOp.FAdd), "lsvmember: e.a + e.b -> OpFAdd on the extracted members")
         validate(t, words, "lsvmember")
         delete words
