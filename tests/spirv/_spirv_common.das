@@ -658,6 +658,24 @@ def public storimg_words : array<uint> {
     return clone_to_move(storimg_spv)
 }
 
+// ===== storage-image @format qualifier: a bare image2D stays Rgba8 (default, back-compat); an
+// @format = "r32f" image2D lowers to OpTypeImage format R32f (the Hi-Z depth-pyramid storage format).
+// imageLoad/imageStore emit is format-agnostic (format lives on OpTypeImage), so the same ops serve both.
+// Two distinct-format images -> two distinct OpTypeImage. spirv-val'd. =====
+var @binding = 0 @format = "r32f" fmt_hzb : image2D
+var @binding = 1 fmt_dst : image2D
+[compute_shader(local_size_x=8, local_size_y=8, name="imgfmt_spv"), marker(no_coverage)]
+def imgfmt {
+    let gid = gl_GlobalInvocationID
+    let coord = int2(int(gid.x), int(gid.y))
+    let d = imageLoad(fmt_hzb, coord)                            // OpImageRead on the R32f image
+    imageStore(fmt_dst, coord, float4(d.x, 0.0f, 0.0f, 1.0f))    // OpImageWrite on the default Rgba8 image
+}
+
+def public imgfmt_words : array<uint> {
+    return clone_to_move(imgfmt_spv)
+}
+
 // ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
 // texelFetch -> OpImage (extract image from the sampled image) + OpImageFetch. Both are derivative-free,
 // so this fixture samples in a COMPUTE shader -- proving the stage lift (texture() is fragment-only). =====
