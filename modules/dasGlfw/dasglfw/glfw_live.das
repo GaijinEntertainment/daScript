@@ -129,7 +129,7 @@ def public maybe_collect_gc() {
     let h_used = heap_bytes_allocated()
     let h_total = heap_total_allocated()
     if (h_total > 0ul && h_used * 3ul < h_total) {              // heap > 2/3 unused
-        unsafe(heap_collect(false, false))                     // value heap only — string heap was just checked, not mostly free
+        unsafe(heap_collect(true, false))                      // both heaps — the GC walk is shared, so reclaiming the string heap too is near-free
     }
 }
 
