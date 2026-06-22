@@ -2404,7 +2404,7 @@ class SpirvEmit : AstVisitor {
                 // A nested struct / fixed-array member would need its laid-out type to match the loaded
                 // composite -- not handled here; fail closed rather than emit a mismatched extract.
                 if (expr._type != null && (expr._type.baseType == Type.tStructure || expr._type.baseType == Type.tFixedArray)) {
-                    errs |> push("member access '.{expr.name}': struct/array members of a local struct value are not yet supported (index the ssbo element directly, e.g. arr[i].{expr.name})")
+                    errs |> push("member access '.{expr.name}': struct/array members of a local struct value are not yet supported; read the member directly from its source block element/field instead of copying the struct into a local")
                     return expr
                 }
                 let lbase = value_of(expr.value)
