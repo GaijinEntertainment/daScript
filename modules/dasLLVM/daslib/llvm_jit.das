@@ -4510,8 +4510,14 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprRef2Value
     def override visitExprRef2Value(expr : ExprRef2Value?) : ExpressionPtr {
-        setE(expr) <| LLVMBuildLoadData2Aligned(g_builder,
-            type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), expr._type.alignOf, "r2v")
+        // Mirror GetR2V (ast_simulate.cpp): a by-ref result type (struct/array/tuple/...) is held
+        // by reference — R2V is a no-op, keep the address; only a workhorse value actually loads.
+        if (expr._type.isRefType) {
+            setE(expr) <| getE(expr.subexpr)
+        } else {
+            setE(expr) <| LLVMBuildLoadData2Aligned(g_builder,
+                type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), expr._type.alignOf, "r2v")
+        }
         return expr
     }
 
