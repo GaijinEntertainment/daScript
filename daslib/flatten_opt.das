@@ -2261,6 +2261,17 @@ struct private PEX {
     noFastMath : bool                       // zero-init false = fast-math ON (the default)
 }
 
+// A ref to a hoisted / CSE'd let, carrying the replaced node's resolved type. The cse/alias loop runs
+// passes that read expr_bt BEFORE the macro re-infers (the rcp-rewrite's scalar-float gate is one) — an
+// un-typed ref reads as `none`, so those passes silently skip a freshly-hoisted divisor.
+def private hoisted_ref(refName : string; src : ExpressionPtr) : ExpressionPtr {
+    var v = new ExprVar(at = src.at, name := refName)
+    if (src._type != null) {
+        v._type = clone_type(src._type)
+    }
+    return v
+}
+
 // `x / U` rcp-candidate: a varying division by a preshader-eligible scalar-float NON-const
 // divisor — shared verbatim by the extraction rewrite and the opt residual oracle. A wholly-
 // uniform division hoists intact (maximal arm); a const divisor belongs to the fold arm.
@@ -2337,7 +2348,7 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
     if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) {
         let nm = pex_hoist_name(pe, e)
         pe.changed = true
-        return new ExprVar(at = e.at, name := nm)
+        return hoisted_ref(nm, e)
     }
     if (e is ExprOp1) {
         var o = e as ExprOp1
@@ -2352,7 +2363,7 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
             pe.changed = true
             return new ExprOp2(at = o.at, op := "*",
                 left = pex_extract(pe, barriers, o.left),
-                right = new ExprVar(at = o.at, name := nm))
+                right = hoisted_ref(nm, o.right))   // 1/U shares U's (scalar-float) type
         }
         o.left = pex_extract(pe, barriers, o.left)
         o.right = pex_extract(pe, barriers, o.right)
@@ -2448,7 +2459,7 @@ def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barr
                 if (psh_has_compute(init)) {
                     // Whole uniform let: hoist its init, rename refs to the preshader temp, drop the decl.
                     let nm = pex_hoist_name(pe, init)
-                    pe.rename[vname] = new ExprVar(at = init.at, name := nm)
+                    pe.rename[vname] = hoisted_ref(nm, init)
                     pe.changed = true
                 } else {
                     // Trivial uniform alias (a bare global / member read): inline it at every use.
@@ -2624,7 +2635,7 @@ class private CseTally : AstVisitor {
 def private cse_replace_expr(var e : ExpressionPtr; key, refName : string) : ExpressionPtr {
     if (e == null) return null
     if (psh_has_compute(e) && "{describe(e)}" == key) {
-        return new ExprVar(at = e.at, name := refName)
+        return hoisted_ref(refName, e)
     }
     if (e is ExprOp1) {
         var o = e as ExprOp1

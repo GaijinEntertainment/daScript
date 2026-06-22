@@ -445,6 +445,23 @@ else
     fail=1
 fi
 
+echo "24. cap_rcp_shared.shader (uniform divisor also used as a multiplier -> still rcp'd)"
+out="$(FLATTEN_DUMP_DAS=1 compile "$here/cap_rcp_shared.shader")"
+rcps="$(echo "$out" | grep -c 'let _preshader_.*1f /')"
+divs="$(echo "$out" | grep -v 'let _preshader_' | grep -c '/ _preshader')"
+errs="$(echo "$out" | grep -ci error)"
+# `slice` is used as BOTH divisor and multiplier, so its value is CSE'd into a uniform _preshader_
+# let; the rcp-rewrite must still see through that freshly-hoisted (un-typed) divisor. With the fix
+# one shared `_preshader_N = 1f / slice` reciprocal exists and the per-pixel body has no `/ _preshader`
+# division — before it, the un-typed divisor read as `none` so the rcp gate skipped it (residual divide).
+if [[ "$errs" -eq 0 && "$rcps" -ge 1 && "$divs" -eq 0 ]]; then
+    echo "   ok — shared reciprocal preshader let; no per-pixel division by the CSE'd uniform"
+else
+    echo "   FAIL — errors=$errs rcp_lets=$rcps residual_divs=$divs (expected >=1 and 0)"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
 echo
 if [[ "$fail" -eq 0 ]]; then echo "capability: all checks passed"; else echo "capability: FAILED"; fi
 exit $fail
