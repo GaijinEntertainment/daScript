@@ -1754,9 +1754,12 @@ rather than rewriting the shader to dodge it.
 **What landed:** `visitExprField` gained a value-path branch (the twin of the existing `e2ptr`
 access-chain branch): when the field base is a local struct **value** (a `let` holding the composite
 loaded by `value_of` in `visitExprLetVariable`), emit `OpCompositeExtract` by member index. Reads only
-(a `let`). Scalar / vector / matrix members lower via `emit_type`; a **nested struct / fixed-array member
-fails closed** (it would need its laid-out type to match the loaded composite) with a clear "index the
-ssbo element directly" message, rather than emit a mismatched extract.
+(a `let`). The branch is gated on the base having lowered to a value id (`e2id`), so an unsupported
+struct base (e.g. `foo().field` that didn't lower) falls through to the clean "not supported" error
+rather than a confusing `internal: no rvalue`. Scalar / vector / matrix members lower via `emit_type`; a
+**nested struct / fixed-array member fails closed** (it would need its laid-out type to match the loaded
+composite) with a generic message pointing at reading the member from its source block element/field,
+rather than emit a mismatched extract.
 
 **Tests/gates:** `lsvmember` fixture (`let e = lsv_in[i]; lsv_out[i] = e.a + e.b`, two `float4` members,
 no swizzles) in `_spirv_common.das`; `test_local_struct_member.das` asserts OpLoad of the composite +
