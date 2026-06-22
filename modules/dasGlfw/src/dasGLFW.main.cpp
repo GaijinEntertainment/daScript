@@ -85,6 +85,40 @@ namespace das {
     }
 }
 
+// Native (Cocoa) fullscreen via NSWindow toggleFullScreen:, reached through the objc runtime so this
+// stays a plain .cpp (no ObjC++). A borderless window can't get a real macOS fullscreen Space — this is
+// the proper green-button / Ctrl-Cmd-F fullscreen. Toggle returns whether it handled it; the query
+// returns -1 when there's no native fullscreen state to report (non-Apple platforms, or a null native
+// window) so callers fall back to a borderless window.
+#if defined(__APPLE__)
+#include <objc/message.h>
+#include <objc/runtime.h>
+namespace das {
+    bool DAS_glfwToggleNativeFullscreen ( GLFWwindow* window ) {
+        void * win = glfwGetCocoaWindow(window);
+        if ( !win ) return false;
+        // OR-in NSWindowCollectionBehaviorFullScreenPrimary (1<<7) to permit toggleFullScreen: without
+        // clobbering the behavior flags GLFW already set
+        unsigned long cb = ((unsigned long(*)(void*,SEL))objc_msgSend)(win, sel_registerName("collectionBehavior"));
+        ((void(*)(void*,SEL,unsigned long))objc_msgSend)(win, sel_registerName("setCollectionBehavior:"), cb | (1ul<<7));
+        ((void(*)(void*,SEL,void*))objc_msgSend)(win, sel_registerName("toggleFullScreen:"), nullptr);
+        return true;
+    }
+    int DAS_glfwIsNativeFullscreen ( GLFWwindow* window ) {
+        void * win = glfwGetCocoaWindow(window);
+        if ( !win ) return -1;
+        // NSWindowStyleMaskFullScreen (1<<14)
+        unsigned long mask = ((unsigned long(*)(void*,SEL))objc_msgSend)(win, sel_registerName("styleMask"));
+        return (mask & (1ul<<14)) ? 1 : 0;
+    }
+}
+#else
+namespace das {
+    bool DAS_glfwToggleNativeFullscreen ( GLFWwindow* ) { return false; }
+    int DAS_glfwIsNativeFullscreen ( GLFWwindow* ) { return -1; }
+}
+#endif
+
 
 namespace das {
 
@@ -444,6 +478,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeWindow)>(*this, lib, "glfwGetNativeWindow",SideEffects::worstDefault, "DAS_glfwGetNativeWindow")
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeDisplay)>(*this, lib, "glfwGetNativeDisplay",SideEffects::worstDefault, "DAS_glfwGetNativeDisplay");
+        addExtern<DAS_BIND_FUN(DAS_glfwToggleNativeFullscreen)>(*this, lib, "glfwToggleNativeFullscreen",SideEffects::worstDefault, "DAS_glfwToggleNativeFullscreen")
+            ->args({"window"});
+        addExtern<DAS_BIND_FUN(DAS_glfwIsNativeFullscreen)>(*this, lib, "glfwIsNativeFullscreen",SideEffects::worstDefault, "DAS_glfwIsNativeFullscreen")
+            ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwInitVulkanLoader)>(*this, lib, "glfwInitVulkanLoader",SideEffects::worstDefault, "DAS_glfwInitVulkanLoader")
             ->args({"loader"});
     }

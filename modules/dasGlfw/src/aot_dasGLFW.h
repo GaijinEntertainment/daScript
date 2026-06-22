@@ -16,6 +16,8 @@ namespace das {
     DAS_MOD_API void DasGlfw_Shutdown();
     DAS_MOD_API void DasGlfw_DestroyWindow ( GLFWwindow * window );
     DAS_MOD_API void * DAS_glfwGetNativeWindow ( GLFWwindow* window );
+    DAS_MOD_API bool DAS_glfwToggleNativeFullscreen ( GLFWwindow* window );
+    DAS_MOD_API int DAS_glfwIsNativeFullscreen ( GLFWwindow* window );
     DAS_MOD_API void DAS_glfwInitVulkanLoader ( void * loader );
     // chain + synthetic event API
     DAS_MOD_API void DasGlfw_ChainAddCursorPos ( GLFWwindow * window, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx );
