@@ -2394,8 +2394,11 @@ class SpirvEmit : AstVisitor {
             // member of a local struct VALUE (e.g. `let inst = instances[i]; inst.pos_scale`): the let
             // holds the loaded composite (value_of in visitExprLetVariable), so extract the member by
             // index -- the value-path twin of the e2ptr access-chain branch above. Reads only (a `let`).
+            // Gate on the base having actually lowered to a value id (e2id): a struct-typed base that did
+            // NOT lower (e.g. an unsupported struct-returning call `foo().field`) falls through to the
+            // clean "not supported" error below, rather than a confusing "internal: no rvalue" out of value_of.
             let lest = expr.value._type.structType
-            if (lest != null) {
+            if (lest != null && key_exists(e2id, intptr(expr.value))) {
                 let lmidx = field_index_by_name(lest, "{expr.name}")
                 if (lmidx < 0) {
                     errs |> push("member access '.{expr.name}': no such field on '{lest.name}'")
