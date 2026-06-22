@@ -12,3 +12,4 @@ module does and where its docs live.
    dasimguinodeeditor
    dasimguiimplot
    dasvulkan
+   dasvideo
