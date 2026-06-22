@@ -676,6 +676,27 @@ def public imgfmt_words : array<uint> {
     return clone_to_move(imgfmt_spv)
 }
 
+// ===== local struct value member access: `let e = ssbo[i]; e.field` copies an SSBO struct element into
+// an immutable local, then reads members off it. The let holds the loaded composite (OpLoad of the whole
+// struct), so each member access lowers to OpCompositeExtract -- the value-path twin of the indexed
+// access-chain form (`ssbo[i].field`). Reads only. spirv-val'd. =====
+struct LsvElem {
+    a : float4
+    b : float4
+}
+var @ssbo @binding = 0 lsv_in : array<LsvElem>
+var @ssbo @binding = 1 lsv_out : array<float4>
+[compute_shader(local_size_x=64, name="lsvmember_spv"), marker(no_coverage)]
+def lsvmember {
+    let i = int(gl_GlobalInvocationID.x)
+    let e = lsv_in[i]              // local copy of an SSBO struct element (OpLoad of the whole composite)
+    lsv_out[i] = e.a + e.b         // two member reads -> exactly two OpCompositeExtract (no swizzles)
+}
+
+def public lsvmember_words : array<uint> {
+    return clone_to_move(lsvmember_spv)
+}
+
 // ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
 // texelFetch -> OpImage (extract image from the sampled image) + OpImageFetch. Both are derivative-free,
 // so this fixture samples in a COMPUTE shader -- proving the stage lift (texture() is fragment-only). =====

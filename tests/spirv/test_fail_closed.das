@@ -47,6 +47,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_call", "cannot call 'safe_acos'")
         check_rejects(t, "_fc_global", "unsupported global 'g_scale'")
         check_rejects(t, "_fc_image_format", "unsupported @format")
+        check_rejects(t, "_fc_local_struct_nested", "struct/array members of a local struct value are not yet supported")
         check_rejects(t, "_fc_localtype", "type tDouble is not supported")
         check_rejects(t, "_fc_stmt", "memzero is not supported in SPIR-V shaders")
         check_rejects(t, "_fc_deadcode", "unreachable code after a block terminator")

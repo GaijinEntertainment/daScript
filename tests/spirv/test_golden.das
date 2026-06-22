@@ -147,6 +147,7 @@ def test_golden_disassembly(t : T?) {
         check_iso(t, "conv", conv_words())
         check_iso(t, "storimg", storimg_words())
         check_iso(t, "imgfmt", imgfmt_words())
+        check_iso(t, "lsvmember", lsvmember_words())
         check_iso(t, "texlod", texlod_words())
         check_iso(t, "dims", dims_words())
         check_iso(t, "septex", septex_words())

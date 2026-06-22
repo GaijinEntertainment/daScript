@@ -2391,7 +2391,31 @@ class SpirvEmit : AstVisitor {
                 e2pty[k] = pointee
                 return expr
             }
-            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global or an indexed ssbo struct element for now")
+            // member of a local struct VALUE (e.g. `let inst = instances[i]; inst.pos_scale`): the let
+            // holds the loaded composite (value_of in visitExprLetVariable), so extract the member by
+            // index -- the value-path twin of the e2ptr access-chain branch above. Reads only (a `let`).
+            let lest = expr.value._type.structType
+            if (lest != null) {
+                let lmidx = field_index_by_name(lest, "{expr.name}")
+                if (lmidx < 0) {
+                    errs |> push("member access '.{expr.name}': no such field on '{lest.name}'")
+                    return expr
+                }
+                // A nested struct / fixed-array member would need its laid-out type to match the loaded
+                // composite -- not handled here; fail closed rather than emit a mismatched extract.
+                if (expr._type != null && (expr._type.baseType == Type.tStructure || expr._type.baseType == Type.tFixedArray)) {
+                    errs |> push("member access '.{expr.name}': struct/array members of a local struct value are not yet supported (index the ssbo element directly, e.g. arr[i].{expr.name})")
+                    return expr
+                }
+                let lbase = value_of(expr.value)
+                if (lbase == 0u) return expr   // base failed to lower (error already pushed)
+                let lrt = emit_type(bm, expr._type)
+                let lres = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.CompositeExtract, lrt, lres, lbase, uint(lmidx))
+                e2id[k] = lres
+                return expr
+            }
+            errs |> push("member access '.{expr.name}' is only supported on a @uniform/@ssbo/@push_constant block global, an indexed ssbo struct element, or a local struct value for now")
             return expr
         }
         let gi = ctx.globals?[intptr(bv)] ?? GlobalInfo()
