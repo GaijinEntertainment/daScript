@@ -58,6 +58,7 @@ def main {
     emit_golden(dir, "conv", conv_words())
     emit_golden(dir, "storimg", storimg_words())
     emit_golden(dir, "imgfmt", imgfmt_words())              // storage-image @format qualifier (r32f + default rgba8)
+    emit_golden(dir, "lsvmember", lsvmember_words())        // local struct value member access (CompositeExtract)
     emit_golden(dir, "texlod", texlod_words())
     emit_golden(dir, "dims", dims_words())
     emit_golden(dir, "septex", septex_words())
