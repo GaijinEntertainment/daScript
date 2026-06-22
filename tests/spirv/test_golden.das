@@ -146,6 +146,7 @@ def test_golden_disassembly(t : T?) {
         // result ids the post-order visitor allocates after their operands.
         check_iso(t, "conv", conv_words())
         check_iso(t, "storimg", storimg_words())
+        check_iso(t, "imgfmt", imgfmt_words())
         check_iso(t, "texlod", texlod_words())
         check_iso(t, "dims", dims_words())
         check_iso(t, "septex", septex_words())

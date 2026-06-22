@@ -507,6 +507,18 @@ def private storage_image_info(t : TypeDecl?) : tuple<ok : bool; dim : SpvDim> {
     return (ok = false, dim = SpvDim._2D)
 }
 
+// Map a GLSL-style storage-image format qualifier (`@format = "r32f"`) to its SpvImageFormat. Only the
+// float-sampled formats are supported -- integer formats (r32i/r32ui/...) would need int/uint
+// imageLoad/imageStore overloads, a separate scope. ok=false -> caller emits a fail-closed error.
+def private parse_storage_image_format(s : string) : tuple<ok : bool; fmt : SpvImageFormat> {
+    if (s == "" || s == "rgba8") return (ok = true, fmt = SpvImageFormat.Rgba8)
+    if (s == "rgba8_snorm") return (ok = true, fmt = SpvImageFormat.Rgba8Snorm)
+    if (s == "rgba16f") return (ok = true, fmt = SpvImageFormat.Rgba16f)
+    if (s == "rgba32f") return (ok = true, fmt = SpvImageFormat.Rgba32f)
+    if (s == "r32f") return (ok = true, fmt = SpvImageFormat.R32f)
+    return (ok = false, fmt = SpvImageFormat.Rgba8)
+}
+
 // subpassInput is the opaque marker for a Vulkan subpass input attachment. Same recognition pattern
 // as sampler/image globals -- a tStructure named "subpassInput" -> Dim=SubpassData OpTypeImage in
 // UniformConstant storage (sampled=2, no format), decorated with InputAttachmentIndex, sampled via
@@ -852,11 +864,18 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         return
     }
     // storage image: a global of an opaque image type (image2D) -> UniformConstant OpTypeImage with a
-    // KNOWN format (Rgba8, sampled=2) so no without-format capability is required. DescriptorSet/Binding;
-    // read/written via imageLoad/imageStore. Not in the entry interface (UniformConstant, SPIR-V <= 1.3).
+    // KNOWN format (default Rgba8, or @format = "r32f"/"rgba16f"/...; sampled=2) so no without-format
+    // capability is required. DescriptorSet/Binding; read/written via imageLoad/imageStore. Not in the
+    // entry interface (UniformConstant, SPIR-V <= 1.3).
     let ii = storage_image_info(v._type)
     if (ii.ok) {
-        let img = type_image(m, type_float(m, 32u), ii.dim, 0u, 2u, SpvImageFormat.Rgba8)
+        let fmt_str = v.annotation |> find_arg("format") ?as tString ?? "rgba8"
+        let pf = parse_storage_image_format(fmt_str)
+        if (!pf.ok) {
+            errors |> push("storage image '{vname}': unsupported @format '{fmt_str}' (supported: rgba8, rgba8_snorm, rgba16f, rgba32f, r32f)")
+            return
+        }
+        let img = type_image(m, type_float(m, 32u), ii.dim, 0u, 2u, pf.fmt)
         let pt = type_pointer(m, SpvStorageClass.UniformConstant, img)
         let vid = alloc_id(m)
         emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))

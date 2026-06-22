@@ -58,6 +58,7 @@ def test_opcode_census(t : T?) {
         add_set(present, tex_frag_words())
         add_set(present, conv_words())
         add_set(present, storimg_words())
+        add_set(present, imgfmt_words())
         add_set(present, texlod_words())
         add_set(present, dims_words())
         add_set(present, septex_words())

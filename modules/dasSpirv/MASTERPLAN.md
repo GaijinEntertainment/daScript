@@ -1719,3 +1719,26 @@ spirv-val `--target-env vulkan1.3`. Goldens frozen for both (the `OpExecutionMod
 config). Two fail-closed fixtures (`_fc_mesh_topology`, `_fc_mesh_count`) in `test_fail_closed.das`.
 Census unchanged — the topology / counts are `OpExecutionMode` operands, not new opcodes. 144/144
 interp + JIT, spirv-val clean.
+
+### Storage-image `@format` qualifier (R32f) — LANDED (2026-06-22, branch `bbatkin/dasspirv-storage-image-format`)
+
+Tutorial-12 (GPU-driven Hi-Z occlusion culling) prereq. A storage `image2D` global can now declare its
+texel format with a GLSL `layout(...)`-style annotation: `var @binding=0 @format = "r32f" hzb : image2D`.
+The Hi-Z depth pyramid needs **R32f** storage (8-bit Rgba8 is unusable for occlusion depth); the emitter
+previously hardwired every `image2D` to Rgba8.
+
+**What landed:**
+- `parse_storage_image_format(s)` maps the qualifier to `SpvImageFormat` — the float-sampled set
+  `rgba8` (default) / `rgba8_snorm` / `rgba16f` / `rgba32f` / `r32f`. Integer formats (r32i/r32ui/…) are
+  out of scope (would need int/uint `imageLoad`/`imageStore` overloads) and **fail closed**.
+- `classify_global` reads `@format` (default `"rgba8"`) and threads it into `type_image`. The low-level
+  builder already took a `format` arg, and `imageLoad`/`imageStore`/`imageSize` are format-agnostic (the
+  format lives on `OpTypeImage`), so only the classifier changed. **An arg-less `image2D` is byte-identical
+  to before** — every existing golden unchanged.
+
+**Tests/gates:** `imgfmt` fixture (an `@format="r32f"` image + a default-Rgba8 image in one compute shader)
+in `_spirv_common.das`; `test_storage_image_format.das` asserts two distinct `OpTypeImage` (R32f + Rgba8 at
+format operand 7), sampled=2 preserved, `OpImageRead`/`OpImageWrite`, spirv-val clean. Golden frozen
+(`imgfmt`, check_iso). Fail-closed fixture `_fc_image_format` (`@format="bogus"`) in `test_fail_closed.das`.
+Census unchanged (format is an `OpTypeImage` operand, not a new opcode). 162/162 interp + spirv-val +
+lint(0) + format + AOT-codegen clean.
