@@ -159,22 +159,44 @@ bool live_is_reload() {
     return g_state.is_reload;
 }
 
-float live_get_dt() {
-    if (!g_state.live_mode) {
-        // Standalone mode: compute dt from elapsed time
-        auto now = std::chrono::steady_clock::now();
-        if (!g_state.time_initialized) {
-            g_state.last_time = now;
-            g_state.time_initialized = true;
-            return 0.0f;
-        }
-        float dt = std::chrono::duration<float>(now - g_state.last_time).count();
+// Measure the wall-clock delta since the last call and cache it into g_state.dt (+ uptime).
+// Shared by the frame-driven path (live_advance_frame_clock) and the undriven get_dt() fallback.
+static void measure_wall_clock_dt() {
+    auto now = std::chrono::steady_clock::now();
+    if (!g_state.time_initialized) {
         g_state.last_time = now;
-        g_state.dt = dt;
-        g_state.uptime_accum += dt;            // double accumulator — drift-free over long sessions
-        g_state.uptime = float(g_state.uptime_accum);
+        g_state.time_initialized = true;
+        g_state.dt = 0.0f;
+        return;
     }
-    return g_state.dt;
+    float dt = std::chrono::duration<float>(now - g_state.last_time).count();
+    g_state.last_time = now;
+    g_state.dt = dt;
+    g_state.uptime_accum += dt;            // double accumulator — drift-free over long sessions
+    g_state.uptime = float(g_state.uptime_accum);
+}
+
+// Standalone: compute THIS frame's dt once and cache it in g_state.dt. Call once per frame (from
+// live_begin_frame). Under the live host the host owns the clock, so this is a no-op. Caching makes
+// get_dt() idempotent within a frame — every get_dt() call in one frame returns the same value
+// (matching live-host behavior). Before this, standalone get_dt() recomputed a wall-clock delta on
+// EVERY call, so a frame's dt was split across however many times the frame called get_dt(): the sim
+// accumulator (first call) got the big slice and was fine, but later callers (e.g. the render pass's
+// pulse/crossfade/camera) got a near-zero sliver, freezing time-based effects.
+void live_advance_frame_clock() {
+    if (g_state.live_mode) return;
+    g_state.frame_clock_driven = true;     // a frame driver owns the clock now → get_dt() returns the cache
+    measure_wall_clock_dt();
+}
+
+float live_get_dt() {
+    // Undriven standalone caller (no frame loop calling advance_frame_clock, not under the host):
+    // self-advance per call so direct live_host users keep the legacy "get_dt computes time" contract.
+    // Once a frame driver has called advance_frame_clock, return the stable per-frame cache instead.
+    if (!g_state.live_mode && !g_state.frame_clock_driven) {
+        measure_wall_clock_dt();
+    }
+    return g_state.dt;   // per-frame cache: set by live_advance_frame_clock (standalone) or by the host
 }
 
 float live_get_uptime() {
@@ -417,6 +439,8 @@ public:
         // Timing
         addExtern<DAS_BIND_FUN(live_get_dt)>(*this, lib, "get_dt",
             SideEffects::accessGlobal, "das::live_get_dt");
+        addExtern<DAS_BIND_FUN(live_advance_frame_clock)>(*this, lib, "advance_frame_clock",
+            SideEffects::modifyExternal, "das::live_advance_frame_clock");
         addExtern<DAS_BIND_FUN(live_get_uptime)>(*this, lib, "get_uptime",
             SideEffects::accessGlobal, "das::live_get_uptime");
         addExtern<DAS_BIND_FUN(live_get_fps)>(*this, lib, "get_fps",

@@ -1,23 +1,23 @@
 options gen2
 options persistent_heap
+options gc
 
 require glfw/glfw_boost
 require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
-require live/opengl_live
+require live/opengl_live // nolint:STYLE030 — side-effect registration for live-reload
 require live/live_commands
 require live/live_api
-require live/live_watch_boost
+require live/live_watch_boost // nolint:STYLE030 — side-effect registration for live-reload
 require live/live_vars
-require live/audio_live
+require live/audio_live // nolint:STYLE030 — side-effect registration for live-reload
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live
+require strudel/strudel_live // nolint:STYLE030 — side-effect registration for live-reload
 require daslib/math_boost
-require daslib/json
 require daslib/json_boost
 require daslib/strings_boost
 require daslib/safe_addr
@@ -477,25 +477,14 @@ def create_gl_objects() {
 }
 
 def gen_ship_triangle() {
-    var frag : GeometryFragment
-    frag.vertices |> push(GeometryPreviewVertex(
-        xyz = float3(0.0, 1.2, 0.0),
-        normal = float3(0.0, 0.0, 1.0),
-        uv = float2(0.5, 1.0)
-    ))
-    frag.vertices |> push(GeometryPreviewVertex(
-        xyz = float3(-0.75, -0.8, 0.0),
-        normal = float3(0.0, 0.0, 1.0),
-        uv = float2(0.0, 0.0)
-    ))
-    frag.vertices |> push(GeometryPreviewVertex(
-        xyz = float3(0.75, -0.8, 0.0),
-        normal = float3(0.0, 0.0, 1.0),
-        uv = float2(1.0, 0.0)
-    ))
-    frag.indices |> push(0)
-    frag.indices |> push(1)
-    frag.indices |> push(2)
+    var frag <- GeometryFragment(
+        vertices <- [
+            GeometryPreviewVertex(xyz = float3(0.0, 1.2, 0.0),  normal = float3(0.0, 0.0, 1.0), uv = float2(0.5, 1.0)),
+            GeometryPreviewVertex(xyz = float3(-0.75, -0.8, 0.0), normal = float3(0.0, 0.0, 1.0), uv = float2(0.0, 0.0)),
+            GeometryPreviewVertex(xyz = float3(0.75, -0.8, 0.0),  normal = float3(0.0, 0.0, 1.0), uv = float2(1.0, 0.0))
+        ]
+    )
+    frag.indices <- [0, 1, 2]
     frag.prim = GeometryFragmentType.triangles
     gen_bbox(frag)
     return <- frag
@@ -568,7 +557,7 @@ def spawn_asteroid(pos : float3; size, speed_mult : float = 1.0) {
 }
 
 def spawn_particles(origin, color : float3; count : int) {
-    create_entities`Particle(count) $(eid : EntityId; i : int; var p : Particle) {
+    create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
         let speed = 50.0 + random_f() * 100.0
         p.pos = origin
@@ -624,7 +613,7 @@ def apply_powerup(kind : PowerupType) {
         rapid_fire_timer = max(rapid_fire_timer, POWERUP_RAPID_FIRE_TIME)
         spawn_particles(ship_pos, powerup_color(kind), 8)
     } elif (kind == PowerupType.extra_life) {
-        lives += 1
+        lives++
         spawn_particles(ship_pos, powerup_color(kind), 10)
     } else {
         invuln_powerup_timer = max(invuln_powerup_timer, POWERUP_INVULN_TIME)
@@ -643,7 +632,7 @@ def spawn_wave(wave : int) {
         var tries = 0
         while (tries < 8 && wrapped_distance_sq(pos, ship_pos) < 180.0 * 180.0) {
             pos = float3(random_range(0.0, FIELD_W), random_range(0.0, FIELD_H), 0.0)
-            tries += 1
+            tries++
         }
         spawn_asteroid(pos, random_range(ASTEROID_MIN_SIZE, max_size), speed_mult)
     }
@@ -679,20 +668,16 @@ def reset_game() {
 }
 
 def update_ship() {
-    if (game_state != GameState.playing) {
+    if (game_state != GameState.playing || ship_respawn_timer > DEATH_BLINK_TIME) {
         return
     }
 
-    if (ship_respawn_timer > DEATH_BLINK_TIME) {
-        return
-    }
+    let up = glfwGetKey(live_window, GLFW_KEY_W) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_UP) == GLFW_PRESS
+    let down = glfwGetKey(live_window, GLFW_KEY_S) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_DOWN) == GLFW_PRESS
+    let left = glfwGetKey(live_window, GLFW_KEY_A) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS
+    let right = glfwGetKey(live_window, GLFW_KEY_D) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS
 
-    let up = glfwGetKey(live_window, int(GLFW_KEY_W)) == int(GLFW_PRESS) || glfwGetKey(live_window, int(GLFW_KEY_UP)) == int(GLFW_PRESS)
-    let down = glfwGetKey(live_window, int(GLFW_KEY_S)) == int(GLFW_PRESS) || glfwGetKey(live_window, int(GLFW_KEY_DOWN)) == int(GLFW_PRESS)
-    let left = glfwGetKey(live_window, int(GLFW_KEY_A)) == int(GLFW_PRESS) || glfwGetKey(live_window, int(GLFW_KEY_LEFT)) == int(GLFW_PRESS)
-    let right = glfwGetKey(live_window, int(GLFW_KEY_D)) == int(GLFW_PRESS) || glfwGetKey(live_window, int(GLFW_KEY_RIGHT)) == int(GLFW_PRESS)
-
-    let mouse_aim_active = mouse_aim_enabled && glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_2)) == int(GLFW_PRESS)
+    let mouse_aim_active = mouse_aim_enabled && glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS
     if (mouse_aim_active) {
         let d = mouse_world - ship_pos
         if (length_sq(d) > 1.0) {
@@ -716,8 +701,8 @@ def update_ship() {
         ship_vel -= ship_forward(ship_rotation) * force
     }
 
-    let fire_kb = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
-    let fire_mouse = mouse_fire_enabled && glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
+    let fire_kb = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
+    let fire_mouse = mouse_fire_enabled && glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS
     let fire_cooldown = (rapid_fire_timer > 0.0 ? FIRE_COOLDOWN * 0.5 : FIRE_COOLDOWN)
     let now = get_uptime()
     if (ship_respawn_timer <= 0.0 && (fire_kb || fire_mouse) && now - last_shot_time > fire_cooldown) {
@@ -868,7 +853,7 @@ def process_collisions() {
             }
         }
         if (ship_hit) {
-            lives -= 1
+            lives--
             spawn_particles(ship_pos, float3(1.0, 0.4, 0.3), 16)
             ship_pos = float3(FIELD_W * 0.5, FIELD_H * 0.5, 0.0)
             ship_vel = float3(0.0)
@@ -931,7 +916,7 @@ def update() {
     update_mouse_world()
 
     if (game_state == GameState.game_over_state || game_state == GameState.win_state) {
-        if (glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)) {
+        if (glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
             reset_game()
         }
     }
@@ -958,8 +943,8 @@ def update() {
             game_state = GameState.win_state
             wave_banner_timer = 0.0
         } else {
-            wave_number += 1
-            lives += 1
+            wave_number++
+            lives++
             wave_banner_timer = WAVE_BANNER_DURATION
             var inscope to_delete : array<EntityId>
             query() $(eid : EntityId; b : Bullet) {
@@ -1100,7 +1085,8 @@ def main() {
     var frame_count = 0
     while (!exit_requested()) {
         update()
-        frame_count += 1
+        maybe_collect_gc()
+        frame_count++
         if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
             break
         }

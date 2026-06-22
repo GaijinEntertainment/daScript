@@ -33,6 +33,10 @@ namespace das {
         float fps = 0.0f;
         std::chrono::steady_clock::time_point last_time;
         bool time_initialized = false;
+        // True once a frame driver (live_begin_frame → advance_frame_clock) owns the clock; then
+        // get_dt() returns the per-frame cache. Until then a direct live_host user's get_dt()
+        // self-advances per call (legacy standalone contract).
+        bool frame_clock_driven = false;
         // Lockstep recording: 0 = wall-clock (normal), > 0 = fixed dt per frame.
         // When set, the host advances the clock by exactly fixed_dt each frame
         // instead of measured wall time, so capture cadence, animation, and the
@@ -74,6 +78,7 @@ namespace das {
     void live_request_reset();
     uint64_t live_get_reload_generation();
     bool live_is_reload();
+    void live_advance_frame_clock();
     float live_get_dt();
     float live_get_uptime();
     float live_get_fps();

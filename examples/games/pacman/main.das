@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 
 require glfw/glfw_boost
 require live/glfw_live
@@ -9,14 +10,13 @@ require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-require live/decs_live
-require live/opengl_live
+require live/decs_live    // nolint:STYLE030 — load-bearing: registers decs live-reload hooks
+require live/opengl_live  // nolint:STYLE030 — load-bearing: registers opengl live-reload hooks
 require live/live_commands
 require live/live_api
-require live/live_watch_boost
+require live/live_watch_boost // nolint:STYLE030 — load-bearing: registers live-watch hooks
 require live/live_vars
-require live/audio_live
-require daslib/json
+require live/audio_live       // nolint:STYLE030 — load-bearing: registers audio live-reload hooks
 require daslib/json_boost
 require daslib/math_boost
 require daslib/archive
@@ -24,7 +24,7 @@ require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live
+require strudel/strudel_live  // nolint:STYLE030 — load-bearing: registers strudel live-reload hooks
 require daslib/strings_boost
 require live_host
 
@@ -330,12 +330,12 @@ def gen_pac_sphere(sectorCount, stackCount : int; mouth_half_angle : float) {
             let a   = mid > PI ? mid - 2.0 * PI : mid
             if (abs(a) >= mouth_half_angle) {
                 if (i != 0) {
-                    frag.indices |> push(k1)
+                    frag.indices |> push(k1) // nolint:STYLE012 — conditional per-iteration pushes; not a bulk literal assignment
                     frag.indices |> push(k2)
                     frag.indices |> push(k1 + 1)
                 }
                 if (i != (stackCount - 1)) {
-                    frag.indices |> push(k1 + 1)
+                    frag.indices |> push(k1 + 1) // nolint:STYLE012 — conditional per-iteration pushes; not a bulk literal assignment
                     frag.indices |> push(k2)
                     frag.indices |> push(k2 + 1)
                 }
@@ -661,7 +661,7 @@ def draw_pellets(prog : uint) {
                 let wpos = cell_to_world(col, row)
                 draw_sphere_obj(float3(wpos.x, wpos.y, 0.08), 0.1, PELLET_COLOR, prog)
             } elif (power_pills[idx]) {
-                let t = float(get_uptime())
+                let t = get_uptime()
                 let pulse = 0.15 + 0.05 * sin(t * 4.0)
                 let wpos = cell_to_world(col, row)
                 draw_sphere_obj(float3(wpos.x, wpos.y, 0.12), pulse, POWER_COLOR, prog)
@@ -692,7 +692,7 @@ def draw_hud() {
     let cy = display_h / 2
     if (game_state == GameState.menu) {
         draw_text_centered("PAC-MAN", cx, cy - 60, float3(1.0, 0.9, 0.1))
-        let pulse = 0.5 + 0.5 * sin(float(get_uptime()) * 3.0)
+        let pulse = 0.5 + 0.5 * sin(get_uptime() * 3.0)
         draw_text_centered("PRESS SPACE TO START", cx, cy + 10, float3(pulse, pulse, pulse))
         draw_text_centered("ARROW KEYS TO MOVE", cx, cy + 45, float3(0.6, 0.6, 0.6))
         return
@@ -704,7 +704,7 @@ def draw_hud() {
         draw_text("POWER!", display_w - 130, 35, float3(1.0, 0.5, 0.0))
     }
     if (game_state == GameState.ready) {
-        let pulse = 0.5 + 0.5 * sin(float(get_uptime()) * 6.0)
+        let pulse = 0.5 + 0.5 * sin(get_uptime() * 6.0)
         draw_text_centered("READY!", cx, cy, float3(1.0, 1.0, 0.2) * pulse)
     } elif (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
@@ -777,17 +777,17 @@ def update_pac(dt : float) {
     if (pac_dead || game_state != GameState.playing) { return ; }
 
     // Read input → queue next direction
-    if (glfwGetKey(live_window, int(GLFW_KEY_RIGHT)) == int(GLFW_PRESS)) { pac_next = int2(1, 0); }
-    if (glfwGetKey(live_window, int(GLFW_KEY_LEFT))  == int(GLFW_PRESS)) { pac_next = int2(-1, 0); }
-    if (glfwGetKey(live_window, int(GLFW_KEY_UP))    == int(GLFW_PRESS)) { pac_next = int2(0, 1); }
-    if (glfwGetKey(live_window, int(GLFW_KEY_DOWN))  == int(GLFW_PRESS)) { pac_next = int2(0, -1); }
+    if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) { pac_next = int2(1, 0); }
+    if (glfwGetKey(live_window, GLFW_KEY_LEFT)  == GLFW_PRESS) { pac_next = int2(-1, 0); }
+    if (glfwGetKey(live_window, GLFW_KEY_UP)    == GLFW_PRESS) { pac_next = int2(0, 1); }
+    if (glfwGetKey(live_window, GLFW_KEY_DOWN)  == GLFW_PRESS) { pac_next = int2(0, -1); }
 
     pac_anim += dt
     pac_move_acc += eff_pac_speed() * dt
 
     // Move by whole cells
     while (pac_move_acc >= 1.0) {
-        pac_move_acc -= 1.0
+        --pac_move_acc
         let cell = world_to_cell(pac_pos.x, pac_pos.y)
         let col  = cell.x
         let row  = cell.y
@@ -815,14 +815,14 @@ def update_pac(dt : float) {
         if (pellets[pi]) {
             pellets[pi] = false
             score += PELLET_SCORE
-            pellets_eaten_total += 1
-            dot_counter += 1
+            ++pellets_eaten_total
+            ++dot_counter
             play_sfx(snd_eat_pellet)
             // Bonus fruit trigger
             if (next_fruit_idx < 2 && pellets_eaten_total >= FRUIT_TRIGGER[next_fruit_idx] && !fruit.active) {
                 let fw = cell_to_world(10, 12)
                 fruit = Fruit(active = true, kind = next_fruit_idx, timer = 9.0, world_pos = fw)
-                next_fruit_idx += 1
+                ++next_fruit_idx
             }
             if (!has_pellets() && !power_pills_any()) {
                 game_state = GameState.win_state
@@ -885,7 +885,7 @@ def update_fruit(dt : float) {
 
 def draw_fruit(prog : uint) {
     if (!fruit.active) { return ; }
-    let pulse = 0.18 + 0.04 * sin(float(get_uptime()) * 5.0)
+    let pulse = 0.18 + 0.04 * sin(get_uptime() * 5.0)
     draw_sphere_obj(float3(fruit.world_pos.x, fruit.world_pos.y, 0.25), pulse, FRUIT_COLOR[fruit.kind], prog)
 }
 
@@ -1022,7 +1022,7 @@ def draw_ghost_ent(g : Ghost) {
     let rt = float2(fd.y, -fd.x)
 
     // Flee blink in last 2 seconds
-    let blink_active = g.flee && power_timer < 2.0 && (sin(float(get_uptime()) * 14.0) > 0.0)
+    let blink_active = g.flee && power_timer < 2.0 && (sin(get_uptime() * 14.0) > 0.0)
     let flee_visible = g.flee && !blink_active
 
     if (!g.eaten) {
@@ -1124,8 +1124,8 @@ def update() {
     // Screen shake
     var shake_off = float2(0.0)
     if (shake_timer > 0.0) {
-        shake_timer -= min(float(get_dt()), 1.0 / 30.0)
-        let t = float(get_uptime())
+        shake_timer -= min(get_dt(), 1.0 / 30.0)
+        let t = get_uptime()
         let decay = saturate(shake_timer / max(shake_mag * 3.0, 0.01))
         shake_off = float2(sin(t * 97.0), cos(t * 71.0)) * shake_mag * decay
     }
@@ -1136,12 +1136,12 @@ def update() {
         float3(0.0, 1.0, 0.0)
     )
 
-    let raw_dt = min(float(get_dt()), 1.0 / 30.0)
+    let raw_dt = min(get_dt(), 1.0 / 30.0)
     // Slow motion during death animation only (not on game over screen)
     let dt = (pac_dead && lives > 0) ? raw_dt * 0.2 : raw_dt
 
     // Input
-    let space_pressed = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
+    let space_pressed = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     let space_just = space_pressed && !space_was_pressed
     space_was_pressed = space_pressed
 
@@ -1212,7 +1212,7 @@ def update() {
         if (score_popups[spi].timer <= 0.0) {
             erase(score_popups, spi)
         }
-        spi -= 1
+        --spi
     }
 
     // Render
@@ -1245,6 +1245,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }
