@@ -415,6 +415,21 @@ else
     fail=1
 fi
 
+echo "22. cap_helper_swizzle.shader (helper swizzles a by-value vector param -> inlined cleanly)"
+out="$(compile "$here/cap_helper_swizzle.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+errs="$(echo "$out" | grep -ci error)"
+# the helper reads p.x/p.y/p.z; flatten inlines it and copy-prop substitutes the (value) argument
+# into the swizzle base. Before the typer folded ref2value-of-a-value this failed with error[30921]
+# "can only dereference a reference". A clean compile proves the swizzled-param helper inlined.
+if [[ "$errs" -eq 0 && "$nodes" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes); the swizzled-param helper inlined cleanly"
+else
+    echo "   FAIL — errors=$errs nodes=$nodes"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
 echo
 if [[ "$fail" -eq 0 ]]; then echo "capability: all checks passed"; else echo "capability: FAILED"; fi
 exit $fail
