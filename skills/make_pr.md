@@ -323,4 +323,4 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Wrap-up curation | `skills/task_wrap_up.md` | Optional. Add answers for cache misses, edit cached answers this PR invalidated |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
-| Review iter | Follow `skills/pr_review_iteration.md` | One round per Copilot pass; convergence in 1-3 rounds is normal |
+| Babysit | Follow `skills/babysit.md` | One round per Copilot pass; convergence in 1-3 rounds is normal |

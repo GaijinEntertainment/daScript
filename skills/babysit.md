@@ -1,6 +1,6 @@
-# PR Review Iteration
+# Babysit (PR review iteration)
 
-Use this skill after the pull request already exists. It covers the post-open loop: watching CI, triaging Copilot/human review comments, discussing verdicts with the user, applying fixes, replying, resolving threads, and re-requesting review.
+**Babysit** an open pull request through to merge. Use this skill after the PR already exists; it covers the post-open loop: watching CI, triaging Copilot/human review comments, discussing verdicts with the user, applying fixes, replying, resolving threads, and re-requesting review.
 
 ## 1. Watching the PR — the loop
 
