@@ -430,6 +430,21 @@ else
     fail=1
 fi
 
+echo "23. cap_inline_accumulator.shader (var accumulator in an inlined helper + parallel loop)"
+out="$(compile "$here/cap_inline_accumulator.shader")"
+nodes="$(echo "$out" | grep -c '^node ')"
+errs="$(echo "$out" | grep -ci error)"
+# the helper's `var threshold` accumulator is uniquified to __flat_loc_N when inlined; ssa_rename
+# must SSA-rename it like a user accumulator. Before that, it stayed a self-referential var whose
+# live init a later DSE stripped -> error[50503] undefined __flat_loc_N. (The dithering shader.)
+if [[ "$errs" -eq 0 && "$nodes" -gt 0 ]]; then
+    echo "   ok — compiles ($nodes nodes); the inlined-helper accumulator was SSA-renamed"
+else
+    echo "   FAIL — errors=$errs nodes=$nodes"
+    echo "$out" | grep -i error | head
+    fail=1
+fi
+
 echo
 if [[ "$fail" -eq 0 ]]; then echo "capability: all checks passed"; else echo "capability: FAILED"; fi
 exit $fail

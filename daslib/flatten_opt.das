@@ -25,6 +25,14 @@ def private is_flat_temp(name : das_string) : bool {
     return name |> starts_with("__flat_")
 }
 
+// Inlined-helper locals are uniquified to `__flat_loc_N` (inline_call). Unlike the loop/live
+// MASKS (`__flat_live`/`__flat_loop`/`__flat_iter`), an inlined `var` accumulator must be
+// SSA-renamed like a user accumulator — else it stays a self-referential `var` whose live init
+// a later DSE strips, leaving a null-init self-ref the shader backend rejects.
+def private is_flat_inlined_local(name : das_string) : bool {
+    return name |> starts_with("__flat_loc_")
+}
+
 // ===== Dead-store elimination =====
 // Straight-line body → liveness is one backward scan. Touches only `__flat_*` locals (never
 // user locals/globals); drops a store whose target is dead afterward and whose RHS is pure.
@@ -543,7 +551,8 @@ def public ssa_rename_pass(var out : array<ExpressionPtr>) {
     for (s in out) {
         if (s is ExprLet && length((s as ExprLet).variables) == 1) {
             let v = (s as ExprLet).variables[0]
-            if (!is_flat_temp(v.name) && v.init != null) declaredInit |> insert(hash(v.name))
+            // User locals, plus inline-renamed `__flat_loc_` accumulators (NOT the masks).
+            if ((!is_flat_temp(v.name) || is_flat_inlined_local(v.name)) && v.init != null) declaredInit |> insert(hash(v.name))
         }
     }
     if (empty(declaredInit)) {
