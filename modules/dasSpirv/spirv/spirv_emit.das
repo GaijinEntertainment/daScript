@@ -3535,7 +3535,7 @@ def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool
     // above; the named modules below have their calls intercepted by name (math -> GLSL.std.450,
     // spirv_builtins -> texture/imageStore/...), so they must never be emitted as OpFunctions.
     let mn = "{f._module.name}"
-    return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins")
+    return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins" || mn == "shader_lingua_franca")
 }
 
 // Validate a user function's signature, allocate its OpFunction id + OpTypeFunction, and record it.

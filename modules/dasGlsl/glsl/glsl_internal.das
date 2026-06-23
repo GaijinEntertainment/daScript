@@ -400,7 +400,7 @@ class GlslExport : AstVisitor {
             pass
         } elif (fun._module.name == "builtin") {
             pass
-        } elif (fun._module.name == "glsl_common") {
+        } elif (fun._module.name == "glsl_common" || fun._module.name == "shader_lingua_franca") {
             pass
         } elif (fun._module.name == "math" || fun._module.name == "math_bits") {
             pass
@@ -534,7 +534,7 @@ class GlslExport : AstVisitor {
         for_each_function(mod, "") $(fun) {
             if (depFun |> key_exists(intptr(fun))) {
                 if (!isMainFunction(fun)) {
-                    if (fun._module.name != "glsl_common") {
+                    if (fun._module.name != "glsl_common" && fun._module.name != "shader_lingua_franca") {
                         let ss = describe_glsl_function(fun)
                         *writer |> write("{ss};")
                         newLine(1)
@@ -707,7 +707,7 @@ class GlslExport : AstVisitor {
 // structure
     def override canVisitStructure(str : Structure?) {
         if (!(depStruct |> key_exists(intptr(str)))) return false
-        return !(str._module.name == "glsl_common")
+        return !(str._module.name == "glsl_common" || str._module.name == "shader_lingua_franca")
     }
     def override preVisitStructure(str : StructurePtr) {
         if (str.flags.isClass) {
@@ -762,7 +762,7 @@ class GlslExport : AstVisitor {
     }
 // function
     def override canVisitFunction(arg : Function?) : bool {
-        if (!depFun |> key_exists(intptr(arg)) || arg._module.name == "glsl_common") return false
+        if (!depFun |> key_exists(intptr(arg)) || arg._module.name == "glsl_common" || arg._module.name == "shader_lingua_franca") return false
         return !(arg._module.name == "math" || arg._module.name == "math_bits")
     }
     def override preVisitFunction(fun : FunctionPtr) {
@@ -883,7 +883,7 @@ class GlslExport : AstVisitor {
 // global let
     def override canVisitGlobalVariable(arg : Variable?) : bool {
         if (!depVar |> key_exists(intptr(arg))) return false
-        return !("{arg._module.name}" |> find("glsl_") != -1)
+        return !("{arg._module.name}" |> find("glsl_") != -1 || arg._module.name == "shader_lingua_franca")
     }
     def checkUniformType(typ : TypeDeclPtr) {
         if (!caps.restrict_uniform_types || typ.baseType == Type.tFloat4) return
@@ -1868,7 +1868,7 @@ def bind_uniform_function_name(fnMain : FunctionPtr) {
 [macro_function]
 def is_glsl_structure(arg; name : string) {
     if (arg._type.baseType == Type.tStructure) {
-        if (arg._type.structType._module.name == "glsl_common" && arg._type.structType.name == name) return true
+        if ((arg._type.structType._module.name == "glsl_common" || arg._type.structType._module.name == "shader_lingua_franca") && arg._type.structType.name == name) return true
     }
     return false
 }

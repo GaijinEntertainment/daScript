@@ -1,23 +1,19 @@
 options gen2
 
-// Shader builtin globals, recognized by name in the emitter (mirrors dasGlsl's glsl_common
-// gl_* declarations). They exist only so authored shader code typechecks; the shader body is
-// never executed in daslang — only its AST is read and lowered to SPIR-V. Each maps to a
-// BuiltIn-decorated variable in spirv_emit.das — Input for read-only builtins (the compute IDs,
-// gl_VertexIndex/gl_InstanceIndex, gl_FragCoord), Output for gl_Position (the one written builtin).
+// VK-specific shader builtins, recognized by name in spirv_emit.das. The modern, backend-invariant
+// surface (the compute IDs, gl_Position/gl_PointSize/gl_PointCoord, sampler2D/sampler3D/image2D,
+// texture()/textureSize()/imageLoad()/imageStore()/imageSize()/barrier()/memoryBarrierShared()/
+// discard()/dFdx()/dFdy()) now lives in shader_lingua_franca, re-exported below so every existing
+// `require spirv/spirv_builtins` consumer still sees it unchanged. This file keeps only what is
+// Vulkan/SPIR-V-specific. All declarations are AST-only: the body is never executed -- only the
+// reference/call AST is read and lowered to SPIR-V (a BuiltIn-decorated variable, or an opcode).
 
 module spirv_builtins shared public
 
-// compute
-var gl_NumWorkGroups        : uint3     // OpEntryPoint NumWorkgroups
-var gl_WorkGroupID          : uint3     // WorkgroupId
-var gl_LocalInvocationID    : uint3     // LocalInvocationId
-var gl_GlobalInvocationID   : uint3     // GlobalInvocationId
-var gl_LocalInvocationIndex : uint      // LocalInvocationIndex
+require daslib/shader_lingua_franca public
 
-// vertex (gl_Position + gl_PointSize are the Output builtins; the indices are Inputs)
-var gl_Position             : float4    // BuiltIn Position (Output)
-var gl_PointSize            : float     // BuiltIn PointSize (Output) — point size in pixels when rasterising POINT_LIST; needs the largePoints device feature for values > 1
+// ===== VK-specific builtin variables =====
+// vertex (the indices are Inputs)
 var gl_VertexIndex          : int       // BuiltIn VertexIndex (Input)
 var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
 var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-draw draw call ordinal; needs the DrawParameters capability (in core in SPIR-V 1.3)
@@ -25,7 +21,6 @@ var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-d
 // fragment
 var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
 var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
-var gl_PointCoord           : float2    // BuiltIn PointCoord (Input) — UV within the rasterised point primitive, [0,1]^2; valid only when POINT_LIST topology is rendered
 var gl_PrimitiveID          : int       // BuiltIn PrimitiveId (Input, fragment) — the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT[i].gl_PrimitiveID
 
 // ===== descriptor indexing =====
@@ -44,16 +39,9 @@ def public nonuniformEXT(x : int) : int { return x }
 def public nonuniformEXT(x : uint) : uint { return x }
 
 // ===== combined image samplers =====
-// sampler2D is an opaque marker type: a global of this type lowers to an OpTypeSampledImage in
-// UniformConstant storage (the emitter recognizes it by name in classify_global). The struct has no
-// fields — shader code never reads it directly, only passes it to texture(). texture() is likewise a
-// stub: its body is never executed (only the AST is read), and the call lowers to OpImageSampleImplicitLod.
-struct sampler2D {}
-
-[unused_argument(s, uv), sideeffects]
-def public texture(s : sampler2D; uv : float2) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+// sampler2D and the base texture(sampler2D, uv) sample live in shader_lingua_franca (shared). The
+// emitter recognizes sampler2D by name in classify_global and lowers it to an OpTypeSampledImage in
+// UniformConstant storage; the GL-superset `texture2D` field is ignored on this rail.
 
 // textureLod samples with an EXPLICIT level-of-detail (OpImageSampleExplicitLod): no screen-space
 // derivatives, so unlike texture() it is valid in any stage (vertex/compute), not fragment-only.
@@ -74,14 +62,10 @@ def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
 // image Dim + Arrayed flag). All sample via texture() with a float3 coordinate: a cubemap direction, a
 // 3D texture coordinate, or (u,v,layer) for a 2D array. The emitter's texture() handler is dimension-
 // agnostic, so these need only their marker type + a texture() overload.
-struct sampler3D {}
+// sampler3D + texture(sampler3D, uv) live in shader_lingua_franca (shared); samplerCube and
+// sampler2DArray are Vulkan-specific.
 struct samplerCube {}
 struct sampler2DArray {}
-
-[unused_argument(s, uv), sideeffects]
-def public texture(s : sampler3D; uv : float3) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
 
 [unused_argument(s, uv), sideeffects]
 def public texture(s : samplerCube; uv : float3) : float4 {
@@ -120,27 +104,9 @@ def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
 }
 
 // ===== storage images =====
-// image2D is an opaque marker for a read-write storage image (UniformConstant OpTypeImage with a
-// known Rgba8 format, recognized by name in classify_global). imageStore/imageLoad are stubs: their
-// bodies never run (only the AST is read), and they lower to OpImageWrite / OpImageRead. A KNOWN
-// format means no StorageImageRead/WriteWithoutFormat capability is required (lavapipe-safe).
-struct image2D {}
-
-[unused_argument(img, coord, value), sideeffects]
-def public imageStore(img : image2D; coord : int2; value : float4) : void {}
-
-[unused_argument(img, coord), sideeffects]
-def public imageLoad(img : image2D; coord : int2) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
-
-// imageSize is a stub too: it lowers to OpImageQuerySize (the storage image's dimensions in texels,
-// no LOD). Lets a compute shader size its pixel<->coordinate mapping off the bound image instead of a
-// hardcoded constant.
-[unused_argument(img), sideeffects]
-def public imageSize(img : image2D) : int2 {
-    return int2(0, 0)
-}
+// image2D + imageStore/imageLoad/imageSize live in shader_lingua_franca (shared). The emitter
+// recognizes image2D by name in classify_global and lowers it to a UniformConstant OpTypeImage with
+// a known Rgba8 format (no StorageImageRead/WriteWithoutFormat capability needed; lavapipe-safe).
 
 // ===== subpass input attachments (Vulkan deferred-rendering rail) =====
 // subpassInput is an opaque marker for a Vulkan subpass input attachment: a per-fragment read of a
@@ -161,23 +127,10 @@ def public subpassLoad(i : subpassInput) : float4 {
 }
 
 // ===== fragment realism =====
-// discard() abandons the current fragment (OpKill). It is a block terminator, so it must be the last
-// statement on its control-flow path (typically `if (cond) { discard() }`); fragment-only.
-[sideeffects]
-def public discard() : void {}
-
-// Screen-space partial derivatives over the 2x2 fragment quad: dFdx/dFdy (OpDPdx/OpDPdy), and
-// fwidth = |dFdx| + |dFdy| (OpFwidth). Fragment-only. Concrete per-width overloads (NOT a generic):
-// the emitter dispatches by the call name, and a generic instance carries a mangled name the
-// name-match would miss. The stub bodies are never executed — only the call AST is lowered.
-[unused_argument(p), sideeffects] def public dFdx(p : float) : float { return p }
-[unused_argument(p), sideeffects] def public dFdx(p : float2) : float2 { return p }
-[unused_argument(p), sideeffects] def public dFdx(p : float3) : float3 { return p }
-[unused_argument(p), sideeffects] def public dFdx(p : float4) : float4 { return p }
-[unused_argument(p), sideeffects] def public dFdy(p : float) : float { return p }
-[unused_argument(p), sideeffects] def public dFdy(p : float2) : float2 { return p }
-[unused_argument(p), sideeffects] def public dFdy(p : float3) : float3 { return p }
-[unused_argument(p), sideeffects] def public dFdy(p : float4) : float4 { return p }
+// discard() and the dFdx/dFdy partial derivatives live in shader_lingua_franca (shared). fwidth =
+// |dFdx| + |dFdy| (OpFwidth) is Vulkan-specific for now. Fragment-only; concrete per-width overloads
+// (NOT a generic): the emitter dispatches by the call name. Stub bodies never run -- the call AST is
+// what is lowered.
 [unused_argument(p), sideeffects] def public fwidth(p : float) : float { return p }
 [unused_argument(p), sideeffects] def public fwidth(p : float2) : float2 { return p }
 [unused_argument(p), sideeffects] def public fwidth(p : float3) : float3 { return p }
@@ -185,8 +138,8 @@ def public discard() : void {}
 
 // textureSize(sampler, lod): the mip-level dimensions in texels (OpImageQuerySizeLod; needs the
 // ImageQuery capability). int2 for 2D/Cube, int3 for 3D / 2D-array (width,height,depth-or-layers).
-[unused_argument(s, lod), sideeffects]
-def public textureSize(s : sampler2D; lod : int) : int2 { return int2(0, 0) }
+// textureSize(sampler2D, lod) -> int2 lives in shader_lingua_franca (shared); the wider-result
+// dimensionalities are kept here.
 [unused_argument(s, lod), sideeffects]
 def public textureSize(s : samplerCube; lod : int) : int2 { return int2(0, 0) }
 [unused_argument(s, lod), sideeffects]
@@ -195,15 +148,8 @@ def public textureSize(s : sampler3D; lod : int) : int3 { return int3(0, 0, 0) }
 def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0, 0) }
 
 // ===== compute synchronization =====
-// barrier() is a control + shared-memory barrier (OpControlBarrier at Workgroup scope): every
-// invocation in the workgroup waits here, and writes to @workgroup memory before the barrier are
-// visible to all after it. The must-have sync point for shared-memory compute (the tiled-reduction
-// pattern). memoryBarrierShared() is the memory-only variant (OpMemoryBarrier) -- it orders shared
-// writes without the execution rendezvous. Both compute-only; the stub bodies never run.
-[sideeffects]
-def public barrier() : void {}
-[sideeffects]
-def public memoryBarrierShared() : void {}
+// barrier() (OpControlBarrier at Workgroup scope) and memoryBarrierShared() (OpMemoryBarrier) live
+// in shader_lingua_franca (shared). Compute-only; the must-have sync points for shared-memory compute.
 
 // ===== atomics =====
 // Atomic read-modify-write on a @workgroup or @ssbo lvalue, returning the OLD value (GLSL/SPIR-V
