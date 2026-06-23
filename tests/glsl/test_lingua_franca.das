@@ -11,6 +11,7 @@ options no_unused_function_arguments = false
 //   gl_InstanceIndex -> gl_InstanceID  (the sibling per-instance-index rename)
 //   fwidth           -> fwidth(...)     (name-identical passthrough)
 //   gl_FragCoord     -> gl_FragCoord    (name-identical passthrough)
+//   gl_FragDepth     -> gl_FragDepth    (name-identical passthrough, write-only Output)
 
 require dastest/testing_boost public
 require glsl/glsl_opengl
@@ -34,6 +35,7 @@ def lf_vertex {
 def lf_fragment {
     let w = fwidth(gl_FragCoord.x)
     lf_frag_color = float4(w, gl_FragCoord.y, 0.0, 1.0)
+    gl_FragDepth = gl_FragCoord.z
 }
 
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
@@ -48,9 +50,10 @@ def test_lingua_franca_builtins(t : T?) {
         t |> success(has(lf_vs_glsl, "gl_InstanceID"), "vertex shader emits gl_InstanceID")
         t |> success(!has(lf_vs_glsl, "gl_InstanceIndex"), "the Vulkan spelling gl_InstanceIndex is fully renamed away")
     }
-    t |> run("fwidth + gl_FragCoord lower name-identically") <| @(t : T?) {
+    t |> run("fwidth + gl_FragCoord + gl_FragDepth lower name-identically") <| @(t : T?) {
         t |> success(has(lf_fs_glsl, "fwidth("), "fragment shader emits fwidth(...)")
         t |> success(has(lf_fs_glsl, "gl_FragCoord"), "fragment shader emits gl_FragCoord")
+        t |> success(has(lf_fs_glsl, "gl_FragDepth"), "fragment shader emits gl_FragDepth (write-only Output)")
     }
     t |> run("both stages carry the desktop-core version line") <| @(t : T?) {
         t |> success(has(lf_vs_glsl, "#version 330 core"), "vertex shader has #version 330 core")

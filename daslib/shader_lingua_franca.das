@@ -31,6 +31,7 @@ var gl_Position   : float4    // clip-space output position (vertex stage)
 var gl_PointSize  : float     // rasterised point size, POINT topology
 var gl_PointCoord : float2    // UV within a rasterised point, [0,1]^2 (fragment stage)
 var gl_FragCoord  : float4    // window-space fragment coordinate, .xy in pixels (fragment stage); GLSL name-identical, SPIR-V BuiltIn FragCoord
+var gl_FragDepth  : float     // fragment depth Output (fragment stage); GLSL name-identical (GL core + ES 3.0), SPIR-V BuiltIn FragDepth -- writing it forces the DepthReplacing execution mode
 // gl_VertexIndex / gl_InstanceIndex are the unified (Vulkan) spellings -- the SPIR-V emitter lowers
 // them to BuiltIn VertexIndex / InstanceIndex; the GLSL emitter renames them to gl_VertexID /
 // gl_InstanceID (the GLSL desktop-core / ES names for the same per-vertex / per-instance index) on
@@ -61,6 +62,21 @@ def public texture(s : sampler3D; uv : float3) : float4 {
 [unused_argument(s, lod), sideeffects]
 def public textureSize(s : sampler2D; lod : int) : int2 {
     return int2(0, 0)
+}
+
+// textureLod samples with an EXPLICIT level-of-detail: no screen-space derivatives, so unlike
+// texture() it is valid in any stage (vertex/compute), not fragment-only. GLSL name-identical
+// (core + ES 3.0); SPIR-V lowers it to OpImageSampleExplicitLod with a Lod operand.
+[unused_argument(s, uv, lod), sideeffects]
+def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+// texelFetch reads a single texel by integer coordinate + mip level, unfiltered. Stage-agnostic
+// (no derivatives). GLSL name-identical (core + ES 3.0); SPIR-V lowers it to OpImage + OpImageFetch.
+[unused_argument(s, coord, lod), sideeffects]
+def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
 }
 
 // ===== storage images =====

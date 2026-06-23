@@ -21,9 +21,10 @@ require daslib/shader_lingua_franca public
 var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-draw draw call ordinal; needs the DrawParameters capability (in core in SPIR-V 1.3)
 
 // fragment
-// gl_FragCoord (BuiltIn FragCoord, Input) lives in shader_lingua_franca (shared) -- GLSL spells it
-// identically, so it is part of the modern union. The SPIR-V emitter still keys it by name.
-var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
+// gl_FragCoord (BuiltIn FragCoord, Input) and gl_FragDepth (BuiltIn FragDepth, Output) live in
+// shader_lingua_franca (shared) -- GLSL spells both identically, so they are part of the modern
+// union. The SPIR-V emitter still keys them by name. gl_PrimitiveID stays VK-only (ES 3.2 GLSL,
+// outside the WebGL2 / GL-4.1 portable floor).
 var gl_PrimitiveID          : int       // BuiltIn PrimitiveId (Input, fragment) — the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT[i].gl_PrimitiveID
 
 // ===== descriptor indexing =====
@@ -45,20 +46,11 @@ def public nonuniformEXT(x : uint) : uint { return x }
 // sampler2D and the base texture(sampler2D, uv) sample live in shader_lingua_franca (shared). The
 // emitter recognizes sampler2D by name in classify_global and lowers it to an OpTypeSampledImage in
 // UniformConstant storage; the GL-superset `texture2D` field is ignored on this rail.
-
-// textureLod samples with an EXPLICIT level-of-detail (OpImageSampleExplicitLod): no screen-space
-// derivatives, so unlike texture() it is valid in any stage (vertex/compute), not fragment-only.
-[unused_argument(s, uv, lod), sideeffects]
-def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
-
-// texelFetch reads a single texel by integer coordinate + mip level, unfiltered (OpImage to extract the
-// image from the sampled image, then OpImageFetch). Stage-agnostic (no derivatives).
-[unused_argument(s, coord, lod), sideeffects]
-def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+// textureLod(sampler2D) and texelFetch(sampler2D) also live in shader_lingua_franca now -- both are
+// GLSL name-identical (core + ES 3.0), so they are part of the modern union; the SPIR-V emitter still
+// keys them by call name (resolve_sampler_arg) and lowers them to OpImageSampleExplicitLod /
+// OpImage+OpImageFetch. (textureLod for samplerCube / sampler2DArray would join them via overloads
+// here once those marker types move per the Plan-A decision.)
 
 // ===== additional sampler dimensionalities =====
 // Each is an opaque marker recognized by name in classify_global (sampler_info maps it to the SPIR-V
