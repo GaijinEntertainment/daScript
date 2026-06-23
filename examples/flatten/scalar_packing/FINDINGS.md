@@ -57,6 +57,35 @@ Two configs:
    - `blur` / `loop_multi` — data-parallel but **texture-bound** (each tap is a `tex2d`,
      already float3, no scalar arithmetic to pack).
 
+## Phase 2 (general SLP) — evaluated, not pursued
+
+After Phase 1 shipped (map-reduce loop re-roll), a corpus survey settled whether a general
+SLP pass — packing isomorphic scalar trees *not* from a loop reduction — was worth building.
+**It is not, on this corpus.** The reasoning is structural, not just sample-size:
+
+1. **Phase 1 already harvests every high-live-range opportunity.** The win scales with
+   width × live-range, and the long-live-range parallelism in these shaders lives in the
+   data-parallel loop reductions Phase 1 re-rolls. Dumping post-Phase-1 voronoi
+   (`FLATTEN_DUMP_DAS=1`) confirms the within-cell x/y chains are *absorbed*: the per-cell
+   `dx`/`dy` become two float4 lets (`_pk*_4` = x across 4 cells, `_pk*_5` = y), and
+   `sqrt(dx*dx + dy*dy)` is already component-wise float4 math — exactly the hand-written
+   `cell_vec` form, generalized across cells. There is no residual within-cell SLP left.
+
+2. **What general SLP would add is only the *low*-live-range cases:**
+   - **Fan into a common builtin** (plasma: 4 independent `sin`s → immediate sum). Live-range
+     ≈ 1, so structurally marginal — measured **−7%**. Exactly **one** corpus instance.
+   - **Standalone isomorphic destructured chains** (a hand-split distance/normal over long
+     chains, then recombined) — this *would* be high-live-range, but there are **zero**
+     standalone instances in the corpus. The only candidates (mandelbrot's `wx`/`wy` fBm,
+     electric_3d's `b0/b1/b2`) are blocked: their dominant op is `noise()` / `tex2d()`,
+     engine leaves that take a vector and return a scalar and **cannot vectorize across
+     lanes** (there is no "noise of N points" primitive). Same false-friend class as #5.
+
+**Conclusion: Phase 1 is the win.** A general SLP pass would add code + risk for at most a
+−7% improvement on a single shader. (The standalone-isomorphic-chain shape could still pay
+off on *client* shaders we feed verbatim and can't see here — if such a shader surfaces with
+a long-live-range destructured computation, revisit then, with that shader as the proof point.)
+
 ## Backend suggestion (EdenSpark's call)
 
 A **horizontal-reduce node** `reduce(b, c, CONST) = Σ bᵢ·cᵢ·CONSTᵢ` (a generalized dot —

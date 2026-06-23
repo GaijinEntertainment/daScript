@@ -777,6 +777,14 @@ def public flatten_optimize(var func : FunctionPtr; barriers : table<string>; no
 }
 
 [macro_function]
+def public flatten_pack(var func : FunctionPtr; no_fast_math : bool = false) : bool {
+    //! Scalar-packing map-reduce re-roll (delegates to `pack_map_reduce`): recognize an unrolled
+    //! min/max reduction's N isomorphic scalar lanes and pack them into width-W vector ops + one
+    //! horizontal reduce. Run PRE-fold (before `flatten_fold`); re-infer after. no_fast_math skips it.
+    return pack_map_reduce(func, no_fast_math)
+}
+
+[macro_function]
 def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false) : bool {
     //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into
     //! `dot(v, mask)`, re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape

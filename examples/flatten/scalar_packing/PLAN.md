@@ -41,7 +41,7 @@ whose leaf inputs differ only by the lane index or a known per-lane constant. Tw
   (voronoi's `minDist = min(minDist, d)`, written as `d < minDist ? d : minDist`). Emit a
   vector-map across W lanes + one horizontal reduce. Prove on **voronoi** (348 → target ~150).
 - **Phase 2 — general SLP.** Pack isomorphic scalar trees not from a loop (the within-vector
-  −25% case).
+  −25% case). **Evaluated and declined** — see Status below and `FINDINGS.md`.
 
 ## Heuristic
 
@@ -62,5 +62,34 @@ friends in FINDINGS #5).
 
 - [x] Backend cost model understood; `flatten=off` A/B mode added.
 - [x] Empirical bracket measured (FINDINGS.md).
-- [ ] Phase 1 — map-reduce re-roll, proven on voronoi.
-- [ ] Phase 2 — general SLP.
+- [x] **Phase 1 — map-reduce re-roll, proven on voronoi: 348 → 171 nodes (−51%).**
+- [x] **Phase 2 — general SLP: evaluated, NOT pursued.** Corpus survey showed Phase 1 already
+  absorbs every high-live-range opportunity (the within-cell x/y chains are subsumed into the
+  across-cell float4 component math — `FLATTEN_DUMP_DAS=1` confirmed). General SLP would add
+  only the low-live-range cases: fan-into-a-common-builtin (plasma, **−7%**, one corpus
+  instance) and standalone isomorphic chains (**zero** corpus instances — the candidates are
+  blocked by non-vectorizable `noise`/`tex2d` leaves). Not worth the code + risk for −7% on one
+  shader. Revisit only if a *client* shader surfaces a long-live-range destructured computation.
+  Full reasoning in `FINDINGS.md` § "Phase 2 (general SLP) — evaluated, not pursued".
+
+### Phase 1 — landed (`pack_map_reduce` in `daslib/flatten_opt.das`)
+
+Pass `flatten_pack` (wrapper in flatten.das), wired as a gated `packed` stage in the backend's
+cycle-2 **before** fold (`shader_dsl_boost.das`). Recognizes a min/max SSA reduction spine
+(`var acc' = (d cmp acc) ? d : acc`) over N isomorphic, independent lane bodies, packs into
+width-≤4 SoA groups (`plan_groups` avoids width-1 tails: 9 → [4,3,2]), and replaces the spine
+with a horizontal reduce `min(init, hmin(g0), …)`.
+
+- **Result:** voronoi 348 → 171 (−51%). Full regression 86/86 compile; A/B diff confirms **only
+  voronoi changed** — zero collateral (raymarch/blur/plasma untouched). Output verified
+  semantically (all 9 cells map once; reduction = `min(10, all d)`).
+- **Key finding:** daslang has **no scalar→vector broadcast** for `+`/`-`/call-args (only
+  `vec * scalar`). So invariants are splatted to `floatN(x)` and the downstream splat-fold
+  collapses the collapsible ones — this is exactly FINDINGS #3's "fold-cleans-the-glue" pipeline.
+- **Gated** on `!no_fast_math` (reduction-tree reassociation), `M ≥ 3` lanes, uniform lane layout,
+  per-lane independence (no lane reads a spine accumulator or another lane's temp) — bails clean
+  (no mutation) on any mismatch.
+
+**Open tuning (not blocking):** [3,3,3] vs [4,3,2] grouping (≈equal node count); the boundary
+const-vec literals (`float4(127.1,…)`) survive mad-fusion (width is free, so each is 1 node) — a
+horizontal-reduce backend node (FINDINGS suggestion) would shave the unpack-at-reduction further.

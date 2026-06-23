@@ -1600,15 +1600,22 @@ class PixelShaderMacro : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
-        // Skip during lint (the twin is irrelevant to linting source).
-        if (is_in_lint_check() || shader_annotation_arg(func, "folded")) {
-            return true
-        }
-        // flatten=off: skip ALL passes; finish() builds IR on the source verbatim (must be flat).
-        if (flatten_is_off(func)) {
+        // Skip during lint (the twin is irrelevant to linting source); flatten=off also skips ALL
+        // passes — finish() then builds IR on the source verbatim (which must already be flat).
+        if (is_in_lint_check() || shader_annotation_arg(func, "folded") || flatten_is_off(func)) {
             return true
         }
         if (shader_annotation_arg(func, "flattened")) {
+            // Scalar packing runs FIRST (pre-fold): the unrolled lane bodies are still isomorphic
+            // and un-CSE'd, so a min/max reduction re-rolls cleanly into width-W vector ops; the
+            // fold/optimize/fuse stages below then clean the boundary combine/splat glue.
+            if (!shader_annotation_arg(func, "packed")) {
+                set_shader_annotation_flag(func, "packed")
+                if (flatten_pack(func, flatten_no_fast_math())) {
+                    astChanged = true
+                    return true
+                }
+            }
             // Cycle 2+ (re-inferred after flattening): collapse const-condition selects
             // and drop the resulting pure self-assigns (`acc = acc`) — without this a
             // loop-var-gated accumulate leaves a self-referential accumulator the IR
