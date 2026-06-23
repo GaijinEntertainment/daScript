@@ -1544,6 +1544,23 @@ def private shader_annotation_arg(func : FunctionPtr; argName : string) : bool {
     return false
 }
 
+// `[pixel_shader(flatten=false)]` -> emit IR for the source VERBATIM: no inline / fold / optimize /
+// fuse. The source must already be flat (the backend bans if/else, loops, helper calls). Lets us
+// A/B a hand-vectorized shader against its scalar twin with the backend producing exactly what is
+// written. Presence-aware (a missing `flatten` arg means flatten stays ON).
+def private flatten_is_off(func : FunctionPtr) : bool {
+    for (ann in func.annotations) {
+        if (ann.annotation.name == "pixel_shader") {
+            for (a in ann.arguments) {
+                if ("{a.name}" == "flatten" && a.basicType == Type.tBool) {
+                    return !a.bValue
+                }
+            }
+        }
+    }
+    return false
+}
+
 [macro_function]
 def private set_shader_annotation_flag(var func : FunctionPtr; argName : string) {
     for (ann in func.annotations) {
@@ -1585,6 +1602,10 @@ class PixelShaderMacro : AstFunctionAnnotation {
                        var astChanged : bool&) : bool {
         // Skip during lint (the twin is irrelevant to linting source).
         if (is_in_lint_check() || shader_annotation_arg(func, "folded")) {
+            return true
+        }
+        // flatten=off: skip ALL passes; finish() builds IR on the source verbatim (must be flat).
+        if (flatten_is_off(func)) {
             return true
         }
         if (shader_annotation_arg(func, "flattened")) {
