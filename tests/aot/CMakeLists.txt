@@ -415,6 +415,10 @@ FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/
 # AOT for loops test files
 FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/loops/*.das")
 
+# AOT for glsl test files (dasGlsl/dasOpenGL: AST->GLSL backend). Compile-time emission tests —
+# no module-AOT list needed (they call no runtime module fns, only `find` + dastest, already stubbed).
+FILE(GLOB AOT_GLSL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/glsl/*.das")
+
 # AOT for spirv test files (dasSpirv: AST->SPIR-V backend)
 FILE(GLOB AOT_SPIRV_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/spirv/*.das")
 # Exclude the shared fixture module (compiled via DAS_AOT_LIB below)
@@ -796,6 +800,10 @@ add_custom_target(test_aot_loops)
 SET(LOOPS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LOOPS_FILES}" LOOPS_AOT_GENERATED_SRC test_aot_loops daslang)
 
+add_custom_target(test_aot_glsl)
+SET(GLSL_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_GLSL_FILES}" GLSL_AOT_GENERATED_SRC test_aot_glsl daslang)
+
 add_custom_target(test_aot_spirv)
 SET(SPIRV_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_SPIRV_FILES}" SPIRV_AOT_GENERATED_SRC test_aot_spirv daslang)
@@ -906,6 +914,7 @@ SOURCE_GROUP_FILES("aot generated" URI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" JIT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LOOPS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" GLSL_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SPIRV_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SPIRV_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
@@ -990,6 +999,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
     ${JIT_AOT_GENERATED_SRC}
     ${LOOPS_AOT_GENERATED_SRC}
+    ${GLSL_AOT_GENERATED_SRC}
     ${SPIRV_AOT_GENERATED_SRC}
     ${SPIRV_MODULES_AOT_GENERATED_SRC}
     ${FIXED_ARRAY_AOT_GENERATED_SRC}
@@ -1040,6 +1050,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_lpipe
     test_aot_jit
     test_aot_loops
+    test_aot_glsl
     test_aot_spirv test_aot_spirv_modules
     test_aot_fixed_array test_aot_typemacro
     test_aot_language test_aot_language_modules
