@@ -7,9 +7,10 @@ options no_unused_function_arguments = false
 // compile-time `const string` global; we assert the GL lowering of the three builtins grown into
 // the shared surface. No GPU — pure compile-time emission, so this is the CI regression lock the
 // arc's union growth previously lacked.
-//   gl_VertexIndex -> gl_VertexID   (the unified Vulkan spelling, renamed on the GL way out)
-//   fwidth         -> fwidth(...)     (name-identical passthrough)
-//   gl_FragCoord   -> gl_FragCoord    (name-identical passthrough)
+//   gl_VertexIndex   -> gl_VertexID    (the unified Vulkan spelling, renamed on the GL way out)
+//   gl_InstanceIndex -> gl_InstanceID  (the sibling per-instance-index rename)
+//   fwidth           -> fwidth(...)     (name-identical passthrough)
+//   gl_FragCoord     -> gl_FragCoord    (name-identical passthrough)
 
 require dastest/testing_boost public
 require glsl/glsl_opengl
@@ -23,6 +24,9 @@ def lf_vertex {
     gl_Position = float4(lf_v_pos, 0.0, 1.0)
     if (gl_VertexIndex == 0) {
         gl_Position = float4(0.0, 0.0, 0.0, 1.0)
+    }
+    if (gl_InstanceIndex > 0) {
+        gl_Position = float4(lf_v_pos, 0.0, 2.0)
     }
 }
 
@@ -39,6 +43,10 @@ def test_lingua_franca_builtins(t : T?) {
     t |> run("gl_VertexIndex lowers to gl_VertexID on the GL rail") <| @(t : T?) {
         t |> success(has(lf_vs_glsl, "gl_VertexID"), "vertex shader emits gl_VertexID")
         t |> success(!has(lf_vs_glsl, "gl_VertexIndex"), "the Vulkan spelling gl_VertexIndex is fully renamed away")
+    }
+    t |> run("gl_InstanceIndex lowers to gl_InstanceID on the GL rail") <| @(t : T?) {
+        t |> success(has(lf_vs_glsl, "gl_InstanceID"), "vertex shader emits gl_InstanceID")
+        t |> success(!has(lf_vs_glsl, "gl_InstanceIndex"), "the Vulkan spelling gl_InstanceIndex is fully renamed away")
     }
     t |> run("fwidth + gl_FragCoord lower name-identically") <| @(t : T?) {
         t |> success(has(lf_fs_glsl, "fwidth("), "fragment shader emits fwidth(...)")

@@ -1565,11 +1565,16 @@ class GlslExport : AstVisitor {
             }
         }
         // shader_lingua_franca carries the unified (Vulkan) builtin spelling; the few names that
-        // diverge from GLSL get renamed here on the way out. gl_VertexIndex -> gl_VertexID (the
-        // GLSL desktop-core / ES name for the same per-vertex index). Gated on the shared module so
-        // a user variable that happens to share the name is never rewritten.
+        // diverge from GLSL get renamed here on the way out: gl_VertexIndex -> gl_VertexID and
+        // gl_InstanceIndex -> gl_InstanceID (the GLSL desktop-core / ES names for the per-vertex /
+        // per-instance index). Gated on the shared module so a user variable that happens to share
+        // the name is never rewritten.
         if (en == "gl_VertexIndex" && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
             *writer |> write("gl_VertexID")
+            return
+        }
+        if (en == "gl_InstanceIndex" && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
+            *writer |> write("gl_InstanceID")
             return
         }
         *writer |> write(en)

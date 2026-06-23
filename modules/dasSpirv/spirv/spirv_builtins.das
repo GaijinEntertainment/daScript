@@ -14,9 +14,10 @@ require daslib/shader_lingua_franca public
 
 // ===== VK-specific builtin variables =====
 // vertex (the indices are Inputs)
-// gl_VertexIndex (BuiltIn VertexIndex, Input) lives in shader_lingua_franca (shared); both rails
-// speak it -- the GLSL emitter renames it to gl_VertexID. The SPIR-V emitter still keys it by name.
-var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
+// gl_VertexIndex (BuiltIn VertexIndex) and gl_InstanceIndex (BuiltIn InstanceIndex) live in
+// shader_lingua_franca (shared); both rails speak them -- the GLSL emitter renames them to
+// gl_VertexID / gl_InstanceID. The SPIR-V emitter still keys them by name. gl_DrawID stays VK-only
+// (its GLSL form needs GL_ARB_shader_draw_parameters, outside the WebGL2 / GL-4.1 portable floor).
 var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-draw draw call ordinal; needs the DrawParameters capability (in core in SPIR-V 1.3)
 
 // fragment

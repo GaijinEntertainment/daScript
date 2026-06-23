@@ -31,10 +31,12 @@ var gl_Position   : float4    // clip-space output position (vertex stage)
 var gl_PointSize  : float     // rasterised point size, POINT topology
 var gl_PointCoord : float2    // UV within a rasterised point, [0,1]^2 (fragment stage)
 var gl_FragCoord  : float4    // window-space fragment coordinate, .xy in pixels (fragment stage); GLSL name-identical, SPIR-V BuiltIn FragCoord
-// gl_VertexIndex is the unified (Vulkan) spelling -- the SPIR-V emitter lowers it to BuiltIn
-// VertexIndex; the GLSL emitter renames it to gl_VertexID (the GLSL desktop-core / ES name for the
-// same per-vertex index) on the way out. Author shaders with the one unified name on both rails.
-var gl_VertexIndex : int      // per-vertex index (vertex stage)
+// gl_VertexIndex / gl_InstanceIndex are the unified (Vulkan) spellings -- the SPIR-V emitter lowers
+// them to BuiltIn VertexIndex / InstanceIndex; the GLSL emitter renames them to gl_VertexID /
+// gl_InstanceID (the GLSL desktop-core / ES names for the same per-vertex / per-instance index) on
+// the way out. Author shaders with the one unified name on both rails.
+var gl_VertexIndex   : int    // per-vertex index (vertex stage)
+var gl_InstanceIndex : int    // per-instance index (vertex stage, instanced draws)
 
 // ===== compute builtins =====
 var gl_NumWorkGroups        : uint3   // global dispatch size (glDispatchCompute args)
