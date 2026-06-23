@@ -271,29 +271,31 @@ def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPt
     if (e is ExprOp1 && (e as ExprOp1).op == "!") {
         return (e as ExprOp1).subexpr               // !!x → x
     }
-    if (e is ExprOp2) {
-        var o = e as ExprOp2
-        if (o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=" || o.op == "==" || o.op == "!=") {
-            // skip a user/non-builtin comparison (no auto-complement) or a NaN-unsafe ordered float compare
-            if (o.func == null || !o.func.flags.builtIn ||
-                    ((o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=") && noFastMath && is_float_valued(o.left))) {
-                return null
-            }
-            if (o.op == ">") return new ExprOp2(at = e.at, op := "<=", left = o.left, right = o.right)
-            if (o.op == "<") return new ExprOp2(at = e.at, op := ">=", left = o.left, right = o.right)
-            if (o.op == ">=") return new ExprOp2(at = e.at, op := "<",  left = o.left, right = o.right)
-            if (o.op == "<=") return new ExprOp2(at = e.at, op := ">",  left = o.left, right = o.right)
-            if (o.op == "==") return new ExprOp2(at = e.at, op := "!=", left = o.left, right = o.right)
-            if (o.op == "!=") return new ExprOp2(at = e.at, op := "==", left = o.left, right = o.right)
+    if (!(e is ExprOp2)) return null
+    var o = e as ExprOp2
+    let ordered = o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<="
+    // comparison → complement; skip a user/non-builtin op (no auto-complement) or a NaN-unsafe ordered float compare
+    if (ordered || o.op == "==" || o.op == "!=") {
+        if (o.func == null || !o.func.flags.builtIn || (ordered && noFastMath && is_float_valued(o.left))) {
+            return null
         }
-        if (o.op == "&&" || o.op == "||") {        // De Morgan, only if both sides negate clean
-            var nl = negate_bool(o.left, noFastMath)
-            if (nl == null) return null
-            var nr = negate_bool(o.right, noFastMath)
-            if (nr == null) return null
-            if (o.op == "&&") return new ExprOp2(at = e.at, op := "||", left = nl, right = nr)
-            return new ExprOp2(at = e.at, op := "&&", left = nl, right = nr)
+        var flip = ""
+        match (o.op) {
+            if (">")  { flip = "<=" }
+            if ("<")  { flip = ">=" }
+            if (">=") { flip = "<" }
+            if ("<=") { flip = ">" }
+            if ("==") { flip = "!=" }
+            if ("!=") { flip = "==" }
         }
+        return new ExprOp2(at = e.at, op := flip, left = o.left, right = o.right)
+    }
+    if (o.op == "&&" || o.op == "||") {        // De Morgan, only if both sides negate clean
+        var nl = negate_bool(o.left, noFastMath)
+        if (nl == null) return null
+        var nr = negate_bool(o.right, noFastMath)
+        if (nr == null) return null
+        return new ExprOp2(at = e.at, op := o.op == "&&" ? "||" : "&&", left = nl, right = nr)
     }
     return null
 }
@@ -303,13 +305,14 @@ def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPt
 // tree). Keep the foldability rules here in lockstep with negate_bool above.
 def public can_negate_bool(e : ExpressionPtr; noFastMath : bool) : bool {
     if (e is ExprConstBool || (e is ExprOp1 && (e as ExprOp1).op == "!")) return true   // const / !!x
-    if (e is ExprOp2) {
-        let o = e as ExprOp2
-        if (o.op == "==" || o.op == "!=") return o.func != null && o.func.flags.builtIn
-        if (o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=") {
+    if (!(e is ExprOp2)) return false
+    let o = e as ExprOp2
+    match (o.op) {
+        if ("==" || "!=") { return o.func != null && o.func.flags.builtIn }
+        if (">" || "<" || ">=" || "<=") {
             return o.func != null && o.func.flags.builtIn && !(noFastMath && is_float_valued(o.left))
         }
-        if (o.op == "&&" || o.op == "||") {
+        if ("&&" || "||") {
             return can_negate_bool(o.left, noFastMath) && can_negate_bool(o.right, noFastMath)
         }
     }
