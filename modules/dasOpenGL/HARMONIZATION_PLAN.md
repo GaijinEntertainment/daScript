@@ -5,7 +5,12 @@
 > Keep this file current as phases land — it is the arc's source of truth.
 
 **Branch:** `bbatkin/opengl-harmonization`  ·  **Worktree:** `D:\Work\daScript-opengl-harmonize`
-**Started:** 2026-06-22  ·  **Status:** Phase 0 complete (foundation built) — **Phase 1 next**
+**Started:** 2026-06-22  ·  **Status:** Phase 1 in progress — shared module landed (commit `e935d6d`)
+
+**Workflow (locked):** ONE branch, many commits, no sub-PRs. The gate is
+`daslang utils/preflight/main.das -- --full` run locally, **not** CI (CI is too slow for the
+iteration loop). Land the safe intersection first, then grow toward the modern union on the same
+branch — every commit preflight-green.
 
 ---
 
@@ -50,6 +55,8 @@ the web (WebGL2/WASM)** — is the logical continuation of the wasm killer featu
 | D6 | **es/wasm profile is keyed off the build target** (wasm ⇒ es300, native ⇒ desktop). No `options` knob until proven necessary; add one later only if needed. |
 | D7 | **SPIR-V→GL (`GL_ARB_gl_spirv`) is demoted to a last-phase nice-to-have, possibly never.** It serves only the Win/Linux GL-4.6 slice (already covered by GLSL) and cannot reach the web. |
 | D8 | **wasm + GL is the NEXT session, not this one.** Recorded here so the foundation work doesn't paint it into a corner. |
+| D9 | **The shared module lives in `daslib/` (`daslib/shader_lingua_franca.das`), required `daslib/shader_lingua_franca public`.** `daslib` is always on every consumer's path — no CMake module registration, no mount, no build-ordering. "There will be more shaders" → `daslib` is the home for shared shader libs. The module NAME is `shader_lingua_franca` (independent of the require path), which is what the emitters key their by-module-name recognition off. |
+| D10 | **The dividing line is MODERN-vs-LEGACY, not intersection-vs-union.** The shared module carries only the modern WebGL2 / GL-4.1-core surface BOTH rails speak. **GL legacy (GLSL 1.x: `gl_FragColor`, `texture2D()`) never enters the shared module and is never pulled toward Vulkan** — it stays in `glsl_common` (which `require shader_lingua_franca public`), marked legacy there (clear section comment, not `[deprecated]` — existing demos must stay warning-free). The harmonization flow is GL→VK: the modern webgl/4.1 builtins land in the shared surface; where GL still spells something the old way but the modern unified name is Vulkan's (e.g. `gl_VertexIndex`, which GL must emit as `gl_VertexID`), the shared module uses the unified spelling and the GL emitter renames on the way out. **STOP signal:** if about to pull a GL-1.1 legacy thing toward Vulkan, keep it GL-legacy instead. |
 
 ---
 
@@ -141,19 +148,34 @@ New in-tree module, independent of both cores; both `require shader_lingua_franc
   `textureSize`, `textureOffset`, `imageLoad`, `imageStore`, `imageSize`, `dFdx`, `dFdy`, `discard`,
   `barrier`, `memoryBarrier*`, `fract`.
 
-**Stays / the knot — opaque resource types.** `sampler2D`/`sampler3D`/`image2D`/`image3D` differ by
-backend (GL carries a `uint` handle; SPIR-V is an empty marker). The type is AST-only and each emitter
-keys off the *marker name*, not the fields.
-- **Plan A (preferred): GL-superset in the shared module** — declare `sampler2D { texture2D : uint }`
-  etc.; Vulkan ignores the unused field. Collapses the knot.
-- **Plan B (fallback if the SPIR-V emitter rejects a non-empty body):** keep resource types backend-local,
-  share only value-builtins + non-resource intrinsics.
-- This is the **prime "kaboom" candidate** — resolved on the first wiring pass (Phase 1).
+**The knot — opaque resource types — RESOLVED (Plan A confirmed, Phase 1).** `sampler2D`/`sampler3D`/
+`image2D` differ by backend (GL carries a `uint` handle; SPIR-V is an empty marker). The SPIR-V emitter
+keys off the *marker name* (`sampler_info` / `classify_global`) and **ignores the struct fields entirely**.
+Verified empirically: adding the GL-superset field to `sampler2D` left the golden disassembly BYTE-EXACT
+and spirv-val clean. So **Plan A holds** — `sampler2D { texture2D : uint }` etc. live in the shared module;
+Vulkan ignores the field. (`image3D` is GL-only — Vulkan has no `image3D` — so it stays in `glsl_common`.)
 
-**Transparency + move discipline.** `glsl_common` and `spirv_builtins` each `require
-shader_lingua_franca public`, so every existing `require glsl/glsl_common` / `require spirv_builtins`
-consumer sees the same symbols unchanged. The move is **delete-from-both-then-add-to-shared** (no
-duplicate decls → no redefinition errors), reconciling any spelling differences to a superset.
+**Recognition mechanism (the load-bearing fact §3/§6's first draft got half-right).** "Both `require …
+public` makes the move transparent" is only true for the SPIR-V emitter, which recognizes builtins by
+**bare symbol name**. The **GLSL emitter recognizes builtins by MODULE name** (`fun._module.name ==
+"glsl_common"`) — and the SPIR-V emitter has ONE module-name gate too (`is_user_shader_func`). So the move
+is NOT free on the GL side: it required teaching the emitters the new module — **6 sites in
+`glsl_internal.das`** (name-passthrough, forward-decl skip, struct/function/global emission skips, the
+`is_glsl_structure` type check) **+ 1 in `spirv_emit.das`** (`is_user_shader_func` exclusion list). Each
+gate now accepts `shader_lingua_franca` alongside its original module.
+
+**Move discipline.** `glsl_common` and `spirv_builtins` each `require daslib/shader_lingua_franca public`,
+so every existing consumer sees the same symbols unchanged. The move is **delete-from-both-then-add-to-
+shared** (no duplicate decls → no redefinition errors), reconciling spelling differences to a superset
+(the shared module uses the annotated `[unused_argument(...), sideeffects] def public … { return … }`
+stub style; bodies never run, only the call/reference AST is lowered).
+
+**Emission caveat (verified benign).** Moving `gl_Position` to a different module changes the *order* in
+which the SPIR-V emitter discovers it relative to a builtin kept in `spirv_builtins` — so a vertex shader
+using both (`gl_Position` + `gl_VertexIndex`/`gl_DrawID`) emits an entry-point interface in a different
+order. This is semantically irrelevant in SPIR-V (interface + variable-decl order are unordered), spirv-val
+clean, byte-equal everywhere else. The `vindex`/`draw_id` goldens were regenerated; a full-suite regen
+changed ONLY those two files, proving nothing else shifted.
 
 ---
 
@@ -187,13 +209,28 @@ duplicate decls → no redefinition errors), reconciling any spelling difference
 Three sweeps, distinguished by whether they need a GPU:
 
 ### 8.1 Compatibility regression sweep (no break allowed)
-Compile-check every existing GL/GLSL consumer; run-a-few-frames the ones that can run headless. This is
-the guard that we didn't break compatibility. Targets (from inventory):
-- `examples/opengl/01_hello_triangle … 09_hello_mesh` (8 files; `05_compute`, `09_mesh` desktop-only)
-- `examples/pathTracer/toy_path_tracer_opengl{,_basic,_hdr}.das`
-- `examples/graphics/furier_opengl_imgui_example.das`
-- `examples/games/{arcanoid,asteroids,pacman,sequence,river_run}` (real games on GL)
-- `examples/daStrudel/{drum_compare,strudel_visualizer}`, `examples/daslive/{hello,hello_stdio,triangle,tank_game}`, `examples/audio/hrtf`, `examples/node-editor/imgui_node_editor_basic.das`
+Compile-check every existing GL/GLSL consumer; run the ones that can run headless. This is the guard that
+we didn't break compatibility. Verified-green targets (corrected from the real tree layout — games /
+daStrudel / daslive live in `<name>/main.das` subdirs):
+- `examples/opengl/0{1..7}_hello_*`, `09_hello_mesh` (`05_compute`, `09_mesh` desktop-only)
+- `examples/pathTracer/toy_path_tracer_opengl{,_hdr}.das`, `toy_pathtracer_opengl_basic.das` (GL)
+- `examples/games/{arcanoid,asteroids,pacman,river_run}/main.das` (real games on GL)
+- `examples/daStrudel/{drum_compare,strudel_visualizer}/main.das`, `examples/daslive/{hello,hello_stdio,triangle,tank_game}/main.das`, `examples/audio/hrtf/main.das`
+- **Not compile-checkable in a bare worktree** (need external daspkg modules — NOT regressions):
+  `examples/games/sequence/main.das` (`cards/opengl_cards` → dasCards), `examples/graphics/furier_opengl_imgui_example.das` + `examples/node-editor/imgui_node_editor_basic.das` (dasImgui/node-editor). Fail at require-resolution before any shader code is reached.
+
+**Pathtracer = a first-class compat target (CPU + GL), MANDATED into the test suite.** The pathtracer has
+both a CPU rail (`examples/pathTracer/{path_tracer,toy_path_tracer,toy_path_tracer_profile}.das`, no `glsl`
+require — own CPU implementation) and a GL rail (the `_opengl*` files above). Both must stay green across
+this arc:
+- **CPU**: compile **+ run headless** (it traces a frame and exits; ~9 s, exit 0). Independent of the
+  shader modules, so it must never regress.
+- **GL**: compile-checked (needs a GL context to run; local-only render check).
+- **TODO (wire it in):** register both rails into a runnable sweep — the CPU one as a real run-test, the
+  GL ones as compile gates — so the harmonization can't silently break either. The deeper convergence
+  (one shader body that runs on CPU *and* GPU, via real CPU bodies for `texture`/`imageLoad`/… — "add
+  daslang builtin functions if needed") is a later forcing-function goal, not Phase 1; Phase 1 confirmed
+  the CPU rail needs **no** new builtins today.
 
 A sweep driver (compile-only, plus optional N-frame run) lives with the arc; run it before/after every
 Phase 1–3 change. CI already exercises the GLFW-gated `.das` via the `sequence` smoke lane — keep it green.
@@ -241,5 +278,10 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
 
 - 2026-06-22 — Phase 0 started: worktree + full LLVM/GLFW build + plan authored.
 - 2026-06-22 — Phase 0 complete. Full Release build green — LLVM/JIT verified (`lib/LLVM.dll` + JIT exe-gen during build), GLFW/StbImage/HV/Audio/PUGIXML built; SQLite dropped locally (vendored `sqlite3.c` `/WX` C4701/C4703 — separate fix, not this branch). MCP wired to the worktree binary (`.mcp.json` + `sgconfig.yml` + tree-sitter grammar). Memory store shared into the worktree session via junction. Baseline green: `examples/opengl/01_hello_triangle.das` compiles clean.
+- 2026-06-22 — **Phase 1 core landed (commit `e935d6d`).** Created `daslib/shader_lingua_franca.das` (D9); moved the modern backend-invariant intersection out of `glsl_common` + `spirv_builtins`, both now `require … public`; taught the two emitters the new module (6 GL sites + 1 SPIR-V site). Sampler-superset knot resolved Plan A (golden byte-exact). Legacy/modern dividing line locked (D10): `gl_FragColor`/`texture2D()` stay GL-legacy. Verified: `tests/spirv` 164/164 (spirv-val); all in-tree GL examples + all pathtracers compile; CPU pathtracer runs; every changed `.das` lint-clean; `vindex`/`draw_id` goldens regenerated (benign reorder, §6).
 
-**▶ NEXT (Phase 1 pickup):** create `shader_lingua_franca` (in-tree, independent module); move the builtin surface OUT of `glsl_common` and `spirv_builtins`; wire `require shader_lingua_franca public` in both cores. **First experiment = the sampler-superset knot (§6, Plan A):** put `sampler2D { texture2D : uint }` in the shared module and check whether the SPIR-V emitter tolerates the non-empty body — if not, fall back to Plan B (resource types stay backend-local). Gate: existing dasOpenGL *and* dasVulkan shaders still compile green. Run from a session rooted in the worktree so MCP/compiler see the in-tree edits.
+**▶ NEXT (Phase 1 finish, then grow):**
+1. **Gate the core commit:** `daslang utils/preflight/main.das -- --full` (running) + a real dasVulkan shader smoke (the in-tree `tests/spirv` suite covers emitter+symbol-resolution; confirm the external consumer too).
+2. **Grow the shared surface toward the modern union, each WITH its emitter lowering (no declared-but-unlowerable symbols — fail-closed):** `fwidth` (name-safe both rails), `gl_FragCoord` (GLSL name-compatible), then `gl_VertexIndex` **with** the GL `gl_VertexIndex`→`gl_VertexID` emitter rename (§5). Each its own commit, preflight-green.
+3. **Wire the pathtracer (CPU run + GL compile) into a runnable sweep** (§8.1 mandate).
+Run from a session rooted in the worktree so MCP/compiler see the in-tree edits.
