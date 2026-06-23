@@ -21,7 +21,6 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/rtti
-require strings
 require daslib/flatten_opt
 
 // Phase token carried as the "phase" argument of the [flatten] annotation on
@@ -141,17 +140,6 @@ def private contains(a : array<string>; s : string) : bool {
         if (x == s) return true
     }
     return false
-}
-
-// Strip a monomorphized generic's mangling to the bare function name: an OR-type
-// instance is named `<scope>`<name>`<hash>` (backtick = char 96). Used so the
-// caller-supplied whitelist can match by simple name regardless of instantiation.
-def private simple_name(fullname : string) : string {
-    let t1 = find(fullname, 96, 0)
-    if (t1 < 0) return fullname
-    let t2 = find(fullname, 96, t1 + 1)
-    let endp = t2 < 0 ? length(fullname) : t2
-    return slice(fullname, t1 + 1, endp)
 }
 
 def private p_and(a, b : ExpressionPtr) : ExpressionPtr {
@@ -359,6 +347,14 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
     if (e is ExprMakeTuple) {
         var n = clone_expression(e)
         var o = n as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = lift_expr(ctx, o.values[vi], structPred, out)
+        }
+        return n
+    }
+    if (e is ExprMakeArray) {
+        var n = clone_expression(e)
+        var o = n as ExprMakeArray
         for (vi in range(length(o.values))) {
             o.values[vi] = lift_expr(ctx, o.values[vi], structPred, out)
         }
