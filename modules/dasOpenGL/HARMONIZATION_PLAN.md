@@ -5,7 +5,7 @@
 > Keep this file current as phases land — it is the arc's source of truth.
 
 **Branch:** `bbatkin/opengl-harmonization`  ·  **Worktree:** `D:\Work\daScript-opengl-harmonize`
-**Started:** 2026-06-22  ·  **Status:** Phase 0 (foundation) — in progress
+**Started:** 2026-06-22  ·  **Status:** Phase 0 complete (foundation built) — **Phase 1 next**
 
 ---
 
@@ -240,3 +240,6 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
 ## Changelog
 
 - 2026-06-22 — Phase 0 started: worktree + full LLVM/GLFW build + plan authored.
+- 2026-06-22 — Phase 0 complete. Full Release build green — LLVM/JIT verified (`lib/LLVM.dll` + JIT exe-gen during build), GLFW/StbImage/HV/Audio/PUGIXML built; SQLite dropped locally (vendored `sqlite3.c` `/WX` C4701/C4703 — separate fix, not this branch). MCP wired to the worktree binary (`.mcp.json` + `sgconfig.yml` + tree-sitter grammar). Memory store shared into the worktree session via junction. Baseline green: `examples/opengl/01_hello_triangle.das` compiles clean.
+
+**▶ NEXT (Phase 1 pickup):** create `shader_lingua_franca` (in-tree, independent module); move the builtin surface OUT of `glsl_common` and `spirv_builtins`; wire `require shader_lingua_franca public` in both cores. **First experiment = the sampler-superset knot (§6, Plan A):** put `sampler2D { texture2D : uint }` in the shared module and check whether the SPIR-V emitter tolerates the non-empty body — if not, fall back to Plan B (resource types stay backend-local). Gate: existing dasOpenGL *and* dasVulkan shaders still compile green. Run from a session rooted in the worktree so MCP/compiler see the in-tree edits.
