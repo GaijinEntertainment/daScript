@@ -381,7 +381,7 @@ def public is_float_valued(e : ExpressionPtr) : bool {
 // returns the lane count; 0 for splats, mixed-arity ctors (`float3(v2,z)`) and non-ctor calls.
 def public ctor_dim_by_name(c : ExprCall?) : int {
     if (c == null) return 0
-    let nm = psh_simple_name("{c.name}")
+    let nm = simple_name("{c.name}")
     var d = 0
     if (nm == "float2" || nm == "int2" || nm == "uint2") {
         d = 2
@@ -401,7 +401,7 @@ def public is_float_vec(bt : Type) : bool {
 def public splat_scalar_arg(e : ExpressionPtr) : ExpressionPtr {
     if (e == null || !(e is ExprCall)) return null
     var c = e as ExprCall
-    let nm = psh_simple_name("{c.name}")
+    let nm = simple_name("{c.name}")
     if ((nm != "float2" && nm != "float3" && nm != "float4") || length(c.arguments) != 1) return null
     return expr_bt(c.arguments[0]) == Type.tFloat ? c.arguments[0] : null
 }
@@ -662,7 +662,7 @@ def public ref_var_name(e : ExpressionPtr) : string {
 // Two pure-AST passes on the converged body: hoist maximal globals-only subtrees to top-of-body
 // `_preshader_N` lets, then CSE-dedup repeated subtrees. See flatten.rst / the plan for the why.
 
-def public psh_simple_name(fullname : string) : string {
+def public simple_name(fullname : string) : string {
     let t1 = find(fullname, 96, 0)
     if (t1 < 0) return fullname
     let t2 = find(fullname, 96, t1 + 1)

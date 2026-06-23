@@ -121,7 +121,7 @@ def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) 
     if (e is ExprCall) {
         let c = e as ExprCall
         // Surviving calls are all whitelisted pure GPU math; only the caller's barriers (sampler/noise) bar a preshader.
-        if (key_exists(barriers, psh_simple_name("{c.name}"))) return false
+        if (key_exists(barriers, simple_name("{c.name}"))) return false
         for (a in c.arguments) {
             if (!pex_eligible(pe, barriers, a)) return false
         }

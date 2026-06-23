@@ -37,7 +37,7 @@ def private lane_letter(i : int) : string {
 def private float_ctor_of(e : ExpressionPtr) : ExprCall? {
     if (e == null || !(e is ExprCall)) return null
     var c = e as ExprCall
-    let nm = psh_simple_name("{c.name}")
+    let nm = simple_name("{c.name}")
     if (nm != "float2" && nm != "float3" && nm != "float4") return null
     return c
 }

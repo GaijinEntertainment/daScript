@@ -187,7 +187,7 @@ class private FoldVisitor : AstVisitor {
         // backend needs only `mul` and an adjacent const factor merges via reassoc.
         if (that.func != null && that.func.flags.builtIn && length(that.arguments) == 1
                 && is_float_family(expr_bt(that.arguments[0]))) {
-            let nm = psh_simple_name("{that.func.name}")
+            let nm = simple_name("{that.func.name}")
             if (nm == "radians" || nm == "degrees") {
                 changed = true
                 let k = nm == "radians" ? DEG_TO_RAD : RAD_TO_DEG
@@ -199,7 +199,7 @@ class private FoldVisitor : AstVisitor {
         // reassoc and CSE see through them; PHASE_FUSED re-packs survivors. Type-gated to the
         // das math overload set — a loose DSL-stub instantiation must not expand ill-typed.
         if (that.func != null && length(that.arguments) == 3) {
-            let fname = psh_simple_name("{that.func.name}")
+            let fname = simple_name("{that.func.name}")
             let ta = expr_bt(that.arguments[0])
             let tb = expr_bt(that.arguments[1])
             let tc = expr_bt(that.arguments[2])

@@ -222,10 +222,10 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     if (exprs[0] is ExprCall) {
         let l0 = exprs[0] as ExprCall
         // simple name (post-infer .name is the mangled scalar overload) so re-infer picks by arg width
-        let nm0 = psh_simple_name("{l0.name}")
+        let nm0 = simple_name("{l0.name}")
         let argc = length(l0.arguments)
         for (e in exprs) {
-            if (!(e is ExprCall) || psh_simple_name("{(e as ExprCall).name}") != nm0 ||
+            if (!(e is ExprCall) || simple_name("{(e as ExprCall).name}") != nm0 ||
                     length((e as ExprCall).arguments) != argc) {
                 return null
             }
