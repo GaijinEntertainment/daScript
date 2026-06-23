@@ -21,17 +21,11 @@ require daslib/flatten_opt_common
 // A negated copy of a scalar/vector float/int const literal; null for any other node
 // (uint excluded — modular negation is value-correct but backend-hostile).
 def private negate_const(e : ExpressionPtr) : ExpressionPtr {
-    if (e == null) return null
-    if (e is ExprConstFloat) return new ExprConstFloat(at = e.at, value = -(e as ExprConstFloat).value)
-    if (e is ExprConstDouble) return new ExprConstDouble(at = e.at, value = -(e as ExprConstDouble).value)
-    if (e is ExprConstInt) return new ExprConstInt(at = e.at, value = -(e as ExprConstInt).value)
-    if (e is ExprConstFloat2) return new ExprConstFloat2(at = e.at, value = -(e as ExprConstFloat2).value)
-    if (e is ExprConstFloat3) return new ExprConstFloat3(at = e.at, value = -(e as ExprConstFloat3).value)
-    if (e is ExprConstFloat4) return new ExprConstFloat4(at = e.at, value = -(e as ExprConstFloat4).value)
-    if (e is ExprConstInt2) return new ExprConstInt2(at = e.at, value = -(e as ExprConstInt2).value)
-    if (e is ExprConstInt3) return new ExprConstInt3(at = e.at, value = -(e as ExprConstInt3).value)
-    if (e is ExprConstInt4) return new ExprConstInt4(at = e.at, value = -(e as ExprConstInt4).value)
-    return null
+    if (e is ExprConstDouble) return new ExprConstDouble(at = e.at, value = -(e as ExprConstDouble).value)   // double: outside the 32-bit grid
+    var L = const_lanes(e)
+    if (L.kind == CK_FLOAT) { L.f = -L.f; return make_const_lanes(L, e.at) }
+    if (L.kind == CK_INT) { L.i = -L.i; return make_const_lanes(L, e.at) }
+    return null   // uint excluded — modular negation is value-correct but backend-hostile
 }
 
 def private has_arity_named(mod : Module?; fname : string; argc : int) : bool {

@@ -38,7 +38,7 @@ def public is_walkable_node(e : ExpressionPtr) : bool {
 // rewrite_children to unlock your work (fail-safe: a missed opt, never a miscompile), then report it.
 def public guard_unhandled_node(e : ExpressionPtr) : void {
     if (e == null || e is ExprVar || e |> is_expr_const()) return   // legit leaves — not a gap
-    macro_error(compiling_program(), e.at, "flatten optimizer reached an unhandled expression node '{e.__rtti}': this is a real gap in the optimizer (the pass silently skips it, so a uniform/mutable subtree inside escapes hoisting / CSE / safety analysis). Comment out guard_unhandled_node in daslib/flatten_opt.das to unlock your current work, then please report this node kind.")
+    macro_error(compiling_program(), e.at, "flatten optimizer reached an unhandled expression node '{e.__rtti}': this is a real gap in the optimizer (the pass silently skips it, so a uniform/mutable subtree inside escapes hoisting / CSE / safety analysis). Comment out guard_unhandled_node in daslib/flatten_opt_common.das to unlock your current work, then please report this node kind.")
 }
 
 // Replace each child slot of `e` in place with `fn(child)`; a known leaf is left alone, and an
@@ -205,6 +205,62 @@ class public FlatUsesBuilder : AstVisitor {
     }
 }
 
+// ===== Numeric-const grid: typed-lane carrier =====
+// One extractor + one builder centralize the per-(element,width) ExprConst* ladder. Scope: the
+// 32-bit grid (float/int/uint, 1..4); int8/16/64, double, bool stay on the scalar predicates below.
+
+let public CK_NONE = 0
+let public CK_FLOAT = 1
+let public CK_INT = 2
+let public CK_UINT = 3
+
+struct public ConstLanes {
+    kind : int       // CK_*
+    dim  : int       // 1..4
+    f    : float4    // float lanes (CK_FLOAT)
+    i    : int4      // int/uint lanes (CK_INT signed; CK_UINT value as int)
+}
+
+//! Extract a 32-bit-grid numeric const (float/int/uint scalar or 2/3/4 vector) into typed lanes; kind = CK_NONE otherwise.
+def public const_lanes(e : ExpressionPtr) : ConstLanes {
+    var r : ConstLanes
+    if (e == null) return r
+    if (e is ExprConstFloat)  { r.kind = CK_FLOAT; r.dim = 1; r.f = float4((e as ExprConstFloat).value, 0.0, 0.0, 0.0); return r }
+    if (e is ExprConstFloat2) { let v = (e as ExprConstFloat2).value; r.kind = CK_FLOAT; r.dim = 2; r.f = float4(v.x, v.y, 0.0, 0.0); return r }
+    if (e is ExprConstFloat3) { let v = (e as ExprConstFloat3).value; r.kind = CK_FLOAT; r.dim = 3; r.f = float4(v.x, v.y, v.z, 0.0); return r }
+    if (e is ExprConstFloat4) { r.kind = CK_FLOAT; r.dim = 4; r.f = (e as ExprConstFloat4).value; return r }
+    if (e is ExprConstInt)    { r.kind = CK_INT;  r.dim = 1; r.i = int4((e as ExprConstInt).value, 0, 0, 0); return r }
+    if (e is ExprConstInt2)   { let v = (e as ExprConstInt2).value; r.kind = CK_INT; r.dim = 2; r.i = int4(v.x, v.y, 0, 0); return r }
+    if (e is ExprConstInt3)   { let v = (e as ExprConstInt3).value; r.kind = CK_INT; r.dim = 3; r.i = int4(v.x, v.y, v.z, 0); return r }
+    if (e is ExprConstInt4)   { r.kind = CK_INT;  r.dim = 4; r.i = (e as ExprConstInt4).value; return r }
+    if (e is ExprConstUInt)   { r.kind = CK_UINT; r.dim = 1; r.i = int4(int((e as ExprConstUInt).value), 0, 0, 0); return r }
+    if (e is ExprConstUInt2)  { let v = (e as ExprConstUInt2).value; r.kind = CK_UINT; r.dim = 2; r.i = int4(int(v.x), int(v.y), 0, 0); return r }
+    if (e is ExprConstUInt3)  { let v = (e as ExprConstUInt3).value; r.kind = CK_UINT; r.dim = 3; r.i = int4(int(v.x), int(v.y), int(v.z), 0); return r }
+    if (e is ExprConstUInt4)  { let v = (e as ExprConstUInt4).value; r.kind = CK_UINT; r.dim = 4; r.i = int4(int(v.x), int(v.y), int(v.z), int(v.w)); return r }
+    return r
+}
+
+//! Build a 32-bit-grid numeric const from typed lanes (the inverse of const_lanes); null if kind = CK_NONE.
+def public make_const_lanes(L : ConstLanes; at : LineInfo) : ExpressionPtr {
+    if (L.kind == CK_FLOAT) {
+        if (L.dim == 1) return new ExprConstFloat(at = at, value = L.f.x)
+        if (L.dim == 2) return new ExprConstFloat2(at = at, value = float2(L.f.x, L.f.y))
+        if (L.dim == 3) return new ExprConstFloat3(at = at, value = float3(L.f.x, L.f.y, L.f.z))
+        return new ExprConstFloat4(at = at, value = L.f)
+    } elif (L.kind == CK_INT) {
+        if (L.dim == 1) return new ExprConstInt(at = at, value = L.i.x)
+        if (L.dim == 2) return new ExprConstInt2(at = at, value = int2(L.i.x, L.i.y))
+        if (L.dim == 3) return new ExprConstInt3(at = at, value = int3(L.i.x, L.i.y, L.i.z))
+        return new ExprConstInt4(at = at, value = L.i)
+    } elif (L.kind == CK_UINT) {
+        if (L.dim == 1) return new ExprConstUInt(at = at, value = uint(L.i.x))
+        if (L.dim == 2) return new ExprConstUInt2(at = at, value = uint2(uint(L.i.x), uint(L.i.y)))
+        if (L.dim == 3) return new ExprConstUInt3(at = at, value = uint3(uint(L.i.x), uint(L.i.y), uint(L.i.z)))
+        return new ExprConstUInt4(at = at, value = uint4(uint(L.i.x), uint(L.i.y), uint(L.i.z), uint(L.i.w)))
+    }
+    return null
+}
+
 // A scalar zero/default literal (int 0, float 0.0, bool false, …). A `var x = <this>` init is
 // redundant with daslang's zero-init of a bare `var x : T`, so it can be dropped. Non-scalar
 // inits (vector/struct ctors) are not literals here and left alone.
@@ -267,35 +323,35 @@ def public is_real_val(e : ExpressionPtr; want : double) : bool {
 // is_real_val so the float identities fire for vector-const operands (`v * float3(1)`); `want`
 // is exact (0/1/-1) so the widening compare is exact.
 def public is_real_vec_val(e : ExpressionPtr; want : double) : bool {
-    if (e == null) return false
-    if (e is ExprConstFloat2) { let v = (e as ExprConstFloat2).getValue; return double(v.x) == want && double(v.y) == want }
-    if (e is ExprConstFloat3) { let v = (e as ExprConstFloat3).getValue; return double(v.x) == want && double(v.y) == want && double(v.z) == want }
-    if (e is ExprConstFloat4) { let v = (e as ExprConstFloat4).getValue; return double(v.x) == want && double(v.y) == want && double(v.z) == want && double(v.w) == want }
-    return false
+    let L = const_lanes(e)
+    if (L.kind != CK_FLOAT || L.dim < 2) return false
+    for (k in range(L.dim)) {
+        if (double(L.f[k]) != want) return false
+    }
+    return true
 }
 
 // An all-lanes-equal int OR uint vector const equal to `want` (want >= 0). Mirrors is_int_val
 // covering both signed and unsigned scalar consts — uint vectors fold for 0/1 but not -1.
 def public is_int_vec_val(e : ExpressionPtr; want : int64) : bool {
-    if (e == null) return false
-    if (e is ExprConstInt2) { let v = (e as ExprConstInt2).getValue; return int64(v.x) == want && int64(v.y) == want }
-    if (e is ExprConstInt3) { let v = (e as ExprConstInt3).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want }
-    if (e is ExprConstInt4) { let v = (e as ExprConstInt4).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want && int64(v.w) == want }
-    if (e is ExprConstUInt2) { let v = (e as ExprConstUInt2).getValue; return int64(v.x) == want && int64(v.y) == want }
-    if (e is ExprConstUInt3) { let v = (e as ExprConstUInt3).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want }
-    if (e is ExprConstUInt4) { let v = (e as ExprConstUInt4).getValue; return int64(v.x) == want && int64(v.y) == want && int64(v.z) == want && int64(v.w) == want }
-    return false
+    let L = const_lanes(e)
+    if ((L.kind != CK_INT && L.kind != CK_UINT) || L.dim < 2) return false
+    for (k in range(L.dim)) {
+        if (int64(L.i[k]) != want) return false
+    }
+    return true
 }
 
 // An all-lanes -1 signed int vector const (ExprConstInt2/3/4 only). Mirrors is_int_neg_one —
 // an unsigned vector "-1" is a large positive, never a negation factor (the "uint ≈ int,
 // almost" boundary).
 def public is_int_vec_neg_one(e : ExpressionPtr) : bool {
-    if (e == null) return false
-    if (e is ExprConstInt2) { let v = (e as ExprConstInt2).getValue; return v.x == -1 && v.y == -1 }
-    if (e is ExprConstInt3) { let v = (e as ExprConstInt3).getValue; return v.x == -1 && v.y == -1 && v.z == -1 }
-    if (e is ExprConstInt4) { let v = (e as ExprConstInt4).getValue; return v.x == -1 && v.y == -1 && v.z == -1 && v.w == -1 }
-    return false
+    let L = const_lanes(e)
+    if (L.kind != CK_INT || L.dim < 2) return false
+    for (k in range(L.dim)) {
+        if (L.i[k] != -1) return false
+    }
+    return true
 }
 
 // Combined const-operand predicates for the algebraic identities: scalar OR all-lanes-equal
@@ -408,35 +464,14 @@ def public splat_scalar_arg(e : ExpressionPtr) : ExpressionPtr {
 
 // Bitmask of zero lanes of a const float/int/uint vector literal; 0 when none (or not one).
 def public const_vec_zero_mask(e : ExpressionPtr) : int {
-    if (e == null) return 0
+    let L = const_lanes(e)
+    if (L.kind == CK_NONE || L.dim < 2) return 0
     var m = 0
-    if (e is ExprConstFloat2) {
-        let v = (e as ExprConstFloat2).value
-        if (v.x == 0.0) { m |= 1; }; if (v.y == 0.0) { m |= 2; }
-    } elif (e is ExprConstFloat3) {
-        let v = (e as ExprConstFloat3).value
-        if (v.x == 0.0) { m |= 1; }; if (v.y == 0.0) { m |= 2; }; if (v.z == 0.0) { m |= 4; }
-    } elif (e is ExprConstFloat4) {
-        let v = (e as ExprConstFloat4).value
-        if (v.x == 0.0) { m |= 1; }; if (v.y == 0.0) { m |= 2; }; if (v.z == 0.0) { m |= 4; }; if (v.w == 0.0) { m |= 8; }
-    } elif (e is ExprConstInt2) {
-        let v = (e as ExprConstInt2).value
-        if (v.x == 0) { m |= 1; }; if (v.y == 0) { m |= 2; }
-    } elif (e is ExprConstInt3) {
-        let v = (e as ExprConstInt3).value
-        if (v.x == 0) { m |= 1; }; if (v.y == 0) { m |= 2; }; if (v.z == 0) { m |= 4; }
-    } elif (e is ExprConstInt4) {
-        let v = (e as ExprConstInt4).value
-        if (v.x == 0) { m |= 1; }; if (v.y == 0) { m |= 2; }; if (v.z == 0) { m |= 4; }; if (v.w == 0) { m |= 8; }
-    } elif (e is ExprConstUInt2) {
-        let v = (e as ExprConstUInt2).value
-        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }
-    } elif (e is ExprConstUInt3) {
-        let v = (e as ExprConstUInt3).value
-        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }; if (v.z == 0u) { m |= 4; }
-    } elif (e is ExprConstUInt4) {
-        let v = (e as ExprConstUInt4).value
-        if (v.x == 0u) { m |= 1; }; if (v.y == 0u) { m |= 2; }; if (v.z == 0u) { m |= 4; }; if (v.w == 0u) { m |= 8; }
+    for (k in range(L.dim)) {
+        let isZero = L.kind == CK_FLOAT ? (L.f[k] == 0.0) : (L.i[k] == 0)
+        if (isZero) {
+            m |= (1 << k)
+        }
     }
     return m
 }
@@ -731,33 +766,18 @@ def public reads_mutable(e : ExpressionPtr; mutableVars : table<string>) : bool 
 // A reciprocal copy of a scalar/vector float const literal (`C` → `1/C`); null for any other
 // node or when any lane is zero (no inf literals). Backs the `x / C → x * (1/C)` fold arm.
 def public recip_const(e : ExpressionPtr) : ExpressionPtr {
-    if (e == null) return null
-    if (e is ExprConstFloat) {
-        let v = (e as ExprConstFloat).value
-        if (v == 0.0) return null
-        return new ExprConstFloat(at = e.at, value = 1.0 / v)
-    }
     if (e is ExprConstDouble) {
         let v = (e as ExprConstDouble).value
         if (v == 0.0lf) return null
         return new ExprConstDouble(at = e.at, value = 1.0lf / v)
     }
-    if (e is ExprConstFloat2) {
-        let v = (e as ExprConstFloat2).value
-        if (v.x == 0.0 || v.y == 0.0) return null
-        return new ExprConstFloat2(at = e.at, value = float2(1.0 / v.x, 1.0 / v.y))
+    var L = const_lanes(e)
+    if (L.kind != CK_FLOAT) return null
+    for (k in range(L.dim)) {
+        if (L.f[k] == 0.0) return null   // a zero lane keeps the div (no inf literal)
     }
-    if (e is ExprConstFloat3) {
-        let v = (e as ExprConstFloat3).value
-        if (v.x == 0.0 || v.y == 0.0 || v.z == 0.0) return null
-        return new ExprConstFloat3(at = e.at, value = float3(1.0 / v.x, 1.0 / v.y, 1.0 / v.z))
-    }
-    if (e is ExprConstFloat4) {
-        let v = (e as ExprConstFloat4).value
-        if (v.x == 0.0 || v.y == 0.0 || v.z == 0.0 || v.w == 0.0) return null
-        return new ExprConstFloat4(at = e.at, value = float4(1.0 / v.x, 1.0 / v.y, 1.0 / v.z, 1.0 / v.w))
-    }
-    return null
+    L.f = float4(1.0, 1.0, 1.0, 1.0) / L.f   // padding lanes (k >= dim) go inf but make_const_lanes drops them
+    return make_const_lanes(L, e.at)
 }
 
 // All-const lanes become a const VECTOR LITERAL (the fold phase is over by fuse time, so an
@@ -809,8 +829,9 @@ def public component_read_of(var e : ExpressionPtr; var baseKey : string&; var b
 }
 
 def public scalar_float_const(e : ExpressionPtr; var v : float&) : bool {
-    if (e == null || !(e is ExprConstFloat)) return false
-    v = (e as ExprConstFloat).value
+    let L = const_lanes(e)
+    if (L.kind != CK_FLOAT || L.dim != 1) return false
+    v = L.f.x
     return true
 }
 
