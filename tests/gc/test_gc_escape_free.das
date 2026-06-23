@@ -84,6 +84,30 @@ def alias_then_escape(i : int) {
     g_kept = q
 }
 
+// a SCRIPT callee that stores its argument into a global -> its parameter escapes, so a local
+// passed only here must NOT be freed
+def keep_node_script(var p : Node?) { g_kept = p }
+def escape_via_script(i : int) {
+    var p = new Node(x = i, y = i)
+    keep_node_script(p)
+}
+
+// transitive: keep_node_script_t forwards p to keep_node_script, which stores it -> the escape
+// transits the call chain, so the parameter still escapes
+def keep_node_script_t(var p : Node?) { keep_node_script(p) }
+def escape_via_script_transitive(i : int) {
+    var p = new Node(x = i, y = i)
+    keep_node_script_t(p)
+}
+
+// a script callee that captures its argument into a lambda stored in a global -> the parameter
+// escapes through the capture frame
+def keep_node_capture(var p : Node?) { g_lam <- @() : int { return p.x } }
+def escape_via_script_capture(i : int) {
+    var p = new Node(x = i, y = i)
+    keep_node_capture(p)
+}
+
 [test]
 def test_escape_free_does_not_free_global(t : T?) {
     leak_into_global(42)
@@ -155,4 +179,28 @@ def test_escape_free_does_not_run_user_finalizer(t : T?) {
     g_user_fin_calls = 0
     churn_user_finalizer()
     t |> equal(g_user_fin_calls, 0)   // freed without finalizing -> matches GC behavior
+}
+
+// SCRIPT-callee escape: a local passed to a script function that stores it must survive. If the
+// per-parameter analysis wrongly marked the callee's parameter escape-free, the local would be
+// statically freed and the validating collect (or the value check) would fail.
+[test]
+def test_escape_free_does_not_free_stored_by_script(t : T?) {
+    escape_via_script(77)
+    unsafe { heap_collect(true, true) }
+    t |> equal(g_kept.x, 77)
+}
+
+[test]
+def test_escape_free_does_not_free_stored_by_script_transitive(t : T?) {
+    escape_via_script_transitive(88)
+    unsafe { heap_collect(true, true) }
+    t |> equal(g_kept.x, 88)
+}
+
+[test]
+def test_escape_free_does_not_free_captured_by_script(t : T?) {
+    escape_via_script_capture(66)
+    unsafe { heap_collect(true, true) }
+    t |> equal(invoke(g_lam), 66)
 }

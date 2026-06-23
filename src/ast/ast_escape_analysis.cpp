@@ -3,22 +3,29 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_escape_analysis.h"
 
 namespace das {
 
-    // Escape analysis and the optimization that uses it are kept as two separate passes:
+    // Escape analysis and the optimization that consumes it are two separate passes, so the analysis
+    // result (the Variable escape flags) stands on its own and the AST mutation is separable:
     //
-    //   1. EscapeAnalysisVisitor  - PURE ANALYSIS. Computes, per local pointer, whether it can
-    //      escape its scope, and records the result on Variable::does_not_escape. No AST mutation.
-    //      The result is a reusable property other optimizations could also consult.
+    //   ANALYSIS (escapeAnalysis) - three pieces with a clear data boundary between them:
+    //     1. EscapeGraph        - PURE DATA: a flow graph over pointer-valued variables + per-function
+    //                             return summaries. No logic.
+    //     2. EscapeGraphBuilder - one whole-program walk that POPULATES an EscapeGraph (sinks, flow
+    //                             edges, return summaries, work lists). No propagation.
+    //     3. EscapeSolver       - CONSUMES the graph: two monotone fixpoints (escape + fresh-owned),
+    //                             then writes the result onto Variable::does_not_escape / escape_* /
+    //                             escape_no_stack. No AST walking.
     //
-    //   2. ScopeFreeVisitor       - OPTIMIZATION (scope-based deallocation, a la RAII/drop).
-    //      Consumes Variable::does_not_escape and emits a deterministic `delete` at the end of the
-    //      declaring block, so the object is freed at scope exit instead of waiting for the heap GC.
+    //   OPTIMIZATION (scopeFreeOptimization, ScopeFreeVisitor) - consumes Variable::does_not_escape and
+    //     emits a deterministic free at the end of the declaring block (scope exit), instead of leaving
+    //     the object to the heap GC. Its "did the AST change" result drives a re-infer.
     //
-    // The analysis is conservative: a local is marked does_not_escape only when EVERY use is a
-    // field access (the base of an ExprField). Under-approximating the safe uses keeps it sound -
-    // any unrecognized use leaves the variable as "escapes" and it is left to the GC.
+    // The analysis is conservative: a use is "safe" only when recognized (field-base read, escape-
+    // neutral argument, copy alias, forwarded ownership). Any unrecognized use leaks the pointer, so
+    // under-approximating the safe uses keeps it sound.
 
     static bool isFreshAlloc ( Expression * init ) {
         // `new T()` is an ExprNew; `new T(field=val)` lowers to ExprAscend over ExprMakeStruct.
@@ -36,47 +43,85 @@ namespace das {
         return typ->canDelete();
     }
 
-    // a local pointer is a candidate for scope-free iff it is freshly allocated and type-eligible,
-    // in a function whose scope-exit semantics are well-defined (not generated/generator/lambda;
-    // unsafe excluded as it can hide aliasing the field-base analysis cannot see)
-    static bool isEscapeFreeCandidate ( Function * func, ExprLet * expr, const VariablePtr & var ) {
+    // shared gates for a scope-free candidate local: a freeable pointer-to-struct in a function
+    // whose scope-exit semantics are well-defined (not generated/generator/lambda; unsafe excluded
+    // as it can hide aliasing the field-base analysis cannot see)
+    static bool isFreeCandidateShape ( Function * func, ExprLet * expr, const VariablePtr & var ) {
         return func
             && !func->generated && !func->generator && !func->lambda
             && !func->hasUnsafe
             && !expr->inScope && !var->inScope
             && !var->consumed && !var->single_return_via_move && !var->early_out
-            && isFreshAlloc(var->init)
             && isEscapeFreePtr(var->type);
     }
 
-    // unwrap pure pointer<->ref / ref->value representation nodes to the variable being
-    // dereferenced; returns the exact ExprVar node the traversal will visit
-    static ExprVar * derefBaseVar ( Expression * e ) {
+    // a local pointer is a candidate for scope-free iff it is freshly allocated and type-eligible
+    static bool isEscapeFreeCandidate ( Function * func, ExprLet * expr, const VariablePtr & var ) {
+        return isFreeCandidateShape(func, expr, var) && isFreshAlloc(var->init);
+    }
+
+    // strip pure pointer<->ref / ref->value representation nodes, returning the underlying expression
+    static Expression * peelRefNodes ( Expression * e ) {
         while ( e ) {
-            if ( e->rtti_isVar() ) return (ExprVar *) e;
-            else if ( e->rtti_isPtr2Ref() ) e = ((ExprPtr2Ref *)e)->subexpr;
+            if ( e->rtti_isPtr2Ref() ) e = ((ExprPtr2Ref *)e)->subexpr;
             else if ( e->rtti_isRef2Ptr() ) e = ((ExprRef2Ptr *)e)->subexpr;
             else if ( e->rtti_isR2V() ) e = ((ExprRef2Value *)e)->subexpr;
             else break;
         }
-        return nullptr;
+        return e;
     }
 
-    // Passing the pointer to such a call cannot let it escape: the callee is a built-in (C++) that is
-    // fully pure (no declared side effects, not unsafe, so it can't store the argument anywhere) and
-    // whose return can't carry the pointer back out (non-ref, void-or-workhorse). Restricted to
-    // built-ins because their SideEffects are declared at bind time and reliable here; script-function
-    // side effects are only inferred in a later pass (ast_unused), so script calls stay conservative.
-    static bool isEscapeNeutralCall ( ExprCall * call ) {
-        auto fn = call->func;
-        if ( !fn || !fn->builtIn || fn->sideEffectFlags != 0 || fn->unsafeOperation ) return false;
-        auto res = fn->result;
-        return res && !res->ref && (res->isVoid() || res->isWorkhorseType());
+    // the exact ExprVar a value dereferences to (after peeling representation nodes), or null
+    static ExprVar * derefBaseVar ( Expression * e ) {
+        e = peelRefNodes(e);
+        return ( e && e->rtti_isVar() ) ? (ExprVar *) e : nullptr;
     }
 
-    static bool escapeDecided ( Variable * var ) {
-        return var->does_not_escape || var->escapes_return || var->escapes_argument
-            || var->escapes_global;
+    // the called function, if the expression is a direct call (after peeling), or null
+    static Function * derefCallee ( Expression * e ) {
+        e = peelRefNodes(e);
+        return ( e && e->rtti_isCallFunc() ) ? ((ExprCallFunc *)e)->func : nullptr;
+    }
+
+    // positional index of `arg` in the call's argument list (~0 if not found)
+    static size_t callArgIndex ( ExprLooksLikeCall * call, Expression * arg ) {
+        for ( size_t i=0; i!=call->arguments.size(); ++i ) {
+            if ( call->arguments[i]==arg ) return i;
+        }
+        return ~size_t(0);
+    }
+
+    // a by-value (non-ref) pointer to a daslang struct - the value whose escape we can track
+    static bool isPointerToStruct ( const TypeDeclPtr & typ ) {
+        return typ && !typ->ref && typ->baseType==Type::tPointer && !typ->smartPtr
+            && typ->firstType && typ->firstType->baseType==Type::tStructure;
+    }
+
+    static bool isParamEscapeCandidate ( const VariablePtr & var ) {
+        return isPointerToStruct(var->type);
+    }
+
+    // a function whose body we can soundly analyze for parameter escape: visible body, no hidden
+    // aliasing via unsafe, not a generated / generator / lambda shape the field-base analysis can't model
+    static bool isParamAnalyzableFunc ( Function * func ) {
+        return func && !func->builtIn && !func->stub && !func->isTemplate
+            && !func->generated && !func->generator && !func->lambda && !func->hasUnsafe;
+    }
+
+    // can a pointer passed at positional `argIndex` of this call escape through the callee? returns
+    // true when it CANNOT (escape-neutral for that one argument). built-ins are judged by their
+    // declared side effects + a return that can't carry the pointer out; script functions by the
+    // interprocedural per-parameter result computed in ParamEscapeAnalysis (which already folds in the
+    // return / global-store / store-into-another-arg / transitive-call channels).
+    static bool isArgEscapeNeutral ( Function * fn, size_t argIndex ) {
+        if ( !fn || fn->unsafeOperation ) return false;
+        if ( fn->builtIn ) {
+            if ( fn->sideEffectFlags != 0 ) return false;
+            auto res = fn->result;
+            return res && !res->ref && (res->isVoid() || res->isWorkhorseType());
+        }
+        if ( argIndex >= fn->arguments.size() ) return false;
+        return fn->arguments[argIndex]->does_not_escape;
     }
 
     static bool finalListFreesVar ( ExprBlock * block, Variable * var ) {
@@ -135,87 +180,260 @@ namespace das {
               << " in '" << func->module->name << "::" << func->name << "'\n";
     }
 
-    // ===== Pass 1: escape analysis (classifies each candidate into the escape-kind result) =====
-    class EscapeAnalysisVisitor : public Visitor {
-    public:
-        bool anyChanged = false;
-        EscapeAnalysisVisitor ( TextWriter * logs_ ) : logs(logs_) {}
-    protected:
-        virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->stub && !fun->isTemplate;
-        }
-        void record ( Variable * var, EscapeKind kind ) {
-            recordEscape(var, kind);
-            logEscape(logs, func, var, kind);
-            anyChanged = true;
-        }
-        virtual void preVisit ( Function * fun ) override {
-            Visitor::preVisit(fun);
-            func = fun;
-            candidates.clear();
-            safeBase.clear();
-            returnDepth = 0;
-            argDepth = 0;
-        }
-        virtual FunctionPtr visit ( Function * fun ) override {
-            // a candidate with no escape kind recorded provably does not escape
-            for ( auto var : candidates ) {
-                if ( escapeDecided(var) ) continue;
-                record(var, EscapeKind::DoesNotEscape);
-            }
-            func = nullptr;
-            return Visitor::visit(fun);
-        }
-        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            // only analyze still-undecided candidates (a decided one keeps its frozen result)
-            if ( !escapeDecided(var) && isEscapeFreeCandidate(func, expr, var) ) {
-                candidates.insert(var);
-            }
-            return Visitor::visitLet(expr,var,last);
-        }
-        virtual void preVisit ( ExprReturn * expr ) override { Visitor::preVisit(expr); returnDepth++; }
-        virtual ExpressionPtr visit ( ExprReturn * expr ) override { returnDepth--; return Visitor::visit(expr); }
-        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
-            Visitor::preVisitCallArg(call, arg, last); argDepth++;
-            // a pointer passed directly to a pure, non-aliasing-return call can't escape through it
-            if ( isEscapeNeutralCall(call) ) {
-                if ( auto v = derefBaseVar(arg) ) safeBase.insert(v);
-            }
-        }
-        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
-            argDepth--; return Visitor::visitCallArg(call, arg, last);
-        }
-        virtual void preVisit ( ExprField * expr ) override {
-            Visitor::preVisit(expr);
-            if ( auto v = derefBaseVar(expr->value) ) safeBase.insert(v);
-        }
-        virtual ExpressionPtr visit ( ExprVar * expr ) override {
-            // a use that is not a field-access base leaks the pointer value: classify how
-            if ( expr->variable && candidates.find(expr->variable)!=candidates.end()
-                 && safeBase.find(expr)==safeBase.end() ) {
-                auto var = expr->variable;
-                if (returnDepth > 0) {
-                    record(var, EscapeKind::Return);
-                } else if (argDepth > 0) {
-                    record(var, EscapeKind::Argument);
-                } else {
-                    record(var, EscapeKind::Global);
-                }
-            }
-            return Visitor::visit(expr);
-        }
-        Function * func = nullptr;
-        TextWriter * logs = nullptr;
-        int returnDepth = 0;
-        int argDepth = 0;
-        das_set<Variable *> candidates;
-        das_set<Expression *> safeBase;
+    // ===== Escape graph =====
+    // The product of one whole-program walk: a flow graph over pointer-valued variables (parameters
+    // and locals alike) plus per-function return summaries. PURE DATA - no analysis logic. Built by
+    // EscapeGraphBuilder, consumed by EscapeSolver.
+    //
+    // Model: Choi et al., "Escape Analysis for Java" (OOPSLA'99) connection graph + the three-state
+    // NoEscape/ArgEscape/GlobalEscape lattice; backward flow-insensitive propagation as in Gay &
+    // Steensgaard, "Fast Escape Analysis and Stack Allocation" (CC'00).
+    struct EscapeGraph {
+        // SEEDS - direct facts read straight off the syntax:
+        das_hash_map<Variable *, EscapeKind>           sinks;        // a var used in a leaking position, + how
+        das_hash_map<Function *, bool>                 freshOwned;   // optimistic: f returns a uniquely-owned fresh object
+        // EDGES - relations the solver propagates to a fixpoint:
+        das_hash_map<Variable *, vector<Variable *>>   revDep;       // escapes(src) |= escapes(dst); revDep[dst] = {src...}
+        das_hash_map<Function *, vector<Function *>>   retForward;   // freshOwned(f) &= freshOwned(g) for `return g(...)`
+        // WORK LISTS - what to materialize once the fixpoint settles:
+        vector<pair<Variable *, Function *>>           paramFn;      // analyzable params       -> Variable::does_not_escape
+        vector<pair<Variable *, Function *>>           freshLocalFn; // fresh-alloc local owners -> EscapeKind
+
+        struct CallResultLet { Variable * var; Function * callee; Function * fn; };
+        vector<CallResultLet>                          callResultLets; // `var c = f(...)` candidates for ownership transfer
+        das_set<Variable *>                            aliasedLocal; // copied/captured local   -> not stack-relocatable
     };
 
-    // ===== Pass 2: scope-free optimization (consumes Variable::does_not_escape) =====
-    // upper bound on a pointee we are willing to move onto the (fixed-size) stack frame; anything
-    // larger stays on the heap (and is still freed at scope exit) so a big struct can't blow the stack
-    static constexpr uint32_t MAX_STACK_ALLOC_SIZE = 256;
+    // ===== Escape graph builder =====
+    // ONE pass over analyzed function bodies. Its only job is to POPULATE an EscapeGraph: record
+    // direct escape sinks, alias/argument flow edges, per-function return summaries, and the
+    // variables to materialize. It performs NO propagation - that is the solver's job.
+    //   input:  the set of functions we are allowed to analyze
+    //   output: a populated EscapeGraph (returned by the static build() entry point)
+    class EscapeGraphBuilder : public Visitor {
+    public:
+        static EscapeGraph build ( Program * prog, const das_set<Function *> & analyzed ) {
+            EscapeGraphBuilder builder(analyzed);
+            prog->visit(builder);
+            return move(builder.graph);
+        }
+    protected:
+        EscapeGraphBuilder ( const das_set<Function *> & analyzed_ ) : analyzed(analyzed_) {}
+
+        // ---- recording helpers (the only writers of `graph`) ----
+        void sink ( Variable * v, EscapeKind kind ) {                  // a direct leak (seed)
+            if ( graph.sinks.find(v)==graph.sinks.end() ) graph.sinks[v] = kind;
+        }
+        void flowEdge ( Variable * src, Variable * dst ) {             // escapes(src) |= escapes(dst)
+            graph.revDep[dst].push_back(src);
+        }
+
+        // ---- classification helpers ----
+        EscapeKind depthKind () const {                                // how an unrecognized use leaks, by context
+            if ( returnDepth > 0 ) return EscapeKind::Return;
+            if ( argDepth > 0 ) return EscapeKind::Argument;
+            return EscapeKind::Global;
+        }
+
+        // ---- per-function setup ----
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return analyzed.find(fun)!=analyzed.end();
+        }
+        virtual void preVisit ( Function * fun ) override {
+            func = fun; returnDepth = 0; argDepth = 0; makeBlockDepth = 0;
+            for ( auto & arg : fun->arguments )
+                if ( isParamEscapeCandidate(arg) ) graph.paramFn.push_back({arg, fun});
+            graph.freshOwned[fun] = isPointerToStruct(fun->result);    // optimistic; a non-fresh return revokes it
+        }
+        virtual FunctionPtr visit ( Function * fun ) override { func = nullptr; return fun; }
+
+        // ---- variables to materialize ----
+        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool ) override {
+            if ( isEscapeFreeCandidate(func, expr, var) ) {
+                graph.freshLocalFn.push_back({var, func});                            // `var x = new T`
+            } else if ( isFreeCandidateShape(func, expr, var) ) {
+                if ( auto callee = derefCallee(var->init) )                           // `var c = f(...)`
+                    graph.callResultLets.push_back({var, callee, func});
+            }
+            return var;
+        }
+
+        // ---- SAFE (non-escaping) uses: pre-marked BEFORE the inner ExprVar is visited ----
+        // a plain copy `var x = y` makes x an alias of y: y escapes only if x does (flow edge), and a
+        // copied-from LOCAL can no longer be stack-relocated (the alias would dangle on relocation)
+        virtual void preVisitLetInit ( ExprLet *, const VariablePtr & var, Expression * init ) override {
+            if ( !isPointerToStruct(var->type) || var->init_via_move || var->init_via_clone || isFreshAlloc(init) ) return;
+            if ( auto src = derefBaseVar(init) ) {
+                if ( (src->local || src->argument) && isPointerToStruct(src->variable->type) ) {
+                    safeBase.insert(src);
+                    flowEdge(src->variable, var);
+                    if ( src->local ) graph.aliasedLocal.insert(src->variable);
+                }
+            }
+        }
+        virtual void preVisit ( ExprField * expr ) override {          // a field read never leaks the base
+            if ( auto v = derefBaseVar(expr->value) ) safeBase.insert(v);
+        }
+        virtual void preVisit ( ExprSafeField * expr ) override {      // `p?.x` is a distinct hook from ExprField
+            if ( auto v = derefBaseVar(expr->value) ) safeBase.insert(v);
+        }
+        virtual void preVisit ( ExprOp2 * expr ) override {            // a null-guard `p == null` doesn't leak p
+            if ( isArgEscapeNeutral(expr->func, 0) ) { if ( auto v = derefBaseVar(expr->left) ) safeBase.insert(v); }
+            if ( isArgEscapeNeutral(expr->func, 1) ) { if ( auto v = derefBaseVar(expr->right) ) safeBase.insert(v); }
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool ) override {
+            argDepth++;
+            auto src = derefBaseVar(arg);
+            if ( !src ) return;
+            auto fn = call->func;
+            auto idx = callArgIndex(call, arg);
+            if ( fn && !fn->builtIn && !fn->unsafeOperation && analyzed.find(fn)!=analyzed.end()
+                 && idx < fn->arguments.size() && isParamEscapeCandidate(fn->arguments[idx]) ) {
+                safeBase.insert(src);                                  // analyzed callee: arg escapes iff its param does
+                flowEdge(src->variable, fn->arguments[idx]);
+            } else if ( isArgEscapeNeutral(call->func, idx) ) {
+                safeBase.insert(src);                                  // builtin / opaque callee that can't retain it
+            }
+            // otherwise the argument leaks: handled as a direct sink in visit(ExprVar)
+        }
+        virtual ExpressionPtr visitCallArg ( ExprCall *, Expression * arg, bool ) override {
+            argDepth--; return arg;
+        }
+        // a string builder ("{x}") formats each element into a FRESH string by a read-only walk of its
+        // value; it never retains the pointer, so a base used only here does not escape - like a field
+        // read. (A custom string-cast lowers to a separate call element, handled by preVisitCallArg.)
+        virtual void preVisitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
+            if ( auto v = derefBaseVar(expr) ) safeBase.insert(v);
+        }
+
+        // ---- scope tracking that affects classification ----
+        virtual void preVisit ( ExprReturn * expr ) override {
+            returnDepth++;
+            if ( !func || !isPointerToStruct(func->result) ) return;
+            auto e = peelRefNodes(expr->subexpr);
+            if ( e && isFreshAlloc(e) ) {
+                // returns a freshly-allocated object - keeps fresh-owned candidacy (no-op)
+            } else if ( e && e->rtti_isCallFunc() && ((ExprCallFunc *)e)->func ) {
+                graph.retForward[func].push_back(((ExprCallFunc *)e)->func);
+            } else {
+                graph.freshOwned[func] = false;   // parameter / global / field / null / ... - not fresh-owned
+            }
+        }
+        virtual ExpressionPtr visit ( ExprReturn * expr ) override { returnDepth--; return expr; }
+        // a block captures by reference and cannot be stored/returned: its captures do not escape, but
+        // (like a copy alias) the reference forbids stack relocation of the captured pointee
+        virtual void preVisit ( ExprMakeBlock * ) override { makeBlockDepth++; }
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override { makeBlockDepth--; return expr; }
+
+        // ---- the leak classifier: any tracked use not pre-marked safe is a direct sink ----
+        virtual ExpressionPtr visit ( ExprVar * expr ) override {
+            const auto trackedVar = expr->variable && (expr->local || expr->argument)
+                && isPointerToStruct(expr->variable->type);
+            if ( trackedVar ) {
+                if ( makeBlockDepth > 0 && expr->local ) graph.aliasedLocal.insert(expr->variable);
+                if ( safeBase.find(expr)==safeBase.end() ) sink(expr->variable, depthKind());
+            }
+            return expr;
+        }
+
+        EscapeGraph graph;                            // the product being built
+        const das_set<Function *> & analyzed;         // input: functions we may analyze
+        Function * func = nullptr;                    // walk state below
+        int returnDepth = 0, argDepth = 0, makeBlockDepth = 0;
+        das_set<ExprVar *> safeBase;                  // ExprVar uses already accounted as non-leaking
+    };
+
+    // ===== Escape solver =====
+    // Consumes an EscapeGraph and produces the final per-variable result. Two monotone fixpoints over
+    // the graph's edges, then write-back onto the AST:
+    //   1. escape:      propagate the escape bit backward along flow edges (worklist).
+    //   2. fresh-owned: revoke a function's fresh-owned summary if any forwarded callee is not.
+    //   3. materialize: Variable::does_not_escape (params + freeable locals), EscapeKind, and
+    //      escape_no_stack (freeable but copied/captured -> freed at scope exit, not relocated).
+    class EscapeSolver {
+    public:
+        EscapeSolver ( EscapeGraph g, TextWriter * logs_ ) : graph(move(g)), logs(logs_) {
+            for ( auto & s : graph.sinks ) esc[s.first] = s.second;   // seed the escape fixpoint
+        }
+        bool solveAndApply () {
+            solveEscape();
+            solveFreshOwned();
+            // `var c = f(...)` where f returns a uniquely-owned fresh object and c does not itself
+            // escape the caller: ownership transfers, so the caller frees c at scope exit.
+            for ( auto & cr : graph.callResultLets ) {
+                if ( graph.freshOwned[cr.callee] && !escapes(cr.var) )
+                    graph.freshLocalFn.push_back({cr.var, cr.fn});
+            }
+            return materialize();
+        }
+    protected:
+        // a variable's escape verdict IS its EscapeKind: DoesNotEscape (the map default) means it does
+        // not escape; any other kind means it does, and records how. No separate boolean needed.
+        EscapeKind escapeOf ( Variable * v ) { return esc[v]; }
+        bool escapes ( Variable * v ) { return escapeOf(v) != EscapeKind::DoesNotEscape; }
+
+        // backward reachability: a var escapes if any value it flowed into escapes
+        void solveEscape () {
+            vector<Variable *> work;
+            for ( auto & kv : esc ) if ( kv.second != EscapeKind::DoesNotEscape ) work.push_back(kv.first);
+            while ( !work.empty() ) {
+                auto v = work.back(); work.pop_back();
+                auto it = graph.revDep.find(v);
+                if ( it==graph.revDep.end() ) continue;
+                auto vkind = esc[v];   // capture BEFORE touching esc[src], whose insert may rehash esc
+                for ( auto src : it->second ) {
+                    auto & k = esc[src];
+                    if ( k==EscapeKind::DoesNotEscape ) { k = vkind; work.push_back(src); }
+                }
+            }
+        }
+        // a function is fresh-owned iff every return is fresh or forwards another fresh-owned function
+        void solveFreshOwned () {
+            bool changed = true;
+            while ( changed ) {
+                changed = false;
+                for ( auto & kv : graph.retForward ) {
+                    if ( !graph.freshOwned[kv.first] ) continue;
+                    for ( auto g : kv.second )
+                        if ( !graph.freshOwned[g] ) { graph.freshOwned[kv.first] = false; changed = true; break; }
+                }
+            }
+        }
+        // write the settled result onto the AST
+        bool materialize () {
+            bool any = false;
+            for ( auto & pf : graph.paramFn ) {
+                bool e = escapes(pf.first);
+                pf.first->does_not_escape = !e;
+                if ( e && logs ) logParam(pf.second, pf.first);
+                any = true;
+            }
+            for ( auto & lf : graph.freshLocalFn ) {
+                auto kind = escapeOf(lf.first);
+                recordEscape(lf.first, kind);
+                // freeable but copied/captured: free at scope exit, but do NOT stack-relocate (the
+                // surviving alias/reference would dangle once the pointee moves into the frame)
+                if ( kind==EscapeKind::DoesNotEscape && graph.aliasedLocal.find(lf.first)!=graph.aliasedLocal.end() ) {
+                    lf.first->escape_no_stack = true;
+                }
+                logEscape(logs, lf.second, lf.first, kind);
+                any = true;
+            }
+            return any;
+        }
+        void logParam ( Function * fn, Variable * var ) {
+            if ( !var->at.empty() && var->at.fileInfo )
+                *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << " ";
+            *logs << "escape analysis: parameter '" << var->name << "' escapes in '"
+                  << fn->module->name << "::" << fn->name << "'\n";
+        }
+
+        EscapeGraph                          graph;   // input graph (also holds the promoted free list)
+        das_hash_map<Variable *, EscapeKind> esc;     // per-variable escape fixpoint state (default = DoesNotEscape)
+        TextWriter *                         logs = nullptr;
+    };
+
+    // ===== Scope-free optimization (consumes Variable::does_not_escape) =====
 
     // set the stack-allocation flag on the fresh-alloc init expression; returns true if it changed it.
     // only the shapes the codegen tiers can stack-allocate: a plain `new T()` (no initializer call,
@@ -223,6 +441,8 @@ namespace das {
     // capped by size. classes / constructors / handles are excluded: their construction has semantics
     // (ctor invocation, rtti) that the plain in-frame build does not reproduce (breaks under JIT).
     static bool setAllocateOnStack ( Expression * init ) {
+        // upper bound on a pointee we are willing to move onto the (fixed-size) stack frame
+        static constexpr uint32_t MAX_STACK_ALLOC_SIZE = 256;
         if ( init && init->rtti_isNewExpr() ) {
             auto en = (ExprNew *) init;
             auto st = en->typeexpr ? en->typeexpr->structType : nullptr;
@@ -298,7 +518,7 @@ namespace das {
             if ( var->does_not_escape && !blocks.empty() ) {
                 // put the pointee in the stack frame instead of the heap; idempotent so the
                 // notInferred re-infer loop terminates once the flag is already set
-                if ( forceStack && setAllocateOnStack(var->init) ) {
+                if ( forceStack && !var->escape_no_stack && setAllocateOnStack(var->init) ) {
                     anyWork = true;
                     func->notInferred();
                 }
@@ -337,22 +557,34 @@ namespace das {
         vector<pair<Variable *, ExprBlock *>> pending;
     };
 
-    bool Program::escapeAnalysis(TextWriter & logs) {
+    // ANALYSIS: build the escape graph from one whole-program walk, solve it, and write the result
+    // onto the AST (Variable::does_not_escape / escape_* / escape_no_stack). No AST mutation - the
+    // flags ARE the analysis result, consumed by scopeFreeOptimization (and reusable by anything else).
+    bool escapeAnalysis(Program * program, TextWriter & logs) {
+        auto & options = program->options;
+        auto & policies = program->policies;
         auto forceStack = options.getBoolOption("force_allocate_on_stack", policies.force_allocate_on_stack);
         if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) && !forceStack ) return false;
         auto logEscape = options.getBoolOption("log_escape_analysis", policies.log_escape_analysis);
-        EscapeAnalysisVisitor ev(logEscape ? &logs : nullptr);
-        visit(ev);
-        return ev.anyChanged;
+        das_set<Function *> analyzed;
+        program->thisModule->functions.foreach([&](auto & fn){
+            if ( isParamAnalyzableFunc(fn) ) analyzed.insert(fn);
+        });
+        EscapeGraph graph = EscapeGraphBuilder::build(program, analyzed);
+        return EscapeSolver(move(graph), logEscape ? &logs : nullptr).solveAndApply();
     }
 
-    bool Program::scopeFreeOptimization(TextWriter & logs) {
+    // OPTIMIZATION: consume the analysis result, emitting scope-exit frees / stack relocation. Returns
+    // whether the AST changed, so the caller re-infers the inserted scope_free calls.
+    bool scopeFreeOptimization(Program * program, TextWriter & logs) {
+        auto & options = program->options;
+        auto & policies = program->policies;
         auto forceStack = options.getBoolOption("force_allocate_on_stack", policies.force_allocate_on_stack);
         if ( !options.getBoolOption("force_escape_free", policies.force_escape_free) && !forceStack ) return false;
         auto logEscape = options.getBoolOption("log_escape_analysis", policies.log_escape_analysis);
-        ScopeFreeVisitor ev(logEscape ? &logs : nullptr, forceStack);
-        visit(ev);
-        return ev.anyWork;
+        ScopeFreeVisitor sfv(logEscape ? &logs : nullptr, forceStack);
+        program->visit(sfv);
+        return sfv.anyWork;
     }
 
 }
