@@ -83,7 +83,9 @@ def public memoryBarrierShared() : void {}
 
 // ===== fragment realism =====
 // discard(): abandon the current fragment (block terminator -- last statement on its path).
-// dFdx/dFdy: screen-space partial derivatives over the 2x2 fragment quad. All fragment-only.
+// dFdx/dFdy: screen-space partial derivatives over the 2x2 fragment quad. fwidth = |dFdx| + |dFdy|,
+// the cheap antialiasing width. All fragment-only; GLSL spells them identically (the GL emitter
+// passes the names through), SPIR-V lowers to OpDPdx/OpDPdy/OpFwidth.
 [sideeffects]
 def public discard() : void {}
 
@@ -95,3 +97,7 @@ def public discard() : void {}
 [unused_argument(p), sideeffects] def public dFdy(p : float2) : float2 { return p }
 [unused_argument(p), sideeffects] def public dFdy(p : float3) : float3 { return p }
 [unused_argument(p), sideeffects] def public dFdy(p : float4) : float4 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float) : float { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float2) : float2 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float3) : float3 { return p }
+[unused_argument(p), sideeffects] def public fwidth(p : float4) : float4 { return p }

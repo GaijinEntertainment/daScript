@@ -127,14 +127,9 @@ def public subpassLoad(i : subpassInput) : float4 {
 }
 
 // ===== fragment realism =====
-// discard() and the dFdx/dFdy partial derivatives live in shader_lingua_franca (shared). fwidth =
-// |dFdx| + |dFdy| (OpFwidth) is Vulkan-specific for now. Fragment-only; concrete per-width overloads
-// (NOT a generic): the emitter dispatches by the call name. Stub bodies never run -- the call AST is
-// what is lowered.
-[unused_argument(p), sideeffects] def public fwidth(p : float) : float { return p }
-[unused_argument(p), sideeffects] def public fwidth(p : float2) : float2 { return p }
-[unused_argument(p), sideeffects] def public fwidth(p : float3) : float3 { return p }
-[unused_argument(p), sideeffects] def public fwidth(p : float4) : float4 { return p }
+// discard(), the dFdx/dFdy partial derivatives, and fwidth (= |dFdx| + |dFdy|) all live in
+// shader_lingua_franca (shared) -- GLSL and SPIR-V both speak them, so they are part of the modern
+// union. The SPIR-V emitter lowers fwidth to OpFwidth by call name (module-agnostic).
 
 // textureSize(sampler, lod): the mip-level dimensions in texels (OpImageQuerySizeLod; needs the
 // ImageQuery capability). int2 for 2D/Cube, int3 for 3D / 2D-array (width,height,depth-or-layers).
