@@ -9,9 +9,22 @@ require daslib/safe_addr
 require daslib/random
 
 require path_tracer
+require daslib/clargs
 
 let TRACE_WIDTH = 1024
 let TRACE_HEIGHT = 1024
+
+[CommandLineArgs]
+struct PathTracerArgs {
+    @clarg_short = "f"
+    @clarg_doc = "Render this many frames, then exit 0 (0 = run until the window closes). Lets the demo double as a headless smoke test."
+    frames : int
+
+    @clarg_short = "?"
+    @clarg_name = "show-help"
+    @clarg_doc = "Show this help and exit"
+    help : bool
+}
 
 var @in @location v_position : float2
 var @in @location v_texcoord : float2
@@ -47,17 +60,13 @@ def compute_effect {
     random_seed2D(RAND_SEED, storePos, c_frame)
     random_float4(RAND_SEED)
     let rgb = draw_ray(storePos.x, TRACE_HEIGHT - storePos.y, TRACE_WIDTH, TRACE_HEIGHT)
-    if (true) {
-        var nrgb = rgb.zyxx
-        if (c_frame != 0) {
-            let orgb = imageLoad(c_destTex, storePos)
-            let wf = float(c_frame)
-            nrgb = (orgb * wf + nrgb) / (wf + 1.)
-        }
-        imageStore(c_destTex, storePos, nrgb)
-    } else {
-        imageStore(c_destTex, storePos, srgb)
+    var nrgb = rgb.zyxx
+    if (c_frame != 0) {
+        let orgb = imageLoad(c_destTex, storePos)
+        let wf = float(c_frame)
+        nrgb = (orgb * wf + nrgb) / (wf + 1.)
     }
+    imageStore(c_destTex, storePos, nrgb)
 }
 
 var compute_program, display_program : uint
@@ -103,6 +112,17 @@ def create_gl_objects {
 
 [export]
 def main {
+    var r <- parse_args(type<PathTracerArgs>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<PathTracerArgs>), "toy_path_tracer_opengl")
+        return
+    }
+    let cfg <- r |> move_unwrap
+    if (cfg.help) {
+        print_help(get_command_info(type<PathTracerArgs>), "toy_path_tracer_opengl")
+        return
+    }
     if (glfwInit() == 0) {
         panic("can't init glfw")
     }
@@ -143,5 +163,8 @@ def main {
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        if (cfg.frames > 0 && c_frame >= cfg.frames) {
+            break   // headless smoke / test mode: stop after the requested frame count
+        }
     }
 }

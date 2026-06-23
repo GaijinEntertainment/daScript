@@ -13,9 +13,22 @@ require daslib/safe_addr
 require daslib/random
 
 require path_tracer
+require daslib/clargs
 
 let TRACE_WIDTH = 1024
 let TRACE_HEIGHT = 1024
+
+[CommandLineArgs]
+struct PathTracerArgs {
+    @clarg_short = "f"
+    @clarg_doc = "Render this many frames, then exit 0 (0 = run until the window closes). Lets the demo double as a headless smoke test."
+    frames : int
+
+    @clarg_short = "?"
+    @clarg_name = "show-help"
+    @clarg_doc = "Show this help and exit"
+    help : bool
+}
 let BLOOM_SCALE = 4
 
 var @in @location = 0 v_position : float2
@@ -193,6 +206,17 @@ def create_gl_objects {
 
 [export]
 def main {
+    var r <- parse_args(type<PathTracerArgs>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<PathTracerArgs>), "toy_path_tracer_opengl_hdr")
+        return
+    }
+    let cfg <- r |> move_unwrap
+    if (cfg.help) {
+        print_help(get_command_info(type<PathTracerArgs>), "toy_path_tracer_opengl_hdr")
+        return
+    }
     if (glfwInit() == 0) {
         panic("can't init glfw")
     }
@@ -269,5 +293,8 @@ def main {
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        if (cfg.frames > 0 && c_frame >= cfg.frames) {
+            break   // headless smoke / test mode: stop after the requested frame count
+        }
     }
 }
