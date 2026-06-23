@@ -967,8 +967,13 @@ class GlslExport : AstVisitor {
             if (arg.annotation |> find_arg("groupshared") ?as tBool ?? false) {
                 needInit = false
             }
+            // The Vulkan rail authors UBOs as @uniform and per-frame constants as @push_constant; GL
+            // has no push constants, so a @push_constant block maps to a plain GL uniform (bound loose
+            // by the host). Both lower to `uniform ...` here. (harmonization arc, Phase 2 / D4.)
+            let isUniform = ((arg.annotation |> find_arg("uniform") is tBool) ||
+                (arg.annotation |> find_arg("push_constant") is tBool))
             if (shaderType == ShaderType.vertex) {
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
@@ -980,11 +985,13 @@ class GlslExport : AstVisitor {
                 if (arg.annotation |> find_arg("in") is tBool) {
                     *writer |> write("in "); needInit = false
                 }
-                if (arg.annotation |> find_arg("inout") is tBool) {
+                // @inout and (Vulkan-style) @out are both vertex-stage outputs -> `out`.
+                if (arg.annotation |> find_arg("inout") is tBool ||
+                    arg.annotation |> find_arg("out") is tBool) {
                     *writer |> write("out "); needInit = false
                 }
             } elif (shaderType == ShaderType.fragment) {
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
@@ -1006,7 +1013,7 @@ class GlslExport : AstVisitor {
                         *writer |> write("shared ")
                     }
                 }
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg) || outputImageMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
