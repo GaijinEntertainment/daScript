@@ -22,9 +22,15 @@ module shader_lingua_franca shared public
 // (glUniform1i). The SPIR-V emitter recognizes each type by NAME (classify_global / sampler_info)
 // and ignores the field entirely -- it is a pure descriptor marker there. Shader code never reads
 // the field; it only passes the value to texture()/imageLoad()/imageStore().
-struct sampler2D { texture2D : uint }
-struct sampler3D { texture3D : uint }
-struct image2D   { texture2D : uint }
+struct sampler2D       { texture2D : uint }
+struct sampler3D       { texture3D : uint }
+struct image2D         { texture2D : uint }
+// samplerCube (cubemap), sampler2DArray (layered 2D), sampler2DShadow (depth-compare 2D) are all
+// core GLSL + GLES 3.0 / WebGL2 portable, so they live in the modern shared surface. Each carries the
+// same GL-superset texture-unit handle field for the dasOpenGL rail (set host-side, ignored by SPIR-V).
+struct samplerCube     { textureCube : uint }
+struct sampler2DArray  { texture2DArray : uint }
+struct sampler2DShadow { texture2D : uint }
 
 // ===== vertex / fragment / point builtins =====
 var gl_Position   : float4    // clip-space output position (vertex stage)
@@ -77,6 +83,44 @@ def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
 [unused_argument(s, coord, lod), sideeffects]
 def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+// texture() on the wider sampler dimensionalities: a samplerCube samples by a float3 direction, a
+// sampler2DArray by (u, v, layer). Both GLSL name-identical (the emitter's texture() is dimension-
+// agnostic); SPIR-V keys the marker by name (Dim Cube / Arrayed). textureSize returns the mip-level
+// size in texels (int2 for cube, int3 for 2D-array / 3D = width,height,layers-or-depth).
+[unused_argument(s, uv), sideeffects]
+def public texture(s : samplerCube; uv : float3) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+[unused_argument(s, uv), sideeffects]
+def public texture(s : sampler2DArray; uv : float3) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+[unused_argument(s, lod), sideeffects]
+def public textureSize(s : samplerCube; lod : int) : int2 {
+    return int2(0, 0)
+}
+
+[unused_argument(s, lod), sideeffects]
+def public textureSize(s : sampler3D; lod : int) : int3 {
+    return int3(0, 0, 0)
+}
+
+[unused_argument(s, lod), sideeffects]
+def public textureSize(s : sampler2DArray; lod : int) : int3 {
+    return int3(0, 0, 0)
+}
+
+// textureCompare samples a depth-comparison (shadow) sampler: returns the scalar compare result in
+// [0,1] (1 = lit, 0 = shadowed; a filtered sampler returns the PCF average). Implicit LOD ->
+// fragment-only. SPIR-V lowers it to OpImageSampleDrefImplicitLod; the GLSL emitter rewrites it to
+// the GL spelling texture(sampler2DShadow, vec3(uv, compare)) (GL has no distinct shadow function).
+[unused_argument(s, uv, compare), sideeffects]
+def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : float {
+    return 0.0
 }
 
 // ===== storage images =====

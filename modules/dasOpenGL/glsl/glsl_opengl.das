@@ -56,10 +56,34 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
     return true
 }
 
+// Emit the host-side bind for a combined image sampler: bind <var>.<fieldName> (the GL texture
+// handle) to texture unit `binding` via bindFn, then point the sampler uniform at that unit. Shared
+// by the samplerCube / sampler2DArray / sampler2DShadow paths (sampler2D / sampler3D predate it and
+// stay inline). bindFn must resolve in the consumer's require chain (opengl_boost), like glUniformAny.
+[macro_function]
+def private emit_combined_sampler_bind(var blk : ExprBlock?; vv : VariablePtr; fieldName, bindFn : string) {
+    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
+    var vtex = new ExprField(at = vv.at,
+        value <- new ExprVar(at = vv.at, name := vv.name),
+        name := fieldName
+    )
+    var cll_bind = new ExprCall(at = vv.at, name := bindFn)
+    cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
+    cll_bind.arguments |> emplace(vtex)
+    blk.list |> emplace(cll_bind)
+    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
+    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
+    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
+    cll_uni.arguments |> emplace(cll_gul)
+    cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
+    blk.list |> emplace(cll_uni)
+}
+
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     var blk = new ExprBlock(at = fn.at)
-    collect_dependencies(fnMain) $(vfun, vvar) {
+    collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
             if (vv.annotation |> find_arg("uniform") is tBool) {
                 if (is_glsl_structure(vv, "sampler2D")) {
@@ -123,6 +147,12 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := format)
                     cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := access)
                     blk.list |> emplace(cll_uni)
+                } elif (is_glsl_structure(vv, "samplerCube")) {
+                    emit_combined_sampler_bind(blk, vv, "textureCube", "bind_sampler_cube")
+                } elif (is_glsl_structure(vv, "sampler2DArray")) {
+                    emit_combined_sampler_bind(blk, vv, "texture2DArray", "bind_sampler_2d_array")
+                } elif (is_glsl_structure(vv, "sampler2DShadow")) {
+                    emit_combined_sampler_bind(blk, vv, "texture2D", "bind_sampler_2d_shadow")
                 } else {
                     // glUniformAny(gl_GetUniformLocation("varName"),varName)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")

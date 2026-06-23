@@ -1164,6 +1164,12 @@ class GlslExport : AstVisitor {
     }
 // call
     def override preVisitExprCall(expr : ExprCall?) {
+        if (is_shadow_compare_call(expr)) {
+            // GL has no textureCompare(): a sampler2DShadow samples with texture(s, vec3(uv, ref)).
+            // The vec3() wrap of (uv, compare) is emitted around args 1+2 in visitExprCallArgument.
+            *writer |> write("texture(")
+            return
+        }
         var fnName : string
         unsafe {
             fnName = glsl_function_name(reinterpret<FunctionPtr> expr.func)
@@ -1183,6 +1189,17 @@ class GlslExport : AstVisitor {
         return expr
     }
     def override visitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) {
+        if (is_shadow_compare_call(expr)) {
+            // args: 0=sampler, 1=uv (float2), 2=compare (float) -> texture(s, vec3(uv, compare))
+            if (arg == expr.arguments[0]) {
+                *writer |> write(",vec3(")
+            } elif (arg == expr.arguments[1]) {
+                *writer |> write(",")
+            } elif (arg == expr.arguments[2]) {
+                *writer |> write(")")
+            }
+            return arg
+        }
         if (!last) {
             *writer |> write(",")
         }
@@ -1890,6 +1907,14 @@ def is_glsl_structure(arg; name : string) {
         if ((arg._type.structType._module.name == "glsl_common" || arg._type.structType._module.name == "shader_lingua_franca") && arg._type.structType.name == name) return true
     }
     return false
+}
+
+// A shader_lingua_franca textureCompare(sampler2DShadow, uv, ref) call — GL spells shadow sampling as
+// texture(s, vec3(uv, ref)), so preVisitExprCall / visitExprCallArgument rewrite it on the way out.
+[macro_function]
+def is_shadow_compare_call(expr : ExprCall?) : bool {
+    return (expr != null && expr.name == "textureCompare" &&
+        expr.func != null && expr.func._module != null && expr.func._module.name == "shader_lingua_franca")
 }
 
 [macro_function]

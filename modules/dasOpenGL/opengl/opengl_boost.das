@@ -71,6 +71,23 @@ def bind_sampler_3d(unit : int; tex : uint) {
     glBindTexture(GL_TEXTURE_3D, tex)
 }
 
+def bind_sampler_cube(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_CUBE_MAP, tex)
+}
+
+def bind_sampler_2d_array(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_2D_ARRAY, tex)
+}
+
+// sampler2DShadow binds an ordinary 2D depth texture; the GL_TEXTURE_COMPARE_MODE / depth format are
+// set when the texture is created (not at bind time), so the bind itself matches bind_sampler_2d.
+def bind_sampler_2d_shadow(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_2D, tex)
+}
+
 def bind_image_any(unit : int; tex : uint; format : uint; access : uint = GL_READ_WRITE) {
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
 }

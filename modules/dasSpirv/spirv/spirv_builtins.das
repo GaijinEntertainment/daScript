@@ -49,41 +49,16 @@ def public nonuniformEXT(x : uint) : uint { return x }
 // textureLod(sampler2D) and texelFetch(sampler2D) also live in shader_lingua_franca now -- both are
 // GLSL name-identical (core + ES 3.0), so they are part of the modern union; the SPIR-V emitter still
 // keys them by call name (resolve_sampler_arg) and lowers them to OpImageSampleExplicitLod /
-// OpImage+OpImageFetch. (textureLod for samplerCube / sampler2DArray would join them via overloads
-// here once those marker types move per the Plan-A decision.)
+// OpImage+OpImageFetch. (Any textureLod overloads for samplerCube / sampler2DArray would join them
+// in shader_lingua_franca, where those marker types now live.)
 
 // ===== additional sampler dimensionalities =====
-// Each is an opaque marker recognized by name in classify_global (sampler_info maps it to the SPIR-V
-// image Dim + Arrayed flag). All sample via texture() with a float3 coordinate: a cubemap direction, a
-// 3D texture coordinate, or (u,v,layer) for a 2D array. The emitter's texture() handler is dimension-
-// agnostic, so these need only their marker type + a texture() overload.
-// sampler3D + texture(sampler3D, uv) live in shader_lingua_franca (shared); samplerCube and
-// sampler2DArray are Vulkan-specific.
-struct samplerCube {}
-struct sampler2DArray {}
-
-[unused_argument(s, uv), sideeffects]
-def public texture(s : samplerCube; uv : float3) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
-
-[unused_argument(s, uv), sideeffects]
-def public texture(s : sampler2DArray; uv : float3) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
-
-// ===== depth-compare (shadow) sampling =====
-// sampler2DShadow is an opaque marker for a DEPTH-comparison combined sampler: its OpTypeImage carries
-// the Depth=1 flag and the descriptor is a comparison sampler. textureCompare samples it with a
-// reference value (OpImageSampleDrefImplicitLod) and returns the scalar comparison result in [0,1]
-// (1 = fully lit, 0 = fully shadowed; a filtered sampler returns the PCF average). Implicit LOD ->
-// fragment-only. The stub body never runs — only the call AST is lowered.
-struct sampler2DShadow {}
-
-[unused_argument(s, uv, compare), sideeffects]
-def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : float {
-    return 0.0
-}
+// samplerCube (cubemap), sampler2DArray (layered 2D) and sampler2DShadow (depth-compare 2D), with
+// their texture() / textureSize() / textureCompare() overloads, all live in shader_lingua_franca now:
+// each is core GLSL + GLES 3.0 / WebGL2 portable, so they belong to the modern shared surface both
+// rails speak. The SPIR-V emitter still recognizes them by name (classify_global / sampler_info ->
+// image Dim + Arrayed / Depth flag) and ignores their GL-superset handle field, exactly as for
+// sampler2D / sampler3D / image2D.
 
 // ===== separate image + sampler =====
 // texture2D is a standalone sampled image (OpTypeImage, no sampler) and sampler is a standalone
@@ -126,16 +101,9 @@ def public subpassLoad(i : subpassInput) : float4 {
 // shader_lingua_franca (shared) -- GLSL and SPIR-V both speak them, so they are part of the modern
 // union. The SPIR-V emitter lowers fwidth to OpFwidth by call name (module-agnostic).
 
-// textureSize(sampler, lod): the mip-level dimensions in texels (OpImageQuerySizeLod; needs the
-// ImageQuery capability). int2 for 2D/Cube, int3 for 3D / 2D-array (width,height,depth-or-layers).
-// textureSize(sampler2D, lod) -> int2 lives in shader_lingua_franca (shared); the wider-result
-// dimensionalities are kept here.
-[unused_argument(s, lod), sideeffects]
-def public textureSize(s : samplerCube; lod : int) : int2 { return int2(0, 0) }
-[unused_argument(s, lod), sideeffects]
-def public textureSize(s : sampler3D; lod : int) : int3 { return int3(0, 0, 0) }
-[unused_argument(s, lod), sideeffects]
-def public textureSize(s : sampler2DArray; lod : int) : int3 { return int3(0, 0, 0) }
+// textureSize(sampler, lod) -> the mip-level dimensions in texels (OpImageQuerySizeLod) for sampler2D
+// (-> int2) plus the wider samplerCube / sampler3D / sampler2DArray overloads all live in
+// shader_lingua_franca now, alongside their marker types.
 
 // ===== compute synchronization =====
 // barrier() (OpControlBarrier at Workgroup scope) and memoryBarrierShared() (OpMemoryBarrier) live
