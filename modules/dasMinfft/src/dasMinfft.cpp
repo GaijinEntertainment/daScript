@@ -3,8 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_typefactory_bind.h"
+#include "daScript/ast/ast_handle.h"
 
 #include "dasMinfft.h"
+
+MAKE_TYPE_FACTORY(dct_plan, das::DctPlan)
 
 namespace das {
 
@@ -98,6 +101,103 @@ void fft_real_inverse(const TArray<float2> & complex_frequencies, TArray<float> 
 }
 
 
+// ===== DCT (DCT-II forward / DCT-III inverse) =====
+
+static inline bool is_pow2(int n)
+{
+  return n > 0 && (n & (n - 1)) == 0;
+}
+
+DctPlan::~DctPlan()
+{
+  if (aux)
+    minfft_free_aux(aux);
+}
+
+// On any failure these return null (no handle to delete); callers can test the
+// result with a null check.
+DctPlan * make_dct_plan_1d(int n)
+{
+  if (!is_pow2(n))
+  {
+    LOG(LogLevel::error) << "make_dct_plan_1d: length must be a power of 2 (length = " << n << ")";
+    return nullptr;
+  }
+  auto plan = new DctPlan();
+  plan->aux = minfft_mkaux_t2t3_1d(n);
+  if (!plan->aux)
+  {
+    LOG(LogLevel::error) << "make_dct_plan_1d: failed to allocate transform tables (length = " << n << ")";
+    delete plan;
+    return nullptr;
+  }
+  plan->n = n;
+  return plan;
+}
+
+DctPlan * make_dct_plan_2d(int rows, int cols)
+{
+  if (!is_pow2(rows) || !is_pow2(cols))
+  {
+    LOG(LogLevel::error) << "make_dct_plan_2d: both dimensions must be powers of 2 (rows = " << rows << ", cols = " << cols << ")";
+    return nullptr;
+  }
+  auto plan = new DctPlan();
+  plan->aux = minfft_mkaux_t2t3_2d(rows, cols);
+  if (!plan->aux)
+  {
+    LOG(LogLevel::error) << "make_dct_plan_2d: failed to allocate transform tables (rows = " << rows << ", cols = " << cols << ")";
+    delete plan;
+    return nullptr;
+  }
+  plan->n = rows * cols;
+  return plan;
+}
+
+void dct(const TArray<float> & input, TArray<float> & output, DctPlan * plan, Context * context, LineInfoArg * at)
+{
+  if (!plan || !plan->aux)
+  {
+    LOG(LogLevel::error) << "dct: invalid plan (build it with make_dct_plan_1d / make_dct_plan_2d)";
+    return;
+  }
+  if (int(input.size) != plan->n)
+  {
+    LOG(LogLevel::error) << "dct: input length " << int(input.size) << " does not match plan length " << plan->n;
+    return;
+  }
+  if (int(output.size) != plan->n)
+    builtin_array_resize(output, plan->n, sizeof(float), context, at);
+
+  minfft_dct2((minfft_real *)input.data, (minfft_real *)output.data, plan->aux);
+}
+
+void idct(const TArray<float> & input, TArray<float> & output, DctPlan * plan, Context * context, LineInfoArg * at)
+{
+  if (!plan || !plan->aux)
+  {
+    LOG(LogLevel::error) << "idct: invalid plan (build it with make_dct_plan_1d / make_dct_plan_2d)";
+    return;
+  }
+  if (int(input.size) != plan->n)
+  {
+    LOG(LogLevel::error) << "idct: input length " << int(input.size) << " does not match plan length " << plan->n;
+    return;
+  }
+  if (int(output.size) != plan->n)
+    builtin_array_resize(output, plan->n, sizeof(float), context, at);
+
+  minfft_dct3((minfft_real *)input.data, (minfft_real *)output.data, plan->aux);
+}
+
+
+// canNew=false: plans must come from make_dct_plan_* (a bare `new dct_plan` would
+// have aux==null and be unusable). canDelete=true keeps `delete plan`.
+struct DctPlanAnnotation : ManagedStructureAnnotation<DctPlan,false,true> {
+  DctPlanAnnotation(ModuleLibrary & ml)
+    : ManagedStructureAnnotation("dct_plan", ml, "das::DctPlan") {
+  }
+};
 
 
 class Module_Minfft : public Module {
@@ -126,6 +226,24 @@ public:
         addExtern<DAS_BIND_FUN(fft_calculate_log_magnitudes)>(*this, lib,
           "fft_calculate_log_magnitudes", SideEffects::modifyArgumentAndExternal, "fft_calculate_log_magnitudes")
           ->args({"complex_frequencies", "log_magnitudes", "", ""});
+
+        addAnnotation(new DctPlanAnnotation(lib));
+
+        addExtern<DAS_BIND_FUN(make_dct_plan_1d)>(*this, lib,
+          "make_dct_plan_1d", SideEffects::modifyExternal, "make_dct_plan_1d")
+          ->args({"n"});
+
+        addExtern<DAS_BIND_FUN(make_dct_plan_2d)>(*this, lib,
+          "make_dct_plan_2d", SideEffects::modifyExternal, "make_dct_plan_2d")
+          ->args({"rows", "cols"});
+
+        addExtern<DAS_BIND_FUN(dct)>(*this, lib,
+          "dct", SideEffects::modifyArgumentAndExternal, "dct")
+          ->args({"input", "output", "plan", "", ""});
+
+        addExtern<DAS_BIND_FUN(idct)>(*this, lib,
+          "idct", SideEffects::modifyArgumentAndExternal, "idct")
+          ->args({"input", "output", "plan", "", ""});
 
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {

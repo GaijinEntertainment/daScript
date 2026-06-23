@@ -10,7 +10,7 @@ This section provides hands-on tutorials organized by topic:
 * **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
 * **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
 * **Macro Tutorials** — write compile-time code transformations using the daslang macro system
-* **Module Tutorials** — dasHV (HTTP), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasPEG (parser generator)
+* **Module Tutorials** — dasHV (HTTP), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasMinfft (FFT / DCT), dasPEG (parser generator)
 
 .. _tutorials_language:
 
@@ -402,6 +402,26 @@ Run any tutorial from the project root::
    tutorials/dasAudio_08_midi.rst
    tutorials/dasAudio_09_playback_status.rst
    tutorials/dasAudio_10_global_controls.rst
+
+.. _tutorials_dasminfft:
+
+dasMinfft (FFT / DCT) Tutorials
+===============================
+
+These tutorials cover the ``minfft`` module — fast FFT and DCT on
+power-of-two lengths, plus the 8x8 block-DCT pipeline at the heart of
+JPEG and MPEG.  Companion ``.das`` files are in ``tutorials/dasMinfft/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasMinfft/01_real_fft.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasMinfft_01_real_fft.rst
+   tutorials/dasMinfft_02_dct_basics.rst
+   tutorials/dasMinfft_03_dct_image_compression.rst
 
 .. _tutorials_dastrudel:
 

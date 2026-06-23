@@ -111,7 +111,7 @@ add_dependencies(all_utils_exe dastest_exe)
 # (bin/jit.exe, built with --jit-register-all-modules). Run explicitly:
 #   ninja jit_cache_all_tests
 add_custom_target(jit_cache_all_tests
-    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude stbimage --exclude live_host --exclude audio --exclude strudel
+    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude stbimage --exclude live_host --exclude audio --exclude strudel --exclude minfft
     DEPENDS jit_exe
     WORKING_DIRECTORY ${UTIL_BIN_DIR}
     COMMENT "JIT-compiling tests/ into the .jitted_scripts cache"
