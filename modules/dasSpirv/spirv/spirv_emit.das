@@ -3439,7 +3439,13 @@ class SpirvEmit : AstVisitor {
         errs |> push("clone (:=) is not supported in SPIR-V shaders")
     }
     def override preVisitExprWith(expr : ExprWith?) : void {
-        errs |> push("with is not supported in SPIR-V shaders")
+        // `with (subject) { body }` is a transparent scope: infer resolves the body's bare field names
+        // to subject.field, and the optimizer's BlockFolding normally inlines the body and drops the
+        // subject before this patch runs. A no-optimization compile (e.g. lint) keeps `with` alive to
+        // here, so emit the body as-is. The subject expression is a struct lvalue reference; visiting it
+        // emits no stray value op for a supported (block) global, and a local struct fails separately on
+        // its own "struct local not supported" limitation -- so there is nothing to do here. (The GL rail
+        // mirrors this; see glsl_internal preVisitExprWith.)
     }
     def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
         errs |> push("try/recover is not supported in SPIR-V shaders")

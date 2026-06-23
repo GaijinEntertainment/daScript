@@ -1263,9 +1263,15 @@ class GlslExport : AstVisitor {
     def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) {
         error("clone is not supported", expr.at)
     }
-// with
+// with — the optimizer's BlockFolding normally inlines the with-body and drops the subject before
+// the shader-emit patch runs; a no-optimization compile (e.g. lint) keeps `with` alive to here. Emit
+// the body as a transparent scope (its field accesses are already resolved to subject.field by infer)
+// and preprocess the subject expression out, mirroring daslib/aot_cpp's #if 0 handling.
     def override preVisitExprWith(expr : ExprWith?) {
-        error("with is not supported", expr.at)
+        *writer |> write("\n#if 0 // with: subject (optimizations off)\n")
+    }
+    def override preVisitExprWithBody(expr : ExprWith?; body : ExpressionPtr) {
+        *writer |> write("\n#endif\n")
     }
 // while
     def override preVisitExprWhile(expr : ExprWhile?) {
