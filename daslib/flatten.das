@@ -364,6 +364,14 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         }
         return n
     }
+    if (e is ExprMakeArray) {
+        var n = clone_expression(e)
+        var o = n as ExprMakeArray
+        for (vi in range(length(o.values))) {
+            o.values[vi] = lift_expr(ctx, o.values[vi], structPred, out)
+        }
+        return n
+    }
     // Typer-inserted ref/value/ptr conversion wrappers — recurse through to the buried call.
     if (e is ExprRef2Value) {
         var n = clone_expression(e)

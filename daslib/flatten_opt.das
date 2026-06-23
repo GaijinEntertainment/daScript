@@ -33,7 +33,8 @@ require strings
 def private is_walkable_node(e : ExpressionPtr) : bool {
     return (e is ExprOp1 || e is ExprOp2 || e is ExprOp3 || e is ExprCall ||
         e is ExprField || e is ExprSwizzle || e is ExprRef2Value || e is ExprCast ||
-        e is ExprPtr2Ref || e is ExprAt || e is ExprMakeTuple || e is ExprMakeStruct)
+        e is ExprPtr2Ref || e is ExprAt || e is ExprMakeTuple || e is ExprMakeStruct ||
+        e is ExprMakeArray)
 }
 
 // Hard guard for a REAL OPTIMIZER GAP: the walk hit a node it doesn't recognize (not walkable, not
@@ -95,6 +96,11 @@ def private rewrite_children(var e : ExpressionPtr; fn : block<(var c : Expressi
                 fld.value = invoke(fn, fld.value)
             }
         }
+    } elif (e is ExprMakeArray) {
+        var o = e as ExprMakeArray
+        for (vi in range(length(o.values))) {
+            o.values[vi] = invoke(fn, o.values[vi])
+        }
     } else {
         guard_unhandled_node(e)
     }
@@ -137,6 +143,10 @@ def private fold_children_or(e : ExpressionPtr; pred : block<(c : ExpressionPtr)
             for (fld in *(ms.structs[si])) {
                 if (invoke(pred, fld.value)) return true
             }
+        }
+    } elif (e is ExprMakeArray) {
+        for (v in (e as ExprMakeArray).values) {
+            if (invoke(pred, v)) return true
         }
     }
     return false
