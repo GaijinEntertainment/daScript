@@ -30,6 +30,7 @@ struct image2D   { texture2D : uint }
 var gl_Position   : float4    // clip-space output position (vertex stage)
 var gl_PointSize  : float     // rasterised point size, POINT topology
 var gl_PointCoord : float2    // UV within a rasterised point, [0,1]^2 (fragment stage)
+var gl_FragCoord  : float4    // window-space fragment coordinate, .xy in pixels (fragment stage); GLSL name-identical, SPIR-V BuiltIn FragCoord
 
 // ===== compute builtins =====
 var gl_NumWorkGroups        : uint3   // global dispatch size (glDispatchCompute args)

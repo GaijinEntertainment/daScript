@@ -19,7 +19,8 @@ var gl_InstanceIndex        : int       // BuiltIn InstanceIndex (Input)
 var gl_DrawID               : int       // BuiltIn DrawIndex (Input) — multi-draw draw call ordinal; needs the DrawParameters capability (in core in SPIR-V 1.3)
 
 // fragment
-var gl_FragCoord            : float4    // BuiltIn FragCoord (Input)
+// gl_FragCoord (BuiltIn FragCoord, Input) lives in shader_lingua_franca (shared) -- GLSL spells it
+// identically, so it is part of the modern union. The SPIR-V emitter still keys it by name.
 var gl_FragDepth            : float     // BuiltIn FragDepth (Output) — writing it forces DepthReplacing
 var gl_PrimitiveID          : int       // BuiltIn PrimitiveId (Input, fragment) — the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT[i].gl_PrimitiveID
 
