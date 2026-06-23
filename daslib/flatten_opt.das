@@ -21,14 +21,134 @@ require daslib/match
 require daslib/rtti
 require strings
 
+// ===== Shared structural walk over the closed post-flatten node set =====
+// Most optimization passes recurse the SAME bounded expression-node set (operators,
+// calls, the typer's ref/value wrappers, index/field/swizzle, tuple/struct ctors).
+// These primitives spell that child enumeration ONCE so a walker keeps only its head
+// logic (per-leaf classification + the conservative unknown-node default). Only walkers
+// that recurse the FULL set use these — passes with a deliberately narrower node set
+// (is_all_const, pex_eligible, select_arm_eval_safe, …) stay explicit, since widening
+// them here would silently change a mirror-paired transform/oracle gate.
+
+def private is_walkable_node(e : ExpressionPtr) : bool {
+    return (e is ExprOp1 || e is ExprOp2 || e is ExprOp3 || e is ExprCall ||
+        e is ExprField || e is ExprSwizzle || e is ExprRef2Value || e is ExprCast ||
+        e is ExprPtr2Ref || e is ExprAt || e is ExprMakeTuple || e is ExprMakeStruct)
+}
+
+// Hard guard for a REAL OPTIMIZER GAP: the walk hit a node it doesn't recognize (not walkable, not
+// a leaf) and would silently under-traverse it. COMMENT OUT the guard_unhandled_node call in
+// rewrite_children to unlock your work (fail-safe: a missed opt, never a miscompile), then report it.
+def private guard_unhandled_node(e : ExpressionPtr) : void {
+    if (e == null || e is ExprVar || e |> is_expr_const()) return   // legit leaves — not a gap
+    macro_error(compiling_program(), e.at, "flatten optimizer reached an unhandled expression node '{e.__rtti}': this is a real gap in the optimizer (the pass silently skips it, so a uniform/mutable subtree inside escapes hoisting / CSE / safety analysis). Comment out guard_unhandled_node in daslib/flatten_opt.das to unlock your current work, then please report this node kind.")
+}
+
+// Replace each child slot of `e` in place with `fn(child)`; a known leaf is left alone, and an
+// UNRECOGNIZED node trips guard_unhandled_node (a real optimizer gap — see above).
+def private rewrite_children(var e : ExpressionPtr; fn : block<(var c : ExpressionPtr) : ExpressionPtr>) : void {
+    if (e is ExprOp1) {
+        var o = e as ExprOp1
+        o.subexpr = invoke(fn, o.subexpr)
+    } elif (e is ExprOp2) {
+        var o = e as ExprOp2
+        o.left = invoke(fn, o.left)
+        o.right = invoke(fn, o.right)
+    } elif (e is ExprOp3) {
+        var o = e as ExprOp3
+        o.subexpr = invoke(fn, o.subexpr)
+        o.left = invoke(fn, o.left)
+        o.right = invoke(fn, o.right)
+    } elif (e is ExprCall) {
+        var c = e as ExprCall
+        for (i in range(length(c.arguments))) {
+            c.arguments[i] = invoke(fn, c.arguments[i])
+        }
+    } elif (e is ExprField) {
+        var o = e as ExprField
+        o.value = invoke(fn, o.value)
+    } elif (e is ExprSwizzle) {
+        var o = e as ExprSwizzle
+        o.value = invoke(fn, o.value)
+    } elif (e is ExprRef2Value) {
+        var o = e as ExprRef2Value
+        o.subexpr = invoke(fn, o.subexpr)
+    } elif (e is ExprCast) {
+        var o = e as ExprCast
+        o.subexpr = invoke(fn, o.subexpr)
+    } elif (e is ExprPtr2Ref) {
+        var o = e as ExprPtr2Ref
+        o.subexpr = invoke(fn, o.subexpr)
+    } elif (e is ExprAt) {
+        var o = e as ExprAt
+        o.subexpr = invoke(fn, o.subexpr)
+        o.index = invoke(fn, o.index)
+    } elif (e is ExprMakeTuple) {
+        var o = e as ExprMakeTuple
+        for (vi in range(length(o.values))) {
+            o.values[vi] = invoke(fn, o.values[vi])
+        }
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                fld.value = invoke(fn, fld.value)
+            }
+        }
+    } else {
+        guard_unhandled_node(e)
+    }
+}
+
+// OR over `e`'s children (short-circuit); vacuous false on a leaf / unknown node.
+def private fold_children_or(e : ExpressionPtr; pred : block<(c : ExpressionPtr) : bool>) : bool {
+    if (e is ExprOp1) {
+        return invoke(pred, (e as ExprOp1).subexpr)
+    } elif (e is ExprOp2) {
+        let o = e as ExprOp2
+        return invoke(pred, o.left) || invoke(pred, o.right)
+    } elif (e is ExprOp3) {
+        let o = e as ExprOp3
+        return invoke(pred, o.subexpr) || invoke(pred, o.left) || invoke(pred, o.right)
+    } elif (e is ExprCall) {
+        for (a in (e as ExprCall).arguments) {
+            if (invoke(pred, a)) return true
+        }
+    } elif (e is ExprField) {
+        return invoke(pred, (e as ExprField).value)
+    } elif (e is ExprSwizzle) {
+        return invoke(pred, (e as ExprSwizzle).value)
+    } elif (e is ExprRef2Value) {
+        return invoke(pred, (e as ExprRef2Value).subexpr)
+    } elif (e is ExprCast) {
+        return invoke(pred, (e as ExprCast).subexpr)
+    } elif (e is ExprPtr2Ref) {
+        return invoke(pred, (e as ExprPtr2Ref).subexpr)
+    } elif (e is ExprAt) {
+        let o = e as ExprAt
+        return invoke(pred, o.subexpr) || invoke(pred, o.index)
+    } elif (e is ExprMakeTuple) {
+        for (v in (e as ExprMakeTuple).values) {
+            if (invoke(pred, v)) return true
+        }
+    } elif (e is ExprMakeStruct) {
+        var ms = e as ExprMakeStruct
+        for (si in range(length(ms.structs))) {
+            for (fld in *(ms.structs[si])) {
+                if (invoke(pred, fld.value)) return true
+            }
+        }
+    }
+    return false
+}
+
 def private is_flat_temp(name : das_string) : bool {
     return name |> starts_with("__flat_")
 }
 
-// Inlined-helper locals are uniquified to `__flat_loc_N` (inline_call). Unlike the loop/live
-// MASKS (`__flat_live`/`__flat_loop`/`__flat_iter`), an inlined `var` accumulator must be
-// SSA-renamed like a user accumulator — else it stays a self-referential `var` whose live init
-// a later DSE strips, leaving a null-init self-ref the shader backend rejects.
+// An inlined-helper local (`__flat_loc_N`). Unlike the loop/live masks it must be SSA-renamed like
+// a user accumulator — else its self-referential `var` loses its live init to DSE, leaving a
+// null-init self-ref the shader backend rejects.
 def private is_flat_inlined_local(name : das_string) : bool {
     return name |> starts_with("__flat_loc_")
 }
@@ -456,14 +576,8 @@ def public dse_pass(var out : array<ExpressionPtr>) {
 }
 
 // ===== Flow-sensitive const-bool propagation of loop/iter masks =====
-// The break/continue masks (`__flat_loop_*`, `__flat_iter_*`) are multi-def — a `var M = true`
-// decl plus `M = M && !(term)` narrows — so copy_prop (single-def only) leaves them. But the body
-// is straight-line, so a forward scan carries each mask's known const-bool value to its next use:
-// the decl seeds `true`; every use before the first narrow folds (`true && X → X`, `true ? a : b →
-// a`, so the first unrolled iteration is unconditional); the first narrow itself (`M = M && X`, M
-// known true → `M = X`) drops the dead `&& true` AND — when M is read nowhere else (a continue
-// mask whose sole consumer was its own narrow) — leaves the whole decl+store dead for the
-// following dse_pass. A non-const narrow clears the mask (subsequent uses are genuine reads).
+// Break/continue masks are multi-def, so single-def copy_prop skips them; a forward scan instead
+// carries each mask's known const value to its uses, collapsing narrows and leaving spent masks dead.
 
 // True if `e` reads any flat-mask currently in `known` (fills `reads`, cleared first). Cheap
 // O(size) scan gating the cloning fold_const so mask-free statements are skipped.
@@ -723,11 +837,8 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprOp1(var that : ExprOp1?) : ExpressionPtr {
-        // `!true → false`, `!false → true` (const operand). Then push `!` into its operand
-        // where it eliminates — flip a comparison (`!(a > b) → a <= b`), drop a double `!`,
-        // De-Morgan through `&&` / `||` — via negate_bool; it returns null (leave the `!`)
-        // when a residual `!` would remain. The select-fold above emits `c ? false : true → !c`,
-        // so this is what collapses the resulting `!comparison`.
+        // Fold const `!`; else push `!` into the operand via negate_bool (flip a comparison, drop a
+        // double `!`, De-Morgan) — this collapses the `!comparison` the select-fold above emits.
         if (that.op == "!") {
             if (is_bool_val(that.subexpr, true)) { changed = true; return new ExprConstBool(at = that.at, value = false) }
             if (is_bool_val(that.subexpr, false)) { changed = true; return new ExprConstBool(at = that.at, value = true) }
@@ -772,11 +883,8 @@ class private FoldVisitor : AstVisitor {
                 return folded
             }
         }
-        // Lower radians/degrees to their defining multiply (`x * K`) so an adjacent const
-        // factor merges (`degrees(x) * C → x * (K*C)`, via reassoc) and a backend needs no
-        // radians/degrees opcode — only `mul`. Bit-exact (K = the builtin at 1.0); a const
-        // arg already folded to a literal above. `x * scalarK` covers float and float-vector
-        // (vec*scalar is native, matching the C++ v_mul-by-splat form).
+        // Lower radians/degrees to their defining `x * K` (bit-exact, K = the builtin at 1.0) so a
+        // backend needs only `mul` and an adjacent const factor merges via reassoc.
         if (that.func != null && that.func.flags.builtIn && length(that.arguments) == 1
                 && is_float_family(expr_bt(that.arguments[0]))) {
             let nm = psh_simple_name("{that.func.name}")
@@ -973,11 +1081,9 @@ def private negate(var e : ExpressionPtr) : ExpressionPtr {
     return new ExprOp1(at = e.at, op := "-", subexpr = e)
 }
 
-// Negate a boolean expression by pushing `!` down to negatable leaves — flip a comparison
-// (`!(a > b) → a <= b`), drop a double `!`, De-Morgan through `&&` / `||` — and return the
-// residual-`!`-free result. Returns null when that can't be done (a leaf would still need a
-// wrapping `!`), so the caller keeps the original `!` rather than churn for no win. NaN charter:
-// an ordered float/double comparison flips only under fast-math; equality flips are always exact.
+// Push `!` down to negatable leaves (flip a comparison, drop `!!`, De-Morgan) and return the
+// residual-`!`-free result; null when a wrapping `!` would remain. NaN charter: ordered float
+// comparisons flip only under fast-math, equality flips are always exact.
 def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPtr {
     if (e is ExprConstBool) {
         return new ExprConstBool(at = e.at, value = !((e as ExprConstBool).value))
@@ -988,10 +1094,7 @@ def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPt
     if (e is ExprOp2) {
         var o = e as ExprOp2
         if (o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=" || o.op == "==" || o.op == "!=") {
-            // don't flip when: (a) a user / non-built-in operator — daslang doesn't auto-generate
-            // its complement (`<=` from `<`, `!=` from `==`), so flipping could call a missing op or
-            // change semantics; or (b) an ordered float/double comparison under no-fast-math, which
-            // is NaN-unsafe (`!(a>b) ≠ a<=b` for NaN)
+            // skip a user/non-builtin comparison (no auto-complement) or a NaN-unsafe ordered float compare
             if (o.func == null || !o.func.flags.builtIn ||
                     ((o.op == ">" || o.op == "<" || o.op == ">=" || o.op == "<=") && noFastMath && is_float_valued(o.left))) {
                 return null
@@ -1625,15 +1728,8 @@ class private ReassocVisitor : AstVisitor {
 }
 
 // ===== Same-condition select-accumulation fusion =====
-// An unrolled loop with a LOOP-INVARIANT guard (`if (uniform) { acc OP= tap }`) emits a chain of
-// selects all on ONE condition: `a0 = c ? T0 : B; a1 = c ? T1(a0) : a0; … ; am = c ? Tm(a_{m-1}) :
-// a_{m-1}`. Since `c` is a single value, the whole chain is binary — `c ? <full accumulation> : B`.
-// We hoist the shared `c` out of all N selects: strip the select from every link but the last
-// (its accumulation runs unconditionally, which in branchless code it already does — predication
-// computes both arms), and rewrite the last select's false arm to the base `B`. The op tree is
-// PRESERVED (not reassociated), so this is bit-exact for ANY ops in the Tk (mad/+/*/min/max/clamp,
-// even mixed) and NOT fast-math gated. Each intermediate accumulator must be single-use (consumed
-// only by the next link); the chain end may be multi-use (returned, etc.).
+// An invariant-guarded unrolled accumulation emits N selects on ONE condition `c`; hoist `c` out
+// (strip all but the last select; last's false arm := base). Op tree preserved → bit-exact, not fast-math.
 
 def private sel3(e : ExpressionPtr) : ExprOp3? {
     return (e != null && e is ExprOp3) ? (e as ExprOp3) : null   // ExprOp3 is the ternary `?:`
@@ -1657,13 +1753,9 @@ def private ref_var_name(e : ExpressionPtr) : string {
     return (x != null && x is ExprVar) ? "{(x as ExprVar).name}" : ""
 }
 
-// Safe to evaluate UNCONDITIONALLY? A stripped (non-last) chain link's true arm runs even when the
-// guard is false (in interp/JIT/AOT `?:` short-circuits, so the original did not), so it must not
-// be able to fault or have a side effect. CONSERVATIVE: explicitly whitelist the known-pure nodes
-// and recurse; ANYTHING else — `ExprAt` (index OOB), `ExprPtr2Ref` (null deref), `ExprNullCoalescing`,
-// or a node kind not reasoned about — is unsafe by default. Integer `/` / `%` panic on a zero divisor
-// (float div is inf, safe). Surviving calls are whitelisted pure GPU builtins (verify_flat bars user
-// calls) — total, no fault. A rejected true arm just isn't fused (a missed opt, never a miscompile).
+// Safe to evaluate UNCONDITIONALLY? A stripped link's true arm runs even when the guard is false,
+// so it must not fault or have side effects. Conservative: whitelist known-pure nodes and recurse;
+// anything else (index OOB, null deref, integer div-by-zero, unknown) is unsafe — just not fused.
 def private select_arm_eval_safe(e : ExpressionPtr) : bool {
     if (e == null || e is ExprVar || e |> is_expr_const()) return true   // null / var read / literal is pure
     if (e is ExprOp1) return select_arm_eval_safe((e as ExprOp1).subexpr)
@@ -1711,11 +1803,9 @@ def private chain_successor(var ub : FlatUsesBuilder?; var blk : ExprBlock?; acc
     return j
 }
 
-// The maximal same-condition select chain headed at statement `i` (chain[0]=i, then each def-use
-// successor), or a <2 chain when `i` heads none. Shared by the fuse transform and its residual
-// oracle so they cannot drift. The condition must be STABLE: a syntactically-identical condition
-// over a reassigned var (a break/continue loop mask `__flat_loop_*` narrowed between selects) has a
-// DIFFERENT value per link, so a mutable-reading condition is rejected.
+// The maximal same-condition select chain headed at `i` (or <2 when none). Shared by the fuse
+// transform and its residual oracle so they can't drift. The condition must be STABLE — a
+// mutable-reading condition (a narrowed loop mask) has a different value per link, so it's rejected.
 def private build_select_chain(var ub : FlatUsesBuilder?; var blk : ExprBlock?; mutableVars : table<string>;
                                consumed : table<int>; i : int) : array<int> {
     var chain : array<int>
@@ -1729,10 +1819,7 @@ def private build_select_chain(var ub : FlatUsesBuilder?; var blk : ExprBlock?; 
     while (true) {
         let j = chain_successor(ub, blk, accName, condKey, chain[length(chain) - 1], consumed)
         if (j < 0) break
-        // Appending j makes the current tail a STRIPPED non-last link — its true arm will run
-        // unconditionally, so it must be fault-free / side-effect-free. If not, stop here: the
-        // current tail stays the (guarded) last link. The check is in this shared walk so the
-        // transform and the residual oracle agree on which chains are fusable.
+        // stop if the new tail's now-unconditional true arm could fault / have a side effect
         let tailSel = sel3((blk.list[chain[length(chain) - 1]] as ExprLet).variables[0].init)
         if (!select_arm_eval_safe(tailSel.left)) break
         chain |> push(j)
@@ -1977,7 +2064,7 @@ def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : boo
         // splat: the one scalar arg fills every lane (emitters clone the duplicate references)
         if (length(c.arguments) == 1 && expr_bt(c.arguments[0]) == Type.tFloat) {
             for (_i in range(d)) {
-                out |> push(LaneSrc(lane = -1, e = c.arguments[0]))
+                out |> push(LaneSrc(lane = -1, e = c.arguments[0]))   // nolint:PERF006 -- ≤4 lanes
             }
             return true
         }
@@ -2006,7 +2093,7 @@ def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : boo
     }
     // opaque float vector — contributes its own lanes
     for (i in range(d)) {
-        out |> push(LaneSrc(lane = i, e = e))
+        out |> push(LaneSrc(lane = i, e = e))   // nolint:PERF006 -- ≤4 lanes
     }
     return true
 }
@@ -2057,7 +2144,7 @@ def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneS
     }
     if (ok) {
         for (f in that.fields) {
-            sel |> push(lanes[int(f)])
+            sel |> push(lanes[int(f)])   // nolint:PERF006 -- ≤4 lanes
         }
     }
     unsafe {
@@ -2350,65 +2437,18 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
         pe.changed = true
         return hoisted_ref(nm, e)
     }
-    if (e is ExprOp1) {
-        var o = e as ExprOp1
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-    } elif (e is ExprOp2) {
+    // `x / U` → `x * (1f/U)` — reciprocal hoisted per-draw, dedup'd by describe (fast-math)
+    if (e is ExprOp2 && !pe.noFastMath && is_rcp_candidate(pe, barriers, e as ExprOp2)) {
         var o = e as ExprOp2
-        // `x / U` → `x * (1f/U)` — reciprocal hoisted per-draw, dedup'd by describe (fast-math)
-        if (!pe.noFastMath && is_rcp_candidate(pe, barriers, o)) {
-            var one = new ExprConstFloat(at = o.at, value = 1.0)
-            var recip = new ExprOp2(at = o.at, op := "/", left = one, right = o.right)
-            let nm = pex_hoist_name(pe, recip)
-            pe.changed = true
-            return new ExprOp2(at = o.at, op := "*",
-                left = pex_extract(pe, barriers, o.left),
-                right = hoisted_ref(nm, o.right))   // 1/U shares U's (scalar-float) type
-        }
-        o.left = pex_extract(pe, barriers, o.left)
-        o.right = pex_extract(pe, barriers, o.right)
-    } elif (e is ExprOp3) {
-        var o = e as ExprOp3
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-        o.left = pex_extract(pe, barriers, o.left)
-        o.right = pex_extract(pe, barriers, o.right)
-    } elif (e is ExprCall) {
-        var c = e as ExprCall
-        for (i in range(length(c.arguments))) {
-            c.arguments[i] = pex_extract(pe, barriers, c.arguments[i])
-        }
-    } elif (e is ExprField) {
-        var o = e as ExprField
-        o.value = pex_extract(pe, barriers, o.value)
-    } elif (e is ExprSwizzle) {
-        var o = e as ExprSwizzle
-        o.value = pex_extract(pe, barriers, o.value)
-    } elif (e is ExprRef2Value) {
-        var o = e as ExprRef2Value
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-    } elif (e is ExprCast) {
-        var o = e as ExprCast
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-    } elif (e is ExprPtr2Ref) {
-        var o = e as ExprPtr2Ref
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-    } elif (e is ExprAt) {
-        var o = e as ExprAt
-        o.subexpr = pex_extract(pe, barriers, o.subexpr)
-        o.index = pex_extract(pe, barriers, o.index)
-    } elif (e is ExprMakeTuple) {
-        var o = e as ExprMakeTuple
-        for (vi in range(length(o.values))) {
-            o.values[vi] = pex_extract(pe, barriers, o.values[vi])
-        }
-    } elif (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                fld.value = pex_extract(pe, barriers, fld.value)
-            }
-        }
+        var one = new ExprConstFloat(at = o.at, value = 1.0)
+        var recip = new ExprOp2(at = o.at, op := "/", left = one, right = o.right)
+        let nm = pex_hoist_name(pe, recip)
+        pe.changed = true
+        return new ExprOp2(at = o.at, op := "*",
+            left = pex_extract(pe, barriers, o.left),
+            right = hoisted_ref(nm, o.right))   // 1/U shares U's (scalar-float) type
     }
+    rewrite_children(e) $(var c : ExpressionPtr) { return pex_extract(pe, barriers, c) }
     return e
 }
 
@@ -2566,46 +2606,8 @@ def private collect_mutable(blk : ExprBlock?) : table<string> {
 def private reads_mutable(e : ExpressionPtr; mutableVars : table<string>) : bool {
     if (e == null || empty(mutableVars) || e |> is_expr_const()) return false
     if (e is ExprVar) return key_exists(mutableVars, "{(e as ExprVar).name}")
-    if (e is ExprRef2Value) return reads_mutable((e as ExprRef2Value).subexpr, mutableVars)
-    if (e is ExprField) return reads_mutable((e as ExprField).value, mutableVars)
-    if (e is ExprSwizzle) return reads_mutable((e as ExprSwizzle).value, mutableVars)
-    if (e is ExprCast) return reads_mutable((e as ExprCast).subexpr, mutableVars)
-    if (e is ExprPtr2Ref) return reads_mutable((e as ExprPtr2Ref).subexpr, mutableVars)
-    if (e is ExprOp1) return reads_mutable((e as ExprOp1).subexpr, mutableVars)
-    if (e is ExprOp2) {
-        let o = e as ExprOp2
-        return reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
-    }
-    if (e is ExprOp3) {
-        let o = e as ExprOp3
-        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.left, mutableVars) || reads_mutable(o.right, mutableVars)
-    }
-    if (e is ExprAt) {
-        let o = e as ExprAt
-        return reads_mutable(o.subexpr, mutableVars) || reads_mutable(o.index, mutableVars)
-    }
-    if (e is ExprCall) {
-        for (a in (e as ExprCall).arguments) {
-            if (reads_mutable(a, mutableVars)) return true
-        }
-        return false
-    }
-    if (e is ExprMakeTuple) {
-        for (v in (e as ExprMakeTuple).values) {
-            if (reads_mutable(v, mutableVars)) return true
-        }
-        return false
-    }
-    if (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                if (reads_mutable(fld.value, mutableVars)) return true
-            }
-        }
-        return false
-    }
-    return true
+    if (!is_walkable_node(e)) return true   // unknown node → conservatively reads a mutable
+    return fold_children_or(e) $(c) => reads_mutable(c, mutableVars)
 }
 
 class private CseTally : AstVisitor {
@@ -2637,55 +2639,7 @@ def private cse_replace_expr(var e : ExpressionPtr; key, refName : string) : Exp
     if (psh_has_compute(e) && "{describe(e)}" == key) {
         return hoisted_ref(refName, e)
     }
-    if (e is ExprOp1) {
-        var o = e as ExprOp1
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-    } elif (e is ExprOp2) {
-        var o = e as ExprOp2
-        o.left = cse_replace_expr(o.left, key, refName)
-        o.right = cse_replace_expr(o.right, key, refName)
-    } elif (e is ExprOp3) {
-        var o = e as ExprOp3
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-        o.left = cse_replace_expr(o.left, key, refName)
-        o.right = cse_replace_expr(o.right, key, refName)
-    } elif (e is ExprCall) {
-        var c = e as ExprCall
-        for (i in range(length(c.arguments))) {
-            c.arguments[i] = cse_replace_expr(c.arguments[i], key, refName)
-        }
-    } elif (e is ExprField) {
-        var o = e as ExprField
-        o.value = cse_replace_expr(o.value, key, refName)
-    } elif (e is ExprSwizzle) {
-        var o = e as ExprSwizzle
-        o.value = cse_replace_expr(o.value, key, refName)
-    } elif (e is ExprRef2Value) {
-        var o = e as ExprRef2Value
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-    } elif (e is ExprCast) {
-        var o = e as ExprCast
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-    } elif (e is ExprPtr2Ref) {
-        var o = e as ExprPtr2Ref
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-    } elif (e is ExprAt) {
-        var o = e as ExprAt
-        o.subexpr = cse_replace_expr(o.subexpr, key, refName)
-        o.index = cse_replace_expr(o.index, key, refName)
-    } elif (e is ExprMakeTuple) {
-        var o = e as ExprMakeTuple
-        for (vi in range(length(o.values))) {
-            o.values[vi] = cse_replace_expr(o.values[vi], key, refName)
-        }
-    } elif (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                fld.value = cse_replace_expr(fld.value, key, refName)
-            }
-        }
-    }
+    rewrite_children(e) $(var c : ExpressionPtr) { return cse_replace_expr(c, key, refName) }
     return e
 }
 
@@ -3041,91 +2995,15 @@ def private eliminate_aliases(var blk : ExprBlock?) : bool {
 def private pex_residual_expr(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
     if (e == null) return false
     if (psh_has_compute(e) && pex_eligible(pe, barriers, e)) return true
-    if (e is ExprOp1) return pex_residual_expr(pe, barriers, (e as ExprOp1).subexpr)
-    if (e is ExprOp2) {
-        let o = e as ExprOp2
-        return pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
-    }
-    if (e is ExprOp3) {
-        let o = e as ExprOp3
-        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.left) || pex_residual_expr(pe, barriers, o.right)
-    }
-    if (e is ExprCall) {
-        for (a in (e as ExprCall).arguments) {
-            if (pex_residual_expr(pe, barriers, a)) return true
-        }
-        return false
-    }
-    if (e is ExprField) return pex_residual_expr(pe, barriers, (e as ExprField).value)
-    if (e is ExprSwizzle) return pex_residual_expr(pe, barriers, (e as ExprSwizzle).value)
-    if (e is ExprRef2Value) return pex_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
-    if (e is ExprCast) return pex_residual_expr(pe, barriers, (e as ExprCast).subexpr)
-    if (e is ExprPtr2Ref) return pex_residual_expr(pe, barriers, (e as ExprPtr2Ref).subexpr)
-    if (e is ExprAt) {
-        let o = e as ExprAt
-        return pex_residual_expr(pe, barriers, o.subexpr) || pex_residual_expr(pe, barriers, o.index)
-    }
-    if (e is ExprMakeTuple) {
-        for (v in (e as ExprMakeTuple).values) {
-            if (pex_residual_expr(pe, barriers, v)) return true
-        }
-        return false
-    }
-    if (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                if (pex_residual_expr(pe, barriers, fld.value)) return true
-            }
-        }
-    }
-    return false
+    return fold_children_or(e) $(c) => pex_residual_expr(pe, barriers, c)
 }
 
 // Oracle mirror of the extraction rcp rewrite — any descendant division `is_rcp_candidate`
 // would have become `* _preshader(1/U)`. Same closed node set as pex_residual_expr.
 def private rcp_residual_expr(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
     if (e == null) return false
-    if (e is ExprOp1) return rcp_residual_expr(pe, barriers, (e as ExprOp1).subexpr)
-    if (e is ExprOp2) {
-        let o = e as ExprOp2
-        if (is_rcp_candidate(pe, barriers, o)) return true
-        return rcp_residual_expr(pe, barriers, o.left) || rcp_residual_expr(pe, barriers, o.right)
-    }
-    if (e is ExprOp3) {
-        let o = e as ExprOp3
-        return rcp_residual_expr(pe, barriers, o.subexpr) || rcp_residual_expr(pe, barriers, o.left) || rcp_residual_expr(pe, barriers, o.right)
-    }
-    if (e is ExprCall) {
-        for (a in (e as ExprCall).arguments) {
-            if (rcp_residual_expr(pe, barriers, a)) return true
-        }
-        return false
-    }
-    if (e is ExprField) return rcp_residual_expr(pe, barriers, (e as ExprField).value)
-    if (e is ExprSwizzle) return rcp_residual_expr(pe, barriers, (e as ExprSwizzle).value)
-    if (e is ExprRef2Value) return rcp_residual_expr(pe, barriers, (e as ExprRef2Value).subexpr)
-    if (e is ExprCast) return rcp_residual_expr(pe, barriers, (e as ExprCast).subexpr)
-    if (e is ExprPtr2Ref) return rcp_residual_expr(pe, barriers, (e as ExprPtr2Ref).subexpr)
-    if (e is ExprAt) {
-        let o = e as ExprAt
-        return rcp_residual_expr(pe, barriers, o.subexpr) || rcp_residual_expr(pe, barriers, o.index)
-    }
-    if (e is ExprMakeTuple) {
-        for (v in (e as ExprMakeTuple).values) {
-            if (rcp_residual_expr(pe, barriers, v)) return true
-        }
-        return false
-    }
-    if (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                if (rcp_residual_expr(pe, barriers, fld.value)) return true
-            }
-        }
-    }
-    return false
+    if (e is ExprOp2 && is_rcp_candidate(pe, barriers, e as ExprOp2)) return true
+    return fold_children_or(e) $(c) => rcp_residual_expr(pe, barriers, c)
 }
 
 def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : array<string> {
@@ -4030,53 +3908,8 @@ def private dot_fold_expr(var e : ExpressionPtr; var changed : bool&) : Expressi
             }
             return e
         }
-        o.left = dot_fold_expr(o.left, changed)
-        o.right = dot_fold_expr(o.right, changed)
-    } elif (e is ExprOp1) {
-        var o = e as ExprOp1
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-    } elif (e is ExprOp3) {
-        var o = e as ExprOp3
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-        o.left = dot_fold_expr(o.left, changed)
-        o.right = dot_fold_expr(o.right, changed)
-    } elif (e is ExprCall) {
-        var c = e as ExprCall
-        for (i in range(length(c.arguments))) {
-            c.arguments[i] = dot_fold_expr(c.arguments[i], changed)
-        }
-    } elif (e is ExprField) {
-        var o = e as ExprField
-        o.value = dot_fold_expr(o.value, changed)
-    } elif (e is ExprSwizzle) {
-        var o = e as ExprSwizzle
-        o.value = dot_fold_expr(o.value, changed)
-    } elif (e is ExprRef2Value) {
-        var o = e as ExprRef2Value
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-    } elif (e is ExprCast) {
-        var o = e as ExprCast
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-    } elif (e is ExprPtr2Ref) {
-        var o = e as ExprPtr2Ref
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-    } elif (e is ExprAt) {
-        var o = e as ExprAt
-        o.subexpr = dot_fold_expr(o.subexpr, changed)
-        o.index = dot_fold_expr(o.index, changed)
-    } elif (e is ExprMakeTuple) {
-        var o = e as ExprMakeTuple
-        for (vi in range(length(o.values))) {
-            o.values[vi] = dot_fold_expr(o.values[vi], changed)
-        }
-    } elif (e is ExprMakeStruct) {
-        var ms = e as ExprMakeStruct
-        for (si in range(length(ms.structs))) {
-            for (fld in *(ms.structs[si])) {
-                fld.value = dot_fold_expr(fld.value, changed)
-            }
-        }
     }
+    rewrite_children(e) $(var c : ExpressionPtr) { return dot_fold_expr(c, changed) }
     return e
 }
 
@@ -4269,10 +4102,9 @@ struct private LinkInfo {
     op      : string   // "min" / "max"
 }
 
-// A reduction link `var acc' = (d cmp acc) ? d : acc` — true arm replaces the accumulator with the
-// per-lane operand. Classifies the min/max direction. Fail-closed: both comparison operands must be
-// exactly the lane operand and the accumulator var, so a threshold-select (`(d < K) ? d : acc`) or a
-// shifted compare (`d < acc + eps`) does NOT classify and is left untouched rather than mis-packed.
+// A reduction link `var acc' = (d cmp acc) ? d : acc`, classifying min/max. Fail-closed: both compare
+// operands must be exactly the lane operand and the accumulator, so a threshold/shifted select does
+// NOT classify (left untouched rather than mis-packed).
 def private classify_link(s : ExpressionPtr) : LinkInfo {
     var r : LinkInfo
     if (!(s is ExprLet)) return r
@@ -4305,11 +4137,9 @@ def private classify_link(s : ExpressionPtr) : LinkInfo {
     return r
 }
 
-// Name-HASHES of every var read in `e` (independence check). Hashes, not strings: `hash(expr.name)`
-// reads the das_string directly (no per-ExprVar temp alloc — the FlatVarRef rule, lines ~195). A
-// 64-bit collision among one function's locals is effectively impossible; were one to occur it would
-// at worst skip a valid pack (false bail) or — far less likely — miss a cross-lane dependency. Treat
-// as practically safe, not provably so.
+// Name-HASHES of every var read in `e` (independence check) — hash reads the das_string directly, no
+// per-ExprVar temp alloc. A 64-bit collision among one function's locals is effectively impossible
+// (worst case: skip a valid pack). Practically safe, not provably so.
 class private VarNames : AstVisitor {
     found : table<uint64>
     def override preVisitExprVar(expr : ExprVar?) : void {
