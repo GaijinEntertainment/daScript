@@ -548,8 +548,23 @@ class GlslExport : AstVisitor {
         }
     }
     def override preVisitProgram(prog : ProgramPtr) : void {
+        // GLSL ES 3.00 (WebGL2) vs desktop core. Keyed off the compiler's platform:
+        // under emscripten the interpreter IS the wasm target (Model A), so a wasm
+        // compile emits ES 3.00. (A host cross-compile to wasm — Model B — emits on
+        // the host and would need an explicit target flag threaded into GlslExport;
+        // not wired yet.) ES 3.00 already matches what desktop core wants minus the
+        // version token, so the body emission below is unchanged.
+        let es300 = get_platform_name() == "emscripten"
         if (caps.write_version) {
-            *writer |> write("#version {version} core\n\n")
+            if (es300) {
+                *writer |> write("#version 300 es\n")
+                // Fragment shaders are invalid in ES without a default precision;
+                // ES 3.0 guarantees highp in fragment so this is loss-free, and it
+                // is a legal no-op in vertex shaders -> emit unconditionally.
+                *writer |> write("precision highp float;\nprecision highp int;\n\n")
+            } else {
+                *writer |> write("#version {version} core\n\n")
+            }
         }
         // TODO: only output builtin functions which are necessary
         if (version >= 400 && shaderType != ShaderType.compute) {
