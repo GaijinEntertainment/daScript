@@ -1235,24 +1235,32 @@ namespace das {
 
     template <typename... TA>
     constexpr int tuple_size() {
+        int sizes[] = { TypeSize<TA>::size..., 0 };
+        int aligns[] = { TypeAlign<TA>::align..., 0 };
         int ma = 0;
-        (..., (ma = round_up(ma, TypeAlign<TA>::align) + TypeSize<TA>::size));
+        for (size_t i = 0; i != sizeof...(TA); ++i)
+            ma = round_up(ma, aligns[i]) + sizes[i];
         return round_up(ma, tuple_align<TA...>());
     }
 
     template <typename... TA>
     constexpr int variant_sizeof() {
         constexpr auto align = variant_align<TA...>();
+        constexpr auto ihdr = round_up(TypeSize<int>::size, align);
+        int sizes[] = { TypeSize<TA>::size..., 0 };
         int ma = 0;
-        ((ma = std::max(round_up(TypeSize<int>::size, align) + round_up(TypeSize<TA>::size, align), ma)), ...);
+        for (size_t i = 0; i != sizeof...(TA); ++i)
+            ma = std::max(ihdr + round_up(sizes[i], align), ma);
         return ma;
     }
 
     template <int id, typename... TA>
     constexpr int tuple_offset() {
-        int cur_id = 0;
+        int sizes[] = { TypeSize<TA>::size..., 0 };
+        int aligns[] = { TypeAlign<TA>::align..., 0 };
         int offset = 0;
-        (..., ((cur_id++) < id ? offset = round_up(offset, TypeAlign<TA>::align) + TypeSize<TA>::size : 0));
+        for (int cur_id = 0; cur_id < id; ++cur_id)
+            offset = round_up(offset, aligns[cur_id]) + sizes[cur_id];
         using OurT = std::tuple_element_t<id, std::tuple<TA...>>;
         return round_up(offset, TypeAlign<OurT>::align);
     }
