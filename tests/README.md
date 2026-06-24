@@ -36,6 +36,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_lambdas.das | AOT lambda codegen — capture, invoke, nested | |
 | test_strings.das | AOT string operations — interpolation, comparison, builder | |
 | test_structures.das | AOT struct codegen — construction, fields, methods, inheritance | |
+| test_struct_decl_order.das | AOT required-module struct topo-sort (#3212) — by-value field of a later-declared struct | |
+| _aot_so_mod.das | *(helper)* #3212 fixture module — Outer holds Inner by value, declared Outer-first | |
 | t_invoke_void.das | AOT `invoke` dispatch — void-returning function pointer via AOT path | |
 
 ## apply/

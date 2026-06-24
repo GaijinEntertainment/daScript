@@ -3971,6 +3971,23 @@ class public CppAot : AstVisitor {
 };
 
 
+def private aotEmitStruct(ps : Structure?;
+                          emitSet : table<Structure?>;
+                          var visited : table<Structure?>;
+                          program : ProgramPtr;
+                          adapter : VisitorAdapter?) {
+    // emit by-value struct fields first: they need the complete type for sizeof/offsetof
+    if (visited |> key_exists(ps)) return ;
+    visited |> insert(ps);
+    for (fld in ps.fields) {
+        let ft = fld._type
+        if (ft.baseType == Type.tStructure && ft.structType != null && emitSet |> key_exists(ft.structType)) {
+            aotEmitStruct(ft.structType, emitSet, visited, program, adapter);
+        }
+    }
+    program |> visit_structure(ps, adapter);
+}
+
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     buildStructEnumCollisions(program);
@@ -3994,11 +4011,19 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
                 write(*aotVisitor.ss, "// unused enumeration {penum.name}\n");
             }
         });
+        // emit structs dependency-first (#3212): a by-value field needs its struct complete
+        var emitSet : table<Structure?>;
         pm |> for_each_structure($(ps) {
             if (!remUS || utm.useStructs |> key_exists(ps)) {
-                program |> visit_structure(ps, aotVisitor.adapter);
+                emitSet |> insert(ps);
             } else {
                 write(*aotVisitor.ss, "// unused structure {ps.name}\n");
+            }
+        });
+        var visited : table<Structure?>;
+        pm |> for_each_structure($(ps) {
+            if (emitSet |> key_exists(ps)) {
+                aotEmitStruct(ps, emitSet, visited, program, aotVisitor.adapter);
             }
         });
     })
