@@ -23,6 +23,7 @@ options persistent_heap
 options no_aot
 options no_optimization
 options force_escape_free = true
+options force_partial_escape_free = true   // flow-sensitive partial frees (default off) - this suite tests them
 
 require dastest/testing_boost public
 require UnitTest
@@ -465,4 +466,181 @@ def test_string_builder_element_freed(t : T?) {
     let grew = heap_bytes_allocated() - before
     t |> equal(acc, 3 * ((N - 1) * N / 2))
     t |> equal(grew, 0ul)        // formatted-only local is freed (string builder does not retain it)
+}
+
+// ===== [PEA] flow-sensitive partial free =====
+// The object escapes on ONE branch (stored to a global + returned) but not on the other. The
+// flow-INsensitive verdict is "escapes" -> the scope-exit pass leaves it to GC. The flow-sensitive
+// pass (CFG + escape flow + liveness) frees it on the branch where it is dead and has not escaped.
+var g_pea : array<Node?>
+
+def pea_partial(keep : bool, i : int) : Node? {
+    var p = new Node(x = i, y = i * 2)
+    if (keep) {
+        g_pea |> push(p)         // escapes via the global on this path
+        return p
+    } else {
+        return null              // p is dead and unescaped here -> PEA frees it
+    }
+}
+
+def pea_sum_freed_path() : int {
+    var seen = 0
+    for (i in range(N)) {
+        var r = pea_partial(false, i)   // non-escaping branch every iteration -> p freed each time
+        if (r != null) { seen ++ }
+    }
+    return seen
+}
+
+[test]
+def test_pea_partial_free_reclaims(t : T?) {        // [PEA] free on the non-escaping branch reclaims the heap
+    g_pea |> clear()
+    let before = heap_bytes_allocated()
+    let seen = pea_sum_freed_path()
+    let grew = heap_bytes_allocated() - before
+    t |> equal(seen, 0)                 // every call took the null branch
+    t |> equal(length(g_pea), 0)        // nothing escaped
+    t |> equal(grew, 0ul)               // freed each iteration, free-list reuses the slot
+}
+
+[test]
+def test_pea_partial_escape_path_ok(t : T?) {       // [PEA] escaping branch keeps the object live (no over-free)
+    g_pea |> clear()
+    let r = pea_partial(true, 5)
+    t |> equal(length(g_pea), 1)        // escaped via the global
+    t |> equal(r.x, 5)                  // not freed on this path -> value intact
+    t |> equal(r.y, 10)
+    g_pea |> clear()
+}
+
+// [PEA] within-block death: the object is USED on the non-escaping branch (read), then dies before the
+// branch returns. The free goes at the branch's scope exit - after the last use - not at its entry.
+def pea_use_then_free(keep : bool, i : int) : int {
+    var p = new Node(x = i, y = i * 2)
+    if (keep) {
+        g_pea |> push(p)         // escapes via the global on this path
+        return p.x
+    } else {
+        let s = p.x + p.y        // p is USED here, then dead -> freed at the branch's scope exit
+        return s
+    }
+}
+
+def pea_sum_use_then_free() : int {
+    var total = 0
+    for (i in range(N)) {
+        total += pea_use_then_free(false, i)   // non-escaping branch: p read then freed each iteration
+    }
+    return total
+}
+
+[test]
+def test_pea_within_block_death_freed(t : T?) {     // [PEA] free after the last use on the non-escaping branch
+    g_pea |> clear()
+    let before = heap_bytes_allocated()
+    let s = pea_sum_use_then_free()
+    let grew = heap_bytes_allocated() - before
+    t |> equal(s, 3 * ((N - 1) * N / 2))    // every read returned the right value before the free
+    t |> equal(length(g_pea), 0)
+    t |> equal(grew, 0ul)                   // freed after use each iteration -> heap flat
+}
+
+// [PEA] early-return escape: the escaping arm RETURNS, so the continuation after the `if` is reached
+// ONLY on the non-escaping fall-through, where p is dead-at-entry. PEA frees p as a statement before
+// the continuation (the contBefore insertion path, distinct from a scope-exit finalList).
+def pea_early_return(keep : bool, i : int) : int {
+    var p = new Node(x = i, y = i * 2)
+    if (keep) {
+        g_pea |> push(p)
+        return p.x
+    }
+    let after = i * 3                        // continuation anchor: the free is inserted before this
+    return after
+}
+[test]
+def test_pea_early_return_freed(t : T?) {
+    g_pea |> clear()
+    let before = heap_bytes_allocated()
+    var s = 0
+    for (i in range(N)) { s += pea_early_return(false, i) }   // always the non-escaping path
+    let grew = heap_bytes_allocated() - before
+    t |> equal(s, 3 * ((N - 1) * N / 2))
+    t |> equal(length(g_pea), 0)
+    t |> equal(grew, 0ul)                   // freed before the continuation statement -> heap flat
+}
+[test]
+def test_pea_early_return_escape_survives(t : T?) {
+    g_pea |> clear()
+    var acc = 0
+    for (i in range(8)) { acc += pea_early_return(true, i) }  // escaping arm: object must survive
+    t |> equal(length(g_pea), 8)
+    var ok = true
+    for (n in g_pea) { if (n.y != n.x * 2) { ok = false } }
+    t |> success(ok, "early-return escaped objects intact")
+    g_pea |> clear()
+}
+
+// [PEA] nested branches: p escapes only on the deepest path (a && b). On a && !b and on !a it is dead,
+// freed at two different continuation levels. Driven down !a -> always the freed path.
+def pea_nested(a : bool, b : bool, i : int) : int {
+    var p = new Node(x = i, y = i * 2)
+    if (a) {
+        if (b) {
+            g_pea |> push(p)
+            return p.x
+        }
+        return i + 1                        // a && !b: p dead
+    }
+    return i + 2                            // !a: p dead
+}
+[test]
+def test_pea_nested_freed(t : T?) {
+    g_pea |> clear()
+    let before = heap_bytes_allocated()
+    var s = 0
+    for (i in range(N)) { s += pea_nested(false, false, i) }
+    let grew = heap_bytes_allocated() - before
+    t |> equal(s, (N - 1) * N / 2 + 2 * N)
+    t |> equal(grew, 0ul)
+}
+
+// [PEA] three tracked objects, divergent fates in one frame: `a` conditionally escapes (escaping arm
+// returns early, so PEA frees it on the fall-through), `b` and `c` never escape (stack-allocated).
+// Exercises the per-object free-site map alongside multiple live stack allocations in one scope.
+def pea_multi(keep_a : bool, i : int) : int {
+    var a = new Node(x = i, y = i * 2)
+    var b = new Node(x = i + 1, y = i + 1)
+    var c = new Node(x = i + 2, y = i + 2)
+    if (keep_a) { g_pea |> push(a); return -1 }
+    return b.x + c.x
+}
+[test]
+def test_pea_multi_freed(t : T?) {
+    g_pea |> clear()
+    let before = heap_bytes_allocated()
+    var s = 0
+    for (i in range(N)) { s += pea_multi(false, i) }
+    let grew = heap_bytes_allocated() - before
+    t |> equal(s, (N - 1) * N + 3 * N)      // sum of (i+1)+(i+2)
+    t |> equal(grew, 0ul)
+}
+
+var g_clob : array<Node?>
+def pea_for_source(keep : bool, i : int) : int {
+    var p = new Node(x = i + 3, y = 0)
+    if (keep) { g_pea |> push(p); return p.x }
+    var clobber = new Node(x = 999, y = 0)
+    g_clob |> push(clobber)
+    var sum = 0
+    for (e in range(p.x)) { sum += e }
+    return sum
+}
+[test]
+def test_pea_for_source_not_freed(t : T?) {
+    g_pea |> clear(); g_clob |> clear()
+    var acc = 0
+    for (i in range(10)) { acc += pea_for_source(false, i) }
+    t |> equal(acc, 285)
+    g_pea |> clear(); g_clob |> clear()
 }

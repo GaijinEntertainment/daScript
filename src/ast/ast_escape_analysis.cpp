@@ -3,7 +3,10 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_cfg.h"
 #include "daScript/ast/ast_escape_analysis.h"
+#include "daScript/misc/string_writer.h"
+#include <cstdint>
 
 namespace das {
 
@@ -485,6 +488,15 @@ namespace das {
         return false;
     }
 
+    // GC-style raw free (no finalizer), matching what the heap GC would do for this garbage.
+    static ExprCall * makeScopeFreeCall ( Variable * var ) {
+        auto call = new ExprCall(var->at, "_::builtin_scope_free");
+        call->arguments.push_back(new ExprVar(var->at, var->name));
+        call->arguments.push_back(new ExprConstUInt(var->at, var->type->firstType->getSizeOf()));
+        call->alwaysSafe = true;
+        return call;
+    }
+
     class ScopeFreeVisitor : public Visitor {
     public:
         bool anyWork = false;
@@ -538,12 +550,7 @@ namespace das {
             if ( var->type->firstType->getSizeOf64() > 0x7fffffffull ) return;  // skip pointees over the 2^31 (32-bit) size limit - oversized/invalid types that error out anyway
             anyWork = true;
             func->notInferred();
-            // GC-style raw free (no finalizer), matching what the heap GC would do for this garbage.
-            auto call = new ExprCall(var->at, "_::builtin_scope_free");
-            call->arguments.push_back(new ExprVar(var->at, var->name));
-            call->arguments.push_back(new ExprConstUInt(var->at, var->type->firstType->getSizeOf()));
-            call->alwaysSafe = true;
-            block->finalList.insert(block->finalList.begin(), call);
+            block->finalList.insert(block->finalList.begin(), makeScopeFreeCall(var));
             if ( logs ) {
                 if ( !var->at.empty() && var->at.fileInfo ) {
                     *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << " ";
@@ -575,6 +582,333 @@ namespace das {
         return EscapeSolver(move(graph), logEscape ? &logs : nullptr).solveAndApply();
     }
 
+    // ===== Flow-sensitive escape (partial escape analysis) - entirely file-local =====
+    namespace {
+        // Per-block dataflow facts for one function's tracked objects, filled by analyzeFlow: a FORWARD
+        // escape flow ("has this object escaped on some path to here?", merge = union) and a BACKWARD
+        // liveness ("is it read on some path forward from here?"). Two separate fixpoints (opposite
+        // directions) write into one result. Only escapedOut is kept for escape (the entry value is a
+        // transient folded into the fixpoint); liveness keeps both ends (both are read downstream).
+        // b is always a block of this cfg (from cfg.blocks / pred / succ, never null) with a dense id in
+        // [0, size), so the accessors need no null / bounds guard.
+        struct FlowFacts {
+            struct PerBlock {
+                das_set<Variable *> escapedOut;   // objects escaped at block exit
+                das_set<Variable *> liveIn;       // objects live at block entry
+                das_set<Variable *> liveOut;      // objects live at block exit
+            };
+            vector<Variable *>   objects;         // tracked fresh-alloc pointer locals
+            vector<PerBlock>     block;           // [block id] -> that block's escape + liveness sets
+            bool escapedAtExit ( CfgBlock * b, Variable * o ) const {
+                return block[b->id].escapedOut.find(o)!=block[b->id].escapedOut.end();
+            }
+            bool liveAtEntry ( CfgBlock * b, Variable * o ) const {
+                return block[b->id].liveIn.find(o)!=block[b->id].liveIn.end();
+            }
+            bool liveAtExit ( CfgBlock * b, Variable * o ) const {
+                return block[b->id].liveOut.find(o)!=block[b->id].liveOut.end();
+            }
+        };
+
+        // the whole-body facts a single FunctionScanner walk produces
+        struct FunctionScan {
+            das_set<Variable *>                     tracked;    // dedup set of fresh-alloc pointer locals
+            vector<Variable *>                      objects;    // same, in discovery order
+        };
+
+        // ONE whole-body walk: collects the tracked fresh-alloc pointer locals (dedup set + ordered list).
+        struct FunctionScanner : Visitor {
+            FunctionScan & fs;
+            FunctionScanner ( FunctionScan & fs )
+                : fs(fs) {}
+
+            static FunctionScan scanFunction ( Function * fn ) {
+                FunctionScan r;
+                if ( fn && fn->body ) {
+                    FunctionScanner fs(r);
+                    fn->body->visit(fs);
+                }
+                return r;
+            }
+
+            virtual VariablePtr visitLet ( ExprLet *, const VariablePtr & var, bool ) override {
+                if ( isPointerToStruct(var->type) && isFreshAlloc(var->init) && fs.tracked.insert(var).second ) {
+                    fs.objects.push_back(var);
+                }
+                return var;
+            }
+        };
+
+
+        // the per-block sets a single BlockScanner walk produces, indexed by block id
+        struct BlockScan {
+            vector<das_set<Variable *>> escapedOut;   // escape-gen (forward escape flow's seed)
+            vector<das_set<Variable *>> uses;         // upward-exposed reads (liveness gen)
+            vector<das_set<Variable *>> defs;         // declarations (liveness kill)
+        };
+
+        // ONE per-block walk (statements IN ORDER), for the block's tracked vars:
+        //  - escaped: escape-gen - a use that is NOT a safe field-base / escape-neutral arg / string-
+        //    builder element; the forward escape flow's seed.
+        //  - defs: vars declared here; uses: upward-exposed reads (read before declared here, so `defs`
+        //    doubles as "declared so far") - the backward liveness's gen/kill. (Confines a variable's
+        //    live range to its declaration; otherwise it would leak past the decl into outer scopes.)
+        struct BlockScanner : Visitor {
+            const das_set<Variable *> & tracked;
+            das_set<ExprVar *> safeBase;
+
+            BlockScan &res;
+            uint32_t b_id;
+
+            // scan every block once (one BlockScanner per block), returning the per-block escape-gen / uses / defs.
+            static BlockScan scanBlocks ( const Cfg & cfg, const das_set<Variable *> & tracked ) {
+                BlockScan r;
+                auto nb = cfg.blocks.size();
+                r.escapedOut.resize(nb);
+                r.uses.resize(nb);
+                r.defs.resize(nb);
+                for ( auto b : cfg.blocks ) {
+                    BlockScanner sc(tracked, r, b->id);
+                    for ( auto s : b->stmts ) {
+                        s->visit(sc);
+                    }
+                }
+                return r;
+            }
+
+            explicit BlockScanner ( const das_set<Variable *> & t, BlockScan &res_, uint32_t b_id_ ) : tracked(t), res(res_), b_id(b_id_) {}
+            virtual void preVisit ( ExprField * e ) override {
+                if ( auto v = derefBaseVar(e->value) ) safeBase.insert(v);
+            }
+            virtual void preVisit ( ExprSafeField * e ) override {
+                if ( auto v = derefBaseVar(e->value) ) safeBase.insert(v);
+            }
+            virtual void preVisit ( ExprOp2 * e ) override {
+                if ( isArgEscapeNeutral(e->func, 0) ) { if ( auto v = derefBaseVar(e->left) ) safeBase.insert(v); }
+                if ( isArgEscapeNeutral(e->func, 1) ) { if ( auto v = derefBaseVar(e->right) ) safeBase.insert(v); }
+            }
+            virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool ) override {
+                if ( isArgEscapeNeutral(call->func, callArgIndex(call, arg)) )
+                    if ( auto v = derefBaseVar(arg) ) safeBase.insert(v);
+            }
+            virtual void preVisitStringBuilderElement ( ExprStringBuilder *, Expression * e, bool ) override {
+                if ( auto v = derefBaseVar(e) ) safeBase.insert(v);
+            }
+            virtual VariablePtr visitLet ( ExprLet *, const VariablePtr & var, bool ) override {
+                if ( tracked.find(var)!=tracked.end() ) res.defs[b_id].insert(var);
+                return var;
+            }
+            virtual ExpressionPtr visit ( ExprVar * e ) override {
+                if ( e->variable && tracked.find(e->variable)!=tracked.end() ) {
+                    if ( safeBase.find(e)==safeBase.end() ) res.escapedOut[b_id].insert(e->variable);   // escape-gen
+                    if ( res.defs[b_id].find(e->variable)==res.defs[b_id].end() ) res.uses[b_id].insert(e->variable);    // upward-exposed use
+                }
+                return e;
+            }
+        };
+    }
+
+    // Compute all per-block flow facts: the forward escape flow + the backward liveness, into one
+    // FlowFacts. Takes the already-collected tracked set / objects; scanBlocks supplies the per-block
+    // gen/kill in a single walk, then the two fixpoints run (independent - opposite directions).
+    static FlowFacts analyzeFlow ( const Cfg & cfg, const das_set<Variable *> & tracked, const vector<Variable *> & objects ) {
+        FlowFacts f;
+        auto nb = cfg.blocks.size();
+        f.block.resize(nb);
+        f.objects = objects;
+        if ( tracked.empty() ) return f;
+
+        auto [escapedGen, uses, defs] = BlockScanner::scanBlocks(cfg, tracked);
+        for ( auto b : cfg.blocks ) {
+            f.block[b->id].escapedOut = move(escapedGen[b->id]);  // seed escape-gen
+        }
+
+        // ---- forward escape flow ----
+        // escapedOut[B] (already seeded with escape-gen) |= union of preds' escapedOut. Monotone -> a size
+        // change is the only signal needed; iterate to stable.
+        bool changed = true;
+        while ( changed ) {
+            changed = false;
+            for ( auto b : cfg.blocks ) {
+                auto & out = f.block[b->id].escapedOut;
+                auto before = out.size();
+                for ( auto p : b->pred ) {
+                    for ( auto o : f.block[p->id].escapedOut ) {
+                        out.insert(o);
+                    }
+                }
+                if ( out.size()!=before ) changed = true;
+            }
+        }
+
+        // ---- backward liveness ----
+        //   liveOut[B] = union of liveIn over B's successors
+        //   liveIn[B]  = uses[B] | (liveOut[B] \ defs[B])
+        // iterated against the edges until the sets stop growing.
+        changed = true;
+        while ( changed ) {
+            changed = false;
+            for ( auto b : cfg.blocks ) {
+                auto & out = f.block[b->id].liveOut;
+                for ( auto s : b->succ ) {
+                    for ( auto o : f.block[s->id].liveIn ) {
+                        out.insert(o);
+                    }
+                }
+                auto & in = f.block[b->id].liveIn;
+                auto before = in.size();
+                for ( auto o : uses[b->id] ) {
+                    in.insert(o);
+                }
+                for ( auto o : out ) {
+                    if ( defs[b->id].find(o)==defs[b->id].end() ) {
+                        in.insert(o);
+                    }
+                }
+                if ( in.size()!=before ) changed = true;
+            }
+        }
+        return f;
+    }
+
+    // Combine the escape flow and liveness into the set of free sites: for each object, the CFG blocks
+    // at whose SCOPE EXIT it can be freed. A block qualifies when the object is dead and not-escaped
+    // leaving it (so freeing there is safe on that path) AND it just died there - either it is live
+    // entering the block (its last use is inside) or it was dead on entry but live at EVERY
+    // predecessor's exit (it died on every incoming edge). That "just died here" condition is the death
+    // frontier: it makes each path free the object exactly once, with no double-free at a later join.
+    // Returns object -> blocks; partialEscapeFree then inserts a builtin_scope_free at each.
+    static das_hash_map<Variable *, vector<CfgBlock *>>
+    partialFreeSites ( const Cfg & cfg, const FlowFacts & f ) {
+        das_hash_map<Variable *, vector<CfgBlock *>> sites;
+        for ( auto b : cfg.blocks ) {
+            for ( auto o : f.objects ) {
+                if ( f.liveAtExit(b, o) ) continue;                // still live leaving b -> not dead here
+                if ( f.escapedAtExit(b, o) ) continue;             // escaped on this path -> owned elsewhere
+                // b is on the death frontier for o iff o dies by the end of b: either o is live ENTERING b
+                // and dead leaving it (its last use is in b), or o was dead-on-entry but live at EVERY
+                // predecessor's exit (it died on every incoming edge). Both mean a single free at b's
+                // scope exit covers this path with no double-free (a later block has o already dead).
+                bool diesHere = f.liveAtEntry(b, o);
+                if ( !diesHere ) {
+                    if ( b->pred.empty() ) continue;
+                    diesHere = true;
+                    for ( auto p : b->pred ) {
+                        if ( !f.liveAtExit(p, o) ) {
+                            diesHere = false; break;
+                        }
+                    }
+                }
+                if ( diesHere ) sites[o].push_back(b);
+            }
+        }
+        return sites;
+    }
+
+    namespace {
+        // pre-scan every candidate target list once for the variables it already frees, keyed by the list,
+        // so the insertion loop checks a set instead of re-scanning per candidate. The loop maintains this
+        // as it inserts, keeping idempotence within one pass (two sites sharing a list) and across re-infers.
+        das_hash_map<const vector<Expression *> *, das_set<Variable *>>
+        collectFreedVars ( const das_hash_map<Variable *, vector<CfgBlock *>> & sites ) {
+            das_hash_map<const vector<Expression *> *, das_set<Variable *>> freedIn;
+            for ( const auto & kv : sites ) {
+                for ( auto b : kv.second ) {
+                    const vector<Expression *> * lp = b->astHead ? &b->astHead->finalList
+                        : ( b->contOwner ? &b->contOwner->list : nullptr );
+                    if ( !lp || freedIn.find(lp)!=freedIn.end() ) continue;
+                    auto & freed = freedIn[lp];
+                    for ( auto s : *lp ) {
+                        if ( !s->rtti_isCall() ) continue;
+                        auto call = static_cast<ExprCall *>(s);
+                        if ( call->name.find("builtin_scope_free")==string::npos || call->arguments.empty() ) continue;
+                        auto a0 = call->arguments[0];
+                        if ( a0->rtti_isVar() ) freed.insert(static_cast<ExprVar *>(a0)->variable);
+                    }
+                }
+            }
+            return freedIn;
+        }
+    }
+
+    // the CFG models if/while/for and fall-through finalList, but NOT finalList on an early-exit edge
+    // (return/break/continue still run it) nor try/recover bodies. partialEscapeFree frees at flow-
+    // determined points, so an incomplete CFG could free before a use the CFG never saw - bail out for
+    // any function carrying those constructs (conservative: such objects fall back to scope-exit / GC).
+    static bool cfgMayBeIncomplete ( Function * fn ) {
+        struct Scan : Visitor {
+            bool found = false;
+            virtual void preVisit ( ExprBlock * b ) override {
+                Visitor::preVisit(b);
+                if ( !b->finalList.empty() ) found = true;
+            }
+            virtual void preVisit ( ExprTryCatch * e ) override {
+                Visitor::preVisit(e);
+                found = true;
+            }
+        };
+        Scan s;
+        fn->body->visit(s);
+        return s.found;
+    }
+
+    static bool partialEscapeFree ( Function * fn, TextWriter * logs ) {
+        if ( !fn || !fn->body || !fn->body->rtti_isBlock() ) return false;
+        if ( fn->generated || fn->generator || fn->lambda || fn->hasUnsafe ) return false;
+        if ( cfgMayBeIncomplete(fn) ) return false;   // finally / try-recover -> CFG can't be trusted
+        Cfg cfg = buildCfg(fn);
+        auto fs = FunctionScanner::scanFunction(fn);              // tracked fresh-alloc pointer locals
+        if ( fs.objects.empty() ) return false;
+        auto facts = analyzeFlow(cfg, fs.tracked, fs.objects);
+        auto sites = partialFreeSites(cfg, facts);
+        auto freedIn = collectFreedVars(sites);
+        bool any = false;
+        for ( const auto & [o, v] : sites ) {
+            if ( o->does_not_escape ) continue;            // freed at scope exit already -> no double free
+            if ( !isEscapeFreePtr(o->type) ) continue;     // not a deletable plain pointer-to-struct
+            if ( o->type->firstType->getSizeOf64() > 0x7fffffffull ) continue;
+            for ( auto b : v ) {
+                // pick the insertion target. A block that opens a lexical scope frees at its scope exit
+                // (finalList - runs after the last use, also on a `return`). A continuation block frees as
+                // a statement before its first statement, on the fall-through path only - and only for an
+                // edge-death (o already dead at entry), else that statement could precede a use of o.
+                ExprBlock * tgt = nullptr;
+                bool intoFinalList = false;
+                if ( b->astHead ) {
+                    tgt = b->astHead; intoFinalList = true;
+                } else if ( b->contOwner && b->contBefore && !facts.liveAtEntry(b, o) ) {
+                    tgt = b->contOwner; intoFinalList = false;
+                } else {
+                    continue;                              // no clean AST insertion point
+                }
+                auto & list = intoFinalList ? tgt->finalList : tgt->list;
+                auto & freed = freedIn[&list];
+                if ( freed.find(o)!=freed.end() ) continue;
+                size_t at = list.size();                   // finalList: append (back); continuation: before anchor
+                if ( !intoFinalList ) {
+                    at = 0; bool found = false;
+                    for ( ; at<list.size(); ++at ) if ( list[at]==b->contBefore ) { found = true; break; }
+                    if ( !found ) continue;                // anchor no longer present
+                }
+                list.insert(list.begin() + at, makeScopeFreeCall(o));
+                freed.insert(o);
+                fn->notInferred();
+                any = true;
+                if ( logs ) {
+                    if ( !o->at.empty() && o->at.fileInfo )
+                        *logs << o->at.fileInfo->name << ":" << o->at.line << ":" << o->at.column << " ";
+                    *logs << "partial-escape free of '" << o->name << "' on a non-escaping path in '"
+                          << fn->module->name << "::" << fn->name << "'";
+                    auto & fat = intoFinalList ? tgt->at : b->contBefore->at;   // where the free is inserted
+                    if ( !fat.empty() && fat.fileInfo )
+                        *logs << " (freed at " << fat.fileInfo->name << ":" << fat.line << ":" << fat.column << ")";
+                    *logs << "\n";
+                }
+            }
+        }
+        return any;
+    }
+
     // OPTIMIZATION: consume the analysis result, emitting scope-exit frees / stack relocation. Returns
     // whether the AST changed, so the caller re-infers the inserted scope_free calls.
     bool scopeFreeOptimization(Program * program, TextWriter & logs) {
@@ -585,7 +919,16 @@ namespace das {
         auto logEscape = options.getBoolOption("log_escape_analysis", policies.log_escape_analysis);
         ScopeFreeVisitor sfv(logEscape ? &logs : nullptr, forceStack);
         program->visit(sfv);
-        return sfv.anyWork;
+        bool anyWork = sfv.anyWork;
+        // flow-sensitive pass (opt-in via force_partial_escape_free): build a CFG and free objects on the
+        // paths where they don't escape (the ones the scope-exit pass left to GC because they escape on
+        // SOME other path). Disabling it skips all CFG building - only the simple EA above runs.
+        if ( options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free) ) {
+            program->thisModule->functions.foreach([&](auto & fn){
+                if ( partialEscapeFree(fn, logEscape ? &logs : nullptr) ) anyWork = true;
+            });
+        }
+        return anyWork;
     }
 
 }
