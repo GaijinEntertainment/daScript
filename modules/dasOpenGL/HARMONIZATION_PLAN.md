@@ -12,6 +12,16 @@
 iteration loop). Land the safe intersection first, then grow toward the modern union on the same
 branch — every commit preflight-green.
 
+> ⛔ **WORKING CONSTRAINT (2026-06-23, Boris — active until Boris is at his desk): NO executable rebuilds.**
+> Windows Defender throws a first-run prompt on freshly-built unsigned `daslang.exe` / `test_aot.exe`, which
+> blocks unattended builds while Boris is away. Until the Defender exclusion is applied (admin-only;
+> self-elevating fix script at `D:\Work\add-daslang-defender-exclusions.ps1`), proceed with **`.das`-only
+> changes** and validate with what the EXISTING worktree binary already runs: **interp + JIT + lint + format
+> + ci-das + the dasVulkan render smoke** (24+15) — none of these rebuild an exe. **BATCH for desk-time:** any
+> C++ change, and **AOT validation** (a `tests/glsl` add makes `test_aot`'s baked stub stale → the AOT gate
+> needs a `test_aot` rebuild). So under this constraint preflight runs with `--skip cpp-syntax,tests-aot` and
+> `sequence` is the GL-game proxy (run its script directly — it bundles in a temp dir, no worktree relink).
+
 ---
 
 ## 0. TL;DR
