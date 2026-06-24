@@ -47,10 +47,12 @@ void Module_dasGLFW::initFunctions_2() {
 	makeExtern< void (*)(GLFWwindow *,int) , glfwSetWindowShouldClose , SimNode_ExtFuncCall >(lib,"glfwSetWindowShouldClose","glfwSetWindowShouldClose")
 		->args({"window","value"})
 		->addToModule(*this, SideEffects::worstDefault);
+#ifndef __EMSCRIPTEN__
 // from GLFW/glfw3.h:3338:21
 	makeExtern< const char * (*)(GLFWwindow *) , glfwGetWindowTitle , SimNode_ExtFuncCall >(lib,"glfwGetWindowTitle","glfwGetWindowTitle")
 		->args({"window"})
 		->addToModule(*this, SideEffects::worstDefault);
+#endif
 // from GLFW/glfw3.h:3364:14
 	makeExtern< void (*)(GLFWwindow *,const char *) , glfwSetWindowTitle , SimNode_ExtFuncCall >(lib,"glfwSetWindowTitle","glfwSetWindowTitle")
 		->args({"window","title"})

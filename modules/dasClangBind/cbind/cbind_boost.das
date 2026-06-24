@@ -1270,6 +1270,13 @@ class CppGenBind : AnyGenBind {
     def rename_function(name, nsname : string) {
         return name
     }
+    // When true, the function's makeExtern is wrapped in #ifndef __EMSCRIPTEN__ so
+    // it is not bound on the web target. Use for functions the emscripten GLFW/GL
+    // library does not provide — fail-closes the binding away on web instead of an
+    // unresolved-symbol link error. Override per-binder; default binds everywhere.
+    def emscripten_skip_function(function_name : string) : bool {
+        return false
+    }
     def isAotAliasType(var t : CXType) {
         if (t.kind == CXTypeKind.Record ||
              t.kind == CXTypeKind.Typedef ||
@@ -1337,6 +1344,10 @@ class CppGenBind : AnyGenBind {
         step_Function()
         let isStatic = clang_Cursor_getStorageClass(c) == CX_StorageClass.Static
         let function_name = string(clang_getCursorSpelling(c))
+        let emWebSkip = emscripten_skip_function(function_name)
+        if (emWebSkip) {
+            fprint(func_file, "#ifndef __EMSCRIPTEN__\n")
+        }
         var das_function_name = function_name
         var isOperator = false
         if (function_name |> starts_with("operator")) {
@@ -1421,6 +1432,9 @@ class CppGenBind : AnyGenBind {
         }
         fprint(func_file, "\n\t\t->addToModule(*this, SideEffects::worstDefault)")
         fprint(func_file, ";\n")
+        if (emWebSkip) {
+            fprint(func_file, "#endif\n")
+        }
     }
     def override parse_Constructor(var c : CXCursor) {
         let ctor_name = string(clang_getCursorSpelling(c))

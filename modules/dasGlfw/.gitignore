@@ -3,6 +3,14 @@ glfw/
 glfw_dyn/
 GLFW.LICENSE
 
+# Vendored GLFW 3.4 header for the emscripten/web build (TRACKED). The unanchored
+# 'glfw/' rule above catches this GLFW/ subdir case-insensitively on Windows, so
+# re-include it explicitly. emcc's -sUSE_GLFW=3 supplies a GLFW 3.3.8 subset at
+# link; this 3.4 header keeps dasGLFW's bindings compiling uniformly at 3.4.
+!web_include/
+!web_include/GLFW/
+!web_include/GLFW/*.h
+
 # Dynamic module
 *.shared_module
 *.pdb
