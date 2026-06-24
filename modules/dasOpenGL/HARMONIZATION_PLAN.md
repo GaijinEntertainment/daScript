@@ -12,15 +12,18 @@
 iteration loop). Land the safe intersection first, then grow toward the modern union on the same
 branch — every commit preflight-green.
 
-> ⛔ **WORKING CONSTRAINT (2026-06-23, Boris — active until Boris is at his desk): NO executable rebuilds.**
-> Windows Defender throws a first-run prompt on freshly-built unsigned `daslang.exe` / `test_aot.exe`, which
-> blocks unattended builds while Boris is away. Until the Defender exclusion is applied (admin-only;
-> self-elevating fix script at `D:\Work\add-daslang-defender-exclusions.ps1`), proceed with **`.das`-only
-> changes** and validate with what the EXISTING worktree binary already runs: **interp + JIT + lint + format
-> + ci-das + the dasVulkan render smoke** (24+15) — none of these rebuild an exe. **BATCH for desk-time:** any
-> C++ change, and **AOT validation** (a `tests/glsl` add makes `test_aot`'s baked stub stale → the AOT gate
-> needs a `test_aot` rebuild). So under this constraint preflight runs with `--skip cpp-syntax,tests-aot` and
-> `sequence` is the GL-game proxy (run its script directly — it bundles in a temp dir, no worktree relink).
+> ✅ **WORKING CONSTRAINT LIFTED (2026-06-24, Boris).** The 2026-06-23 NO-EXE-REBUILD constraint — Windows
+> Defender/SmartScreen first-run prompt on freshly-built unsigned `daslang.exe` / `test_aot.exe` blocking
+> unattended builds — was **tested and does not reproduce.** An incremental `--target daslang` rebuild
+> (genuinely fresh **PE-image** hash, `E28CE02E…`→`D5BA787D…`, cascaded fresh `libDaScriptDyn*.dll`) ran clean
+> via BOTH `CreateProcess` (redirected) AND the SmartScreen-hooked `ShellExecute` path — exit 0, no
+> `smartscreen.exe`, no modal, in an interactive session. **Gotcha learned:** an overlay-appended copy of the
+> exe is NOT a faithful probe — appended bytes sit OUTSIDE the PE image and reputation hashing (Authenticode/
+> PE-image hash) ignores trailing data, so the copy keeps the known-good image hash; only a real relink changes
+> the hash that matters, and even that wasn't gated. **So rebuilds + AOT validation are back on the table** —
+> preflight runs `--full` again (drop the `--skip cpp-syntax,tests-aot` workaround). The Defender exclusion
+> script `D:\Work\add-daslang-defender-exclusions.ps1` stays as belt-and-suspenders if the prompt ever resurfaces.
+> (Premise was likely a one-time first-run cloud-reputation check, a MOTW'd download, or a since-changed setting.)
 
 ---
 
@@ -280,7 +283,11 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
   modernizing them is both the lingua-franca unification and the web-readiness fix.
 - **wasm `late`-extern resolution (Phase 4):** emscripten exposes WebGL2 as *linked symbols*, not a
   proc-address table — the `late`/`library` extern model may need an emscripten path. This is the real
-  "does the binding reach the web" gate, bigger than any shader-emitter work.
+  "does the binding reach the web" gate, bigger than any shader-emitter work. **AUDITED 2026-06-23 (§11):
+  CONFIRMED + de-risked.** The gap is exactly one C++ function — `openGlGetFunctionAddress` returns `nullptr`
+  on emscripten (`module_builtin_dasbind.cpp:74-78`, no `__EMSCRIPTEN__` branch); the fix is a GLAD-style static
+  name→`&symbol` table. The *call* path is already portable C++ (`systemV_64_wrapper.inc`), and the browser
+  main-loop is already scaffolded (`builtin_main_loop`), so this gate is narrower than feared. Full scope in §11.
 
 ---
 
@@ -291,6 +298,115 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
 - SPIR-V→GL ingestion (Phase 5 at most).
 - WebGL1 / GLES2 support.
 - Merging the two stage-macro sets or the host-binding models.
+
+---
+
+## 11. Phase 4 AUDIT — wasm/web (2026-06-23, investigation-only, NOT yet committed to)
+
+Scope-only audit (no build; the no-exe-rebuild constraint is in force). Two questions: **(Q1)** what would
+it take to TEST shaders/GL under wasm, and **(Q2)** what would it take to render `examples/opengl/01_hello_triangle.das`
+on a webpage via WebGL2. All findings source-verified; file:line in-line.
+
+### 11.0 There are TWO distinct wasm execution models today (they have DIFFERENT extern stories)
+
+| Model | What it is | Runtime | GL story today |
+|---|---|---|---|
+| **A — interpreter-in-wasm** | the WHOLE daslang compiler+interpreter compiled to wasm via emscripten `em++` (`daslang_static.wasm`), embeds daslib+dastest, `callMain`+`FS` | browser **or** Node | runs `.das` through the **interpreter** → a GL `late` extern resolves via `SimNode_DasBindCall::bind` → `getDllAddress` → `openGlGetFunctionAddress` (`module_builtin_dasbind.cpp:225`) |
+| **B — standalone cross-compile** | a single `.das` → LLVM IR → wasm32 obj → `emcc` link (`-sSTANDALONE_WASM`) → one `.wasm`, via `daslang -exe --jit-target=wasm32-unknown-emscripten --jit-runtime-lib=…` | **wasmtime** (WASI) | **headless, compute-only — NO WebGL exists in WASI.** The ~18 cross-compiled examples (`web/CMakeLists.txt:161-180`) exercise **zero native externs**; this path has never resolved a `late` extern |
+
+CI builds **both** (`.github/workflows/wasm_build.yml` + `pages.yml`); modules disabled in the web build:
+LLVM/ClangBind/HV/**GLFW**/AUDIO/StdDlg/StbImage/PUGIXML/SQLITE (`web/CMakeLists.txt:7-17`). emsdk pinned
+**5.0.3** (wasm_cross) / **5.0.7** (pages) — fragile, clang-snapshot regressions make the pin load-bearing.
+
+### 11.1 Q1 — testing shaders/GL under wasm (cheap → expensive)
+
+- **CHEAP, available now (no GPU, no new infra): run `tests/glsl` inside the wasm compiler.** The emission
+  suite is **compile-time only** (bakes emitted GLSL into a `const string`, asserts substrings) and needs only
+  `glsl/glsl_opengl` (the compile-time emitter) — **no GL runtime, no GPU**. So it can be added to the Node.js
+  `dastest_wasm.js` sweep (`web/test/dastest_wasm.js:33-48` already runs a `tests/language` subset) — proves the
+  GLSL emitter behaves **identically when the compiler itself runs under emscripten**. This is the single
+  cheapest "test shaders under wasm" win and is constraint-safe to wire whenever a build is allowed.
+- **MEDIUM:** a "does the GL example cross-compile to wasm at all" gate is only meaningful once the extern gate
+  (11.2-b) is solved; and even then Model B runs under wasmtime (no WebGL) so it can't *render*.
+- **EXPENSIVE / net-new (the real gap for shader RENDER tests on web):** WebGL2 pixel-oracle testing needs a
+  **browser/headless-GL harness** (Playwright or puppeteer + `<canvas>` readback, or Node `headless-gl`), mirroring
+  the dasVulkan lavapipe oracle but web-side. No such harness exists. This is the web analogue of §8.3.
+
+### 11.2 Q2 — the GL triangle on a webpage: four gates, ranked by size
+
+The triangle needs dasGLFW (window/ctx/loop) + dasOpenGL (gl*) + the GLSL emitter (`[vertex_program]`/
+`[fragment_program]`) + `opengl_boost` helpers (`create_shader_program`, `bind_vertex_buffer`, `*_bind_uniform`).
+
+**(b) THE REAL GATE — `late`-extern address resolution under emscripten. [biggest, but de-risked]**
+CONFIRMED at source: `openGlGetFunctionAddress` (`module_builtin_dasbind.cpp:46-78`) has branches only for
+`_MSC_VER`/`__APPLE__`/`__linux__`; **emscripten falls into the `#else` → `return nullptr`** → every GL `late`
+extern fails to bind. Emscripten exposes WebGL2/GLES3 as **linked C symbols** (`<GLES3/gl3.h>`, resolved by
+`emcc` at link time), **not** a `wglGetProcAddress`/`dlsym` table. **Fix shape:** add an
+`#if defined(__EMSCRIPTEN__)` branch returning the address of the linked symbol — but since there's no
+proc-address table, this needs a **GLAD-style static `{"glClear",(void*)&glClear,…}` table** compiled into the
+wasm (`&glClear` is a valid wasm function-pointer). **De-risked finding:** the `late`-extern *call* path is
+**already portable** — `systemV_64_wrapper.inc` (used in the `#else`/non-MSVC build, i.e. emscripten) is plain
+typed-pointer-cast C++ (`using call_kind = …; return Rx(call_kind(fn)(…))`, lines 1-4), **not** inline asm. So
+calling through the resolved pointer works on wasm32 as-is; **only the address resolution is missing.** This
+gate hits Model A directly (verified path). For Model B the LLVM-to-wasm lowering of a `late` extern is
+**unverified** (no cross-compiled example has ever used one) — name that as its own sub-unknown.
+
+**Build/link gate — emscripten GLFW + WebGL2 emulation. [large]**
+dasGLFW + dasOpenGL are DISABLED in the web build and have **no emscripten guards** in their CMakeLists; dasGLFW
+builds vendored GLFW 3.4 via ExternalProject (no emscripten backend → configure fails). Emscripten ships its own
+GLFW emulation (`-sUSE_GLFW=3`, maps `glfw*`→canvas/events) + WebGL2 (`-sFULL_ES3=1 -sMAX_WEBGL_VERSION=2`). So
+dasGLFW needs an emscripten path that **skips the vendored build** and binds `glfw*` as `late` externs to the
+emscripten-provided symbols (same mechanism as gate (b), extended from `gl*` to `glfw*`).
+
+**(a) es300 emitter mode. [smallest, well-scoped by §5]**
+Version line is hardcoded `#version {version} core` (`glsl_internal.das:552`); **no precision qualifiers emitted
+at all** (zero matches for `precision`/`highp`); **no target detection** anywhere in dasGlsl/dasOpenGL. For
+WebGL2 the emitter must emit `#version 300 es` + mandatory `precision highp float; precision highp int;` in
+fragment shaders. GOOD NEWS already true: the emitter does **not** put `layout(binding)`/`layout(location)` on
+plain uniforms (binds host-side — `glsl_opengl.das` `emit_loose_struct_bind`) → already ES-safe; and the modern
+path no longer emits `gl_FragColor`/`texture2D` (the triangle uses `@out f_FragColor` + the modern surface). So
+es300 is a contained change: thread a target flag into `GlslExport`, branch the version line + add the precision
+preamble. **Keying asymmetry (D6):** "keyed off build target" is clean for Model A (compiler==target, the macro
+running under emscripten can read `das_get_platform_name()=="emscripten"`) but Model B emits GLSL on the HOST
+(compiler≠target) → needs an explicit signal (a `jit_target`-derived flag) threaded into the emitter.
+
+**(c) WebGL2 capability profile — fail-closed. [small, policy]**
+WebGL2 = GLES3.0: **no compute, no SSBO, no image load/store, no geometry/tessellation** (§4 lattice).
+`05_hello_compute` + `09_hello_mesh` are inherently desktop-only. Per the codegen-fail-closed rule, a
+web-targeted shader reaching compute/SSBO/image must get a clean **compile error**, not a silent WebGL link
+failure. No such gate today; it keys off the same wasm signal as (a).
+
+**(d) HTML/JS shell + canvas + link step. [small-medium, plumbing]**
+Need `index.html` + `<canvas>` + the emscripten JS glue + browser link flags
+(`-sUSE_GLFW=3 -sFULL_ES3=1 -sMAX_WEBGL_VERSION=2 …`). The current cross-compile link is `-sSTANDALONE_WASM`
+(wasmtime/WASI, **no browser, no canvas**) — wrong target for a webpage. A browser triangle needs a **new
+non-standalone emscripten link profile** (Model C, below).
+
+**Already solved (positive finding): the browser main-loop.** `eval_main_loop` (`builtin_main_loop`,
+`module_builtin_runtime.cpp:1760`) already has emscripten scaffolding — `emscripten_set_main_loop_arg(...,60,true)`
+(line 1774) instead of a blocking `while(true)`. It's currently **disabled** (`#define TRY_MAIN_LOOP 0`, line 1739)
+and gated on `_EMSCRIPTEN_` while the web build defines `_EMSCRIPTEN_VER` (`web/CMakeLists.txt:27`) — a macro
+mismatch. So it's minor wiring (flip the define, reconcile the macro), and the hard concept (a browser can't block)
+is already understood by the codebase. The GL examples that use `eval_main_loop` are structurally browser-ready.
+
+### 11.3 Two paths to the first rendered triangle (both share gates (b)+es300+main-loop)
+
+- **Path A — interpreter-in-wasm renders (the playground, with graphics).** Enable dasGLFW+dasOpenGL in the
+  `daslang_static.wasm` build with `-sUSE_GLFW=3 -sFULL_ES3=1`; add the emscripten branch to
+  `openGlGetFunctionAddress` (+ the `glfw*` table); es300 emitter; canvas in the playground HTML; wire the
+  main-loop. Reuses the working interpreter; user pastes the triangle `.das` and it draws to a `<canvas>`.
+- **Path B/C — cross-compile one self-contained browser app.** A **new non-standalone browser link profile**
+  (drop `-sSTANDALONE_WASM`, add `-sUSE_GLFW=3 -sFULL_ES3=1`) + HTML shell + per-example `.js`/`.wasm`/`.html`.
+  Cleaner "shippable demo," but adds the unverified Model-B `late`-extern lowering on top of the shared gates.
+
+**Audit recommendation (not a commitment):** Path A is the faster proof-of-life (interpreter already runs under
+wasm; the only verified-path blocker is the one C++ function in gate (b) + linking emscripten GL/GLFW + the
+contained es300 change). Path B is the better standalone artifact but carries the extra Model-B unknown. Either
+way the critical-path first step is **gate (b)'s `openGlGetFunctionAddress` emscripten branch + the static
+symbol table** — everything else is downstream of "does a single `glClear` reach WebGL at all."
+
+**Desk-time dependency:** any actual proof needs the emscripten toolchain + the Defender exclusion
+(`D:\Work\add-daslang-defender-exclusions.ps1`) — out of scope for this constraint-bound audit.
 
 ---
 
@@ -320,6 +436,10 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
 
 - 2026-06-23 — **Loose struct-uniform binder completed: mat3 + array-of-struct (commit `5f3d0ad`, `.das`-only under the no-rebuild constraint).** Closed the two fail-closed gaps the Phase-2 first slice left: `glUniformAny(float3x3)` added to opengl_boost (mat3 uniform fields, e.g. a normal matrix — float3x3 verified 36B = 9 tight column-major floats → straight `glUniformMatrix3fv`), and `emit_loose_struct_bind` now flattens array-of-struct fields by index (`lights : NLight[2]` → binds `lights[0].pos`/`lights[0].color`/`lights[1].pos`/`lights[1].color`; scalar/vec arrays still take `glUniformAny`'s array overload in one call). Probe-verified the exact flattened leaf names on a nested + mat3 + array-of-struct UBO. `tests/glsl/test_lingua_franca_annotations.das` +2 subtests. Validated interp + JIT + ci-das (no exe rebuild). **Surfaced a pre-existing orthogonal GL-emitter gap** (recorded above): matrix-COLUMN indexing in a shader body fails under a no-opt compile — the test body uses the uniform without `m[0]` (the bind flattens all fields regardless of body use).
 
+- 2026-06-23 — **Phase 4 wasm/web AUDIT (investigation-only, no build, NOT yet committed to — full findings §11).** Scoped the two next-session questions against source. **Q1 (test under wasm):** two wasm models exist today — interpreter-in-wasm (`daslang_static.wasm`, browser/Node) and standalone cross-compile (`-sSTANDALONE_WASM`, wasmtime/WASI, compute-only). Cheapest shader-test win, available now & constraint-safe to wire: add the **compile-time-only `tests/glsl`** suite to the Node `dastest_wasm.js` sweep (needs only `glsl/glsl_opengl`, no GPU) — proves the emitter runs identically under the wasm compiler. Render-correctness on web is a net-new browser/headless-GL harness (the web analogue of §8.3). **Q2 (triangle on a webpage):** four gates ranked. **(b) THE REAL GATE — but de-risked:** `openGlGetFunctionAddress` returns `nullptr` on emscripten (`module_builtin_dasbind.cpp:74-78`, no `__EMSCRIPTEN__` branch) → every GL `late` extern fails to bind; fix = a GLAD-style static name→`&symbol` table (`&glClear` is a valid wasm fn-ptr). Crucially the *call* path is **already portable C++** (`systemV_64_wrapper.inc`, not asm) and the browser **main-loop is already scaffolded** (`builtin_main_loop` → `emscripten_set_main_loop_arg`, disabled via `TRY_MAIN_LOOP 0` + an `_EMSCRIPTEN_`/`_EMSCRIPTEN_VER` macro mismatch) — so the gate is narrower than feared. Other gates: emscripten GLFW+WebGL2 emulation build (`-sUSE_GLFW=3 -sFULL_ES3=1`, modules disabled + no emscripten CMake guards today); es300 emitter mode (`#version 300 es` + precision preamble — version line hardcoded `…core` at `glsl_internal.das:552`, no precision emitted, but already avoids `layout(binding/location)` on uniforms so it's contained); fail-closed WebGL2 capability profile (no compute/SSBO/image); HTML/canvas shell + a new non-standalone browser link profile (`-sSTANDALONE_WASM` is wrong for a webpage). Two paths to first render: Path A (interpreter-in-wasm playground draws to a canvas — faster proof-of-life) vs Path B/C (cross-compile a self-contained browser app — better artifact, adds an unverified Model-B `late`-extern-lowering unknown). Critical-path first step either way = gate (b)'s emscripten branch + symbol table. **No code touched; constraint-safe.**
+
+- 2026-06-24 — **No-exe-rebuild constraint LIFTED + deferred AOT gate CLEARED (24/24).** Tested whether a freshly-built unsigned exe trips the Defender/SmartScreen first-run prompt that motivated the 2026-06-23 constraint: it does **not** (an incremental `--target daslang` relink → fresh PE-image hash → ran clean via both `CreateProcess` and the SmartScreen-hooked `ShellExecute` path, exit 0, no modal). See the lifted-constraint callout near the top for the method + the overlay-probe gotcha. With rebuilds back on the table, rebuilt `test_aot` (583s, exit 0) and ran the AOT tier on `tests/glsl`: **24 tests, 24 passed, 0 failed/errors** — no `error[50101]`. This closes the AOT validation deferred since commits `4cf2c20`/`5f3d0ad`: `test_lingua_franca_annotations.das` (incl. the loose binder's nested **mat3** + **array-of-struct** subtests) and `test_lingua_franca_textures.das` (sampler moves + `textureCompare` rewrite) now pass under AOT, so the arc's full `tests/glsl` suite is locked across **interp + JIT + AOT**.
+
 **▶ NEXT:**
 1. **Land the dasVulkan fix with the arc.** The `bbatkin/bind-uniform-marker-by-name` fix is safe to merge into dasVulkan independently (no-op pre-arc), but the arc MUST NOT ship the non-empty shared `sampler2D` to consumers until that fix is in their daslang. Keep the dasVulkan smoke (above) as a standing pre-push gate for any further arc change touching the shared shader surface.
 2. **✅ DONE (2026-06-23) — Permanent GL emission gate (§8.2).** `tests/glsl/test_lingua_franca.das` (union-builtin lock + negative control) + `tests/glsl/test_emission_basics.das` (surface baseline), `require glsl/glsl_opengl` only (no GL runtime, no module-AOT list), registered in `tests/aot/CMakeLists.txt`, validated **7/7 interp + AOT + JIT**. See changelog. The new GL lowerings are no longer probe-verified-only.
@@ -330,6 +450,6 @@ sweeps. The worktree is built LLVM-ON specifically so JIT + AOT-exe paths work.
    - **✅ DONE (2026-06-23, commit `ce7e6e6`) — `samplerCube`, `sampler2DArray`, `sampler2DShadow` moved to the shared module.** All three GL-portable (ES 3.0/WebGL2) opaque markers, with their `texture` / `textureSize` / `textureCompare` overloads, now live in `shader_lingua_franca`, each carrying the same GL handle field as `sampler2D`. The dasOpenGL side got the REAL work it needed: new GL bind paths in `glsl_opengl.das` (`emit_combined_sampler_bind` helper → `bind_sampler_cube` / `bind_sampler_2d_array` / `bind_sampler_2d_shadow`; they previously fell into the wrong generic `glUniformAny` `else` branch); the three runtime helpers in `opengl_boost.das` (`glBindTexture` to `GL_TEXTURE_CUBE_MAP` / `GL_TEXTURE_2D_ARRAY` / `GL_TEXTURE_2D`); and the `textureCompare` GL lowering in `glsl_internal.das` — GL has no `textureCompare`, so `preVisitExprCall`/`visitExprCallArgument` rewrite it to `texture(s, vec3(uv, ref))` (emitted GLSL eyeball-verified). SPIR-V is byte-neutral (emitter keys by name, ignores the field): `tests/spirv` 166/166, **golden regen = zero diff**. Locked in `tests/glsl/test_lingua_franca_textures.das` (declarations + `texture()` sampling + the `textureCompare` rewrite + a negative control that the daslang name is gone), via the **dummy-host-bind-stub pattern** so the suite stays `opengl_boost`-free. Validated: full preflight 13/13 ran-gates green + AOT `tests/glsl` 17/17 + sequence smoke; **dasVulkan external smoke 24/24 + 15/15 (skybox uses `samplerCube`)**. Open: GL *render* correctness of the new bind paths is untested locally (no GL cubemap/array/shadow render test — same coverage level as the existing `sampler2D`/`sampler3D` GL binds; a Phase-3 forcing-function item).
    - **Stay VK-only:** `gl_DrawID` (needs `GL_ARB_shader_draw_parameters`), `gl_PrimitiveID` (ES 3.2, not in the WebGL2 floor), `nonuniformEXT` (VK descriptor indexing), `texture2D` + `sampler` (VK separate-image/sampler model — GL is always combined).
 5. **Phase 2 — GLSL generator accepts the Vulkan `@`-annotations.**
-   - **✅ DONE (2026-06-23, commit `4cf2c20`) — first slice: annotation acceptance via the loose binder.** A shader authored in the dasVulkan annotation style now compiles + emits on the GL rail. `@push_constant` → a GL `uniform` (was a dead zero-init global) + host-bound like `@uniform`; struct `@uniform`/`@push_constant` → `uniform StructType name;` with the bind codegen flattening each leaf field loose by name (`emit_loose_struct_bind`, recurses nested structs); vertex `@out @location` → a real `out` varying (the emitter only handled `@inout` before); `@set` ignored, `@binding` tolerated. Locked by `tests/glsl/test_lingua_franca_annotations.das`. Validated interp + JIT + ci-das + sequence smoke + tests/glsl 22/22; AOT of the new test pending a `test_aot` rebuild. **Loose-binder gaps CLOSED (`5f3d0ad`):** `mat3` (added `glUniformAny(float3x3)` — float3x3 is 36B = 9 tight floats, uploads via `glUniformMatrix3fv`) + array-of-struct fields (`emit_loose_struct_bind` now flattens `name[i].field`), so the loose path covers the full nested + array-of-struct + mat3 shape. **Orthogonal pre-existing GL-emitter gap discovered:** matrix-COLUMN indexing in a shader body (`m[0]`) trips a no-opt bounds-check (`__lineinfo__`/`__context__`) the GLSL emitter rejects — same class as the `with` issue; folds away under an optimized compile but fails lint/JIT. Future emitter fix, not Phase 2.
+   - **✅ DONE (2026-06-23, commit `4cf2c20`) — first slice: annotation acceptance via the loose binder.** A shader authored in the dasVulkan annotation style now compiles + emits on the GL rail. `@push_constant` → a GL `uniform` (was a dead zero-init global) + host-bound like `@uniform`; struct `@uniform`/`@push_constant` → `uniform StructType name;` with the bind codegen flattening each leaf field loose by name (`emit_loose_struct_bind`, recurses nested structs); vertex `@out @location` → a real `out` varying (the emitter only handled `@inout` before); `@set` ignored, `@binding` tolerated. Locked by `tests/glsl/test_lingua_franca_annotations.das`. Validated interp + JIT + ci-das + sequence smoke + tests/glsl 22/22; **AOT now confirmed too (2026-06-24, 24/24 — see changelog).** **Loose-binder gaps CLOSED (`5f3d0ad`):** `mat3` (added `glUniformAny(float3x3)` — float3x3 is 36B = 9 tight floats, uploads via `glUniformMatrix3fv`) + array-of-struct fields (`emit_loose_struct_bind` now flattens `name[i].field`), so the loose path covers the full nested + array-of-struct + mat3 shape. **Orthogonal pre-existing GL-emitter gap discovered:** matrix-COLUMN indexing in a shader body (`m[0]`) trips a no-opt bounds-check (`__lineinfo__`/`__context__`) the GLSL emitter rejects — same class as the `with` issue; folds away under an optimized compile but fails lint/JIT. Future emitter fix, not Phase 2.
    - **TODO — second slice: the D5 std140 UBO loose-OR-pack binder.** Net-new on the GL rail (the emitter only does loose `glUniform` today; no `layout(std140)` block emission / packing). Emit `layout(std140) uniform Block {…}`, compute the std140 layout, pack + `glBindBufferBase`/`glUniformBlockBinding`, loose-vs-pack keyed off the build target (D6: wasm/es300 ⇒ pack). Brings the WebGL2/perf path online.
 Run from a session rooted in the worktree so MCP/compiler see the in-tree edits.
