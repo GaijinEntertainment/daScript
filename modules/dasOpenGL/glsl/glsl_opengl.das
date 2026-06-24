@@ -96,6 +96,18 @@ def private emit_loose_struct_bind(var blk : ExprBlock?; st : Structure?; namePr
         )
         if (f._type.baseType == Type.tStructure && f._type.structType != null) {
             emit_loose_struct_bind(blk, f._type.structType, fieldName, fieldAccess)
+        } elif (f._type.baseType == Type.tFixedArray && f._type.firstType != null &&
+                f._type.firstType.baseType == Type.tStructure && f._type.firstType.structType != null) {
+            // array of struct: GL exposes name[0].field, name[1].field, ... as separate locations, so
+            // flatten per element index. (Arrays of scalar/vector fall through to glUniformAny's array
+            // overload below, which uploads the whole array from the base location in one call.)
+            for (i in range(f._type.fixedDim)) {
+                var elemAccess = new ExprAt(at = accessExpr.at,
+                    subexpr <- clone_expression(fieldAccess),
+                    index <- new ExprConstInt(at = accessExpr.at, value = i)
+                )
+                emit_loose_struct_bind(blk, f._type.firstType.structType, "{fieldName}[{i}]", elemAccess)
+            }
         } else {
             var cll_gul = new ExprCall(at = accessExpr.at, name := "glGetUniformLocation")
             cll_gul.arguments |> emplace_new() <| new ExprVar(at = accessExpr.at, name := "_opengl_program")

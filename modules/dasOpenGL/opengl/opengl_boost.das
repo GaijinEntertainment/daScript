@@ -143,6 +143,12 @@ def glUniformAny(location : int; value : float4x4) {
     glUniformMatrix4fv(location, value)
 }
 
+// float3x3 is 36 bytes = 9 tight column-major floats (3x float3, no std140 padding), so it uploads
+// straight via glUniformMatrix3fv -- matches a `uniform mat3` shader field (e.g. a normal matrix).
+def glUniformAny(location : int; value : float3x3) {
+    glUniformMatrix3fv(location, value)
+}
+
 def glUniformAny(location : int; value : int2) {
     glUniform2iv(location, 1, unsafe(addr(value.x)))
 }
@@ -158,6 +164,12 @@ def glUniformAny(location : int; value : int4) {
 def glUniformMatrix4fv(location : int; value : float4x4) {
     unsafe {
         glUniformMatrix4fv(location, 1, false, addr(value[0][0]))
+    }
+}
+
+def glUniformMatrix3fv(location : int; value : float3x3) {
+    unsafe {
+        glUniformMatrix3fv(location, 1, false, addr(value[0][0]))
     }
 }
 
