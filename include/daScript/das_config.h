@@ -130,6 +130,13 @@ using das_safe_set = std::set<K,C>;
     #define DAS_BIND_EXTERNAL 1
   #elif defined __HAIKU__
     #define DAS_BIND_EXTERNAL 1
+  #elif defined(__EMSCRIPTEN__)
+    // wasm has no dlopen for host .so, but the OpenGL late-extern path resolves
+    // statically-linked WebGL2/GLES3 symbols via emscripten_webgl_get_proc_address
+    // (openGlGetFunctionAddress, module_builtin_dasbind.cpp). The general dlopen
+    // path compiles (sysos.cpp routes _EMSCRIPTEN_VER through the __linux__ arm)
+    // but is a graceful no-op — nothing on web loads a host library.
+    #define DAS_BIND_EXTERNAL 1
   #else
     #define DAS_BIND_EXTERNAL 0
   #endif

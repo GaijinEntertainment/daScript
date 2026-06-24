@@ -13,6 +13,12 @@
 
 #include <mutex>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5_webgl.h>
+#include "daScript/misc/anyhash.h"
+#include <initializer_list>
+#endif
+
 namespace das {
 
 #if DAS_BIND_EXTERNAL
@@ -70,6 +76,17 @@ namespace das {
         void * libhandle = nullptr;
         libhandle = getLibraryHandle(libName);
         return getFunctionAddress(libhandle, name);
+    }
+#elif defined(__EMSCRIPTEN__)
+    void * openGlGetFunctionAddress ( const char * name ) {
+        // WebGL2/GLES3 symbols are statically linked into the wasm (-sFULL_ES3);
+        // there is no wglGetProcAddress/dlsym table. emscripten_webgl_get_proc_address
+        // returns a fn-ptr to any linked WebGL1/2 symbol. The header warns this route is
+        // slow + bloats code size, but that is exactly the cost daslang already pays: the
+        // late-extern model always calls gl through a resolved fnptr, never a direct call.
+        // Desktop-GL-only names return nullptr -> clean "failed to bind X", the correct
+        // fail-closed result on WebGL2. Needs -sGL_ENABLE_GET_PROC_ADDRESS (default on).
+        return emscripten_webgl_get_proc_address(name);
     }
 #else
     void * openGlGetFunctionAddress ( const char * name ) {
@@ -246,7 +263,68 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         ApiType api = ApiType::api_unknown;
     };
 
+#if defined(__EMSCRIPTEN__)
+    // ===== Exact-typed late-extern call wrappers for wasm =====
+    // wasm `call_indirect` is signature-checked, so the type-erased fastcall64
+    // trampolines (which pun every arg to int64/double and the return to int64)
+    // trap with "function signature mismatch". We still resolve the function
+    // pointer via gate (b) exactly as on desktop, but call it through a wrapper
+    // whose STATIC C signature matches the real function, keyed by a 64-bit hash
+    // of the daslang base-type signature (return type first, then arg base-types;
+    // all pointers collapse to Type::tPointer since every pointer is one wasm i32).
+    // This is a hand-written PROTOTYPE slice (just what the gl probe exercises);
+    // the full per-signature table is generated from the gl decls — see
+    // modules/dasOpenGL/HARMONIZATION_PLAN.md.
+
+    static uint64_t glExactSigHash ( Function * fun ) {
+        uint8_t buf[1 + DAS_MAX_FUNCTION_ARGUMENTS];
+        int n = 0;
+        buf[n++] = (uint8_t) fun->result->baseType;
+        for ( auto & arg : fun->arguments ) {
+            buf[n++] = (uint8_t) arg->type->baseType;
+        }
+        return hash_block64(buf, n);
+    }
+    // The same hash from an explicit {return, args...} base-type list (table init).
+    static uint64_t glExactSigHashOf ( std::initializer_list<Type> sig ) {
+        uint8_t buf[1 + DAS_MAX_FUNCTION_ARGUMENTS];
+        int n = 0;
+        for ( Type t : sig ) buf[n++] = (uint8_t) t;
+        return hash_block64(buf, n);
+    }
+
+    static vec4f glwrap_v_ffff ( void * fn, vec4f * args ) {   // void ( float, float, float, float )
+        using ck = void(*)(float,float,float,float);
+        ((ck)fn)( *(float*)(args+0), *(float*)(args+1), *(float*)(args+2), *(float*)(args+3) );
+        return v_zero();
+    }
+    static vec4f glwrap_v_u ( void * fn, vec4f * args ) {      // void ( uint )
+        using ck = void(*)(uint32_t);
+        ((ck)fn)( *(uint32_t*)(args+0) );
+        return v_zero();
+    }
+
+    struct GlExactEntry { uint64_t hash; FastCallWrapper wrapper; };
+    static FastCallWrapper getExactWrapper ( Function * fun ) {
+        static const GlExactEntry table[] = {
+            { glExactSigHashOf({Type::tVoid, Type::tFloat, Type::tFloat, Type::tFloat, Type::tFloat}), &glwrap_v_ffff },
+            { glExactSigHashOf({Type::tVoid, Type::tUInt}),                                            &glwrap_v_u    },
+        };
+        uint64_t h = glExactSigHash(fun);
+        for ( auto & e : table ) {
+            if ( e.hash == h ) return e.wrapper;
+        }
+        return nullptr;
+    }
+#endif
+
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
+#if defined(__EMSCRIPTEN__)
+        // wasm: prefer an exact-typed wrapper. Falls through to the type-erased
+        // fastcall for signatures not yet in the prototype table (those still trap
+        // on wasm — the generated full table closes that gap).
+        if ( auto w = getExactWrapper(fun) ) return w;
+#endif
         int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
         for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
             if ( a==4 ) break;
