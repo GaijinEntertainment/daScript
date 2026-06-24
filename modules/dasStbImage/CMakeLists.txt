@@ -45,6 +45,18 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
 	ENDIF()
 
 	ADD_MODULE_PUB_LIB(libDasModuleStbImage dasModuleStbImage ${DAS_STBIMAGE_MODULE_SRC} ${DAS_STBIMAGE_MODULE_PLATFORM_SRC})
+	# On emscripten the wasm build passes BOTH -msse2 (defines __SSE2__) and -msimd128
+	# (defines __wasm_simd128__), so the vendored stb headers light up their SSE2 AND
+	# WASM SIMD paths at once -> stb_image_resize2.h initializes a 4x-int32 vector with
+	# 64-bit-packed SSE constants -> -Wc++11-narrowing errors. -msse2 is load-bearing
+	# for the interpreter's vecmath, so force stb to its scalar paths on wasm instead
+	# (decode/resize slightly slower, fully correct).
+	IF(EMSCRIPTEN)
+		TARGET_COMPILE_DEFINITIONS(libDasModuleStbImage PRIVATE STBI_NO_SIMD STBIR_NO_SIMD)
+		IF(TARGET dasModuleStbImage)
+			TARGET_COMPILE_DEFINITIONS(dasModuleStbImage PRIVATE STBI_NO_SIMD STBIR_NO_SIMD)
+		ENDIF()
+	ENDIF()
 	TARGET_LINK_LIBRARIES(libDasModuleStbImage PUBLIC ${STBIMAGE_LIBRARIES})
 	# GNU-only flag; clang-cl rejects it
 	IF(NOT MSVC)

@@ -8,10 +8,18 @@ option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" ON)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
-option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" ON)
+# dasGLFW + dasOpenGL are ENABLED on web: dasGLFW binds glfw* at link-time (emcc
+# -sUSE_GLFW=3 supplies the symbols; the module's CMakeLists takes its EMSCRIPTEN
+# branch — no GLFW source build), and dasOpenGL's gl* late-externs resolve via
+# emscripten_webgl_get_proc_address (gate (b), module_builtin_dasbind.cpp). This is
+# the WebGL2/GL-on-the-web rail of the harmonization arc (HARMONIZATION_PLAN §11).
+option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
 option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" ON)
-option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" ON)
+# dasStbImage ENABLED on web: opengl_boost requires `stbimage` (and opengl_ttf
+# requires stbimage/stbimage_ttf) for texture/font loading. It vendors pure stb
+# headers (no system deps) so it cross-compiles to wasm cleanly.
+option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
@@ -39,6 +47,21 @@ add_link_options(
     # Allow heap to grow beyond the default 16MB cap.
     -sALLOW_MEMORY_GROWTH=1
 )
+
+# WebGL2 / GLFW link profile for the GL-on-the-web rail (HARMONIZATION_PLAN §11).
+#   -sUSE_GLFW=3                 emcc's JS reimplementation of the GLFW3 API (canvas/DOM/WebGL);
+#                               supplies the glfw* symbols dasGLFW binds at link time.
+#   -sFULL_ES3 / MAX_WEBGL=2    GLES3/WebGL2 emulation — the WebGL2 portable floor (no compute/SSBO).
+#   -sGL_ENABLE_GET_PROC_ADDRESS emscripten_webgl_get_proc_address (gate (b)) — how dasOpenGL's
+#                               gl* late-externs resolve on wasm. Default-on, set explicitly.
+# Only daslang_static (Model A interpreter-in-wasm) links in this scope; the standalone
+# cross-compiled examples are linked by the host daslang and are unaffected.
+add_link_options(
+    -sUSE_GLFW=3
+    -sFULL_ES3=1
+    -sMAX_WEBGL_VERSION=2
+    -sGL_ENABLE_GET_PROC_ADDRESS=1
+)
 # embed daslang standard library into wasm binary.
 # SHELL: keeps the --embed-file + path pair atomic — without it, CMake folds
 # repeated --embed-file flags into one token (drops the second), so the second
@@ -54,6 +77,22 @@ add_link_options("SHELL:--exclude-file */daslib/linked_list.das")
 # embed dastest runner so the playground's Test button can invoke
 # /dastest/dastest.das against user-authored [test] functions.
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../dastest@dastest")
+
+# Embed the GL module .das source trees so the interpreter-in-wasm can `require`
+# them at runtime (the native fs resolver looks for
+# getDasRoot()/modules/<dir>/<subdir>/<name>.das — fs_file_info.cpp). The native
+# C++ bindings (libDasModuleGlfw, dasOpenGL) are linked in; these are the matching
+# .das halves. Mounted at /modules/<dir>/<subdir> to mirror the desktop layout.
+#   glfw/glfw_boost, glfw/glfw_live           -> modules/dasGlfw/dasglfw
+#   opengl/*, live/opengl_live                -> modules/dasOpenGL/opengl
+#   glsl/glsl_opengl                          -> modules/dasOpenGL/glsl
+#   glsl/glsl_common, glsl/glsl_internal      -> modules/dasGlsl/glsl
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasGlfw/dasglfw@modules/dasGlfw/dasglfw")
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasOpenGL/opengl@modules/dasOpenGL/opengl")
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasOpenGL/glsl@modules/dasOpenGL/glsl")
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasGlsl/glsl@modules/dasGlsl/glsl")
+#   stbimage, stbimage/stbimage_boost, stbimage/stbimage_ttf -> modules/dasStbImage/stbimage
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasStbImage/stbimage@modules/dasStbImage/stbimage")
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${DAS_CONFIG_INCLUDE_DIR})
