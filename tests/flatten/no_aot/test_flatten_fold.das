@@ -189,6 +189,30 @@ def test_flatten_fold(t : T?) {
         t |> success(wn |> find("float3(2f,3f,-4f)") >= 0, "weighted/negated lanes must land in the mask: {wn}")
         delete bodies
     }
+    t |> run("hadd corpus fuses clean (test_flatten_hadd.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_hadd.das")
+        t |> success(n >= 9, "expected >=9 twins, checked {n}")
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_hadd.das")
+        // FIRED proof: four independent scalars with no shared base collapse to hadd(float4(...))
+        let h4 = bodies?["h_four_flat"] ?? ""
+        t |> success(!empty(h4), "h_four_flat twin must be produced")
+        t |> success(h4 |> find("hadd(") >= 0, "a+b+c+d must fuse to hadd: {h4}")
+        // 8-way packs into TWO PARALLEL hadds, not a nested one — an existing hadd is never a lane,
+        // so `hadd(float4(...` never contains an inner `hadd(` (guards the bottom-up nesting trap)
+        let h8 = bodies?["h_eight_flat"] ?? ""
+        t |> success(!empty(h8), "h_eight_flat twin must be produced")
+        t |> equal(count_sub(h8, "hadd("), 2, "8-way must pack into two hadds: {h8}")
+        t |> success(h8 |> find("float4(hadd(") < 0, "the two hadds must be parallel, not nested: {h8}")
+        // below the four-lane threshold: a 3-term sum stays a scalar add chain (no combine+hadd cost)
+        let h3 = bodies?["h_three_flat"] ?? ""
+        t |> success(!empty(h3), "h_three_flat twin must be produced")
+        t |> success(h3 |> find("hadd(") < 0, "a+b+c must NOT fuse (below four-lane threshold): {h3}")
+        // the mandelbrot guard: `*`-weighted terms are mad-fusable, so mad must win — no hadd
+        let hp = bodies?["h_products_flat"] ?? ""
+        t |> success(!empty(hp), "h_products_flat twin must be produced")
+        t |> success(hp |> find("hadd(") < 0, "weighted products must stay for mad, not hadd: {hp}")
+        delete bodies
+    }
     t |> run("swizzle corpus folds clean (test_flatten_swizzle.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_swizzle.das")
         t |> success(n >= 14, "expected >=14 twins, checked {n}")

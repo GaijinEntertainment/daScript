@@ -274,6 +274,27 @@ normalize ``an.x + an.y + an.z`` drops 4 instructions). The fold reorders the
 float adds and multiplies skipped lanes by 0, so it is **fast-math gated**, and
 it runs only when a 2-argument ``dot`` is visible from the twin's module.
 
+**Independent horizontal sums become hadds.** The dot re-pack reaches a sum only
+when its terms are lane reads of *one* vector; a sum of **unrelated** scalars —
+four separate accumulators with no shared base — has no vector to ride. The fuse
+pass collapses ≥4 **positive** such terms of any maximal ``+``/``-`` chain into
+``hadd(float4(…))``: one *combine* node gathers the lanes, one *hadd* node reduces
+them, replacing the ≥3 add nodes the serial chain spent (``hadd`` takes one
+``floatN`` argument, so a width-4 group is ``hadd(float4(a, b, c, d))``; a
+subtracted term is not packed — ``a + b + c + d - e → hadd(float4(a, b, c, d)) - e``). Only full groups of four
+are emitted — four adds for one combine + one hadd is a strict one-node drop,
+while a width-2 or width-3 group only breaks even against its combine, so a
+remainder of one to three terms stays a scalar add. Two exclusions keep it from
+fighting the neighbouring fusions: a ``*``-weighted term is left for the mad walk
+(``mad(a, b, acc)`` folds the multiply *and* the add into one node per term, which
+beats a combine + hadd on a weighted sum such as an fBm octave chain
+``n0*w0 + n1*w1 + …``), and an already-emitted ``hadd`` is never re-packed as a
+lane, so a chain longer than four packs into *parallel* hadds
+(``hadd(float4(a, b, c, d)) + hadd(float4(e, f, g, h))``) rather than nesting one
+inside the next — same node count, lower dependency depth. The fold reorders the adds, so it is **fast-math
+gated**, and it runs only when a 1-argument ``hadd`` is visible from the twin's
+module.
+
 **Division becomes a reciprocal multiply.** A divide is the most expensive
 arithmetic node a shader carries, and most divisors never change per pixel. The
 fold rewrites ``x / C`` (const ``C``, float family) into ``x * (1/C)`` with the
@@ -322,8 +343,8 @@ flatten's default contract is a shader compiler's: fast math. Every
 value-changing rewrite — the float ``x*0 → 0`` / ``x - x → 0`` folds (inf/NaN
 propagation), float reassociation (association order), regroup-to-share (same),
 the ``lerp`` const-selector short-circuits (they drop an argument),
-division→reciprocal, the float zero-lane kill, the horizontal-add→dot re-pack,
-and majority-factor compensation — assumes finite
+division→reciprocal, the float zero-lane kill, the horizontal-add→dot and
+horizontal-sum→hadd re-packs, and majority-factor compensation — assumes finite
 inputs and tolerates ~1-ulp drift. A module that cannot accept that opts out
 with a user option:
 
@@ -487,10 +508,11 @@ Public API
 
 ``flatten_fuse(var func, no_fast_math = false) : bool``
     The finishing fuse pass: collapse same-vector lane sums into
-    ``dot(v, mask)`` (fast-math), re-pack ctor lane patterns (re-vectorization,
-    shared-factor extraction, majority compensation), ``a*b ± c`` into
-    ``mad(a, b, c)``, and the expanded lerp shape ``mad(b - a, t, a)`` back
-    into ``lerp(a, b, t)``. Run it
+    ``dot(v, mask)`` and independent ≥4-term scalar sums into
+    ``hadd(float4(…))`` (both fast-math), re-pack ctor lane patterns
+    (re-vectorization, shared-factor extraction, majority compensation),
+    ``a*b ± c`` into ``mad(a, b, c)``, and the expanded lerp shape
+    ``mad(b - a, t, a)`` back into ``lerp(a, b, t)``. Run it
     after ``flatten_optimize``'s re-infer (the type gates need settled types) and
     **iterate across re-inference while it reports change**, exactly like the
     fold — each round strictly drops a ``+``/``-`` node, so it converges.
