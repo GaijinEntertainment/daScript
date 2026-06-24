@@ -46,6 +46,8 @@ DAS_AOT_LIB("${AOT_DASLIB_MODULE_FILES}" DASLIB_MODULES_AOT_GENERATED_SRC test_a
 
 # AOT for individual test files
 FILE(GLOB AOT_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
+# Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
+list(FILTER AOT_TEST_FILES EXCLUDE REGEX "/_")
 
 # AOT for algorithm test files
 FILE(GLOB AOT_ALGORITHM_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/algorithm/*.das")
