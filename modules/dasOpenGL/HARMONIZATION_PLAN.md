@@ -351,12 +351,23 @@ calling through the resolved pointer works on wasm32 as-is; **only the address r
 gate hits Model A directly (verified path). For Model B the LLVM-to-wasm lowering of a `late` extern is
 **unverified** (no cross-compiled example has ever used one) — name that as its own sub-unknown.
 
-**Build/link gate — emscripten GLFW + WebGL2 emulation. [large]**
+**Build/link gate — emscripten GLFW + WebGL2 emulation. [large] — NOTE: GLFW is a DIFFERENT mechanism from gate (b).**
 dasGLFW + dasOpenGL are DISABLED in the web build and have **no emscripten guards** in their CMakeLists; dasGLFW
-builds vendored GLFW 3.4 via ExternalProject (no emscripten backend → configure fails). Emscripten ships its own
-GLFW emulation (`-sUSE_GLFW=3`, maps `glfw*`→canvas/events) + WebGL2 (`-sFULL_ES3=1 -sMAX_WEBGL_VERSION=2`). So
-dasGLFW needs an emscripten path that **skips the vendored build** and binds `glfw*` as `late` externs to the
-emscripten-provided symbols (same mechanism as gate (b), extended from `gl*` to `glfw*`).
+vendors **GLFW 3.4** and builds it from source via ExternalProject (`dasGlfw/CMakeLists.txt:52-96`), linking the
+**static lib at link-time** (`:159`) + the desktop backends (X11/Xrandr/Xi · Cocoa/IOKit/Metal · Win32). **Stock GLFW
+has NO web/emscripten platform** (upstream = Win32/Cocoa/X11/Wayland only) → it CANNOT be compiled to wasm; do not try.
+The path is to **replace** it: emcc ships a from-scratch JS reimplementation of the GLFW3 API (`library_glfw.js`,
+enabled by `-sUSE_GLFW=3`) mapping `glfw*`→canvas/DOM/WebGL. **dasGLFW binds GLFW at LINK-TIME** (C++ wrappers in
+`dasGLFW.cpp`/`dasGLFW.func_*.cpp` calling `glfw*` directly) — **NOT** `late`/`library` externs — so the emscripten
+path SKIPS the ExternalProject and lets `-sUSE_GLFW=3` supply the symbols at link (this is NOT the gate-(b)
+`openGlGetFunctionAddress` mechanism; OpenGL is `late`-extern, GLFW is link-time). **Real friction:** emscripten's
+GLFW emulation is a **SUBSET**, but dasGLFW auto-binds the FULL GLFW surface → undefined symbols for anything emcc
+doesn't implement → trim the wasm dasGLFW to the supported subset (or stub the rest). **Strategic fork for Path A
+(decide AFTER gate (b) is proven; the canvas already exists + emscripten can make a WebGL2 context directly via
+`emscripten/html5.h`, so GLFW's window/context role nearly vanishes):** **A1** lean on `-sUSE_GLFW=3` (keeps
+`01_hello_triangle.das` unmodified, bets on emulation coverage + trim) vs **A2** bypass GLFW on the web — a thin
+emscripten-HTML5 shim makes the context + drives the loop, GL render code untouched, only the ~6 `glfw*` setup/loop
+calls get a shim, GLFW stays desktop-only (Boris's lean for a first triangle, 2026-06-24).
 
 **(a) es300 emitter mode. [smallest, well-scoped by §5]**
 Version line is hardcoded `#version {version} core` (`glsl_internal.das:552`); **no precision qualifiers emitted
