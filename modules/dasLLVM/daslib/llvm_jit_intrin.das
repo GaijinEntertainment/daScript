@@ -107,6 +107,9 @@ let g_intrin_lookup <- {
     "math::pow" => @@intrinsic_op2,
     "math::min" => @@intrinsic_math_minmax,
     "math::max" => @@intrinsic_math_minmax,
+    "math::hmin" => @@intrinsic_math_hminmax,
+    "math::hmax" => @@intrinsic_math_hminmax,
+    "math::hadd" => @@intrinsic_math_hadd,
     "math::clamp" => @@intrinsic_math_clamp,
     "math::step" => @@intrinsic_math_step,
     "math::smoothstep" => @@intrinsic_math_smoothstep,
@@ -971,6 +974,31 @@ def intrinsic_math_dot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
     assert(opType.isVectorType)
     let v2 = LLVMBuildFMul(ctx.builder, arguments[0], arguments[1], "")
     return build_fadd(ctx, opType, v2, "dot")
+}
+
+// hmin/hmax: horizontal min/max via llvm.vector.reduce.fmin/fmax (one IR op, no extern call).
+def intrinsic_math_hminmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let op = expr.name == "hmin" ? "fmin" : "fmax"
+    let iname = "llvm.vector.reduce.{op}.v{opType.vectorDim}f32"
+    var argTypes <- [ type_to_llvm_abi_type(opType)]
+    let id = LLVMLookupIntrinsicID(iname)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if (decl == null) {
+        failed("missing intrinsic {iname}")
+        return null
+    }
+    var args <- [ arguments[0]]
+    var typ = LLVMFunctionType(ctx.types.t_float, [ type_to_llvm_abi_type(opType)])
+    return LLVMBuildCall2(ctx.builder, typ, decl, args, string(expr.name))
+}
+
+// hadd: horizontal sum via llvm.vector.reduce.fadd (shares build_fadd with dot/length).
+def intrinsic_math_hadd(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    return build_fadd(ctx, opType, arguments[0], "hadd")
 }
 
 def intrinsic_math_fast_normalize(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

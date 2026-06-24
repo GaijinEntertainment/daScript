@@ -227,7 +227,7 @@ VECTORCALL VECMATH_FINLINE vec4i v_muli(vec4i a, vec4i b) { return vmulq_s32(a, 
 
 VECTORCALL VECMATH_FINLINE vec4f v_hadd4_x(vec4f a)
 {
-  return v_set_x(vaddvq_s32(a));
+  return v_set_x(vaddvq_f32(a));
 }
 VECTORCALL VECMATH_FINLINE vec4f v_hadd3_x(vec4f a)
 {

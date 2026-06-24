@@ -57,6 +57,18 @@ namespace das {
     __forceinline float dot3(vec4f a, vec4f b){return v_extract_x(v_dot3_x(a, b));}
     __forceinline float dot4(vec4f a, vec4f b){return v_extract_x(v_dot4_x(a, b));}
 
+    // horizontal reduce of a float vector to a scalar. hmin/hmax NaN behavior follows
+    // the underlying SIMD min/max (not daslang scalar min/max), so don't feed them NaN.
+    __forceinline float hmin2(vec4f a){return v_extract_x(v_min(a, v_rot_1(a)));}
+    __forceinline float hmin3(vec4f a){return v_extract_x(v_hmin3(a));}
+    __forceinline float hmin4(vec4f a){return v_extract_x(v_hmin(a));}
+    __forceinline float hmax2(vec4f a){return v_extract_x(v_max(a, v_rot_1(a)));}
+    __forceinline float hmax3(vec4f a){return v_extract_x(v_hmax3(a));}
+    __forceinline float hmax4(vec4f a){return v_extract_x(v_hmax(a));}
+    __forceinline float hadd2(vec4f a){return v_extract_x(v_add_x(a, v_rot_1(a)));}
+    __forceinline float hadd3(vec4f a){return v_extract_x(v_hadd3_x(a));}
+    __forceinline float hadd4(vec4f a){return v_extract_x(v_hadd4_x(a));}
+
     __forceinline vec4f normalize2(vec4f a){return v_norm2(a); }
     __forceinline vec4f normalize3(vec4f a){return v_norm3(a); }
     __forceinline vec4f normalize4(vec4f a){return v_norm4(a); }

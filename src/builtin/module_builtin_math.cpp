@@ -684,6 +684,15 @@ namespace das {
             addExternEx<float(float2,float2),DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none, "dot2")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none, "dot3")->args({"x","y"});
             addExternEx<float(float4,float4),DAS_BIND_FUN(dot4)>(*this, lib, "dot", SideEffects::none, "dot4")->args({"x","y"});
+            addExternEx<float(float2),DAS_BIND_FUN(hmin2)>(*this, lib, "hmin", SideEffects::none, "hmin2")->arg("a");
+            addExternEx<float(float3),DAS_BIND_FUN(hmin3)>(*this, lib, "hmin", SideEffects::none, "hmin3")->arg("a");
+            addExternEx<float(float4),DAS_BIND_FUN(hmin4)>(*this, lib, "hmin", SideEffects::none, "hmin4")->arg("a");
+            addExternEx<float(float2),DAS_BIND_FUN(hmax2)>(*this, lib, "hmax", SideEffects::none, "hmax2")->arg("a");
+            addExternEx<float(float3),DAS_BIND_FUN(hmax3)>(*this, lib, "hmax", SideEffects::none, "hmax3")->arg("a");
+            addExternEx<float(float4),DAS_BIND_FUN(hmax4)>(*this, lib, "hmax", SideEffects::none, "hmax4")->arg("a");
+            addExternEx<float(float2),DAS_BIND_FUN(hadd2)>(*this, lib, "hadd", SideEffects::none, "hadd2")->arg("a");
+            addExternEx<float(float3),DAS_BIND_FUN(hadd3)>(*this, lib, "hadd", SideEffects::none, "hadd3")->arg("a");
+            addExternEx<float(float4),DAS_BIND_FUN(hadd4)>(*this, lib, "hadd", SideEffects::none, "hadd4")->arg("a");
             addExternEx<float3(float3,float3),DAS_BIND_FUN(cross3)>(*this, lib, "cross", SideEffects::none, "cross3")->args({"x","y"});
             addExternEx<float2(float2),DAS_BIND_FUN(normalize2)>(*this, lib, "fast_normalize", SideEffects::none, "normalize2")->arg("x");
             addExternEx<float3(float3),DAS_BIND_FUN(normalize3)>(*this, lib, "fast_normalize", SideEffects::none, "normalize3")->arg("x");
