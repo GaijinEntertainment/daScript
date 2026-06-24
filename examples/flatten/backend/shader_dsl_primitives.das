@@ -138,6 +138,26 @@ def max(x : float3, y : float3) : float3 {}
 [stub, hint(max)]
 def max(x : float4, y : float4) : float4 {}
 
+// -- horizontal reduce (vector -> scalar) --
+[stub, hint(hmin)]
+def hmin(x : float2) : float {}
+[stub, hint(hmin)]
+def hmin(x : float3) : float {}
+[stub, hint(hmin)]
+def hmin(x : float4) : float {}
+[stub, hint(hmax)]
+def hmax(x : float2) : float {}
+[stub, hint(hmax)]
+def hmax(x : float3) : float {}
+[stub, hint(hmax)]
+def hmax(x : float4) : float {}
+[stub, hint(hadd)]
+def hadd(x : float2) : float {}
+[stub, hint(hadd)]
+def hadd(x : float3) : float {}
+[stub, hint(hadd)]
+def hadd(x : float4) : float {}
+
 // -- clamp (ternary) --
 [stub, hint(clamp)]
 def clamp(x : float | int, min : float | int, max : float | int) : float {}

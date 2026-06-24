@@ -30,6 +30,12 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `test01.das` | Runtime heap `heap_collect` cost — mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
 
+## core/math/
+
+| File | Description |
+|---|---|
+| `horizontal_reduce.das` | `hmin`/`hmax`/`hadd` over a hot float4 array — measures the JIT `llvm.vector.reduce.*` lowering vs the extern-call fallback (and interp); non-constant inputs + a global sink defeat const-fold / DCE |
+
 ## audio/
 
 | File | Description |

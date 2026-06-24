@@ -14,7 +14,6 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/match
 require daslib/rtti
-require strings
 require daslib/flatten_opt_common
 
 
@@ -269,19 +268,14 @@ def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : Expres
     return qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
 }
 
-// Horizontal min/max over `vecName`'s W components: op(op(.x,.y),.z)... — W>=2.
+// Horizontal reduce over `vecName`'s W (2..4) components as a single hmin/hmax call.
 def private hreduce(vecName : string; width : int; op : string; at : LineInfo) : ExpressionPtr {
-    var acc : ExpressionPtr = new ExprField(at = at, value = new ExprVar(at = at, name := vecName),
-                                            name := slice("xyzw", 0, 1))
-    for (c in range(1, width)) {
-        var nextc = new ExprField(at = at, value = new ExprVar(at = at, name := vecName),
-                                  name := slice("xyzw", c, c + 1))
-        var call = new ExprCall(at = at, name := op)
-        call.arguments |> push(acc)
-        call.arguments |> push(nextc)
-        acc = call
-    }
-    return acc
+    // groups are width 2..4 (caller bails below M=3, plan_groups avoids width-1 tails),
+    // so one horizontal-reduce call (hmin/hmax) replaces the lane-extract + scalar tree.
+    assert(width >= 2 && width <= 4, "hreduce expects a packed group of width 2..4")
+    var call = new ExprCall(at = at, name := "h{op}")
+    call.arguments |> push(new ExprVar(at = at, name := vecName))
+    return call
 }
 
 def public pack_map_reduce(var func : FunctionPtr; no_fast_math : bool = false) : bool {

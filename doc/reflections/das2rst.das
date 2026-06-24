@@ -136,6 +136,7 @@ require spirv/spirv_reflect
 def document_module_math(_root : string) {
     var mod = get_module("math")
     var groups <- array<DocGroup>(
+        group_by_regex("Horizontal reduce (float2, float3, float4)", mod, %regex~(hmin|hmax|hadd)$%%),
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%),
         group_by_regex("float* and double", mod, %regex~(sign|abs|acos|asin|safe_acos|safe_asin|atan|atan2|cos|sin|tan|sinh|cosh|tanh|asinh|acosh|atanh|exp|log|exp2|expm1|log2|log10|log1p|pow|sqrt|cbrt|hypot|fmod|remainder|trunc|rcp|ceil|floor|abs|saturate|sincos|is_finite|is_nan|radians|degrees|step|smoothstep)$%%),
         group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|round|rsqrt|rsqrt_est|fract|\-)$%%),

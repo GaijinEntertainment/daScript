@@ -78,6 +78,7 @@ let HINT_WHITELIST : table<string> <- {
     "abs", "min", "max", "clamp", "saturate", "frac", "floor", "ceil", "mad", "lerp",
     "sqrt", "pow", "sin", "cos", "atan2", "log", "exp", "sign", "radians", "degrees",
     "dot", "cross", "length", "normalize", "fresnel",
+    "hmin", "hmax", "hadd",
     "remap", "one_minus", "step", "smooth_step", "unpack_normal",
     "float", "int",
     "float2", "float3", "float4", "int2", "int3", "int4",
