@@ -797,7 +797,8 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
     // plus an un-packed ctor lane pattern (re-vectorize / shared factor), which needs no callable.
     let cm = fuse_callable(func._module, "mad")
     var fr = new FuseResidualVisitor(checkMad = cm, checkLerp = cm && fuse_callable(func._module, "lerp"),
-        checkDot = !no_fast_math && fuse_callable(func._module, "dot", 2), noFastMath = no_fast_math)
+        checkDot = !no_fast_math && fuse_callable(func._module, "dot", 2),
+        checkHadd = !no_fast_math && fuse_callable(func._module, "hadd", 1), noFastMath = no_fast_math)
     make_visitor(*fr) $(a) {
         visit(func.body, a)
     }
@@ -815,6 +816,9 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
     }
     if (fr.foundDot) {
         res |> push("an un-fused lane sum ('v.x + v.y + …' should be dot(v, mask))")
+    }
+    if (fr.foundHadd) {
+        res |> push("an un-fused scalar sum ('a + b + c + d' should be hadd(float4(...)))")
     }
     unsafe {
         delete fr
