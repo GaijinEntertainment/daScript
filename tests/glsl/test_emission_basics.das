@@ -40,6 +40,19 @@ def floatlit_fragment {
     b_frag_color = float4(acc / 256.0, 0.0, 0.0, 1.0)
 }
 
+// `discard()` can't be a bare daslang call to the GLSL keyword, so the emitter renames it
+// `_discard()` and emits a `void _discard ( ) { discard; }` wrapper. The wrapper must be
+// emitted for fragment shaders in EVERY version (the keyword exists since GLSL 110 / ES 100;
+// gating it on version >= 400 left ES 3.00 / 330 shaders with `_discard()` undefined) and
+// ONLY for fragment shaders (`discard` is illegal in a vertex stage).
+[fragment_program(name="discard_fs_glsl")]
+def discard_fragment {
+    if (b_vcolor.x > 0.5) {
+        discard()
+    }
+    b_frag_color = float4(1.0, 1.0, 1.0, 1.0)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
@@ -66,5 +79,12 @@ def test_glsl_emission_basics(t : T?) {
         // negative control: the bare-int form `acc = 0;` / `> 4)` must not appear
         t |> success(!has(floatlit_fs_glsl, "= 0;"), "no bare-int float initializer")
         t |> success(!has(floatlit_fs_glsl, "> 4)"), "no bare-int comparison literal")
+    }
+    t |> run("discard() lowers to the GLSL discard keyword (any version, fragment only)") <| @(t : T?) {
+        t |> success(has(discard_fs_glsl, "void _discard ( )"), "the _discard wrapper is emitted in the fragment stage")
+        t |> success(has(discard_fs_glsl, "discard;"), "the wrapper bridges to the GLSL discard keyword")
+        t |> success(has(discard_fs_glsl, "_discard();"), "discard() lowers to a _discard() call")
+        // negative control: discard is fragment-only, so the vertex stage must NOT carry the helper
+        t |> success(!has(basics_vs_glsl, "void _discard ( )"), "no _discard helper in the vertex stage")
     }
 }

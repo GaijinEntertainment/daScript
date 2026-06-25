@@ -592,7 +592,13 @@ class GlslExport : AstVisitor {
             }
         }
         // TODO: only output builtin functions which are necessary
-        if (version >= 400 && shaderType != ShaderType.compute) {
+        // `discard()` renames to `_discard()` (the keyword can't be a daslang call); emit the
+        // wrapper that bridges back to the GLSL `discard` keyword. It is needed in EVERY GLSL
+        // version (the keyword exists since GLSL 110 / ES 100), so it must NOT be gated on
+        // version >= 400 (that left ES 3.00 / 330 fragment shaders with `_discard()` undefined).
+        // `discard` is a fragment-only keyword, so emit the helper ONLY for fragment shaders --
+        // a vertex/compute stage carrying `discard;` in the preamble would itself fail to compile.
+        if (shaderType == ShaderType.fragment) {
             *writer |> write("void _discard ( ) \{ discard; \}\n")
         }
         *writer |> write("float rcp ( float r ) \{ return 1.0 / r; \}\n")
