@@ -34,7 +34,7 @@ typedef const struct bsph3f& bsph3f_cref;
 #if defined(__SANITIZE_ADDRESS__)
 # define DAGOR_ASAN_ENABLED
 #elif defined(__has_feature)
-# if __has_feature(address_sanitizer)
+# if __has_feature(address_sanitizer) || __has_feature(hwaddress_sanitizer)
 #   define DAGOR_ASAN_ENABLED
 # endif
 #endif
@@ -58,7 +58,7 @@ typedef const struct bsph3f& bsph3f_cref;
 #ifndef VECTORCALL
   #if _TARGET_PC_MACOSX && __SSE__
     #define VECTORCALL [[clang::vectorcall]]
-  #elif _TARGET_PC_WIN && (defined(_MSC_VER) || defined(__clang__)) && __SSE__
+  #elif (defined(_MSC_VER) || defined(__clang__)) && defined(_WIN32) && __SSE__
       //__vectorcall is faster on msvc, even on x64 target
     #define VECTORCALL __vectorcall
   #else
@@ -66,17 +66,9 @@ typedef const struct bsph3f& bsph3f_cref;
   #endif
 #endif
 
-// Suppresses ASan AND TSan on intentional 16-byte unaligned loads. v_ldu may legitimately
-// read past a 4/8-byte struct end (caller uses cast<T>::to which only consumes the relevant
-// bytes). ASan flags this on stack-near-allocation; TSan flags it when the adjacent memory
-// was just freed in the racy way (e.g., compile-error TextWriter buffer freed during
-// rtti_builtin_compile_file). The unused upper bytes never escape the v_ldu callee.
-// Use the split-attribute form for compatibility with older GCC (no_sanitize_address /
-// no_sanitize_thread are GCC-4.8+; the multi-arg no_sanitize("a","b") string form is GCC-8+).
-#if (defined(DAGOR_ASAN_ENABLED) || defined(DAGOR_TSAN_ENABLED)) && (defined(__clang__) || __GNUC__ >= 7)
-# define NO_ASAN_INLINE inline __attribute__((no_sanitize_address)) __attribute__((no_sanitize_thread))
-#elif defined(DAGOR_ASAN_ENABLED) && defined(_MSC_VER)
-# define NO_ASAN_INLINE __declspec(no_sanitize_address) __forceinline
+#if defined(DAGOR_ASAN_ENABLED) && (defined(__clang__) || __GNUC__ >= 7)
+# define NO_ASAN_INLINE inline __attribute__((no_sanitize_address))
+//loads have to switch off address sanitize. It is common (and ok) to load data from stack, even if data partially is not allocated (i.e. .xyzU).
 #else
 # define NO_ASAN_INLINE VECMATH_FINLINE
 #endif
