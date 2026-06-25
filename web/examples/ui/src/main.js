@@ -118,6 +118,50 @@ function deriveJitName(files) {
     return files[0].split('/').pop().replace(/\.das$/, '');
 }
 
+// Some samples (e.g. the OpenGL deferred-shading tutorial) load external assets
+// — a mesh + PBR texture set — via plain fopen(). On the web fopen() reads
+// MEMFS, which starts empty, so the bytes must be fetched and written first.
+// A sample opts in with a "<file>.das.assets.json" sidecar next to it: an array
+// of repo-relative paths. We fetch each and write it into MEMFS at "/<path>",
+// the exact cwd-relative path the tutorial's fopen() expects — the one and only
+// web-vs-desktop delta (desktop fopen hits real disk). Mirrors the standalone
+// gl_tutorial.html harness used to develop the rung.
+var currentAssetsUrl = null;
+var __preloadedManifests = new Set();
+
+function deriveAssetsUrl(files) {
+    if (!files || files.length !== 1) return null;
+    return './samples/' + files[0] + '.assets.json';
+}
+
+// Fetch the current sample's asset manifest (if any) and populate MEMFS. Idempotent
+// per manifest URL — MEMFS persists for the page session, so the (potentially large)
+// fetch happens once, not on every Run. Absent sidecar / a 404 is the normal case.
+async function preloadSampleAssets() {
+    if (!currentAssetsUrl || __preloadedManifests.has(currentAssetsUrl)) return;
+    if (typeof FS === 'undefined') return;
+    let assets;
+    try {
+        const r = await fetch(currentAssetsUrl);
+        if (!r.ok) { __preloadedManifests.add(currentAssetsUrl); return; }
+        assets = await r.json();
+    } catch (e) {
+        return; // transient network error — leave un-cached so the next Run retries
+    }
+    try {
+        for (const rel of assets) {
+            const buf = new Uint8Array(await (await fetch('./' + rel)).arrayBuffer());
+            const path = '/' + rel;
+            try { FS.mkdirTree(path.substring(0, path.lastIndexOf('/'))); } catch (e) { /* exists */ }
+            FS.writeFile(path, buf);
+        }
+        __preloadedManifests.add(currentAssetsUrl);
+        printOutput('preloaded ' + assets.length + ' asset(s) for this sample', '#9fe');
+    } catch (e) {
+        printOutput('asset preload failed: ' + (e && e.message ? e.message : e), '#ff9393');
+    }
+}
+
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
@@ -188,6 +232,7 @@ selectSample = function(type, id) {
         showCanvas(false);
         const files = samplesData[type][vv].files;
         currentJitName = deriveJitName(files);
+        currentAssetsUrl = deriveAssetsUrl(files);
         updateEngineAvailability(currentJitName);
         Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
@@ -330,7 +375,7 @@ function callMainAndFlush(args) {
     }
 }
 
-runCode = function() {
+runCode = async function() {
     syncUrlToState();
     if (selectedEngine() === 'jit') {
         if (!currentJitName) {
@@ -350,6 +395,9 @@ runCode = function() {
     // program re-reveals it the instant it creates a WebGL context (the
     // getContext hook in pageInit). Detection is program-driven, not flagged.
     showCanvas(false);
+    // Populate MEMFS with any external assets this sample needs (mesh/textures)
+    // before the program's fopen() runs. No-op for samples without a manifest.
+    await preloadSampleAssets();
     if (syncMemFsFromState()) {
         callMainAndFlush(['main.das']);
         return;

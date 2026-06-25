@@ -117,11 +117,17 @@ set_target_properties(libDaScript_runtime PROPERTIES
     EXCLUDE_FROM_ALL FALSE
     ARCHIVE_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR}/lib)
 
-# Copy web UI assets to output at build time.
+# Copy web UI assets to output at build time. The OpenGL deferred-shading sample
+# fetches mesh + PBR textures from tutorials/_assets/ at runtime (see its
+# .das.assets.json manifest + main.js preloadSampleAssets); stage them at the
+# repo-relative path the manifest names so the playground can fetch them.
 add_custom_target(copy_web_ui ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/ui
         ${DAS_WEB_OUTPUT_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tutorials/_assets
+        ${DAS_WEB_OUTPUT_DIR}/tutorials/_assets
     COMMENT "Copying web UI to ${DAS_WEB_OUTPUT_DIR}"
 )
 
@@ -142,6 +148,9 @@ add_custom_target(stage_site_playground ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/ui/samples
         ${SITE_PLAYGROUND_DIR}/samples
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/../tutorials/_assets
+        ${SITE_PLAYGROUND_DIR}/tutorials/_assets
     COMMAND ${CMAKE_COMMAND} -E copy
         ${DAS_WEB_OUTPUT_DIR}/daslang_static.js
         ${DAS_WEB_OUTPUT_DIR}/daslang_static.wasm

@@ -20,6 +20,9 @@ playground/main.js
 playground/samples/
 playground/daslang_static.js
 playground/daslang_static.wasm
+# Tutorial assets (mesh + textures) staged from tutorials/_assets/ by web/CMakeLists.txt
+# for samples that fetch them at runtime (the OpenGL deferred-shading rung).
+playground/tutorials/
 
 # WASM artifact built by pages.yml from web/.
 files/wasm/

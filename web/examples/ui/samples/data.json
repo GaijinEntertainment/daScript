@@ -38,6 +38,10 @@
       "files" : ["examples/gl_09_msaa.das"]
     },
     {
+      "name" : "OpenGL: deferred shading (cat on brick, MRT G-buffer)",
+      "files" : ["examples/gl_10_deferred.das"]
+    },
+    {
       "name" : "OpenGL: HDR + bloom (float FBO)",
       "files" : ["examples/gl_11_hdr.das"]
     },

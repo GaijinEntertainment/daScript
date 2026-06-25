@@ -35,4 +35,5 @@ the portable floor made visible.
    07_particles.rst
    08_shadow.rst
    09_msaa.rst
+   10_deferred.rst
    11_hdr.rst
