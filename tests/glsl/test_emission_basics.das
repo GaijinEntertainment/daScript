@@ -27,6 +27,19 @@ def basics_fragment {
     b_frag_color = float4(b_vcolor, 1.0)
 }
 
+// Scalar float literals in non-constructor contexts (init, comparison,
+// assignment, division). The `:g` formatter drops the decimal point on
+// integer-valued floats (4.0 -> "4"), which GLSL ES 3.00 (WebGL2) rejects as an
+// int in these positions; the emitter must re-attach ".0". See glsl_float_literal.
+[fragment_program(name="floatlit_fs_glsl")]
+def floatlit_fragment {
+    var acc = 0.0
+    if (b_vcolor.x > 4.0) {
+        acc = 2.0
+    }
+    b_frag_color = float4(acc / 256.0, 0.0, 0.0, 1.0)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
@@ -44,5 +57,14 @@ def test_glsl_emission_basics(t : T?) {
         t |> success(has(basics_fs_glsl, "in vec3 b_vcolor"), "@inout varying lowers to in on the fragment side")
         t |> success(has(basics_fs_glsl, "out vec4 b_frag_color"), "fragment output declaration")
         t |> success(has(basics_fs_glsl, "void main()"), "entry point")
+    }
+    t |> run("integer-valued float literals keep a decimal point (GLSL ES strictness)") <| @(t : T?) {
+        t |> success(has(floatlit_fs_glsl, "= 0.0"), "scalar float init keeps the decimal point")
+        t |> success(has(floatlit_fs_glsl, "> 4.0"), "comparison literal keeps the decimal point")
+        t |> success(has(floatlit_fs_glsl, "= 2.0"), "assignment literal keeps the decimal point")
+        t |> success(has(floatlit_fs_glsl, "256.0"), "divisor literal keeps the decimal point")
+        // negative control: the bare-int form `acc = 0;` / `> 4)` must not appear
+        t |> success(!has(floatlit_fs_glsl, "= 0;"), "no bare-int float initializer")
+        t |> success(!has(floatlit_fs_glsl, "> 4)"), "no bare-int comparison literal")
     }
 }

@@ -283,6 +283,24 @@ let private glsl_compatibility_constructors <- {
     "uint2"  =>  "UVEC2"
 }
 
+// A GLSL float literal must carry a '.', 'e', or 'E', otherwise the token is an
+// int. `:g` drops the decimal point on integer-valued floats (4.0 -> "4"), which
+// desktop GLSL tolerates via implicit conversion but GLSL ES 3.00 (WebGL2) rejects
+// in scalar / binary-operator contexts (`float x = 0;`, `x > 4`, `x / 256`). Print
+// with `:g` for compactness, then re-attach ".0" when the result is a bare integer
+// so it stays a float on every target. (inf/nan tails are left alone.)
+def private glsl_float_literal(value : float) : string {
+    var s = build_string() $(var w) {
+        w |> fmt(":g", value)
+    }
+    // Append ".0" only for a bare integer ("256"); leave decimals ("0.5"),
+    // exponents ("1e+20"), and inf/nan (the 'e'/'f'/'n' letters) untouched.
+    if (find(s, ".") < 0 && find(s, "e") < 0 && find(s, "E") < 0 && find(s, "f") < 0 && find(s, "n") < 0) {
+        s += ".0"
+    }
+    return s
+}
+
 class GlslExport : AstVisitor {
     errors : array<string>
     writer : StringBuilderWriter?
@@ -1808,7 +1826,7 @@ class GlslExport : AstVisitor {
     }
 // const float
     def override preVisitExprConstFloat(expr : ExprConstFloat?) : void {
-        *writer |> fmt(":g", expr.value)
+        *writer |> write(glsl_float_literal(expr.value))
     }
 // const float2
     def override preVisitExprConstFloat2(expr : ExprConstFloat2?) : void {
@@ -1817,9 +1835,9 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec2(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(")")
     }
 // const float3
@@ -1829,11 +1847,11 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec3(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.z)
+        *writer |> write(glsl_float_literal(expr.value.z))
         *writer |> write(")")
     }
 // const float4
@@ -1843,13 +1861,13 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec4(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.z)
+        *writer |> write(glsl_float_literal(expr.value.z))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.w)
+        *writer |> write(glsl_float_literal(expr.value.w))
         *writer |> write(")")
     }
 // string
