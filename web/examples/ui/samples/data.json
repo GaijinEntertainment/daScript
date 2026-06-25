@@ -22,6 +22,10 @@
       "files" : ["examples/gl_05_instancing.das"]
     },
     {
+      "name" : "OpenGL: skybox + reflections (cubemap)",
+      "files" : ["examples/gl_06_skybox.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
