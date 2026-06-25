@@ -30,3 +30,4 @@ the portable floor made visible.
    02_mandelbrot.rst
    03_sdf.rst
    04_cube.rst
+   05_instancing.rst

@@ -18,6 +18,10 @@
       "files" : ["examples/gl_04_cube.das"]
     },
     {
+      "name" : "OpenGL: cube swarm (instancing)",
+      "files" : ["examples/gl_05_instancing.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
