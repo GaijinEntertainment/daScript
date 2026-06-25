@@ -579,7 +579,14 @@ class GlslExport : AstVisitor {
                 // Fragment shaders are invalid in ES without a default precision;
                 // ES 3.0 guarantees highp in fragment so this is loss-free, and it
                 // is a legal no-op in vertex shaders -> emit unconditionally.
-                *writer |> write("precision highp float;\nprecision highp int;\n\n")
+                *writer |> write("precision highp float;\nprecision highp int;\n")
+                // ES 3.0 fragment shaders predeclare a default precision only for
+                // sampler2D and samplerCube; the other sampler types the shared
+                // sampler surface exposes (sampler3D, sampler2DArray, and the depth-
+                // compare sampler2DShadow) have NO fragment default and fail to
+                // compile without one. Emit highp defaults; a legal no-op in the
+                // vertex stage, which already defaults every sampler to highp.
+                *writer |> write("precision highp sampler3D;\nprecision highp sampler2DArray;\nprecision highp sampler2DShadow;\n\n")
             } else {
                 *writer |> write("#version {version} core\n\n")
             }
