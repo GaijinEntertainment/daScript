@@ -5,11 +5,12 @@ require dastest/testing_boost public
 require daslib/flatten
 require math
 
-//! Differential net for the PHASE_FUSED horizontal-sum re-pack (DEFAULT width>=3 policy): a sum of
+//! Differential net for the PHASE_FUSED horizontal-reduce re-pack (DEFAULT width>=3 policy): a sum of
 //! independent scalars (no shared vector base, so the dot fold above can't reach them) collapses into
-//! `hadd(floatN(...))` groups of width 3..4 via plan_groups; a width-2 tail stays scalar (a bare pair
-//! is +1 node on a node-graph backend). The width-2 path is exercised under the option in
-//! no_aot/test_flatten_hadd_pairs.das. The hadd reorders the adds, so floats compare approx (same
+//! `hadd(floatN(...))` groups of width 3..4 via plan_groups — or `dot(floatN(s), floatN(weights))` when
+//! the lanes carry const weights (`a*2 + b*3 + …`). A width-2 tail stays scalar (a bare pair is +1 node
+//! on a node-graph backend); the width-2 path is exercised under the option in
+//! no_aot/test_flatten_hadd_pairs.das. The reduce reorders the adds, so floats compare approx (same
 //! contract as the dot/mad corpus). The structural FIRED half lives in no_aot/test_flatten_fold.das.
 
 // ----- 2-way sum: below the default width-3 floor -> stays a scalar add -----
@@ -48,10 +49,11 @@ def h_eight(a, b, c, d, e, f, g, h : float) : float {
     return a + b + c + d + e + f + g + h
 }
 
-// ----- one lane only: `a` is the sole hadd term, the rest are `*`-products (mad-fusable) -> no hadd -----
+// ----- one lane only: `a` is the sole reduce lane, `b*c` is a runtime*runtime product (mad, not a
+// weighted lane) -> nothing to pack -----
 [flatten]
 def h_one_lane(a, b, c : float) : float {
-    return a + b * 2.0 + c * 3.0
+    return a + b * c
 }
 
 // ----- negated tail: four positives pack, the `- e` stays -----
@@ -78,10 +80,17 @@ def h_mad(a, b, c, d : float) : float {
     return (a + b + c + d) * 2.0 + 1.0
 }
 
-// ----- weighted products must NOT pack: `n*w` is mad-fusable, mad beats hadd (mandelbrot fBm) -----
+// ----- const-weighted lanes pack into a DOT, not hadd: `n*w` summed -> dot(floatN(n), floatN(w)) -----
+// (the weighted reduction beats the mad-chain at width>=3: combine + dot vs N mads — the mandelbrot fBm)
 [flatten]
-def h_products(a, b, c, d : float) : float {
+def h_weighted(a, b, c, d : float) : float {
     return a * 2.0 + b * 3.0 + c * 4.0 + d * 5.0
+}
+
+// ----- mixed plain + weighted lanes share one dot with a unit weight: `a + b*2 + c*3` -> dot(.,(1,2,3)) -----
+[flatten]
+def h_wmixed(a, b, c : float) : float {
+    return a + b * 2.0 + c * 3.0
 }
 
 // ----- producer-vectorization: same elementwise-unary lanes collapse the producer -> hadd(sin(float3(...))) -----
@@ -139,11 +148,12 @@ def test_flatten_hadd(t : T?) {
             fapprox(t, h_const_flat(v, 1.5, -v, 2.5), h_const(v, 1.5, -v, 2.5))
         }
     }
-    t |> run("buried sum / mad shape / weighted products — value approx") @(t : T?) {
+    t |> run("buried sum / mad shape / weighted dot — value approx") @(t : T?) {
         for (v in GRID) {
             fapprox(t, h_buried_flat(v, 1.5, -v, 2.5), h_buried(v, 1.5, -v, 2.5))
             fapprox(t, h_mad_flat(v, 1.5, -v, 2.5), h_mad(v, 1.5, -v, 2.5))
-            fapprox(t, h_products_flat(v, 1.5, -v, 2.5), h_products(v, 1.5, -v, 2.5))
+            fapprox(t, h_weighted_flat(v, 1.5, -v, 2.5), h_weighted(v, 1.5, -v, 2.5))
+            fapprox(t, h_wmixed_flat(v, 1.5, -v), h_wmixed(v, 1.5, -v))
         }
     }
     t |> run("producer-vectorization: shared / mixed elementwise unary — value approx") @(t : T?) {

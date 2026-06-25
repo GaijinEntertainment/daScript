@@ -191,7 +191,7 @@ def test_flatten_fold(t : T?) {
     }
     t |> run("hadd corpus fuses clean — DEFAULT width>=3 (test_flatten_hadd.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_hadd.das")
-        t |> success(n >= 15, "expected >=15 twins, checked {n}")
+        t |> success(n >= 16, "expected >=16 twins, checked {n}")
         var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_hadd.das")
         // FIRED proof: width-3/4 sums pack (each width emits its own hadd ctor); a bare pair stays scalar
         let h3 = bodies?["h_three_flat"] ?? ""
@@ -220,14 +220,20 @@ def test_flatten_fold(t : T?) {
         t |> success(!empty(h8), "h_eight_flat twin must be produced")
         t |> equal(count_sub(h8, "hadd("), 2, "8-way must pack into two hadds: {h8}")
         t |> success(h8 |> find("float4(hadd(") < 0, "the two hadds must be parallel, not nested: {h8}")
-        // a single hadd lane (the rest `*`-products) never reaches a group — no hadd
+        // a single reduce lane (`a`; `b*c` is a runtime product -> mad) never reaches a group — no reduce
         let h1 = bodies?["h_one_lane_flat"] ?? ""
         t |> success(!empty(h1), "h_one_lane_flat twin must be produced")
-        t |> success(h1 |> find("hadd(") < 0, "a single lane must NOT fuse: {h1}")
-        // the mandelbrot guard: `*`-weighted terms are mad-fusable, so mad must win — no hadd
-        let hp = bodies?["h_products_flat"] ?? ""
-        t |> success(!empty(hp), "h_products_flat twin must be produced")
-        t |> success(hp |> find("hadd(") < 0, "weighted products must stay for mad, not hadd: {hp}")
+        t |> success(h1 |> find("hadd(") < 0 && h1 |> find("dot(") < 0, "a single lane must NOT fuse: {h1}")
+        // const-weighted lanes pack into a DOT (combine + dot beats the mad-chain at width>=3 — the fBm)
+        let hw = bodies?["h_weighted_flat"] ?? ""
+        t |> success(!empty(hw), "h_weighted_flat twin must be produced")
+        t |> success(hw |> find("dot(float4(") >= 0, "a*2+b*3+c*4+d*5 must fuse to a weighted dot4: {hw}")
+        // mixed plain + weighted lanes share ONE dot3 (a plain hadd3 would be unweighted), the plain
+        // lane carried as a unit weight in the const mask (reassoc may permute the lane/weight order)
+        let hwm = bodies?["h_wmixed_flat"] ?? ""
+        t |> success(!empty(hwm), "h_wmixed_flat twin must be produced")
+        t |> success(hwm |> find("dot(float3(") >= 0 && count_sub(hwm, "dot(") == 1 && hwm |> find("1f") >= 0,
+                     "a + b*2 + c*3 must fuse to one weighted dot3 with a unit weight for the plain lane: {hwm}")
         // producer-vectorization: shared elementwise-unary lanes collapse the producer into one call
         let ht = bodies?["h_trig_flat"] ?? ""
         t |> success(!empty(ht), "h_trig_flat twin must be produced")
