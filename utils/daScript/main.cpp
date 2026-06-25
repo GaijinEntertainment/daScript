@@ -251,8 +251,9 @@ namespace {
     // emscripten_set_main_loop(...,false) does NOT unwind the C++ stack, so
     // compile_and_run returns and its stack ContextPtr (a shared_ptr) would drop
     // to zero refs and destroy the Context — the per-frame update() would then
-    // deref a dead context. We copy the shared_ptr into this heap struct and leak
-    // it: the page owns the Context for its whole lifetime.
+    // deref a dead context. We copy the shared_ptr into this heap struct so it
+    // outlives that return; stop_browser_loop() frees it when the loop ends
+    // (update() stops, or the next run supersedes it).
     struct WebLoop {
         ContextPtr      ctx;
         SimFunction *   updateFn = nullptr;
