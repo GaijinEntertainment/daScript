@@ -2,6 +2,10 @@
 
   "examples" : [
     {
+      "name" : "OpenGL: rotating triangle",
+      "files" : ["examples/gl_01_triangle.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },

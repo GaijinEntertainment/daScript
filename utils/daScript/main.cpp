@@ -273,6 +273,26 @@ namespace {
         return found;
     }
 
+    // The single active browser loop. Emscripten supports ONE main loop and ONE
+    // GLFW window at a time, so a new run must tear the previous one down first.
+    WebLoop * g_activeWebLoop = nullptr;
+
+    // Stop the active loop: cancel its main loop, run its shutdown() (which
+    // destroys the GLFW window + glfwTerminate — without this the next program's
+    // glfwCreateWindow aborts "only supports one window at a time"), free the
+    // Context. Idempotent; null-guarded; best-effort (teardown ignores exceptions).
+    void stop_browser_loop () {
+        if ( !g_activeWebLoop ) return;
+        auto loop = g_activeWebLoop;
+        g_activeWebLoop = nullptr;
+        emscripten_cancel_main_loop();
+        if ( loop->shutdownFn ) {
+            loop->ctx->evalWithCatch(loop->shutdownFn, nullptr);
+            loop->ctx->getException();   // swallow — teardown is best-effort
+        }
+        delete loop;
+    }
+
     void web_loop_tick ( void * arg ) {
         auto loop = (WebLoop *) arg;
         vec4f res = loop->ctx->evalWithCatch(loop->updateFn, nullptr);
@@ -284,11 +304,8 @@ namespace {
                  && loop->updateFn->debugInfo->result->type == Type::tBool ) {
             keepGoing = cast<bool>::to(res);    // bool update(): false stops the loop
         }
-        // void update(): runs until the page closes.
-        if ( !keepGoing ) {
-            emscripten_cancel_main_loop();
-            if ( loop->shutdownFn ) loop->ctx->evalWithCatch(loop->shutdownFn, nullptr);
-        }
+        // void update(): runs until the page closes or the next run stops it.
+        if ( !keepGoing ) stop_browser_loop();
     }
 
     // True ⇒ the program was launched as a browser loop (Context persisted, main
@@ -306,10 +323,11 @@ namespace {
                 return true;    // reported; do not fall back to main(), do not start the loop
             }
         }
-        auto loop = new WebLoop();      // page-lifetime; intentionally leaked
+        auto loop = new WebLoop();      // lives until the next run stops it (stop_browser_loop)
         loop->ctx = pctx;               // shared_ptr copy keeps the Context alive past return
         loop->updateFn = updateFn;
         loop->shutdownFn = shutdownFn;
+        g_activeWebLoop = loop;
         emscripten_set_main_loop_arg(web_loop_tick, loop, 0, false);    // 0 = rAF; false = no unwind
         return true;
     }
@@ -324,6 +342,12 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     // captures below this frame skip re-walking ancestors. No-op when
     // DAS_TRACK_ALLOC is off or on non-Win64.
     das::AllocTrackingLandmark _alloc_tracker_landmark;
+#ifdef __EMSCRIPTEN__
+    // A previous graphics program may have installed a browser loop that is still
+    // running (and still owns the single GLFW window). Tear it down before running
+    // a new program, else its glfwCreateWindow aborts. No-op when none is active.
+    stop_browser_loop();
+#endif
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);

@@ -16,6 +16,22 @@ pageInit = function () {
     editorCode = document.getElementById("code");
     editorOutput = document.getElementById("output");
 
+    // Bind the WebGL canvas so emscripten's GL (glfwCreateWindow → WebGL2) renders
+    // into it. AUTO-DETECT graphics vs text: hook getContext so the canvas reveals
+    // itself the instant ANY program creates a WebGL context on it — the precise,
+    // program-driven signal (works for pasted/edited code, not just flagged
+    // samples). The data.json "graphics" flag is only a pre-run hint for the
+    // sample picker. See showCanvas() / selectSample().
+    var glCanvas = document.getElementById("canvas");
+    if (glCanvas && typeof Module === "object" && Module) {
+        Module.canvas = glCanvas;
+        const origGetContext = glCanvas.getContext.bind(glCanvas);
+        glCanvas.getContext = function(type) {
+            if (/webgl/i.test(String(type))) showCanvas(true);
+            return origGetContext.apply(glCanvas, arguments);
+        };
+    }
+
     sampleList["examples"] = document.getElementById("examples");
 
 
@@ -132,6 +148,34 @@ function updateEngineAvailability(name) {
         });
 }
 
+// Force the canvas to a true 4:3 display box matching its 640x480 drawing buffer,
+// so the shader's aspect correction is right and rotations trace circles, not
+// ovals. Set inline with !important — the highest-priority source — because the
+// column's stylesheet otherwise stretches the canvas to ~80vh (portrait). Clamped
+// to the column width; re-applied on resize.
+function fitCanvas() {
+    const c = document.getElementById("canvas");
+    if (!c || !c.classList.contains("is-graphics")) return;
+    const avail = Math.min((c.parentElement ? c.parentElement.clientWidth : 640), 640);
+    c.style.setProperty("width", avail + "px", "important");
+    c.style.setProperty("height", Math.round(avail * 3 / 4) + "px", "important");
+}
+window.addEventListener("resize", fitCanvas);
+
+// Show/hide the WebGL canvas. Graphics programs render into it (item 0b's browser
+// loop); text programs keep it hidden. The output panel shrinks to share the
+// column so a graphics program can both draw (canvas) and print() (output below).
+function showCanvas(show) {
+    const c = document.getElementById("canvas");
+    if (c) {
+        c.classList.toggle("is-graphics", show);
+        if (show) fitCanvas();
+        else { c.style.removeProperty("width"); c.style.removeProperty("height"); }
+    }
+    const o = document.getElementById("output");
+    if (o) o.classList.toggle("with-canvas", show);
+}
+
 selectSample = function(type, id) {
     const sel = sampleList[type];
     if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
@@ -139,6 +183,9 @@ selectSample = function(type, id) {
     if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
         // Multi-file samples ship as files[] — load all in parallel, then hand
         // the bundle to the loader (single editor today, tab strip in phase 3).
+        // Hide the canvas on every sample switch; a graphics program re-reveals
+        // it on Run when it creates a WebGL context (the getContext hook).
+        showCanvas(false);
         const files = samplesData[type][vv].files;
         currentJitName = deriveJitName(files);
         updateEngineAvailability(currentJitName);
@@ -299,6 +346,10 @@ runCode = function() {
         printOutput('daslang is still loading, please wait…', '#ff9393');
         return;
     }
+    // Reset before each run: a text program leaves the canvas hidden; a graphics
+    // program re-reveals it the instant it creates a WebGL context (the
+    // getContext hook in pageInit). Detection is program-driven, not flagged.
+    showCanvas(false);
     if (syncMemFsFromState()) {
         callMainAndFlush(['main.das']);
         return;
