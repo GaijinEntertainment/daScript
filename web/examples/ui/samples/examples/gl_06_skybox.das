@@ -291,10 +291,10 @@ def gen_sphere(var verts : array<SceneVertex>; var indices : array<int>) {
 
 // Large floor quad in the XZ plane at y=0, normal up.
 let floor_verts = [SceneVertex(
-    pos=float3(-9.0, 0, -9.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(9.0, 0, -9.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(9.0, 0, 9.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(-9.0, 0, 9.0), normal=float3(0, 1, 0)
+    pos=float3(-9.0, 0.0, -9.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(9.0, 0.0, -9.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(9.0, 0.0, 9.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(-9.0, 0.0, 9.0), normal=float3(0, 1, 0)
 )];
 
 let floor_indices = fixed_array<int>(0, 1, 2, 0, 2, 3)

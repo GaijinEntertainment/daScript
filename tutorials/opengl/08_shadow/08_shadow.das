@@ -222,10 +222,10 @@ let cube_indices = fixed_array<int>(
 // Floor quad in the XZ plane at y=0, normal up, sized to FLOOR_HALF -- big enough
 // that the cube's shadow lands inside it. Drawn with an identity model matrix.
 let floor_verts = [SceneVertex(
-    pos=float3(-5.0, 0, -5.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(5.0, 0, -5.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(5.0, 0, 5.0), normal=float3(0, 1, 0)), SceneVertex(
-    pos=float3(-5.0, 0, 5.0), normal=float3(0, 1, 0)
+    pos=float3(-5.0, 0.0, -5.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(5.0, 0.0, -5.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(5.0, 0.0, 5.0), normal=float3(0, 1, 0)), SceneVertex(
+    pos=float3(-5.0, 0.0, 5.0), normal=float3(0, 1, 0)
 )];
 
 let floor_indices = fixed_array<int>(0, 1, 2, 0, 2, 3)
