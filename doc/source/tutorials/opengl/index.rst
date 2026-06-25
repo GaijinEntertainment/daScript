@@ -32,3 +32,4 @@ the portable floor made visible.
    04_cube.rst
    05_instancing.rst
    06_skybox.rst
+   08_shadow.rst

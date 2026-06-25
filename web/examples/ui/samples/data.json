@@ -26,6 +26,10 @@
       "files" : ["examples/gl_06_skybox.das"]
     },
     {
+      "name" : "OpenGL: shadow map (two-pass)",
+      "files" : ["examples/gl_08_shadow.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
