@@ -1735,29 +1735,22 @@ namespace das
         return allocFromMod(Module::require(name ? name : ""));
     }
 
-// Browser main-loop: a wasm page cannot block in a while(true) — it must yield to
-// the browser each frame via emscripten_set_main_loop. Enabled on the web build so
-// eval_main_loop()-driven examples (the GL tutorials) run in the playground.
-#define TRY_MAIN_LOOP   1
+// remove define to enable emscripten version
+#define TRY_MAIN_LOOP   0
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
+#ifdef _EMSCRIPTEN_
 #if TRY_MAIN_LOOP
-    // The Block is stored BY VALUE: emscripten_set_main_loop_arg(...,true) unwinds
-    // the C++ stack (the browser-can't-block model), so builtin_main_loop's frame —
-    // and any stack-local arg — is gone by the time the first callback fires. The
-    // arg is heap-allocated and intentionally leaked (it lives for the page).
     struct MainLoopArg {
         Context * context;
         LineInfoArg * at;
-        Block block;
+        Block * block;
     };
 
     void main_loop_arg ( void * arg ) {
         auto mla = (MainLoopArg *) arg;
         vec4f args[1];
         args[0] = v_zero();
-        if ( !cast<bool>::to(mla->context->invoke(mla->block, args, nullptr, mla->at)) ) {
+        if ( !cast<bool>::to(mla->context->invoke(*mla->block, args, nullptr, mla->at)) ) {
             emscripten_cancel_main_loop();
         }
     }
@@ -1765,7 +1758,7 @@ namespace das
 #endif
 
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at ) {
-#ifndef __EMSCRIPTEN__
+#ifndef _EMSCRIPTEN_
         vec4f args[1];
         args[0] = v_zero();
         while ( true ) {
@@ -1774,11 +1767,11 @@ namespace das
         }
 #else
 #if TRY_MAIN_LOOP
-    auto arg = new MainLoopArg();   // leaked on purpose: page-lifetime (see above)
-    arg->context = context;
-    arg->at = at;
-    arg->block = block;             // copy the Block; its body SimNode lives in code
-    emscripten_set_main_loop_arg(main_loop_arg, arg, 60, true);
+    MainLoopArg arg;
+    arg.context = context;
+    arg.at = at;
+    arg.block = &block;
+    emscripten_set_main_loop_arg(main_loop_arg, &arg, 60, true);
 #endif
 #endif
     }

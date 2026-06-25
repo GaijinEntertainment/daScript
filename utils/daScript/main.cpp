@@ -300,9 +300,13 @@ namespace {
         if ( auto ex = loop->ctx->getException() ) {
             tout << "EXCEPTION: " << ex << " at " << loop->ctx->exceptionAt.describe() << "\n";
             keepGoing = false;
-        } else if ( loop->updateFn->debugInfo && loop->updateFn->debugInfo->result
-                 && loop->updateFn->debugInfo->result->type == Type::tBool ) {
-            keepGoing = cast<bool>::to(res);    // bool update(): false stops the loop
+        } else if ( loop->updateFn->debugInfo && loop->updateFn->debugInfo->result ) {
+            auto rt = loop->updateFn->debugInfo->result->type;
+            if ( rt == Type::tBool ) {
+                keepGoing = cast<bool>::to(res);            // bool update(): false stops the loop
+            } else if ( rt == Type::tInt ) {
+                keepGoing = cast<int32_t>::to(res) != 0;    // int update(): 0 stops the loop
+            }
         }
         // void update(): runs until the page closes or the next run stops it.
         if ( !keepGoing ) stop_browser_loop();
