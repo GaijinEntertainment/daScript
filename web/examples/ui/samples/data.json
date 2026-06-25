@@ -26,6 +26,10 @@
       "files" : ["examples/gl_06_skybox.das"]
     },
     {
+      "name" : "OpenGL: particle swarm (transform feedback)",
+      "files" : ["examples/gl_07_particles.das"]
+    },
+    {
       "name" : "OpenGL: shadow map (two-pass)",
       "files" : ["examples/gl_08_shadow.das"]
     },
