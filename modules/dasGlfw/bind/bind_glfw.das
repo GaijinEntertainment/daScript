@@ -8,6 +8,7 @@ class GlfwGen : CppGenBind {
     override func_to_stdout = false
     override generate_constant_decl = true
     glfw_skip_func : table<string; bool>
+    glfw_emscripten_skip : table<string>
     def GlfwGen {
         bind_root = "{get_das_root()}/modules/dasGlfw/src"
         bind_module = "dasGLFW"
@@ -21,8 +22,7 @@ class GlfwGen : CppGenBind {
             "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH=1"
         )
         func_per_chunk = 20
-        init_args(pfn, pfp, args)
-        setDefaultFiles()
+        super(pfn, pfp, args)
         init_skip_func()
         openAllFiles()
     }
@@ -30,12 +30,21 @@ class GlfwGen : CppGenBind {
         glfw_skip_func <- {
             "glfwDestroyWindow" => true
         }
+        // GLFW functions emscripten's library_glfw.js (a GLFW 3.3.8 subset) does not
+        // provide: the 3.4 additions plus a few 3.3 funcs left unimplemented. All are
+        // unused across the codebase + consumers (audited), so skip-on-web is fail-closed.
+        glfw_emscripten_skip <- {
+            "glfwGetError", "glfwGetGamepadName", "glfwGetGamepadState",
+            "glfwGetMonitorUserPointer", "glfwGetPlatform", "glfwGetWindowTitle",
+            "glfwInitAllocator", "glfwInitHint", "glfwPlatformSupported",
+            "glfwSetMonitorUserPointer", "glfwUpdateGamepadMappings"
+        }
+    }
+    def override emscripten_skip_function(function_name : string) : bool {
+        return key_exists(glfw_emscripten_skip, function_name)
     }
     def override skip_const(name : string) : bool {
-        if (name |> starts_with("GL_")) {
-            return true
-        }
-        return false
+        return name |> starts_with("GL_")
     }
     def override isArgByValue(name : string) {
         return true

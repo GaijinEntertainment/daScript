@@ -71,6 +71,23 @@ def bind_sampler_3d(unit : int; tex : uint) {
     glBindTexture(GL_TEXTURE_3D, tex)
 }
 
+def bind_sampler_cube(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_CUBE_MAP, tex)
+}
+
+def bind_sampler_2d_array(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_2D_ARRAY, tex)
+}
+
+// sampler2DShadow binds an ordinary 2D depth texture; the GL_TEXTURE_COMPARE_MODE / depth format are
+// set when the texture is created (not at bind time), so the bind itself matches bind_sampler_2d.
+def bind_sampler_2d_shadow(unit : int; tex : uint) {
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_2D, tex)
+}
+
 def bind_image_any(unit : int; tex : uint; format : uint; access : uint = GL_READ_WRITE) {
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
 }
@@ -126,6 +143,12 @@ def glUniformAny(location : int; value : float4x4) {
     glUniformMatrix4fv(location, value)
 }
 
+// float3x3 is 36 bytes = 9 tight column-major floats (3x float3, no std140 padding), so it uploads
+// straight via glUniformMatrix3fv -- matches a `uniform mat3` shader field (e.g. a normal matrix).
+def glUniformAny(location : int; value : float3x3) {
+    glUniformMatrix3fv(location, value)
+}
+
 def glUniformAny(location : int; value : int2) {
     glUniform2iv(location, 1, unsafe(addr(value.x)))
 }
@@ -141,6 +164,12 @@ def glUniformAny(location : int; value : int4) {
 def glUniformMatrix4fv(location : int; value : float4x4) {
     unsafe {
         glUniformMatrix4fv(location, 1, false, addr(value[0][0]))
+    }
+}
+
+def glUniformMatrix3fv(location : int; value : float3x3) {
+    unsafe {
+        glUniformMatrix3fv(location, 1, false, addr(value[0][0]))
     }
 }
 

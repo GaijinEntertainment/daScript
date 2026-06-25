@@ -20,18 +20,24 @@ void Module_dasGLFW::initFunctions_5() {
 	makeExtern< int (*)(int) , glfwJoystickIsGamepad , SimNode_ExtFuncCall >(lib,"glfwJoystickIsGamepad","glfwJoystickIsGamepad")
 		->args({"jid"})
 		->addToModule(*this, SideEffects::worstDefault);
+#ifndef __EMSCRIPTEN__
 // from GLFW/glfw3.h:5827:13
 	makeExtern< int (*)(const char *) , glfwUpdateGamepadMappings , SimNode_ExtFuncCall >(lib,"glfwUpdateGamepadMappings","glfwUpdateGamepadMappings")
 		->args({"string"})
 		->addToModule(*this, SideEffects::worstDefault);
+#endif
+#ifndef __EMSCRIPTEN__
 // from GLFW/glfw3.h:5859:21
 	makeExtern< const char * (*)(int) , glfwGetGamepadName , SimNode_ExtFuncCall >(lib,"glfwGetGamepadName","glfwGetGamepadName")
 		->args({"jid"})
 		->addToModule(*this, SideEffects::worstDefault);
+#endif
+#ifndef __EMSCRIPTEN__
 // from GLFW/glfw3.h:5897:13
 	makeExtern< int (*)(int,GLFWgamepadstate *) , glfwGetGamepadState , SimNode_ExtFuncCall >(lib,"glfwGetGamepadState","glfwGetGamepadState")
 		->args({"jid","state"})
 		->addToModule(*this, SideEffects::worstDefault);
+#endif
 // from GLFW/glfw3.h:5927:14
 	makeExtern< void (*)(GLFWwindow *,const char *) , glfwSetClipboardString , SimNode_ExtFuncCall >(lib,"glfwSetClipboardString","glfwSetClipboardString")
 		->args({"window","string"})

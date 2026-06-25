@@ -283,6 +283,24 @@ let private glsl_compatibility_constructors <- {
     "uint2"  =>  "UVEC2"
 }
 
+// A GLSL float literal must carry a '.', 'e', or 'E', otherwise the token is an
+// int. `:g` drops the decimal point on integer-valued floats (4.0 -> "4"), which
+// desktop GLSL tolerates via implicit conversion but GLSL ES 3.00 (WebGL2) rejects
+// in scalar / binary-operator contexts (`float x = 0;`, `x > 4`, `x / 256`). Print
+// with `:g` for compactness, then re-attach ".0" when the result is a bare integer
+// so it stays a float on every target. (inf/nan tails are left alone.)
+def private glsl_float_literal(value : float) : string {
+    var s = build_string() $(var w) {
+        w |> fmt(":g", value)
+    }
+    // Append ".0" only for a bare integer ("256"); leave decimals ("0.5"),
+    // exponents ("1e+20"), and inf/nan (the 'e'/'f'/'n' letters) untouched.
+    if (find(s, ".") < 0 && find(s, "e") < 0 && find(s, "E") < 0 && find(s, "f") < 0 && find(s, "n") < 0) {
+        s += ".0"
+    }
+    return s
+}
+
 class GlslExport : AstVisitor {
     errors : array<string>
     writer : StringBuilderWriter?
@@ -400,7 +418,7 @@ class GlslExport : AstVisitor {
             pass
         } elif (fun._module.name == "builtin") {
             pass
-        } elif (fun._module.name == "glsl_common") {
+        } elif (fun._module.name == "glsl_common" || fun._module.name == "shader_lingua_franca") {
             pass
         } elif (fun._module.name == "math" || fun._module.name == "math_bits") {
             pass
@@ -534,7 +552,7 @@ class GlslExport : AstVisitor {
         for_each_function(mod, "") $(fun) {
             if (depFun |> key_exists(intptr(fun))) {
                 if (!isMainFunction(fun)) {
-                    if (fun._module.name != "glsl_common") {
+                    if (fun._module.name != "glsl_common" && fun._module.name != "shader_lingua_franca") {
                         let ss = describe_glsl_function(fun)
                         *writer |> write("{ss};")
                         newLine(1)
@@ -548,11 +566,39 @@ class GlslExport : AstVisitor {
         }
     }
     def override preVisitProgram(prog : ProgramPtr) : void {
+        // GLSL ES 3.00 (WebGL2) vs desktop core. Keyed off the compiler's platform:
+        // under emscripten the interpreter IS the wasm target (Model A), so a wasm
+        // compile emits ES 3.00. (A host cross-compile to wasm — Model B — emits on
+        // the host and would need an explicit target flag threaded into GlslExport;
+        // not wired yet.) ES 3.00 already matches what desktop core wants minus the
+        // version token, so the body emission below is unchanged.
+        let es300 = get_platform_name() == "emscripten"
         if (caps.write_version) {
-            *writer |> write("#version {version} core\n\n")
+            if (es300) {
+                *writer |> write("#version 300 es\n")
+                // Fragment shaders are invalid in ES without a default precision;
+                // ES 3.0 guarantees highp in fragment so this is loss-free, and it
+                // is a legal no-op in vertex shaders -> emit unconditionally.
+                *writer |> write("precision highp float;\nprecision highp int;\n")
+                // ES 3.0 fragment shaders predeclare a default precision only for
+                // sampler2D and samplerCube; the other sampler types the shared
+                // sampler surface exposes (sampler3D, sampler2DArray, and the depth-
+                // compare sampler2DShadow) have NO fragment default and fail to
+                // compile without one. Emit highp defaults; a legal no-op in the
+                // vertex stage, which already defaults every sampler to highp.
+                *writer |> write("precision highp sampler3D;\nprecision highp sampler2DArray;\nprecision highp sampler2DShadow;\n\n")
+            } else {
+                *writer |> write("#version {version} core\n\n")
+            }
         }
         // TODO: only output builtin functions which are necessary
-        if (version >= 400 && shaderType != ShaderType.compute) {
+        // `discard()` renames to `_discard()` (the keyword can't be a daslang call); emit the
+        // wrapper that bridges back to the GLSL `discard` keyword. It is needed in EVERY GLSL
+        // version (the keyword exists since GLSL 110 / ES 100), so it must NOT be gated on
+        // version >= 400 (that left ES 3.00 / 330 fragment shaders with `_discard()` undefined).
+        // `discard` is a fragment-only keyword, so emit the helper ONLY for fragment shaders --
+        // a vertex/compute stage carrying `discard;` in the preamble would itself fail to compile.
+        if (shaderType == ShaderType.fragment) {
             *writer |> write("void _discard ( ) \{ discard; \}\n")
         }
         *writer |> write("float rcp ( float r ) \{ return 1.0 / r; \}\n")
@@ -707,7 +753,7 @@ class GlslExport : AstVisitor {
 // structure
     def override canVisitStructure(str : Structure?) {
         if (!(depStruct |> key_exists(intptr(str)))) return false
-        return !(str._module.name == "glsl_common")
+        return !(str._module.name == "glsl_common" || str._module.name == "shader_lingua_franca")
     }
     def override preVisitStructure(str : StructurePtr) {
         if (str.flags.isClass) {
@@ -762,7 +808,7 @@ class GlslExport : AstVisitor {
     }
 // function
     def override canVisitFunction(arg : Function?) : bool {
-        if (!depFun |> key_exists(intptr(arg)) || arg._module.name == "glsl_common") return false
+        if (!depFun |> key_exists(intptr(arg)) || arg._module.name == "glsl_common" || arg._module.name == "shader_lingua_franca") return false
         return !(arg._module.name == "math" || arg._module.name == "math_bits")
     }
     def override preVisitFunction(fun : FunctionPtr) {
@@ -883,7 +929,7 @@ class GlslExport : AstVisitor {
 // global let
     def override canVisitGlobalVariable(arg : Variable?) : bool {
         if (!depVar |> key_exists(intptr(arg))) return false
-        return !("{arg._module.name}" |> find("glsl_") != -1)
+        return !("{arg._module.name}" |> find("glsl_") != -1 || arg._module.name == "shader_lingua_franca")
     }
     def checkUniformType(typ : TypeDeclPtr) {
         if (!caps.restrict_uniform_types || typ.baseType == Type.tFloat4) return
@@ -967,8 +1013,13 @@ class GlslExport : AstVisitor {
             if (arg.annotation |> find_arg("groupshared") ?as tBool ?? false) {
                 needInit = false
             }
+            // The Vulkan rail authors UBOs as @uniform and per-frame constants as @push_constant; GL
+            // has no push constants, so a @push_constant block maps to a plain GL uniform (bound loose
+            // by the host). Both lower to `uniform ...` here. (harmonization arc, Phase 2 / D4.)
+            let isUniform = ((arg.annotation |> find_arg("uniform") is tBool) ||
+                (arg.annotation |> find_arg("push_constant") is tBool))
             if (shaderType == ShaderType.vertex) {
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
@@ -980,14 +1031,23 @@ class GlslExport : AstVisitor {
                 if (arg.annotation |> find_arg("in") is tBool) {
                     *writer |> write("in "); needInit = false
                 }
-                if (arg.annotation |> find_arg("inout") is tBool) {
+                // @inout and (Vulkan-style) @out are both vertex-stage outputs -> `out`.
+                if (arg.annotation |> find_arg("inout") is tBool ||
+                    arg.annotation |> find_arg("out") is tBool) {
                     *writer |> write("out "); needInit = false
                 }
             } elif (shaderType == ShaderType.fragment) {
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
+                }
+                // GLSL ES 3.00 REQUIRES an explicit layout(location=N) on every fragment output when
+                // there are multiple (MRT / deferred G-buffer). Mirror the vertex branch so a
+                // @out @location=N fragment output emits its location (valid on #version 330 too).
+                let argLoc = arg.annotation |> find_arg("location")
+                if (argLoc is tInt) {
+                    *writer |> write("layout(location={argLoc as tInt}) "); needInit = false
                 }
                 if (arg.annotation |> find_arg("in") is tBool) {
                     *writer |> write("in "); needInit = false
@@ -1006,7 +1066,7 @@ class GlslExport : AstVisitor {
                         *writer |> write("shared ")
                     }
                 }
-                if (arg.annotation |> find_arg("uniform") is tBool) {
+                if (isUniform) {
                     checkUniformType(arg._type)
                     if (outputSamplerMacro(arg) || outputImageMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
@@ -1164,6 +1224,12 @@ class GlslExport : AstVisitor {
     }
 // call
     def override preVisitExprCall(expr : ExprCall?) {
+        if (is_shadow_compare_call(expr)) {
+            // GL has no textureCompare(): a sampler2DShadow samples with texture(s, vec3(uv, ref)).
+            // The vec3() wrap of (uv, compare) is emitted around args 1+2 in visitExprCallArgument.
+            *writer |> write("texture(")
+            return
+        }
         var fnName : string
         unsafe {
             fnName = glsl_function_name(reinterpret<FunctionPtr> expr.func)
@@ -1183,6 +1249,17 @@ class GlslExport : AstVisitor {
         return expr
     }
     def override visitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) {
+        if (is_shadow_compare_call(expr)) {
+            // args: 0=sampler, 1=uv (float2), 2=compare (float) -> texture(s, vec3(uv, compare))
+            if (arg == expr.arguments[0]) {
+                *writer |> write(",vec3(")
+            } elif (arg == expr.arguments[1]) {
+                *writer |> write(",")
+            } elif (arg == expr.arguments[2]) {
+                *writer |> write(")")
+            }
+            return arg
+        }
         if (!last) {
             *writer |> write(",")
         }
@@ -1263,9 +1340,15 @@ class GlslExport : AstVisitor {
     def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) {
         error("clone is not supported", expr.at)
     }
-// with
+// with — the optimizer's BlockFolding normally inlines the with-body and drops the subject before
+// the shader-emit patch runs; a no-optimization compile (e.g. lint) keeps `with` alive to here. Emit
+// the body as a transparent scope (its field accesses are already resolved to subject.field by infer)
+// and preprocess the subject expression out, mirroring daslib/aot_cpp's #if 0 handling.
     def override preVisitExprWith(expr : ExprWith?) {
-        error("with is not supported", expr.at)
+        *writer |> write("\n#if 0 // with: subject (optimizations off)\n")
+    }
+    def override preVisitExprWithBody(expr : ExprWith?; body : ExpressionPtr) {
+        *writer |> write("\n#endif\n")
     }
 // while
     def override preVisitExprWhile(expr : ExprWhile?) {
@@ -1558,7 +1641,20 @@ class GlslExport : AstVisitor {
                 return
             }
         }
-        *writer |> write("{expr.name}")
+        // shader_lingua_franca carries the unified (Vulkan) builtin spelling; the few names that
+        // diverge from GLSL get renamed here on the way out: gl_VertexIndex -> gl_VertexID and
+        // gl_InstanceIndex -> gl_InstanceID (the GLSL desktop-core / ES names for the per-vertex /
+        // per-instance index). Gated on the shared module so a user variable that happens to share
+        // the name is never rewritten.
+        if (en == "gl_VertexIndex" && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
+            *writer |> write("gl_VertexID")
+            return
+        }
+        if (en == "gl_InstanceIndex" && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
+            *writer |> write("gl_InstanceID")
+            return
+        }
+        *writer |> write(en)
     }
 // field
     def override visitExprField(expr : ExprField?) : ExpressionPtr {
@@ -1750,7 +1846,7 @@ class GlslExport : AstVisitor {
     }
 // const float
     def override preVisitExprConstFloat(expr : ExprConstFloat?) : void {
-        *writer |> fmt(":g", expr.value)
+        *writer |> write(glsl_float_literal(expr.value))
     }
 // const float2
     def override preVisitExprConstFloat2(expr : ExprConstFloat2?) : void {
@@ -1759,9 +1855,9 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec2(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(")")
     }
 // const float3
@@ -1771,11 +1867,11 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec3(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.z)
+        *writer |> write(glsl_float_literal(expr.value.z))
         *writer |> write(")")
     }
 // const float4
@@ -1785,13 +1881,13 @@ class GlslExport : AstVisitor {
         } else {
             *writer |> write("vec4(")
         }
-        *writer |> fmt(":g", expr.value.x)
+        *writer |> write(glsl_float_literal(expr.value.x))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.y)
+        *writer |> write(glsl_float_literal(expr.value.y))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.z)
+        *writer |> write(glsl_float_literal(expr.value.z))
         *writer |> write(",")
-        *writer |> fmt(":g", expr.value.w)
+        *writer |> write(glsl_float_literal(expr.value.w))
         *writer |> write(")")
     }
 // string
@@ -1868,9 +1964,17 @@ def bind_uniform_function_name(fnMain : FunctionPtr) {
 [macro_function]
 def is_glsl_structure(arg; name : string) {
     if (arg._type.baseType == Type.tStructure) {
-        if (arg._type.structType._module.name == "glsl_common" && arg._type.structType.name == name) return true
+        if ((arg._type.structType._module.name == "glsl_common" || arg._type.structType._module.name == "shader_lingua_franca") && arg._type.structType.name == name) return true
     }
     return false
+}
+
+// A shader_lingua_franca textureCompare(sampler2DShadow, uv, ref) call — GL spells shadow sampling as
+// texture(s, vec3(uv, ref)), so preVisitExprCall / visitExprCallArgument rewrite it on the way out.
+[macro_function]
+def is_shadow_compare_call(expr : ExprCall?) : bool {
+    return (expr != null && expr.name == "textureCompare" &&
+        expr.func != null && expr.func._module != null && expr.func._module.name == "shader_lingua_franca")
 }
 
 [macro_function]

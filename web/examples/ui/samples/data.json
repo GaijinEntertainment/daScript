@@ -2,6 +2,50 @@
 
   "examples" : [
     {
+      "name" : "OpenGL: rotating triangle",
+      "files" : ["examples/gl_01_triangle.das"]
+    },
+    {
+      "name" : "OpenGL: mandelbrot",
+      "files" : ["examples/gl_02_mandelbrot.das"]
+    },
+    {
+      "name" : "OpenGL: SDF raymarcher",
+      "files" : ["examples/gl_03_sdf.das"]
+    },
+    {
+      "name" : "OpenGL: synthwave cube",
+      "files" : ["examples/gl_04_cube.das"]
+    },
+    {
+      "name" : "OpenGL: cube swarm (instancing)",
+      "files" : ["examples/gl_05_instancing.das"]
+    },
+    {
+      "name" : "OpenGL: skybox + reflections (cubemap)",
+      "files" : ["examples/gl_06_skybox.das"]
+    },
+    {
+      "name" : "OpenGL: particle swarm (transform feedback)",
+      "files" : ["examples/gl_07_particles.das"]
+    },
+    {
+      "name" : "OpenGL: shadow map (two-pass)",
+      "files" : ["examples/gl_08_shadow.das"]
+    },
+    {
+      "name" : "OpenGL: MSAA (multisample + blit resolve)",
+      "files" : ["examples/gl_09_msaa.das"]
+    },
+    {
+      "name" : "OpenGL: deferred shading (cat on brick, MRT G-buffer)",
+      "files" : ["examples/gl_10_deferred.das"]
+    },
+    {
+      "name" : "OpenGL: HDR + bloom (float FBO)",
+      "files" : ["examples/gl_11_hdr.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },

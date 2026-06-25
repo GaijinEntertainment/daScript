@@ -239,6 +239,106 @@ int das_aot_main ( int argc, char * argv[] ) {
     return compiled ? 0 : -1;
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+// Browser 3-call lifecycle: a wasm page cannot block in main()'s while(true) — it
+// must yield to the browser each frame. So a program that exposes `update` is run
+// as a browser main-loop instead of single-shot main(): init() once, then update()
+// per frame via emscripten_set_main_loop, shutdown() when the loop ends. Desktop
+// runs main() (init();while(!exit){update()};shutdown()) — one homogeneous .das.
+namespace {
+    // emscripten_set_main_loop(...,false) does NOT unwind the C++ stack, so
+    // compile_and_run returns and its stack ContextPtr (a shared_ptr) would drop
+    // to zero refs and destroy the Context — the per-frame update() would then
+    // deref a dead context. We copy the shared_ptr into this heap struct so it
+    // outlives that return; stop_browser_loop() frees it when the loop ends
+    // (update() stops, or the next run supersedes it).
+    struct WebLoop {
+        ContextPtr      ctx;
+        SimFunction *   updateFn = nullptr;
+        SimFunction *   shutdownFn = nullptr;
+    };
+
+    // The single void/bool/int callable overload of `name`, or nullptr (none/ambiguous).
+    SimFunction * pick_lifecycle_fn ( Context * ctx, const char * name, ModuleGroup & mg ) {
+        SimFunction * found = nullptr;
+        for ( auto fnAS : ctx->findFunctions(name) ) {
+            if ( verifyCall<void>(fnAS->debugInfo, mg)
+              || verifyCall<bool>(fnAS->debugInfo, mg)
+              || verifyCall<int32_t>(fnAS->debugInfo, mg) ) {
+                if ( found ) return nullptr;    // ambiguous overload set
+                found = fnAS;
+            }
+        }
+        return found;
+    }
+
+    // The single active browser loop. Emscripten supports ONE main loop and ONE
+    // GLFW window at a time, so a new run must tear the previous one down first.
+    WebLoop * g_activeWebLoop = nullptr;
+
+    // Stop the active loop: cancel its main loop, run its shutdown() (which
+    // destroys the GLFW window + glfwTerminate — without this the next program's
+    // glfwCreateWindow aborts "only supports one window at a time"), free the
+    // Context. Idempotent; null-guarded; best-effort (teardown ignores exceptions).
+    void stop_browser_loop () {
+        if ( !g_activeWebLoop ) return;
+        auto loop = g_activeWebLoop;
+        g_activeWebLoop = nullptr;
+        emscripten_cancel_main_loop();
+        if ( loop->shutdownFn ) {
+            loop->ctx->evalWithCatch(loop->shutdownFn, nullptr);
+            loop->ctx->getException();   // swallow — teardown is best-effort
+        }
+        delete loop;
+    }
+
+    void web_loop_tick ( void * arg ) {
+        auto loop = (WebLoop *) arg;
+        vec4f res = loop->ctx->evalWithCatch(loop->updateFn, nullptr);
+        bool keepGoing = true;
+        if ( auto ex = loop->ctx->getException() ) {
+            tout << "EXCEPTION: " << ex << " at " << loop->ctx->exceptionAt.describe() << "\n";
+            keepGoing = false;
+        } else if ( loop->updateFn->debugInfo && loop->updateFn->debugInfo->result ) {
+            auto rt = loop->updateFn->debugInfo->result->type;
+            if ( rt == Type::tBool ) {
+                keepGoing = cast<bool>::to(res);            // bool update(): false stops the loop
+            } else if ( rt == Type::tInt ) {
+                keepGoing = cast<int32_t>::to(res) != 0;    // int update(): 0 stops the loop
+            }
+        }
+        // void update(): runs until the page closes or the next run stops it.
+        if ( !keepGoing ) stop_browser_loop();
+    }
+
+    // True ⇒ the program was launched as a browser loop (Context persisted, main
+    // loop installed, or init() threw and was reported). False ⇒ run single-shot main().
+    bool start_browser_loop ( ContextPtr & pctx, ModuleGroup & mg ) {
+        auto updateFn = pick_lifecycle_fn(pctx.get(), "update", mg);
+        if ( !updateFn ) return false;
+        auto initFn = pick_lifecycle_fn(pctx.get(), "init", mg);
+        auto shutdownFn = pick_lifecycle_fn(pctx.get(), "shutdown", mg);
+        pctx->restart();
+        if ( initFn ) {
+            pctx->evalWithCatch(initFn, nullptr);
+            if ( auto ex = pctx->getException() ) {
+                tout << "EXCEPTION in init(): " << ex << " at " << pctx->exceptionAt.describe() << "\n";
+                return true;    // reported; do not fall back to main(), do not start the loop
+            }
+        }
+        auto loop = new WebLoop();      // lives until the next run stops it (stop_browser_loop)
+        loop->ctx = pctx;               // shared_ptr copy keeps the Context alive past return
+        loop->updateFn = updateFn;
+        loop->shutdownFn = shutdownFn;
+        g_activeWebLoop = loop;
+        emscripten_set_main_loop_arg(web_loop_tick, loop, 0, false);    // 0 = rAF; false = no unwind
+        return true;
+    }
+}
+#endif
+
 // returns process exit code:
 //   0 on success
 //   non-zero from int main, or 1 on compile/simulate/verify/exception failure
@@ -247,6 +347,12 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     // captures below this frame skip re-walking ancestors. No-op when
     // DAS_TRACK_ALLOC is off or on non-Win64.
     das::AllocTrackingLandmark _alloc_tracker_landmark;
+#ifdef __EMSCRIPTEN__
+    // A previous graphics program may have installed a browser loop that is still
+    // running (and still owns the single GLFW window). Tear it down before running
+    // a new program, else its glfwCreateWindow aborts. No-op when none is active.
+    stop_browser_loop();
+#endif
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
@@ -324,6 +430,13 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             } else if ( program->thisModule->isModule ) {
                 tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else {
+#ifdef __EMSCRIPTEN__
+                // If the program exposes update(), run it as a browser main-loop
+                // (the Context is persisted off the stack) instead of single-shot main().
+                if ( start_browser_loop(pctx, dummyGroup) ) {
+                    return 0;
+                }
+#endif
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
                 das::vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {

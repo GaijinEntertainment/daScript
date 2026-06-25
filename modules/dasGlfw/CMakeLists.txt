@@ -1,7 +1,64 @@
 IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_GLFW_DISABLED)))
     SET(DAS_GLFW_INCLUDED TRUE)
     MESSAGE(STATUS "dasGlfw module included.")
-	SET(DAS_GLFW_DIR ${CMAKE_SOURCE_DIR}/modules/dasGlfw)
+	# CMAKE_CURRENT_LIST_DIR (this file's own dir) rather than
+	# ${CMAKE_SOURCE_DIR}/modules/dasGlfw: in the web build the top-level source
+	# dir is web/, so the CMAKE_SOURCE_DIR form resolved to web/modules/dasGlfw.
+	# CMAKE_CURRENT_LIST_DIR is the repo's modules/dasGlfw on both desktop and web.
+	SET(DAS_GLFW_DIR ${CMAKE_CURRENT_LIST_DIR})
+	SET(DAS_GLFW_BIND_DIR ${DAS_GLFW_DIR})
+
+	# libDasModuleGlfw binding sources — the generated C++ wrappers that call glfw*
+	# directly. Shared verbatim by the desktop and web branches below; the ~11
+	# functions emcc's library_glfw.js does not implement are #ifndef __EMSCRIPTEN__-
+	# guarded inside the generated code, so the same TU set compiles for both.
+	SET(DAS_GLFW_BIND_MODULE_SRC
+		${DAS_GLFW_BIND_DIR}/src/aot_dasGLFW.h
+		${DAS_GLFW_BIND_DIR}/src/cb_dasGLFW.h
+		${DAS_GLFW_BIND_DIR}/src/need_dasGLFW.h
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.h
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.cpp
+	# user include
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.main.cpp
+	# generated binding includes
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.alias.add.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.dummy.add.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.add.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.class.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.decl.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.decl.cast.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.add.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.postadd.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.class.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.decl.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.impl.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.cast.inc
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.const.inc
+	# generated functions
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_1.cpp
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_2.cpp
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_3.cpp
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_4.cpp
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_5.cpp
+	)
+
+	IF(EMSCRIPTEN)
+		# ===== Web (emscripten) =====
+		# Stock GLFW 3.4 has no web backend, so we do NOT build it from source.
+		# emcc's -sUSE_GLFW=3 (set in web/CMakeLists.txt) supplies the glfw* symbols
+		# at link time; the vendored 3.4 headers in web_include/ give the C++ binder
+		# its type/enum/struct declarations. Static module only — the wasm build is a
+		# monolith with no dynamic .shared_module loading, so there is no GLFW3/GLFW3_DYN
+		# ExternalProject, no find_package(OpenGL), and no DLL staging here.
+		MESSAGE(STATUS "dasGlfw: emscripten/web build (link-time -sUSE_GLFW=3, no GLFW source build).")
+		SET(GLFW_INCLUDE_DIR ${DAS_GLFW_DIR}/web_include)
+		ADD_MODULE_CPP(dasGLFW)
+		ADD_MODULE_DAS(glfw dasglfw glfw_boost)
+		ADD_MODULE_DAS(live dasglfw glfw_live)
+		ADD_DAS_STATIC_MODULE_LIB(libDasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC})
+		TARGET_INCLUDE_DIRECTORIES(libDasModuleGlfw PRIVATE ${GLFW_INCLUDE_DIR})
+		SETUP_CPP11(libDasModuleGlfw)
+	ELSE()
 	SET(GLFW_INCLUDE_DIR ${DAS_GLFW_DIR}/glfw/$<CONFIG>/include)
 
 	SET(GLFW_STATIC_LIB_PATH ${DAS_GLFW_DIR}/glfw/$<CONFIG>)
@@ -106,38 +163,6 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		COMMENT "Copying GLFW LICENSE to ${DAS_GLFW_DIR}"
 	)
 
-	SET(DAS_GLFW_BIND_DIR ${DAS_GLFW_DIR})
-
-	# libDasModuleGlfw
-	SET(DAS_GLFW_BIND_MODULE_SRC
-		${DAS_GLFW_BIND_DIR}/src/aot_dasGLFW.h
-		${DAS_GLFW_BIND_DIR}/src/cb_dasGLFW.h
-		${DAS_GLFW_BIND_DIR}/src/need_dasGLFW.h
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.h
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.cpp
-	# user include
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.main.cpp
-	# generated binding includes
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.alias.add.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.dummy.add.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.add.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.class.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.decl.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.enum.decl.cast.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.add.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.postadd.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.class.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.decl.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.impl.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.struct.cast.inc
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.const.inc
-	# generated functions
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_1.cpp
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_2.cpp
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_3.cpp
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_4.cpp
-		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_5.cpp
-	)
 	ADD_MODULE_CPP(dasGLFW)
 	ADD_MODULE_DAS(glfw dasglfw glfw_boost)
 	ADD_MODULE_DAS(live dasglfw glfw_live)
@@ -278,5 +303,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
     )
 
 	install(FILES ${DAS_GLFW_DIR}/GLFW.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
+
+	ENDIF() # IF(EMSCRIPTEN) ... ELSE() [desktop GLFW-from-source]
 
 ENDIF()

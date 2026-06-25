@@ -920,10 +920,19 @@ namespace das {
             if ( !program->failed() ) {
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
-                    program->thisModule->functions.foreach([&](auto && fn) {
-                        fn->notInferred();
-                    });
-                    goto restartInfer;
+                    // A patchAnnotations() pass can both mutate the AST (astChanged) AND record a
+                    // deliberate error -- either a patch() returning false or a macro_error() raised
+                    // inside it. Re-inferring would clear program->errors at the top of the next infer
+                    // pass (inferTypes), silently dropping that error and letting a broken program
+                    // compile (this is exactly how a fail-closed shader bind guard once shipped a no-op
+                    // bind). So only restart infer when the patch pass stayed clean; otherwise fall
+                    // through and let the recorded error surface as a compile failure.
+                    if ( !program->failed() ) {
+                        program->thisModule->functions.foreach([&](auto && fn) {
+                            fn->notInferred();
+                        });
+                        goto restartInfer;
+                    }
                 }
             }
             gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "infer", logs);

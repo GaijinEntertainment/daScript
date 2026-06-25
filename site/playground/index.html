@@ -26,6 +26,24 @@
     <link rel="stylesheet" href="../files/docsearch.css" />
     <script src="https://cdn.jsdelivr.net/npm/@docsearch/js@3" defer></script>
     <script src="../files/docsearch.js" defer></script>
+
+    <!-- Graphics canvas: force a true 4:3 box (matching the 640x480 drawing
+         buffer the shader's aspect correction assumes) so the render isn't
+         stretched and rotations trace circles, not ovals. !important beats the
+         non-important inline width/height emscripten's GLFW sets on the canvas.
+         Text output sits below it (#output), so a graphics program can both
+         draw and print(). -->
+    <style>
+      #canvas {
+        display: none;
+        background: #000;
+        border: 1px solid #444;
+        margin-top: 20px;
+        margin-bottom: 6px;
+      }
+      #canvas.is-graphics { display: block; }
+      #output.with-canvas { height: 40vh; }
+    </style>
 </head>
 <body onload="pageInit()">
 
@@ -105,6 +123,7 @@
         </div>
         <div class="main_col">
             <div class="main_col_part">
+                <canvas id="canvas" width="640" height="480" tabindex="-1"></canvas>
                 <div id="output"></div>
             </div>
         </div>

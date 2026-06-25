@@ -16,6 +16,22 @@ pageInit = function () {
     editorCode = document.getElementById("code");
     editorOutput = document.getElementById("output");
 
+    // Bind the WebGL canvas so emscripten's GL (glfwCreateWindow → WebGL2) renders
+    // into it. AUTO-DETECT graphics vs text: hook getContext so the canvas reveals
+    // itself the instant ANY program creates a WebGL context on it — the precise,
+    // program-driven signal (works for pasted/edited code, not just flagged
+    // samples). The data.json "graphics" flag is only a pre-run hint for the
+    // sample picker. See showCanvas() / selectSample().
+    var glCanvas = document.getElementById("canvas");
+    if (glCanvas && typeof Module === "object" && Module) {
+        Module.canvas = glCanvas;
+        const origGetContext = glCanvas.getContext.bind(glCanvas);
+        glCanvas.getContext = function(type) {
+            if (/webgl/i.test(String(type))) showCanvas(true);
+            return origGetContext.apply(glCanvas, arguments);
+        };
+    }
+
     sampleList["examples"] = document.getElementById("examples");
 
 
@@ -102,6 +118,52 @@ function deriveJitName(files) {
     return files[0].split('/').pop().replace(/\.das$/, '');
 }
 
+// Some samples (e.g. the OpenGL deferred-shading tutorial) load external assets
+// — a mesh + PBR texture set — via plain fopen(). On the web fopen() reads
+// MEMFS, which starts empty, so the bytes must be fetched and written first.
+// A sample opts in with a "<file>.das.assets.json" sidecar next to it: an array
+// of repo-relative paths. We fetch each and write it into MEMFS at "/<path>",
+// the exact cwd-relative path the tutorial's fopen() expects — the one and only
+// web-vs-desktop delta (desktop fopen hits real disk). Mirrors the standalone
+// gl_tutorial.html harness used to develop the rung.
+var currentAssetsUrl = null;
+var __preloadedManifests = new Set();
+
+function deriveAssetsUrl(files) {
+    if (!files || files.length !== 1) return null;
+    return './samples/' + files[0] + '.assets.json';
+}
+
+// Fetch the current sample's asset manifest (if any) and populate MEMFS. Idempotent
+// per manifest URL — MEMFS persists for the page session, so the (potentially large)
+// fetch happens once, not on every Run. Absent sidecar / a 404 is the normal case.
+async function preloadSampleAssets() {
+    if (!currentAssetsUrl || __preloadedManifests.has(currentAssetsUrl)) return;
+    if (typeof FS === 'undefined') return;
+    let assets;
+    try {
+        const r = await fetch(currentAssetsUrl);
+        if (!r.ok) { __preloadedManifests.add(currentAssetsUrl); return; }
+        assets = await r.json();
+    } catch (e) {
+        return; // transient network error — leave un-cached so the next Run retries
+    }
+    try {
+        for (const rel of assets) {
+            const resp = await fetch('./' + rel);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' fetching ' + rel);
+            const buf = new Uint8Array(await resp.arrayBuffer());
+            const path = '/' + rel;
+            try { FS.mkdirTree(path.substring(0, path.lastIndexOf('/'))); } catch (e) { /* exists */ }
+            FS.writeFile(path, buf);
+        }
+        __preloadedManifests.add(currentAssetsUrl);
+        printOutput('preloaded ' + assets.length + ' asset(s) for this sample', '#9fe');
+    } catch (e) {
+        printOutput('asset preload failed: ' + (e && e.message ? e.message : e), '#ff9393');
+    }
+}
+
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
@@ -132,6 +194,34 @@ function updateEngineAvailability(name) {
         });
 }
 
+// Force the canvas to a true 4:3 display box matching its 640x480 drawing buffer,
+// so the shader's aspect correction is right and rotations trace circles, not
+// ovals. Set inline with !important — the highest-priority source — because the
+// column's stylesheet otherwise stretches the canvas to ~80vh (portrait). Clamped
+// to the column width; re-applied on resize.
+function fitCanvas() {
+    const c = document.getElementById("canvas");
+    if (!c || !c.classList.contains("is-graphics")) return;
+    const avail = Math.min((c.parentElement ? c.parentElement.clientWidth : 640), 640);
+    c.style.setProperty("width", avail + "px", "important");
+    c.style.setProperty("height", Math.round(avail * 3 / 4) + "px", "important");
+}
+window.addEventListener("resize", fitCanvas);
+
+// Show/hide the WebGL canvas. Graphics programs render into it (item 0b's browser
+// loop); text programs keep it hidden. The output panel shrinks to share the
+// column so a graphics program can both draw (canvas) and print() (output below).
+function showCanvas(show) {
+    const c = document.getElementById("canvas");
+    if (c) {
+        c.classList.toggle("is-graphics", show);
+        if (show) fitCanvas();
+        else { c.style.removeProperty("width"); c.style.removeProperty("height"); }
+    }
+    const o = document.getElementById("output");
+    if (o) o.classList.toggle("with-canvas", show);
+}
+
 selectSample = function(type, id) {
     const sel = sampleList[type];
     if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
@@ -139,8 +229,12 @@ selectSample = function(type, id) {
     if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
         // Multi-file samples ship as files[] — load all in parallel, then hand
         // the bundle to the loader (single editor today, tab strip in phase 3).
+        // Hide the canvas on every sample switch; a graphics program re-reveals
+        // it on Run when it creates a WebGL context (the getContext hook).
+        showCanvas(false);
         const files = samplesData[type][vv].files;
         currentJitName = deriveJitName(files);
+        currentAssetsUrl = deriveAssetsUrl(files);
         updateEngineAvailability(currentJitName);
         Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
@@ -283,7 +377,7 @@ function callMainAndFlush(args) {
     }
 }
 
-runCode = function() {
+runCode = async function() {
     syncUrlToState();
     if (selectedEngine() === 'jit') {
         if (!currentJitName) {
@@ -299,6 +393,13 @@ runCode = function() {
         printOutput('daslang is still loading, please wait…', '#ff9393');
         return;
     }
+    // Reset before each run: a text program leaves the canvas hidden; a graphics
+    // program re-reveals it the instant it creates a WebGL context (the
+    // getContext hook in pageInit). Detection is program-driven, not flagged.
+    showCanvas(false);
+    // Populate MEMFS with any external assets this sample needs (mesh/textures)
+    // before the program's fopen() runs. No-op for samples without a manifest.
+    await preloadSampleAssets();
     if (syncMemFsFromState()) {
         callMainAndFlush(['main.das']);
         return;

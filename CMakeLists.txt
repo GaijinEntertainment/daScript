@@ -543,6 +543,12 @@ ENDMACRO()
 
 ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
 
+# CPU path tracer — headless render smoke (no GPU/GUI). Compat gate for the OpenGL<->Vulkan shader
+# harmonization arc (modules/dasOpenGL/HARMONIZATION_PLAN.md section 8.1): the GL path tracers share
+# this CPU rail, so a regression in the shared shader builtins surfaces here. exe=FALSE → interpreted
+# run only (the path_tracer AOT executable already covers the AOT-compile path).
+ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer.das" FALSE)
+
 FUNCTION(ADD_MODULE_CPP cpp)
     FILE(APPEND ${DAS_MODULES_NEED_INC}.temp "NEED_MODULE(Module_${cpp});\n")
     FILE(APPEND ${DAS_MODULES_DECLARE_INC}.temp "DECLARE_MODULE(Module_${cpp});\n")

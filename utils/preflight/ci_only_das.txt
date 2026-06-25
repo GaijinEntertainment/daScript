@@ -10,3 +10,6 @@
 # lying around and report phantom errors.
 modules/dasOpenGL/opengl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
 modules/dasOpenGL/glsl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
+# GL path tracers (OpenGL<->Vulkan harmonization compat, HARMONIZATION_PLAN.md section 8.1): GLFW-gated
+# and need a GPU to run, so compile-only. The CPU rail (toy_path_tracer.das) is a run gate via ADD_EXAMPLE_RUN.
+examples/pathTracer/*opengl*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF

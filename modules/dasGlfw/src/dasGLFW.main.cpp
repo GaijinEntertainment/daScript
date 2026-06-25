@@ -74,6 +74,10 @@ namespace das {
 // loader is off GLFW's default dlopen search path. glfw3.h guards its prototype
 // behind VK_VERSION_1_0 (i.e. needs vulkan.h, which this module does not include),
 // so forward-declare it with an ABI-compatible loader type and bind a void* shim.
+// emscripten's GLFW (library_glfw.js) provides no Vulkan loader, and the web
+// target has no Vulkan — leave glfwInitVulkanLoader unbound there (fail-closed,
+// matching the binder's emscripten_skip_function for the other GLFW gaps).
+#ifndef __EMSCRIPTEN__
 extern "C" {
     typedef void * (* DAS_vkGetInstanceProcAddr)(void * instance, const char * name);
     GLFWAPI void glfwInitVulkanLoader(DAS_vkGetInstanceProcAddr loader);
@@ -84,6 +88,7 @@ namespace das {
         glfwInitVulkanLoader((DAS_vkGetInstanceProcAddr) loader);
     }
 }
+#endif
 
 // Native (Cocoa) fullscreen via NSWindow toggleFullScreen:, reached through the objc runtime so this
 // stays a plain .cpp (no ObjC++). A borderless window can't get a real macOS fullscreen Space — this is
@@ -482,8 +487,10 @@ namespace das {
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwIsNativeFullscreen)>(*this, lib, "glfwIsNativeFullscreen",SideEffects::worstDefault, "DAS_glfwIsNativeFullscreen")
             ->args({"window"});
+#ifndef __EMSCRIPTEN__
         addExtern<DAS_BIND_FUN(DAS_glfwInitVulkanLoader)>(*this, lib, "glfwInitVulkanLoader",SideEffects::worstDefault, "DAS_glfwInitVulkanLoader")
             ->args({"loader"});
+#endif
     }
 
 	ModuleAotType Module_dasGLFW::aotRequire ( TextWriter & tw ) const {
