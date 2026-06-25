@@ -167,6 +167,19 @@ jobs:
             # .wasm is reachable, so dropping the .wasm here permanently
             # disables the toggle in production.
             cp -r site/playground/samples _site/playground/samples 2>/dev/null || true
+            # Tutorial assets (mesh + PBR textures + HDRI) fetched at runtime by
+            # samples that ship a .das.assets.json manifest (the OpenGL
+            # deferred-shading rung). stage_site_playground staged them under
+            # site/playground/tutorials/_assets; the manifest names them at the
+            # repo-relative path tutorials/_assets/..., so preserve that layout.
+            # Without this the manifest 200s but every asset fetch 404s — so make
+            # a missing dir loud (warn) rather than silently shipping a broken
+            # rung; an actual copy failure fails the step under set -eo pipefail.
+            if [ -d site/playground/tutorials ]; then
+                cp -r site/playground/tutorials _site/playground/tutorials
+            else
+                echo "WARNING: site/playground/tutorials missing — manifest-driven samples (e.g. the OpenGL deferred rung) will 404 their assets."
+            fi
             # Our Forge-skinned playground/index.html + skin CSS + init shim take precedence.
             # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
             # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`
