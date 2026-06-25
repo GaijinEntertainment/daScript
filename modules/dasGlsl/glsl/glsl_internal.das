@@ -999,11 +999,11 @@ class GlslExport : AstVisitor {
         let t = arg._type
         if (t.baseType != Type.tStructure || t.structType == null) return false
         // Skip the UBO path (fall through to the loose `uniform Struct name;` form + by-name binder) for
-        // sampler/image markers (they bind as textures, not UBOs) and for structs with a float3x3 /
-        // composite field that can't pack flat. The host bind macro consults the SAME predicate
-        // (std140_block_is_simple) so emitter and binder agree on which blocks pack.
+        // sampler/image markers (they bind as textures, not UBOs) and for blocks with no physical std140
+        // layout (a bool / non-numeric field). The host bind macro consults the SAME predicate
+        // (std140_block_is_packable) so emitter and binder agree on which blocks pack.
         let snm = "{t.structType.name}"
-        if (snm |> find("sampler") != -1 || snm |> find("image") != -1 || !std140_block_is_simple(t.structType)) return false
+        if (snm |> find("sampler") != -1 || snm |> find("image") != -1 || !std140_block_is_packable(t.structType)) return false
         // Block name = <instance>_ubo, NOT the struct type name: the struct type is still emitted as a
         // standalone GLSL `struct` (it may be used elsewhere), and a block sharing that name would
         // collide. Per-instance keeps two uniforms of the same struct type distinct, and keeps a global

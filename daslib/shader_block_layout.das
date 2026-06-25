@@ -223,27 +223,78 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
     return (ok = true, size = off, align = max_align)
 }
 
-//! True iff every field of the block packs into std140 with a single memcpy at its offset: a 32-bit
-//! scalar / vector / float4x4. False for float3x3 / float3x4 (std140 pads each column to vec4 ->
-//! per-column repack), fixed-arrays and nested structs (composite -> stride / recursion), and any block
-//! compute_block_layout rejects. A backend uses this to choose the std140 UBO pack path vs a loose
-//! by-name fallback for a given @uniform block, and the emitter + host binder MUST agree by both
-//! consulting it. (The simple-field restriction is the current GL UBO binder's scope, not a std140 law.)
+//! True iff the block has a physical std140 layout — i.e. compute_block_layout succeeds. That covers
+//! every supported field shape: 32-bit scalar / vector / matrix (float4x4 flat, float3x3 / float3x4
+//! per-column), nested structs, and fixed-arrays of those. False only for blocks with a bool or other
+//! non-numeric field (no std140 layout). A backend uses this to choose the std140 UBO pack path vs a
+//! loose by-name fallback for a given @uniform block, and the emitter + host binder MUST agree by both
+//! consulting it.
 [macro_function]
-def public std140_block_is_simple(st : Structure?) : bool {
+def public std140_block_is_packable(st : Structure?) : bool {
     var fields : array<BlockField>
     var errors : array<string>
     let layout = compute_block_layout("", st, fields, errors)
-    var simple = layout.ok
-    if (simple) {
-        for (f in fields) {
-            if (f.is_composite || (f.is_matrix && f.matrix_width != 4)) {
-                simple = false
-                break
+    delete fields
+    delete errors
+    return layout.ok
+}
+
+//! One std140 leaf write produced by std140_block_writes: a scalar / vector value (a plain field, a
+//! matrix COLUMN, or an array ELEMENT) and its std140 byte offset within the block. A backend's bind
+//! macro emits one memcpy-style write per entry — GL std140_set, dasVulkan write_field — each copying
+//! sizeof(value) bytes. No backend needs matrix / array / nesting knowledge: the decomposition lives in
+//! std140_block_writes, so every rail packs the same bytes by construction.
+struct public Std140Write {
+    offset : int             //!< std140 byte offset of this leaf within the block
+    access : ExpressionPtr   //!< expression yielding the scalar/vector leaf value (field / column / element)
+}
+
+//! Decompose an interface block into a flat list of leaf writes (Std140Write) — the single shared
+//! std140 packing walk for every shader backend's host binder. float3x3 / float3x4 split into per-column
+//! writes (column c at offset + c*16; daslang stores width-wide packed columns, std140 pads each to a
+//! vec4, and the per-column memcpy gives that padding for free); float4x4 stays one whole-matrix write
+//! (its columns are already vec4-wide so a single memcpy is std140-correct); fixed-arrays split per
+//! element at the std140 stride; nested structs recurse; array-of-struct recurses per element. `access`
+//! is the accessor for the block instance (e.g. an ExprVar of the @uniform global), cloned per leaf;
+//! each emitted access node is moved by the caller into exactly one backend write call. Assumes the
+//! block is std140-packable (std140_block_is_packable) — array-of-matrix / bool fields are rejected
+//! upstream by compute_block_layout, so this never sees an unsupported shape.
+[macro_function]
+def public std140_block_writes(st : Structure?; access : ExpressionPtr; baseOffset : int; var out : array<Std140Write>) {
+    var fields : array<BlockField>
+    var errors : array<string>
+    compute_block_layout("", st, fields, errors)
+    for (i in range(length(fields))) {
+        let f = fields[i]
+        let ftype = st.fields[i]._type
+        let off = baseOffset + f.offset
+        var faccess = new ExprField(at = access.at, value <- clone_expression(access), name := st.fields[i].name)
+        if (f.is_matrix && f.matrix_width != 4) {
+            out |> reserve(length(out) + f.matrix_cols)
+            for (c in range(f.matrix_cols)) {
+                var col = new ExprAt(at = access.at, subexpr <- clone_expression(faccess),
+                    index <- new ExprConstInt(at = access.at, value = c))
+                out |> push(Std140Write(offset = off + c * 16, access = col))
             }
+        } elif (f.is_array && f.is_struct) {
+            for (e in range(f.array_count)) {
+                var el = new ExprAt(at = access.at, subexpr <- clone_expression(faccess),
+                    index <- new ExprConstInt(at = access.at, value = e))
+                std140_block_writes(ftype.firstType.structType, el, off + e * f.array_stride, out)
+            }
+        } elif (f.is_array) {
+            out |> reserve(length(out) + f.array_count)
+            for (e in range(f.array_count)) {
+                var el = new ExprAt(at = access.at, subexpr <- clone_expression(faccess),
+                    index <- new ExprConstInt(at = access.at, value = e))
+                out |> push(Std140Write(offset = off + e * f.array_stride, access = el))
+            }
+        } elif (f.is_struct) {
+            std140_block_writes(ftype.structType, faccess, off, out)
+        } else {
+            out |> push(Std140Write(offset = off, access = faccess))
         }
     }
     delete fields
     delete errors
-    return simple
 }
