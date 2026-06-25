@@ -10,6 +10,10 @@
       "files" : ["examples/gl_02_mandelbrot.das"]
     },
     {
+      "name" : "OpenGL: SDF raymarcher",
+      "files" : ["examples/gl_03_sdf.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
