@@ -34,6 +34,10 @@
       "files" : ["examples/gl_08_shadow.das"]
     },
     {
+      "name" : "OpenGL: MSAA (multisample + blit resolve)",
+      "files" : ["examples/gl_09_msaa.das"]
+    },
+    {
       "name" : "OpenGL: HDR + bloom (float FBO)",
       "files" : ["examples/gl_11_hdr.das"]
     },
