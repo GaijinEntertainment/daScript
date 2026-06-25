@@ -1042,6 +1042,13 @@ class GlslExport : AstVisitor {
                     if (outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
+                // GLSL ES 3.00 REQUIRES an explicit layout(location=N) on every fragment output when
+                // there are multiple (MRT / deferred G-buffer). Mirror the vertex branch so a
+                // @out @location=N fragment output emits its location (valid on #version 330 too).
+                let argLoc = arg.annotation |> find_arg("location")
+                if (argLoc is tInt) {
+                    *writer |> write("layout(location={argLoc as tInt}) "); needInit = false
+                }
                 if (arg.annotation |> find_arg("in") is tBool) {
                     *writer |> write("in "); needInit = false
                 }

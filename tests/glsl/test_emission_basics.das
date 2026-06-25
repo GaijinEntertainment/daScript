@@ -53,6 +53,21 @@ def discard_fragment {
     b_frag_color = float4(1.0, 1.0, 1.0, 1.0)
 }
 
+// MRT (deferred G-buffer): GLSL ES 3.00 / WebGL2 REQUIRES an explicit layout(location=N) on every
+// fragment output when there is more than one. The emitter's vertex branch already carried the
+// @location; the fragment branch did not, so a multi-output fragment shader was rejected in the
+// browser. Each @out @location=N fragment output must now emit its location qualifier.
+var @out @location = 0 mrt_g0 : float4
+var @out @location = 1 mrt_g1 : float4
+var @out @location = 2 mrt_g2 : float4
+
+[fragment_program(name="mrt_fs_glsl")]
+def mrt_fragment {
+    mrt_g0 = float4(b_vcolor, 1.0)
+    mrt_g1 = float4(0.0, 1.0, 0.0, 1.0)
+    mrt_g2 = float4(1.0, 0.0, 0.0, 1.0)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
@@ -86,5 +101,12 @@ def test_glsl_emission_basics(t : T?) {
         t |> success(has(discard_fs_glsl, "_discard();"), "discard() lowers to a _discard() call")
         // negative control: discard is fragment-only, so the vertex stage must NOT carry the helper
         t |> success(!has(basics_vs_glsl, "void _discard ( )"), "no _discard helper in the vertex stage")
+    }
+    t |> run("multiple fragment outputs carry explicit layout(location=N) (MRT / WebGL2)") <| @(t : T?) {
+        t |> success(has(mrt_fs_glsl, "layout(location=0) out vec4 mrt_g0"), "MRT output 0 carries its location")
+        t |> success(has(mrt_fs_glsl, "layout(location=1) out vec4 mrt_g1"), "MRT output 1 carries its location")
+        t |> success(has(mrt_fs_glsl, "layout(location=2) out vec4 mrt_g2"), "MRT output 2 carries its location")
+        // negative control: a single bare @out (no @location) stays unqualified
+        t |> success(!has(basics_fs_glsl, "layout(location"), "single fragment output has no location qualifier")
     }
 }
