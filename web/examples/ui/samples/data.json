@@ -6,6 +6,10 @@
       "files" : ["examples/gl_01_triangle.das"]
     },
     {
+      "name" : "OpenGL: mandelbrot",
+      "files" : ["examples/gl_02_mandelbrot.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },

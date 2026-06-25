@@ -27,3 +27,4 @@ the portable floor made visible.
    :maxdepth: 1
 
    01_triangle.rst
+   02_mandelbrot.rst
