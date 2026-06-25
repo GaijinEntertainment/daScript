@@ -5,7 +5,7 @@ tags:
     - daScript
 ---
 
-From dascript.org "... is high-level, statically strong typed scripting language, designed to be fast ..."
+From daslang.io "... is high-level, statically strong typed scripting language, designed to be fast ..."
 
 With an emphasis on fast. Performance first, last, and foremost.
 

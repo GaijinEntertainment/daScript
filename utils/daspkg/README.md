@@ -1,6 +1,6 @@
 # daspkg — daslang package manager
 
-Package manager for [daslang](https://dascript.org/). Installs, updates, builds, and manages daslang modules from git repositories or a central package index.
+Package manager for [daslang](https://daslang.io/). Installs, updates, builds, and manages daslang modules from git repositories or a central package index.
 
 ## Quick start
 

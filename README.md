@@ -5,7 +5,7 @@ Daslang (formerly daScript) is a high-performance, statically typed programming 
 [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)
 [![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
 
-[Website](https://dascript.org/) · [Documentation](https://dascript.org/doc/) · [Blog](https://borisbat.github.io/dascf-blog) · [Try Online](https://gaijinentertainment.github.io/try-dascript/)
+[Website](https://daslang.io/) · [Documentation](https://daslang.io/doc/) · [Blog](https://borisbat.github.io/dascf-blog) · [Try Online](https://gaijinentertainment.github.io/try-dascript/)
 
 ## Why Daslang?
 
