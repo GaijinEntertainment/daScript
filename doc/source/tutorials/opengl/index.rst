@@ -29,3 +29,4 @@ the portable floor made visible.
    01_triangle.rst
    02_mandelbrot.rst
    03_sdf.rst
+   04_cube.rst

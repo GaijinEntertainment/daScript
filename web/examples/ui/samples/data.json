@@ -14,6 +14,10 @@
       "files" : ["examples/gl_03_sdf.das"]
     },
     {
+      "name" : "OpenGL: synthwave cube",
+      "files" : ["examples/gl_04_cube.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
