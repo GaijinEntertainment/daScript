@@ -46,6 +46,14 @@
       "files" : ["examples/gl_11_hdr.das"]
     },
     {
+      "name" : "Audio: strudel synth arpeggio",
+      "files" : ["examples/audio_strudel.das"]
+    },
+    {
+      "name" : "Audio: sine beep",
+      "files" : ["examples/audio_sine.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },

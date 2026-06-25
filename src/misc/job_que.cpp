@@ -327,10 +327,21 @@ namespace das {
     }
 
     void JobStatus::Wait() {
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+        // Single-threaded wasm (no -pthread): nothing can decrement mRemaining
+        // except the calling thread, which is the very thread blocked here — a
+        // condition_variable wait would deadlock forever. join()/Wait() exist to
+        // fence against a worker thread that does not exist in this build, so the
+        // wait is a no-op. (A miniaudio Web Audio callback that would otherwise
+        // drain a Stream/LockBox runs as a separate main-thread task and likewise
+        // cannot make progress while we block, so there is nothing to wait for.)
+        return;
+#else
         unique_lock<mutex> lock(mCompleteMutex);
         mCond.wait(lock, [this] {
             return mRemaining==0;
         });
+#endif
     }
 
     bool JobStatus::isReady() {

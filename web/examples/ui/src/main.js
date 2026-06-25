@@ -8,6 +8,38 @@ var code;
 var sampleList = {"examples":null};
 
 
+// --- Audio autoplay unlock -------------------------------------------------
+// dasAudio programs (miniaudio's emscripten Web Audio / ScriptProcessor backend)
+// create an AudioContext deep inside the wasm run. The Run handler awaits
+// (preloadSampleAssets) before callMain, so the context is born after the click's
+// synchronous frame — browsers would leave it 'suspended'. We wrap AudioContext to
+// resume it on creation (the Run click gives sticky activation, so resume() is
+// allowed), and also resume on any later gesture. No-op for non-audio programs.
+// Installed at script-eval time, BEFORE pageInit loads daslang_static.js, so the
+// wasm's `new AudioContext()` sees the wrapper.
+(function installAudioUnlock() {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (!OrigAC) return;
+    var ctxs = new Set();
+    var Wrapped = function () {
+        var c = new OrigAC(...arguments);
+        ctxs.add(c);
+        try { c.resume(); } catch (e) {}
+        return c;
+    };
+    Wrapped.prototype = OrigAC.prototype;
+    window.AudioContext = Wrapped;
+    if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
+    var resumeAll = function () {
+        ctxs.forEach(function (c) {
+            if (c.state === "closed") ctxs.delete(c);          // drop dead contexts so the set can't grow across runs
+            else if (c.state === "suspended") c.resume().catch(function () {});
+        });
+    };
+    ["pointerdown", "keydown", "click"].forEach(function (e) { document.addEventListener(e, resumeAll, true); });
+})();
+
+
 pageInit = function () {
 
     $.getScript("daslang_static.js")

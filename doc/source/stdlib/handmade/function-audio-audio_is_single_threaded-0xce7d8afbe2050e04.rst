@@ -1,0 +1,1 @@
+Returns whether this audio system came up single-threaded — the device callback (and audio command processing) runs on the main thread with no separate audio thread. Recorded when the device is initialized (audio_system_create / with_audio_system). The teardown uses it to decide whether it must drain the command queue itself (single-threaded) or let the audio thread do it.

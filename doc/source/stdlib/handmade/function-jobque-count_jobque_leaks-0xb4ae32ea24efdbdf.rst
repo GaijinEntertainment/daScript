@@ -1,0 +1,1 @@
+Returns the number of JobStatus, Channel, LockBox, Stream and Feature objects currently alive (globally tracked). Compare this count before and after a teardown to assert that a job/channel/lockbox/stream cycle leaked nothing — an absolute value is not meaningful because supporting infrastructure may hold some.

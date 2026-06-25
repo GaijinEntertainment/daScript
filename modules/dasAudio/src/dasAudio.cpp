@@ -253,6 +253,29 @@ static Func g_mixer_function = (void *) nullptr;
 static bool g_mixer_initialized = false;
 static int g_rate = 0;
 static int g_channels = 0;
+// Null-backend mode (for headless tests / CI): force miniaudio's ma_backend_null
+// so the device + audio thread run without real hardware. Set via sound_set_null_device.
+static bool g_force_null_backend = false;
+static ma_context g_null_context;
+static bool g_null_context_inited = false;
+
+// Recorded at dasAudio_init: whether this audio system came up single-threaded —
+// i.e. the device callback (command_processor) runs on the MAIN thread, with no
+// separate audio thread to drain the command queue. The teardown reads this to
+// decide whether it must drain the queue itself (single-thread) or wait for the
+// audio thread (multi-thread, the original path). Today it's the emscripten
+// no-pthread build (ScriptProcessor callback on main); kept as a runtime flag,
+// not a compile-time check at the call sites, so the audio code asks "how was I
+// initialized" rather than "what platform is this".
+static bool g_audio_single_threaded = false;
+
+void dasAudio_set_null_device ( bool enabled ) {
+    g_force_null_backend = enabled;
+}
+
+bool dasAudio_is_single_threaded () {
+    return g_audio_single_threaded;
+}
 
 void on_error_log ( void * , ma_uint32 level, const char * message ) {
     if (level <= 1) {
@@ -285,6 +308,13 @@ Context & dasAudio_mixerContext ( Context * context, LineInfoArg * at ) {
 
 bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context ) {
     g_mixer_initialized = false;
+    // Record how this audio system comes up: single-threaded (device callback on
+    // the main thread, no separate audio thread) vs threaded. See g_audio_single_threaded.
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    g_audio_single_threaded = true;
+#else
+    g_audio_single_threaded = false;
+#endif
     g_rate = rate;
     g_channels = channels;
     // log
@@ -298,8 +328,20 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
     deviceConfig.sampleRate        = g_rate;
     deviceConfig.dataCallback      = data_callback;
     deviceConfig.pUserData         = NULL;
-    if ( ma_device_init(nullptr, &deviceConfig, &g_device) != MA_SUCCESS ) {
+    ma_context * pContext = nullptr;
+    if ( g_force_null_backend ) {
+        // Restrict to the null backend (timer-driven callback, no hardware).
+        ma_backend nullBackend = ma_backend_null;
+        if ( ma_context_init(&nullBackend, 1, nullptr, &g_null_context) != MA_SUCCESS ) {
+            LOG(LogLevel::error) << "failed to init null audio context.\n";
+            return false;
+        }
+        g_null_context_inited = true;
+        pContext = &g_null_context;
+    }
+    if ( ma_device_init(pContext, &deviceConfig, &g_device) != MA_SUCCESS ) {
         LOG(LogLevel::error) << "failed to open playback device.\n";
+        if ( g_null_context_inited ) { ma_context_uninit(&g_null_context); g_null_context_inited = false; }
         return false;
     }
     g_mixer_context.reset(get_clone_context(&context,uint32_t(ContextCategory::audio_context)));
@@ -308,6 +350,7 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
     g_mixer_env = daScriptEnvironment::getBound();
     if ( ma_device_start(&g_device) != MA_SUCCESS ) {
         ma_device_uninit(&g_device);
+        if ( g_null_context_inited ) { ma_context_uninit(&g_null_context); g_null_context_inited = false; }
         g_mixer_context.reset();
         return false;
     }
@@ -320,6 +363,10 @@ void dasAudio_finalize ( void ) {
         ma_device_uninit(&g_device);
         g_mixer_context.reset();
         g_mixer_initialized = false;
+    }
+    if ( g_null_context_inited ) {
+        ma_context_uninit(&g_null_context);
+        g_null_context_inited = false;
     }
 }
 
@@ -983,6 +1030,10 @@ public:
             SideEffects::modifyExternal, "dasAudio_init")->args({"mixer", "rate", "channels","context"});
         addExtern<DAS_BIND_FUN(dasAudio_finalize)>(*this, lib, "sound_finalize",
             SideEffects::modifyExternal, "dasAudio_finalize");
+        addExtern<DAS_BIND_FUN(dasAudio_set_null_device)>(*this, lib, "sound_set_null_device",
+            SideEffects::modifyExternal, "dasAudio_set_null_device")->args({"enabled"});
+        addExtern<DAS_BIND_FUN(dasAudio_is_single_threaded)>(*this, lib, "audio_is_single_threaded",
+            SideEffects::accessExternal, "dasAudio_is_single_threaded");
         addExtern<DAS_BIND_FUN(dasAudio_mixerContext),SimNode_ExtFuncCallRef>(*this, lib, "mixer_context",
             SideEffects::modifyExternal, "dasAudio_mixerContext");
         // enums
