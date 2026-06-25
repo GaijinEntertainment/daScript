@@ -100,3 +100,19 @@ def operator :=(var sampler : sampler2D; image : uint) {
 def operator :=(var sampler : sampler3D; image : uint) {
     sampler.texture3D = image
 }
+
+// The wider sampler dimensionalities (moved to shader_lingua_franca) bind a GL texture-unit handle
+// into their own GL-superset field. These complete the host-side assignment surface the portable
+// sampler-move work left half-done (it added the bind codegen + bind_sampler_cube paths but not the
+// := operators) -- the bind_uniform codegen reads <var>.textureCube / .texture2DArray / .texture2D.
+def operator :=(var sampler : samplerCube; image : uint) {
+    sampler.textureCube = image
+}
+
+def operator :=(var sampler : sampler2DArray; image : uint) {
+    sampler.texture2DArray = image
+}
+
+def operator :=(var sampler : sampler2DShadow; image : uint) {
+    sampler.texture2D = image
+}
