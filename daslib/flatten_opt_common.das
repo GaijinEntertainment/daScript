@@ -862,3 +862,26 @@ def public lane_index(comp : string) : int {
     if (comp == "z") return 2
     return 3
 }
+
+// Partition M lanes into groups of width [minWidth..4]. A tail smaller than minWidth is NOT grouped
+// (the caller leaves those lanes unpacked) — so sum(result) may be < M. A too-small tail is rebalanced
+// by shrinking the previous take when that keeps both groups >= minWidth (so M=5,minWidth=2 -> [3,2],
+// not [4]+1). Shared by the min/max reduction pack (minWidth=2) and the hadd fold (minWidth 2 or 3).
+// minWidth=2: 5 -> [3,2], 6 -> [4,2], 9 -> [4,3,2] (covers all, M>=2). minWidth=3: 5 -> [4] (+1 left),
+// 6 -> [3,3], 9 -> [4,4] (+1 left).
+def public plan_groups(M : int; minWidth : int = 2) : array<int> {
+    assert(minWidth >= 2 && minWidth <= 4, "plan_groups expects minWidth in [2..4]")   // minWidth<=0 would divide by zero below / never terminate
+    var g : array<int>
+    g |> reserve((M + minWidth - 1) / minWidth)
+    var rem = M
+    while (rem >= minWidth) {
+        var take = rem >= 4 ? 4 : rem   // nolint:PERF015 — math.min not required in this module
+        let tail = rem - take
+        if (tail > 0 && tail < minWidth && take - (minWidth - tail) >= minWidth) {
+            take = take - (minWidth - tail)
+        }
+        g |> push(take)
+        rem = rem - take
+    }
+    return <- g
+}

@@ -248,22 +248,6 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     return null
 }
 
-// Partition M lanes into width<=4 groups, never leaving a width-1 remainder (so every group packs).
-def private plan_groups(M : int) : array<int> {
-    var g : array<int>
-    g |> reserve((M + 3) / 4)
-    var rem = M
-    while (rem > 0) {
-        var take = rem >= 4 ? 4 : rem   // nolint:PERF015 — math.min not required in this module
-        if (rem - take == 1) {
-            take = take - 1
-        }
-        g |> push(take)
-        rem = rem - take
-    }
-    return <- g
-}
-
 def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : ExpressionPtr {
     return qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
 }

@@ -750,6 +750,15 @@ def public flatten_expand_lerp : bool {
 }
 
 [macro_function]
+def public flatten_hadd_pack_pairs : bool {
+    //! True when the COMPILING module sets `options _flatten_hadd_pack_pairs = true` — pack width-2
+    //! horizontal sums (`a + b`) into `hadd2` too. The default packs width >=3 only: a width-2 pack is
+    //! +1 node on a node-graph backend (a `combine2` with no offsetting add saved), but a win in cycles
+    //! on a SIMD CPU backend. COMPILE-TIME ONLY: patch code reads it once, runtime tools pass their flag.
+    return compiling_program()._options |> find_arg("_flatten_hadd_pack_pairs") ?as tBool ?? false
+}
+
+[macro_function]
 def public flatten_fold(var func : FunctionPtr; no_fast_math : bool = false; expand_lerp : bool = false) : bool {
     //! Post-infer fold pass (delegates to `fold_body`): collapse `const ? a : b`, fold identities,
     //! drop pure self-assigns. Run AFTER re-inference; returns true if anything changed. Compile-time
@@ -782,11 +791,12 @@ def public flatten_pack(var func : FunctionPtr; no_fast_math : bool = false) : b
 }
 
 [macro_function]
-def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false) : bool {
+def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false; hadd_min_width : int = 3) : bool {
     //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into
-    //! `dot(v, mask)`, re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape
-    //! back into lerp. Call on the optimized, re-inferred body; repeat until it returns false.
-    return fuse_body(func, no_fast_math)
+    //! `dot(v, mask)`, independent scalar sums into `hadd` (groups of width [hadd_min_width..4]),
+    //! re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape back into lerp.
+    //! Call on the optimized, re-inferred body; repeat until it returns false.
+    return fuse_body(func, no_fast_math, hadd_min_width)
 }
 
 def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
@@ -980,7 +990,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             // `lerp`, re-inferring to resolve the new calls; iterates (each round strictly
             // drops a `+`/`-`, so it converges), a clean round falls through to the shape check.
             set_flatten_phase(func, PHASE_FUSED)
-            if (flatten_fuse(twin, flatten_no_fast_math())) {
+            if (flatten_fuse(twin, flatten_no_fast_math(), flatten_hadd_pack_pairs() ? 2 : 3)) {
                 astChanged = true
                 return true
             }

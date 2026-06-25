@@ -189,28 +189,72 @@ def test_flatten_fold(t : T?) {
         t |> success(wn |> find("float3(2f,3f,-4f)") >= 0, "weighted/negated lanes must land in the mask: {wn}")
         delete bodies
     }
-    t |> run("hadd corpus fuses clean (test_flatten_hadd.das twins)") @(t : T?) {
+    t |> run("hadd corpus fuses clean — DEFAULT width>=3 (test_flatten_hadd.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_hadd.das")
-        t |> success(n >= 9, "expected >=9 twins, checked {n}")
+        t |> success(n >= 15, "expected >=15 twins, checked {n}")
         var bodies <- twin_bodies(t, "{root}/tests/flatten/test_flatten_hadd.das")
-        // FIRED proof: four independent scalars with no shared base collapse to hadd(float4(...))
+        // FIRED proof: width-3/4 sums pack (each width emits its own hadd ctor); a bare pair stays scalar
+        let h3 = bodies?["h_three_flat"] ?? ""
+        t |> success(!empty(h3), "h_three_flat twin must be produced")
+        t |> success(h3 |> find("hadd(float3(") >= 0, "a+b+c must fuse to hadd3: {h3}")
         let h4 = bodies?["h_four_flat"] ?? ""
         t |> success(!empty(h4), "h_four_flat twin must be produced")
-        t |> success(h4 |> find("hadd(") >= 0, "a+b+c+d must fuse to hadd: {h4}")
+        t |> success(h4 |> find("hadd(float4(") >= 0, "a+b+c+d must fuse to hadd4: {h4}")
+        // 2-way is below the default width-3 floor: stays a scalar add, no combine overhead
+        let h2 = bodies?["h_two_flat"] ?? ""
+        t |> success(!empty(h2), "h_two_flat twin must be produced")
+        t |> success(h2 |> find("hadd(") < 0, "a+b must NOT fuse by default (width-2 below the floor): {h2}")
+        // 5-way -> plan_groups(5,3) = [4] + 1 scalar tail: one hadd4, the 5th lane stays a scalar add
+        let h5 = bodies?["h_five_flat"] ?? ""
+        t |> success(!empty(h5), "h_five_flat twin must be produced")
+        t |> success(h5 |> find("hadd(float4(") >= 0, "5-way must pack a hadd4: {h5}")
+        t |> equal(count_sub(h5, "hadd("), 1, "5-way is hadd4 + a scalar tail, not two hadds: {h5}")
+        // 7-way -> [4,3]: hadd4 + hadd3 (the width-3 remainder packs under the default)
+        let h7 = bodies?["h_seven_flat"] ?? ""
+        t |> success(!empty(h7), "h_seven_flat twin must be produced")
+        t |> success(h7 |> find("hadd(float4(") >= 0 && h7 |> find("hadd(float3(") >= 0,
+                     "7-way must split into hadd4 + hadd3: {h7}")
         // 8-way packs into TWO PARALLEL hadds, not a nested one — an existing hadd is never a lane,
         // so `hadd(float4(...` never contains an inner `hadd(` (guards the bottom-up nesting trap)
         let h8 = bodies?["h_eight_flat"] ?? ""
         t |> success(!empty(h8), "h_eight_flat twin must be produced")
         t |> equal(count_sub(h8, "hadd("), 2, "8-way must pack into two hadds: {h8}")
         t |> success(h8 |> find("float4(hadd(") < 0, "the two hadds must be parallel, not nested: {h8}")
-        // below the four-lane threshold: a 3-term sum stays a scalar add chain (no combine+hadd cost)
-        let h3 = bodies?["h_three_flat"] ?? ""
-        t |> success(!empty(h3), "h_three_flat twin must be produced")
-        t |> success(h3 |> find("hadd(") < 0, "a+b+c must NOT fuse (below four-lane threshold): {h3}")
+        // a single hadd lane (the rest `*`-products) never reaches a group — no hadd
+        let h1 = bodies?["h_one_lane_flat"] ?? ""
+        t |> success(!empty(h1), "h_one_lane_flat twin must be produced")
+        t |> success(h1 |> find("hadd(") < 0, "a single lane must NOT fuse: {h1}")
         // the mandelbrot guard: `*`-weighted terms are mad-fusable, so mad must win — no hadd
         let hp = bodies?["h_products_flat"] ?? ""
         t |> success(!empty(hp), "h_products_flat twin must be produced")
         t |> success(hp |> find("hadd(") < 0, "weighted products must stay for mad, not hadd: {hp}")
+        // producer-vectorization: shared elementwise-unary lanes collapse the producer into one call
+        let ht = bodies?["h_trig_flat"] ?? ""
+        t |> success(!empty(ht), "h_trig_flat twin must be produced")
+        t |> success(ht |> find("hadd(sin(float3(") >= 0, "sin(a)+sin(b)+sin(c) must collapse to hadd(sin(float3(...))): {ht}")
+        let ht4 = bodies?["h_trig4_flat"] ?? ""
+        t |> success(!empty(ht4), "h_trig4_flat twin must be produced")
+        t |> success(ht4 |> find("hadd(cos(float4(") >= 0, "four cos lanes must collapse to hadd(cos(float4(...))): {ht4}")
+        // mixed producers (sin/cos/sin) do NOT vectorize — leaf-pack keeps the per-lane calls
+        let hmx = bodies?["h_mixed_flat"] ?? ""
+        t |> success(!empty(hmx), "h_mixed_flat twin must be produced")
+        t |> success(hmx |> find("hadd(float3(") >= 0 && hmx |> find("hadd(sin(") < 0,
+                     "mixed sin/cos/sin must leaf-pack, not vectorize the producer: {hmx}")
+        delete bodies
+    }
+    t |> run("hadd width-2 path — OPTION _flatten_hadd_pack_pairs (test_flatten_hadd_pairs.das twins)") @(t : T?) {
+        let n = check_unit(t, "", "{root}/tests/flatten/no_aot/test_flatten_hadd_pairs.das")
+        t |> success(n >= 2, "expected >=2 twins, checked {n}")
+        var bodies <- twin_bodies(t, "{root}/tests/flatten/no_aot/test_flatten_hadd_pairs.das")
+        // with the floor lowered to 2, a bare pair packs into hadd2 ...
+        let p2 = bodies?["hp_two_flat"] ?? ""
+        t |> success(!empty(p2), "hp_two_flat twin must be produced")
+        t |> success(p2 |> find("hadd(float2(") >= 0, "a+b must fuse to hadd2 under the option: {p2}")
+        // ... and plan_groups(5,2) = [3,2] emits the width-2 remainder alongside the hadd3
+        let p5 = bodies?["hp_five_flat"] ?? ""
+        t |> success(!empty(p5), "hp_five_flat twin must be produced")
+        t |> success(p5 |> find("hadd(float3(") >= 0 && p5 |> find("hadd(float2(") >= 0,
+                     "5-way must split into hadd3 + hadd2 under the option: {p5}")
         delete bodies
     }
     t |> run("swizzle corpus folds clean (test_flatten_swizzle.das twins)") @(t : T?) {
