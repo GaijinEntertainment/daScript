@@ -46,6 +46,7 @@ The compiler sets `DAS_PAK_ROOT` to the project directory before evaluating call
 - **Always check the exit code** after running `daslang` — a crash may produce no output at all, looking like a silent success. PowerShell: `$LASTEXITCODE`. Bash/zsh: `$?`. Exit code `0` = success.
 - Exit code `-1073741819` / `0xC0000005` (Windows) or `139` / `134` (Linux/macOS) = native crash — Access Violation / SIGSEGV / SIGABRT
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse) — check exit code first
+- **`error[50101]: AOT link failed on <fn>`** — the runtime computed a different semantic hash for `<fn>` than the AOT generator recorded, so the stub lookup misses. Almost always means the `.das` source (or a daslib it pulls in) changed after the AOT C++ was emitted — regenerate the stubs with `bin/daslang -aot input.das output.cpp` and rebuild
 - **Don't truncate output** with `head`/`tail` — daslang stack traces are easily clipped. Capture full output, then `grep` if needed
 - **`options log`** — append at the end of a `.das` file to dump the final post-compilation program text. Useful for confirming what the compiler actually produces (constant folding, generic reification, macro expansion).
 - **`options log_infer_passes`** — append at the end of a failing `.das` file for a per-pass infer-pipeline dump (which generics got reified, when finalize ran, where lookups missed). Smaller and more targeted than `options log` for template/generic reification bugs.
@@ -65,7 +66,9 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |
 | `skills/clargs_usage.md` | Writing daslang CLI tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
+| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImgui, dasPUGIXML, dasSQLITE, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
+| `skills/imgui_ui_debugging.md` | Diagnosing or fixing any dasImgui UI / interaction bug — the discipline: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix works from logic or a screenshot alone |
 | `skills/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII, builder, XPath, struct round-trip) |
 | `skills/filesystem.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
@@ -170,6 +173,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 ### Unsafe
 
 - **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it. Lint backs this: STYLE024 flags `unsafe` wraps with no descendant needing unsafe; STYLE025 flags blocks where exactly one statement needs unsafe (narrow to expression form); STYLE026 flags nested `unsafe { ... }`
+  - **The expression form does NOT propagate into nested call arguments.** `unsafe(f(addr(x)))` still fails with `error[31000] address of reference requires unsafe` at the inner `addr` — the wrap only authorizes the unsafe op at the *top* of `expr`, not a sub-expression buried in an argument. Wrap the exact unsafe op instead: `f(unsafe(addr(x)))`. The block form `unsafe { f(addr(x)) }` *does* cover the nested op (whole scope), so it's the fallback when several nested ops need it.
 - **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
 - **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
 - **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
@@ -180,6 +184,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 
 - `try/recover` — NOT `try/catch` (`recover` is the keyword)
 - `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
+- **`assert`/`verify` message must be a string CONSTANT** — `assert(cond, "msg")` rejects an interpolated `"...{x}..."` with `error[30117]` "assert comment must be string constant". Use a constant message; when you need the runtime value in the diagnostic, guard instead: `if (!cond) panic("...{x}...")` (`panic` takes an interpolated string).
 - **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
 - **Braceless early-exit:** prefer `if (cond) return X` (or postfix `return X if (cond)`) over `if (cond) { return X }` — STYLE005 flags the braced single-terminator form as noise
 - **Panic is fatal, not an exception.** daslang has no C++/JS-style exception model. A `panic` (or failed `assert` / `verify`) means the program is broken — the only correct response is to print diagnostics and exit. `try/recover` exists to capture the message before exit so you can log it nicely, NOT to recover-and-continue. Do not write code that relies on continuing after `recover`; do not design APIs around panic-as-control-flow. Corollary: `{ body } finally { cleanup }` deliberately skips `cleanup` on panic (the cleanup can't run safely on a broken program); this is not a bug. Don't try to "fix" it; don't use `finally` for cleanup that needs to run on panic. If you need post-statements that run after a block in the normal path, just put them after the block — panic skips everything, and that's the design.
@@ -189,6 +194,14 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - **`_::foo(x)`**: resolves in the **calling** module — caller’s overloads visible. Use in library generics.
 - **Unqualified** `foo(x)`: resolves in the **defining** module — caller’s overloads NOT visible.
 - This is why `:=` and `delete` emit `_::clone` / `_::finalize`
+
+### Recursive flatten / variadic generics (untyped param)
+
+A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) — e.g. a flattening `push_from(dest, src)` — uses an **untyped** source param (`def f(var dest : array<auto(T)>; src)`, NOT `array<auto(TT)>`) plus `static_if (typeinfo is_array(src)) { for (x in src) f(dest, x) } else { <base> }`. **ADD it alongside** the concrete single-level overload (`array<numT>`); the concrete one out-specializes a bare untyped param, so flat sources take the fast/bulk path and the recursive form fires only for deeper nesting — zero change/risk to the existing overload. (Live example: variadic `push_from`/`push_clone_from` in `daslib/builtin.das`.)
+
+- **`array<numT>` and `array<auto(TT)>` are EQUALLY specialized** → two such same-name overloads are *ambiguous* (`error[30341] too many matching functions`). A bare untyped `src` is *less* specialized than `array<numT>`, so the concrete one wins — that's why the recursive param is untyped, not `array<auto(TT)>`. (Whether an alias should out-specialize a non-alias is an open compiler question.)
+- **Compile-time type equality:** there is **no** `typeinfo is_same_type(A, B)` (typeinfo traits take one arg). Use `typeinfo stripped_typename(x) == typeinfo stripped_typename(y)` (pattern from `daslib/algorithm.das`).
+- **`-#` / `==const` on ≥2 same-`numT` array params breaks matching** (rejects a plain `array<int>&`) — use plain `array<numT>` for fixed-arity multi-source params (`f(dest; a : array<numT>; b : array<numT>)`).
 
 ### Dot as pseudo-pipe
 
@@ -272,6 +285,9 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 | `for (s in A) { B \|> push(s) }` / `push_clone(s)` (iter-var only) | `B \|> push_from(A)` / `push_clone_from(A)` | PERF022: the bulk overload in builtin.das reserves combined capacity up front. Single name `push`/`push_clone` is overloaded between single-element and bulk (ambiguous when destination is `array<T[]>`); the `_from` suffix names the bulk intent. Source must be `array<T>` or C-array — range/iterator sources are not flagged. `emplace` is out of scope (const iter-var can't be moved) |
 | `var a : array<T>; for (x in SRC) { if (COND) { a \|> push(EXPR) } }` (or `table<K;V>` + `insert`/`a[k]=v`) | `var a <- [for (x in SRC); EXPR; where COND]` (or `\{for (...); k => v; where ...\}`) | STYLE027: var with empty default-init followed by a for-loop that only push/insert into it. Accepts depth ≤ 2 nested fors and if-filters at any depth. `emplace` excluded — move-source-zeroing differs from comprehension element-construction. Iterator-comprehension form (`[$f ...]`) NOT suggested |
 | `var X = clone_expression(E); ... $e(X) ...` (only-uses-are-qmacro-splice) | drop the pre-clone, inline `$e(E)` at each splice site | PERF023: `qmacro`/`qmacro_block`/`qmacro_expr`/`qmacro_block_to_array` go through `apply_template` (templates_boost.das:251), which calls `clone_expression` on every substitution input. Pre-cloning is wasted work. Detection: post-expansion `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; visitor tracks splice-wrapper depth via preVisitExprCall/visitExprCall counter on `add_ptr_ref`, classifies each candidate `ExprVar` reference as "safe" when depth>0. Fires only when ALL uses are safe AND ≥1 is observed. Multi-clone-of-same-source flagged too — apply_template clones each substitution independently |
+| `var t : table<K;V>; t \|> insert(k1, v1); t \|> insert(k2, v2)` (or `t[k] = v` runs, or 2-arg set inserts) | `var t <- { k1 => v1, k2 => v2 }` (set: `var s <- { k1, k2 }`) | STYLE031: ≥ 2 contiguous inserts/`[]=` after an empty table decl collapse to a literal move-assign. Computed keys fine; runs with a duplicate CONST key stay silent (literal duplicates are `error[30706]`, inserts overwrite). `table<string; JsonValue?>` const-key runs get STYLE021's `JV((k1=...))` form instead |
+| `var w : array<T>; w \|> push_from(SRC)` (empty decl + single bulk copy from an `array<T>`) | `var w := SRC` (clone-assign); if then `return <- w`, `return clone_to_move(SRC)` | STYLE032 (the init half) + PERF009-clone (the return half) — they compose. A bulk `push_from`/`push_clone_from` into a fresh-empty array IS a clone-init. Array source only; a C-array source stays silent (`var w := cArray` ≠ `array<T>`). Only the statement immediately after the decl is inspected — a `reserve`/guard between keeps it quiet. PERF009 clone variant: `var x := src; return <- x` → `return clone_to_move(src)`, NOT `return <- src` (would move/destroy the source) |
+| hand-rolled `is X` / `as X` / null-guard / `ExprRef2Value`-peel ladders in macro code | `qmatch(e, $e(a) + $e(b))` for source-syntax shapes; `match (e) { if (ExprField(name = "key", value = ExprVar(...))) { ... } }` for node-class shapes | both matchers peel `ExprRef2Value` automatically; `\|\|` alternation, `&&` guards, and `match_expr(local)` cover most ladders. Limits + the qmatch↔match division of labor: `skills/das_macros.md` "`match` (daslib/match)" |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 

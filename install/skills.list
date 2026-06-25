@@ -12,9 +12,11 @@ daspkg.md
 decs.md
 detect_dupe.md
 dynamic_modules.md
+external_module_debugging.md
 filesystem.md
 gc_migration.md
 glob.md
+imgui_ui_debugging.md
 jobque_debugging.md
 json.md
 linq.md

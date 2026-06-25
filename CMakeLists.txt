@@ -1721,6 +1721,24 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 # Install utility scripts
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 
+# Install jit tool (LLVM JIT CLI — .das to shared lib or standalone -exe)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/jit/main.das DESTINATION utils/jit)
+
+# Install fix-lint-errors tool (mechanical lint auto-fixer)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
+
+# Install requirefix tool (require-statement fixer + its module)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/requirefix/main.das
+    ${PROJECT_SOURCE_DIR}/utils/requirefix/requirefix.das
+    ${PROJECT_SOURCE_DIR}/utils/requirefix/test_requirefix.das
+    DESTINATION utils/requirefix
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/requirefix/testdata/
+    DESTINATION utils/requirefix/testdata
+    FILES_MATCHING PATTERN "*.das"
+)
+
 # Install MCP server (stdio transport, no dasHV dependency)
 #   main.das        — full server entry point
 #   cpp_main.das    — cpp/agnostic-subset entry point
@@ -1856,6 +1874,31 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/examples/hello_world.das
     ${PROJECT_SOURCE_DIR}/examples/README.md
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+)
+
+# Install clargs example
+file(GLOB DAS_CLARGS_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/clargs/*.das
+)
+install(FILES ${DAS_CLARGS_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/clargs
+)
+
+# Install file_path_require example (cross-file require + .das_project resolution)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/file_path_require/main.das
+    ${PROJECT_SOURCE_DIR}/examples/file_path_require/shared_helpers.das
+    ${PROJECT_SOURCE_DIR}/examples/file_path_require/project.das_project
+    ${PROJECT_SOURCE_DIR}/examples/file_path_require/README.md
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/file_path_require
+)
+
+# Install mcp echo example (stdio MCP server + client)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/server.das
+    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/client.das
+    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/README.md
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/mcp/echo
 )
 
 # Install dasbind example

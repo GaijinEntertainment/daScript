@@ -4,7 +4,7 @@ Read this skill once at the start of significant work in or with daslang — it'
 
 ## What is daslang
 
-[daslang](https://dascript.org/) (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications, standalone or embedded. The language has been renamed to **daslang**, but the repository (GaijinEntertainment/daScript) and many C++ API names still use the old "daScript" spelling.
+[daslang](https://daslang.io/) (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications, standalone or embedded. The language has been renamed to **daslang**, but the repository (GaijinEntertainment/daScript) and many C++ API names still use the old "daScript" spelling.
 
 ## What and Why
 
