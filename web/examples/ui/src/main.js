@@ -150,7 +150,9 @@ async function preloadSampleAssets() {
     }
     try {
         for (const rel of assets) {
-            const buf = new Uint8Array(await (await fetch('./' + rel)).arrayBuffer());
+            const resp = await fetch('./' + rel);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' fetching ' + rel);
+            const buf = new Uint8Array(await resp.arrayBuffer());
             const path = '/' + rel;
             try { FS.mkdirTree(path.substring(0, path.lastIndexOf('/'))); } catch (e) { /* exists */ }
             FS.writeFile(path, buf);
