@@ -10,10 +10,13 @@ Same math, same daslang shader language -- a different backend, and a different
 "one thread per pixel" vehicle. Drawing that substitution explicitly is part of
 the harmonization story.
 
-Each fragment maps its clip-space position to a complex number *c*, iterates
-*z = z² + c* until \|z\| > 2 or it hits ``MAX_ITER``, and colors the pixel from
-the escape count. A per-frame ``u_zoom`` uniform breathes the view in and out so
-the loop has a real GPU parameter; ``u_aspect`` keeps the set from stretching.
+The shader is a faithful port of the Vulkan tutorial's animated viewer, itself a
+port of `Inigo Quilez's smooth-coloured Mandelbrot zoom
+<https://www.shadertoy.com/view/ldf3DN>`_: a single ``u_time`` uniform drives an
+oscillating zoom and a slow rotation about the seahorse-valley point
+``(-0.745, 0.186)``. A large bailout radius plus a continuous (smooth) iteration
+count kills the banding, an IQ cosine palette colours it, and 4×4 supersampling
+antialiases the boundary.
 
 .. literalinclude:: ../../../../tutorials/opengl/02_mandelbrot/02_mandelbrot.das
    :language: das
@@ -27,28 +30,30 @@ triangles' worth of indices cover the viewport edge to edge. The vertex stage
 does nothing but pass the clip-space position through as a varying ``f_uv`` and
 write ``gl_Position``; all the work happens per fragment.
 
-The escape-time loop
---------------------
+Smooth colouring
+----------------
 
-The fragment shader is the whole tutorial. It reconstructs *c* from the
-interpolated ``f_uv`` (scaled by ``u_zoom`` and aspect-corrected so circles stay
-round), then runs the classic ``while`` / ``break`` escape loop in daslang. This
-is the first rung whose shader body is real control flow and scalar float
-arithmetic rather than a single expression -- and it is exactly what surfaced a
-GLSL-emitter gap: integer-valued float literals (``0.0``, ``4.0``, ``256.0``)
-must keep their decimal point, because GLSL ES 3.00 (WebGL2) is strict about
-``float`` vs ``int`` in scalar and binary-operator positions where the desktop
-driver had been lenient.
+Each fragment reconstructs the complex point *c* from ``f_uv`` (widened by
+``u_aspect``, then zoomed and rotated about the seahorse valley), and -- after
+the cheap cardioid/bulb interior tests -- runs the escape loop with a large
+bailout radius. The *continuous* iteration count ``n - log2(log2(|z|²)) + 4``
+removes the integer banding, and an IQ cosine palette maps it to colour. This is
+the first rung whose shader body is real control flow, scalar float arithmetic,
+and a fistful of user-defined helper functions (``cmul`` / ``is_interior`` /
+``mandel_smooth`` / ``palette`` / ``sample_at``) -- all lowered to GLSL by
+dasGlsl. It is also what surfaced a GLSL-emitter gap: integer-valued float
+literals (``0.0``, ``4.0``, ``256.0``) must keep their decimal point, because
+GLSL ES 3.00 (WebGL2) is strict about ``float`` vs ``int`` in scalar and
+binary-operator positions where the desktop driver had been lenient.
 
 The loop
 --------
 
-``update()`` advances a phase, ping-pongs ``u_zoom`` between a wide view and deep
-filigree (easing toward the close-up so it dwells on the detail), reads the live
-framebuffer size for the aspect correction, clears, binds the program and its
-uniforms, and draws the two triangles. The fixed center -- the seahorse valley,
-near the boundary where the structure lives -- is an inline constant in the
-shader; only the zoom animates.
+``update()`` advances a time value, reads the live framebuffer size (so the
+aspect correction and supersample spacing follow window/canvas resizes), clears,
+binds the program and its uniforms, and draws the two triangles. The whole
+animation -- the breathing zoom and the slow rotation -- is derived inside the
+shader from ``u_time`` alone, so the loop has one real GPU parameter.
 
 Run it
 ------
@@ -58,4 +63,4 @@ Locally, in a window::
     daslang tutorials/opengl/02_mandelbrot/02_mandelbrot.das
 
 In the browser, it runs live in the daslang playground -- the same ``.das``,
-lowered to WebGL2, the escape loop running on your GPU.
+lowered to WebGL2, the smooth-coloured zoom running on your GPU.

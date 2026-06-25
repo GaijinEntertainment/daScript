@@ -6,26 +6,87 @@ require daslib/safe_addr
 
 // 02 - The Mandelbrot Set (OpenGL / WebGL2 tutorial)
 //
-// The Vulkan rung computes the set in a [compute_shader], one invocation per
-// pixel, into a storage image. WebGL2 has no compute / no storage images, so
-// the portable GL idiom is a FULLSCREEN FRAGMENT shader: draw two triangles
-// covering the whole viewport and let the fragment stage run the escape-time
-// loop once per pixel. Same math, same daslang shader language -- a different
-// backend and a different "one thread per pixel" vehicle.
+// The dasVulkan rung computes the set in a [compute_shader], one invocation per
+// pixel, into a storage image. WebGL2 has no compute / no storage images, so the
+// portable GL idiom is a FULLSCREEN FRAGMENT shader: draw two triangles covering
+// the whole viewport and let the fragment stage run the escape-time loop once per
+// pixel. Same math, same daslang shader language -- a different backend and a
+// different "one thread per pixel" vehicle.
 //
-// Each fragment maps its clip-space position to a complex number c, iterates
-// z = z*z + c until |z| > 2 or it hits MAX_ITER, and colors the pixel from the
-// escape count. A per-frame `u_zoom` uniform breathes the view in and out, so
-// the loop has a real GPU parameter; `u_aspect` keeps the set from stretching.
+// This is a faithful port of the Vulkan tutorial's animated viewer, itself a
+// port of Inigo Quilez's smooth-coloured Mandelbrot zoom
+// (https://www.shadertoy.com/view/ldf3DN): a single `u_time` uniform drives an
+// oscillating zoom and a slow rotation about the seahorse-valley point
+// (-0.745, 0.186). A large bailout radius + continuous (smooth) iteration count
+// kills the banding; an IQ cosine palette colours it; 4x4 supersampling
+// antialiases the boundary. Every line of the shader is daslang, lowered to GLSL
+// by dasGlsl.
 //
 // One homogeneous program: `main()` is the desktop windowed viewer; on the web
 // the wasm run path drives init/update/shutdown once per browser frame.
 
 var @in @location v_position : float2
+var @uniform u_time : float
 var @uniform u_aspect : float
-var @uniform u_zoom : float
+var @uniform u_res : float2
 var @inout f_uv : float2
 var @out f_FragColor : float4
+
+let MAX_ITER = 512
+let ESCAPE2 = 65536.0       // B*B with the IQ bailout radius B = 256
+let AA = 4                  // 4x4 supersampling: 16 colour samples per pixel
+
+// complex multiply -- (a.x + i a.y) * (b.x + i b.y)
+def private cmul(a, b : float2) : float2 {
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
+}
+
+// IQ's cheap interior tests: skip iteration inside the main cardioid and the
+// period-2 bulb.
+def private is_interior(c : float2) : bool {
+    let c2 = c.x * c.x + c.y * c.y
+    let in_cardioid = 256.0 * c2 * c2 - 96.0 * c2 + 32.0 * c.x - 3.0 < 0.0
+    let in_bulb = 16.0 * (c2 + 2.0 * c.x + 1.0) - 1.0 < 0.0
+    return in_cardioid || in_bulb
+}
+
+// Escape-time iteration with a large bailout radius (needed for smooth colouring).
+// Returns (iteration_count, exit_magnitude |z|^2). n == MAX_ITER with d <= ESCAPE2
+// means the point did not escape (treat as interior).
+def private mandel_smooth(c : float2) : float2 {
+    var z = float2(0.0, 0.0)
+    var n = 0
+    while (n < MAX_ITER) {
+        z = cmul(z, z) + c
+        if (z.x * z.x + z.y * z.y > ESCAPE2) {
+            break
+        }
+        n++
+    }
+    return float2(float(n), z.x * z.x + z.y * z.y)
+}
+
+// IQ's cosine palette evaluated at a continuous-iteration phase t.
+def private palette(t : float) : float3 {
+    let phase = 3.0 + t * 0.15
+    return float3(0.5 + 0.5 * cos(phase),
+                  0.5 + 0.5 * cos(phase + 0.6),
+                  0.5 + 0.5 * cos(phase + 1.0))
+}
+
+// One supersample at complex point c: interior -> black, else continuous
+// iteration count -> palette.
+def private sample_at(c : float2) : float3 {
+    if (is_interior(c)) {
+        return float3(0.0, 0.0, 0.0)
+    }
+    let nd = mandel_smooth(c)
+    if (nd.y > ESCAPE2) {
+        let sn = nd.x - log2(log2(nd.y)) + 4.0
+        return palette(sn)
+    }
+    return float3(0.0, 0.0, 0.0)
+}
 
 [vertex_program]
 def vs_main {
@@ -35,35 +96,33 @@ def vs_main {
 
 [fragment_program]
 def fs_main {
-    // The seahorse valley, near the boundary of the set, where the filigree
-    // detail lives. Fixed center, so it is an inline constant rather than a
-    // uniform; only the zoom animates.
-    let center = float2(-0.745, 0.115)
-    let cx = center.x + f_uv.x * u_aspect * u_zoom
-    let cy = center.y + f_uv.y * u_zoom
-    var zx = 0.0
-    var zy = 0.0
-    var n = 0
-    let MAX_ITER = 256
-    while (n < MAX_ITER) {
-        let x2 = zx * zx
-        let y2 = zy * zy
-        if (x2 + y2 > 4.0) {
-            break
-        }
-        let nzx = x2 - y2 + cx
-        zy = 2.0 * zx * zy + cy
-        zx = nzx
-        n++
+    let t = u_time
+    // animated zoom (oscillates) + slow rotation, both derived from time
+    let zoo0 = 0.62 + 0.38 * cos(0.07 * t)
+    let ang = 0.15 * (1.0 - zoo0) * t
+    let coa = cos(ang)
+    let sia = sin(ang)
+    let zoo = pow(zoo0, 8.0)
+    // base screen coords: x widened by aspect, y flipped to match the Vulkan
+    // image orientation (y down). One screen pixel spans 2/res.y in this space.
+    let base_px = f_uv.x * u_aspect
+    let base_py = -f_uv.y
+    let pix = 2.0 / u_res.y
+    // average AA*AA subpixel colour samples; interior samples contribute black, so
+    // the set boundary softens correctly.
+    var col = float3(0.0, 0.0, 0.0)
+    for (s in range(AA * AA)) {
+        let ox = (float(s % AA) + 0.5) / float(AA) - 0.5
+        let oy = (float(s / AA) + 0.5) / float(AA) - 0.5
+        let px = base_px + ox * pix
+        let py = base_py + oy * pix
+        let xr = px * coa - py * sia
+        let yr = px * sia + py * coa
+        let c = float2(-0.745 + xr * zoo, 0.186 + yr * zoo)
+        col += sample_at(c)
     }
-    if (n == MAX_ITER) {
-        // inside the set: black
-        f_FragColor = float4(0.0, 0.0, 0.0, 1.0)
-    } else {
-        // outside: an arithmetic ramp on the escape count (no trig)
-        let t = float(n) / float(MAX_ITER)
-        f_FragColor = float4(t, t * 0.5, 1.0 - t, 1.0)
-    }
+    let avg = col * (1.0 / float(AA * AA))
+    f_FragColor = float4(avg, 1.0)
 }
 
 var program : uint
@@ -71,7 +130,7 @@ var vao : uint
 var vbo : uint
 var ebo : uint
 var window : GLFWwindow?
-var phase : float = 0.0
+var time : float = 0.0
 
 [vertex_buffer]
 struct Vertex {
@@ -117,15 +176,13 @@ def init {
 
 [export]
 def update : bool {
-    phase += 0.01
-    // Ping-pong the zoom between a wide view (1.3) and deep filigree (0.03),
-    // easing toward the close-up so it dwells on the detail.
-    let s = sin(phase) * 0.5 + 0.5
+    time += 1.0 / 60.0
     var display_w, display_h : int
     glfwGetFramebufferSize(window, display_w, display_h)
     let h = max(display_h, 1)
+    u_time = time
     u_aspect = float(display_w) / float(h)
-    u_zoom = 0.03 + (1.3 - 0.03) * (s * s)
+    u_res = float2(float(display_w), float(h))
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.0, 0.0, 0.0, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
