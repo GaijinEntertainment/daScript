@@ -6,18 +6,24 @@ options strict_smart_pointers
 
 module glsl_opengl shared public
 
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/shader_block_layout
 
 require glsl/glsl_internal
 require glsl/glsl_common public
 
 class GlslOpenGLShader : GlslShader {
+    // Pack struct @uniform / @push_constant blocks as std140 UBOs by default (the GL/WebGL2 portable
+    // floor, byte-for-byte with the Vulkan rail). Loose by-name binding stays the fallback for the
+    // scalar / vector / matrix / sampler uniforms that aren't interface blocks.
+    override pack_std140_uniforms = true
     def override generate_bind_uniform_dummy(var func : FunctionPtr) {
         glsl_opengl::generate_bind_uniform_dummy(func)
     }
     def override generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
-        glsl_opengl::generate_bind_uniform(fnMain, fn)
+        glsl_opengl::generate_bind_uniform(fnMain, fn, pack_std140_uniforms)
     }
 }
 
@@ -121,9 +127,60 @@ def private emit_loose_struct_bind(var blk : ExprBlock?; st : Structure?; namePr
     }
 }
 
+// Emit the std140 UBO bind for one struct @uniform / @push_constant block. The caller has already
+// confirmed std140_block_is_simple, so every field packs flat. Computes the shared std140 layout
+// (compute_block_layout — the same offsets the SPIR-V/Vulkan rails use), then emits a flat call
+// sequence into the bind function: std140_reset(prog, block, paddedSize); one std140_set(prog, block,
+// offset, vv.field) per field; std140_flush(prog, block, bindingPoint).
 [macro_function]
-def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
+def private emit_std140_ubo_bind(var blk : ExprBlock?; vv : VariablePtr; bindingPoint : int) {
+    let st = vv._type.structType
+    // Block name = <instance>_ubo — must match glsl_internal's outputStd140UboBlock (distinct from the
+    // struct type name, which is still emitted as a standalone GLSL struct).
+    let blockName = "{vv.name}_ubo"
+    var fields : array<BlockField>
+    var errs : array<string>
+    let layout = compute_block_layout(blockName, st, fields, errs)
+    if (!layout.ok) {
+        // Defensive: std140_block_is_simple already rejected non-layoutable blocks to the loose path.
+        let msg = empty(errs) ? "(no diagnostic)" : errs[0]
+        macro_error(compiling_program(), vv.at, "[opengl std140]: @uniform '{vv.name}' layout failed: {msg}")
+        delete fields
+        delete errs
+        return
+    }
+    let padded = round_up(layout.size, 16)
+    var cll_reset = new ExprCall(at = vv.at, name := "std140_reset")
+    cll_reset.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_reset.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := blockName)
+    cll_reset.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = padded)
+    blk.list |> emplace(cll_reset)
+    for (f in fields) {
+        var cll_set = new ExprCall(at = vv.at, name := "std140_set")
+        cll_set.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+        cll_set.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := blockName)
+        cll_set.arguments |> emplace_new() <| new ExprConstUInt(at = vv.at, value = uint(f.offset))
+        var fld_access = new ExprField(at = vv.at,
+            value <- new ExprVar(at = vv.at, name := vv.name),
+            name := f.name
+        )
+        cll_set.arguments |> emplace(fld_access)
+        blk.list |> emplace(cll_set)
+    }
+    var cll_flush = new ExprCall(at = vv.at, name := "std140_flush")
+    cll_flush.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_flush.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := blockName)
+    cll_flush.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = bindingPoint)
+    blk.list |> emplace(cll_flush)
+    delete fields
+    delete errs
+}
+
+[macro_function]
+def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pack_std140 : bool) {
     var blk = new ExprBlock(at = fn.at)
+    var ubo_globals : array<VariablePtr>   // struct @uniform/@push_constant blocks to pack as std140 UBOs
+    var ubo_seen : table<string>           // dedup: a block reachable via >1 function is collected once
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
             // @push_constant has no GL equivalent -> bind it like a @uniform (loose). Phase 2 / D4.
@@ -198,11 +255,23 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                 } elif (is_glsl_structure(vv, "sampler2DShadow")) {
                     emit_combined_sampler_bind(blk, vv, "texture2D", "bind_sampler_2d_shadow")
                 } elif (vv._type.baseType == Type.tStructure && vv._type.structType != null) {
-                    // A struct @uniform / @push_constant lowers to a GLSL `uniform StructType name;`.
-                    // GL exposes each leaf field as its own by-name uniform location, so bind them
-                    // loose by flattened name (name.field, name.field.subfield, ...). Phase 2 / D5.
-                    emit_loose_struct_bind(blk, vv._type.structType, string(vv.name),
-                        new ExprVar(at = vv.at, name := vv.name))
+                    if (pack_std140 && std140_block_is_simple(vv._type.structType)) {
+                        // std140 UBO pack (default for blocks whose fields all pack flat): defer until
+                        // every block is collected, so binding points can be assigned in a stable order
+                        // that agrees across the vertex/fragment bind functions (both walk the same
+                        // module globals). The emitter consults the same predicate. Phase 2 / D5.
+                        let nm = string(vv.name)
+                        if (!key_exists(ubo_seen, nm)) {
+                            ubo_seen |> insert(nm)
+                            ubo_globals |> push(vv)
+                        }
+                    } else {
+                        // loose fallback (packing off, or a float3x3 / composite block the UBO binder
+                        // can't pack yet): a struct uniform lowers to `uniform StructType name;` and each
+                        // leaf field binds by flattened name (name.field, name.field.subfield, ...).
+                        emit_loose_struct_bind(blk, vv._type.structType, string(vv.name),
+                            new ExprVar(at = vv.at, name := vv.name))
+                    }
                 } else {
                     // scalar / vector / matrix uniform: glUniformAny(glGetUniformLocation("name"), name)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
@@ -216,6 +285,17 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             }
         }
     }
+    // std140 UBO binding points: assign by sorted block name so the same block gets the same point in
+    // every stage's bind function (the glBindBufferRange index must agree across vertex/fragment for a
+    // linked program). An explicit @binding wins; otherwise the name-sorted index is used.
+    ubo_globals |> sort() $(a, b) => string(a.name) < string(b.name)
+    for (i in range(length(ubo_globals))) {
+        let vv = ubo_globals[i]
+        let bp = vv.annotation |> find_arg("binding") ?as tInt ?? i
+        emit_std140_ubo_bind(blk, vv, bp)
+    }
+    unsafe { delete ubo_globals; }
+    delete ubo_seen
     fn.body := blk
     if (DEBUG_SHADER_BINDINGS) {
         print("{describe(fn)}\n")

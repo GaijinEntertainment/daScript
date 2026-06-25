@@ -222,3 +222,28 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
     }
     return (ok = true, size = off, align = max_align)
 }
+
+//! True iff every field of the block packs into std140 with a single memcpy at its offset: a 32-bit
+//! scalar / vector / float4x4. False for float3x3 / float3x4 (std140 pads each column to vec4 ->
+//! per-column repack), fixed-arrays and nested structs (composite -> stride / recursion), and any block
+//! compute_block_layout rejects. A backend uses this to choose the std140 UBO pack path vs a loose
+//! by-name fallback for a given @uniform block, and the emitter + host binder MUST agree by both
+//! consulting it. (The simple-field restriction is the current GL UBO binder's scope, not a std140 law.)
+[macro_function]
+def public std140_block_is_simple(st : Structure?) : bool {
+    var fields : array<BlockField>
+    var errors : array<string>
+    let layout = compute_block_layout("", st, fields, errors)
+    var simple = layout.ok
+    if (simple) {
+        for (f in fields) {
+            if (f.is_composite || (f.is_matrix && f.matrix_width != 4)) {
+                simple = false
+                break
+            }
+        }
+    }
+    delete fields
+    delete errors
+    return simple
+}
