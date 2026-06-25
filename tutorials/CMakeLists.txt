@@ -99,6 +99,20 @@ install(FILES ${OPENAI_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasOPENAI
 )
 
+# Install OpenGL tutorial .das files (nested one-dir-per-rung, so preserve structure)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/opengl/
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/opengl
+    FILES_MATCHING PATTERN "*.das"
+)
+
+# Install the shared assets the OpenGL rungs load at runtime (referenced as
+# "tutorials/_assets/..."): brick/cat textures, the cat mesh, an HDRI, provenance.
+# Exclude dev helper scripts (e.g. cat/gltf_to_obj.py) — not runtime assets.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/_assets/
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/_assets
+    PATTERN "*.py" EXCLUDE
+)
+
 if (NOT ${DAS_TUTORIAL_DISABLED})
     include(integration/c/CMakeLists.txt)
     include(integration/cpp/CMakeLists.txt)
