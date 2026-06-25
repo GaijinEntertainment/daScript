@@ -30,6 +30,10 @@
       "files" : ["examples/gl_08_shadow.das"]
     },
     {
+      "name" : "OpenGL: HDR + bloom (float FBO)",
+      "files" : ["examples/gl_11_hdr.das"]
+    },
+    {
       "name" : "Hello world",
       "files" : ["examples/hello.das"]
     },
