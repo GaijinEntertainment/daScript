@@ -33,6 +33,23 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("audio")
         return
     }
+    // Device-driven audio tests (with_audio_system + the device callback thread).
+    // Interpreter-only: under --use-aot the AOT-compiled audio_system_finalize drains
+    // command_processor on the main thread while the audio thread does too, on a
+    // non-thread-safe mixer context -> heap corruption. Gate the whole dir off for AOT.
+    if (folder_name == "strudel_device") {
+        *result = has_module("audio")
+        if (*result) {
+            let args <- get_command_line_arguments()
+            for (arg in args) {
+                if (arg == "--use-aot") {
+                    *result = false
+                    return
+                }
+            }
+        }
+        return
+    }
     if (folder_name == "jit_tests" || folder_name == ".jitted_scripts") {
         let args <- get_command_line_arguments()
         for (arg in args) {

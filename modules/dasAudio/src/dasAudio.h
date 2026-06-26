@@ -46,6 +46,8 @@ namespace das {
 
     bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context );
     void dasAudio_finalize ( void );
+    void dasAudio_set_null_device ( bool enabled );
+    bool dasAudio_is_single_threaded ();
     MA_API ma_result dasAudio_ma_resampler_init(const ma_resampler_config* pConfig, ma_resampler* pResampler);
     MA_API void dasAudio_ma_resampler_uninit(ma_resampler* pResampler);
     MA_API ma_result dasAudio_ma_channel_converter_init(const ma_channel_converter_config* pConfig, ma_channel_converter* pConverter);

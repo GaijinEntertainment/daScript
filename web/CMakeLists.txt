@@ -14,7 +14,13 @@ option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
 # emscripten_webgl_get_proc_address (gate (b), module_builtin_dasbind.cpp). This is
 # the WebGL2/GL-on-the-web rail of the harmonization arc (HARMONIZATION_PLAN §11).
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
-option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
+# dasAudio ENABLED on web: miniaudio's emscripten backend uses the Web Audio API
+# (ScriptProcessorNode), whose audio callback runs on the main thread — so the
+# whole strudel/audio stack runs single-threaded (no -pthread / SharedArrayBuffer).
+# strudel's main-thread playback mode (strudel_tick) is non-blocking; the device
+# callback and strudel_tick are the same thread. Statically linked into
+# daslang_static; the audio/strudel .das halves are embedded below.
+option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" ON)
 # dasStbImage ENABLED on web: opengl_boost requires `stbimage` (and opengl_ttf
 # requires stbimage/stbimage_ttf) for texture/font loading. It vendors pure stb
@@ -93,6 +99,15 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasO
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasGlsl/glsl@modules/dasGlsl/glsl")
 #   stbimage, stbimage/stbimage_boost, stbimage/stbimage_ttf -> modules/dasStbImage/stbimage
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasStbImage/stbimage@modules/dasStbImage/stbimage")
+
+# Embed the dasAudio .das source trees (the matching halves of the statically
+# linked libDasModuleAudio). The native fs resolver looks for
+# getDasRoot()/modules/dasAudio/<subdir>/<name>.das (fs_file_info.cpp,
+# NATIVE_MODULE), so mount them at /modules/dasAudio/<subdir> to mirror desktop.
+#   audio/audio_boost, audio/audio_wav        -> modules/dasAudio/audio
+#   strudel/*                                 -> modules/dasAudio/strudel
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/audio@modules/dasAudio/audio")
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/strudel@modules/dasAudio/strudel")
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${DAS_CONFIG_INCLUDE_DIR})

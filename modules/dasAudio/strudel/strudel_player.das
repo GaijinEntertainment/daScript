@@ -911,6 +911,17 @@ def public strudel_shutdown() {
     // status box (main-thread mode: created in strudel_create_channel)
     if (g_tick_status_box != null) {
         unset_status_update(g_sid)
+        // set_status_update added a ref released only when the audio command processor
+        // handles this status=0 command (notify_and_release). In single-threaded mode
+        // there is no audio thread to do it (and the join below is a no-op, job_que.cpp),
+        // so we drain the queue ourselves — SAFE because nothing else is in the mixer
+        // context. In the threaded build we must NOT drain here: the audio thread is
+        // running command_processor concurrently and the mixer context is not
+        // thread-safe (verySafeContext=false) — racing it corrupts the heap. There the
+        // audio thread processes the command and the join below fences (original path).
+        if (audio_is_single_threaded()) {
+            audio_system_release_context()
+        }
         clear_status(g_tick_status_box)
         var tick_ptr = g_tick_status_box
         g_tick_status_box |> release()

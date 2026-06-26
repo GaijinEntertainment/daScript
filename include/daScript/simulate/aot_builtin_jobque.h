@@ -175,6 +175,7 @@ namespace das {
     };
 
     DAS_API bool is_job_que_shutting_down();
+    DAS_API uint64_t count_jobque_leaks();
     DAS_API void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );

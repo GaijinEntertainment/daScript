@@ -278,6 +278,10 @@ namespace {
     // GLFW window at a time, so a new run must tear the previous one down first.
     WebLoop * g_activeWebLoop = nullptr;
 
+    // Mirror of main()'s dumpLeaks (-no-dump-leaks), so the post-shutdown leak check
+    // in stop_browser_loop respects the same flag as the end-of-callMain dump.
+    bool g_webloop_dump_leaks = true;
+
     // Stop the active loop: cancel its main loop, run its shutdown() (which
     // destroys the GLFW window + glfwTerminate — without this the next program's
     // glfwCreateWindow aborts "only supports one window at a time"), free the
@@ -291,7 +295,18 @@ namespace {
             loop->ctx->evalWithCatch(loop->shutdownFn, nullptr);
             loop->ctx->getException();   // swallow — teardown is best-effort
         }
-        delete loop;
+        delete loop;   // drops the Context shared_ptr -> Context + its objects freed
+        // Real leak check for browser-loop programs: now that the program has ended
+        // and shutdown() ran, report any JobStatus/Channel/LockBox the program failed
+        // to free. (The end-of-callMain dump in main() is skipped while a loop is live
+        // — at that point the program is still running and its objects are in use.)
+        // Honors -no-dump-leaks via g_webloop_dump_leaks.
+        if ( g_webloop_dump_leaks ) {
+            if ( uint64_t n = JobStatus::CountJobQueLeaks() ) {
+                tout << "JobQue leak after browser-loop shutdown: " << n << "\n";
+                JobStatus::DumpJobQueLeaks();
+            }
+        }
     }
 
     void web_loop_tick ( void * arg ) {
@@ -892,6 +907,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return -1;
     }
 
+#ifdef __EMSCRIPTEN__
+    g_webloop_dump_leaks = dumpLeaks;   // stop_browser_loop's leak check honors -no-dump-leaks
+#endif
     for ( auto & fn : files ) {
         replace(fn, "_dasroot_", getDasRoot());
         int rc = compile_and_run(fn, mainName, outputProgramCode, dryRun, compileOnly);
@@ -901,10 +919,25 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     // and done
     if ( pauseAfterDone ) getchar();
+#ifdef __EMSCRIPTEN__
+    // A browser main-loop (update/init/shutdown program) keeps running after
+    // callMain returns — its Context, JobStatus and smart_ptrs are legitimately
+    // still alive (freed when the loop ends, via stop_browser_loop, which runs its
+    // own leak check). Module::Shutdown still runs (its per-run cleanup is needed
+    // for the next program to start cleanly), but with leak reporting off; then we
+    // return before the end-of-run JobStatus/smart_ptr dump + exit(1), which assume
+    // the program is finished and would flag every in-use object as "leaked".
+    const bool browserLoopActive = ( g_activeWebLoop != nullptr );
+#else
+    const bool browserLoopActive = false;
+#endif
     // Handle-leak dump runs inside Module::Shutdown, between module
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
-    Module::Shutdown(dumpLeaks);
+    Module::Shutdown(dumpLeaks && !browserLoopActive);
+    if ( browserLoopActive ) {
+        return exitCode;
+    }
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
     }

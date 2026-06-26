@@ -1,0 +1,1 @@
+Forces the audio system to use miniaudio's null backend — a timer-driven playback device with no real hardware — on the next audio_system_create / with_audio_system. Intended for headless tests and CI where no audio device is available; pass false to restore the default backend.

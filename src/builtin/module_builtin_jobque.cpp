@@ -636,6 +636,13 @@ namespace das {
         return g_jobQueAvailable == 0;
     }
 
+    uint64_t count_jobque_leaks () {
+        // Number of live JobStatus/Channel/LockBox/Stream + Feature objects globally.
+        // Tests compare before/after a teardown to assert no net leak (dastest's own
+        // infrastructure may hold some, so an absolute count is not meaningful).
+        return JobStatus::CountJobQueLeaks();
+    }
+
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
@@ -982,6 +989,8 @@ namespace das {
                     ->args({"block","context","line"});
             addExtern<DAS_BIND_FUN(is_job_que_shutting_down)>(*this, lib,  "is_job_que_shutting_down",
                 SideEffects::modifyExternal, "is_job_que_shutting_down");
+            addExtern<DAS_BIND_FUN(count_jobque_leaks)>(*this, lib,  "count_jobque_leaks",
+                SideEffects::accessExternal, "count_jobque_leaks");
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_jobque.h\"\n";
