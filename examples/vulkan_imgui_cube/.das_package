@@ -1,0 +1,24 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("vulkan-imgui-cube")
+    package_description("Spinning dasVulkan cube with a Dear ImGui control panel, rendered by a 100%-daslang ImGui->Vulkan backend")
+    package_author("borisbat")
+    package_license("MIT")
+    package_tag("graphics")
+    package_tag("vulkan")
+    package_tag("gui")
+}
+
+[export]
+def dependencies(version : string) {
+    require_package("dasVulkan")
+    require_package("dasImgui")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+}
