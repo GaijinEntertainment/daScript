@@ -318,6 +318,7 @@ class GlslExport : AstVisitor {
     depEnum   : table<uint64; bool>
     trackLine : int = 0
     trackFile : string
+    suppress_bounds_arg : bool = false    // the very next expr visited is a `.[]` call's __context__/__lineinfo__ tail arg; elide it
     shaderType : ShaderType
     version : int = 0
     renames : array<tuple<name : string; repl : string>>
@@ -1264,6 +1265,10 @@ class GlslExport : AstVisitor {
     }
 // call
     def override preVisitExprCall(expr : ExprCall?) {
+        if (is_index_op_call(expr)) {
+            // `.[]` runtime index -> base[index]; opened/closed in visitExprCallArgument, no `fn(`.
+            return
+        }
         if (is_shadow_compare_call(expr)) {
             // GL has no textureCompare(): a sampler2DShadow samples with texture(s, vec3(uv, ref)).
             // The vec3() wrap of (uv, compare) is emitted around args 1+2 in visitExprCallArgument.
@@ -1285,10 +1290,29 @@ class GlslExport : AstVisitor {
         *writer |> write("{fnName}(")
     }
     def override visitExprCall(expr : ExprCall?) : ExpressionPtr {
+        if (is_index_op_call(expr)) {
+            return expr
+        }
         *writer |> write(")")
         return expr
     }
+    def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) {
+        // Mark EXACTLY a `.[]` runtime-index call's 3rd/4th args (its __context__ / __lineinfo__
+        // bounds-check tail) for elision, by node identity. Scoping to those nodes (not the whole
+        // `.[]` subtree) keeps an explicit __context__ in the base / index failing closed.
+        suppress_bounds_arg = (is_index_op_call(expr) && length(expr.arguments) > 3 &&
+            (arg == expr.arguments[2] || arg == expr.arguments[3]))
+    }
     def override visitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) {
+        if (is_index_op_call(expr)) {
+            // base -> `[`, index -> `]`; the trailing __context__ / __lineinfo__ args emit nothing.
+            if (arg == expr.arguments[0]) {
+                *writer |> write("[")
+            } elif (arg == expr.arguments[1]) {
+                *writer |> write("]")
+            }
+            return arg
+        }
         if (is_shadow_compare_call(expr)) {
             // args: 0=sampler, 1=uv (float2), 2=compare (float) -> texture(s, vec3(uv, compare))
             if (arg == expr.arguments[0]) {
@@ -1940,10 +1964,20 @@ class GlslExport : AstVisitor {
     }
 // fake context
     def override preVisitExprFakeContext(expr : ExprFakeContext?) : void {
+        // dropped only when it IS a `.[]` bounds-check tail arg (flagged in preVisitExprCallArgument);
+        // an explicit __context__ anywhere else still fails closed.
+        if (suppress_bounds_arg) {
+            suppress_bounds_arg = false
+            return
+        }
         error("__context__ is not supported", expr.at)
     }
 // fake line info
     def override preVisitExprFakeLineInfo(expr : ExprFakeLineInfo?) : void {
+        if (suppress_bounds_arg) {
+            suppress_bounds_arg = false
+            return
+        }
         error("__lineinfo__ is not supported", expr.at)
     }
 // reader
@@ -2015,6 +2049,16 @@ def is_glsl_structure(arg; name : string) {
 def is_shadow_compare_call(expr : ExprCall?) : bool {
     return (expr != null && expr.name == "textureCompare" &&
         expr.func != null && expr.func._module != null && expr.func._module.name == "shader_lingua_franca")
+}
+
+// A runtime-index `m[i]` (vector / matrix / fixed-array indexed by a non-const value) lowers to a
+// `.[](base, index, __context__, __lineinfo__)` operator call under no-opt / JIT — the bounds-check
+// carries the context + line for an out-of-range panic (a const index stays a plain ExprAt and folds).
+// GLSL has its own (undefined-but-not-trapping) out-of-bounds behavior, so the emitter drops the check
+// and writes `base[index]`, eliding the two trailing __context__ / __lineinfo__ args.
+[macro_function]
+def is_index_op_call(expr : ExprCall?) : bool {
+    return expr != null && expr.name == ".[]"
 }
 
 [macro_function]
