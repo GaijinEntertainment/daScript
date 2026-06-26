@@ -10,9 +10,14 @@ require daslib/safe_addr
 // The first 3D-geometry rung. A textured, lit, breathing cube spins while the
 // camera orbits it. This introduces the pieces the fullscreen-fragment rungs
 // (01-03) skipped: a real vertex buffer with per-vertex (pos, normal, uv), the
-// model / view / projection matrix chain (mat4 uniforms built host-side with
-// daslib/math_boost), depth testing + back-face culling, and a texture sampled
-// in the fragment shader.
+// model / view / projection matrix chain (mat4s built host-side with
+// daslib/math_boost and packed into a std140 uniform block), depth testing +
+// back-face culling, and a texture sampled in the fragment shader.
+//
+// The matrices + lighting params live in one `struct Camera` declared `@uniform`:
+// dasGlsl lowers it to a `layout(std140) uniform` interface block and the host
+// uploads it through a single uniform buffer, the GL/WebGL2-portable way to feed
+// a shader a block of constants (and the same std140 path the dasVulkan rail uses).
 //
 // A faithful port of the dasVulkan rung (same look): the cube wears a procedural
 // "synthwave horizon" texture -- deep-purple-to-magenta sky with a banded neon
@@ -27,11 +32,20 @@ require daslib/safe_addr
 var @in @location a_pos : float3
 var @in @location a_normal : float3
 var @in @location a_uv : float2
-var @uniform u_model : float4x4
-var @uniform u_view : float4x4
-var @uniform u_proj : float4x4
-var @uniform u_cam_pos : float3
-var @uniform u_time : float
+
+// The camera's per-frame transform + lighting params, packed into one std140 UBO. A struct @uniform
+// emits a `layout(std140) uniform u_cam_ubo { ... } u_cam;` interface block (the GL/WebGL2 portable
+// floor) and the host bind uploads it through a single uniform-buffer, instead of one glUniform* call
+// per field. cam_pos (float3) sits right before time (float) on purpose: that float3-then-scalar pair
+// is the case naive packing gets wrong, and exercises the std140 layout walk's per-field offsets.
+struct Camera {
+    model   : float4x4
+    view    : float4x4
+    proj    : float4x4
+    cam_pos : float3
+    time    : float
+}
+var @uniform u_cam : Camera
 var @uniform u_tex : sampler2D
 var @inout w_pos : float3
 var @inout w_normal : float3
@@ -40,24 +54,24 @@ var @out f_FragColor : float4
 
 [vertex_program]
 def vs_main {
-    let world = u_model * float4(a_pos, 1.0)
-    gl_Position = u_proj * u_view * world
+    let world = u_cam.model * float4(a_pos, 1.0)
+    gl_Position = u_cam.proj * u_cam.view * world
     w_pos = world.xyz
     // model is rotation + uniform scale only, so a (normal, 0) multiply transforms
     // the normal correctly without an inverse-transpose.
-    w_normal = (u_model * float4(a_normal, 0.0)).xyz
+    w_normal = (u_cam.model * float4(a_normal, 0.0)).xyz
     w_uv = a_uv
 }
 
 [fragment_program]
 def fs_main {
     let n = normalize(w_normal)
-    let v = normalize(u_cam_pos - w_pos)
+    let v = normalize(u_cam.cam_pos - w_pos)
     let l = normalize(float3(0.5, 1.0, 0.3))            // warm key light from above-front
     let key = max(dot(n, l), 0.0) * 0.7 + 0.3            // ambient floor 0.3
     let rim = pow(1.0 - max(dot(n, v), 0.0), 2.0)        // silhouette glow
     let rim_color = float3(0.4, 0.6, 1.0)                // cool cyan
-    let scrolled = float2(w_uv.x, w_uv.y + u_time * 0.05)
+    let scrolled = float2(w_uv.x, w_uv.y + u_cam.time * 0.05)
     let albedo = texture(u_tex, scrolled).xyz
     let lit = albedo * key + rim_color * rim
     f_FragColor = float4(lit, 1.0)
@@ -231,11 +245,11 @@ def update : bool {
     // breathing scale + tumble about a tilted axis
     let breathe = 1.0 + 0.05 * sin(t * 2.0)
     let rot = quat_from_unit_vec_ang(normalize(float3(1.0, 1.0, 0.0)), t * 0.6)
-    u_model = compose(float3(0, 0, 0), rot, float3(breathe))
-    u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 50.0)
-    u_cam_pos = cam_pos
-    u_time = t
+    u_cam.model = compose(float3(0, 0, 0), rot, float3(breathe))
+    u_cam.view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
+    u_cam.proj = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 50.0)
+    u_cam.cam_pos = cam_pos
+    u_cam.time = t
 
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.02, 0.01, 0.05, 1.0)

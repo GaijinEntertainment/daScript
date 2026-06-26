@@ -145,6 +145,15 @@ def public live_get_framebuffer_size(var width, height : int&) {
 
 // --- Window preservation across reloads ---
 
+// Free std140 UBO buffers before the render context is torn down for a reload. opengl_boost tracks
+// them in render-context tables holding raw GL handles the GC can't see; the reload frees the tables
+// but not the buffers, so each reload would otherwise orphan one buffer set per (program, block). The
+// preserved GL context is still current here, so glDeleteBuffers is valid.
+[before_reload]
+def release_std140_ubos() {
+    std140_release_all()
+}
+
 [before_reload]
 def save_glfw_window() {
     if (live_window != null) {

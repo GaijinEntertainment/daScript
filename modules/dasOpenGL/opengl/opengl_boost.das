@@ -10,6 +10,7 @@ require opengl/opengl public
 require daslib/safe_addr
 require daslib/contracts
 require daslib/array_boost
+require daslib/strings_boost
 
 require glsl/glsl_opengl public
 
@@ -226,6 +227,39 @@ def std140_flush(program : uint; blockName : string; bindingPoint : int) {
         glUniformBlockBinding(program, blockIndex, uint(bindingPoint))
         glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, int64(0), nbytes)
     }
+}
+
+// Delete the GL uniform buffer + CPU staging entry for every std140 block owned by `program`. Call
+// when a program is deleted (e.g. an app that recompiles shaders at runtime) so its per-(program,
+// block) UBO buffers don't leak. g_std140_* hold raw GL handles the GC can't see, so they must be
+// released explicitly, and from the SAME context that ran the bind (these tables are render-context
+// state, not the opengl_cache agent context). Block keys are "program/block", so an exact "program/"
+// prefix selects this program's entries without matching e.g. "12/" for program 1.
+def std140_release(program : uint) {
+    let prefix = "{program}/"
+    var stale <- [for (key in keys(g_std140_staging)); key; where key |> starts_with(prefix)]
+    for (key in stale) {
+        var ubo = g_std140_ubos?[key] ?? 0u
+        if (ubo != 0u) {
+            glDeleteBuffers(1, safe_addr(ubo))
+        }
+        g_std140_ubos |> erase(key)
+        g_std140_staging |> erase(key)
+    }
+    delete stale
+}
+
+// Delete ALL std140 UBO buffers + staging entries in the current context. Call on teardown or before
+// a live reload (glfw_live does, via [before_reload]): the render context is about to be destroyed,
+// which frees these tables but NOT the GL buffers they reference, so without this every reload
+// orphans one buffer set per (program, block). Safe to call when nothing was allocated (no-op).
+def std140_release_all() {
+    for (ubo in values(g_std140_ubos)) {
+        var b = ubo
+        glDeleteBuffers(1, safe_addr(b))
+    }
+    delete g_std140_ubos
+    delete g_std140_staging
 }
 
 def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; offset : int) {
