@@ -10,6 +10,7 @@ module strudel_sf2 shared public
 require daslib/fio
 require strings
 require math
+require audio
 
 // ─── SF2 Generator Operators ───
 
@@ -79,6 +80,8 @@ let public SF2_SAMPLE_RIGHT  = 2u
 let public SF2_SAMPLE_LEFT   = 4u
 //! Linked sample flag — indicates a multi-sample link set.
 let public SF2_SAMPLE_LINKED = 8u
+//! OGG-Vorbis compressed sample flag (SF3) — sample data is an OGG stream, not raw PCM.
+let public SF2_SAMPLE_OGG_VORBIS = 0x10u
 
 // ─── SF2 Data Structures ───
 
@@ -534,6 +537,63 @@ def private split_global_zone(var zones : array<SF2Zone?>; terminal_oper : int) 
     return null
 }
 
+// ─── SF3 (OGG-Vorbis) Sample Decoding ───
+
+def private decode_ogg_block(data : array<uint8>; byte_offset, byte_len : int; var out_pcm : array<int16>) : int {
+    // Decode one OGG-Vorbis stream (a single SF3 sample) to mono int16 and append to out_pcm.
+    // Returns the decoded frame count, 0 on failure.
+    if (byte_len <= 0 || byte_offset < 0 || byte_offset + byte_len > length(data)) return 0
+    var decoder = new ma_decoder
+    var config <- ma_decoder_config_init(ma_format.ma_format_s16, 1u, 0u)
+    if (ma_decoder_init_memory(unsafe(addr(data[byte_offset])), uint64(byte_len), unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
+        unsafe { delete decoder; }
+        return 0
+    }
+    let total = int(ma_decoder_get_length_in_pcm_frames(decoder))
+    if (total > 0) {
+        // decode straight into out_pcm's tail — no temp buffer
+        let base = length(out_pcm)
+        out_pcm |> resize(base + total)
+        ma_decoder_read_pcm_frames(decoder, unsafe(addr(out_pcm[base])), uint64(total))
+    }
+    ma_decoder_uninit(decoder)
+    unsafe { delete decoder; }    // uninit frees native state; delete frees the heap shell (gc won't — leak-checked in CI)
+    return total
+}
+
+def private sf3_decode_samples(data : array<uint8>; smpl_offset, smpl_size : int; var sf2 : SF2File) : bool {
+    if (smpl_offset < 0 || smpl_size <= 0) return false
+    var pcm : array<int16>
+    for (s in sf2.samples) {
+        let base = length(pcm)
+        var frames = 0
+        var loop_lo = 0
+        var loop_hi = 0
+        if ((s.sample_type & SF2_SAMPLE_OGG_VORBIS) != 0u) {
+            frames = decode_ogg_block(data, smpl_offset + int(s.start), int(s.end) - int(s.start) + 1, pcm)
+            loop_lo = int(s.loop_start)
+            loop_hi = int(s.loop_end)
+            s.sample_type = s.sample_type & ~SF2_SAMPLE_OGG_VORBIS
+        } else {
+            let from = clamp(int(s.start), 0, length(sf2.sample_data))
+            let to = clamp(int(s.end), from, length(sf2.sample_data))
+            pcm |> reserve(base + to - from)
+            for (i in range(from, to)) {
+                pcm |> push(sf2.sample_data[i])
+            }
+            frames = to - from
+            loop_lo = int(s.loop_start) - int(s.start)
+            loop_hi = int(s.loop_end) - int(s.start)
+        }
+        s.start = uint(base)
+        s.end = uint(base + frames)
+        s.loop_start = uint(base + clamp(loop_lo, 0, frames))
+        s.loop_end = uint(base + clamp(loop_hi, 0, frames))
+    }
+    sf2.sample_data <- pcm
+    return !empty(sf2.sample_data)
+}
+
 // ─── Top-Level Parse ───
 
 def public sf2_load(path : string) : SF2File? {
@@ -576,6 +636,9 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
 
     var result = new SF2File()
 
+    var smpl_offset = -1
+    var smpl_size = 0
+
     // raw pdta arrays
     var raw_phdr : array<RawPresetHeader>
     var raw_inst : array<RawInstrumentHeader>
@@ -617,6 +680,8 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
                     let sub_id = read_fourcc(data, cursor)
                     let sub_size = int(read_u32_le(data, cursor))
                     if (sub_id == "smpl") {
+                        smpl_offset = cursor
+                        smpl_size = sub_size
                         let num_samples = sub_size / 2
                         result.sample_data |> resize(num_samples)
                         // bulk copy — data is little-endian int16, same as native on x86/x64
@@ -703,6 +768,31 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
         // build lookup
         let key = (preset.bank << 8) | preset.preset
         result.preset_lookup[key] = pi
+    }
+
+    // SF3: samples flagged OGG-Vorbis hold compressed streams in smpl — decode them now.
+    var is_sf3 = false
+    for (s in result.samples) {
+        if ((s.sample_type & SF2_SAMPLE_OGG_VORBIS) != 0u) {
+            is_sf3 = true
+            break
+        }
+    }
+    if (is_sf3) {
+        if (!sf3_decode_samples(data, smpl_offset, smpl_size, *result)) {
+            to_log(0, "SF2: '{result.name}' is a compressed SF3 soundfont but OGG-Vorbis decode failed\n")
+            return null
+        }
+    } else {
+        // uncompressed SF2: guard against truncated sample data (would read out of bounds at render)
+        var max_sample_end = 0
+        for (s in result.samples) {
+            max_sample_end = max(max_sample_end, int(s.end))
+        }
+        if (max_sample_end > length(result.sample_data)) {
+            to_log(0, "SF2: '{result.name}' references {max_sample_end} sample frames but only {length(result.sample_data)} are present — truncated soundfont, unsupported.\n")
+            return null
+        }
     }
 
     to_log(0, "SF2: loaded \"{result.name}\" — {num_presets} presets, {num_inst} instruments, {length(result.samples)} samples, {length(result.sample_data)} sample frames\n")

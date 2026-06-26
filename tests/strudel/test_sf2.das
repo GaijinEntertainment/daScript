@@ -7,7 +7,6 @@ require strudel/strudel_sf2
 require dastest/testing_boost
 require daslib/fio
 require math
-require strings
 
 let SF2_DIR = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
 
@@ -54,6 +53,39 @@ def test_centibels_to_linear(t : T?) {
     t |> run("200 cb ~ 0.1") <| @(t : T?) {
         t |> roughly_equal(0.1, centibels_to_linear(200), 0.001)
     }
+}
+
+[test]
+def test_load_sf3_compressed(t : T?) {
+    // mini.sf3: a hand-built minimal SF3 holding one OGG-Vorbis sample (a 0.06s 440Hz
+    // mono sine, 22050Hz). Exercises the SF3 decode path deterministically — no external asset.
+    let path = "{get_das_root()}/tests/strudel/fixtures/mini.sf3"
+    var sf2 = sf2_load(path)
+    t |> run("compressed SF3 loads (not rejected)") <| @(t : T?) {
+        t |> success(sf2 != null)
+    }
+    if (sf2 == null) return
+    t |> run("OGG stream decoded to PCM frames") <| @(t : T?) {
+        // 3553-byte OGG decodes to ~1323 frames; just assert a plausible decoded length
+        t |> success(length(sf2.sample_data) > 1000)
+    }
+    t |> run("sample header rewritten in-bounds") <| @(t : T?) {
+        let n = length(sf2.sample_data)
+        let s = sf2.samples[0]
+        t |> success(int(s.end) <= n && int(s.start) < int(s.end))
+    }
+    t |> run("OGG-Vorbis flag stripped after decode") <| @(t : T?) {
+        t |> success((sf2.samples[0].sample_type & SF2_SAMPLE_OGG_VORBIS) == 0u)
+    }
+    t |> run("preset resolves to a playable zone") <| @(t : T?) {
+        let idx = sf2_find_preset(*sf2, 0, 0)
+        t |> success(idx >= 0)
+        if (idx >= 0) {
+            let zones = sf2_find_zones(*sf2, idx, 60, 127)
+            t |> success(length(zones) > 0)
+        }
+    }
+    unsafe { delete sf2; }
 }
 
 [test]
