@@ -6,18 +6,24 @@ options strict_smart_pointers
 
 module glsl_opengl shared public
 
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/shader_block_layout
 
 require glsl/glsl_internal
 require glsl/glsl_common public
 
 class GlslOpenGLShader : GlslShader {
+    // Pack struct @uniform / @push_constant blocks as std140 UBOs by default (the GL/WebGL2 portable
+    // floor, byte-for-byte with the Vulkan rail). Loose by-name binding stays the fallback for the
+    // scalar / vector / matrix / sampler uniforms that aren't interface blocks.
+    override pack_std140_uniforms = true
     def override generate_bind_uniform_dummy(var func : FunctionPtr) {
         glsl_opengl::generate_bind_uniform_dummy(func)
     }
     def override generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
-        glsl_opengl::generate_bind_uniform(fnMain, fn)
+        glsl_opengl::generate_bind_uniform(fnMain, fn, pack_std140_uniforms)
     }
 }
 
@@ -121,9 +127,78 @@ def private emit_loose_struct_bind(var blk : ExprBlock?; st : Structure?; namePr
     }
 }
 
+// True if a module global is a std140-packable @uniform / @push_constant UBO block (the exact set the
+// emitter packs: a non-sampler/image struct that lays out in std140). Used to build a program-stable
+// binding-point index across ALL of the module's UBO blocks, independent of which stage reaches them.
 [macro_function]
-def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
+def private is_packable_ubo(vv : VariablePtr) : bool {
+    if (!((vv.annotation |> find_arg("uniform") is tBool) || (vv.annotation |> find_arg("push_constant") is tBool)) ||
+        vv._type == null || vv._type.baseType != Type.tStructure || vv._type.structType == null) return false
+    let snm = "{vv._type.structType.name}"
+    if (snm |> find("sampler") != -1 || snm |> find("image") != -1) return false
+    return std140_block_is_packable(vv._type.structType)
+}
+
+// Emit a std140_set(_opengl_program, blockName, off, access) call into the bind block — a flat memcpy
+// of one scalar / vector / float4x4 / array-element / leaf field into the staging buffer at its offset.
+[macro_function]
+def private emit_std140_set(var blk : ExprBlock?; at : LineInfo; blockName : string; off : int; var access : ExpressionPtr) {
+    var c = new ExprCall(at = at, name := "std140_set")
+    c.arguments |> emplace_new() <| new ExprVar(at = at, name := "_opengl_program")
+    c.arguments |> emplace_new() <| new ExprConstString(at = at, value := blockName)
+    c.arguments |> emplace_new() <| new ExprConstUInt(at = at, value = uint(off))
+    c.arguments |> emplace(access)
+    blk.list |> emplace(c)
+}
+
+// Emit the std140 UBO bind for one struct @uniform / @push_constant block. The caller confirmed
+// std140_block_is_packable. The shared std140 walk (std140_block_writes) decomposes the block into leaf
+// scalar/vector writes — float3x3/float3x4 columns, array elements, nested-struct fields — at their
+// std140 offsets; we wrap them with std140_reset / per-leaf std140_set / std140_flush. The Vulkan rail
+// drives the SAME walk through write_field, so both pack byte-identically.
+[macro_function]
+def private emit_std140_ubo_bind(var blk : ExprBlock?; vv : VariablePtr; bindingPoint : int) {
+    let st = vv._type.structType
+    // Block name = <instance>_ubo — must match glsl_internal's outputStd140UboBlock (distinct from the
+    // struct type name, which is still emitted as a standalone GLSL struct).
+    let blockName = "{vv.name}_ubo"
+    var fields : array<BlockField>
+    var errs : array<string>
+    let layout = compute_block_layout(blockName, st, fields, errs)
+    if (!layout.ok) {
+        // Defensive: std140_block_is_packable already rejected non-layoutable blocks to the loose path.
+        let msg = empty(errs) ? "(no diagnostic)" : errs[0]
+        macro_error(compiling_program(), vv.at, "[opengl std140]: @uniform '{vv.name}' layout failed: {msg}")
+        delete fields
+        delete errs
+        return
+    }
+    let padded = round_up(layout.size, 16)
+    var cll_reset = new ExprCall(at = vv.at, name := "std140_reset")
+    cll_reset.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_reset.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := blockName)
+    cll_reset.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = padded)
+    blk.list |> emplace(cll_reset)
+    var writes : array<Std140Write>
+    std140_block_writes(st, new ExprVar(at = vv.at, name := vv.name), 0, writes)
+    for (w in writes) {
+        emit_std140_set(blk, vv.at, blockName, w.offset, w.access)
+    }
+    unsafe { delete writes; }
+    var cll_flush = new ExprCall(at = vv.at, name := "std140_flush")
+    cll_flush.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_flush.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := blockName)
+    cll_flush.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = bindingPoint)
+    blk.list |> emplace(cll_flush)
+    delete fields
+    delete errs
+}
+
+[macro_function]
+def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pack_std140 : bool) {
     var blk = new ExprBlock(at = fn.at)
+    var ubo_globals : array<VariablePtr>   // struct @uniform/@push_constant blocks to pack as std140 UBOs
+    var ubo_seen : table<string>           // dedup: a block reachable via >1 function is collected once
     collect_dependencies(fnMain) $(_vfun, vvar) {
         for (vv in vvar) {
             // @push_constant has no GL equivalent -> bind it like a @uniform (loose). Phase 2 / D4.
@@ -198,11 +273,26 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                 } elif (is_glsl_structure(vv, "sampler2DShadow")) {
                     emit_combined_sampler_bind(blk, vv, "texture2D", "bind_sampler_2d_shadow")
                 } elif (vv._type.baseType == Type.tStructure && vv._type.structType != null) {
-                    // A struct @uniform / @push_constant lowers to a GLSL `uniform StructType name;`.
-                    // GL exposes each leaf field as its own by-name uniform location, so bind them
-                    // loose by flattened name (name.field, name.field.subfield, ...). Phase 2 / D5.
-                    emit_loose_struct_bind(blk, vv._type.structType, string(vv.name),
-                        new ExprVar(at = vv.at, name := vv.name))
+                    // Same predicate the program-stable binding-point pass uses (is_packable_ubo), so a
+                    // block is collected iff it also gets a point — and it matches the emitter's pack
+                    // decision, so emitter and binder never disagree on a block.
+                    if (pack_std140 && is_packable_ubo(vv)) {
+                        // std140 UBO pack (default): defer until every block is collected, so binding
+                        // points can be assigned in a stable order that agrees across the vertex/fragment
+                        // bind functions (both walk the same module globals). The emitter consults the
+                        // same predicate. Phase 2 / D5.
+                        let nm = string(vv.name)
+                        if (!key_exists(ubo_seen, nm)) {
+                            ubo_seen |> insert(nm)
+                            ubo_globals |> push(vv)
+                        }
+                    } else {
+                        // loose fallback (packing off, or a block with no std140 layout — e.g. a bool
+                        // field): a struct uniform lowers to `uniform StructType name;` and each leaf
+                        // field binds by flattened name (name.field, name.field.subfield, ...).
+                        emit_loose_struct_bind(blk, vv._type.structType, string(vv.name),
+                            new ExprVar(at = vv.at, name := vv.name))
+                    }
                 } else {
                     // scalar / vector / matrix uniform: glUniformAny(glGetUniformLocation("name"), name)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
@@ -216,6 +306,64 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
             }
         }
     }
+    // std140 UBO binding points: a linked program needs a DISTINCT point per block, and a block shared
+    // across stages must get the SAME point in each stage's bind. The reachable set is per-stage, so an
+    // index over it is NOT program-stable — two distinct blocks split across the vertex/fragment stages
+    // could both land on 0 and stomp each other. So we assign points over ALL of the MODULE's packable
+    // UBO globals (every stage walks the same set, so the result is identical in each): an explicit
+    // @binding is reserved as-is (fail-closed on a negative or a duplicate), and every other block gets
+    // the lowest still-free point. The per-shader bind then just looks up its reachable blocks.
+    var ubo_explicit : table<string; int>   // module UBO block name -> explicit @binding (if any)
+    var ubo_names : array<string>           // all module UBO block names (sorted -> deterministic auto order)
+    for_each_global(compiling_module()) $(gv) {
+        if (is_packable_ubo(gv)) {
+            let gnm = string(gv.name)
+            ubo_names |> push(gnm)
+            let be = gv.annotation |> find_arg("binding")
+            if (be is tInt) {
+                ubo_explicit[gnm] = be as tInt
+            }
+        }
+    }
+    ubo_names |> sort()
+    var reserved : table<int>                // points claimed by an explicit @binding
+    for (gnm in ubo_names) {
+        if (key_exists(ubo_explicit, gnm)) {
+            let be = ubo_explicit[gnm]
+            if (be < 0) {
+                macro_error(compiling_program(), fn.at,
+                    "[opengl std140]: @uniform block '{gnm}' has a negative @binding ({be}); binding points must be >= 0.")
+            } elif (key_exists(reserved, be)) {
+                macro_error(compiling_program(), fn.at,
+                    "[opengl std140]: two std140 UBO blocks both request @binding {be}; each block needs a distinct binding point.")
+            } else {
+                reserved |> insert(be)
+            }
+        }
+    }
+    var ubo_point : table<string; int>       // final program-stable point per block
+    var next_free = 0
+    for (gnm in ubo_names) {
+        if (key_exists(ubo_explicit, gnm)) {
+            ubo_point[gnm] = ubo_explicit[gnm]
+        } else {
+            while (key_exists(reserved, next_free)) {
+                next_free++
+            }
+            ubo_point[gnm] = next_free
+            reserved |> insert(next_free)
+            next_free++
+        }
+    }
+    for (vv in ubo_globals) {
+        emit_std140_ubo_bind(blk, vv, ubo_point?[string(vv.name)] ?? 0)
+    }
+    delete ubo_explicit
+    delete ubo_names
+    delete reserved
+    delete ubo_point
+    unsafe { delete ubo_globals; }
+    delete ubo_seen
     fn.body := blk
     if (DEBUG_SHADER_BINDINGS) {
         print("{describe(fn)}\n")

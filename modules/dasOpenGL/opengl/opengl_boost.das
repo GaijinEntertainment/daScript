@@ -181,6 +181,53 @@ def glBufferData(target : GLenum; arr; usage : GLenum) {
     }
 }
 
+// ===== std140 UBO runtime (the GL analogue of dasVulkan's write_field / with_mapped_memory) =====
+// A struct @uniform packed as a std140 interface block binds through these three helpers, emitted by
+// glsl_opengl's bind-uniform macro: std140_reset sizes a per-(program, block) CPU staging buffer,
+// std140_set writes each field at its compile-time std140 offset, std140_flush uploads the bytes to a
+// per-(program, block) GL uniform buffer and binds blockName -> bindingPoint -> buffer. Keeping all
+// state in these tables lets the generated bind body stay a flat list of calls (no local buffer).
+// GL/WebGL2 blocks carry no layout(binding=), so the binding point is assigned host-side at flush.
+var private g_std140_staging : table<string; array<uint8>>
+var private g_std140_ubos : table<string; uint>
+
+// Resize the staging buffer for (program, blockName) to `size` bytes (the std140 block size, padded to
+// 16). Unwritten bytes are std140 padding the shader never reads, so they need no zeroing.
+def std140_reset(program : uint; blockName : string; size : int) {
+    let key = "{program}/{blockName}"
+    g_std140_staging[key] |> resize(size)
+}
+
+// memcpy a 32-bit scalar / vector / float4x4 field into the staging buffer at its std140 byte offset.
+// Mirrors dasVulkan's write_field; float3x3 / composites are repacked/recursed by the bind macro.
+def std140_set(program : uint; blockName : string; offset : uint; var value : auto(TT) const) {
+    let key = "{program}/{blockName}"
+    unsafe {
+        let dst = reinterpret<void?>(addr(g_std140_staging[key][int(offset)]))
+        memcpy(dst, reinterpret<void?>(addr(value)), typeinfo sizeof(type<TT>))
+    }
+}
+
+// Upload the staging buffer to a per-(program, block) GL uniform buffer (lazily created) and bind the
+// block to `bindingPoint`. glUniformBlockBinding wires the program's block to the point; glBindBufferRange
+// binds the buffer there.
+def std140_flush(program : uint; blockName : string; bindingPoint : int) {
+    let key = "{program}/{blockName}"
+    var ubo = g_std140_ubos?[key] ?? 0u
+    if (ubo == 0u) {
+        glGenBuffers(1, safe_addr(ubo))
+        g_std140_ubos[key] = ubo
+    }
+    glBindBuffer(GL_UNIFORM_BUFFER, ubo)
+    glBufferData(GL_UNIFORM_BUFFER, g_std140_staging[key], GL_DYNAMIC_DRAW)
+    let blockIndex = glGetUniformBlockIndex(program, blockName)
+    if (blockIndex != GL_INVALID_INDEX) {
+        let nbytes = int64(length(g_std140_staging[key]))
+        glUniformBlockBinding(program, blockIndex, uint(bindingPoint))
+        glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, int64(0), nbytes)
+    }
+}
+
 def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; offset : int) {
     unsafe {
         glVertexAttribPointer(index, size, tp, normalized, stride, reinterpret<void?> offset)
