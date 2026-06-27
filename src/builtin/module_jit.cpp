@@ -431,44 +431,6 @@ extern "C" {
         return context.shared + context.globalOffsetByMangledName(mnh);
     }
 
-    // Return the raw globals / shared base pointers from the Context. Existed
-    // before as JIT IR doing `GEP ctx+CONTEXT_OFFSET_OF_GLOBALS + load`, but
-    // CONTEXT_OFFSET_OF_GLOBALS is a `static const uint32_t` baked at C++
-    // compile time of THIS file using the host's `offsetof(Context, globals)`.
-    // When cross-compiling JIT'd code to wasm32, the wasm32 Context struct
-    // has 4-byte pointers and a different offsetof — emitting the host's
-    // offset reads garbage. The runtime archive (libDaScript_runtime.a) is
-    // built for the target with the right layout, so calling this helper
-    // gives the right pointer.
-    DAS_API void * jit_get_globals_base ( Context * context ) {
-        return context->globals;
-    }
-
-    DAS_API void * jit_get_shared_base ( Context * context ) {
-        return context->shared;
-    }
-
-    // Resolve a handled-type (C++) field offset at runtime. Same host/target skew
-    // as jit_get_globals_base: the JIT bakes field offsets via the HOST annotation's
-    // offsetof, but a wasm32 cross-compile needs the TARGET layout. The runtime
-    // archive (built for the target) registers each handled type's annotation with
-    // the right offsetof, so resolve by (module, type, field) here. Called once per
-    // offset-global at init, after initialize_modules() has registered the modules.
-    DAS_API uint32_t jit_get_handled_field_offset ( const char * moduleName,
-                                                    const char * typeName,
-                                                    const char * fieldName ) {
-        uint32_t offset = (uint32_t)-1;
-        Module::foreach([&](Module * module) -> bool {
-            if ( module->name != moduleName ) return true;
-            auto ann = module->findAnnotation(typeName);
-            if ( ann && (ann->rtti_isHandledTypeAnnotation() || ann->rtti_isStructureAnnotation()) ) {
-                offset = ((TypeAnnotation *)ann)->getFieldOffset(fieldName);
-                return false; // stop iterating
-            }
-            return true;
-        });
-        return offset;
-    }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         return context->allocate(bytes);
@@ -661,9 +623,6 @@ extern "C" {
     void *das_get_jit_string_builder_temp() { return (void *)&jit_string_builder_temp; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
-    void *das_get_jit_get_globals_base() { return (void *)&jit_get_globals_base; }
-    void *das_get_jit_get_shared_base() { return (void *)&jit_get_shared_base; }
-    void *das_get_jit_get_handled_field_offset() { return (void *)&jit_get_handled_field_offset; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -1217,12 +1176,6 @@ extern "C" {
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
                 SideEffects::none, "das_get_jit_get_shared_mnh");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_globals_base)>(*this, lib, "get_jit_get_globals_base",
-                SideEffects::none, "das_get_jit_get_globals_base");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_shared_base)>(*this, lib, "get_jit_get_shared_base",
-                SideEffects::none, "das_get_jit_get_shared_base");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_handled_field_offset)>(*this, lib, "get_jit_get_handled_field_offset",
-                SideEffects::none, "das_get_jit_get_handled_field_offset");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",

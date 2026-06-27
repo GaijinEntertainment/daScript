@@ -48,11 +48,6 @@ let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
 let public FN_JIT_STRING_BUILDER_TEMP    = "jit_string_builder_temp"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
 let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
-// Wasm-only path — see g_target_is_wasm in init_jit and the two sites in
-// llvm_jit.das that emit a call instead of a baked-host-offset GEP+load.
-let public FN_JIT_GET_GLOBALS_BASE  = "jit_get_globals_base"
-let public FN_JIT_GET_SHARED_BASE   = "jit_get_shared_base"
-let public FN_JIT_GET_HANDLED_FIELD_OFFSET = "jit_get_handled_field_offset"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -368,10 +363,6 @@ def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpa
 
 var public g_fn_types : table<string; LLVMTypeRef>
 
-// Wasm cross-compile only: per (handled-type, field) i32 globals holding the TARGET
-// field offset, filled once after initialize_modules() via jit_get_handled_field_offset.
-// Keyed by the global name; value carries the (module, type, field) for the init call.
-var public g_handled_field_offset_globals : table<string; tuple<modName : string; typeName : string; fieldName : string>>
 
 // Set by init_jit when target_triple is a wasm target. Cross-compile path's
 // host-LLVM wasm32 codegen mishandles several user-provided hints (alwaysinline
@@ -442,7 +433,6 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     g_prim_t = new PrimitiveTypes(g_ctx)
     g_failed = false
     g_fn_types |> clear()
-    g_handled_field_offset_globals |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
     LLVMCreateJITCompilerForModule(g_engine, g_mod, cg_opt_level)
     // For cross-compile targets (wasm32, etc.) pin the module's data layout
@@ -556,31 +546,6 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
     LLVMAddAttributesToFunction(jit_get_shared_mnh, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
-    // Wasm-only: void * jit_get_globals_base ( Context * ); same shape for shared.
-    // Declared unconditionally (zero cost if unused); only called from llvm_jit.das
-    // when g_target_is_wasm. The native path keeps the inlined GEP+load — these
-    // helpers exist so the wasm32 runtime archive (which knows its own Context
-    // layout) resolves the right field offset.
-    var jit_get_globals_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBALS_BASE,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
-    LLVMAddGlobalMapping(g_engine, jit_get_globals_base, get_jit_get_globals_base())
-    LLVMAddAttributesToFunction(jit_get_globals_base, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgument(jit_get_globals_base, 0u, nocapture)
-    var jit_get_shared_base = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_SHARED_BASE,
-        LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType())))
-    LLVMAddGlobalMapping(g_engine, jit_get_shared_base, get_jit_get_shared_base())
-    LLVMAddAttributesToFunction(jit_get_shared_base, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgument(jit_get_shared_base, 0u, nocapture)
-    // uint32_t jit_get_handled_field_offset ( const char * module, const char * type, const char * field )
-    // Wasm-only: resolves a handled-type (C++) field offset against the TARGET runtime's
-    // annotation registry. Filled into per-field offset globals once at init.
-    var jit_get_handled_field_offset = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_HANDLED_FIELD_OFFSET,
-        LLVMFunctionType(g_prim_t.t_int32,
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
-    LLVMAddGlobalMapping(g_engine, jit_get_handled_field_offset, get_jit_get_handled_field_offset())
-    LLVMAddAttributesToFunction(jit_get_handled_field_offset, fixed_array(nounwind, willreturn))
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
@@ -993,27 +958,23 @@ def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
     }
 }
 
-// Locate the wasm32 libDaScript_runtime.a. If `override_path` is non-empty it
-// wins (caller-supplied path, e.g. from --jit-runtime-lib CLI flag) and a
-// missing file logs a warning. Otherwise auto-locates the archive at
-// <das_root>/web/output/lib/liblibDaScript_runtime.a.
-def private find_runtime_lib(override_path : string; want64 : bool) : Option<string> {
+// Locate the wasm64 (memory64) libDaScript_runtime.a. If `override_path` is non-empty
+// it wins (caller-supplied path, e.g. from --jit-runtime-lib CLI flag) and a missing
+// file logs a warning. Otherwise auto-locates the archive at
+// <das_root>/web/output64/lib/liblibDaScript_runtime.a.
+def private find_runtime_lib(override_path : string) : Option<string> {
     if (!(override_path |> empty())) {
         if (stat(override_path).is_valid) return some(override_path)
         to_log(LOG_WARNING, "wasm: --jit-runtime-lib path does not exist: {override_path}\n")
         return none(type<string>)
     }
-    // wasm64 (memory64) archive lives in web/output64/lib (built with -sMEMORY64=1);
-    // the wasm32 archive in web/output/lib. They are ABI-incompatible — pick by target.
-    let subdir = want64 ? "output64" : "output"
-    let candidate = "{get_das_root()}/web/{subdir}/lib/liblibDaScript_runtime.a"
+    let candidate = "{get_das_root()}/web/output64/lib/liblibDaScript_runtime.a"
     return stat(candidate).is_valid ? some(candidate) : none(type<string>)
 }
 
-// Cross-compile a module to wasm (wasm32 or wasm64) and link to a runnable
-// .wasm via emcc. A wasm64 triple auto-selects the memory64 runtime archive
-// (web/output64) and passes -sMEMORY64=1 to the linker.
-// triple defaults to wasm32-unknown-emscripten (matches the wasm32 archive).
+// Cross-compile a module to wasm64 (memory64) and link to a runnable .wasm via
+// emcc, against the web/output64 runtime archive with -sMEMORY64=1.
+// triple defaults to wasm64-unknown-emscripten.
 // path_to_emcc may be empty; link_wasm falls back to bin/emcc then PATH.
 // needs_runtime gates inclusion of libDaScript_runtime.a in the link:
 // true → archive is linked when found, otherwise warning + link without;
@@ -1021,12 +982,10 @@ def private find_runtime_lib(override_path : string; want64 : bool) : Option<str
 // explicit_runtime is an optional caller-supplied archive path.
 def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : string; path_to_emcc : string; needs_runtime : bool; explicit_runtime : string = ""; emit_object_only : bool = false) {
     LLVMInitializeWasmTarget()
-    let real_triple = (!(triple |> empty()) ? triple : "wasm32-unknown-emscripten")
-    let is64 = real_triple |> starts_with("wasm64")
-    let runtime_lib = find_runtime_lib(explicit_runtime, is64)
+    let real_triple = (!(triple |> empty()) ? triple : "wasm64-unknown-emscripten")
+    let runtime_lib = find_runtime_lib(explicit_runtime)
     if (needs_runtime && is_none(runtime_lib)) {
-        let lib_dir = is64 ? "web/output64/lib/" : "web/output/lib/"
-        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at {lib_dir} — run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
+        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ — run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
     }
     // Match the feature set web/CMakeLists.txt compiles the runtime archive with
     // (-msimd128 -mnontrapping-fptoint). Without +simd128 the host LLVM lowers
@@ -1037,8 +996,8 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
     let features = "+simd128,+nontrapping-fptoint"
     with_target_machine(real_triple, "", features, 2u) $(targetMachine : LLVMTargetMachineRef) {
         // Pin the module's data layout + triple to the TARGET's so codegen sizes
-        // pointers correctly (wasm32 → 4-byte, wasm64 → 8-byte). Without this the
-        // module inherits host layout and produces wrong-sized loads/stores.
+        // pointers correctly (wasm64 → 8-byte). Without this the module inherits
+        // host layout and produces wrong-sized loads/stores.
         let dl = LLVMCreateTargetDataLayout(targetMachine)
         LLVMSetModuleDataLayout(mod, dl)
         LLVMSetTarget(mod, real_triple)
@@ -1060,7 +1019,7 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
             return
         }
         let runtime_arg = needs_runtime ? (runtime_lib ?? "") : ""
-        let ok = link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc, is64)
+        let ok = link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc, true)
         if (!ok) {
             panic("write_wasm: link failed for {out_path}.wasm")
         }

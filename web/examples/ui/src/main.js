@@ -205,10 +205,13 @@ async function preloadSampleAssets() {
 // disabled there regardless of artifact presence. Detected once at load.
 const WASM64_SUPPORTED = (() => {
     try {
-        // Throws on engines without memory64; the 1-page allocation is freed
-        // immediately and never grown.
-        new WebAssembly.Memory({ initial: 1, maximum: 1, index: 'i64' });
-        return true;
+        // Validate a minimal module declaring a 64-bit (memory64) memory:
+        // \0asm | version | memory section {count=1, flags=0x04 (memory64), min=1}.
+        // More robust than `new WebAssembly.Memory({index:'i64'})`, which can
+        // false-positive on engines that silently ignore the unknown descriptor
+        // field and hand back a wasm32 memory. validate() parses the memory64
+        // flag, so it is true only where the engine truly supports it.
+        return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
     } catch (e) {
         return false;
     }

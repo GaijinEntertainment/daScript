@@ -42,10 +42,13 @@
     // ─── wasm64 (memory64) feature detection ────────────────────────────
     var HAS_WASM64 = (function () {
         try {
-            // memory64 memories are declared with a 64-bit address type; engines
-            // without it throw on this descriptor. (Chrome/Edge/FF 133+.)
-            new WebAssembly.Memory({ initial: 1, maximum: 1, index: 'i64' });
-            return true;
+            // Validate a minimal module declaring a 64-bit (memory64) memory:
+            // \0asm | version | memory section {count=1, flags=0x04 (memory64), min=1}.
+            // More robust than `new WebAssembly.Memory({index:'i64'})`, which can
+            // false-positive on engines that silently ignore the unknown descriptor
+            // field and hand back a wasm32 memory. validate() parses the memory64
+            // flag, so it is true only where the engine truly supports it. (Chrome/Edge/FF 133+.)
+            return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
         } catch (e) {
             return false;
         }

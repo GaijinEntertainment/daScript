@@ -4203,48 +4203,10 @@ class public LlvmJitVisitor : AstVisitor {
         return blk
     }
 
-    // The lambda runtime-ABI header (__lambda @ idx0, __finalize @ idx1) is read by
-    // the C++ runtime (das_delete<Lambda> -> ((SimFunction**)capture)[1]) and by the
-    // JIT delete path (g_t_lambda) at TARGET pointer offsets. The host-sized das
-    // field.offset (8 for __finalize on a 64-bit host) disagrees on a 32-bit target
-    // (wasm32 -> 4), so a cross-compiled lambda writes its finalizer where nothing
-    // reads it -> null finalizer -> OOB. Emit the header where the ABI reads it
-    // (offset taken from the target data layout via g_t_lambda). On native host==target
-    // this is identical to field.offset, so it is a no-op off the cross-compile path.
-    // Captured fields keep their das offset (consistent with the baked typeinfo / GC walk).
-    def lambda_header_abi_offset(makeType : TypeDeclPtr; fieldName : string; das_offset : int) : int {
-        if (makeType.structType == null || !makeType.structType.flags.isLambda) {
-            return das_offset
-        }
-        if (fieldName == "__lambda") return 0
-        if (fieldName == "__finalize") {
-            let dl = LLVMGetModuleDataLayout(g_mod)
-            return int(LLVMOffsetOfElement(dl, g_t_lambda, uint(JIT_LAMBDA.FINALIZER)))
-        }
-        return das_offset
-    }
-
-    // Handled-type (C++ struct) field offset, as an LLVM i32 *value*. The JIT bakes
-    // these via the HOST annotation's offsetof, which is wrong on a 32-bit cross-compile
-    // (target pointers shift fields). On native (host==target) this is the host constant.
-    // On wasm we emit/reuse a per-(type,field) i32 global filled once at init by
-    // jit_get_handled_field_offset against the TARGET annotation, and return a load of it.
+    // Handled-type (C++ struct) field offset as an LLVM i32 constant. host==target
+    // (native or wasm64), so the host annotation's offsetof is correct.
     def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
-        let host_offset = int(get_handled_type_field_offset(ann, fieldName))
-        if (!g_target_is_wasm) {
-            return types.ConstI32(uint64(host_offset))
-        }
-        let modName = string(ann._module.name)
-        let typeName = string(ann.name)
-        let globName = "field`offset`{modName}`{typeName}`{fieldName}"
-        var glob = LLVMGetNamedGlobal(g_mod, globName)
-        if (glob == null) {
-            glob = LLVMAddGlobal(g_mod, types.t_int32, globName)
-            set_private_linkage(glob)
-            LLVMSetInitializer(glob, types.ConstI32(0ul))
-            g_handled_field_offset_globals[globName] = (modName = modName, typeName = typeName, fieldName = fieldName)
-        }
-        return LLVMBuildLoad2(g_builder, types.t_int32, glob, "h`field`off`{fieldName}")
+        return types.ConstI32(uint64(int(get_handled_type_field_offset(ann, fieldName))))
     }
 
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {
@@ -4260,7 +4222,6 @@ class public LlvmJitVisitor : AstVisitor {
             }
             field_offset = field.offset
         }
-        field_offset = lambda_header_abi_offset(expr.makeType, string(decl.name), field_offset)
         let stride = expr.makeType.stride
         let offset =  index * stride + field_offset
         var v_ptr = getE(expr)
@@ -4294,7 +4255,6 @@ class public LlvmJitVisitor : AstVisitor {
             field_offset = field.offset
             field_type := field._type
         }
-        field_offset = lambda_header_abi_offset(expr.makeType, string(decl.name), field_offset)
         let stride = expr.makeType.stride
         let offset =  index * stride + field_offset
         var v_ptr = getE(expr)
@@ -5709,25 +5669,13 @@ class public LlvmJitVisitor : AstVisitor {
                         vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                         vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                     } else {
-                        // On wasm32 the host's offsetof(Context, globals) (the
-                        // CONTEXT_OFFSET_OF_GLOBALS constant baked into module_jit.cpp)
-                        // does NOT match the wasm32 runtime's Context layout —
-                        // 4-byte pointers shift everything. Call into the runtime
-                        // archive (which knows its own layout) instead of doing
-                        // GEP+load against a host-derived offset. Native keeps
-                        // the inlined GEP+load — same codegen as before.
-                        var global_ptr : LLVMOpaqueValue?
-                        if (g_target_is_wasm) {
-                            let fname = expr.variable.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
-                            let fty = g_fn_types[fname]
-                            var args = fixed_array(get_context_param())
-                            global_ptr = LLVMBuildCall2(g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
-                        } else {
-                            var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
-                            let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                            var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                            global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
-                        }
+                        // Globals base = context->globals, via the host-baked
+                        // offsetof(Context, globals); index by stackTop. host==target
+                        // (native or wasm64), so the baked Context offset is correct.
+                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
+                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                        var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                        let global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
                         vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     }
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
@@ -7634,20 +7582,13 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                             vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
                             vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
                         } else {
-                            // See the matching site in preVisitExprVar for why
-                            // wasm32 goes through a runtime helper here.
-                            var global_ptr : LLVMOpaqueValue?
-                            if (g_target_is_wasm) {
-                                let fname = glob.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
-                                let fty = g_fn_types[fname]
-                                var args = fixed_array(ctx_param)
-                                global_ptr = LLVMBuildCall2(visitor.g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
-                            } else {
-                                var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
-                                let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                                var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                                global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
-                            }
+                            // Globals base = context->globals via the host-baked
+                            // offsetof(Context, globals). host==target (native or
+                            // wasm64), so the baked Context offset is correct.
+                            var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                            let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                            var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                            let global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
                             vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                         }
                         // register CMRES destination so init expressions that return by copy/move
