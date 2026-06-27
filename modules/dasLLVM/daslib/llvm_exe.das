@@ -1062,6 +1062,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     // call is emitted further down at its runtime position in main_fn.
     var init_glob : LLVMOpaqueValue?
     var init_glob_type : LLVMOpaqueType?
+    var clone_init_glob : LLVMOpaqueValue?
     {
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = true
@@ -1070,6 +1071,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
         init_glob = pair._0
         init_glob_type = pair._1
+        // Clone variant: inits non-shared globals only (a clone is not the shared owner;
+        // re-initializing shared globals would corrupt the parent's shared buffer). Used by
+        // the clone init script below so a jobque/thread/audio clone matches the interpreter.
+        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, "init_globals_clone", true)
+        clone_init_glob = cpair._0
     }
 
     let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
@@ -1164,7 +1170,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         let isentry = LLVMAppendBasicBlockInContext(ctx, init_script_fn, "entry")
         LLVMPositionBuilderAtEnd(isb, isentry)
         let isctx = LLVMGetParam(init_script_fn, 0u)
-        LLVMBuildCall2(isb, init_glob_type, init_glob, fixed_array(isctx), "")
+        // init_globals_clone: skips shared globals so the clone doesn't corrupt the
+        // owner's shared buffer (matches the interpreter's sharedOwner gate).
+        LLVMBuildCall2(isb, init_glob_type, clone_init_glob, fixed_array(isctx), "")
         for (fn in funcs) {
             if (fn.flags.init) {
                 let fn_impl_name = uids.get_dll_fn_name(fn).impl()

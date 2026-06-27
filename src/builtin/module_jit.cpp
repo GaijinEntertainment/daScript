@@ -298,6 +298,19 @@ extern "C" {
             (*tabGMnLookup)[mnh] = offset;
         }
 
+        // A standalone -exe leaves globalVariables[] zeroed (registerJitGlobalVariable
+        // only fills tabGMnLookup). collectHeap walks globalVariables[i] via
+        // .offset/.debugInfo/.shared, so they must be populated or the GC dereferences
+        // a NULL debugInfo. Called from the JIT'd init function (debugInfo is the
+        // exe-resident TypeInfo emitted by create_type_info_global).
+        void setStandaloneGlobalInfo(uint64_t index, uint64_t offset, void* debugInfo, int shared) {
+            DAS_ASSERT(index < (uint64_t) totalVariables);
+            auto & gv = globalVariables[index];
+            gv.offset = (uint32_t) offset;
+            gv.debugInfo = (VarInfo *) debugInfo;
+            gv.flags = shared ? 1u : 0u;
+        }
+
         void initFunctionAddr ( uint64_t index, void * globPtr ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             *((SimFunction **) globPtr) = &functions[index];
@@ -333,6 +346,13 @@ extern "C" {
 
     DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
         static_cast<JitContext *>(ctx)->registerJitGlobalVariable(mangledNameHash, offset);
+    }
+
+    // Populate globalVariables[index] so the GC can trace standalone-exe globals.
+    // Emitted by generate_globals_initialization_fn into the init function (debugInfo
+    // is the exe-resident TypeInfo, so it can only be wired at codegen time).
+    DAS_API void jit_set_global_var ( Context * ctx, uint64_t index, uint64_t offset, void* debugInfo, int shared ) {
+        static_cast<JitContext *>(ctx)->setStandaloneGlobalInfo(index, offset, debugInfo, shared);
     }
 
     DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {
@@ -750,6 +770,14 @@ extern "C" {
 
     uint64_t das_get_global_variable_mnh( const Context * ctx, int id ) {
         return ctx->getGlobalVariable(id).mangledNameHash;
+    }
+
+    void * das_get_global_variable_debug_info( const Context * ctx, int id ) {
+        return (void *) ctx->getGlobalVariable(id).debugInfo;
+    }
+
+    int das_get_global_variable_shared( const Context * ctx, int id ) {
+        return ctx->getGlobalVariable(id).shared ? 1 : 0;
     }
 
     uint64_t das_get_context_globals_size( const Context * ctx ) {
@@ -1227,6 +1255,10 @@ extern "C" {
                 SideEffects::none, "das_get_global_variable_offset");
             addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
                 SideEffects::none, "das_get_global_variable_mnh");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_debug_info)>(*this, lib, "get_global_variable_debug_info",
+                SideEffects::none, "das_get_global_variable_debug_info");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_shared)>(*this, lib, "get_global_variable_shared",
+                SideEffects::none, "das_get_global_variable_shared");
             addExtern<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
                 SideEffects::none, "das_get_context_globals_size");
             addExtern<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",

@@ -7579,7 +7579,12 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                                               var types : PrimitiveTypes?;
                                               uids : UidNodes?;
                                               flags : LlvmJitFlags;
-                                              fn_name : string = "init_globals") {
+                                              fn_name : string = "init_globals";
+                                              skip_shared : bool = false) {
+    // skip_shared: for a CLONED context (sharedOwner==false) that re-runs init,
+    // shared globals belong to the owner — re-initializing them writes into the
+    // parent's shared buffer and corrupts it. Skipping them matches the interpreter's
+    // `if (sharedOwner || !pv.shared)` gate (context.cpp Context::runInitScript).
     let attrs = new Attributes(g_ctx)
     var visitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
     var globals_fn : LLVMOpaqueValue?
@@ -7612,6 +7617,9 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
             prog |> for_each_module() $(mod) {
                 mod |> for_each_global() $(glob) {
                     if (glob.init != null && glob.flags.used) {
+                        // A clone is not the shared owner: leave shared globals as the
+                        // parent's (re-init would corrupt the shared buffer). See skip_shared.
+                        if (skip_shared && glob.flags.global_shared) { return }
                         // compute global variable destination pointer before visiting init expression
                         let isSolidContext = glob._module.moduleFlags.isSolidContext
                         var vptr : LLVMOpaqueValue?
@@ -7651,6 +7659,38 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                         }
                     }
                 }
+            }
+        }
+        // Populate globalVariables[] (offset/debugInfo/shared) for EVERY global so the GC
+        // can trace standalone-exe globals. The exe otherwise leaves globalVariables zeroed
+        // (only tabGMnLookup is filled), so collectHeap would deref a NULL debugInfo and
+        // crash on any `options gc` heap_collect. Emitted once (main init, not the
+        // shared-skipping clone variant); debugInfo is the exe-resident TypeInfo.
+        if (!skip_shared) {
+            let set_gv_type = LLVMFunctionType(types.t_void,
+                fixed_array<LLVMTypeRef>(
+                    types.LLVMVoidPtrType(),  // Context *
+                    types.t_int64,            // uint64_t index
+                    types.t_int64,            // uint64_t offset
+                    types.LLVMVoidPtrType(),  // void * debugInfo (TypeInfo)
+                    types.t_int32             // int shared
+                )
+            )
+            var set_gv_fn = LLVMGetNamedFunction(g_mod, "jit_set_global_var")
+            if (set_gv_fn == null) {
+                set_gv_fn = LLVMAddFunctionWithType(g_mod, "jit_set_global_var", set_gv_type)
+            }
+            for (gvi in range(ctx.totalVariables)) {
+                let di = get_global_variable_debug_info(ctx, gvi)
+                let tinfo_ptr = visitor.create_type_info_global(unsafe(reinterpret<TypeInfo?>(di)))
+                var gv_args = fixed_array(
+                    ctx_param,
+                    types.ConstI64(uint64(gvi)),
+                    types.ConstI64(get_global_variable_offset(ctx, gvi)),
+                    tinfo_ptr,
+                    types.ConstI32(uint64(get_global_variable_shared(ctx, gvi)))
+                )
+                LLVMBuildCall2(visitor.g_builder, set_gv_type, set_gv_fn, gv_args, "")
             }
         }
         LLVMBuildRetVoid(visitor.g_builder)
