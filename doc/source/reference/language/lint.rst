@@ -533,8 +533,11 @@ LINT015 — free-floating unary ``+``/``-`` statement
 At statement level daslang is one statement per line, so a multi-line
 arithmetic RHS without wrapping parentheses splits each continuation into its
 own statement. A line beginning with ``+`` or ``-`` re-parses as a unary
-expression (``+b`` / ``-b``), which is pure — so the optimizer **silently drops
-it**: terms vanish, the result is wrong, and nothing is reported.
+expression (``+b`` / ``-b``) whose value is discarded — the term no longer
+contributes. When the operand is pure the optimizer removes the whole statement
+**silently**: terms vanish, the result is wrong, and nothing is reported. (If
+the operand has side effects those still run, but the leading ``+``/``-`` is
+meaningless either way — the rule fires regardless.)
 
 Only ``+`` and ``-`` qualify — they are the only operators that are both binary
 and unary, so a split binary ``a + b`` orphans as a valid unary statement.

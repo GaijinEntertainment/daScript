@@ -164,10 +164,11 @@ class LintVisitor : AstVisitor {
         }
         // LINT015: a free-floating unary +/- subexpression used as a statement — a
         // continuation line that lost its wrapping parens (`let x = a` ⏎ `+ b`,
-        // which re-parses as a unary `+b`, is pure, and the optimizer silently drops
-        // it). Only `+`/`-` qualify: they are the only operators that are both binary
-        // and unary, so a split binary `a + b` orphans as a valid unary statement
-        // (`~`/`!` aren't binary, `*`/`|>`/etc. can't start a statement → loud error).
+        // which re-parses as a unary `+b` whose value is discarded; if the operand
+        // is pure the optimizer drops the whole statement silently). Only `+`/`-`
+        // qualify: they are the only operators that are both binary and unary, so a
+        // split binary `a + b` orphans as a valid unary statement (`~`/`!` aren't
+        // binary, `*`/`|>`/etc. can't start a statement → loud error).
         if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
             let op1 = expr as ExprOp1
             if (op1.op == "+" || op1.op == "-") {
