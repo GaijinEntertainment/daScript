@@ -64,6 +64,14 @@ struct DaspkgArgs {
 
     @clarg_doc = "Output directory for `release` (default: current directory)"
     out : string = "."
+
+    @clarg_name = "wasm"
+    @clarg_doc = "Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
+    wasm : bool
+
+    @clarg_name = "wasm-lib-dir"
+    @clarg_doc = "Directory holding the wasm64 archives (liblibDaScript_runtime.a + liblibDasModule*.a); default <das_root>/web/output64/lib"
+    wasm_lib_dir : string
 }
 
 // Apply parsed flags that flip module-level globals.  Called by main after
@@ -1012,6 +1020,97 @@ def cmd_build(root : string; is_global : bool = false) {
         print("Build complete: {built} succeeded, {failed} failed\n")
     }
     if (failed > 0) return 1
+    return 0
+}
+
+// `daspkg build --wasm` — build the wasm64 (memory64) runtime + module archives
+// that `daspkg release wasm` links against, and consolidate them into <lib_dir>
+// (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
+// (emcc + cmake on PATH); CI activates emsdk_env before invoking.
+def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
+    let das_root = get_das_root()
+    let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
+    let build_dir = "{das_root}/web/build64"
+    let out_dir = "{das_root}/web/output64"
+
+    if (!check_tool("emcc", get_platform_name() == "windows" ? "emcc.bat --version" : "emcc --version")) {
+        to_log(LOG_ERROR, "build --wasm: emcc not found on PATH. Activate the emscripten SDK (emsdk_env) first, then retry.\n")
+        return 1
+    }
+
+    // Configure web/build64 for memory64 if it isn't already.
+    if (!fexist("{build_dir}/CMakeCache.txt")) {
+        log("build --wasm: configuring {build_dir} (memory64)...\n")
+        let cfg = "emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" -DDAS_WASM_MEMORY64=ON -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1"
+        var cfg_out : string
+        let cfg_rc = run_cmd(cfg, cfg_out)
+        if (cfg_rc != 0) {
+            to_log(LOG_ERROR, "build --wasm: cmake configure failed (rc={cfg_rc}):\n{cfg_out}\n")
+            return 1
+        }
+    }
+
+    // Build the wasm64 runtime + the module archives release wasm links against.
+    log("build --wasm: building wasm64 archives...\n")
+    let targets = "libDaScript_runtime libDasModuleOpenGL libDasModuleGlfw libDasModuleStbImage libDasModuleAudio libDasModuleMinfft"
+    var bld_out : string
+    let bld_rc = run_cmd("cmake --build \"{build_dir}\" --target {targets}", bld_out)
+    if (bld_rc != 0) {
+        to_log(LOG_ERROR, "build --wasm: archive build failed (rc={bld_rc}):\n{bld_out}\n")
+        return 1
+    }
+
+    // Consolidate every produced archive into one canonical lib_dir so
+    // `release wasm` resolves them in one place. The web build splits outputs:
+    // the runtime lands in web/output64/lib (DAS_WEB_OUTPUT_DIR), the module
+    // archives in <das_root>/lib. Copying both into lib_dir also insulates the
+    // release inputs from a later desktop build that overwrites <das_root>/lib
+    // with native-ABI archives.
+    mkdir_rec(lib_dir)
+    var copied = 0
+    var copy_failed = false
+    // Runtime archive (web/output64/lib via DAS_WEB_OUTPUT_DIR).
+    let rt_src = "{out_dir}/lib/liblibDaScript_runtime.a"
+    if (fexist(rt_src)) {
+        let rt_dst = path_join(lib_dir, "liblibDaScript_runtime.a")
+        if (get_full_file_name(rt_src) == get_full_file_name(rt_dst)) {
+            copied ++
+        } else {
+            var err : string
+            if (copy_file(rt_src, rt_dst, true, err)) {
+                copied ++
+                log("  staged liblibDaScript_runtime.a\n")
+            } else {
+                to_log(LOG_ERROR, "build --wasm: copy_file({rt_src} -> {rt_dst}) failed: {err}\n")
+                copy_failed = true
+            }
+        }
+    }
+    // Module archives (<das_root>/lib).
+    glob("{das_root}/lib", "**/liblibDasModule*.a") $(rel_path, is_dir) {
+        if (is_dir) return
+        let base = base_name(rel_path)
+        let src = path_join("{das_root}/lib", rel_path)
+        let dst = path_join(lib_dir, base)
+        if (get_full_file_name(src) == get_full_file_name(dst)) {
+            copied ++
+            return
+        }
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "build --wasm: copy_file({src} -> {dst}) failed: {err}\n")
+            copy_failed = true
+            return
+        }
+        copied ++
+        log("  staged {base}\n")
+    }
+    if (copy_failed) return 1
+    if (copied == 0) {
+        to_log(LOG_ERROR, "build --wasm: build succeeded but no archives found under {build_dir}\n")
+        return 1
+    }
+    log("build --wasm: {copied} archive(s) -> {lib_dir}\n")
     return 0
 }
 
@@ -2016,4 +2115,229 @@ def cmd_release(root : string; out_dir : string) : int {
         log("Released to: {bundle_dir}\n")
     }
     return 0
+}
+
+// ── release wasm (wasm64 compiled artifacts) ───────────────────────────
+//
+// `daspkg release wasm` cross-compiles each app to a wasm64 object (daslang
+// -exe --jit-target=wasm64 --jit-emit-object), discovers the modules it links
+// via --list-shared-modules, then runs emcc with the wasm64 module archives +
+// release defaults + each module's own emcc contributions → <app>.{html,js,wasm}.
+
+// Derive the wasm64 static archive name from a shared module's deps-JSON rel
+// path: modules/dasGlfw/dasModuleGlfw.shared_module → liblibDasModuleGlfw.a
+// (the name the web/ build emits with -DDAS_WASM_MEMORY64=ON).
+def private wasm_archive_name(rel : string) : string {
+    var base = base_name(rel)
+    let suffix = ".shared_module"
+    if (base |> ends_with(suffix)) {
+        base = slice(base, 0, length(base) - length(suffix))
+    }
+    return "liblib{base}.a"
+}
+
+// Run a referenced module's .das_package release() (if present) and accumulate
+// the emcc flags + MEMFS embeds it contributes (e.g. dasGlfw → -sUSE_GLFW=3,
+// dasStbImage → its HUD font). Deduped by package dir.
+def private gather_wasm_module(pkg_dir : string; var emcc_args, embeds : array<string>; var seen : table<string>) {
+    let key = get_full_file_name(pkg_dir)
+    if (key_exists(seen, key)) return
+    seen |> insert(key)
+    let pkg_file = "{pkg_dir}/.das_package"
+    if (!fexist(pkg_file)) return
+    var info : PackageReleaseInfo
+    if (!run_das_package_release(pkg_file, info)) return
+    emcc_args |> push_from(info.emcc_args)
+    embeds |> push_from(info.embed_paths)
+}
+
+// Build one app: cross-compile → discover modules → emcc-link → stage assets.
+def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
+                                 wasm_lib_dir, runtime_archive, shell_path : string;
+                                 include_globs, exclude_globs : array<string>) : int {
+    if (!is_safe_pkg_name(app_name)) {
+        to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
+        return 1
+    }
+    let main_path = path_join(root, main_script)
+    if (!fexist(main_path)) {
+        to_log(LOG_ERROR, "release wasm: app `{app_name}` main script not found: {main_path}\n")
+        return 1
+    }
+    let app_out_dir = path_join(out_dir, app_name)
+    if (fexist(app_out_dir)) {
+        force_rmdir(app_out_dir)
+    }
+    mkdir_rec(app_out_dir)
+
+    let daslang = get_daslang_path()
+    let das_root = get_das_root()
+    run_cmd_counter ++
+    let obj_path = "{das_root}/_daspkg_wasm_{run_cmd_counter}.o"
+    let deps_file = "{das_root}/_daspkg_wasm_deps_{run_cmd_counter}.json"
+
+    // 1. Cross-compile to a wasm64 object (link skipped via --jit-emit-object),
+    //    with --list-shared-modules writing the referenced-module set.
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
+    var xc_out : string
+    let xc_rc = run_cmd(xc_cmd, xc_out)
+    if (xc_rc != 0 || !fexist(obj_path)) {
+        to_log(LOG_ERROR, "release wasm: cross-compile failed for `{app_name}` (rc={xc_rc}):\n{xc_out}\n")
+        if (fexist(deps_file)) {
+            remove(deps_file)
+        }
+        return 1
+    }
+
+    // 2. Read the referenced-module set.
+    var deps : ReleaseDeps
+    if (!read_release_deps(deps_file, deps)) {
+        to_log(LOG_ERROR, "release wasm: cannot read module deps for `{app_name}`\n")
+        remove(obj_path)
+        return 1
+    }
+    remove(deps_file)
+
+    // 2.5 GL-fallback guard. A graphics program that links glfw but whose opengl
+    //     did NOT resolve to the native module fell back to the broken dasbind GL
+    //     late-extern path (cross-compiles fine, but black canvas at runtime).
+    var uses_glfw = false
+    var uses_opengl = false
+    for (e in deps.shared_modules) {
+        if (e.das_name == "glfw") {
+            uses_glfw = true
+        }
+        if (e.das_name == "opengl") {
+            uses_opengl = true
+        }
+    }
+    if (uses_glfw && !uses_opengl) {
+        to_log(LOG_ERROR, "release wasm: `{app_name}` links glfw but opengl did not bind as a native module — the cross-compile fell back to the broken dasbind GL path (black canvas). Ensure modules/dasOpenGL/dasModuleOpenGL.shared_module exists at cross-compile time, then rebuild.\n")
+        remove(obj_path)
+        return 1
+    }
+
+    // 3. Gather wasm64 archives + per-module emcc args / embeds.
+    var archives : array<string>
+    var emcc_args : array<string>
+    var embeds : array<string>
+    var seen : table<string>
+    for (e in deps.shared_modules) {
+        if (empty(e.rel)) continue
+        let arch = "{wasm_lib_dir}/{wasm_archive_name(e.rel)}"
+        if (!fexist(arch)) {
+            to_log(LOG_ERROR, "release wasm: missing module archive {arch} (module `{e.das_name}`); run `daspkg build --wasm`\n")
+            remove(obj_path)
+            return 1
+        }
+        archives |> push(arch)
+        gather_wasm_module(dir_name(e.abs), emcc_args, embeds, seen)
+    }
+    for (dm in deps.das_modules) {
+        gather_wasm_module(dm.package_dir, emcc_args, embeds, seen)
+    }
+
+    // 4. emcc link → <app>.{html,js,wasm}. run_cmd handles the Windows
+    //    cmd.exe outer-quote wrapping, so quoted paths survive on every host.
+    let html_out = path_join(app_out_dir, "{app_name}.html")
+    let emcc = get_platform_name() == "windows" ? "emcc.bat" : "emcc"
+    let link_cmd = build_string() $(var w) {
+        w |> write("\"{emcc}\" \"{obj_path}\"")
+        for (a in archives) {
+            w |> write(" \"{a}\"")
+        }
+        w |> write(" \"{runtime_archive}\"")
+        // Release defaults: wasm64 + WebGL2/ES3 + modern wasm EH + filesystem.
+        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1")
+        for (a in emcc_args) {
+            w |> write(" {a}")
+        }
+        for (e in embeds) {
+            let at = find(e, "@")
+            if (at >= 0) {
+                let src = slice(e, 0, at)
+                let dst = slice(e, at + 1)
+                w |> write(" --embed-file \"{das_root}/{src}@{dst}\"")
+            }
+        }
+        w |> write(" --shell-file \"{shell_path}\" -o \"{html_out}\"")
+    }
+    var link_out : string
+    let link_rc = run_cmd(link_cmd, link_out)
+    remove(obj_path)
+    if (link_rc != 0) {
+        to_log(LOG_ERROR, "release wasm: emcc link failed for `{app_name}` (rc={link_rc}):\n{link_out}\n")
+        return 1
+    }
+
+    // 5. Stage package assets next to the artifact.
+    var asset_files : array<string>
+    glob_filtered(root, include_globs, exclude_globs) $(rel_path, is_dir) {
+        if (!is_dir) {
+            asset_files |> push_clone(rel_path)
+        }
+    }
+    for (rel_path in asset_files) {
+        let src = path_join(root, rel_path)
+        let dst = path_join(app_out_dir, rel_path)
+        mkdir_rec(dir_name(dst))
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "release wasm: copy_file({src} -> {dst}) failed: {err}\n")
+            return 1
+        }
+    }
+    log("  released {app_name} -> {app_out_dir} ({app_name}.html / .js / .wasm)\n")
+    return 0
+}
+
+// `daspkg release wasm` entry. Releases the single app the package's .das_package
+// declares (release_main()) into <out>/<name>/. Each example is its own package
+// (its .das_package declares both requirements and packaging) — CI loops over the
+// example dirs, releasing each. Mirrors native cmd_release's single-app shape.
+def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : string) : int {
+    let das_package = "{root}/.das_package"
+    if (!fexist(das_package)) {
+        to_log(LOG_ERROR, "release wasm: no .das_package in {root}\n")
+        return 1
+    }
+    var spec : PackageReleaseInfo
+    if (!run_das_package_release(das_package, spec)) {
+        to_log(LOG_ERROR, "release wasm: cannot run release() in {das_package}\n")
+        return 1
+    }
+    // wasm entry: release_wasm_main() (e.g. a live_stub variant that drops the
+    // desktop live stack) overrides release_main() for the wasm64 build.
+    let main_script = empty(spec.wasm_main_script) ? spec.main_script : spec.wasm_main_script
+    if (empty(main_script)) {
+        to_log(LOG_ERROR, "release wasm: {das_package} has no release() hook, or release() didn't call release_main()/release_wasm_main()\n")
+        return 1
+    }
+
+    var pkg : PackageMeta
+    let have_pkg = run_das_package_meta(das_package, pkg)
+    var bundle_name = spec.name
+    if (empty(bundle_name)) {
+        bundle_name = (have_pkg && !empty(pkg.pkg_name)) ? pkg.pkg_name : base_name(get_full_file_name(root))
+    }
+
+    // Archive cache (`daspkg build --wasm` output) + the wasm64 runtime archive.
+    let wasm_lib_dir = empty(wasm_lib_dir_override) ? "{get_das_root()}/web/output64/lib" : wasm_lib_dir_override
+    let runtime_archive = "{wasm_lib_dir}/liblibDaScript_runtime.a"
+    if (!fexist(runtime_archive)) {
+        to_log(LOG_ERROR, "release wasm: no wasm64 runtime archive at {runtime_archive}. Build it with `daspkg build --wasm` (or pass --wasm-lib-dir <dir>).\n")
+        return 1
+    }
+
+    // Shell: explicit release_web_shell() > daslang's default canvas shell.
+    let shell_path = (!empty(spec.web_shell)
+        ? path_join(root, spec.web_shell)
+        : "{get_das_root()}/web/templates/wasm_canvas_shell.html")
+    if (!fexist(shell_path)) {
+        to_log(LOG_ERROR, "release wasm: shell file not found: {shell_path}. Set release_web_shell(<path>) in .das_package.\n")
+        return 1
+    }
+
+    mkdir_rec(out_dir)
+    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs)
 }

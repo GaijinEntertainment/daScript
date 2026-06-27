@@ -275,6 +275,7 @@ namespace das {
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     const char * das_get_platform_name();
+    const char * das_get_cross_platform_name();
     const char * das_get_architecture_name();
 
     DAS_API char * fmt_i8 ( const char * fmt, int8_t value, Context * context, LineInfoArg * at );

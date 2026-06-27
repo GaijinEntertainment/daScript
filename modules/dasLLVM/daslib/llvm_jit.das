@@ -4203,6 +4203,50 @@ class public LlvmJitVisitor : AstVisitor {
         return blk
     }
 
+    // The lambda runtime-ABI header (__lambda @ idx0, __finalize @ idx1) is read by
+    // the C++ runtime (das_delete<Lambda> -> ((SimFunction**)capture)[1]) and by the
+    // JIT delete path (g_t_lambda) at TARGET pointer offsets. The host-sized das
+    // field.offset (8 for __finalize on a 64-bit host) disagrees on a 32-bit target
+    // (wasm32 -> 4), so a cross-compiled lambda writes its finalizer where nothing
+    // reads it -> null finalizer -> OOB. Emit the header where the ABI reads it
+    // (offset taken from the target data layout via g_t_lambda). On native host==target
+    // this is identical to field.offset, so it is a no-op off the cross-compile path.
+    // Captured fields keep their das offset (consistent with the baked typeinfo / GC walk).
+    def lambda_header_abi_offset(makeType : TypeDeclPtr; fieldName : string; das_offset : int) : int {
+        if (makeType.structType == null || !makeType.structType.flags.isLambda) {
+            return das_offset
+        }
+        if (fieldName == "__lambda") return 0
+        if (fieldName == "__finalize") {
+            let dl = LLVMGetModuleDataLayout(g_mod)
+            return int(LLVMOffsetOfElement(dl, g_t_lambda, uint(JIT_LAMBDA.FINALIZER)))
+        }
+        return das_offset
+    }
+
+    // Handled-type (C++ struct) field offset, as an LLVM i32 *value*. The JIT bakes
+    // these via the HOST annotation's offsetof, which is wrong on a 32-bit cross-compile
+    // (target pointers shift fields). On native (host==target) this is the host constant.
+    // On wasm we emit/reuse a per-(type,field) i32 global filled once at init by
+    // jit_get_handled_field_offset against the TARGET annotation, and return a load of it.
+    def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
+        let host_offset = int(get_handled_type_field_offset(ann, fieldName))
+        if (!g_target_is_wasm) {
+            return types.ConstI32(uint64(host_offset))
+        }
+        let modName = string(ann._module.name)
+        let typeName = string(ann.name)
+        let globName = "field`offset`{modName}`{typeName}`{fieldName}"
+        var glob = LLVMGetNamedGlobal(g_mod, globName)
+        if (glob == null) {
+            glob = LLVMAddGlobal(g_mod, types.t_int32, globName)
+            set_private_linkage(glob)
+            LLVMSetInitializer(glob, types.ConstI32(0ul))
+            g_handled_field_offset_globals[globName] = (modName = modName, typeName = typeName, fieldName = fieldName)
+        }
+        return LLVMBuildLoad2(g_builder, types.t_int32, glob, "h`field`off`{fieldName}")
+    }
+
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {
         var field_offset : int
         if (expr.makeType.isHandle) {
@@ -4216,6 +4260,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
             field_offset = field.offset
         }
+        field_offset = lambda_header_abi_offset(expr.makeType, string(decl.name), field_offset)
         let stride = expr.makeType.stride
         let offset =  index * stride + field_offset
         var v_ptr = getE(expr)
@@ -4249,6 +4294,7 @@ class public LlvmJitVisitor : AstVisitor {
             field_offset = field.offset
             field_type := field._type
         }
+        field_offset = lambda_header_abi_offset(expr.makeType, string(decl.name), field_offset)
         let stride = expr.makeType.stride
         let offset =  index * stride + field_offset
         var v_ptr = getE(expr)
@@ -5737,6 +5783,7 @@ class public LlvmJitVisitor : AstVisitor {
             field_ptr = res
         } else {
             var field_offset = 0U
+            var field_offset_val : LLVMOpaqueValue? = null   // handled-type: runtime offset on wasm
             var field_type : LLVMOpaqueType?
             var field_name : string;
             var val_ptr = getE(expr.value)
@@ -5751,6 +5798,7 @@ class public LlvmJitVisitor : AstVisitor {
                     failed_E(expr, "field {expr.name} offset is -1")
                     return expr
                 }
+                field_offset_val = handled_field_offset_value(expr.annotation, string(expr.name))
                 field_type = get_type_pointer(expr._type);
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.name}";
             } elif (expr.value._type.isTuple || (expr.value._type.isPointer && expr.value._type.firstType.isTuple)) {
@@ -5773,7 +5821,8 @@ class public LlvmJitVisitor : AstVisitor {
                 field_type = get_type_pointer(expr.field._type)
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.field.name}"
             }
-            field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(field_offset)), "")
+            var off_idx = field_offset_val != null ? field_offset_val : types.ConstI32(uint64(field_offset))
+            field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, field_type, field_name)
         }
 
@@ -5791,6 +5840,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprSafeField(expr : ExprSafeField?) : ExpressionPtr {
         // unsupported(expr, "safe field access is not supported yet")
         var fieldOffset = -1
+        var field_offset_val : LLVMOpaqueValue? = null   // handled-type: runtime offset on wasm
         if (expr.annotation == null) {
             if (expr.fieldIndex != -1) {
                 if (expr.value._type.firstType.isVariant) {
@@ -5809,14 +5859,16 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "field {expr.name} offset is -1")
                 return expr
             }
+            field_offset_val = handled_field_offset_value(expr.annotation, string(expr.name))
         }
+        var off_idx = field_offset_val != null ? field_offset_val : types.ConstI32(uint64(fieldOffset))
         if (expr.skipQQ) {
             var val_ptr = getE(expr.value)
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
             var res_type = type_to_llvm_type(expr._type)
             var res = build_select(cond, res_type) {
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(types.t_int8, 0u), "")
-                var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(fieldOffset)), "")
+                var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type, 0u), ".{expr.name}")
                 field_ptr = LLVMBuildLoadData2Aligned(g_builder, res_type, field_ptr, expr._type.alignOf, "")
                 return field_ptr
@@ -5828,7 +5880,7 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             var val_ptr = getE(expr.value)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(fieldOffset)), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
             var res_type = type_to_llvm_type(expr._type)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")

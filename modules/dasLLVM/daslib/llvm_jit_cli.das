@@ -38,6 +38,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT: explicit path to libDaScript_runtime.a (wasm cross-compile); overrides auto-locate under web/output/lib/"
     runtime_lib : Option<string>
 
+    @clarg_name = "jit-emit-object"
+    @clarg_doc = "JIT (-exe wasm cross-compile): emit the linkable object only and skip the emcc link, so the caller (e.g. daspkg release wasm) runs emcc with module archives + flags. Object is written to -output verbatim."
+    emit_object : Option<bool>
+
     @clarg_name = "jit-linker-string"
     @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd (e.g. -fsanitize=undefined)"
     linker_string : Option<string>

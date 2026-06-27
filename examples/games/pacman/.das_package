@@ -1,0 +1,15 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("pacman")
+    package_description("Pac-Man example built on dasGlfw + dasOpenGL")
+}
+
+[export]
+def release() {
+    release_main("main.das")            // native bundle: desktop live-reload stack
+    release_wasm_main("main_web.das")   // daspkg release wasm: live_stub variant (no live host / REST / jobque)
+}

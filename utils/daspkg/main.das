@@ -4,12 +4,9 @@ options persistent_heap
 options no_global_variables = false
 
 require daslib/fio
-require strings
 
-require daslib/ansi_colors
 require daslib/clargs
 
-require lockfile
 require utils
 require index
 require commands
@@ -100,13 +97,21 @@ def main() {
             rc = cmd_upgrade(root, command_arg, is_global)
         }
     } elif (command == "build") {
-        rc = cmd_build(root, is_global)
+        if (parsed.wasm) {
+            rc = cmd_build_wasm(root, parsed.wasm_lib_dir)
+        } else {
+            rc = cmd_build(root, is_global)
+        }
     } elif (command == "check") {
         rc = cmd_check(root, parsed.json, is_global)
     } elif (command == "cleanup") {
         rc = cmd_cleanup(root, parsed.force, is_global)
     } elif (command == "release") {
-        rc = cmd_release(root, parsed.out)
+        if (command_arg == "wasm") {
+            rc = cmd_release_wasm(root, parsed.out, parsed.wasm_lib_dir)
+        } else {
+            rc = cmd_release(root, parsed.out)
+        }
     } elif (command == "doctor") {
         rc = cmd_doctor()
     } elif (command == "search") {

@@ -1735,22 +1735,31 @@ namespace das
         return allocFromMod(Module::require(name ? name : ""));
     }
 
-// remove define to enable emscripten version
-#define TRY_MAIN_LOOP   0
+// emscripten browser-loop for eval_main_loop: drives a daslang block once per
+// requestAnimationFrame instead of a blocking while loop. Enables standalone
+// cross-compiled graphics apps (glfw/opengl) to run in the browser.
+#define TRY_MAIN_LOOP   1
 
-#ifdef _EMSCRIPTEN_
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
 #if TRY_MAIN_LOOP
+    // Heap-allocated and the block copied BY VALUE so both survive the
+    // emscripten_set_main_loop_arg(..., simulate_infinite_loop=true) stack
+    // unwind: that flag throws to unwind the C++ stack (so builtin_main_loop
+    // never returns), which would otherwise destroy a stack-local arg + the
+    // caller's TBlock. The daslang context stack the block captures is separate
+    // and persists across the unwind, so the copied Block stays valid.
     struct MainLoopArg {
         Context * context;
         LineInfoArg * at;
-        Block * block;
+        Block block;
     };
 
     void main_loop_arg ( void * arg ) {
         auto mla = (MainLoopArg *) arg;
         vec4f args[1];
         args[0] = v_zero();
-        if ( !cast<bool>::to(mla->context->invoke(*mla->block, args, nullptr, mla->at)) ) {
+        if ( !cast<bool>::to(mla->context->invoke(mla->block, args, nullptr, mla->at)) ) {
             emscripten_cancel_main_loop();
         }
     }
@@ -1758,7 +1767,7 @@ namespace das
 #endif
 
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at ) {
-#ifndef _EMSCRIPTEN_
+#ifndef __EMSCRIPTEN__
         vec4f args[1];
         args[0] = v_zero();
         while ( true ) {
@@ -1767,11 +1776,12 @@ namespace das
         }
 #else
 #if TRY_MAIN_LOOP
-    MainLoopArg arg;
-    arg.context = context;
-    arg.at = at;
-    arg.block = &block;
-    emscripten_set_main_loop_arg(main_loop_arg, &arg, 60, true);
+        // simulate_infinite_loop=true → never returns, so the standalone-exe
+        // entry's jit_shutdown() after the daslang main is never reached and the
+        // runtime/context stay alive for the rAF callbacks. arg leaks by design
+        // (lives for the whole program). 0 = browser rAF cadence.
+        auto * arg = new MainLoopArg{ context, at, block };
+        emscripten_set_main_loop_arg(main_loop_arg, arg, 0, true);
 #endif
 #endif
     }
@@ -1815,6 +1825,35 @@ namespace das
         #else
             return "unknown";
         #endif
+    }
+
+    // The cross-compilation TARGET platform, or "" on a normal (non-cross) run.
+    // Unlike get_platform_name() (the host, a compile-time #if), this reads the
+    // active jit cross-compile target from the command line (`--jit-target=<triple>`
+    // after `--`) -- already in g_CommandLineArguments at process start, so it is
+    // valid at .das_module-initialize time, before the jit codegen macro runs.
+    // Lets a .das_module register a target-native module only when cross-compiling
+    // for that target (e.g. dasOpenGL registers its wasm GLES3 module for emscripten,
+    // while a normal desktop run keeps the pure-das opengl.das). Only the wasm triple
+    // is mapped today (-> "emscripten"); other cross targets return "".
+    const char * das_get_cross_platform_name() {
+        char ** argv = (char **) g_CommandLineArguments.data;
+        uint64_t n = g_CommandLineArguments.size;
+        for ( uint64_t i=0; i<n; ++i ) {
+            const char * a = argv[i];
+            if ( !a ) continue;
+            const char * triple = nullptr;
+            if ( strncmp(a, "--jit-target=", 13)==0 ) {
+                triple = a + 13;
+            } else if ( strcmp(a, "--jit-target")==0 && i+1<n ) {
+                triple = argv[i+1];
+            }
+            if ( triple ) {
+                if ( strncmp(triple, "wasm", 4)==0 || strstr(triple, "emscripten") ) return "emscripten";
+                return "";
+            }
+        }
+        return "";
     }
 
     // x86, arm, etc
@@ -2444,6 +2483,8 @@ namespace das
         // platform and architecture
         addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
             SideEffects::none, "das_get_platform_name");
+        addExtern<DAS_BIND_FUN(das_get_cross_platform_name)>(*this, lib, "get_cross_platform_name",
+            SideEffects::accessExternal, "das_get_cross_platform_name");
         addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
         // fmt

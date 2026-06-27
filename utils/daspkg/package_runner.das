@@ -33,11 +33,15 @@ struct PackageBuildInfo {
 struct PackageReleaseInfo {
     name : string
     main_script : string
+    wasm_main_script : string
     include_globs : array<string>
     exclude_globs : array<string>
     forced_modules : array<string>
     native_dlls : array<string>
     bundle_id : string
+    emcc_args : array<string>
+    embed_paths : array<string>
+    web_shell : string
 }
 
 
@@ -112,6 +116,7 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
             let src = unsafe(reinterpret<ReleaseSpec?>(p))
             info.name = clone_string(src.name)
             info.main_script = clone_string(src.main_script)
+            info.wasm_main_script = clone_string(src.wasm_main_script)
             for (g in src.include_globs) {
                 info.include_globs |> push_clone(clone_string(g))
             }
@@ -125,6 +130,13 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
                 info.native_dlls |> push_clone(clone_string(d))
             }
             info.bundle_id = clone_string(src.bundle_id)
+            for (a in src.emcc_args) {
+                info.emcc_args |> push_clone(clone_string(a))
+            }
+            for (e in src.embed_paths) {
+                info.embed_paths |> push_clone(clone_string(e))
+            }
+            info.web_shell = clone_string(src.web_shell)
         }
     }
     return ok

@@ -574,14 +574,26 @@ ENDFOREACH()
 # Clean stale .shared_module files. When a module is disabled, its .shared_module
 # from a previous build may remain and cause crashes at startup (the dynamic module
 # loader tries to load them even though the module code is no longer linked).
-FILE(GLOB_RECURSE _all_shared_modules CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
-FOREACH(_sm ${_all_shared_modules})
-    GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
-    IF(NOT TARGET ${_sm_name})
-        MESSAGE(STATUS "Removing stale ${_sm}")
-        FILE(REMOVE "${_sm}")
-    ENDIF()
-ENDFOREACH()
+#
+# Skip this entirely under EMSCRIPTEN. The wasm build has no native dynamic
+# loading (das_is_dll_build() is false; it's a static monolith), so a leftover
+# native .shared_module can never be loaded there — the crash this guards against
+# can't happen. More importantly, configuring the web build against the shared
+# source tree builds modules like dasGlfw/dasOpenGL as their STATIC variant
+# (target libDasModule*, not dasModule*), so this loop would otherwise treat the
+# desktop-built host .shared_module as "stale" and DELETE it — destroying exactly
+# the host artifacts a wasm cross-compile (daspkg release wasm) needs. A later
+# desktop configure still cleans genuinely-disabled modules.
+IF(NOT EMSCRIPTEN)
+    FILE(GLOB_RECURSE _all_shared_modules CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
+    FOREACH(_sm ${_all_shared_modules})
+        GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
+        IF(NOT TARGET ${_sm_name})
+            MESSAGE(STATUS "Removing stale ${_sm}")
+            FILE(REMOVE "${_sm}")
+        ENDIF()
+    ENDFOREACH()
+ENDIF()
 
 FOREACH(_example ${DAS_ALL_EXAMPLES})
     MESSAGE("adding to ${_example} ${DAS_MODULES_LIBS}")

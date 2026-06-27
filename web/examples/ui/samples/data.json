@@ -6,6 +6,16 @@
       "files" : ["examples/gl_01_triangle.das"]
     },
     {
+      "name" : "Game: Arcanoid (3D, arrow keys + space)",
+      "slug" : "arcanoid",
+      "files" : ["examples/arcanoid/main.das", "examples/arcanoid/live_stub.das"]
+    },
+    {
+      "name" : "Game: Pac-Man (3D, arrow keys + space)",
+      "slug" : "pacman",
+      "files" : ["examples/pacman/main.das", "examples/pacman/live_stub.das"]
+    },
+    {
       "name" : "OpenGL: mandelbrot",
       "files" : ["examples/gl_02_mandelbrot.das"]
     },

@@ -130,11 +130,15 @@ pageInit = function () {
 }
 
 // Derive a URL-friendly slug from a sample entry. Used by the ?example=
-// query-string deep-link from daslang.io's § 01 bench cycler. The slug is
-// the first file's basename without the `.das` suffix, which by convention
-// matches the dasProfile bench test name (`sha256.das` → `sha256`, etc.).
+// query-string deep-link (daslang.io's § 01 bench cycler, and the /examples
+// page's embedded player). An explicit "slug" field wins — multi-file samples
+// (the games) all share a main.das basename, so they MUST carry a slug to be
+// addressable. Otherwise fall back to the first file's basename without `.das`
+// (so `examples/sha256.das` → `sha256`, matching the dasProfile bench name).
 function slugForSample(entry) {
-    if (!entry || !entry.files || !entry.files.length) return null;
+    if (!entry) return null;
+    if (entry.slug) return entry.slug;
+    if (!entry.files || !entry.files.length) return null;
     const f = entry.files[0];
     const base = f.split('/').pop();
     return base.replace(/\.das$/, '');
@@ -196,6 +200,20 @@ async function preloadSampleAssets() {
     }
 }
 
+// Precompiled sample .wasm are now wasm64 (memory64) — browsers without
+// memory64 (Safari/iOS) cannot instantiate them, so the JIT engine must stay
+// disabled there regardless of artifact presence. Detected once at load.
+const WASM64_SUPPORTED = (() => {
+    try {
+        // Throws on engines without memory64; the 1-page allocation is freed
+        // immediately and never grown.
+        new WebAssembly.Memory({ initial: 1, maximum: 1, index: 'i64' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+})();
+
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
@@ -211,6 +229,9 @@ function updateEngineAvailability(name) {
             if (interpRadio) interpRadio.checked = true;
         }
     };
+    // Gate 1: no memory64 → wasm64 artifacts can't run here at all.
+    if (!WASM64_SUPPORTED) { disableJit(); return; }
+    // Gate 2: no precompiled .wasm for this sample (multi-file or absent).
     if (!name) { disableJit(); return; }
     // Rapid sample-switching can land HEAD-fetch responses out of order
     // (HTTP/2). Gate the late .then/.catch on the sample still being current

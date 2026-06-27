@@ -1,0 +1,19 @@
+// tests_wasm.das_project — swaps dastest/testing_boost for the wasm/AOT variant
+// (dastest_wasm/testing_boost.das) so a [test] file cross-compiled under this
+// project gets a generated `main` that runs its tests, instead of relying on the
+// dastest meta-compiler. Returning an empty result for every other require
+// delegates to the default mount-aware resolver (daslib / native / dynamic modules).
+//
+//   daslang -exe -project dastest_wasm/tests_wasm.das_project -output X.o X.das -- --jit-target=wasm32-...
+
+options gen2
+
+typedef module_info = tuple<string; string; string> const
+
+[export]
+def module_get(req, from : string) : module_info {
+    if (req == "dastest/testing_boost") {
+        return ("testing_boost", "{get_das_root()}/dastest_wasm/testing_boost.das", "testing_boost")
+    }
+    return ("", "", "")   // delegate to default resolution
+}

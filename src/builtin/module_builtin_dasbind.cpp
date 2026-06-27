@@ -13,18 +13,6 @@
 
 #include <mutex>
 
-#if defined(__EMSCRIPTEN__)
-#include <emscripten/html5_webgl.h>
-#include "daScript/misc/anyhash.h"
-#include <type_traits>
-#include <utility>
-// pull the typed GLES3 declarations so decltype(&::glX) names the exact gl call
-// signature for the wasm exact-typed wrappers below (see getGlWasmWrapper).
-#define GL_WASM_INCLUDE_HEADERS
-#include "gl_wasm_wrappers.inc"
-#undef GL_WASM_INCLUDE_HEADERS
-#endif
-
 namespace das {
 
 #if DAS_BIND_EXTERNAL
@@ -82,17 +70,6 @@ namespace das {
         void * libhandle = nullptr;
         libhandle = getLibraryHandle(libName);
         return getFunctionAddress(libhandle, name);
-    }
-#elif defined(__EMSCRIPTEN__)
-    void * openGlGetFunctionAddress ( const char * name ) {
-        // WebGL2/GLES3 symbols are statically linked into the wasm (-sFULL_ES3);
-        // there is no wglGetProcAddress/dlsym table. emscripten_webgl_get_proc_address
-        // returns a fn-ptr to any linked WebGL1/2 symbol. The header warns this route is
-        // slow + bloats code size, but that is exactly the cost daslang already pays: the
-        // late-extern model always calls gl through a resolved fnptr, never a direct call.
-        // Desktop-GL-only names return nullptr -> clean "failed to bind X", the correct
-        // fail-closed result on WebGL2. Needs -sGL_ENABLE_GET_PROC_ADDRESS (default on).
-        return emscripten_webgl_get_proc_address(name);
     }
 #else
     void * openGlGetFunctionAddress ( const char * name ) {
@@ -269,61 +246,6 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         ApiType api = ApiType::api_unknown;
     };
 
-#if defined(__EMSCRIPTEN__)
-    // ===== Exact-typed late-extern call wrappers for wasm (WebGL2/GLES3) =====
-    // wasm `call_indirect` is signature-checked, so the type-erased fastcall64
-    // trampolines (which pun every arg to int64/double and the return to int64)
-    // trap with "function signature mismatch". We still resolve the gl function
-    // pointer via gate (b) exactly as on desktop, but call it through a wrapper
-    // whose STATIC C signature comes from the real GLES3 header via decltype(&::glX).
-    // That also truncates the desktop-64-bit daslang gl decls (GLsizeiptr/GLintptr
-    // are int64 in das but 32-bit on wasm32) down to the real wasm32 type. The table
-    // is keyed by the gl symbol NAME (decltype needs the symbol); the name list is
-    // generated into gl_wasm_wrappers.inc by gen_gl_wasm_wrappers.das.
-
-    template <typename Fn> struct GlWrap;
-    template <typename R, typename... A>
-    struct GlWrap<R(*)(A...)> {
-        // each daslang arg occupies one vec4f slot with the value at the slot's low
-        // bytes; read it back with the function's OWN parameter type A.
-        template <size_t... I>
-        static vec4f call_seq ( void * fn, vec4f * args, std::index_sequence<I...> ) {
-            auto f = (R(*)(A...)) fn;
-            if constexpr ( std::is_void_v<R> ) {
-                f( (*(A*)(args+I))... );
-                return v_zero();
-            } else if constexpr ( std::is_pointer_v<R> ) {
-                return Rx( (int64_t)(intptr_t) f( (*(A*)(args+I))... ) );
-            } else {
-                return Rx( (int64_t) f( (*(A*)(args+I))... ) );
-            }
-        }
-        static vec4f call ( void * fn, vec4f * args ) {
-            return call_seq(fn, args, std::index_sequence_for<A...>{});
-        }
-    };
-
-    // hash(gl symbol name) -> exact wrapper, built once. Desktop-only gl funcs are
-    // absent -> nullptr -> the caller falls through and fail-closes at address
-    // resolution (the correct WebGL2 result).
-    static FastCallWrapper getGlWasmWrapper ( const string & name ) {
-        static const das_hash_map<uint64_t,FastCallWrapper> table = [](){
-            das_hash_map<uint64_t,FastCallWrapper> m;
-            int count = 0;
-            #define GLW(n)  { m[hash_blockz64((const uint8_t*)#n)] = &GlWrap<decltype(&::n)>::call; ++count; }
-            #include "gl_wasm_wrappers.inc"
-            #undef GLW
-            // finite static list -> a name-hash collision is a build-time bug.
-            DAS_VERIFYF(int(m.size())==count,
-                "gl_wasm_wrappers: name-hash collision (%d names, %d unique hashes)",
-                count, int(m.size()));
-            return m;
-        }();
-        auto it = table.find(hash_blockz64((const uint8_t*)name.c_str()));
-        return it==table.end() ? nullptr : it->second;
-    }
-#endif
-
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
         int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
         for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
@@ -431,18 +353,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return {true, result};
     }
 
-    FastCallWrapper computeWrapper ( Function * fun, const ExternBindArgs & ba ) {
-#if defined(__EMSCRIPTEN__)
-        // gl late-externs are the lone wasm consumer of the type-erased call path;
-        // give them an exact-typed wrapper keyed by the resolved gl symbol. A
-        // desktop-only gl name has no wrapper -> fall through; it then fail-closes
-        // at address resolution (emscripten_webgl_get_proc_address -> nullptr).
-        if ( ba.api==ApiType::api_opengl ) {
-            if ( auto w = getGlWasmWrapper(ba.fn_name) ) return w;
-        }
-#else
-        (void) ba;
-#endif
+    FastCallWrapper computeWrapper ( Function * fun ) {
 #ifdef _MSC_VER
         return getWrapper(fun, 4);
 #else
@@ -551,7 +462,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 funptr = getDllAddress(ba.library, ba.fn_name, ba.api == ApiType::api_opengl, err);
                 if ( !funptr ) return false;
             }
-            auto wrp = computeWrapper(fun, ba);
+            auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
             auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp);
             bif->result = fun->result;

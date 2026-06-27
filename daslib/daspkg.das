@@ -131,11 +131,15 @@ def custom_build(command : string) {
 struct ReleaseSpec {
     name : string                       //!< bundle name; defaults to package_name
     main_script : string                //!< path to project's main .das (relative to root)
+    wasm_main_script : string           //!< entry for `daspkg release wasm` when it differs from main_script (e.g. a live_stub variant); falls back to main_script
     include_globs : array<string>       //!< asset globs to ship
     exclude_globs : array<string>       //!< asset globs to skip
     forced_modules : array<string>      //!< force-include shared module by das_name (auto-detection misses media-only or runtime-loaded packages)
     native_dlls : array<string>         //!< native shared libraries to ship next to this package's .shared_module (e.g. "glfw3.dll" / "libglfw.so.3.4"); resolved against <das_root>/bin/ (Windows) or <das_root>/lib/ (POSIX)
     bundle_id : string                  //!< macOS .app CFBundleIdentifier (reverse-DNS); defaults to com.<author>.<name>
+    emcc_args : array<string>           //!< extra emcc flags this module contributes to a `daspkg release wasm` link (e.g. "-sUSE_GLFW=3"); gathered from every referenced module
+    embed_paths : array<string>         //!< "src@dst" embed pairs this module needs in the wasm MEMFS (e.g. a HUD font); gathered from every referenced module
+    web_shell : string                  //!< optional emcc `--shell-file` HTML for `release wasm`; empty = daslang's minimal canvas shell
 }
 
 var _release_spec : ReleaseSpec
@@ -146,6 +150,14 @@ def release_name(name : string) {
 
 def release_main(script : string) {
     _release_spec.main_script = script
+}
+
+//! Entry script for `daspkg release wasm` (the wasm64 build) when it differs
+//! from the native release_main() — e.g. a live_stub variant that drops the
+//! desktop live-reload stack (which can't cross-compile). Falls back to
+//! release_main() when unset.
+def release_wasm_main(script : string) {
+    _release_spec.wasm_main_script = script
 }
 
 def release_include(pattern : string) {
@@ -173,5 +185,29 @@ def release_include_dll(name : string) {
 
 def release_bundle_id(id : string) {
     _release_spec.bundle_id = id
+}
+
+//! Contribute an extra emcc flag to a `daspkg release wasm` link. Declared in a
+//! module's `.das_package` so the flag is added whenever a released app links
+//! that module (e.g. dasGlfw declares `release_emcc_arg("-sUSE_GLFW=3")`).
+//! `-sMEMORY64=1` / `-sFULL_ES3` / WebGL2 flags are release defaults — don't
+//! re-declare them here.
+def release_emcc_arg(arg : string) {
+    _release_spec.emcc_args |> push(arg)
+}
+
+//! Declare a file a module needs embedded in the wasm MEMFS for `release wasm`
+//! (emcc `--embed-file src@dst`). `src` is relative to <das_root>; `dst` is the
+//! absolute MEMFS path the runtime opens at (e.g. dasStbImage embeds its HUD
+//! font at `/modules/dasStbImage/fonts/droidsansmono.ttf`).
+def release_embed_file(src, dst : string) {
+    _release_spec.embed_paths |> push("{src}@{dst}")
+}
+
+//! Choose the emcc `--shell-file` HTML wrapper for `release wasm`. Empty (the
+//! default) ships daslang's minimal canvas-only shell. A site can point this at
+//! its own shell (e.g. the forge canvas frame) for in-page embedding.
+def release_web_shell(path : string) {
+    _release_spec.web_shell = path
 }
 

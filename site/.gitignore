@@ -27,6 +27,13 @@ playground/tutorials/
 # WASM artifact built by pages.yml from web/.
 files/wasm/
 
+# /examples/ per-game runtime: the compiled wasm64 builds (<game>.{html,js,wasm})
+# plus the .das sources + HUD font that the interpreted fallback (_interp.html)
+# loads. All staged by pages.yml from web/examples/ui/samples/examples/<game>/ and
+# the wasm64 cross-compile. Only the page source is committed: examples.html,
+# files/examples.js, examples/_interp.html, files/examples/*-poster.png.
+examples/*/
+
 # Per-platform dasProfile snapshots fetched fresh by pages.yml from
 # https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_<platform>.json
 files/profile_results_*.json

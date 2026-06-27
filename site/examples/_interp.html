@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>daslang example — interpreted</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #070605; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #canvas { max-width: 100%; max-height: 100%; border: 0; outline: none; background: #070605; }
+    #ex-load {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      font: 12px "JetBrains Mono", monospace; color: #9b9281; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+  <div id="ex-load">loading interpreter…</div>
+  <script>
+    // Interpreted runner for the /examples player's non-memory64 fallback.
+    // Loads daslang_static.wasm (the universal wasm32 interpreter the playground
+    // uses), mounts the game's main.das + live_stub.das into MEMFS, and callMain's
+    // it — the C++ WebLoop drives the exported init/update/shutdown per rAF.
+    var GAME = (new URLSearchParams(location.search).get('g') || '').replace(/[^a-z0-9_-]/gi, '');
+    var WASM_DIR = '../files/wasm/';
+    var loadEl = document.getElementById('ex-load');
+    function note(s) { if (loadEl) loadEl.textContent = s; }
+
+    function mount(path, bytes) {
+      var dir = path.substring(0, path.lastIndexOf('/'));
+      if (dir) { try { FS.mkdirTree(dir); } catch (e) {} }
+      FS.writeFile(path, new Uint8Array(bytes));
+    }
+    function get(url) { return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error(r.status + ' ' + url);
+      return r.arrayBuffer();
+    }); }
+
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      arguments: ['main.das'],
+      noInitialRun: true,                       // -sINVOKE_RUN=0; we callMain after mounting
+      locateFile: function (p) { return WASM_DIR + p; },
+      print: function () { console.log.apply(console, arguments); },
+      printErr: function () { console.error.apply(console, arguments); },
+      onRuntimeInitialized: function () {
+        note('mounting ' + GAME + '…');
+        // Production daslang_static embeds the HUD font; inject it too as a
+        // belt-and-suspenders for builds that don't (fetch is non-fatal).
+        var font = get(GAME + '/droidsansmono.ttf')
+          .then(function (b) { mount('/modules/dasStbImage/fonts/droidsansmono.ttf', b); })
+          .catch(function () {});
+        var src = Promise.all(['main.das', 'live_stub.das'].map(function (f) {
+          return get(GAME + '/' + f).then(function (b) { mount(f, b); });
+        }));
+        Promise.all([font, src]).then(function () {
+          note('running…');
+          try { Module.callMain(['main.das']); if (loadEl) loadEl.style.display = 'none'; }
+          catch (e) { note('error: ' + (e && e.message || e)); console.error(e); }
+          document.getElementById('canvas').focus();
+        }).catch(function (e) { note('failed to load ' + GAME + ': ' + e.message); });
+      },
+    };
+    window.addEventListener('click', function () { var c = document.getElementById('canvas'); if (c) c.focus(); });
+  </script>
+  <script src="../files/wasm/daslang_static.js"></script>
+</body>
+</html>
