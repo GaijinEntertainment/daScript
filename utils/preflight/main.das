@@ -878,12 +878,12 @@ def report_gate(r : GateResult; verbose : bool) {
 
 // ===== preflight token (pre-push gate) =====
 
-// On a clean, complete full pass, mint a token the pre-push hook checks. Bound
-// to the HEAD sha so any later commit/amend goes stale; written via
-// `git rev-parse --git-path` so each worktree keeps its own. Threat model is
-// "forgot to preflight", not a hostile actor — it's a forcing function, not a
-// security boundary (`git push --no-verify` is the documented WIP escape, CI
-// is the real wall).
+// On a complete full run with no failing gate (env-SKIPs are fine) and a clean
+// tree, mint a token the pre-push hook checks. Bound to the HEAD sha so any
+// later commit/amend goes stale; written via `git rev-parse --git-path` so each
+// worktree keeps its own. Threat model is "forgot to preflight", not a hostile
+// actor — it's a forcing function, not a security boundary (`git push
+// --no-verify` is the documented WIP escape, CI is the real wall).
 
 def git_line(args : array<string>) : string {
     let r = run_argv(args)
@@ -1048,8 +1048,9 @@ def main() : int {
     }
 
     // Mint the pre-push token only after a complete full run (no --only/--skip
-    // subsetting) that passed. A failed complete full run clears any stale
-    // token. Fast tier and subset runs leave a prior full token untouched.
+    // subsetting) with no failing gate (env-SKIPs are fine). A failed complete
+    // run clears any stale token. Fast tier and subset runs leave a prior token
+    // untouched.
     if (cfg.full && empty(cfg.only) && empty(cfg.skip)) {
         if (n_fail == 0) {
             emit_preflight_token()

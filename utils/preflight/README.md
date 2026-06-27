@@ -29,8 +29,8 @@ even the full ~160-TU header-change sweep at ~15-30 s. A gate whose host tool
 or module is missing reports `SKIP` with an install/rebuild hint instead of
 passing silently. Exit code is non-zero when any gate fails.
 
-**Pre-push token.** A clean, complete `--full` run (no `--only`/`--skip`, every
-gate passing, working tree == HEAD) mints a token at
+**Pre-push token.** A clean, complete `--full` run (no `--only`/`--skip`, no gate
+failing — env-SKIPs are fine — working tree == HEAD) mints a token at
 `$(git rev-parse --git-path preflight-token)` bound to the HEAD sha. The
 `.githooks/pre-push` hook requires that token, so `git push` is blocked until
 full preflight has passed for exactly the commit being pushed — re-run after any

@@ -36,7 +36,8 @@ block() {
 # Collect the tips being pushed (skip branch deletes — a zero local sha).
 LOCAL_SHAS=()
 while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
-    case "$LOCAL_SHA" in "$ZERO40"|"$ZERO64") continue;; esac
+    case "$LOCAL_SHA" in "$ZERO40"|"$ZERO64") continue;; esac   # branch delete
+    case "$LOCAL_REF" in refs/tags/*) continue;; esac           # tag push: not preflight-gated
     LOCAL_SHAS+=("$LOCAL_SHA")
 done
 if [ ${#LOCAL_SHAS[@]} -eq 0 ]; then

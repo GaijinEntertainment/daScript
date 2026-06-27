@@ -12,8 +12,11 @@ Reverts via `git config --unset core.hooksPath`. Skip once with `git push --no-v
 
 ## The full-preflight gate
 
-`pre-push` blocks any push whose tip lacks a fresh **full-preflight token**. The
-token is minted only by a clean, complete full run of preflight:
+`pre-push` blocks a push unless **both** hold for the pushed commit: it is based
+on the latest `origin/master` (the hook fetches to check; a stale base prints a
+rebase remedy), **and** it has a fresh **full-preflight token**. Tag pushes
+(`refs/tags/*`) are not gated. The token is minted only by a clean, complete
+full run of preflight:
 
 ```sh
 daslang utils/preflight/main.das -- --full
