@@ -8,6 +8,11 @@ daslib/_aot_generated/*.cpp binary
 # Shell scripts must keep LF endings even when checked out under autocrlf=true.
 *.sh text eol=lf
 
+# Git hooks are bash scripts with no extension — Git Bash chokes on CRLF in the
+# shebang / read loops, so pin the whole dir to LF (autocrlf=true would otherwise
+# check them out CRLF on Windows and silently break the pre-push gate).
+.githooks/** text eol=lf
+
 # Windows batch launchers must keep CRLF — cmd.exe mis-parses an LF-only .cmd
 # (it runs each line's tail as a command). Force CRLF so an editor or a checkout
 # under autocrlf=input can't silently break the daslang MCP vcvars launcher.

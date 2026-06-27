@@ -1,92 +1,97 @@
 #!/usr/bin/env bash
-# pre-push: mirror CI's formatter + lint (.github/workflows/extended_checks.yml).
-# Cross-platform: runs under Git Bash on Windows, bash on Linux/macOS.
+# pre-push gate. Blocks a push unless BOTH hold for every pushed commit:
+#   1. the branch is based on the latest origin/master (mirrors make_pr.md S0)
+#   2. a fresh full-preflight token exists for the commit being pushed
 #
-# Enable per-clone:
-#   git config core.hooksPath hooks
-# Skip once:
-#   git push --no-verify
-# Override binary path:
-#   DASLANG=/path/to/daslang git push
+# The token is minted by a clean, complete full run of preflight:
+#     daslang utils/preflight/main.das -- --full
+# It is bound to the HEAD sha, so any later commit/amend/rebase makes it stale.
+#
+# This is a forcing function for "forgot to rebase / forgot to preflight", NOT a
+# security gate. Read skills/make_pr.md before opening a PR.
+#
+# Enable per-clone:    git config core.hooksPath .githooks
+# Deliberate WIP push: git push --no-verify
+#
+# Cross-platform: runs under Git Bash on Windows, bash on Linux/macOS.
 
 set -eu
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-# Resolve daslang binary across single/multi-config layouts.
-resolve_daslang() {
-    if [ -n "${DASLANG:-}" ] && [ -x "$DASLANG" ]; then
-        echo "$DASLANG"; return
-    fi
-    for p in \
-        "$ROOT/bin/daslang" \
-        "$ROOT/bin/daslang.exe" \
-        "$ROOT/bin/Release/daslang.exe" \
-        "$ROOT/bin/Debug/daslang.exe" \
-        "$ROOT/build/daslang" \
-        "$ROOT/build/bin/daslang"
-    do
-        [ -x "$p" ] && { echo "$p"; return; }
-    done
-    return 1
-}
-
-DASLANG="$(resolve_daslang || true)"
-if [ -z "$DASLANG" ]; then
-    echo "pre-push: daslang not found — build it (cmake --build build --target daslang)" >&2
-    echo "         or set DASLANG=/path/to/daslang" >&2
-    exit 1
-fi
-
-echo "pre-push: using $DASLANG"
-
-# Formatter: verify only tracked .das files (the git index), fed via --files-from.
-# This is exactly CI's fresh-clone view, so the hook can't diverge from CI: gitignored
-# scratch (examples/wip.das), build/ and _build/ output, and untracked files that
-# aren't being pushed are all skipped — none of them reach CI.
-echo "pre-push: formatter --verify ..."
-FMT_LIST="$(mktemp "${TMPDIR:-/tmp}/dasfmt-prepush.XXXXXX")"   # template form: portable across GNU/BSD/macOS/Git Bash
-trap 'rm -f "$FMT_LIST"' EXIT
-git ls-files --cached -- '*.das' > "$FMT_LIST"
-# daslang is a native binary; under Git Bash it needs a Windows path, not /tmp/...
-FMT_LIST_ARG="$FMT_LIST"
-command -v cygpath >/dev/null 2>&1 && FMT_LIST_ARG="$(cygpath -m "$FMT_LIST")"
-"$DASLANG" "$ROOT/utils/das-fmt/dasfmt.das" -- --files-from "$FMT_LIST_ARG" --verify
-
-# Lint: only .das files changed in the pushed range vs remote tip
-# (mirrors CI's `git diff origin/<base>...HEAD`).
 ZERO40="0000000000000000000000000000000000000000"
 ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
-RANGES=()
+
+# block <reason> <remedy-lines>: print the standard rejection and exit.
+block() {
+    echo "pre-push: $1" >&2
+    echo "" >&2
+    printf '%s\n' "$2" >&2
+    echo "" >&2
+    echo "  Deliberate WIP push (skips this gate): git push --no-verify" >&2
+    exit 1
+}
+
+# Collect the tips being pushed (skip branch deletes — a zero local sha).
+LOCAL_SHAS=()
 while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
-    case "$LOCAL_SHA" in "$ZERO40"|"$ZERO64") continue;; esac  # branch delete
-    case "$REMOTE_SHA" in
-        "$ZERO40"|"$ZERO64")
-            BASE="$(git merge-base "$LOCAL_SHA" origin/master 2>/dev/null || true)"
-            [ -n "$BASE" ] && RANGES+=("$BASE..$LOCAL_SHA")
-            ;;
-        *)
-            RANGES+=("$REMOTE_SHA..$LOCAL_SHA")
-            ;;
+    case "$LOCAL_SHA" in "$ZERO40"|"$ZERO64") continue;; esac
+    LOCAL_SHAS+=("$LOCAL_SHA")
+done
+if [ ${#LOCAL_SHAS[@]} -eq 0 ]; then
+    echo "pre-push: nothing to push (deletes only)"
+    exit 0
+fi
+
+# ----- (1) based on the latest origin/master -----
+# Fetch so the check is authoritative; fall back to the local ref if offline.
+if git fetch -q origin master 2>/dev/null; then
+    MASTER="$(git rev-parse FETCH_HEAD)"
+else
+    MASTER="$(git rev-parse origin/master 2>/dev/null || true)"
+    [ -n "$MASTER" ] && echo "pre-push: warning: could not fetch origin/master; checking against the local ref" >&2
+fi
+
+if [ -n "$MASTER" ]; then
+    for sha in "${LOCAL_SHAS[@]}"; do
+        BASE="$(git merge-base "$sha" "$MASTER" 2>/dev/null || true)"
+        if [ "$BASE" != "$MASTER" ]; then
+            block "branch is not based on the latest origin/master (it is behind ${MASTER:0:12})" \
+"  Rebase onto latest master, then re-run full preflight:
+    git fetch origin master
+    git rebase origin/master
+    daslang utils/preflight/main.das -- --full"
+        fi
+    done
+fi
+
+# ----- (2) fresh full-preflight token for the pushed commit -----
+TOKEN="$(git rev-parse --git-path preflight-token)"
+PREFLIGHT="  Read skills/make_pr.md, then run:
+    daslang utils/preflight/main.das -- --full"
+
+[ -f "$TOKEN" ] || block "no full-preflight token found" "$PREFLIGHT"
+
+# Parse head=<sha>/mode=full/result=pass; strip a trailing CR so a token written
+# on one platform still reads cleanly on another.
+TOK_HEAD=""; TOK_MODE=""; TOK_RESULT=""
+while IFS='=' read -r k v; do
+    v="${v%$'\r'}"
+    case "$k" in
+        head)   TOK_HEAD="$v";;
+        mode)   TOK_MODE="$v";;
+        result) TOK_RESULT="$v";;
     esac
+done < "$TOKEN"
+
+[ "$TOK_MODE" = "full" ]   || block "preflight token is not a full run (mode='$TOK_MODE')" "$PREFLIGHT"
+[ "$TOK_RESULT" = "pass" ] || block "last full preflight did not pass (result='$TOK_RESULT')" "$PREFLIGHT"
+
+for sha in "${LOCAL_SHAS[@]}"; do
+    if [ "$sha" != "$TOK_HEAD" ]; then
+        block "stale token: minted for ${TOK_HEAD:0:12}, but pushing ${sha:0:12}" "$PREFLIGHT"
+    fi
 done
 
-if [ ${#RANGES[@]} -eq 0 ]; then
-    echo "pre-push: no ranges (deleting or empty); skipping lint"
-    exit 0
-fi
-
-# Portable read-into-array (mapfile is bash 4+; macOS default ships bash 3.2).
-CHANGED=()
-while IFS= read -r line; do
-    CHANGED+=("$line")
-done < <(git diff --name-only --diff-filter=AM "${RANGES[@]}" -- '*.das' | sort -u)
-
-if [ ${#CHANGED[@]} -eq 0 ]; then
-    echo "pre-push: no .das files changed; skipping lint"
-    exit 0
-fi
-
-echo "pre-push: linting ${#CHANGED[@]} .das file(s)"
-"$DASLANG" "$ROOT/utils/lint/main.das" -- "${CHANGED[@]}" --quiet
+echo "pre-push: on latest master + full-preflight token OK for ${TOK_HEAD:0:12}"

@@ -29,6 +29,15 @@ even the full ~160-TU header-change sweep at ~15-30 s. A gate whose host tool
 or module is missing reports `SKIP` with an install/rebuild hint instead of
 passing silently. Exit code is non-zero when any gate fails.
 
+**Pre-push token.** A clean, complete `--full` run (no `--only`/`--skip`, every
+gate passing, working tree == HEAD) mints a token at
+`$(git rev-parse --git-path preflight-token)` bound to the HEAD sha. The
+`.githooks/pre-push` hook requires that token, so `git push` is blocked until
+full preflight has passed for exactly the commit being pushed — re-run after any
+new commit/amend/rebase. A failed complete run clears a stale token. Forcing
+function only; `git push --no-verify` is the WIP escape. See
+[.githooks/README.md](../../.githooks/README.md).
+
 `ci_only_das.txt` lists the in-repo das surface that no default local build
 compiles (dasOpenGL today); see the header comment there before adding
 entries — surfaces that pull external daspkg packages belong to the

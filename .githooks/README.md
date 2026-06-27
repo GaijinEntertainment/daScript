@@ -10,6 +10,23 @@ git config core.hooksPath .githooks
 
 Reverts via `git config --unset core.hooksPath`. Skip once with `git push --no-verify`.
 
+## The full-preflight gate
+
+`pre-push` blocks any push whose tip lacks a fresh **full-preflight token**. The
+token is minted only by a clean, complete full run of preflight:
+
+```sh
+daslang utils/preflight/main.das -- --full
+```
+
+It is written to `$(git rev-parse --git-path preflight-token)` (per-worktree)
+and bound to the HEAD sha. Any later commit, amend, or rebase changes the sha,
+the token goes stale, and the hook blocks until you re-run full preflight. A
+failed or partial (`--only`/`--skip`) run does not mint a token; a dirty working
+tree at the end of a full run does not either (you pushed the commit, not the
+tree). This is a forcing function for "forgot to preflight" — not a security
+gate; `git push --no-verify` skips it for deliberate WIP pushes.
+
 ### Windows notes
 
 - Git for Windows ships Git Bash — the `#!/usr/bin/env bash` shebang works out of the box. No extra install needed.
@@ -26,7 +43,7 @@ chmod +x .githooks/*
 
 ## Hooks
 
-- **pre-push** — formatter (`--verify` on the whole tree) + lint on pushed `.das` files. Mirrors `.github/workflows/extended_checks.yml`.
+- **pre-push** — requires a fresh full-preflight token for the pushed commit (see "The full-preflight gate" above). Full preflight itself runs the format + lint gates that mirror `.github/workflows/extended_checks.yml`, plus the full-tier suites.
 
 ## Requirements
 

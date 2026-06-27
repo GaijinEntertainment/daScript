@@ -876,6 +876,58 @@ def report_gate(r : GateResult; verbose : bool) {
     }
 }
 
+// ===== preflight token (pre-push gate) =====
+
+// On a clean, complete full pass, mint a token the pre-push hook checks. Bound
+// to the HEAD sha so any later commit/amend goes stale; written via
+// `git rev-parse --git-path` so each worktree keeps its own. Threat model is
+// "forgot to preflight", not a hostile actor — it's a forcing function, not a
+// security boundary (`git push --no-verify` is the documented WIP escape, CI
+// is the real wall).
+
+def git_line(args : array<string>) : string {
+    let r = run_argv(args)
+    return r.rc == 0 ? strip(replace(r.out, "\r", "")) : ""
+}
+
+def token_path() : string {
+    return git_line(["git", "rev-parse", "--git-path", "preflight-token"])
+}
+
+def emit_preflight_token() {
+    let head = git_line(["git", "rev-parse", "HEAD"])
+    if (empty(head)) {
+        to_log(LOG_WARNING, "preflight: could not resolve HEAD — no token written\n")
+        return
+    }
+    // The tree we validated must equal HEAD: git push ships the commit, not the
+    // working tree, so a dirty tree would certify code that isn't being pushed.
+    // (untracked files are ignored — they never reach CI.)
+    if (run_argv(["git", "diff", "--quiet", "HEAD"]).rc != 0) {
+        to_log(LOG_WARNING, "preflight: working tree differs from HEAD — no token written (commit, then re-run --full)\n")
+        return
+    }
+    let path = token_path()
+    if (empty(path)) {
+        to_log(LOG_WARNING, "preflight: could not resolve token path — no token written\n")
+        return
+    }
+    if (!fwrite(path, "head={head}\nmode=full\nresult=pass\n")) {
+        to_log(LOG_WARNING, "preflight: could not write token at {path}\n")
+        return
+    }
+    to_log(LOG_INFO, "preflight: full-pass token written for {head} — git push allowed\n")
+}
+
+// A failed (or now-stale) complete full run must not leave a prior pass token
+// behind for a bare `git push` to ride on.
+def clear_preflight_token() {
+    let path = token_path()
+    if (!empty(path) && fexist(path)) {
+        remove(path)
+    }
+}
+
 [export]
 def main() : int {
     var args_r <- parse_args(type<Config>)
@@ -992,6 +1044,17 @@ def main() : int {
                 detail = " — {r.detail}"
             }
             to_log(r.status == GateStatus.Fail ? LOG_ERROR : LOG_INFO, "  [{tag}] {r.name}{detail}\n")
+        }
+    }
+
+    // Mint the pre-push token only after a complete full run (no --only/--skip
+    // subsetting) that passed. A failed complete full run clears any stale
+    // token. Fast tier and subset runs leave a prior full token untouched.
+    if (cfg.full && empty(cfg.only) && empty(cfg.skip)) {
+        if (n_fail == 0) {
+            emit_preflight_token()
+        } else {
+            clear_preflight_token()
         }
     }
     return n_fail > 0 ? 1 : 0
