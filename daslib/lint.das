@@ -62,6 +62,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT012: unused function argument (class-method and [extern] args skipped — signature is dictated externally)
     //!   - LINT013: unused block argument
     //!   - LINT014: mutable (var) function argument is never written — drop the var
+    //!   - LINT015: free-floating unary +/- expression statement — value discarded; a continuation line missing its parens
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -160,6 +161,19 @@ class LintVisitor : AstVisitor {
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
             lint_error("LINT001: unreachable code", expr.at)
+        }
+        // LINT015: a free-floating unary +/- subexpression used as a statement — a
+        // continuation line that lost its wrapping parens (`let x = a` ⏎ `+ b`,
+        // which re-parses as a unary `+b` whose value is discarded; if the operand
+        // is pure the optimizer drops the whole statement silently). Only `+`/`-`
+        // qualify: they are the only operators that are both binary and unary, so a
+        // split binary `a + b` orphans as a valid unary statement (`~`/`!` aren't
+        // binary, `*`/`|>`/etc. can't start a statement → loud error).
+        if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
+            let op1 = expr as ExprOp1
+            if (op1.op == "+" || op1.op == "-") {
+                lint_error("LINT015: free-floating unary '{op1.op}' expression as a statement — its value is silently discarded; this is almost always a continuation line missing its parens, wrap the multi-line RHS in (...)", expr.at)
+            }
         }
         // Mark this block as terminated only when `expr` IS a direct-child terminator.
         // Tracking from preVisitExprReturn/preVisitExprCall(panic) was incorrect: it

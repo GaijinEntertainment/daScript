@@ -527,6 +527,38 @@ the next lint run exposes the caller.
     on the specific parameter's line; on a single-line ``def foo(a, b, c)`` a
     trailing ``// nolint:LINT012`` suppresses the whole line.
 
+LINT015 — free-floating unary ``+``/``-`` statement
+============================================================
+
+At statement level daslang is one statement per line, so a multi-line
+arithmetic RHS without wrapping parentheses splits each continuation into its
+own statement. A line beginning with ``+`` or ``-`` re-parses as a unary
+expression (``+b`` / ``-b``) whose value is discarded — the term no longer
+contributes. When the operand is pure the optimizer removes the whole statement
+**silently**: terms vanish, the result is wrong, and nothing is reported. (If
+the operand has side effects those still run, but the leading ``+``/``-`` is
+meaningless either way — the rule fires regardless.)
+
+Only ``+`` and ``-`` qualify — they are the only operators that are both binary
+and unary, so a split binary ``a + b`` orphans as a valid unary statement.
+``~`` / ``!`` are not binary (they cannot be a split continuation), ``++`` /
+``--`` mutate (real statements), and an operator that cannot begin a statement
+(``*``, ``|>``, …) raises a loud parse error instead.
+
+.. code-block:: das
+
+    // Bad — `+ b` and `+ c` become separate `+b` / `+c` statements, dropped
+    let x = a
+        + b                                 // LINT015
+        + c                                 // LINT015
+
+    // Good — the newlines now fall inside the parentheses
+    let x = (a
+        + b
+        + c)
+
+Wrap any multi-line arithmetic RHS in ``(...)``.
+
 .. _perf_lint:
 
 -----------------
