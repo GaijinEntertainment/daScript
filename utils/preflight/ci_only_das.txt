@@ -8,7 +8,9 @@
 # `sequence` gate instead — its ci_smoke_test script installs the deps fresh,
 # while a bare -compile-only would read whatever stale gitignored install is
 # lying around and report phantom errors.
-modules/dasOpenGL/opengl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
+# opengl_imgui_driver.das pulls external dasImgui (imgui): absent locally it
+# SKIPs via allow-skip, present in CI it compiles — better coverage than excluding it.
+modules/dasOpenGL/opengl/*.das | glfw, opengl, imgui | rebuild with -DDAS_GLFW_DISABLED=OFF (imgui: install dasImgui via daspkg)
 modules/dasOpenGL/glsl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
 # GL path tracers (OpenGL<->Vulkan harmonization compat, HARMONIZATION_PLAN.md section 8.1): GLFW-gated
 # and need a GPU to run, so compile-only. The CPU rail (toy_path_tracer.das) is a run gate via ADD_EXAMPLE_RUN.
