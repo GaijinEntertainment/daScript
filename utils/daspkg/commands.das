@@ -1052,7 +1052,7 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
 
     // Build the wasm64 runtime + the module archives release wasm links against.
     log("build --wasm: building wasm64 archives...\n")
-    let targets = "libDaScript_runtime libDasModuleOpenGL libDasModuleGlfw libDasModuleStbImage libDasModuleAudio libDasModuleMinfft"
+    let targets = "libDaScript_runtime libDasModuleOpenGL libDasModuleGlfw libDasModuleStbImage libDasModuleAudio libDasModuleMinfft libDasModuleLiveHost"
     var bld_out : string
     let bld_rc = run_cmd("cmake --build \"{build_dir}\" --target {targets}", bld_out)
     if (bld_rc != 0) {
