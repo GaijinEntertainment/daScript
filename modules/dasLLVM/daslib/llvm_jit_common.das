@@ -48,6 +48,10 @@ let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
 let public FN_JIT_STRING_BUILDER_TEMP    = "jit_string_builder_temp"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
 let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
+// Wasm cross-compile only — handled-type field offset resolved against the TARGET
+// runtime's annotation registry (the host's offsetof is wrong when the target C++
+// ABI lays the struct out differently; see handled_field_offset_value in llvm_jit.das).
+let public FN_JIT_GET_HANDLED_FIELD_OFFSET = "jit_get_handled_field_offset"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -363,6 +367,10 @@ def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpa
 
 var public g_fn_types : table<string; LLVMTypeRef>
 
+// Wasm cross-compile only: per (handled-type, field) i32 globals holding the TARGET
+// field offset, filled once after initialize_modules() via jit_get_handled_field_offset.
+// Keyed by the global name; value carries the (module, type, field) for the init call.
+var public g_handled_field_offset_globals : table<string; tuple<modName : string; typeName : string; fieldName : string>>
 
 // Set by init_jit when target_triple is a wasm target. Cross-compile path's
 // host-LLVM wasm32 codegen mishandles several user-provided hints (alwaysinline
@@ -433,6 +441,7 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     g_prim_t = new PrimitiveTypes(g_ctx)
     g_failed = false
     g_fn_types |> clear()
+    g_handled_field_offset_globals |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
     LLVMCreateJITCompilerForModule(g_engine, g_mod, cg_opt_level)
     // For cross-compile targets (wasm32, etc.) pin the module's data layout
@@ -546,6 +555,15 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
     LLVMAddAttributesToFunction(jit_get_shared_mnh, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
+    // uint32_t jit_get_handled_field_offset ( const char * module, const char * type, const char * field )
+    // Wasm-only: resolves a handled-type (C++) field offset against the TARGET runtime's
+    // annotation registry. Filled into per-field offset globals once at init. Declared
+    // unconditionally (zero cost if unused); only emitted/called when g_target_is_wasm.
+    var jit_get_handled_field_offset = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_HANDLED_FIELD_OFFSET,
+        LLVMFunctionType(g_prim_t.t_int32,
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+    LLVMAddGlobalMapping(g_engine, jit_get_handled_field_offset, get_jit_get_handled_field_offset())
+    LLVMAddAttributesToFunction(jit_get_handled_field_offset, fixed_array(nounwind, willreturn))
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),

@@ -431,6 +431,29 @@ extern "C" {
         return context.shared + context.globalOffsetByMangledName(mnh);
     }
 
+    // Resolve a handled-type (C++) field offset at runtime. The JIT bakes field
+    // offsets via the HOST annotation's offsetof, which is wrong when cross-compiling
+    // to a target whose C++ ABI lays the struct out differently — even at equal pointer
+    // width (e.g. an MSVC host vs a clang/wasm64 target: vptr + multiple-base ordering
+    // diverge for polymorphic classes like Context). The runtime archive (built for the
+    // target) registers each handled type's annotation with the right offsetof, so
+    // resolve by (module, type, field) here. Called once per offset-global at init,
+    // after initialize_modules() has registered the modules.
+    DAS_API uint32_t jit_get_handled_field_offset ( const char * moduleName,
+                                                    const char * typeName,
+                                                    const char * fieldName ) {
+        uint32_t offset = (uint32_t)-1;
+        Module::foreach([&](Module * module) -> bool {
+            if ( module->name != moduleName ) return true;
+            auto ann = module->findAnnotation(typeName);
+            if ( ann && (ann->rtti_isHandledTypeAnnotation() || ann->rtti_isStructureAnnotation()) ) {
+                offset = ((TypeAnnotation *)ann)->getFieldOffset(fieldName);
+                return false; // stop iterating
+            }
+            return true;
+        });
+        return offset;
+    }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         return context->allocate(bytes);
@@ -623,6 +646,7 @@ extern "C" {
     void *das_get_jit_string_builder_temp() { return (void *)&jit_string_builder_temp; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
+    void *das_get_jit_get_handled_field_offset() { return (void *)&jit_get_handled_field_offset; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -1176,6 +1200,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
                 SideEffects::none, "das_get_jit_get_shared_mnh");
+            addExtern<DAS_BIND_FUN(das_get_jit_get_handled_field_offset)>(*this, lib, "get_jit_get_handled_field_offset",
+                SideEffects::none, "das_get_jit_get_handled_field_offset");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
