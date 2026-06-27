@@ -4,6 +4,7 @@ options persistent_heap = true
 options _allow_glfw_calls = true
 
 require imgui/imgui_harness
+require imgui/imgui_live
 require opengl/opengl_boost
 require glfw/glfw_boost
 require live/glfw_live
@@ -128,7 +129,7 @@ def update() {
 
     end_of_frame()
     Render()
-    ImGui_ImplOpenGL3_RenderDrawData(GetDrawData())
+    live_imgui_render()
     live_end_frame()
 }
 
