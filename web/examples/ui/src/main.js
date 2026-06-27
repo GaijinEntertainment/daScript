@@ -130,11 +130,15 @@ pageInit = function () {
 }
 
 // Derive a URL-friendly slug from a sample entry. Used by the ?example=
-// query-string deep-link from daslang.io's § 01 bench cycler. The slug is
-// the first file's basename without the `.das` suffix, which by convention
-// matches the dasProfile bench test name (`sha256.das` → `sha256`, etc.).
+// query-string deep-link (daslang.io's § 01 bench cycler, and the /examples
+// page's embedded player). An explicit "slug" field wins — multi-file samples
+// (the games) all share a main.das basename, so they MUST carry a slug to be
+// addressable. Otherwise fall back to the first file's basename without `.das`
+// (so `examples/sha256.das` → `sha256`, matching the dasProfile bench name).
 function slugForSample(entry) {
-    if (!entry || !entry.files || !entry.files.length) return null;
+    if (!entry) return null;
+    if (entry.slug) return entry.slug;
+    if (!entry.files || !entry.files.length) return null;
     const f = entry.files[0];
     const base = f.split('/').pop();
     return base.replace(/\.das$/, '');
@@ -196,6 +200,23 @@ async function preloadSampleAssets() {
     }
 }
 
+// Precompiled sample .wasm are now wasm64 (memory64) — browsers without
+// memory64 (Safari/iOS) cannot instantiate them, so the JIT engine must stay
+// disabled there regardless of artifact presence. Detected once at load.
+const WASM64_SUPPORTED = (() => {
+    try {
+        // Validate a minimal module declaring a 64-bit (memory64) memory:
+        // \0asm | version | memory section {count=1, flags=0x04 (memory64), min=1}.
+        // More robust than `new WebAssembly.Memory({index:'i64'})`, which can
+        // false-positive on engines that silently ignore the unknown descriptor
+        // field and hand back a wasm32 memory. validate() parses the memory64
+        // flag, so it is true only where the engine truly supports it.
+        return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
+    } catch (e) {
+        return false;
+    }
+})();
+
 function updateEngineAvailability(name) {
     const jitRadio = document.querySelector('input[name=engine][value=jit]');
     if (!jitRadio) return;
@@ -211,6 +232,9 @@ function updateEngineAvailability(name) {
             if (interpRadio) interpRadio.checked = true;
         }
     };
+    // Gate 1: no memory64 → wasm64 artifacts can't run here at all.
+    if (!WASM64_SUPPORTED) { disableJit(); return; }
+    // Gate 2: no precompiled .wasm for this sample (multi-file or absent).
     if (!name) { disableJit(); return; }
     // Rapid sample-switching can land HEAD-fetch responses out of order
     // (HTTP/2). Gate the late .then/.catch on the sample still being current

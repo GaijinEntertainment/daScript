@@ -4203,6 +4203,12 @@ class public LlvmJitVisitor : AstVisitor {
         return blk
     }
 
+    // Handled-type (C++ struct) field offset as an LLVM i32 constant. host==target
+    // (native or wasm64), so the host annotation's offsetof is correct.
+    def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
+        return types.ConstI32(uint64(int(get_handled_type_field_offset(ann, fieldName))))
+    }
+
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {
         var field_offset : int
         if (expr.makeType.isHandle) {
@@ -5663,25 +5669,13 @@ class public LlvmJitVisitor : AstVisitor {
                         vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                         vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                     } else {
-                        // On wasm32 the host's offsetof(Context, globals) (the
-                        // CONTEXT_OFFSET_OF_GLOBALS constant baked into module_jit.cpp)
-                        // does NOT match the wasm32 runtime's Context layout —
-                        // 4-byte pointers shift everything. Call into the runtime
-                        // archive (which knows its own layout) instead of doing
-                        // GEP+load against a host-derived offset. Native keeps
-                        // the inlined GEP+load — same codegen as before.
-                        var global_ptr : LLVMOpaqueValue?
-                        if (g_target_is_wasm) {
-                            let fname = expr.variable.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
-                            let fty = g_fn_types[fname]
-                            var args = fixed_array(get_context_param())
-                            global_ptr = LLVMBuildCall2(g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
-                        } else {
-                            var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
-                            let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                            var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                            global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
-                        }
+                        // Globals base = context->globals, via the host-baked
+                        // offsetof(Context, globals); index by stackTop. host==target
+                        // (native or wasm64), so the baked Context offset is correct.
+                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
+                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                        var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                        let global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
                         vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     }
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
@@ -5737,6 +5731,7 @@ class public LlvmJitVisitor : AstVisitor {
             field_ptr = res
         } else {
             var field_offset = 0U
+            var field_offset_val : LLVMOpaqueValue? = null   // handled-type: runtime offset on wasm
             var field_type : LLVMOpaqueType?
             var field_name : string;
             var val_ptr = getE(expr.value)
@@ -5751,6 +5746,7 @@ class public LlvmJitVisitor : AstVisitor {
                     failed_E(expr, "field {expr.name} offset is -1")
                     return expr
                 }
+                field_offset_val = handled_field_offset_value(expr.annotation, string(expr.name))
                 field_type = get_type_pointer(expr._type);
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.name}";
             } elif (expr.value._type.isTuple || (expr.value._type.isPointer && expr.value._type.firstType.isTuple)) {
@@ -5773,7 +5769,8 @@ class public LlvmJitVisitor : AstVisitor {
                 field_type = get_type_pointer(expr.field._type)
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.field.name}"
             }
-            field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(field_offset)), "")
+            var off_idx = field_offset_val != null ? field_offset_val : types.ConstI32(uint64(field_offset))
+            field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, field_type, field_name)
         }
 
@@ -5791,6 +5788,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprSafeField(expr : ExprSafeField?) : ExpressionPtr {
         // unsupported(expr, "safe field access is not supported yet")
         var fieldOffset = -1
+        var field_offset_val : LLVMOpaqueValue? = null   // handled-type: runtime offset on wasm
         if (expr.annotation == null) {
             if (expr.fieldIndex != -1) {
                 if (expr.value._type.firstType.isVariant) {
@@ -5809,14 +5807,16 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "field {expr.name} offset is -1")
                 return expr
             }
+            field_offset_val = handled_field_offset_value(expr.annotation, string(expr.name))
         }
+        var off_idx = field_offset_val != null ? field_offset_val : types.ConstI32(uint64(fieldOffset))
         if (expr.skipQQ) {
             var val_ptr = getE(expr.value)
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
             var res_type = type_to_llvm_type(expr._type)
             var res = build_select(cond, res_type) {
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(types.t_int8, 0u), "")
-                var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(fieldOffset)), "")
+                var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type, 0u), ".{expr.name}")
                 field_ptr = LLVMBuildLoadData2Aligned(g_builder, res_type, field_ptr, expr._type.alignOf, "")
                 return field_ptr
@@ -5828,7 +5828,7 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             var val_ptr = getE(expr.value)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(fieldOffset)), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, off_idx, "")
             var res_type = type_to_llvm_type(expr._type)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
@@ -7527,7 +7527,12 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                                               var types : PrimitiveTypes?;
                                               uids : UidNodes?;
                                               flags : LlvmJitFlags;
-                                              fn_name : string = "init_globals") {
+                                              fn_name : string = "init_globals";
+                                              skip_shared : bool = false) {
+    // skip_shared: for a CLONED context (sharedOwner==false) that re-runs init,
+    // shared globals belong to the owner — re-initializing them writes into the
+    // parent's shared buffer and corrupts it. Skipping them matches the interpreter's
+    // `if (sharedOwner || !pv.shared)` gate (context.cpp Context::runInitScript).
     let attrs = new Attributes(g_ctx)
     var visitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
     var globals_fn : LLVMOpaqueValue?
@@ -7560,6 +7565,9 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
             prog |> for_each_module() $(mod) {
                 mod |> for_each_global() $(glob) {
                     if (glob.init != null && glob.flags.used) {
+                        // A clone is not the shared owner: leave shared globals as the
+                        // parent's (re-init would corrupt the shared buffer). See skip_shared.
+                        if (skip_shared && glob.flags.global_shared) { return }
                         // compute global variable destination pointer before visiting init expression
                         let isSolidContext = glob._module.moduleFlags.isSolidContext
                         var vptr : LLVMOpaqueValue?
@@ -7574,20 +7582,13 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                             vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
                             vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
                         } else {
-                            // See the matching site in preVisitExprVar for why
-                            // wasm32 goes through a runtime helper here.
-                            var global_ptr : LLVMOpaqueValue?
-                            if (g_target_is_wasm) {
-                                let fname = glob.flags.global_shared ? FN_JIT_GET_SHARED_BASE : FN_JIT_GET_GLOBALS_BASE
-                                let fty = g_fn_types[fname]
-                                var args = fixed_array(ctx_param)
-                                global_ptr = LLVMBuildCall2(visitor.g_builder, fty, LLVMGetNamedFunction(g_mod, fname), args, "")
-                            } else {
-                                var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
-                                let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                                var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                                global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
-                            }
+                            // Globals base = context->globals via the host-baked
+                            // offsetof(Context, globals). host==target (native or
+                            // wasm64), so the baked Context offset is correct.
+                            var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                            let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                            var gp = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                            let global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
                             vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                         }
                         // register CMRES destination so init expressions that return by copy/move
@@ -7599,6 +7600,38 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                         }
                     }
                 }
+            }
+        }
+        // Populate globalVariables[] (offset/debugInfo/shared) for EVERY global so the GC
+        // can trace standalone-exe globals. The exe otherwise leaves globalVariables zeroed
+        // (only tabGMnLookup is filled), so collectHeap would deref a NULL debugInfo and
+        // crash on any `options gc` heap_collect. Emitted once (main init, not the
+        // shared-skipping clone variant); debugInfo is the exe-resident TypeInfo.
+        if (!skip_shared) {
+            let set_gv_type = LLVMFunctionType(types.t_void,
+                fixed_array<LLVMTypeRef>(
+                    types.LLVMVoidPtrType(),  // Context *
+                    types.t_int64,            // uint64_t index
+                    types.t_int64,            // uint64_t offset
+                    types.LLVMVoidPtrType(),  // void * debugInfo (TypeInfo)
+                    types.t_int32             // int shared
+                )
+            )
+            var set_gv_fn = LLVMGetNamedFunction(g_mod, "jit_set_global_var")
+            if (set_gv_fn == null) {
+                set_gv_fn = LLVMAddFunctionWithType(g_mod, "jit_set_global_var", set_gv_type)
+            }
+            for (gvi in range(ctx.totalVariables)) {
+                let di = get_global_variable_debug_info(ctx, gvi)
+                let tinfo_ptr = visitor.create_type_info_global(unsafe(reinterpret<TypeInfo?>(di)))
+                var gv_args = fixed_array(
+                    ctx_param,
+                    types.ConstI64(uint64(gvi)),
+                    types.ConstI64(get_global_variable_offset(ctx, gvi)),
+                    tinfo_ptr,
+                    types.ConstI32(uint64(get_global_variable_shared(ctx, gvi)))
+                )
+                LLVMBuildCall2(visitor.g_builder, set_gv_type, set_gv_fn, gv_args, "")
             }
         }
         LLVMBuildRetVoid(visitor.g_builder)

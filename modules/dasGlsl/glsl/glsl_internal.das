@@ -579,7 +579,15 @@ class GlslExport : AstVisitor {
         // the host and would need an explicit target flag threaded into GlslExport;
         // not wired yet.) ES 3.00 already matches what desktop core wants minus the
         // version token, so the body emission below is unchanged.
-        let es300 = get_platform_name() == "emscripten"
+        var es300 = get_platform_name() == "emscripten"
+        if (!es300) {
+            for (a in get_command_line_arguments()) {
+                if (find(a, "wasm32") >= 0 || find(a, "emscripten") >= 0) {
+                    es300 = true
+                    break
+                }
+            }
+        }
         if (caps.write_version) {
             if (es300) {
                 *writer |> write("#version 300 es\n")

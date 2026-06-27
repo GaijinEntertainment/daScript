@@ -224,12 +224,18 @@ extern "C" {
     public:
         ~JitContext() = default;
         JitContext(size_t totalVariables, size_t totalFunctions, size_t globalStringHeapSize,
-                  size_t globSize, size_t shrSize, bool pinvoke, uint32_t stackSize = 16*1024)
+                  size_t globSize, size_t shrSize, bool pinvoke, uint32_t stackSize = 16*1024,
+                  bool persistentHeap = false, bool gcEnabled = false)
             : Context(stackSize) {
             auto &context = *this;
             CodeOfPolicies policies;
             policies.debugger = false;
+            // standalone exe skips Program::simulate (which would read `options
+            // persistent_heap` / `options gc`), so set the heap mode here. Without a
+            // persistent heap + gcEnabled, heap_collect() throws at runtime.
+            policies.persistent_heap = persistentHeap;
             context.setup(totalVariables, globalStringHeapSize, policies, {});
+            context.gcEnabled = gcEnabled;
             context.globalsSize = globSize;
             context.sharedSize = shrSize;
             context.sharedOwner = true;
@@ -292,6 +298,19 @@ extern "C" {
             (*tabGMnLookup)[mnh] = offset;
         }
 
+        // A standalone -exe leaves globalVariables[] zeroed (registerJitGlobalVariable
+        // only fills tabGMnLookup). collectHeap walks globalVariables[i] via
+        // .offset/.debugInfo/.shared, so they must be populated or the GC dereferences
+        // a NULL debugInfo. Called from the JIT'd init function (debugInfo is the
+        // exe-resident TypeInfo emitted by create_type_info_global).
+        void setStandaloneGlobalInfo(uint64_t index, uint64_t offset, void* debugInfo, int shared) {
+            DAS_ASSERT(index < (uint64_t) totalVariables);
+            auto & gv = globalVariables[index];
+            gv.offset = (uint32_t) offset;
+            gv.debugInfo = (VarInfo *) debugInfo;
+            gv.flags = shared ? 1u : 0u;
+        }
+
         void initFunctionAddr ( uint64_t index, void * globPtr ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             *((SimFunction **) globPtr) = &functions[index];
@@ -309,7 +328,8 @@ extern "C" {
                                                   uint64_t stackSize) {
         Context *context = new JitContext(totalVariables, totalFunctions, globalStringHeapSize,
                                          globalsSize, sharedSize, pinvoke,
-                                         stackSize ? (uint32_t)stackSize : 16*1024);
+                                         stackSize ? (uint32_t)stackSize : 16*1024,
+                                         /*persistentHeap*/ true, /*gcEnabled*/ true);
         static_cast<JitContext *>(context)->allocFunctions(totalFunctions);
         return context;
     }
@@ -326,6 +346,13 @@ extern "C" {
 
     DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
         static_cast<JitContext *>(ctx)->registerJitGlobalVariable(mangledNameHash, offset);
+    }
+
+    // Populate globalVariables[index] so the GC can trace standalone-exe globals.
+    // Emitted by generate_globals_initialization_fn into the init function (debugInfo
+    // is the exe-resident TypeInfo, so it can only be wired at codegen time).
+    DAS_API void jit_set_global_var ( Context * ctx, uint64_t index, uint64_t offset, void* debugInfo, int shared ) {
+        static_cast<JitContext *>(ctx)->setStandaloneGlobalInfo(index, offset, debugInfo, shared);
     }
 
     DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {
@@ -404,22 +431,6 @@ extern "C" {
         return context.shared + context.globalOffsetByMangledName(mnh);
     }
 
-    // Return the raw globals / shared base pointers from the Context. Existed
-    // before as JIT IR doing `GEP ctx+CONTEXT_OFFSET_OF_GLOBALS + load`, but
-    // CONTEXT_OFFSET_OF_GLOBALS is a `static const uint32_t` baked at C++
-    // compile time of THIS file using the host's `offsetof(Context, globals)`.
-    // When cross-compiling JIT'd code to wasm32, the wasm32 Context struct
-    // has 4-byte pointers and a different offsetof — emitting the host's
-    // offset reads garbage. The runtime archive (libDaScript_runtime.a) is
-    // built for the target with the right layout, so calling this helper
-    // gives the right pointer.
-    DAS_API void * jit_get_globals_base ( Context * context ) {
-        return context->globals;
-    }
-
-    DAS_API void * jit_get_shared_base ( Context * context ) {
-        return context->shared;
-    }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         return context->allocate(bytes);
@@ -612,8 +623,6 @@ extern "C" {
     void *das_get_jit_string_builder_temp() { return (void *)&jit_string_builder_temp; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
-    void *das_get_jit_get_globals_base() { return (void *)&jit_get_globals_base; }
-    void *das_get_jit_get_shared_base() { return (void *)&jit_get_shared_base; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -720,6 +729,14 @@ extern "C" {
 
     uint64_t das_get_global_variable_mnh( const Context * ctx, int id ) {
         return ctx->getGlobalVariable(id).mangledNameHash;
+    }
+
+    void * das_get_global_variable_debug_info( const Context * ctx, int id ) {
+        return (void *) ctx->getGlobalVariable(id).debugInfo;
+    }
+
+    int das_get_global_variable_shared( const Context * ctx, int id ) {
+        return ctx->getGlobalVariable(id).shared ? 1 : 0;
     }
 
     uint64_t das_get_context_globals_size( const Context * ctx ) {
@@ -1051,14 +1068,14 @@ extern "C" {
     // is self-contained -sSTANDALONE_WASM (only wasi imports).
     bool link_wasm ( const char * objFilePath, const char * wasmPath,
                      const char * runtimeLibPath, const char * customEmcc,
-                     Context * context ) {
+                     bool memory64, Context * context ) {
         #if defined(_WIN32) || defined(_WIN64)
             const auto linker = find_linker(customEmcc, "emcc.bat", "emcc");
         #else
             const auto linker = find_linker(customEmcc, "emcc", "emcc");
         #endif
         if ( !check_file_present(objFilePath) ) {
-            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing wasm32 object, does not exist\n";
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing wasm object, does not exist\n";
             return false;
         }
         const bool withRuntime = runtimeLibPath != nullptr && runtimeLibPath[0] != '\0'
@@ -1077,13 +1094,28 @@ extern "C" {
         // to actual use. 128MB covers all current playground benchmarks; see
         // #2805.
         const std::string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
+        // -sMEMORY64=1: wasm64 (memory64) target — 8-byte pointers. The object and
+        // runtime archive must also be wasm64 (built with -sMEMORY64=1); the linker
+        // setting must match or wasm-ld rejects the mixed-ABI inputs.
+        const char * mem64Arg = memory64 ? " -sMEMORY64=1" : "";
+        // Windows: wrap the whole command in an extra outer quote pair
+        // (`""emcc.bat" ... 2>&1"`). popen → cmd.exe strips the outermost pair,
+        // leaving the inner quoted argv intact; without this wrap cmd.exe mangles
+        // the quoted linker/paths and fails with "filename/directory syntax
+        // incorrect". Same trick create_shared_library uses (see above).
+        #if defined(_WIN32) || defined(_WIN64)
         const std::string cmd = fmt::format(
-            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB 2>&1"),
-            linker.c_str(), objFilePath, runtimeArg, wasmPath);
+            FMT_STRING("\"\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB{} 2>&1\""),
+            linker.c_str(), objFilePath, runtimeArg, wasmPath, mem64Arg);
+        #else
+        const std::string cmd = fmt::format(
+            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB{} 2>&1"),
+            linker.c_str(), objFilePath, runtimeArg, wasmPath, mem64Arg);
+        #endif
         return run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);
     }
 #else
-    bool link_wasm ( const char *, const char *, const char *, const char *, Context * ) { return true; }
+    bool link_wasm ( const char *, const char *, const char *, const char *, bool, Context * ) { return true; }
 #endif
 
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
@@ -1144,10 +1176,6 @@ extern "C" {
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
                 SideEffects::none, "das_get_jit_get_shared_mnh");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_globals_base)>(*this, lib, "get_jit_get_globals_base",
-                SideEffects::none, "das_get_jit_get_globals_base");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_shared_base)>(*this, lib, "get_jit_get_shared_base",
-                SideEffects::none, "das_get_jit_get_shared_base");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
@@ -1180,6 +1208,10 @@ extern "C" {
                 SideEffects::none, "das_get_global_variable_offset");
             addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
                 SideEffects::none, "das_get_global_variable_mnh");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_debug_info)>(*this, lib, "get_global_variable_debug_info",
+                SideEffects::none, "das_get_global_variable_debug_info");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_shared)>(*this, lib, "get_global_variable_shared",
+                SideEffects::none, "das_get_global_variable_shared");
             addExtern<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
                 SideEffects::none, "das_get_context_globals_size");
             addExtern<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",
@@ -1242,7 +1274,7 @@ extern "C" {
                 SideEffects::none, "host_jit_triple");
             addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
                 SideEffects::worstDefault, "link_wasm")
-                    ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","context"});
+                    ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","memory64","context"});
             addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
@@ -1346,7 +1378,61 @@ static das::string resolve_dynamic_module_path ( const char *, const char * ) {
 }
 #endif
 
+// Standalone-exe browser lifecycle (matches the interpreter's WebLoop in
+// utils/daScript/main.cpp). A cross-compiled wasm graphics app exports
+// init/update/shutdown, but its `main` is the blocking desktop driver. On the web
+// the generated entry (llvm_exe.das) runs init() then calls jit_run_web_lifecycle
+// instead of main: it installs an rAF loop on update() and runs shutdown() when
+// update() returns false. updateFn/shutdownFn are jitted `RetT(Context*)` pointers;
+// updateReturnsValue selects the void vs bool/int call signature (bool/int both
+// return wasm i32, so they share one signature).
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+namespace {
+    struct JitWebLifecycle {
+        das::Context *  ctx;
+        void *          updateFn;
+        bool            updateReturnsValue;
+        void *          shutdownFn;             // nullable
+    };
+    void jit_web_lifecycle_tick ( void * arg ) {
+        auto * lc = (JitWebLifecycle *) arg;
+        bool keepGoing = true;
+        if ( lc->updateReturnsValue ) {
+            keepGoing = ((int32_t(*)(das::Context*))lc->updateFn)(lc->ctx) != 0;
+        } else {
+            ((void(*)(das::Context*))lc->updateFn)(lc->ctx);
+        }
+        if ( !keepGoing ) {
+            emscripten_cancel_main_loop();
+            if ( lc->shutdownFn ) ((void(*)(das::Context*))lc->shutdownFn)(lc->ctx);
+        }
+    }
+}
+#endif
+
 extern "C" {
+// See JitWebLifecycle note above. Defined for every target so the symbol always
+// links; only the emscripten build installs the rAF loop (others block, but the
+// generated entry only emits this call on the wasm target).
+DAS_API void jit_run_web_lifecycle ( das::Context * ctx, void * updateFn,
+                                     int32_t updateReturnsValue, void * shutdownFn ) {
+#ifdef __EMSCRIPTEN__
+    // arg leaks by design (lives the whole program). 0 = browser rAF cadence;
+    // true = simulate_infinite_loop, so this never returns and the entry's
+    // jit_shutdown() stays unreachable — the runtime persists for the rAF callbacks.
+    auto * lc = new JitWebLifecycle{ ctx, updateFn, updateReturnsValue != 0, shutdownFn };
+    emscripten_set_main_loop_arg(jit_web_lifecycle_tick, lc, 0, true);
+#else
+    bool keepGoing = true;
+    while ( keepGoing ) {
+        if ( updateReturnsValue ) keepGoing = ((int32_t(*)(das::Context*))updateFn)(ctx) != 0;
+        else ((void(*)(das::Context*))updateFn)(ctx);
+    }
+    if ( shutdownFn ) ((void(*)(das::Context*))shutdownFn)(ctx);
+#endif
+}
+
 DAS_API void das_ensure_environment () {
     das::daScriptEnvironment::ensure();
 }

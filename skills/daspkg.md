@@ -24,9 +24,11 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `list` | `list [--json] [--global]` | List installed packages |
 | `check` | `check [--json] [--global]` | Verify installed packages match lockfile |
 | `build` | `build [--global]` | Build native (CMake) packages |
+| `build --wasm` | `build --wasm [--wasm-lib-dir <dir>]` | Build the wasm64 runtime + module archives `release wasm` links against (see WebAssembly section) |
 | `cleanup` | `cleanup [--force] [--global]` | Remove `modules/` and `daspkg.lock` to reset a project |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |
 | `release` | `release [--out <dir>]` | Bundle project as a redistributable standalone (exe + shared modules + assets) |
+| `release wasm` | `release wasm --root <dir> [--out <dir>] [--wasm-lib-dir <dir>]` | Cross-compile the project to a standalone wasm64 web app (`<name>.{html,js,wasm}`) — see WebAssembly section |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
 
@@ -48,7 +50,9 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `--no-color` | Disable colored output (useful for capturing output) |
 | `--verbose`, `-v` | Print detailed progress |
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
-| `--out <path>` | Output directory for `release` (default: current directory) |
+| `--out <path>` | Output directory for `release` / `release wasm` (default: current directory) |
+| `--wasm` | (on `build`) Build the wasm64 runtime + module archives instead of native CMake packages |
+| `--wasm-lib-dir <path>` | Directory holding the wasm64 archives (`liblibDaScript_runtime.a` + `liblibDasModule*.a`); default `<das_root>/web/output64/lib` |
 
 ## Key Details
 
@@ -249,6 +253,57 @@ The macro captures the call-site source file path at expansion, then walks the s
 - Source files alongside `.shared_module` dylibs (CMakeLists, README, etc.).
 - The `.das_package` and `daspkg.lock` files.
 - Anything not matched by a `release_include` glob.
+
+## WebAssembly (wasm64) — `build --wasm` / `release wasm`
+
+`daspkg release wasm` cross-compiles a project to a **standalone wasm64 web app** (`<name>.{html,js,wasm}`) that runs compiled (not interpreted) in the browser. It is the web analogue of native `release`: one `.das_package` per example, driven by the same `release()` hook.
+
+**wasm64 ONLY.** Every compiled web artifact is memory64 (8-byte pointers). The wasm32 *cross-compile* target is unsupported — on a 64-bit host it bakes 8-byte-pointer layouts the wasm32 runtime reads as 4 (garbage); pure scripts only ever "worked" at wasm32 by dodging that bug class. wasm64 makes host-ptr-size == target-ptr-size, so the bug class vanishes with zero codegen changes. The browser needs memory64 (Chrome/Edge/Firefox 133+); on Safari/iOS the site falls back to the wasm32 *interpreter* (`daslang_static.wasm`, an ordinary C++→wasm build — not the cross-compiler, so unaffected).
+
+### Two-step workflow
+
+```bash
+# 1. Build the wasm64 runtime + module archives (once; emsdk must be active).
+daspkg build --wasm
+#    -> configures web/build64 (-DDAS_WASM_MEMORY64=ON), builds the runtime +
+#       OpenGL/Glfw/StbImage/Audio/Minfft archives, consolidates into web/output64/lib
+
+# 2. Release each example to a wasm64 web app.
+daspkg release wasm --root examples/games/arcanoid --out _release
+#    -> arcanoid.{html,js,wasm}
+```
+
+`release wasm` per example: cross-compiles the entry script to a wasm64 object, reads `--list-shared-modules` to know which module archives to link, runs `emcc` (memory64 + WebGL2 flags + each module's `release_emcc_arg`/`release_embed_file` + the shell file), and emits `<name>.{html,js,wasm}`.
+
+### Prerequisites
+
+- **emsdk active** — `emcc` + `cmake` on PATH (CI activates `emsdk_env` first).
+- **wasm64 archives** — from `daspkg build --wasm` (in `web/output64/lib`, or pass `--wasm-lib-dir`).
+- **Host shared modules** (graphics examples only) — the host daslang must have `modules/dasGlfw/dasModuleGlfw.shared_module` + `modules/dasOpenGL/dasModuleOpenGL.shared_module` present, or GL silently falls back to the broken dasbind path (black canvas + runtime "Failed to find @dasbind::glCreateShader"). Guard before release: the cross-compile log must show `NEED_MODULE(Module_dasOpenGL) for opengl` (native), not a `@dasbind` binding. Pure compute scripts need no shared modules.
+
+### `release()` hooks for web
+
+```das
+[export]
+def release() {
+    release_main("main.das")            // native bundle: desktop entry (e.g. live-reload stack)
+    release_wasm_main("main_web.das")   // wasm entry; falls back to release_main if unset
+}
+```
+
+`release_wasm_main` exists because the desktop entry often `require`s host-only stacks (live-reload, libhv HTTP, threaded jobque) that don't cross-compile. The web variant swaps those for a `live_stub` shim (plain GLFW window + frame clock + no-op `[live_command]`) and guards music off (threaded strudel needs the jobque worker; SFX is single-threaded and stays on). One `.das_package` drives both targets.
+
+**Module-side hooks** (in a module's own `.das_package`, accumulated across all linked modules):
+
+| Hook | Effect |
+|---|---|
+| `release_emcc_arg("-sUSE_GLFW=3")` | Append an emcc link flag (dasGlfw declares this) |
+| `release_embed_file(src, dst)` | `--embed-file src@dst` into MEMFS (dasStbImage embeds its HUD font) |
+| `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`) |
+
+### Game source contract (cross-compiles UNCHANGED)
+
+A game keeps its plain desktop `main` — on wasm the browser lifecycle auto-drives `init`/`update`/`shutdown` per `requestAnimationFrame` and **bypasses `main`**. No `eval_main_loop` / per-platform edits. (Graphics examples may need `options stack = 8_388_608` — decs nested queries overflow the 16 KB default context stack in the cross-compiled exe.)
 
 ## Resetting a Project (cleanup)
 

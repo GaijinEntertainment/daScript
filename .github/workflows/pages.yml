@@ -33,18 +33,67 @@ jobs:
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
-    - name: "Build: Daslang (for das2rst)"
+    # The host daslang now builds with dasGlfw/dasOpenGL ON so it can drive the
+    # /examples game cross-compile (daspkg release wasm). dasGlfw's
+    # find_package(OpenGL REQUIRED) needs the GL + X11 dev headers.
+    - name: "Install OpenGL dev libraries"
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev
+
+    - name: Setup Emscripten
+      uses: emscripten-core/setup-emsdk@v11
+      with:
+        # Every emsdk pin snapshots LLVM main (not a release tag). 5.0.3
+        # (clang 23.0.0git, 2026-03-13 snapshot) repeatedly broke on
+        # utils/dasFormatter/ds_parser.cpp — bus-errors one run, EOF-
+        # inside-`#ifndef` parse errors the next. We pinned to 4.0.23
+        # (clang 22.0.0git, 2026-01-09 snapshot) but the same intermittent
+        # parser failures still surfaced (~1 in 4 deploys); see run
+        # https://github.com/GaijinEntertainment/daScript/actions/runs/26377946207.
+        # 5.0.7 ships clang 23.0.0git snapshot 7b58716d96c3 — same major
+        # family as the bad 5.0.3, but a different upstream snapshot.
+        # Locally compiles ds_parser.cpp + the full daslang_static target
+        # cleanly. Bump back down if 5.0.7 reintroduces the flake.
+        version: '5.0.7'
+
+    # Cache every expensive wasm artifact, keyed on the sources that affect it.
+    # A doc-only push (doc/source, blog, news, *.md) leaves this key unchanged →
+    # cache hit → the host build + wasm build steps below are skipped and the
+    # cached binaries/archives are reused, so docs redeploy without rebuilding
+    # the runtime, games, or compute samples. Any source change to the runtime,
+    # modules, daslib, daspkg, or the example sources misses the key → full rebuild.
+    - name: "Cache wasm build artifacts"
+      id: wasm-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          bin
+          modules/dasGlfw/dasModuleGlfw.shared_module
+          modules/dasOpenGL/dasModuleOpenGL.shared_module
+          web/output
+          web/output64
+          site/playground/samples
+          site/playground/tutorials
+        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+
+    # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
+    # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
+    # wasm cross-compile. Skipped on a cache hit (the cached bin/ + shared modules
+    # are restored; das2rst below still runs against them).
+    - name: "Build: Daslang host (+ glfw/opengl shared modules)"
+      if: steps.wasm-cache.outputs.cache-hit != 'true'
       run: |
         set -eux
-        mkdir build
+        mkdir -p build
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
           -DDAS_HV_DISABLED=OFF \
           -DDAS_PUGIXML_DISABLED=OFF \
-          -DDAS_LLVM_DISABLED=ON \
-          -DDAS_GLFW_DISABLED=ON \
+          -DDAS_LLVM_DISABLED=OFF \
+          -DDAS_GLFW_DISABLED=OFF \
           -G Ninja
-        cmake --build ./build --target daslang
+        cmake --build ./build --target daslang dasModuleGlfw dasModuleOpenGL
 
     - name: "Run das2rst"
       run: |
@@ -73,31 +122,46 @@ jobs:
         working_directory: build/latex
         continue_on_error: true
 
-    - name: Setup Emscripten
-      uses: emscripten-core/setup-emsdk@v11
-      with:
-        # Every emsdk pin snapshots LLVM main (not a release tag). 5.0.3
-        # (clang 23.0.0git, 2026-03-13 snapshot) repeatedly broke on
-        # utils/dasFormatter/ds_parser.cpp — bus-errors one run, EOF-
-        # inside-`#ifndef` parse errors the next. We pinned to 4.0.23
-        # (clang 22.0.0git, 2026-01-09 snapshot) but the same intermittent
-        # parser failures still surfaced (~1 in 4 deploys); see run
-        # https://github.com/GaijinEntertainment/daScript/actions/runs/26377946207.
-        # 5.0.7 ships clang 23.0.0git snapshot 7b58716d96c3 — same major
-        # family as the bad 5.0.3, but a different upstream snapshot.
-        # Locally compiles ds_parser.cpp + the full daslang_static target
-        # cleanly. Bump back down if 5.0.7 reintroduces the flake.
-        version: '5.0.7'
-
-    - name: "Build WASM (Emscripten) for /playground/ + /files/wasm/"
+    # WASM build: the wasm32 interpreter playground (daslang_static) + the wasm64
+    # compiled path (runtime/module archives, compute samples, and the /examples
+    # games). Skipped on a cache hit — the cached web/output + web/output64 are
+    # reused. wasm32 is the universal interpreter fallback; everything COMPILED
+    # is wasm64 (the cross-compile is layout-correct only when host ptr width ==
+    # target ptr width).
+    - name: "Build WASM (Emscripten): playground + wasm64 examples"
+      if: steps.wasm-cache.outputs.cache-hit != 'true'
       run: |
         set -eux
-        cd web
-        mkdir -p build && cd build
-        emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja ..
-        # daslang_static.wasm playground + stage_site_playground (vendored UI
-        # + js/wasm) + stage_site_playground_wasm (cross-compiled examples).
-        ninja daslang_static stage_site_playground stage_site_playground_wasm
+        REPO="$PWD"
+
+        # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the
+        #    cross-compiled example .das sources staged into site/playground.
+        #    (stage_site_playground_wasm is gone — compute samples are wasm64 now,
+        #    built below; it is gated off under non-memory64 in web/CMakeLists.)
+        ( cd web && mkdir -p build && cd build \
+            && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja .. \
+            && ninja daslang_static stage_site_playground )
+
+        # 2. wasm64 archives + compute samples + games. Configure web/build64 with
+        #    the prebuilt host (so the compute foreach reuses it instead of
+        #    rebuilding daslang) + memory64; daspkg build --wasm then populates the
+        #    runtime/module archives into it.
+        emcmake cmake -S web -B web/build64 -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DDAS_WEB_OUTPUT_DIR="$REPO/web/output64" \
+          -DDAS_WASM_MEMORY64=ON \
+          -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 \
+          -DDAS_HOST_DASLANG_OVERRIDE="$REPO/bin/daslang"
+        ./bin/daslang utils/daspkg/main.das -- build --wasm
+
+        # 3. compute playground samples → wasm64 (web/output64/samples/examples)
+        cmake --build web/build64 --target all_wasm
+
+        # 4. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/)
+        for g in arcanoid pacman; do
+            ./bin/daslang utils/daspkg/main.das -- \
+                release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"
+        done
 
     - name: "Fetch dasProfile per-platform benchmark JSONs"
       # dasProfile now ships a per-platform JSON file
@@ -123,6 +187,7 @@ jobs:
         cp site/index.html _site/
         cp site/downloads.html _site/
         cp site/daspkg.html _site/
+        cp site/examples.html _site/
         cp site/robots.txt _site/
         cp -r site/files _site/files
 
@@ -161,12 +226,12 @@ jobs:
             cp web/output/daslang_static.wasm _site/files/wasm/
             # Pull samples from site/playground/samples — that directory is the
             # single staged source of truth: stage_site_playground populates
-            # the .das sources, stage_site_playground_wasm overlays the
-            # cross-compiled .wasm artifacts. The HEAD probe in main.js
-            # (updateEngineAvailability) enables the JIT radio only when the
-            # .wasm is reachable, so dropping the .wasm here permanently
-            # disables the toggle in production.
+            # the .das sources. Overlay the wasm64 compute .wasm built above.
             cp -r site/playground/samples _site/playground/samples 2>/dev/null || true
+            if [ -d web/output64/samples/examples ]; then
+                mkdir -p _site/playground/samples/examples
+                cp web/output64/samples/examples/*.wasm _site/playground/samples/examples/ 2>/dev/null || true
+            fi
             # Tutorial assets (mesh + PBR textures + HDRI) fetched at runtime by
             # samples that ship a .das.assets.json manifest (the OpenGL
             # deferred-shading rung). stage_site_playground staged them under
@@ -199,6 +264,29 @@ jobs:
             mkdir -p _site/playground
             cp site/playground/placeholder.html _site/playground/index.html
         fi
+
+        # /examples/ runtime: the interpreted runner harness + per-game artifacts.
+        # Each game dir holds BOTH the compiled wasm64 build (loaded in an iframe on
+        # memory64 engines) AND the .das sources + HUD font the interpreted fallback
+        # (_interp.html) mounts on Safari/iOS. The page UI (examples.html, posters,
+        # files/examples.js) was already staged above via cp site/examples.html +
+        # cp -r site/files.
+        mkdir -p _site/examples
+        cp site/examples/_interp.html _site/examples/_interp.html
+        for g in arcanoid pacman; do
+            mkdir -p "_site/examples/$g"
+            if [ -f "web/output64/examples/$g/$g.wasm" ]; then
+                cp "web/output64/examples/$g/$g.html" "_site/examples/$g/"
+                cp "web/output64/examples/$g/$g.js"   "_site/examples/$g/"
+                cp "web/output64/examples/$g/$g.wasm" "_site/examples/$g/"
+            else
+                echo "WARNING: web/output64/examples/$g/$g.wasm missing — $g card will fall back to interpreted only."
+            fi
+            # Interpreted-fallback sources + HUD font (fetched by _interp.html).
+            cp "web/examples/ui/samples/examples/$g/main.das"      "_site/examples/$g/"
+            cp "web/examples/ui/samples/examples/$g/live_stub.das" "_site/examples/$g/"
+            cp modules/dasStbImage/fonts/droidsansmono.ttf         "_site/examples/$g/"
+        done
 
         # GitHub Pages control files
         touch _site/.nojekyll

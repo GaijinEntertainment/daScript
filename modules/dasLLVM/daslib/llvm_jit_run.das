@@ -182,6 +182,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     // back to `options jit_runtime_lib = "..."` then write_wasm's
     // find_runtime_lib() auto-locate under web/output/lib/.
     let runtime_lib_override = cli_opts.runtime_lib |> unwrap_or((prog._options |> find_arg("jit_runtime_lib")) ?as tString ?? "")
+    // --jit-emit-object: emit the wasm object and skip the emcc link (the caller
+    // links it, e.g. daspkg release wasm). Sidesteps the link entirely, including
+    // the Windows popen-quoting failure path in link_wasm.
+    let emit_object = cli_opts.emit_object |> unwrap_or(false)
     // Extra args appended verbatim to the host linker cmd. CLI > script option.
     let linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
 
@@ -327,7 +331,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                 // path_to_linker is reused as the optional emcc override
                 // for the wasm link (mirrors how it's used for clang-cl
                 // on the host path).
-                write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override)
+                write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override, emit_object)
             } elif (gen_exe) {
                 mkdir_rec(dir_name(output_path))
                 write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB)

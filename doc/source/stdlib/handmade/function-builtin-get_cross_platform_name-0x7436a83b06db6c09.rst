@@ -1,0 +1,1 @@
+Returns ``"emscripten"`` when the program is being cross-compiled to WebAssembly (detected from a ``--jit-target`` argument naming a ``wasm`` or ``emscripten`` triple), and an empty string otherwise; module initializers use it to register web-specific native bindings during a cross-compile.

@@ -1573,3 +1573,309 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-pkg-callout h2 { font-size: 26px; }
     .forge-pkg-callout__cells { grid-template-columns: 1fr; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Examples page (examples.html) — daslang apps compiled to wasm, played in
+   an overlay. Mirrors forge-examples.jsx. The card "screen" is a real
+   gameplay poster; clicking runs the compiled wasm64 build in an iframe.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ───── Hero ───── */
+.forge-ex-hero {
+    border-bottom: 1px solid var(--rule);
+    padding: 52px 0 40px;
+    position: relative;
+    overflow: hidden;
+}
+.forge-ex-hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background-image:
+        radial-gradient(700px 280px at 85% -60px, rgba(232,161,58,0.10), transparent 60%),
+        radial-gradient(circle at center, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: auto, 22px 22px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+    mask-image: linear-gradient(to bottom, black, transparent);
+}
+.forge-ex-hero__kicker {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--amber);
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    position: relative;
+}
+.forge-ex-hero__title {
+    font-family: var(--font-sans);
+    font-size: 56px;
+    line-height: 1.02;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.03em;
+    max-width: 760px;
+    position: relative;
+}
+.forge-ex-hero__title em { font-style: italic; font-weight: 400; color: var(--amber); }
+.forge-ex-hero__lede {
+    margin-top: 18px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+    max-width: 620px;
+    position: relative;
+}
+
+/* ───── Grid ───── */
+.forge-ex-grid { padding: 40px 0 90px; }
+.forge-ex-grid__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+/* ───── Card ───── */
+.forge-ex-card {
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 120ms ease;
+}
+.forge-ex-card:hover,
+.forge-ex-card:focus-visible { border-color: var(--amber-dim); outline: none; }
+.forge-ex-card__screen {
+    position: relative;
+    height: 200px;
+    border-bottom: 1px solid var(--rule);
+    background: #070605;
+    overflow: hidden;
+}
+.forge-ex-card__poster {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: center 40%;
+}
+.forge-ex-card__scanlines {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px);
+}
+.forge-ex-card__hover {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    transition: background 120ms ease;
+}
+.forge-ex-card:hover .forge-ex-card__hover,
+.forge-ex-card:focus-visible .forge-ex-card__hover { background: rgba(7,6,5,0.45); }
+/* Persistent play-circle (video-thumbnail pattern) — always visible so the card
+   reads as runnable on touch + at a glance; brightens to solid amber on hover. */
+.forge-ex-card__playbtn {
+    width: 56px; height: 56px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 99px;
+    background: rgba(7,6,5,0.55);
+    border: 1.5px solid var(--amber);
+    color: var(--amber);
+    font-size: 18px;
+    padding-left: 3px;            /* optically center the ▶ glyph */
+    opacity: 0.9;
+    transition: all 140ms ease;
+}
+.forge-ex-card:hover .forge-ex-card__playbtn,
+.forge-ex-card:focus-visible .forge-ex-card__playbtn {
+    background: var(--amber);
+    color: var(--bg);
+    opacity: 1;
+    transform: scale(1.08);
+}
+.forge-ex-card__body {
+    padding: 18px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+}
+.forge-ex-card__titlerow { display: flex; align-items: baseline; gap: 10px; }
+.forge-ex-card__name {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+}
+.forge-ex-card__kind {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--amber);
+    border: 1px solid var(--amber-dim);
+    padding: 1px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+}
+.forge-ex-card__desc { margin: 0; color: var(--fg-dim); font-size: 13.5px; line-height: 1.55; }
+.forge-ex-card__tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.forge-ex-tag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--fg-dim);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+}
+.forge-ex-card__foot {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+}
+.forge-ex-card__pglink { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-dim); white-space: nowrap; }
+.forge-ex-card__pglink:hover { color: var(--amber); }
+
+/* ───── More-coming tile ───── */
+.forge-ex-more {
+    border: 1px dashed var(--rule);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 150px;
+    text-align: center;
+    padding: 24px;
+}
+.forge-ex-more__plus { font-family: var(--font-mono); font-size: 22px; color: var(--rule); }
+.forge-ex-more__head { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
+.forge-ex-more__sub { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; max-width: 220px; color: var(--fg-faint); }
+
+/* ───── Overlay player ───── */
+.forge-ex-overlay {
+    position: fixed; inset: 0;
+    z-index: 1000;
+    background: rgba(5,4,3,0.82);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+.forge-ex-player {
+    width: min(900px, 100%);
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+}
+.forge-ex-player__bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--rule);
+}
+.forge-ex-player__lights { display: flex; gap: 6px; }
+.forge-ex-player__lights span { width: 11px; height: 11px; border-radius: 99px; }
+.forge-ex-player__lights span:nth-child(1) { background: #e84a3a; }
+.forge-ex-player__lights span:nth-child(2) { background: #e8a13a; }
+.forge-ex-player__lights span:nth-child(3) { background: #9bc46a; }
+.forge-ex-player__name { font-family: var(--font-mono); font-size: 13px; color: var(--fg); font-weight: 600; }
+.forge-ex-player__status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.forge-ex-player__status.is-running { color: var(--green); }
+.forge-ex-player__status.is-loading { color: var(--fg-dim); }
+.forge-ex-player__status.is-fallback { color: var(--amber); }
+.forge-ex-player__dot { width: 6px; height: 6px; border-radius: 99px; background: currentColor; display: inline-block; }
+.forge-ex-player__status.is-running .forge-ex-player__dot { animation: forgeExBlink 1.1s ease-in-out infinite; }
+.forge-ex-player__status.is-loading .forge-ex-player__dot { animation: forgeExBlink 0.7s ease-in-out infinite; }
+.forge-ex-player__actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.forge-ex-pill {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg-dim);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 4px 9px;
+    background: var(--bg-2);
+    cursor: pointer;
+}
+.forge-ex-pill:hover { color: var(--fg); border-color: var(--amber-dim); }
+.forge-ex-pill--close { color: var(--fg); }
+.forge-ex-player__viewport {
+    position: relative;
+    width: 100%;
+    height: min(62vh, 560px);
+    background: #070605;
+}
+.forge-ex-player__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.forge-ex-player__fallback {
+    position: absolute; inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 14px;
+    padding: 40px;
+}
+.forge-ex-player__fallback-glyph { font-size: 40px; color: var(--amber); opacity: 0.8; }
+.forge-ex-player__fallback-head { font-family: var(--font-sans); font-size: 20px; font-weight: 600; color: var(--fg); }
+.forge-ex-player__fallback-body { font-size: 14px; line-height: 1.6; color: var(--fg-dim); max-width: 440px; }
+.forge-ex-player__fallback-btn {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--amber);
+    padding: 10px 18px;
+    border-radius: 5px;
+}
+.forge-ex-player__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--rule);
+    background: var(--bg);
+    flex-wrap: wrap;
+}
+.forge-ex-player__controls { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-faint); }
+.forge-ex-player__controls-label { color: var(--fg-dim); }
+.forge-ex-player__links { display: flex; align-items: center; gap: 16px; font-family: var(--font-mono); font-size: 12px; }
+.forge-ex-player__link { color: var(--fg-dim); border-bottom: 1px solid var(--rule); }
+.forge-ex-player__link:hover { color: var(--fg); }
+.forge-ex-player__link--amber { color: var(--amber); border-bottom-color: var(--amber-dim); }
+
+@keyframes forgeExBlink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+/* ───── Responsive ───── */
+@media (max-width: 1023px) {
+    .forge-ex-hero__title { font-size: 42px; }
+}
+@media (max-width: 640px) {
+    .forge-ex-hero__title { font-size: 34px; }
+    .forge-ex-overlay { padding: 16px; }
+}

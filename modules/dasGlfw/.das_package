@@ -9,6 +9,9 @@ def package() {
 
 [export]
 def release() {
+    // wasm (`daspkg release wasm`): emcc supplies the GLFW3 implementation at
+    // link time; ignored by the native bundle path.
+    release_emcc_arg("-sUSE_GLFW=3")
     let p = get_platform_name()
     if (p == "windows") {
         release_include_dll("glfw3.dll")

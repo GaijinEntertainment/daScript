@@ -4,4 +4,14 @@ require daslib/fio
 [export]
 def initialize(project_path : string) {
     register_native_path("live", "opengl_live", "{project_path}/opengl/opengl_live.das")
+    // Register the native C++ opengl module ONLY when this host is cross-compiling for
+    // the web. The desktop host then has Module("opengl")'s signatures to emit handled-
+    // extern dispatch for the wasm target (ensure_module registers it there; emcc links
+    // the real GLES3 glue). On desktop the module is signatures-only stubs that link but
+    // never run (see dasOpenGL.desktop_stubs.cpp). Normal desktop runs keep opengl.das.
+    // The emscripten interpreter build registers it via CMake ADD_MODULE_CPP instead
+    // (das_is_dll_build() is false in the static wasm monolith).
+    if (das_is_dll_build() && get_cross_platform_name() == "emscripten") {
+        register_dynamic_module("{project_path}/dasModuleOpenGL.shared_module", "Module_dasOpenGL")
+    }
 }

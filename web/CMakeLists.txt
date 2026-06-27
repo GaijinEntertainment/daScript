@@ -34,6 +34,19 @@ add_compile_options(-msimd128)
 add_compile_options(-msse2)
 add_compile_options(-mnontrapping-fptoint)
 
+# wasm64 (memory64): 8-byte pointers. With a 64-bit host, host-ptr-size ==
+# target-ptr-size, so the JIT/AOT cross-compile bakes correct layouts (no
+# pointer-width mismatch). Build the runtime archive with this ON and point
+# DAS_WEB_OUTPUT_DIR at a separate dir (e.g. web/output64) so it does not
+# collide with the wasm32 archive — they are ABI-incompatible. dasLLVM
+# (find_runtime_lib / link_wasm) auto-selects web/output64 + -sMEMORY64=1 for a
+# wasm64-unknown-emscripten target.
+option(DAS_WASM_MEMORY64 "Build wasm output for memory64 (8-byte pointers)" OFF)
+if(DAS_WASM_MEMORY64)
+    add_compile_options(-sMEMORY64=1)
+    add_link_options(-sMEMORY64=1)
+endif()
+
 # Modern wasm EH (try_table/exnref). DAS_ENABLE_EXCEPTIONS routes daslang
 # error paths through C++ throw instead of setjmp/longjmp.
 add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
@@ -181,77 +194,105 @@ add_custom_target(stage_site_playground ALL
 
 # Host daslang sub-build (outer is emsdk), drives .das→.wasm cross-compile.
 include(ExternalProject)
-find_program(DAS_HOST_CC  NAMES clang gcc   REQUIRED)
-find_program(DAS_HOST_CXX NAMES clang++ g++ REQUIRED)
 find_program(DAS_WASMTIME wasmtime)
-set(_host_compiler_args)
-if(NOT CMAKE_HOST_WIN32)
-    set(_host_compiler_args
-        -DCMAKE_C_COMPILER:FILEPATH=${DAS_HOST_CC}
-        -DCMAKE_CXX_COMPILER:FILEPATH=${DAS_HOST_CXX})
-endif()
-ExternalProject_Add(host_daslang
-    EXCLUDE_FROM_ALL TRUE
-    SOURCE_DIR       ${CMAKE_CURRENT_SOURCE_DIR}/..
-    INSTALL_COMMAND  ""
-    BUILD_BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/../bin/daslang
-    STEP_TARGETS     build
-    CMAKE_CACHE_ARGS -DCMAKE_TOOLCHAIN_FILE:STRING=
-                     ${_host_compiler_args}
-                     -DCMAKE_BUILD_TYPE:STRING=Release
-                     -DDAS_LLVM_DISABLED:BOOL=OFF
-                     -DDAS_PUGIXML_DISABLED:BOOL=OFF
-                     # dasGlfw pulls find_package(OpenGL REQUIRED) at configure
-                     # time. The pages.yml runner doesn't apt-install OpenGL
-                     # dev libs, and this sub-build is tooling-only (drives
-                     # .das→wasm codegen via dasLLVM — no graphics needed).
-                     -DDAS_GLFW_DISABLED:BOOL=ON
-    BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target daslang --parallel)
-
-# Cross-compile web playground example scripts to wasm32 via host daslang.
 set(_repo ${CMAKE_CURRENT_SOURCE_DIR}/..)
-set(DAS_HOST_DASLANG ${_repo}/bin/daslang)
+
+# DAS_HOST_DASLANG_OVERRIDE: reuse a pre-built host daslang (with dasLLVM + the
+# glfw/opengl shared modules) instead of building one here via ExternalProject.
+# CI (pages.yml) builds ONE games-capable host and points BOTH the game release
+# (daspkg release wasm) and this compute cross-compile at it — so the two don't
+# clobber bin/daslang with different configs, and the host is built once. Leave
+# unset locally to auto-build a tooling host (LLVM on, glfw off — compute only).
+if(DAS_HOST_DASLANG_OVERRIDE)
+    set(DAS_HOST_DASLANG ${DAS_HOST_DASLANG_OVERRIDE})
+    add_custom_target(host_daslang)   # no-op so `DEPENDS host_daslang` resolves to the prebuilt binary
+else()
+    find_program(DAS_HOST_CC  NAMES clang gcc   REQUIRED)
+    find_program(DAS_HOST_CXX NAMES clang++ g++ REQUIRED)
+    set(_host_compiler_args)
+    if(NOT CMAKE_HOST_WIN32)
+        set(_host_compiler_args
+            -DCMAKE_C_COMPILER:FILEPATH=${DAS_HOST_CC}
+            -DCMAKE_CXX_COMPILER:FILEPATH=${DAS_HOST_CXX})
+    endif()
+    ExternalProject_Add(host_daslang
+        EXCLUDE_FROM_ALL TRUE
+        SOURCE_DIR       ${CMAKE_CURRENT_SOURCE_DIR}/..
+        INSTALL_COMMAND  ""
+        BUILD_BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/../bin/daslang
+        STEP_TARGETS     build
+        CMAKE_CACHE_ARGS -DCMAKE_TOOLCHAIN_FILE:STRING=
+                         ${_host_compiler_args}
+                         -DCMAKE_BUILD_TYPE:STRING=Release
+                         -DDAS_LLVM_DISABLED:BOOL=OFF
+                         -DDAS_PUGIXML_DISABLED:BOOL=OFF
+                         # dasGlfw pulls find_package(OpenGL REQUIRED) at configure
+                         # time. This auto-built sub-build is tooling-only (drives
+                         # .das→wasm codegen via dasLLVM — no graphics needed).
+                         -DDAS_GLFW_DISABLED:BOOL=ON
+        BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target daslang --parallel)
+    set(DAS_HOST_DASLANG ${_repo}/bin/daslang)
+endif()
+
+# Cross-compile web playground example scripts to wasm via the host daslang.
 set(_web_ex_src ${CMAKE_CURRENT_SOURCE_DIR}/examples/ui/samples/examples)
 set(_web_ex_out ${DAS_WEB_OUTPUT_DIR}/samples/examples)
 
 add_custom_target(all_wasm)
 set(_wasm_run_cmds)
+# Compute playground samples cross-compile to wasm64 ONLY. wasm32 cross-compile is
+# unsupported: the 64-bit host bakes 8-byte-pointer layouts the wasm32 runtime reads
+# as 4 — these samples only ever "worked" at wasm32 by dodging that bug class. So the
+# whole cross-compile is gated on DAS_WASM_MEMORY64 (the web/build64 config). The
+# default wasm32 web build ships only daslang_static, which interprets these same .das
+# sources on-target (no host-baked layouts, nothing to dodge).
+#
 # Each name maps to web/examples/ui/samples/examples/<name>.das. Names match
 # the bench `name` slug emitted by dasProfile (and the playground `?example=`
 # URL param), with hyphens replaced by underscores (`spectral-norm` →
 # `spectral_norm`) so they're valid CMake target stems.
-#
-foreach(ex hello loop func table_sort f2s tree
-        dict sha256 exp f2i fib_loop fib_recursive mandelbrot
-        nbodies particles primes queen spectral_norm)
-    add_custom_command(OUTPUT ${_web_ex_out}/${ex}.wasm
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
-        COMMAND ${DAS_HOST_DASLANG} -exe -output ${_web_ex_out}/${ex}
-                ${_web_ex_src}/${ex}.das --
-                --jit-target=wasm32-unknown-emscripten
-                --jit-runtime-lib=$<TARGET_FILE:libDaScript_runtime>
-        DEPENDS ${_web_ex_src}/${ex}.das host_daslang libDaScript_runtime
-        WORKING_DIRECTORY ${_repo}
-        COMMENT "Cross-compile ${ex} → wasm32" VERBATIM)
-    add_custom_target(${ex}_web_wasm DEPENDS ${_web_ex_out}/${ex}.wasm)
-    add_dependencies(all_wasm ${ex}_web_wasm)
-    if(DAS_WASMTIME)
-        list(APPEND _wasm_run_cmds
-            COMMAND ${CMAKE_COMMAND} -E echo "=== ${ex}.wasm ==="
-            COMMAND ${DAS_WASMTIME} -W exceptions=y ${_web_ex_out}/${ex}.wasm)
-    endif()
-endforeach()
+if(DAS_WASM_MEMORY64)
+    foreach(ex hello loop func table_sort f2s tree
+            dict sha256 exp f2i fib_loop fib_recursive mandelbrot
+            nbodies particles primes queen spectral_norm)
+        add_custom_command(OUTPUT ${_web_ex_out}/${ex}.wasm
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
+            COMMAND ${DAS_HOST_DASLANG} -exe -output ${_web_ex_out}/${ex}
+                    ${_web_ex_src}/${ex}.das --
+                    --jit-target=wasm64-unknown-emscripten
+                    --jit-runtime-lib=$<TARGET_FILE:libDaScript_runtime>
+            DEPENDS ${_web_ex_src}/${ex}.das host_daslang libDaScript_runtime
+            WORKING_DIRECTORY ${_repo}
+            COMMENT "Cross-compile ${ex} → wasm64" VERBATIM)
+        add_custom_target(${ex}_web_wasm DEPENDS ${_web_ex_out}/${ex}.wasm)
+        add_dependencies(all_wasm ${ex}_web_wasm)
+        if(DAS_WASMTIME)
+            list(APPEND _wasm_run_cmds
+                COMMAND ${CMAKE_COMMAND} -E echo "=== ${ex}.wasm ==="
+                COMMAND ${DAS_WASMTIME} -W exceptions=y -W memory64=y ${_web_ex_out}/${ex}.wasm)
+        endif()
+    endforeach()
+endif()
 
+# run_wasm_examples + stage_site_playground_wasm are defined UNCONDITIONALLY so a
+# non-memory64 web build (the wasm_cross CI lane invokes `ninja run_wasm_examples`)
+# doesn't hit "unknown target". When DAS_WASM_MEMORY64 is OFF the foreach above
+# registered nothing — `_wasm_run_cmds` is empty and all_wasm has no deps — so both
+# targets are no-ops (wasm32 cross-compile is unsupported; the real wasm64 compute
+# smoke runs in the memory64 build, driven by pages.yml / daspkg release wasm).
 if(DAS_WASMTIME)
     add_custom_target(run_wasm_examples
         ${_wasm_run_cmds}
         DEPENDS all_wasm
-        COMMENT "Run cross-compiled .wasm examples under wasmtime")
+        COMMENT "Run cross-compiled wasm64 examples under wasmtime")
 endif()
 
 # Stage example .wasm into site/playground for local-dev preview (gitignored).
+# make_directory _web_ex_out first so copy_directory is a clean no-op when the
+# foreach produced nothing (non-memory64 build).
 add_custom_target(stage_site_playground_wasm
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_repo}/site/playground/samples/examples
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${_web_ex_out} ${_repo}/site/playground/samples/examples
     DEPENDS all_wasm
-    COMMENT "Staging JIT example .wasm into site/playground/")
+    COMMENT "Staging wasm64 example .wasm into site/playground/")

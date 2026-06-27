@@ -938,6 +938,13 @@ class CppGenBind : AnyGenBind {
     func_file_decl : FILE const?
     func_file_aot : FILE const?
     func_file_aot_decl : FILE const?
+    // Optional desktop-stub sink. When set (+ emit_desktop_stub() true for a fn), a
+    // signatures-only `extern "C"` definition of each free function is written here so
+    // the generated module LINKS on a host where the real symbols are absent (e.g. the
+    // GLES3 gl* on desktop), without ever calling them. Used to register a target-native
+    // module on the cross-compile host for signatures only (the real glue links in the
+    // wasm target). Null by default -> no stubs (every other binder is unaffected).
+    desktop_stub_file : FILE const?
     module_cpp_file : FILE const?
     module_h_file : FILE const?
     module_need_h_file : FILE const?
@@ -1277,6 +1284,13 @@ class CppGenBind : AnyGenBind {
     def emscripten_skip_function(function_name : string) : bool {
         return false
     }
+    // When true (and desktop_stub_file is set), emit a signatures-only `extern "C"`
+    // desktop stub for this free function so the module links where the real symbol
+    // is absent. Pairs with a `#ifndef __EMSCRIPTEN__` guard the binder writes around
+    // the stub file. Override per-binder; default emits no stubs.
+    def emit_desktop_stub(function_name : string) : bool {
+        return false
+    }
     def isAotAliasType(var t : CXType) {
         if (t.kind == CXTypeKind.Record ||
              t.kind == CXTypeKind.Typedef ||
@@ -1390,6 +1404,13 @@ class CppGenBind : AnyGenBind {
             let function_cpp_type = functionPtrSpelling(c, false)
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
+            if (desktop_stub_file != null && emit_desktop_stub(function_name)) {
+                // signatures-only stub: links on a host lacking the real symbol, never runs.
+                // `return ({R})0;` covers void too (`return (void)0;` is legal).
+                let stub_header = functionHeaderSpelling(c, false, false, false, function_cpp_name, "")
+                let res_sp = typeSpelling(clang_getResultType(clang_getCursorType(c)))
+                fprint(desktop_stub_file, "{stub_header} \{ return ({res_sp})0; \}\n")
+            }
         }
         fprint(func_file, from_comment(c))
         fprint(func_file, "\tmakeExtern<{bind_enchantation}{extra_enchantation}{get_module_temp_fn()}>(lib,\"{das_function_name}\",\"{cpp_enchantation}\")")
