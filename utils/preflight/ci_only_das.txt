@@ -3,12 +3,17 @@
 # Format: <glob> | <native modules whose absence means SKIP, comma-separated> | <rebuild hint>
 # A compile failure whose missing prerequisite is NOT in the allow-skip list is a FAIL.
 #
-# Only list files whose requires resolve entirely in-repo. Surfaces that pull
+# Prefer files whose requires resolve entirely in-repo. Surfaces that pull
 # external daspkg packages (examples/games/sequence -> das-cards) belong to the
 # `sequence` gate instead — its ci_smoke_test script installs the deps fresh,
 # while a bare -compile-only would read whatever stale gitignored install is
 # lying around and report phantom errors.
-modules/dasOpenGL/opengl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
+# Exception: an external native module is fine IF named in the allow-skip column
+# — its absence then downgrades to SKIP locally and it still compiles in CI (see
+# the dasOpenGL/opengl entry's `imgui`). Don't "fix" that by removing it.
+# opengl_imgui_driver.das pulls external dasImgui (imgui): absent locally it
+# SKIPs via allow-skip, present in CI it compiles — better coverage than excluding it.
+modules/dasOpenGL/opengl/*.das | glfw, opengl, imgui | rebuild with -DDAS_GLFW_DISABLED=OFF (imgui: install dasImgui via daspkg)
 modules/dasOpenGL/glsl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
 # GL path tracers (OpenGL<->Vulkan harmonization compat, HARMONIZATION_PLAN.md section 8.1): GLFW-gated
 # and need a GPU to run, so compile-only. The CPU rail (toy_path_tracer.das) is a run gate via ADD_EXAMPLE_RUN.
