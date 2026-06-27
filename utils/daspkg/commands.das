@@ -2133,6 +2133,11 @@ def private wasm_archive_name(rel : string) : string {
     if (base |> ends_with(suffix)) {
         base = slice(base, 0, length(base) - length(suffix))
     }
+    // CMake emits the archive after its target case (libDasModule*); the file is
+    // lowercase dasModule*. Capitalize so the lookup hits on case-sensitive FS (Linux CI).
+    if (!empty(base)) {
+        base = "{to_upper(slice(base, 0, 1))}{slice(base, 1)}"
+    }
     return "liblib{base}.a"
 }
 
