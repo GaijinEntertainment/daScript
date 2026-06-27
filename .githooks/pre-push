@@ -47,7 +47,7 @@ fi
 
 # ----- (1) based on the latest origin/master -----
 # Fetch so the check is authoritative; fall back to the local ref if offline.
-if git fetch -q origin master 2>/dev/null; then
+if GIT_TERMINAL_PROMPT=0 git fetch -q origin master 2>/dev/null; then
     MASTER="$(git rev-parse FETCH_HEAD)"
 else
     MASTER="$(git rev-parse origin/master 2>/dev/null || true)"
@@ -86,6 +86,7 @@ while IFS='=' read -r k v; do
     esac
 done < "$TOKEN"
 
+[ -n "$TOK_HEAD" ]         || block "malformed preflight token (missing head sha)" "$PREFLIGHT"
 [ "$TOK_MODE" = "full" ]   || block "preflight token is not a full run (mode='$TOK_MODE')" "$PREFLIGHT"
 [ "$TOK_RESULT" = "pass" ] || block "last full preflight did not pass (result='$TOK_RESULT')" "$PREFLIGHT"
 
