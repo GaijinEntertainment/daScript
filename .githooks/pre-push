@@ -41,7 +41,7 @@ while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
     LOCAL_SHAS+=("$LOCAL_SHA")
 done
 if [ ${#LOCAL_SHAS[@]} -eq 0 ]; then
-    echo "pre-push: nothing to push (deletes only)"
+    echo "pre-push: nothing to gate (deletes or tags only)"
     exit 0
 fi
 
@@ -53,6 +53,10 @@ else
     MASTER="$(git rev-parse origin/master 2>/dev/null || true)"
     [ -n "$MASTER" ] && echo "pre-push: warning: could not fetch origin/master; checking against the local ref" >&2
 fi
+
+# If neither the fetch nor the local ref resolved master, the base check can't
+# run — warn rather than silently passing it (the token below is still enforced).
+[ -n "$MASTER" ] || echo "pre-push: warning: cannot resolve origin/master — based-on-master check skipped (token still enforced)" >&2
 
 if [ -n "$MASTER" ]; then
     for sha in "${LOCAL_SHAS[@]}"; do
