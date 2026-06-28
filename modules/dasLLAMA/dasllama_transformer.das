@@ -151,7 +151,7 @@ def make_run_state(c : Config) : RunState {
 }
 
 // matmul with the weight as a zero-copy view into the model blob at `woff` (len n*d).
-def private mm_at(var y : array<float> | #; t : Transformer; woff : int64; x : array<float> | #; n, d : int64) {
+def private mm_at(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
     array_view(t.blob, woff, n * d) $(w : array<float>#) {
         matmul(y, w, x, n, d)
     }

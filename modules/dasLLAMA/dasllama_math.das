@@ -3,6 +3,7 @@ options gen2
 module dasllama_math shared public
 
 require math
+require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -32,15 +33,38 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     }
 }
 
+// n*d above this -> split the output rows across worker threads. Below it, the per-call
+// job-dispatch overhead (~90us) dwarfs the gain, so stay single-thread. (Measured on M1 Max:
+// classifier 32000x288 = 9.2M threads to ~2x; ffn 768x288 = 0.22M would be ~5x slower.)
+let MATMUL_PAR_THRESHOLD = 2_000_000l
+
 //! y = W·x — matrix-vector product, the dominant LLM compute kernel.
 //! W is row-major [d rows x n cols], x is [n], y is [d]; each y[i] is one dot
 //! product of W's i-th row with x. Shapes match llama2.c (n = input dim, d = output dim).
-def matmul(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
-    // reinterpret normalizes the element pointer (a weight view yields a `#` temp pointer)
-    // to a plain pointer dot_vec accepts; the view stays valid for the synchronous call.
-    for (i in range64(d)) {
+//! Large matmuls thread the output rows across workers (requires an enclosing with_job_que);
+//! small ones stay single-thread. Workers read y/w/x via raw pointers (unsafe cross-context).
+def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : int64) {
+    if (n * d >= MATMUL_PAR_THRESHOLD) {
         unsafe {
-            y[i] = dot(reinterpret<float const?>(addr(w[i * n])), reinterpret<float const?>(addr(x[0])), n)
+            let yp = addr(y[0])
+            let wp = reinterpret<float const?>(addr(w[0]))  // strip the `#` if w is a view
+            let xp = addr(x[0])
+            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
+                unsafe {
+                    var myp = reinterpret<float?>(yp)  // var: lambda capture would const-bind the write pointer
+                    for (i in range(rb, re)) {
+                        myp[i] = dot(wp + int64(i) * n, xp, n)
+                    }
+                }
+                wg |> notify_and_release
+            }
+        }
+    } else {
+        unsafe {
+            let xp = addr(x[0])
+            for (i in range64(d)) {
+                y[i] = dot(reinterpret<float const?>(addr(w[i * n])), xp, n)
+            }
         }
     }
 }

@@ -2,6 +2,8 @@ options gen2
 
 module matmul_variants shared public
 
+require daslib/jobque_boost
+
 // Experiment ledger for the matmul kernel. Every optimization attempt lives here as
 // its own function so bench_matmul.das can compare them head-to-head (and against the
 // production dasllama_math::matmul). The winner gets promoted into dasllama_math.
@@ -142,5 +144,25 @@ def matmul_f4(var y : array<float> | #; w : array<float> | #; x : array<float> |
             j++
         }
         y[i] = sum
+    }
+}
+
+//! Threaded matmul: split the d output rows into `num_jobs` chunks via parallel_for.
+//! Each worker reads main-context y/w/x through raw pointers (unsafe cross-context), so
+//! dot_vec runs per row on a worker. Requires an enclosing with_job_que. Sweep num_jobs.
+def matmul_par(var y : array<float>; w : array<float> | #; x : array<float>; n, d : int64; num_jobs : int) {
+    unsafe {
+        let yp = addr(y[0])
+        let wp = reinterpret<float const?>(addr(w[0]))  // strip the `#` if w is a view
+        let xp = addr(x[0])
+        parallel_for(0, int(d), num_jobs) $(rb, re, wg) {
+            unsafe {
+                var myp = reinterpret<float?>(yp)  // var (not let): let would const-bind the write pointer
+                for (i in range(rb, re)) {
+                    myp[i] = dot_vec(wp + int64(i) * n, xp, n)
+                }
+            }
+            wg |> notify_and_release
+        }
     }
 }

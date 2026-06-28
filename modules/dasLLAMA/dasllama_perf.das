@@ -1,6 +1,7 @@
 options gen2
 
 require dasllama_transformer
+require daslib/jobque_boost
 
 // End-to-end throughput harness — the real metric for "reasonable performance".
 // Run under JIT: bin/daslang -jit modules/dasLLAMA/dasllama_perf.das
@@ -19,15 +20,18 @@ def main {
     let c = t.config
     var s <- make_run_state(c)
 
-    let t0 = ref_time_ticks()
-    let ids <- generate(t, s, [1l], N_TOKENS)
-    let us = get_time_usec(t0)
+    // job queue persists across the whole run (created once, before timing)
+    with_job_que() {
+        let t0 = ref_time_ticks()
+        let ids <- generate(t, s, [1l], N_TOKENS)
+        let us = get_time_usec(t0)
 
-    let toks = length(ids)
-    let tok_per_s = double(toks) * 1.0lf / (double(us) * 1.0e-6lf)
-    let fpt = flops_per_token(c)
-    let gflops = double(int64(toks) * fpt) / (double(us) * 1000.0lf)
-    print("generated {toks} tokens in {us} us\n")
-    print("  {tok_per_s} tok/s\n")
-    print("  {gflops} GFLOP/s (matmul)\n")
+        let toks = length(ids)
+        let tok_per_s = double(toks) * 1.0lf / (double(us) * 1.0e-6lf)
+        let fpt = flops_per_token(c)
+        let gflops = double(int64(toks) * fpt) / (double(us) * 1000.0lf)
+        print("generated {toks} tokens in {us} us\n")
+        print("  {tok_per_s} tok/s\n")
+        print("  {gflops} GFLOP/s (matmul)\n")
+    }
 }

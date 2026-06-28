@@ -2,6 +2,7 @@ options gen2
 
 require dasllama_transformer
 require dasllama_tokenizer
+require daslib/jobque_boost
 
 // Local model + tokenizer (60MB / 433KB, gitignored).
 let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
@@ -44,20 +45,23 @@ def main {
     show("encode 'Once upon a time' -> ", pt)
     print("  encode {matches(pt, PROMPT_ORACLE) ? "MATCH" : "MISMATCH"}\n")
 
-    // 2. empty-prompt regression: greedy decode token-for-token vs the oracle
-    var s <- make_run_state(c)
-    let bos_only <- encode(tk, "", true, false)
-    let ids <- generate(t, s, bos_only, length(ORACLE))
-    print("  empty-prompt greedy {matches(ids, ORACLE) ? "MATCH" : "MISMATCH"}\n")
+    // forward (via generate) threads its big matmuls, so it must run inside a job queue
+    with_job_que() {
+        // 2. empty-prompt regression: greedy decode token-for-token vs the oracle
+        var s <- make_run_state(c)
+        let bos_only <- encode(tk, "", true, false)
+        let ids <- generate(t, s, bos_only, length(ORACLE))
+        print("  empty-prompt greedy {matches(ids, ORACLE) ? "MATCH" : "MISMATCH"}\n")
 
-    // 3. prompt-driven generation: continue the prompt, decode to text
-    var s2 <- make_run_state(c)
-    let story <- generate(t, s2, pt, 64)
-    print("story: \"")
-    var prev = 1l
-    for (id in story) {
-        print(decode(tk, prev, id))
-        prev = id
+        // 3. prompt-driven generation: continue the prompt, decode to text
+        var s2 <- make_run_state(c)
+        let story <- generate(t, s2, pt, 64)
+        print("story: \"")
+        var prev = 1l
+        for (id in story) {
+            print(decode(tk, prev, id))
+            prev = id
+        }
+        print("\"\n")
     }
-    print("\"\n")
 }
