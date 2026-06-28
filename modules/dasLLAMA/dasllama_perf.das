@@ -14,24 +14,28 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
+def run_once(t : Transformer; c : Config; tag : string) : double {
+    var s <- make_run_state(c)
+    let t0 = ref_time_ticks()
+    let ids <- generate(t, s, [1l], N_TOKENS)
+    let us = get_time_usec(t0)
+    let toks = length(ids)
+    let tok_per_s = double(toks) * 1.0lf / (double(us) * 1.0e-6lf)
+    let gflops = double(int64(toks) * flops_per_token(c)) / (double(us) * 1000.0lf)
+    print("  {tag}: {toks} tokens in {us} us -> {tok_per_s} tok/s ({gflops} GFLOP/s)\n")
+    return tok_per_s
+}
+
 [export]
 def main {
-    let t <- load_checkpoint(MODEL_PATH)
+    var t <- load_checkpoint(MODEL_PATH)
     let c = t.config
-    var s <- make_run_state(c)
 
     // job queue persists across the whole run (created once, before timing)
     with_job_que() {
-        let t0 = ref_time_ticks()
-        let ids <- generate(t, s, [1l], N_TOKENS)
-        let us = get_time_usec(t0)
-
-        let toks = length(ids)
-        let tok_per_s = double(toks) * 1.0lf / (double(us) * 1.0e-6lf)
-        let fpt = flops_per_token(c)
-        let gflops = double(int64(toks) * fpt) / (double(us) * 1000.0lf)
-        print("generated {toks} tokens in {us} us\n")
-        print("  {tok_per_s} tok/s\n")
-        print("  {gflops} GFLOP/s (matmul)\n")
+        let fp32 = run_once(t, c, "fp32 ")  // use_q8 defaults false
+        quantize_weights(t)                 // sets t.use_q8 = true
+        let q8 = run_once(t, c, "q8   ")
+        print("  speedup: {q8 / fp32}x\n")
     }
 }

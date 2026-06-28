@@ -69,6 +69,63 @@ def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : 
     }
 }
 
+//! Q8_0 dequant-in-dot: weights are int8 quants `wq` + one fp32 scale `ws` per 32-block,
+//! activations `x` stay fp32. A float4 accumulator is carried across the blocks (scale
+//! applied per block as a broadcast fma), with a single horizontal reduce at the end —
+//! this layout won the kernel bench (see matmul_variants). n must be a multiple of 32.
+def dot_q8(wq : int8 const?; ws : float const?; x : float const?; n : int64) : float {
+    let nb = n / 32l
+    var acc = float4(0.0, 0.0, 0.0, 0.0)
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        let s = unsafe(ws[bi])
+        var bacc = float4(0.0, 0.0, 0.0, 0.0)
+        var c = 0l
+        while (c < 32l) {
+            let off = base + c
+            unsafe {
+                let q4 = float4(float(wq[off]), float(wq[off + 1l]), float(wq[off + 2l]), float(wq[off + 3l]))
+                let x4 = *reinterpret<float4?>(addr(x[off]))
+                bacc += q4 * x4
+            }
+            c += 4l
+        }
+        acc += float4(s, s, s, s) * bacc
+    }
+    return acc.x + acc.y + acc.z + acc.w
+}
+
+//! Q8_0 matmul: y = W·x with W stored as int8 quants `wq` [d x n] + per-block scales
+//! `ws` [d x n/32]. Same auto-dispatch as the fp32 matmul; large matmuls thread the output
+//! rows (2x the worker count — Q8 is compute-bound and threads better than fp32). n % 32 == 0.
+def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
+    let nb = n / 32l
+    if (n * d >= MATMUL_PAR_THRESHOLD) {
+        unsafe {
+            let yp = addr(y[0])
+            let wp = reinterpret<int8 const?>(addr(wq[0]))
+            let sp = reinterpret<float const?>(addr(ws[0]))
+            let xp = addr(x[0])
+            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
+                unsafe {
+                    var myp = reinterpret<float?>(yp)
+                    for (i in range(rb, re)) {
+                        myp[i] = dot_q8(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
+                    }
+                }
+                wg |> notify_and_release
+            }
+        }
+    } else {
+        unsafe {
+            let xp = addr(x[0])
+            for (i in range64(d)) {
+                y[i] = dot_q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
+            }
+        }
+    }
+}
+
 //! RMSNorm — root-mean-square normalization (no mean subtraction, no bias).
 //! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). Matches llama2.c (eps = 1e-5).
 def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64) {

@@ -5,6 +5,7 @@ module dasllama_transformer shared public
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama_math
+require dasllama_quant
 require math
 
 // dasLLAMA inference engine. Loads a llama2.c checkpoint into one fp32 blob and
@@ -41,6 +42,12 @@ struct Transformer {
     w3_off : int64
     rms_final_off : int64
     wcls_off : int64
+    // Q8_0 weights: a quantized copy of the whole blob (parallel element layout, so the same
+    // offsets index it; scale index = offset / 32). Populated by quantize_weights. When use_q8
+    // is set, forward routes the 2D-weight matmuls through the Q8 kernel; norms/embedding stay fp32.
+    qblob : array<int8>
+    qscales : array<float>
+    use_q8 : bool
 }
 
 //! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed order.
@@ -116,6 +123,18 @@ def load_checkpoint(path : string) : Transformer {
     return <- t
 }
 
+//! Quantize all weights to Q8_0 (the whole blob, parallel layout) and switch forward onto
+//! the Q8 matmul path. The 1D norm weights live in the blob too but forward never routes
+//! them through Q8 — only the 2D weight matrices and the classifier. Idempotent re-quantize
+//! is harmless; flip t.use_q8 back to false to A/B against the fp32 path on the same model.
+def quantize_weights(var t : Transformer) {
+    let n = int64(length(t.blob))
+    var qt <- quantize_q8_0(t.blob, n)
+    t.qblob <- qt.q
+    t.qscales <- qt.scales
+    t.use_q8 = true
+}
+
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
 struct RunState {
     x : array<float>          // residual stream (dim)
@@ -164,6 +183,27 @@ def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : 
     }
 }
 
+// Q8 matmul with the weight viewed into the quantized blob (int8) + its per-block scales.
+// woff is the same float-element offset as the fp32 path; scales start at woff/32 (woff is
+// block-aligned for every 2D tensor since dims are multiples of 32).
+def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+    let total = n * d
+    array_view(t.qblob, woff, total) $(wq : array<int8>#) {
+        array_view(t.qscales, woff / 32l, total / 32l) $(ws : array<float>#) {
+            matmul_q8(y, wq, ws, x, n, d)
+        }
+    }
+}
+
+// Route a weight matmul through Q8 or fp32 depending on the model's quant toggle.
+def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+    if (t.use_q8) {
+        mm_at_q8(y, t, woff, x, n, d)
+    } else {
+        mm_at(y, t, woff, x, n, d)
+    }
+}
+
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blob, KV cache grows by pos.
 def forward(t : Transformer; var s : RunState; token, pos : int64) {
@@ -189,9 +229,9 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // attention rmsnorm
         rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
         // q, k, v projections
-        mm_at(s.q, t, t.wq_off + l * dim * dim, s.xb, dim, dim)
-        mm_at(s.k, t, t.wk_off + l * dim * kv_dim, s.xb, dim, kv_dim)
-        mm_at(s.v, t, t.wv_off + l * dim * kv_dim, s.xb, dim, kv_dim)
+        mm(s.q, t, t.wq_off + l * dim * dim, s.xb, dim, dim)
+        mm(s.k, t, t.wk_off + l * dim * kv_dim, s.xb, dim, kv_dim)
+        mm(s.v, t, t.wv_off + l * dim * kv_dim, s.xb, dim, kv_dim)
         // RoPE on q (dim) and k (kv_dim)
         rope(s.q, pos, head_size, dim)
         rope(s.k, pos, head_size, kv_dim)
@@ -221,21 +261,21 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             }
         }
         // output projection, residual
-        mm_at(s.xb2, t, t.wo_off + l * dim * dim, s.xb, dim, dim)
+        mm(s.xb2, t, t.wo_off + l * dim * dim, s.xb, dim, dim)
         for (i in range64(dim)) {
             s.x[i] += s.xb2[i]
         }
         // ffn rmsnorm
         rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
         // SwiGLU: hb = silu(W1·xb) * (W3·xb)
-        mm_at(s.hb, t, t.w1_off + l * dim * hidden, s.xb, dim, hidden)
-        mm_at(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, dim, hidden)
+        mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, dim, hidden)
+        mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, dim, hidden)
         silu(s.hb, hidden)
         for (i in range64(hidden)) {
             s.hb[i] *= s.hb2[i]
         }
         // down projection, residual
-        mm_at(s.xb, t, t.w2_off + l * hidden * dim, s.hb, hidden, dim)
+        mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, hidden, dim)
         for (i in range64(dim)) {
             s.x[i] += s.xb[i]
         }
@@ -243,7 +283,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 
     // final rmsnorm (into xb to avoid aliasing x as both in/out), then classifier
     rms_at(s.xb, t, t.rms_final_off, s.x, dim)
-    mm_at(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
+    mm(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
 }
 
 //! Greedy argmax over the current logits; returns the winning token id.

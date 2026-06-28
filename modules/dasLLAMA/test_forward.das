@@ -48,3 +48,24 @@ def test_forward_end_to_end(t : T?) {
         }
     }
 }
+
+[test]
+def test_forward_q8(t : T?) {
+    t |> run("all-weights Q8 forward matches fp32 oracle (needs stories15M.bin)") @(t : T?) {
+        if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
+            t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        let c = tr.config
+        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        quantize_weights(tr)  // all 2D weights -> Q8_0, tr.use_q8 = true
+        // Q8 is effectively lossless at greedy decode on stories15M: still token-for-token.
+        with_job_que() {
+            var s <- make_run_state(c)
+            let bos_only <- encode(tk, "", true, false)
+            let ids <- generate(tr, s, bos_only, length(ORACLE))
+            t |> success(same(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
+        }
+    }
+}
