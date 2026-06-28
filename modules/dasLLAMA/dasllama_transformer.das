@@ -11,6 +11,14 @@ require math
 // dasLLAMA inference engine. Loads a llama2.c checkpoint into one fp32 blob and
 // exposes weight tensors as zero-copy views (array_view) for the forward pass.
 
+//! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
+//! q8/q4 select the quantized kernels once the matching blob has been built.
+enum QuantMode {
+    fp32
+    q8
+    q4
+}
+
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
     dim : int64
@@ -42,12 +50,16 @@ struct Transformer {
     w3_off : int64
     rms_final_off : int64
     wcls_off : int64
-    // Q8_0 weights: a quantized copy of the whole blob (parallel element layout, so the same
-    // offsets index it; scale index = offset / 32). Populated by quantize_weights. When use_q8
-    // is set, forward routes the 2D-weight matmuls through the Q8 kernel; norms/embedding stay fp32.
+    // Quantized copies of the whole blob (parallel layout, so the same float offsets index them).
+    // Q8: int8 quants + one fp32 scale per 32-block (scale index = offset / 32). Q4: 4-bit quants
+    // packed two per byte (byte offset = offset / 2) + one fp32 scale per block. Populated by
+    // quantize_weights / quantize_weights_q4; `quant` selects which kernel forward routes the 2D
+    // weight matmuls through (norms/embedding always stay fp32, matching the GGUF 1D-norm rule).
     qblob : array<int8>
     qscales : array<float>
-    use_q8 : bool
+    q4blob : array<uint8>
+    q4scales : array<float>
+    quant : QuantMode
 }
 
 //! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed order.
@@ -123,16 +135,26 @@ def load_checkpoint(path : string) : Transformer {
     return <- t
 }
 
-//! Quantize all weights to Q8_0 (the whole blob, parallel layout) and switch forward onto
-//! the Q8 matmul path. The 1D norm weights live in the blob too but forward never routes
-//! them through Q8 — only the 2D weight matrices and the classifier. Idempotent re-quantize
-//! is harmless; flip t.use_q8 back to false to A/B against the fp32 path on the same model.
+//! Quantize all weights to Q8_0 (the whole blob, parallel layout) and switch forward onto the Q8
+//! matmul path. The 1D norm weights live in the blob too but forward never routes them through Q8 —
+//! only the 2D weight matrices and the classifier. Set t.quant back to QuantMode.fp32 to A/B against
+//! the fp32 path on the same model.
 def quantize_weights(var t : Transformer) {
     let n = int64(length(t.blob))
     var qt <- quantize_q8_0(t.blob, n)
     t.qblob <- qt.q
     t.qscales <- qt.scales
-    t.use_q8 = true
+    t.quant = QuantMode.q8
+}
+
+//! Quantize all weights to Q4_0 (GGML split-half layout) and switch forward onto the Q4 matmul
+//! path. Same all-2D-weights scope as quantize_weights; ~8x fewer weight bytes than fp32, lossier.
+def quantize_weights_q4(var t : Transformer) {
+    let n = int64(length(t.blob))
+    var qt <- quantize_q4_0(t.blob, n)
+    t.q4blob <- qt.q
+    t.q4scales <- qt.scales
+    t.quant = QuantMode.q4
 }
 
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
@@ -195,10 +217,24 @@ def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : ar
     }
 }
 
-// Route a weight matmul through Q8 or fp32 depending on the model's quant toggle.
+// Q4 matmul with the weight viewed into the quantized blob (4-bit, two per byte) + its per-block
+// scales. woff is the same float-element offset as the fp32 path; bytes start at woff/2 (woff is
+// even — block-aligned for every 2D tensor), scales at woff/32.
+def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+    let total = n * d
+    array_view(t.q4blob, woff / 2l, total / 2l) $(wq : array<uint8>#) {
+        array_view(t.q4scales, woff / 32l, total / 32l) $(ws : array<float>#) {
+            matmul_q4(y, wq, ws, x, n, d)
+        }
+    }
+}
+
+// Route a weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
-    if (t.use_q8) {
+    if (t.quant == QuantMode.q8) {
         mm_at_q8(y, t, woff, x, n, d)
+    } elif (t.quant == QuantMode.q4) {
+        mm_at_q4(y, t, woff, x, n, d)
     } else {
         mm_at(y, t, woff, x, n, d)
     }

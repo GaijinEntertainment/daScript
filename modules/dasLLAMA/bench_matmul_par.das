@@ -28,8 +28,9 @@ def bench_matmul_par(b : B?) {
     yref |> resize(32000)
     matmul_llvm_vec(yref, w, x, 288l, 32000l)
 
-    // Q8 weights for the threaded fp32-vs-Q8 comparison (the production-relevant one).
+    // Q8 + Q4 weights for the threaded fp32-vs-quantized comparison (the production-relevant one).
     let qt <- quantize_q8_0(w, 288l * 32000l)
+    let qt4 <- quantize_q4_0(w, 288l * 32000l)
 
     // small shapes, to find the threshold below which threading isn't worth it
     var wp : array<float>
@@ -122,6 +123,49 @@ def bench_matmul_par(b : B?) {
         }
         b |> run("q8flat par-4N        ") {
             matmul_q8flat_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 4)
+        }
+        // Q4 threaded: gate against the fp32 reference (lossy sanity), then sweep num_jobs.
+        matmul_q4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N)
+        for (i in range(32000)) {
+            if (abs(yq[i] - yref[i]) > 1.0) {
+                b->failNow()
+            }
+        }
+        b |> run("q4   par-N           ") {
+            matmul_q4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q4   par-2N          ") {
+            matmul_q4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q4   par-4N          ") {
+            matmul_q4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 4)
+        }
+        b |> run("q4fv par-N           ") {
+            matmul_q4fv_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q4fv par-2N          ") {
+            matmul_q4fv_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q4fv par-4N          ") {
+            matmul_q4fv_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 4)
+        }
+        b |> run("q4fv-w4u4 par-N      ") {
+            matmul_q4fvw4u4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q4fv-w4u4 par-2N     ") {
+            matmul_q4fvw4u4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q4fv-w4u4 par-4N     ") {
+            matmul_q4fvw4u4_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 4)
+        }
+        b |> run("q4flat par-N         ") {
+            matmul_q4flat_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q4flat par-2N        ") {
+            matmul_q4flat_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q4flat par-4N        ") {
+            matmul_q4flat_par(yq, qt4.q, qt4.scales, x, 288l, 32000l, N * 4)
         }
     }
 }

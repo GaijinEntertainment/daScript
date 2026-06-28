@@ -106,6 +106,49 @@ def bench_matmul(b : B?) {
         b |> run("q8flat classifier 32000x288") {
             matmul_q8_flat(y, qt.q, qt.scales, x, 288l, 32000l)
         }
+        // Q4_0: 8x fewer weight bytes than fp32, but a costlier unpack (shift+mask per element).
+        let qt4 <- quantize_q4_0(w, 288l * 32000l)
+        var wdeq4 : array<float>
+        wdeq4 |> resize(288 * 32000)
+        dequantize_q4_0(qt4, wdeq4)
+        check_q4(b, qt4, wdeq4, x, 288, 32000)
+        b |> run("q4    classifier 32000x288") {
+            matmul_q4(y, qt4.q, qt4.scales, x, 288l, 32000l)
+        }
+        b |> run("q4fv  classifier 32000x288") {
+            matmul_q4_fv(y, qt4.q, qt4.scales, x, 288l, 32000l)
+        }
+        b |> run("q4fv-w4u4 classifier      ") {
+            matmul_q4_fv_w4u4(y, qt4.q, qt4.scales, x, 288l, 32000l)
+        }
+        b |> run("q4fv-w16  classifier      ") {
+            matmul_q4_fv_w16(y, qt4.q, qt4.scales, x, 288l, 32000l)
+        }
+        b |> run("q4flat classifier 32000x288") {
+            matmul_q4_flat(y, qt4.q, qt4.scales, x, 288l, 32000l)
+        }
+    }
+}
+
+// Q4 correctness gate: dequant the weights, run the fp32 kernel on them, compare to each Q4 kernel.
+// Algebraically identical (scale factors out of each block), so the gap is fp-order only.
+def check_q4(b : B?; qt : Q4Tensor; wdeq, x : array<float>; n, d : int) {
+    var yref : array<float>
+    var ya : array<float>
+    var yb : array<float>
+    var yc : array<float>
+    yref |> resize(d)
+    ya |> resize(d)
+    yb |> resize(d)
+    yc |> resize(d)
+    matmul_llvm_vec(yref, wdeq, x, int64(n), int64(d))
+    matmul_q4(ya, qt.q, qt.scales, x, int64(n), int64(d))
+    matmul_q4_fv(yb, qt.q, qt.scales, x, int64(n), int64(d))
+    matmul_q4_flat(yc, qt.q, qt.scales, x, int64(n), int64(d))
+    for (i in range(d)) {
+        if (abs(yref[i] - ya[i]) > 1.0e-2 || abs(yref[i] - yb[i]) > 1.0e-2 || abs(yref[i] - yc[i]) > 1.0e-2) {
+            b->failNow()
+        }
     }
 }
 

@@ -6,12 +6,9 @@ require dasllama_quant
 require daslib/jobque_boost
 require math
 
-// Q4_0 quant-quality detector (curriculum step 6.3, position 0: measure before optimizing).
-// No Q4 kernel exists yet, so divergence is measured by dequantizing the Q4 weights back to fp32
-// and running the EXISTING fp32 forward on them — that is exactly the reference a future Q4
-// dequant-in-dot kernel must reproduce. Three numbers, same as the Q8 detector:
+// Q4_0 quant-quality detector (curriculum step 6.3). Three numbers, same as the Q8 detector:
 //   1. reconstruction error  — how far dequant(quant(w)) drifts from w (per weight)
-//   2. divergence step        — first token where the Q4 forward leaves fp32's output
+//   2. divergence step        — first token where the real Q4 forward leaves fp32's output
 //   3. coherence              — both stories printed, eyeball that Q4 still reads
 let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
 let TOKENIZER_PATH = "/Users/borisbatkin/Work/llama2.c/tokenizer.bin"
@@ -47,11 +44,11 @@ def main {
     print("  SNR          {st.snr_db} dB\n")
     print("  footprint    {fp32_bytes} -> {q4_bytes} bytes ({double(fp32_bytes) / double(q4_bytes)}x)\n")
 
-    // 2) divergence: fp32 greedy (original weights) vs the fp32 forward on Q4-dequantized weights
+    // 2) divergence: fp32 greedy vs the REAL all-weights Q4 forward, same model
     with_job_que() {
         var sref <- make_run_state(c)
-        let ref_ids <- generate(t, sref, [1l], N_TOKENS)  // gold: original fp32 blob
-        t.blob <- deq4                                    // swap in the Q4-dequantized weights
+        let ref_ids <- generate(t, sref, [1l], N_TOKENS)  // gold: fp32 (quant defaults fp32)
+        quantize_weights_q4(t)                            // sets t.quant = q4
         var sq <- make_run_state(c)
         let q_ids <- generate(t, sq, [1l], N_TOKENS)
 

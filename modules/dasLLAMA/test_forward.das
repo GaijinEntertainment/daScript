@@ -59,13 +59,35 @@ def test_forward_q8(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
         let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
-        quantize_weights(tr)  // all 2D weights -> Q8_0, tr.use_q8 = true
+        quantize_weights(tr)  // all 2D weights -> Q8_0, tr.quant = q8
         // Q8 is effectively lossless at greedy decode on stories15M: still token-for-token.
         with_job_que() {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
             t |> success(same(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
+        }
+    }
+}
+
+[test]
+def test_forward_q4(t : T?) {
+    t |> run("all-weights Q4 forward matches the fp32 oracle prefix (needs stories15M.bin)") @(t : T?) {
+        if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
+            t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        let c = tr.config
+        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4
+        // Q4 is lossier than Q8 — greedy diverges from fp32 around token ~19 — but the per-step
+        // loss hasn't flipped an argmax yet over the 12-token ORACLE prefix, so it still matches.
+        with_job_que() {
+            var s <- make_run_state(c)
+            let bos_only <- encode(tk, "", true, false)
+            let ids <- generate(tr, s, bos_only, length(ORACLE))
+            t |> success(same(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
         }
     }
 }
