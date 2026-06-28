@@ -2,13 +2,30 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
-require dasllama_math
+require matmul_variants
+require math
 
 // Deterministic fill — values don't matter, only that they're non-trivial.
 def fill(var a : array<float>; count : int) {
     a |> resize(count)
     for (i in range(count)) {
         a[i] = float(i % 7) * 0.1
+    }
+}
+
+// Correctness gate: a variant must match the production kernel before its timing means anything.
+// (float4 reorders the summation, so results differ in the low bits — compare with a tolerance.)
+def check_same(b : B?; w, x : array<float>; n, d : int) {
+    var yn : array<float>
+    var yf : array<float>
+    yn |> resize(d)
+    yf |> resize(d)
+    matmul_naive(yn, w, x, int64(n), int64(d))
+    matmul_f4(yf, w, x, int64(n), int64(d))
+    for (i in range(d)) {
+        if (abs(yn[i] - yf[i]) > 1.0e-2) {
+            b->failNow()
+        }
     }
 }
 
@@ -22,8 +39,12 @@ def bench_matmul(b : B?) {
         fill(w, 288 * 288)
         fill(x, 288)
         y |> resize(288)
-        b |> run("proj 288x288") {
-            matmul(y, w, x, 288l, 288l)
+        check_same(b, w, x, 288, 288)
+        b |> run("naive proj 288x288") {
+            matmul_naive(y, w, x, 288l, 288l)
+        }
+        b |> run("f4    proj 288x288") {
+            matmul_f4(y, w, x, 288l, 288l)
         }
     }
     // stories15M classifier head — W is 32000 x 288 (the heaviest single matmul).
@@ -34,8 +55,12 @@ def bench_matmul(b : B?) {
         fill(w, 32000 * 288)
         fill(x, 288)
         y |> resize(32000)
-        b |> run("classifier 32000x288") {
-            matmul(y, w, x, 288l, 32000l)
+        check_same(b, w, x, 288, 32000)
+        b |> run("naive classifier 32000x288") {
+            matmul_naive(y, w, x, 288l, 32000l)
+        }
+        b |> run("f4    classifier 32000x288") {
+            matmul_f4(y, w, x, 288l, 32000l)
         }
     }
 }

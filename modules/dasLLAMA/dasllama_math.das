@@ -16,12 +16,23 @@ require math
 //! product of W's i-th row with x. Shapes match llama2.c (n = input dim, d = output dim).
 def matmul(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
     for (i in range64(d)) {
-        var acc = 0.0
         let row = i * n
-        for (j in range64(n)) {
-            acc += w[row + j] * x[j]
+        var acc = float4(0.0, 0.0, 0.0, 0.0)
+        var j = 0l
+        while (j + 4l <= n) {
+            unsafe {
+                let w4 = *reinterpret<float4?>(addr(w[row + j]))
+                let x4 = *reinterpret<float4?>(addr(x[j]))
+                acc += w4 * x4
+            }
+            j += 4l
         }
-        y[i] = acc
+        var sum = acc.x + acc.y + acc.z + acc.w
+        while (j < n) {  // tail (n not a multiple of 4)
+            sum += w[row + j] * x[j]
+            j++
+        }
+        y[i] = sum
     }
 }
 
