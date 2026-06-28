@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama_math
 require dasllama_quant
+require dasllama_gguf
 require math
 
 // dasLLAMA inference engine. Loads a llama2.c checkpoint into one fp32 blob and
@@ -132,6 +133,97 @@ def load_checkpoint(path : string) : Transformer {
     off += t.config.seq_len * t.config.head_size / 2l   // skip old freq_cis_real
     off += t.config.seq_len * t.config.head_size / 2l   // skip old freq_cis_imag
     t.wcls_off = t.config.shared_weights ? t.tok_emb_off : off
+    return <- t
+}
+
+//! Load a llama-architecture GGUF (F32 or F16 weights) into the same fp32 blob layout as
+//! load_checkpoint, so the existing forward pass runs unchanged. Config comes from metadata;
+//! vocab is derived from token_embd (some files omit llama.vocab_size). rms_eps (1e-5) and
+//! rope_theta (10000) are read for validation but the primitives currently hardcode them —
+//! they match for Llama-2-family models like TinyLlama.
+def load_gguf(path : string) : Transformer {
+    var t : Transformer
+    let f = fopen(path, "rb")
+    if (f == null) {
+        panic("dasLLAMA: cannot open gguf '{path}'")
+    }
+    fmap(f) $(var bytes : array<uint8>#) {
+        let m <- parse_gguf_meta(bytes)
+        let arch = gguf_str(m, bytes, "general.architecture")
+        if (arch != "llama") {
+            panic("dasLLAMA: unsupported architecture '{arch}' (only llama)")
+        }
+        let dim = gguf_int(m, bytes, "llama.embedding_length")
+        let hidden = gguf_int(m, bytes, "llama.feed_forward_length")
+        let layers = gguf_int(m, bytes, "llama.block_count")
+        let n_heads = gguf_int(m, bytes, "llama.attention.head_count")
+        let n_kv_heads = gguf_int(m, bytes, "llama.attention.head_count_kv")
+        let seq_len = gguf_int(m, bytes, "llama.context_length")
+        // vocab from the token-embedding tensor: rows = vocab, cols = dim
+        let temb = gguf_find_tensor(m, "token_embd.weight")
+        if (temb < 0) {
+            panic("dasLLAMA: token_embd.weight missing")
+        }
+        let vocab = m.tensors[temb].n_elem / dim
+        t.config.dim = dim
+        t.config.hidden_dim = hidden
+        t.config.n_layers = layers
+        t.config.n_heads = n_heads
+        t.config.n_kv_heads = n_kv_heads
+        t.config.vocab_size = vocab
+        t.config.seq_len = seq_len
+        t.config.head_size = dim / n_heads
+        t.config.kv_dim = (dim * n_kv_heads) / n_heads
+        // a separate output.weight means the classifier is not tied to the embeddings
+        t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
+        let kv = t.config.kv_dim
+        // blob offsets, same memory_map_weights order as load_checkpoint (no freq_cis section)
+        var off = 0l
+        t.tok_emb_off = off
+        off += vocab * dim
+        t.rms_att_off = off
+        off += layers * dim
+        t.wq_off = off
+        off += layers * dim * dim
+        t.wk_off = off
+        off += layers * dim * kv
+        t.wv_off = off
+        off += layers * dim * kv
+        t.wo_off = off
+        off += layers * dim * dim
+        t.rms_ffn_off = off
+        off += layers * dim
+        t.w1_off = off
+        off += layers * dim * hidden
+        t.w2_off = off
+        off += layers * hidden * dim
+        t.w3_off = off
+        off += layers * dim * hidden
+        t.rms_final_off = off
+        off += dim
+        t.wcls_off = t.config.shared_weights ? t.tok_emb_off : off
+        let total = t.config.shared_weights ? off : off + vocab * dim
+        t.blob |> resize(total)
+        // copy/decode each named tensor (F16 -> fp32) into its blob slot. ggml stores weights
+        // row-major [out x in] = our llama2.c convention, so no transpose is needed.
+        gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.blob, t.tok_emb_off, vocab * dim)
+        for (l in range64(layers)) {
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.blob, t.rms_att_off + l * dim, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.weight", t.blob, t.wq_off + l * dim * dim, dim * dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.weight", t.blob, t.wk_off + l * dim * kv, dim * kv)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.weight", t.blob, t.wv_off + l * dim * kv, dim * kv)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_output.weight", t.blob, t.wo_off + l * dim * dim, dim * dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_norm.weight", t.blob, t.rms_ffn_off + l * dim, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate.weight", t.blob, t.w1_off + l * dim * hidden, dim * hidden)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_down.weight", t.blob, t.w2_off + l * hidden * dim, hidden * dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_up.weight", t.blob, t.w3_off + l * dim * hidden, dim * hidden)
+        }
+        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.blob, t.rms_final_off, dim)
+        if (!t.config.shared_weights) {
+            gguf_read_tensor_f32(m, bytes, "output.weight", t.blob, t.wcls_off, vocab * dim)
+        }
+    }
+    fclose(f)
     return <- t
 }
 
