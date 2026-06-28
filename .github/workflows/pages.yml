@@ -75,7 +75,7 @@ jobs:
           web/output64
           site/playground/samples
           site/playground/tutorials
-        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -162,6 +162,23 @@ jobs:
             ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"
         done
+
+        # 5. /examples furier — the ImGui-in-wasm showcase. Unlike the games (all
+        #    in-tree modules), furier pulls the EXTERNAL dasImgui module: install
+        #    its deps from the package index into the package dir, then release.
+        #    dasImgui's own .das_package builds its 3 wasm64 archives on demand
+        #    (release_wasm_build). Non-fatal — it depends on dasImgui shipping the
+        #    wasm-support release in the package index, so a dep/index hiccup must
+        #    not red the whole deploy; the furier card is skipped at stage time
+        #    below (examples.js shows a "needs memory64" note when the iframe is
+        #    unavailable).
+        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/furier \
+           && ./bin/daslang utils/daspkg/main.das -- \
+                release wasm --root examples/graphics/furier --out "$REPO/web/output64/examples"; then
+            echo "furier wasm build OK"
+        else
+            echo "WARNING: furier wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+        fi
 
     - name: "Fetch dasProfile per-platform benchmark JSONs"
       # dasProfile now ships a per-platform JSON file
@@ -287,6 +304,19 @@ jobs:
             cp "web/examples/ui/samples/examples/$g/live_stub.das" "_site/examples/$g/"
             cp modules/dasStbImage/fonts/droidsansmono.ttf         "_site/examples/$g/"
         done
+
+        # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the external
+        # dasImgui module, which the universal interpreter can't bind, so there is NO
+        # interpreted fallback (no .das sources to stage). Skip gracefully if the
+        # non-fatal build above produced no artifact.
+        if [ -f web/output64/examples/furier/furier.wasm ]; then
+            mkdir -p _site/examples/furier
+            cp web/output64/examples/furier/furier.html _site/examples/furier/
+            cp web/output64/examples/furier/furier.js   _site/examples/furier/
+            cp web/output64/examples/furier/furier.wasm _site/examples/furier/
+        else
+            echo "WARNING: web/output64/examples/furier/furier.wasm missing — furier card unavailable this deploy."
+        fi
 
         # GitHub Pages control files
         touch _site/.nojekyll
