@@ -4,8 +4,41 @@ daslang-native **CPU** LLM inference (Llama-architecture transformers). Loads GG
 (or llama2.c `.bin`), runs the forward pass + KV cache, tokenizes, and decodes —
 all in daslang, JIT tier. Verified token-for-token against `llama.cpp` / `llama2.c`.
 
-Run a model: `bin/daslang -jit modules/dasLLAMA/dasllama_gguf_run.das -- <model.gguf>`
-Chat: `bin/daslang -jit modules/dasLLAMA/dasllama_chat.das`
+Run a model: `bin/daslang -jit examples/dasLLAMA/gguf_run.das -- <model.gguf>`
+Chat: `bin/daslang -jit examples/dasLLAMA/chat.das`
+
+---
+
+## Module layout & usage
+
+dasLLAMA is a pure-daslang module under the `dasllama/` namespace. The core library
+lives in `modules/dasLLAMA/dasllama/`; runnable demos are in `examples/dasLLAMA/` and
+tests in `tests/dasLLAMA/`.
+
+```
+modules/dasLLAMA/
+  .das_module                 # registers the dasllama/ namespace (dynamic binary)
+  CMakeLists.txt              # ADD_MODULE_DAS registration (static binary + install)
+  dasllama/                   # the module — require dasllama/<name>
+    dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q8·Q8, Q4)
+    dasllama_quant.das        #   Q8_0 / Q4_0 (de)quantization
+    dasllama_gguf.das         #   GGUF container parser + tensor transcode
+    dasllama_unicode.das      #   Unicode classification + UTF-8 codec
+    dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family)
+    dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3)
+    dasllama_transformer.das  #   Config / Transformer / RunState, load + forward + generate
+tests/dasLLAMA/               # dastest [test] suites (model-gated ones self-skip)
+examples/dasLLAMA/            # runnable demos, perf harnesses, and bench/ (matmul ledger)
+```
+
+Pull the pieces you need:
+
+```das
+require dasllama/dasllama_transformer    // load_gguf / load_checkpoint, forward, generate
+require dasllama/dasllama_tokenizer      // SentencePiece
+require dasllama/dasllama_bpe            // Llama-3 BPE
+require dasllama/dasllama_math           // matmul / rmsnorm / softmax / silu / rope / dot
+```
 
 ---
 
@@ -28,24 +61,24 @@ Models are **not** checked into the repo — they live in `~/Work/llama.cpp/mode
 
 ```sh
 # stories15M (toy, correctness baseline)
-bin/daslang -jit modules/dasLLAMA/dasllama_run.das          # vs ~/Work/llama2.c/stories15M.bin
+bin/daslang -jit examples/dasLLAMA/run.das          # vs ~/Work/llama2.c/stories15M.bin
 
 # TinyLlama F16 / Q8_0 GGUF, text-in -> text-out, token-for-token vs llama.cpp
-bin/daslang -jit modules/dasLLAMA/dasllama_gguf_run.das -- ~/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf
+bin/daslang -jit examples/dasLLAMA/gguf_run.das -- ~/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf
 
 # Llama-3 (BPE tokenizer + θ=500000 RoPE + llama3 scaling), token-for-token vs llama.cpp
-bin/daslang -jit modules/dasLLAMA/dasllama_llama3_run.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
-bin/daslang -jit modules/dasLLAMA/dasllama_llama3_run.das -- ~/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf
+bin/daslang -jit examples/dasLLAMA/llama3_run.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
+bin/daslang -jit examples/dasLLAMA/llama3_run.das -- ~/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf
 
 # BPE tokenizer corpus gate (no model needed — uses the in-repo ggml-vocab-llama-bpe fixture)
-bin/daslang -jit modules/dasLLAMA/dasllama_bpe_test.das
+bin/daslang -jit examples/dasLLAMA/bpe_test.das
 
 # Interactive chat (TinyLlama-1.1B-Chat-v1.0 Q8_0, Zephyr template)
-bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
+bin/daslang -jit examples/dasLLAMA/chat.das
 
 # Interactive Llama-3 chat (BPE + Llama-3 template + <|eot_id|> stop); defaults to 3.1-8B
-bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das
-bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
+bin/daslang -jit examples/dasLLAMA/llama3_chat.das
+bin/daslang -jit examples/dasLLAMA/llama3_chat.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
 ```
 
 ---

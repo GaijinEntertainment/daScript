@@ -1,0 +1,13 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    let dasllama_paths = [
+        "dasllama_math", "dasllama_quant", "dasllama_gguf", "dasllama_unicode",
+        "dasllama_tokenizer", "dasllama_bpe", "dasllama_transformer"
+    ]
+    for (path in dasllama_paths) {
+        register_native_path("dasllama", "{path}", "{project_path}/dasllama/{path}.das")
+    }
+}
