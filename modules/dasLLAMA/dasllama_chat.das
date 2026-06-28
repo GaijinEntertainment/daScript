@@ -17,11 +17,9 @@ require strings
 // Non-interactive demo: pipe lines in --
 //   printf 'hi\nwrite a haiku\n/quit\n' | bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
 
-let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf"
+let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
 let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
-let IM_START = 32001l   // <|im_start|>
-let IM_END = 32002l     // <|im_end|>
-let EOS = 2l
+let EOS = 2l   // </s> — the Zephyr turn separator and stop token
 let TEMP = 0.7
 let TOP_K = 40l         // sample only from the K most-likely tokens (kills long-tail drift)
 let PENALTY = 1.3       // repetition penalty on tokens already emitted this turn (kills loops)
@@ -99,11 +97,11 @@ def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len
 [export]
 def main {
     print("loading {MODEL} ...\n")
-    var t <- load_gguf(MODEL)
+    var t <- load_gguf(MODEL)  // reads the Q8_0 GGUF: weights dequant to fp32, norms F32
     let tok <- load_tokenizer_gguf(MODEL)
-    quantize_weights(t)  // Q8: ~1.6x faster, token-for-token with fp32 at greedy
+    quantize_weights(t)  // re-Q8 for speed (~1.6x); near-lossless round-trip
     let c = t.config
-    print("TinyLlama-1.1B-Chat ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). ")
+    print("TinyLlama-1.1B-Chat-v1.0 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). ")
     print("Type your message; /quit to exit.\n\n")
 
     var s = make_run_state(c)
@@ -125,22 +123,20 @@ def main {
             break
         }
 
-        // Build this turn's ChatML prefill: control tokens by id, inner text via normal encode.
+        // Build this turn's Zephyr prefill: role markers are plain text, </s>=EOS by id.
+        // <|system|>\n{sys}</s>  <|user|>\n{msg}</s>  <|assistant|>\n
         var pre : array<int64>
         if (first) {
             pre |> push(1l)  // BOS, once
-            pre |> push(IM_START)
-            pre |> push_from(encode(tok, "system\n{SYSTEM}", false, false))
-            pre |> push(IM_END)
-            pre |> push_from(encode(tok, "\n", false, false))
+            pre |> push_from(encode(tok, "<|system|>\n{SYSTEM}", false, false))
+            pre |> push(EOS)
+            pre |> push_from(encode(tok, "\n<|user|>\n{line}", false, false))
             first = false
+        } else {
+            pre |> push_from(encode(tok, "\n<|user|>\n{line}", false, false))
         }
-        pre |> push(IM_START)
-        pre |> push_from(encode(tok, "user\n{line}", false, false))
-        pre |> push(IM_END)
-        pre |> push_from(encode(tok, "\n", false, false))
-        pre |> push(IM_START)
-        pre |> push_from(encode(tok, "assistant\n", false, false))
+        pre |> push(EOS)
+        pre |> push_from(encode(tok, "\n<|assistant|>\n", false, false))
 
         if (pos + int64(length(pre)) >= c.seq_len) {
             print("\n[context full — restart to continue]\n")
@@ -150,12 +146,12 @@ def main {
 
         // Stream the reply, sampling until <|im_end|> / EOS / budget.
         fprint(fstdout(), "Bot: ")
-        var prev = IM_END  // not BOS, so decode won't strip leading space spuriously
+        var prev = EOS  // not BOS, so decode won't strip leading space spuriously
         var recent : array<int64>  // tokens emitted this turn, for repetition penalty
         var nout = 0l
         while (nout < MAX_NEW && pos < c.seq_len) {
             let next = sample(s, c.vocab_size, TEMP, PENALTY, TOP_K, recent, scratch, seed)
-            if (next == IM_END || next == EOS) {
+            if (next == EOS) {
                 break
             }
             var piece = decode(tok, prev, next)
@@ -172,9 +168,8 @@ def main {
         }
         print("\n\n")
 
-        // Close the assistant turn in the KV context so the next turn continues cleanly.
-        pos = prefill(t, s, [IM_END], pos, c.seq_len)
-        pos = prefill(t, s, encode(tok, "\n", false, false), pos, c.seq_len)
+        // Close the assistant turn in the KV context (</s>) so the next turn continues cleanly.
+        pos = prefill(t, s, [EOS], pos, c.seq_len)
     }
     }
     print("bye\n")

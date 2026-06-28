@@ -377,7 +377,35 @@ def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; 
                 dst[dst_off + i] = f16_to_f32(uint(src[i]))
             }
         }
+    } elif (gtype == GGML_TYPE_Q8_0) {
+        // block of 32: fp16 scale d (2 bytes) + 32 int8 quants; x[i] = q[i] * d
+        let nb = expect_n / 32l
+        var bo = base
+        for (blk in range64(nb)) {
+            let d = f16_to_f32(rd_u16(bytes, bo))
+            bo += 2l
+            for (k in range64(32l)) {
+                let u = int(bytes[bo + k])
+                let q = u < 128 ? u : u - 256
+                dst[dst_off + blk * 32l + k] = float(q) * d
+            }
+            bo += 32l
+        }
+    } elif (gtype == GGML_TYPE_Q4_0) {
+        // block of 32: fp16 scale d (2 bytes) + 16 bytes (split-half nibbles); x = (nibble - 8) * d
+        let nb = expect_n / 32l
+        var bo = base
+        for (blk in range64(nb)) {
+            let d = f16_to_f32(rd_u16(bytes, bo))
+            bo += 2l
+            for (k in range64(16l)) {
+                let b = int(bytes[bo + k])
+                dst[dst_off + blk * 32l + k] = float((b & 15) - 8) * d
+                dst[dst_off + blk * 32l + k + 16l] = float((b >> 4) - 8) * d
+            }
+            bo += 16l
+        }
     } else {
-        panic("gguf: tensor '{name}' type {gtype} not supported yet (only F32/F16)")
+        panic("gguf: tensor '{name}' type {gtype} not supported (have F32/F16/Q8_0/Q4_0)")
     }
 }
