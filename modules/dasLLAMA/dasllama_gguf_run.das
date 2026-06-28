@@ -56,6 +56,7 @@ def main {
     var s = make_run_state(c)
     let n_gen = length(oracle)
     with_job_que() {
+        set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
         let ids <- generate(t, s, prompt, length(prompt) + n_gen)
         // decode the whole emitted sequence back to text
         let text = build_string() $(var w) {

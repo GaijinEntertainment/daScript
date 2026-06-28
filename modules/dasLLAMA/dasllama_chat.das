@@ -111,6 +111,7 @@ def main {
     var first = true
 
     with_job_que() {
+    set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
     while (true) {
         fprint(fstdout(), "You: ")
         fflush(fstdout())

@@ -289,6 +289,7 @@ namespace das
         thisHelper = ctx.thisHelper;
         name = "clone of " + ctx.name;
         category.value = opts.category;
+        skipInitShutdownScript = opts.skipInitScript;
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
             heap = make_unique<PersistentHeapAllocator>();
@@ -335,7 +336,8 @@ namespace das
         announceCreation();
         // now, make it good to go
         restart();
-        if ( !failed ) {
+        // a pure-data fork (skipInitScript) never touches globals, so skip the init script entirely
+        if ( !failed && !skipInitShutdownScript ) {
             if ( stack.size() > globalInitStackSize ) {
                 failed |= !runWithCatch([&]() {
                     runInitScript();
@@ -356,6 +358,34 @@ namespace das
         restart();
     }
 
+    Context * Context::acquireForkContext ( uint32_t category_ ) {
+        {
+            lock_guard<mutex> guard(forkContextPoolMutex);
+            if ( !forkContextPool.empty() ) {
+                Context * fork = forkContextPool.back();
+                forkContextPool.pop_back();
+                // reset for reuse — drop the previous job's heap/stack state
+                fork->restart();
+                fork->restartHeaps();
+                return fork;
+            }
+        }
+        // none pooled: clone a fresh fork (skip the init script for pure-data jobs)
+        CopyOptions opts;
+        opts.category = category_;
+        opts.skipInitScript = forkSkipInitScript;
+        return new Context(*this, opts);
+    }
+
+    void Context::releaseForkContext ( Context * forkContext ) {
+        if ( keepForkContexts ) {
+            lock_guard<mutex> guard(forkContextPoolMutex);
+            forkContextPool.push_back(forkContext);
+        } else {
+            delete forkContext;
+        }
+    }
+
     void Context::addGcRoot ( void * ptr, TypeInfo * type ) {
         gcRoots[ptr] = type;
     }
@@ -365,6 +395,12 @@ namespace das
     }
 
     Context::~Context() {
+        // free any pooled job-fork contexts (idle by now — with_job_que has joined). They were
+        // cloned skip-init, so their own destructors skip the shutdown script.
+        for ( auto * fork : forkContextPool ) {
+            delete fork;
+        }
+        forkContextPool.clear();
         on_debug_agent_mutex([&](){
             // unregister
             category.value |= uint32_t(ContextCategory::dead);
@@ -373,8 +409,8 @@ namespace das
                 pAgent->onDestroyContext(this);
             });
         });
-        if ( !failed ) {
-            // shutdown
+        if ( !failed && !skipInitShutdownScript ) {
+            // shutdown (skipped for pure-data forks that never ran the init script)
             runShutdownScript();
         }
         // and free memory

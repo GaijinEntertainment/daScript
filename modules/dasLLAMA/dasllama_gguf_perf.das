@@ -74,6 +74,7 @@ def main {
     print("config: dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size}\n")
 
     with_job_que() {
+        set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
         var fp = 0.0lf
         var q8 = 0.0lf
         var q4 = 0.0lf

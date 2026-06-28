@@ -328,6 +328,7 @@ namespace das
         {
             uint32_t category = 0;
             uint32_t stackSize = 0;
+            bool skipInitScript = false;    // pure-data fork: skip running the global init (and, symmetrically, shutdown) script
         };
 
         static constexpr uint32_t CONTEXT_MAGIC = 0xDA514C09;  // "das" + "ctx" + version
@@ -835,6 +836,18 @@ namespace das
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
         bool                            sharedPtrContext = false;   // there is a shared ptr to this context
+        bool                            skipInitShutdownScript = false; // this (cloned) context skipped global init, so skip shutdown too
+        bool                            keepForkContexts = false;   // pool job-fork contexts on this context instead of clone/destroy per job
+        bool                            forkSkipInitScript = false; // when pooling, clone job-forks with CopyOptions::skipInitScript (pure-data jobs)
+    public:
+        // Job-fork context pooling (opt-in via keepForkContexts). Forks are reused across new_job
+        // dispatches instead of cloned/destroyed each time; acquire runs on the dispatching thread,
+        // release on the worker thread, so the pool is mutex-guarded. Only safe for pure-data jobs.
+        Context * acquireForkContext ( uint32_t category );
+        void releaseForkContext ( Context * forkContext );
+    protected:
+        vector<Context *>               forkContextPool;
+        mutex                           forkContextPoolMutex;
     public:
         string                          name;
         Bitfield                        category = 0;
