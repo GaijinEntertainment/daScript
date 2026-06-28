@@ -2156,6 +2156,46 @@ def private gather_wasm_module(pkg_dir : string; var emcc_args, embeds : array<s
     embeds |> push_from(info.embed_paths)
 }
 
+// An EXTERNAL module (not part of daslang's in-tree web build, so `daspkg build --wasm`
+// never produced its archives) can declare in its .das_package how to build them:
+// release_wasm_build(command) + release_wasm_archive(path). When a released app links
+// such a module and its archive is not already staged, run that build once (cwd = the
+// module dir) and copy the declared archives into wasm_lib_dir. Deduped by module dir,
+// so a module that emits several archives builds only once.
+def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var built : table<string>) {
+    let key = get_full_file_name(pkg_dir)
+    return if (key_exists(built, key))
+    built |> insert(key)
+    let pkg_file = "{pkg_dir}/.das_package"
+    return if (!fexist(pkg_file))
+    var info : PackageReleaseInfo
+    return if (!run_das_package_release(pkg_file, info) || empty(info.wasm_build_command))
+    log("release wasm: building wasm archives for external module at {pkg_dir}...\n")
+    let cd = get_platform_name() == "windows" ? "cd /d" : "cd"
+    var bld_out : string
+    let bld_rc = run_cmd("{cd} \"{pkg_dir}\" && {info.wasm_build_command}", bld_out)
+    if (bld_rc != 0) {
+        to_log(LOG_ERROR, "release wasm: wasm build failed for external module at {pkg_dir} (rc={bld_rc}):\n{bld_out}\n")
+        return
+    }
+    mkdir_rec(wasm_lib_dir)
+    for (a in info.wasm_archives) {
+        let src = path_join(pkg_dir, a)
+        if (!fexist(src)) {
+            to_log(LOG_ERROR, "release wasm: declared wasm archive not found after build: {src}\n")
+            continue
+        }
+        let dst = path_join(wasm_lib_dir, base_name(a))
+        continue if (get_full_file_name(src) == get_full_file_name(dst))
+        var err : string
+        if (copy_file(src, dst, true, err)) {
+            log("  staged {base_name(a)}\n")
+        } else {
+            to_log(LOG_ERROR, "release wasm: copy_file({src} -> {dst}) failed: {err}\n")
+        }
+    }
+}
+
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
                                  wasm_lib_dir, runtime_archive, shell_path : string;
@@ -2230,11 +2270,18 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
     var emcc_args : array<string>
     var embeds : array<string>
     var seen : table<string>
+    var built_external : table<string>
     for (e in deps.shared_modules) {
         if (empty(e.rel)) continue
         let arch = "{wasm_lib_dir}/{wasm_archive_name(e.rel)}"
+        // In-tree archives come from `daspkg build --wasm`; an external module instead
+        // declares its own wasm build in its .das_package (release_wasm_build) -- run it
+        // on demand to produce the missing archive.
         if (!fexist(arch)) {
-            to_log(LOG_ERROR, "release wasm: missing module archive {arch} (module `{e.das_name}`); run `daspkg build --wasm`\n")
+            ensure_external_wasm_archives(dir_name(e.abs), wasm_lib_dir, built_external)
+        }
+        if (!fexist(arch)) {
+            to_log(LOG_ERROR, "release wasm: missing module archive {arch} (module `{e.das_name}`); for an in-tree module run `daspkg build --wasm`, for an external module declare release_wasm_build/release_wasm_archive in its .das_package\n")
             remove(obj_path)
             return 1
         }

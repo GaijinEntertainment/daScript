@@ -140,6 +140,8 @@ struct ReleaseSpec {
     emcc_args : array<string>           //!< extra emcc flags this module contributes to a `daspkg release wasm` link (e.g. "-sUSE_GLFW=3"); gathered from every referenced module
     embed_paths : array<string>         //!< "src@dst" embed pairs this module needs in the wasm MEMFS (e.g. a HUD font); gathered from every referenced module
     web_shell : string                  //!< optional emcc `--shell-file` HTML for `release wasm`; empty = daslang's minimal canvas shell
+    wasm_build_command : string         //!< shell command that builds this EXTERNAL module's wasm archives (run with cwd = module dir); empty = in-tree module built by `daspkg build --wasm`
+    wasm_archives : array<string>       //!< archives (relative to module dir) produced by wasm_build_command, staged into the release wasm lib dir
 }
 
 var _release_spec : ReleaseSpec
@@ -209,5 +211,25 @@ def release_embed_file(src, dst : string) {
 //! its own shell (e.g. the forge canvas frame) for in-page embedding.
 def release_web_shell(path : string) {
     _release_spec.web_shell = path
+}
+
+//! Declare how to build this module's wasm archives for `daspkg release wasm`, used
+//! when the module is an EXTERNAL package (not part of daslang's in-tree web build, so
+//! `daspkg build --wasm` does not produce its archives). The command runs with the
+//! module directory as the working directory and an emscripten SDK already on PATH;
+//! reference the daslang SDK via `get_das_root()` interpolation (it resolves when the
+//! `.das_package` runs). daspkg invokes it once, on demand, when a released app links
+//! this module and its wasm archive is not already staged. Pair with
+//! release_wasm_archive() to declare the produced files.
+def release_wasm_build(command : string) {
+    _release_spec.wasm_build_command = command
+}
+
+//! Declare a wasm archive produced by release_wasm_build() (path relative to the
+//! module directory) to stage into the release's wasm lib dir. Repeatable. The
+//! archive's basename must match the daspkg convention (`liblib<CppModule>.a`, the name
+//! the in-tree web build emits) so the link step resolves it for the shared module.
+def release_wasm_archive(path : string) {
+    _release_spec.wasm_archives |> push(path)
 }
 

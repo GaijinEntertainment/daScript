@@ -42,6 +42,8 @@ struct PackageReleaseInfo {
     emcc_args : array<string>
     embed_paths : array<string>
     web_shell : string
+    wasm_build_command : string
+    wasm_archives : array<string>
 }
 
 
@@ -137,6 +139,10 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
                 info.embed_paths |> push_clone(clone_string(e))
             }
             info.web_shell = clone_string(src.web_shell)
+            info.wasm_build_command = clone_string(src.wasm_build_command)
+            for (a in src.wasm_archives) {
+                info.wasm_archives |> push_clone(clone_string(a))
+            }
         }
     }
     return ok

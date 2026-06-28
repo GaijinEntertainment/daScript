@@ -16,4 +16,7 @@ def release() {
     release_exclude("data/internal/**")
     release_shared_module("dasSQLITE")
     release_shared_module("dasGlfw")
+    release_wasm_build("emcmake cmake -S . -B _wasm && cmake --build _wasm")
+    release_wasm_archive("_wasm/liblibDasModuleTest.a")
+    release_wasm_archive("_wasm/liblibTestApp.a")
 }
