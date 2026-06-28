@@ -64,13 +64,17 @@ struct public ImguiGlRenderer {
     vbo      : uint
     ebo      : uint
     textures : array<uint>      // GL texture names we created (== the ImTextureIDs), freed at finalize
+    is_web   : bool             // WebGL2 (emscripten) lacks glDrawElementsBaseVertex; pick the draw at create
 }
 
 //! Build the renderer: compile+link the imgui shaders, create the VAO and the streaming vertex/index
 //! buffers, and record the ImDrawVert attribute layout (pos/uv as float, packed RGBA8 color as a
 //! normalized unsigned-byte vec4) into the VAO.
 def public imgui_gl_create : ImguiGlRenderer {
-    var r : ImguiGlRenderer
+    // get_running_platform_name() (unlike get_platform_name(), which const-folds to the COMPILE host)
+    // is a real runtime call, so it reports "emscripten" both for the wasm interpreter and for a
+    // cross-compiled exe executing in the browser -> the right WebGL2 branch in both.
+    var r = ImguiGlRenderer(is_web = get_running_platform_name() == "emscripten")
     r.program = create_shader_program(@@imgui_gl_vs, @@imgui_gl_fs)
     glGenVertexArrays(1, safe_addr(r.vao))
     glGenBuffers(1, safe_addr(r.vbo))
@@ -250,8 +254,16 @@ def public imgui_gl_render(r : ImguiGlRenderer) {
             // GL scissor origin is bottom-left, so the clip rect's top (miny) maps to fb_h - maxy.
             glScissor(int(minx), fb_h - int(maxy), int(maxx - minx), int(maxy - miny))
             bind_sampler_2d(0, uint(c.GetTexID()))
-            glDrawElementsBaseVertex(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
-                unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)), int(c.VtxOffset))
+            if (r.is_web) {
+                // WebGL2 has no BaseVertex draw; with RendererHasVtxOffset cleared (see backend flags)
+                // ImGui keeps VtxOffset == 0 by splitting any >64K-vertex list, so plain glDrawElements
+                // over the freshly-bound per-list buffers is correct.
+                glDrawElements(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
+                    unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)))
+            } else {
+                glDrawElementsBaseVertex(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
+                    unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)), int(c.VtxOffset))
+            }
         }
     }
 
@@ -266,5 +278,11 @@ def public imgui_gl_render(r : ImguiGlRenderer) {
 def public imgui_gl_set_backend_flags() {
     var io & = unsafe(GetIO())
     io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures
-    io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset
+    // WebGL2 can't honor per-command VtxOffset (no BaseVertex draw); leaving this flag off makes ImGui
+    // split >64K-vertex draw lists itself so the web path's plain glDrawElements stays correct.
+    // get_running_platform_name() (real runtime call, not the host-folded get_platform_name()) so this
+    // is correct in a cross-compiled in-browser exe too.
+    if (get_running_platform_name() != "emscripten") {
+        io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset
+    }
 }
