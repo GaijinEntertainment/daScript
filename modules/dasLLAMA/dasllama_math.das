@@ -183,6 +183,49 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
     }
 }
 
+//! Fused Q8·Q8 for three independent row-groups that share the activation (attention Q/K/V): one
+//! parallel_for over the combined d0+d1+d2 output rows, so idle workers fill in on the small K/V rows
+//! that would otherwise run single-thread while the pool sits idle (~23% faster than the sequential
+//! Q-parallel + K,V-single on the real shapes). wq/ws is the whole quantized blob; woff{0,1,2} are the
+//! per-group weight-element offsets; the activation is pre-quantized once into (xq, xs).
+// wq/ws are the whole owning quantized blob (not a view), so plain array types — keeping the kernel
+// non-generic also keeps its inner dot_q8q8 resolving here, not in a caller that sees another dot_q8q8.
+def matmul_q8q8_group3(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
+                       wq : array<int8>; ws : array<float>; woff0, woff1, woff2 : int64;
+                       xq : array<int8>; xs : array<float>; n, d0, d1, d2 : int64) {
+    let nb = n / 32l
+    let dtot = d0 + d1 + d2
+    unsafe {
+        let y0p = addr(y0[0])
+        let y1p = addr(y1[0])
+        let y2p = addr(y2[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        parallel_for(0, int(dtot), get_total_hw_jobs()) $(rb, re, wg) {
+            unsafe {
+                var w0 = reinterpret<float?>(y0p)
+                var w1 = reinterpret<float?>(y1p)
+                var w2 = reinterpret<float?>(y2p)
+                for (gi in range(rb, re)) {
+                    let g = int64(gi)
+                    if (g < d0) {
+                        w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    } elif (g < d0 + d1) {
+                        let r = g - d0
+                        w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    } else {
+                        let r = g - d0 - d1
+                        w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    }
+                }
+            }
+            wg |> notify_and_release
+        }
+    }
+}
+
 //! Q4_0 dequant-in-dot: weights are 4-bit quants `wq` in GGML split-half packing (per 32-block,
 //! byte j holds element j low / j+16 high) + one fp32 scale `ws` per block; activations `x` fp32.
 //! Per block: the inner for[vectorize] widens nibbles to float at width 4 (M1 native NEON lane —

@@ -385,6 +385,48 @@ def matmul_q8q8_par(var y : array<float>; wq : array<int8> | #; ws : array<float
     }
 }
 
+//! Fused Q8·Q8 for THREE independent row-groups that share the activation x (e.g. attention Q/K/V):
+//! one parallel_for over the combined d0+d1+d2 output rows, so workers fill in on the small K/V rows
+//! that would otherwise run single-thread while the pool sits idle. wq/ws is the whole quantized blob;
+//! woff{0,1,2} are the weight-element offsets of each group; the activation is pre-quantized once.
+def matmul_q8q8_group3_par(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
+                           wq : array<int8> | #; ws : array<float> | #;
+                           woff0, woff1, woff2 : int64;
+                           xq : array<int8> | #; xs : array<float> | #;
+                           n, d0, d1, d2 : int64; num_jobs : int) {
+    let nb = n / 32l
+    let dtot = d0 + d1 + d2
+    unsafe {
+        let y0p = addr(y0[0])
+        let y1p = addr(y1[0])
+        let y2p = addr(y2[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        parallel_for(0, int(dtot), num_jobs) $(rb, re, wg) {
+            unsafe {
+                var w0 = reinterpret<float?>(y0p)
+                var w1 = reinterpret<float?>(y1p)
+                var w2 = reinterpret<float?>(y2p)
+                for (gi in range(rb, re)) {
+                    let g = int64(gi)
+                    if (g < d0) {
+                        w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    } elif (g < d0 + d1) {
+                        let r = g - d0
+                        w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    } else {
+                        let r = g - d0 - d1
+                        w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    }
+                }
+            }
+            wg |> notify_and_release
+        }
+    }
+}
+
 // --- Q4_0 dequant-in-dot. Weights are 4-bit (8x fewer bytes than fp32) in GGML's split-half
 // packing: per 32-weight block, 16 bytes where byte j holds element j in the low nibble and
 // element j+16 in the high nibble, plus one fp32 scale. Half the bytes of Q8 to read, but the

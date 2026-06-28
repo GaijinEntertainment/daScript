@@ -443,6 +443,27 @@ def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : ar
     }
 }
 
+// Fuse the attention Q/K/V projections (all three read s.xb) into one parallel dispatch when the
+// model is Q8 and the combined matmul clears the parallel threshold: the small K/V projections ride
+// along on the worker pool instead of running single-thread while it idles, and the activation is
+// quantized once. Otherwise fall back to three separate matmuls (each handling its own threshold).
+def private mm_qkv(var s : RunState; t : Transformer; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let kv = c.kv_dim
+    let qoff = t.wq_off + l * dim * dim
+    let koff = t.wk_off + l * dim * kv
+    let voff = t.wv_off + l * dim * kv
+    if (t.quant == QuantMode.q8 && dim * (dim + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
+        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+        matmul_q8q8_group3(s.q, s.k, s.v, t.qblob, t.qscales, qoff, koff, voff, s.xq, s.xs, dim, dim, kv, kv)
+    } else {
+        mm(s.q, t, qoff, s.xb, s.xq, s.xs, dim, dim)
+        mm(s.k, t, koff, s.xb, s.xq, s.xs, dim, kv)
+        mm(s.v, t, voff, s.xb, s.xq, s.xs, dim, kv)
+    }
+}
+
 // Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 // xq/xs are the run-state activation-quant scratch (used only by the Q8 path).
 def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
@@ -479,10 +500,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         let loff = l * seq_len * kv_dim
         // attention rmsnorm
         rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-        // q, k, v projections
-        mm(s.q, t, t.wq_off + l * dim * dim, s.xb, s.xq, s.xs, dim, dim)
-        mm(s.k, t, t.wk_off + l * dim * kv_dim, s.xb, s.xq, s.xs, dim, kv_dim)
-        mm(s.v, t, t.wv_off + l * dim * kv_dim, s.xb, s.xq, s.xs, dim, kv_dim)
+        // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
+        mm_qkv(s, t, l)
         // RoPE on q (dim) and k (kv_dim)
         rope(s.q, pos, head_size, dim)
         rope(s.k, pos, head_size, kv_dim)
