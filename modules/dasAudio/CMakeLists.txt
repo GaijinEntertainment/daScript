@@ -63,6 +63,18 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	SETUP_AUDIO(libDasModuleAudio)
 	SETUP_AUDIO(dasModuleAudio)
 
+	# Threaded web build: drive miniaudio's emscripten backend via AudioWorklet
+	# (mixer callback on the dedicated audio rendering thread) instead of the
+	# main-thread ScriptProcessorNode. Needs the worklet emcc link flags
+	# (-sAUDIO_WORKLET=1 -sWASM_WORKERS=1, set in web/CMakeLists.txt) + the
+	# non-blocking ma_device_init patch (patches/miniaudio_memory64.cmake), so it
+	# works with -fwasm-exceptions (no -sASYNCIFY). Gated on DAS_WASM_PTHREADS.
+	IF(EMSCRIPTEN AND DAS_WASM_PTHREADS)
+		TARGET_COMPILE_DEFINITIONS(libDasModuleAudio PRIVATE MA_ENABLE_AUDIO_WORKLETS)
+		TARGET_COMPILE_DEFINITIONS(dasModuleAudio    PRIVATE MA_ENABLE_AUDIO_WORKLETS)
+		MESSAGE(STATUS "dasAudio: AudioWorklet backend enabled (threaded web build).")
+	ENDIF()
+
 	# HRTF FFT convolution — compile minfft.c directly (avoids cross-DLL static lib issues on Windows)
 	SET(DAS_MINFFT_INCLUDE ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleAudio PRIVATE ${DAS_MINFFT_INCLUDE})

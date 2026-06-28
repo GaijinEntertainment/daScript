@@ -381,6 +381,19 @@ var public g_handled_field_offset_globals : table<string; tuple<modName : string
 // wasm32-only miscompiles.
 var public g_target_is_wasm = false
 
+// Cross-compile a wasm object compatible with a -pthread (SharedArrayBuffer)
+// runtime: add +atomics,+bulk-memory to the target_features section so wasm-ld
+// links it into a --shared-memory build. Set from the --jit-threads CLI flag in
+// llvm_jit_run.das BEFORE codegen. MUST match the archives: a +atomics object
+// links only against -pthread archives (web/output64mt), and a non-threads
+// object only against non-pthread ones (web/output64) — same discipline as the
+// +simd128 vec4f-sret match documented in write_wasm.
+var public g_target_wasm_threads = false
+
+def private wasm_target_features() : string {
+    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
+}
+
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
     var rv = LLVMAddFunction(mod, name, typ)
     g_fn_types[name] = typ
@@ -462,7 +475,7 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
         // so vec4f returns are v128-in-register on both sides; meaningless
         // (and potentially a target-machine-creation failure) on other
         // cross-compile triples, so keep features empty there.
-        let features = g_target_is_wasm ? "+simd128,+nontrapping-fptoint" : ""
+        let features = g_target_is_wasm ? wasm_target_features() : ""
         with_target_machine(target_triple, "", features, cg_opt_level) $(targetMachine : LLVMTargetMachineRef) {
             let dl = LLVMCreateTargetDataLayout(targetMachine)
             LLVMSetModuleDataLayout(g_mod, dl)
@@ -1010,8 +1023,9 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
     // vec4f returns via sret while emcc returns them as native v128, causing
     // function-signature mismatches at wasm-ld link time and `unreachable`
     // traps at runtime on any helper that returns vec4f (jit_invoke_block_*,
-    // jit_call_*).
-    let features = "+simd128,+nontrapping-fptoint"
+    // jit_call_*). +atomics,+bulk-memory added for a -pthread runtime — see
+    // g_target_wasm_threads / wasm_target_features.
+    let features = wasm_target_features()
     with_target_machine(real_triple, "", features, 2u) $(targetMachine : LLVMTargetMachineRef) {
         // Pin the module's data layout + triple to the TARGET's so codegen sizes
         // pointers correctly (wasm64 → 8-byte). Without this the module inherits

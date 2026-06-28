@@ -47,6 +47,29 @@ if(DAS_WASM_MEMORY64)
     add_link_options(-sMEMORY64=1)
 endif()
 
+# Threads: build the runtime/modules with -pthread so std::thread (new_thread,
+# JobQue workers, parallel_for) map to real Web Workers backed by SharedArrayBuffer.
+# ABI-incompatible with a non-pthread build (TLS model, shared memory, +atomics),
+# so it MUST go to a separate DAS_WEB_OUTPUT_DIR (e.g. web/output64mt) and the
+# das→wasm cross-compile object must add +atomics,+bulk-memory to match
+# (llvm_jit_common.das write_wasm). The serving page must send COOP same-origin +
+# COEP require-corp for the SharedArrayBuffer to instantiate. Verified that
+# -sMEMORY64=1 -pthread -fwasm-exceptions all coexist in emsdk 5.0.7 (probe).
+option(DAS_WASM_PTHREADS "Build wasm output with -pthread (real worker threads, needs SharedArrayBuffer/COOP+COEP)" OFF)
+if(DAS_WASM_PTHREADS)
+    add_compile_options(-pthread)
+    # -sSHARED_MEMORY pins initial memory (no auto-grow at startup), so it must be
+    # large enough for daslang's static data + embedded daslib (~55MB). 128MB gives
+    # headroom; ALLOW_MEMORY_GROWTH still lets the heap grow past it at runtime.
+    add_link_options(-pthread -sPTHREAD_POOL_SIZE=8 -sINITIAL_MEMORY=134217728)
+    # AudioWorklet backend for dasAudio (mixer on the dedicated audio thread).
+    # WASM_WORKERS backs the worklet thread; AUDIO_WORKLET enables the API. No
+    # -sASYNCIFY (incompatible with -fwasm-exceptions) — the non-blocking
+    # ma_device_init patch removes the only code that needed it. Matched by
+    # MA_ENABLE_AUDIO_WORKLETS on libDasModuleAudio (modules/dasAudio/CMakeLists).
+    add_link_options(-sAUDIO_WORKLET=1 -sWASM_WORKERS=1)
+endif()
+
 # Modern wasm EH (try_table/exnref). DAS_ENABLE_EXCEPTIONS routes daslang
 # error paths through C++ throw instead of setjmp/longjmp.
 add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)

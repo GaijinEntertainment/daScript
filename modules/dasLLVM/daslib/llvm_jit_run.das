@@ -186,6 +186,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     // links it, e.g. daspkg release wasm). Sidesteps the link entirely, including
     // the Windows popen-quoting failure path in link_wasm.
     let emit_object = cli_opts.emit_object |> unwrap_or(false)
+    // --jit-threads: emit a -pthread-compatible wasm object (+atomics,+bulk-memory).
+    // Set the codegen global before any IR is built so both the data-layout machine
+    // and write_wasm's emission machine pick up the threaded feature set.
+    g_target_wasm_threads = cli_opts.threads |> unwrap_or(false)
     // Extra args appended verbatim to the host linker cmd. CLI > script option.
     let linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
 
