@@ -84,4 +84,21 @@ def main() {
     fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])
     fresh_ok = fresh_ok && check_fresh(tk, "  spaces   and\ttabs", [220l, 12908l, 256l, 323l, 3324l, 3518l])
     to_log(LOG_INFO, "fresh cross-check: {fresh_ok ? "PASS" : "FAIL"}\n")
+
+    // decode round-trip: byte-level BPE is lossless, so decode(encode(x)) == x
+    var rt_ok = 0
+    for (i in range(length(inputs))) {
+        let rt = bpe_decode_ids(tk, bpe_encode(tk, inputs[i]))
+        if (rt == inputs[i]) {
+            rt_ok++
+        } else {
+            to_log(LOG_ERROR, "ROUNDTRIP FAIL [{i}] in='{inputs[i]}' got='{rt}'\n")
+        }
+    }
+    to_log(LOG_INFO, "decode round-trip: {rt_ok}/{length(inputs)}\n")
+
+    // special tokens resolve by surface form; control tokens decode to nothing
+    let eot = special_id(tk, "<|eot_id|>")
+    let bos = special_id(tk, "<|begin_of_text|>")
+    to_log(LOG_INFO, "special: eot_id={eot} bos={bos} decode(9906)='{bpe_decode(tk, 9906l)}' decode(eot)='{bpe_decode(tk, eot)}'\n")
 }

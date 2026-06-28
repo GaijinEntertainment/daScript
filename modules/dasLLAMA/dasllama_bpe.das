@@ -55,6 +55,8 @@ def load_bpe_tokenizer_gguf(path : string) : BPETokenizer {
 // byte -> its visible-unicode piece (utf8). Printable bytes map to themselves;
 // the rest map to codepoints 256+n (in byte order) so every byte is a printable token.
 var private BYTE2UNI : array<string>
+// reverse map: visible-unicode codepoint -> original byte (for decode)
+var private UNI2BYTE : table<int; int>
 
 [init]
 def init_byte2uni() {
@@ -68,6 +70,7 @@ def init_byte2uni() {
             n++
         }
         BYTE2UNI[ch] = cpt_to_utf8(cpt)
+        UNI2BYTE |> insert(cpt, ch)
     }
 }
 
@@ -259,4 +262,36 @@ def bpe_encode(tk : BPETokenizer; text : string) : array<int64> {
         delete symbols
     }
     return <- ids
+}
+
+// ===== decode + special tokens =====
+
+//! Decode one token id back to its raw UTF-8 text. Control/special tokens (BOS, EOS,
+//! <|eot_id|>, header markers) render as empty — callers detect them by id, not text.
+def bpe_decode(tk : BPETokenizer; id : int64) : string {
+    // out of range, or a control token (BOS/EOS/<|eot_id|>/headers, GGUF type 3) — render nothing
+    if (id < 0l || id >= int64(length(tk.vocab)) || tk.token_type[id] == 3l) {
+        return ""
+    }
+    let cpts <- utf8_to_cpts(tk.vocab[id])
+    return build_string() $(var wr) {
+        for (c in cpts) {
+            let b = UNI2BYTE?[c] ?? -1
+            write_char(wr, b) if (b >= 0)
+        }
+    }
+}
+
+//! Decode a token id sequence to text (concatenated bpe_decode).
+def bpe_decode_ids(tk : BPETokenizer; ids : array<int64>) : string {
+    return build_string() $(var wr) {
+        for (id in ids) {
+            write(wr, bpe_decode(tk, id))
+        }
+    }
+}
+
+//! Look up a special/added token id by its surface form (e.g. "<|eot_id|>"); -1 if absent.
+def special_id(tk : BPETokenizer; name : string) : int64 {
+    return tk.lookup?[name] ?? -1l
 }
