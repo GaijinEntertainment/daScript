@@ -16,7 +16,7 @@ require math
 [hint(unsafe_range_check, noalias = x, noalias = w)]
 def private dot_vec(w, x : float const?; n : int64) : float {
     var acc = 0.0
-    for [vectorize, vectorize_width = 8] (j in range64(n)) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
         acc += unsafe(w[j]) * unsafe(x[j])
     }
     return acc

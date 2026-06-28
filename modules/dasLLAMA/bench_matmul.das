@@ -71,5 +71,20 @@ def bench_matmul(b : B?) {
         b |> run("llvm  classifier 32000x288") {
             matmul_llvm_vec(y, w, x, 288l, 32000l)
         }
+        b |> run("w8u2  classifier 32000x288") {
+            matmul_w8u2(y, w, x, 288l, 32000l)
+        }
+        b |> run("w8u4  classifier 32000x288") {
+            matmul_w8u4(y, w, x, 288l, 32000l)
+        }
+        b |> run("w8u8  classifier 32000x288") {
+            matmul_w8u8(y, w, x, 288l, 32000l)
+        }
+        b |> run("w16   classifier 32000x288") {
+            matmul_w16(y, w, x, 288l, 32000l)
+        }
+        b |> run("w16u4 classifier 32000x288") {
+            matmul_w16u4(y, w, x, 288l, 32000l)
+        }
     }
 }

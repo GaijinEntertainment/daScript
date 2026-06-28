@@ -38,6 +38,90 @@ def matmul_llvm_vec(var y : array<float> | #; w : array<float> | #; x : array<fl
     }
 }
 
+// --- LLVM hint sweep: vectorize_width x unroll_count. dot_vec_WxxUyy + matmul_WxxUyy pairs.
+// Hints are codegen-only (same scalar semantics as the gated matmul_llvm_vec), so they need
+// no separate correctness gate. n=288 for every real matmul, so the classifier shape suffices.
+
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dv_w8u2(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=8, unroll_count=2] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+def matmul_w8u2(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        unsafe {
+            y[i] = dv_w8u2(addr(w[i * n]), addr(x[0]), n)
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dv_w8u4(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=8, unroll_count=4] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+def matmul_w8u4(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        unsafe {
+            y[i] = dv_w8u4(addr(w[i * n]), addr(x[0]), n)
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dv_w8u8(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=8, unroll_count=8] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+def matmul_w8u8(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        unsafe {
+            y[i] = dv_w8u8(addr(w[i * n]), addr(x[0]), n)
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dv_w16(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=16] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+def matmul_w16(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        unsafe {
+            y[i] = dv_w16(addr(w[i * n]), addr(x[0]), n)
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dv_w16u4(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=16, unroll_count=4] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+def matmul_w16u4(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        unsafe {
+            y[i] = dv_w16u4(addr(w[i * n]), addr(x[0]), n)
+        }
+    }
+}
+
 //! float4 SIMD: accumulate the dot product four lanes at a time, horizontal-sum at the end.
 def matmul_f4(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
     for (i in range64(d)) {
