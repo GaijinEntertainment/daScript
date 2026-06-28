@@ -42,6 +42,10 @@ bin/daslang -jit modules/dasLLAMA/dasllama_bpe_test.das
 
 # Interactive chat (TinyLlama-1.1B-Chat-v1.0 Q8_0, Zephyr template)
 bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
+
+# Interactive Llama-3 chat (BPE + Llama-3 template + <|eot_id|> stop); defaults to 3.1-8B
+bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das
+bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
 ```
 
 ---
