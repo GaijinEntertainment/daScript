@@ -11,15 +11,25 @@ require math
 // can be passed zero-copy as views into one big model blob and outputs can be written
 // straight into a view (e.g. the KV cache). Dims/indices are int64 for large models.
 
-// One row's dot product, left to the LLVM JIT to auto-vectorize: width-8, no bounds
-// checks, and w/x asserted non-aliasing. Beats a hand-rolled float4 loop (~1.8x).
-[hint(unsafe_range_check, noalias = x, noalias = w)]
-def private dot_vec(w, x : float const?; n : int64) : float {
+//! Dot product of two n-length float buffers, auto-vectorized by the LLVM JIT
+//! (width-8, no bounds checks, a/b asserted non-aliasing). Beats hand-rolled float4 ~1.8x.
+[hint(unsafe_range_check, noalias = a, noalias = b)]
+def dot(a, b : float const?; n : int64) : float {
     var acc = 0.0
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-        acc += unsafe(w[j]) * unsafe(x[j])
+        acc += unsafe(a[j]) * unsafe(b[j])
     }
     return acc
+}
+
+//! AXPY: d[j] += scale * s[j] over n elements, same auto-vectorization.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def axpy(var d : float?; s : float const?; scale : float; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] += scale * s[j]
+        }
+    }
 }
 
 //! y = W·x — matrix-vector product, the dominant LLM compute kernel.
@@ -30,7 +40,7 @@ def matmul(var y : array<float> | #; w : array<float> | #; x : array<float> | #;
     // to a plain pointer dot_vec accepts; the view stays valid for the synchronous call.
     for (i in range64(d)) {
         unsafe {
-            y[i] = dot_vec(reinterpret<float const?>(addr(w[i * n])), reinterpret<float const?>(addr(x[0])), n)
+            y[i] = dot(reinterpret<float const?>(addr(w[i * n])), reinterpret<float const?>(addr(x[0])), n)
         }
     }
 }

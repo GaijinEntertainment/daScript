@@ -208,11 +208,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             // scores against all cached keys 0..pos, scaled by 1/sqrt(head_size)
             for (tp in range64(pos + 1l)) {
                 let koff = loff + tp * kv_dim + kvhoff
-                var score = 0.0
-                for (i in range64(head_size)) {
-                    score += s.q[qoff + i] * s.key_cache[koff + i]
-                }
-                s.att[tp] = score * scale
+                s.att[tp] = dot(unsafe(addr(s.q[qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
             }
             softmax(s.att, pos + 1l)
             // weighted sum of values into xb[qoff..]
@@ -221,10 +217,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             }
             for (tp in range64(pos + 1l)) {
                 let voff = loff + tp * kv_dim + kvhoff
-                let a = s.att[tp]
-                for (i in range64(head_size)) {
-                    s.xb[qoff + i] += a * s.value_cache[voff + i]
-                }
+                axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[tp], head_size)
             }
         }
         // output projection, residual
