@@ -148,7 +148,8 @@ def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float c
 
 //! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the
 //! activation PRE-quantized to (xq [n], xs [n/32]) by the caller (it's shared across all d rows, so
-//! quantizing once amortizes). Same auto-dispatch + 2x-worker threading as matmul_q8. n % 32 == 0.
+//! quantizing once amortizes). Large matmuls thread the rows at 1 chunk per hw job (1N — measured
+//! fastest for this compute-light kernel); small ones stay single-thread. n % 32 == 0.
 def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
     let nb = n / 32l
     if (n * d >= MATMUL_PAR_THRESHOLD) {
@@ -158,7 +159,10 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
             let sp = reinterpret<float const?>(addr(ws[0]))
             let xqp = reinterpret<int8 const?>(addr(xq[0]))
             let xsp = reinterpret<float const?>(addr(xs[0]))
-            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
+            // 1N (one chunk per hw job) measured best on the real shapes with the cond-var + fork-pool
+            // job manager — both in the kernel microbench and end-to-end (~52 vs ~51 tok/s at 2N).
+            // The compute-light SDOT kernel gains nothing from more chunks; they only add dispatch cost.
+            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
                 unsafe {
                     var myp = reinterpret<float?>(yp)
                     for (i in range(rb, re)) {
@@ -203,8 +207,8 @@ def dot_q4(wq : uint8 const?; ws : float const?; x : float const?; n : int64) : 
 }
 
 //! Q4_0 matmul: y = W·x with W as 4-bit quants `wq` [d x n/2 bytes] + per-block scales `ws`
-//! [d x n/32]. Same auto-dispatch as matmul_q8 (large matmuls thread the output rows at 2x the
-//! worker count — quantized kernels are compute-bound and thread better than fp32). n % 32 == 0.
+//! [d x n/32]. Large matmuls thread the output rows at 4 chunks per hw job (4N — the heavy nibble
+//! unpack is compute-bound, so finer splitting balances better); small ones stay single. n % 32 == 0.
 def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
     let nh = n / 2l
@@ -214,7 +218,10 @@ def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #
             let wp = reinterpret<uint8 const?>(addr(wq[0]))
             let sp = reinterpret<float const?>(addr(ws[0]))
             let xp = addr(x[0])
-            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
+            // 4N measured fastest for Q4 on the real shapes: the heavy nibble unpack makes each row
+            // compute-bound, so finer splitting balances better (esp. the classifier) — more than the
+            // compute-light Q8 path, which prefers 1N.
+            parallel_for(0, int(d), 4 * get_total_hw_jobs()) $(rb, re, wg) {
                 unsafe {
                     var myp = reinterpret<float?>(yp)
                     for (i in range(rb, re)) {
