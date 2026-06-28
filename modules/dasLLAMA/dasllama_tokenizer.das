@@ -13,6 +13,7 @@ require strings
 struct Tokenizer {
     vocab : array<string>
     scores : array<float>
+    lookup : table<string; int64>  // piece text -> id, for encode
     max_token_length : int
 }
 
@@ -27,13 +28,14 @@ def load_tokenizer(path : string; vocab_size : int64) : Tokenizer {
         unsafe {
             tk.max_token_length = temp_array(reinterpret<int?>(addr(bytes[0])), 1, type<int>)[0]
             var cur = 4
-            for (_i in range64(vocab_size)) {
+            for (i in range64(vocab_size)) {
                 let score = temp_array(reinterpret<float?>(addr(bytes[cur])), 1, type<float>)[0]
                 cur += 4
                 let len = temp_array(reinterpret<int?>(addr(bytes[cur])), 1, type<int>)[0]
                 cur += 4
                 let piece = string(temp_array(reinterpret<uint8?>(addr(bytes[cur])), len, type<uint8>))
                 tk.scores |> push(score)
+                tk.lookup |> insert(piece, i)
                 tk.vocab |> push(piece)
                 cur += len
             }
@@ -84,4 +86,61 @@ def decode(tk : Tokenizer; prev_token, token : int64) : string {
         return slice(piece, 1)
     }
     return piece
+}
+
+//! Encode text into token IDs (SentencePiece-BPE, ported from llama2.c encode):
+//! optional BOS, a dummy leading-space token, per-codepoint vocab lookup with byte
+//! fallback, then greedily merge the highest-scoring adjacent pair until none remain.
+def encode(tk : Tokenizer; text : string; bos, eos : bool) : array<int64> {
+    var tokens : array<int64>
+    if (bos) {
+        tokens |> push(1l)
+    }
+    // sentencepiece add_dummy_prefix: a leading space token when text is non-empty
+    if (!empty(text)) {
+        tokens |> push(tk.lookup?[" "] ?? -1l)
+    }
+    // split into UTF-8 codepoints; each -> its vocab token, or byte fallback (byte + 3)
+    peek_data(text) $(d : array<uint8> const#) {
+        var i = 0
+        while (i < length(d)) {
+            var j = i + 1
+            while (j < length(d) && (int(d[j]) & int(0xC0)) == int(0x80) && j - i < 4) {
+                j++
+            }
+            let id = tk.lookup?[slice(text, i, j)] ?? -1l
+            if (id >= 0l) {
+                tokens |> push(id)
+            } else {
+                for (b in range(i, j)) {
+                    tokens |> push(int64(int(d[b]) + 3))
+                }
+            }
+            i = j
+        }
+    }
+    // greedy BPE merge: repeatedly fuse the best-scoring adjacent pair present in vocab
+    while (true) {
+        var best_score = -1.0e10
+        var best_id = -1l
+        var best_idx = -1
+        for (i in range(length(tokens) - 1)) {
+            let merged = tk.vocab[tokens[i]] + tk.vocab[tokens[i + 1]]
+            let id = tk.lookup?[merged] ?? -1l
+            if (id >= 0l && tk.scores[id] > best_score) {
+                best_score = tk.scores[id]
+                best_id = id
+                best_idx = i
+            }
+        }
+        if (best_idx == -1) {
+            break
+        }
+        tokens[best_idx] = best_id
+        tokens |> erase(best_idx + 1)
+    }
+    if (eos) {
+        tokens |> push(2l)
+    }
+    return <- tokens
 }

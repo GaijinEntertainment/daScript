@@ -266,14 +266,22 @@ def private argmax(s : RunState; vocab : int64) : int64 {
     return best
 }
 
-//! Greedy decode from BOS: run forward at each position, take the argmax token, feed it
-//! back, repeat. Returns the generated token IDs (stops early on BOS, like llama2.c).
-def generate(t : Transformer; var s : RunState; steps : int) : array<int64> {
+//! Greedy decode. `prompt_tokens` is the encoded prompt (at least [BOS]); while still
+//! inside it, the next token is forced from the prompt, otherwise it's the argmax of the
+//! logits. Returns the emitted token IDs (prompt echo minus BOS, then the continuation;
+//! stops early on BOS, like llama2.c).
+def generate(t : Transformer; var s : RunState; prompt_tokens : array<int64>; steps : int) : array<int64> {
     var ids : array<int64>
-    var token = 1l  // BOS
+    let n_prompt = int64(length(prompt_tokens))
+    var token = prompt_tokens[0]
     for (pos in range64(steps)) {
         forward(t, s, token, pos)
-        let next = argmax(s, t.config.vocab_size)
+        var next = 0l
+        if (pos < n_prompt - 1l) {
+            next = prompt_tokens[pos + 1l]  // still consuming the prompt
+        } else {
+            next = argmax(s, t.config.vocab_size)
+        }
         if (next == 1l) {  // BOS delimits sequences
             break
         }
