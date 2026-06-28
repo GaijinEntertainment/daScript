@@ -53,3 +53,13 @@ def softmax(var x : array<float>; size : int) {
         x[i] /= sum
     }
 }
+
+//! SiLU (a.k.a. swish) activation: silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
+//! In place over the first `size` elements. The nonlinearity in the SwiGLU FFN gate;
+//! smooth, ~identity for large x, dips slightly negative just below zero.
+def silu(var x : array<float>; size : int) {
+    for (i in range(size)) {
+        let v = x[i]
+        x[i] = v / (1.0 + exp(-v))
+    }
+}
