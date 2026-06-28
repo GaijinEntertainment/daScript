@@ -1,3 +1,21 @@
+# CI lane targets: verify formatting / regenerated-bindings freshness. Both run
+# daslang interpreted (no LLVM), so define them before the DAS_LLVM_DISABLED
+# early-return below.
+add_custom_target(check_format
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/das-fmt/dasfmt.das -- --path ${PROJECT_SOURCE_DIR}/ --verify
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Verifying .das formatting (das-fmt --verify)"
+)
+
+add_custom_target(check_dasgen
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/dasgen/gen_bind.das
+    COMMAND git diff --exit-code -- ${PROJECT_SOURCE_DIR}/include/daScript/builtin/
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
+)
+
 # Build daslang utilities as standalone executables using -exe mode.
 # Each utility with a main.das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary

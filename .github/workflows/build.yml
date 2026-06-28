@@ -451,7 +451,6 @@ jobs:
         esac
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
-            cd bin
             # LSan suppressions: format_error (fmt::throw_format_error allocates
             # std::runtime_error whose internal string is reported as leaked
             # because the exception object isn't always destroyed); uriParseSingleUriA
@@ -468,36 +467,32 @@ jobs:
                 TEST_DIR=_dasroot_/tests
             fi
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --timeout 900 --test $TEST_DIR || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test $TEST_DIR
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --timeout 900 --test $TEST_DIR || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test $TEST_DIR
             # Interpreter sweep: non-sanitizer only.
             if [ "${{ matrix.sanitizers }}" = "none" ]; then
-                ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             fi
             ;;
            windows32)
-            cd bin
-            ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             ;;
            windows*)
-            cd bin
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.jit_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --timeout 900 --color --failures-only --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
-            ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.jit_disabled }}" = "ON" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             ;;
            linux_arm64)
-            cd bin
             # Skip JIT tests on the Debug cmake preset — LLVM ARM64 SelectionDAG
             # hangs reproducibly mid-suite under Debug (different test each run,
             # ~20 min in). Tracked separately. Release of the same matrix still
             # runs JIT — keep --failures-only off there so PASS lines print and
             # name the test running just before the hang if it reoccurs (see
             # RC2 release run #25572466058).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
-            ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --timeout 900 --test _dasroot_/tests || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             ;;
            *)
-            cd bin
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
-            ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             ;;
         esac
     - name: "Small C++ Tests"
@@ -525,16 +520,14 @@ jobs:
             echo "Skipping AOT tests on 32-bit Windows"
             ;;
            windows*)
-            cd bin
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test _dasroot_/tests
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
             ;;
            *)
-            cd bin
             # Same suppressions as the "Test" step — sanitizer matrix entries
             # need them here too.
             printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test _dasroot_/tests
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
             ;;
         esac
 
@@ -718,16 +711,14 @@ jobs:
     - name: "Test: interpreter sweep"
       run: |
         set -eux
-        cd bin
-        ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test _dasroot_/tests \
-          || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+        cmake --build ./build-mingw --config Release --target run_tests_interpreter \
+          || cmake --build ./build-mingw --config Release --target run_tests_interpreter_isolated
 
     - name: "Test: JIT sweep"
       run: |
         set -eux
-        cd bin
-        ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test _dasroot_/tests \
-          || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+        cmake --build ./build-mingw --config Release --target run_tests_jit \
+          || cmake --build ./build-mingw --config Release --target run_tests_jit_isolated
 
     - name: "Small C++ Tests"
       run: |
@@ -738,8 +729,7 @@ jobs:
     - name: "Slow Release Tests (AOT)"
       run: |
         set -eux
-        cd bin
-        ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test _dasroot_/tests
+        cmake --build ./build-mingw --config Release --target run_tests_aot
 
     # bind_clangbind self-binder lives here (not on linux extended_checks)
     # because dasClangBind on linux pulls libclang.so → libLLVM-22.so.1,
@@ -839,15 +829,13 @@ jobs:
     - name: "Test: interpreter sweep"
       shell: pwsh
       run: |
-        bin\Release\daslang.exe dastest\dastest.das -- --color --failures-only --timeout 900 --test tests
+        cmake --build build-clangcl --config Release --target run_tests_interpreter
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Test: AOT sweep"
       shell: pwsh
       run: |
-        cmake --build build-clangcl --config Release --target test_aot --parallel
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-        bin\Release\test_aot.exe -use-aot dastest\dastest.das -- --use-aot --color --failures-only --timeout 900 --test tests
+        cmake --build build-clangcl --config Release --target run_tests_aot
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Small C++ tests"

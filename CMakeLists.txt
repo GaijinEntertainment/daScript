@@ -2015,67 +2015,11 @@ install(FILES
 
 add_subdirectory(tutorials)
 
-# ── Documentation build (optional) ──────────────────────────────────────────
-# Requires the `daslang` target (das2rst stdlib RST generator runs it). If the
-# user explicitly asked for docs but also disabled tools, fail early rather
-# than silently skipping — mirrors the DAS_AOT_EXAMPLES check above.
-if(DAS_BUILD_DOCUMENTATION)
-    if(DAS_TOOLS_DISABLED)
-        message(FATAL_ERROR "DAS_BUILD_DOCUMENTATION requires DAS_TOOLS_DISABLED to be OFF (the docs pipeline runs daslang via das2rst.das)")
-    endif()
-    find_package(Python3 COMPONENTS Interpreter)
-    if(Python3_FOUND)
-        execute_process(
-            COMMAND ${Python3_EXECUTABLE} -c "import sphinx; print(sphinx.__version__)"
-            RESULT_VARIABLE SPHINX_CHECK_RESULT
-            OUTPUT_VARIABLE SPHINX_VERSION
-            ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-    endif()
-    if(Python3_FOUND AND SPHINX_CHECK_RESULT EQUAL 0)
-        message(STATUS "Sphinx ${SPHINX_VERSION} found — documentation build enabled")
-        set(DAS_DOC_SOURCE_DIR  "${PROJECT_SOURCE_DIR}/doc/source")
-        set(DAS_DOC_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/doc_html")
-        set(DAS_DOC_DOCTREE_DIR "${CMAKE_CURRENT_BINARY_DIR}/doc_doctrees")
+# Test-runner targets (run_tests_interpreter / _jit / _aot).
+add_subdirectory(tests)
 
-        # Step 1: regenerate stdlib RST from daslib source comments (requires daslang)
-        add_custom_command(
-            OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
-            COMMAND $<TARGET_FILE:daslang> "${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das"
-            COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
-            DEPENDS daslang
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-            COMMENT "Generating stdlib RST documentation (das2rst)"
-        )
-
-        # Step 2: build HTML with Sphinx
-        add_custom_command(
-            OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
-            COMMAND ${Python3_EXECUTABLE} -m sphinx
-                    -b html
-                    -d "${DAS_DOC_DOCTREE_DIR}"
-                    "${DAS_DOC_SOURCE_DIR}"
-                    "${DAS_DOC_BUILD_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
-            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc
-            COMMENT "Building HTML documentation (Sphinx)"
-        )
-
-        add_custom_target(das_documentation ALL
-            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
-        )
-
-        install(DIRECTORY ${DAS_DOC_BUILD_DIR}/
-            DESTINATION ${DAS_INSTALL_DOCDIR}/doc
-            PATTERN ".buildinfo" EXCLUDE
-            PATTERN ".doctrees" EXCLUDE
-        )
-    else()
-        message(WARNING "DAS_BUILD_DOCUMENTATION is ON but Sphinx was not found. "
-                        "Install Python 3 and run: pip install sphinx sphinx-rtd-theme")
-    endif()
-endif()
+# Documentation targets (check_docs_generated, build_doc, das_documentation).
+add_subdirectory(doc)
 
 # macOS: ad-hoc code sign all installed binaries and shared libraries.
 # This prevents Gatekeeper from quarantining downloaded SDK artifacts
