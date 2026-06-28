@@ -179,9 +179,21 @@ struct Vertex {
     xy : float2
 }
 
+// GL_LINE_SMOOTH is a desktop-only line anti-aliasing hint; WebGL2 has no such capability, so a raw
+// glEnable/glDisable(GL_LINE_SMOOTH) spams INVALID_ENUM every frame in the browser. Gate it on the
+// runtime platform (get_running_platform_name, not the host-folded get_platform_name) — a no-op on web.
+def line_smooth(on : bool) {
+    if (get_running_platform_name() == "emscripten") return
+    if (on) {
+        glEnable(GL_LINE_SMOOTH)
+    } else {
+        glDisable(GL_LINE_SMOOTH)
+    }
+}
+
 def draw_circle(origin : float2; radius : float; color : float3) {
     glUseProgram(program)
-    glEnable(GL_LINE_SMOOTH)
+    line_smooth(true)
     f_color = color
     v_offset = origin
     v_scale = float2(radius, radius)
@@ -190,12 +202,12 @@ def draw_circle(origin : float2; radius : float; color : float3) {
     fs_main_bind_uniform(program)
     glBindVertexArray(vao_circle)
     glDrawArrays(GL_LINE_LOOP, 0, 360)
-    glDisable(GL_LINE_SMOOTH)
+    line_smooth(false)
 }
 
 def draw_arrow(origin : float2; c : float2; color : float3) {
     glUseProgram(program)
-    glEnable(GL_LINE_SMOOTH)
+    line_smooth(true)
     f_color = color
     v_offset = origin
     v_rot = c
@@ -204,12 +216,12 @@ def draw_arrow(origin : float2; c : float2; color : float3) {
     fs_main_bind_uniform(program)
     glBindVertexArray(vao_arrow)
     glDrawArrays(GL_LINE_LOOP, 0, 360)
-    glDisable(GL_LINE_SMOOTH)
+    line_smooth(false)
 }
 
 def draw_graph(color : float3) {
     glUseProgram(program)
-    glEnable(GL_LINE_SMOOTH)
+    line_smooth(true)
     f_color = color
     v_offset = float2(0.0f, 0.0f)
     v_rot = float2(1.0f, 0.0f)
@@ -220,7 +232,7 @@ def draw_graph(color : float3) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo_graph)
     compute_graph()
     glDrawArrays(GL_LINE_LOOP, 0, NGRAPH)
-    glDisable(GL_LINE_SMOOTH)
+    line_smooth(false)
 }
 
 def create_gl_objects {
