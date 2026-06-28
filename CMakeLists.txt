@@ -43,6 +43,10 @@ option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 option(DAS_BUILD_DOCUMENTATION "Build HTML documentation via Sphinx during install" OFF)
 option(DAS_ENABLE_PIC "Build static libs as position-independent code (UNIX, required to link into shared objects)" ON)
+# Single source of truth for the MSVC C runtime: drives CMAKE_MSVC_RUNTIME_LIBRARY
+# (all daslang targets, every config) and libhv's BUILD_FOR_MT (modules/dasHV) in
+# lockstep, so no target can disagree on /MT vs /MD. See CMakeCommon.txt.
+option(DAS_USE_STATIC_STD_LIBS "Link the static MSVC runtime (/MT); OFF = dynamic (/MD)" OFF)
 # RelWithDebInfo is permanently our heap-leak tracking / audit build.
 # DAS_TRACK_ALLOC=1 (and the global new/delete override) are auto-enabled below
 # via generator expressions; tracker source files are #if DAS_TRACK_ALLOC-gated

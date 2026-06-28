@@ -247,10 +247,15 @@ MACRO(SETUP_COMPILER)
 			ELSEIF(SSE2_SUPPORTED)
 				ADD_DEFINITIONS("/arch:SSE2")
 			ENDIF()
+			# CRT selection — single source of truth. DAS_USE_STATIC_STD_LIBS drives
+			# CMAKE_MSVC_RUNTIME_LIBRARY (CMP0091; applies to every target and every
+			# config, Debug included) AND libhv's BUILD_FOR_MT in modules/dasHV, so
+			# daslang and its vendored static libs can never disagree on the CRT
+			# (the LNK2038 MT/MD mismatch). NEVER hand-append /MT|/MD to flag strings.
 			IF(DAS_USE_STATIC_STD_LIBS)
-				SET(MSVC_STD_LIB_FLAG "/MT")
+				SET(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 			ELSE()
-				SET(MSVC_STD_LIB_FLAG "/MD")
+				SET(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 			ENDIF()
 			# /Z7 (debug info embedded in each .obj) instead of /Zi (a single
 			# shared .pdb): /Zi serializes parallel cl.exe through mspdbsrv and
@@ -263,9 +268,9 @@ MACRO(SETUP_COMPILER)
 			STRING(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 			STRING(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 			SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /EHa")
-			SET(CMAKE_CXX_FLAGS_RELEASE "${MSVC_STD_LIB_FLAG} /Ot /Ox /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
-			SET(CMAKE_CXX_FLAGS_MINSIZEREL "${MSVC_STD_LIB_FLAG} /Os /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
-			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Z7 ${MSVC_STD_LIB_FLAG} /Ot /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa")
+			SET(CMAKE_CXX_FLAGS_RELEASE "/Ot /Ox /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
+			SET(CMAKE_CXX_FLAGS_MINSIZEREL "/Os /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
+			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Z7 /Ot /Oi /DNDEBUG=1 /Gy /GS- /GR- /EHa")
 
 			# HUGE LINKER HEAP
 			set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /HEAP:536870912")
