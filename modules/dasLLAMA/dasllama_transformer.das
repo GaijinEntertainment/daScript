@@ -9,11 +9,15 @@ require dasllama_quant
 require dasllama_gguf
 require math
 
-// dasLLAMA inference engine. Loads a llama2.c checkpoint into one fp32 blob and
-// exposes weight tensors as zero-copy views (array_view) for the forward pass.
+// dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
+// (the embedding table + the norm weights, which forward always reads as fp32) and the big 2D
+// weight matrices (attn q/k/v/o, ffn gate/down/up, untied classifier). Only the big weights are
+// quantized, and only ONE representation is held — so a Q8 model never materializes the fp32
+// weights ("load as stored"). All big-weight arrays are reserve()'d to exact size to avoid the
+// allocator's power-of-2 rounding.
 
 //! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
-//! q8/q4 select the quantized kernels once the matching blob has been built.
+//! q8/q4 select the quantized kernels (and the matching big-weight storage).
 enum QuantMode {
     fp32
     q8
@@ -31,43 +35,106 @@ struct Config {
     seq_len : int64
     head_size : int64       // dim / n_heads
     kv_dim : int64          // (dim * n_kv_heads) / n_heads
-    shared_weights : bool   // wcls aliases the token-embedding table
+    shared_weights : bool   // classifier aliases the token-embedding table
 }
 
-//! The whole model: one fp32 blob plus base offsets into it (float-element units),
-//! mirroring llama2.c's memory_map_weights pointer layout.
+//! The whole model. `fblob` holds the fp32 embedding + norm weights at the *_off offsets below;
+//! the big 2D weights live in exactly one of wblob (fp32) / qblob+qscales (Q8) / q4blob+q4scales
+//! (Q4) per `quant`, at the w*_off offsets (parallel layout: the same weight-element offset indexes
+//! all three — Q8 scales at off/32, Q4 bytes at off/2). For shared_weights the classifier reads the
+//! fp32 embedding from fblob, so wcls_off is unused.
 struct Transformer {
     config : Config
-    blob : array<float>
+    // fp32 aux: embedding + norms
+    fblob : array<float>
     tok_emb_off : int64
     rms_att_off : int64
-    wq_off : int64
-    wk_off : int64
-    wv_off : int64
-    wo_off : int64
     rms_ffn_off : int64
-    w1_off : int64
-    w2_off : int64
-    w3_off : int64
     rms_final_off : int64
-    wcls_off : int64
-    // Quantized copies of the whole blob (parallel layout, so the same float offsets index them).
-    // Q8: int8 quants + one fp32 scale per 32-block (scale index = offset / 32). Q4: 4-bit quants
-    // packed two per byte (byte offset = offset / 2) + one fp32 scale per block. Populated by
-    // quantize_weights / quantize_weights_q4; `quant` selects which kernel forward routes the 2D
-    // weight matmuls through (norms/embedding always stay fp32, matching the GGUF 1D-norm rule).
+    // big 2D weights — exactly one representation populated per `quant`
+    wblob : array<float>
     qblob : array<int8>
     qscales : array<float>
     q4blob : array<uint8>
     q4scales : array<float>
+    wq_off : int64
+    wk_off : int64
+    wv_off : int64
+    wo_off : int64
+    w1_off : int64
+    w2_off : int64
+    w3_off : int64
+    wcls_off : int64
     quant : QuantMode
 }
 
-//! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed order.
+struct private LayoutSizes {
+    fblob_n : int64   // element count of the fp32 aux region
+    wblob_n : int64   // element count of the big-weight region
+}
+
+// Fill both offset tables from the config; return the element counts of each region. The big-weight
+// offsets are 32-aligned (every dim/kv/hidden is a multiple of 32), so Q8/Q4 scale and byte indices
+// divide cleanly. qd = n_heads * head_size (== dim for the llama family).
+def private layout_offsets(var t : Transformer) : LayoutSizes {
+    let c = t.config
+    let dim = c.dim
+    let hidden = c.hidden_dim
+    let layers = c.n_layers
+    let kv = c.kv_dim
+    let qd = c.n_heads * c.head_size
+    var fo = 0l
+    t.tok_emb_off = fo
+    fo += c.vocab_size * dim
+    t.rms_att_off = fo
+    fo += layers * dim
+    t.rms_ffn_off = fo
+    fo += layers * dim
+    t.rms_final_off = fo
+    fo += dim
+    var wo = 0l
+    t.wq_off = wo
+    wo += layers * dim * qd
+    t.wk_off = wo
+    wo += layers * dim * kv
+    t.wv_off = wo
+    wo += layers * dim * kv
+    t.wo_off = wo
+    wo += layers * qd * dim
+    t.w1_off = wo
+    wo += layers * dim * hidden
+    t.w2_off = wo
+    wo += layers * hidden * dim
+    t.w3_off = wo
+    wo += layers * dim * hidden
+    if (c.shared_weights) {
+        t.wcls_off = 0l
+    } else {
+        t.wcls_off = wo
+        wo += c.vocab_size * dim
+    }
+    return LayoutSizes(fblob_n = fo, wblob_n = wo)
+}
+
+// Reserve exact capacity then size — avoids the array allocator's power-of-2 rounding on big arrays.
+def private reserve_resize(var a : array<float>; n : int64) {
+    a |> reserve(n)
+    a |> resize(n)
+}
+
+def private copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
+    for (i in range64(n)) {
+        dst[doff + i] = src[soff + i]
+    }
+}
+
+//! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed file order. Distributes
+//! them into the split fp32 layout (embedding + norms -> fblob, the 2D matrices -> wblob).
 def load_checkpoint(path : string) : Transformer {
     let HEADER_INTS = 7
     let HEADER_BYTES = 28
     var t : Transformer
+    t.quant = QuantMode.fp32
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open checkpoint '{path}'")
@@ -88,61 +155,88 @@ def load_checkpoint(path : string) : Transformer {
             // negative vocab is llama2.c's signal for unshared classifier weights
             t.config.shared_weights = vocab > 0
             t.config.vocab_size = int64(vocab > 0 ? vocab : -vocab)
-            // copy the fp32 weight blob (everything past the header) into an owned array
+        }
+        t.config.head_size = t.config.dim / t.config.n_heads
+        t.config.kv_dim = (t.config.dim * t.config.n_kv_heads) / t.config.n_heads
+        let sz = layout_offsets(t)
+        reserve_resize(t.fblob, sz.fblob_n)
+        reserve_resize(t.wblob, sz.wblob_n)
+        let c = t.config
+        let dim = c.dim
+        let hidden = c.hidden_dim
+        let layers = c.n_layers
+        let kv = c.kv_dim
+        let qd = c.n_heads * c.head_size
+        unsafe {
             let n_floats = (length(bytes) - HEADER_BYTES) / 4
-            t.blob |> resize(n_floats)
             let src = temp_array(reinterpret<float?>(addr(bytes[HEADER_BYTES])), n_floats, type<float>)
-            for (i in range(n_floats)) {
-                t.blob[i] = src[i]
+            // file order: emb, rms_att, wq, wk, wv, wo, rms_ffn, w1, w2, w3, rms_final, freq_cis, [wcls]
+            var fc = 0l
+            copy_floats(src, fc, t.fblob, t.tok_emb_off, c.vocab_size * dim)
+            fc += c.vocab_size * dim
+            copy_floats(src, fc, t.fblob, t.rms_att_off, layers * dim)
+            fc += layers * dim
+            copy_floats(src, fc, t.wblob, t.wq_off, layers * dim * qd)
+            fc += layers * dim * qd
+            copy_floats(src, fc, t.wblob, t.wk_off, layers * dim * kv)
+            fc += layers * dim * kv
+            copy_floats(src, fc, t.wblob, t.wv_off, layers * dim * kv)
+            fc += layers * dim * kv
+            copy_floats(src, fc, t.wblob, t.wo_off, layers * qd * dim)
+            fc += layers * qd * dim
+            copy_floats(src, fc, t.fblob, t.rms_ffn_off, layers * dim)
+            fc += layers * dim
+            copy_floats(src, fc, t.wblob, t.w1_off, layers * dim * hidden)
+            fc += layers * dim * hidden
+            copy_floats(src, fc, t.wblob, t.w2_off, layers * hidden * dim)
+            fc += layers * hidden * dim
+            copy_floats(src, fc, t.wblob, t.w3_off, layers * dim * hidden)
+            fc += layers * dim * hidden
+            copy_floats(src, fc, t.fblob, t.rms_final_off, dim)
+            fc += dim
+            fc += c.seq_len * c.head_size   // skip old freq_cis (real + imag halves)
+            if (!c.shared_weights) {
+                copy_floats(src, fc, t.wblob, t.wcls_off, c.vocab_size * dim)
             }
         }
     }
     fclose(f)
-    // derived sizes
-    t.config.head_size = t.config.dim / t.config.n_heads
-    t.config.kv_dim = (t.config.dim * t.config.n_kv_heads) / t.config.n_heads
-    // weight base offsets, in float-element units (mirrors memory_map_weights)
-    let dim = t.config.dim
-    let hidden = t.config.hidden_dim
-    let layers = t.config.n_layers
-    let kv = t.config.kv_dim
-    let qd = t.config.n_heads * t.config.head_size
-    var off = 0l
-    t.tok_emb_off = off
-    off += t.config.vocab_size * dim
-    t.rms_att_off = off
-    off += layers * dim
-    t.wq_off = off
-    off += layers * dim * qd
-    t.wk_off = off
-    off += layers * dim * kv
-    t.wv_off = off
-    off += layers * dim * kv
-    t.wo_off = off
-    off += layers * qd * dim
-    t.rms_ffn_off = off
-    off += layers * dim
-    t.w1_off = off
-    off += layers * dim * hidden
-    t.w2_off = off
-    off += layers * hidden * dim
-    t.w3_off = off
-    off += layers * dim * hidden
-    t.rms_final_off = off
-    off += dim
-    off += t.config.seq_len * t.config.head_size / 2l   // skip old freq_cis_real
-    off += t.config.seq_len * t.config.head_size / 2l   // skip old freq_cis_imag
-    t.wcls_off = t.config.shared_weights ? t.tok_emb_off : off
     return <- t
 }
 
-//! Load a llama-architecture GGUF (F32 or F16 weights) into the same fp32 blob layout as
-//! load_checkpoint, so the existing forward pass runs unchanged. Config comes from metadata;
-//! vocab is derived from token_embd (some files omit llama.vocab_size). rms_eps (1e-5) and
-//! rope_theta (10000) are read for validation but the primitives currently hardcode them —
-//! they match for Llama-2-family models like TinyLlama.
-def load_gguf(path : string) : Transformer {
+// Read one big 2D weight tensor into the active representation: transcode straight from disk when
+// the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
+// and quantize into the shared blob. `woff` is the weight-element offset; `scratch` is reused.
+def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Transformer; woff, n : int64; var scratch : array<float>) {
+    if (t.quant == QuantMode.q8) {
+        if (gguf_tensor_type(m, name) == GGML_TYPE_Q8_0) {
+            gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n)
+        } else {
+            scratch |> resize(n)
+            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n)
+            quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
+        }
+    } elif (t.quant == QuantMode.q4) {
+        if (gguf_tensor_type(m, name) == GGML_TYPE_Q4_0) {
+            gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n)
+        } else {
+            scratch |> resize(n)
+            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n)
+            quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
+        }
+    } else {
+        gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n)
+    }
+}
+
+//! Load a llama-architecture GGUF into the split layout at the requested precision. The big weights
+//! go straight into `mode`'s storage (pre-quantized tensors transcode block-for-block with no fp32
+//! round-trip; F16/F32 tensors dequant one at a time through a small reused scratch), so a Q8/Q4
+//! load never holds the dense fp32 weights. The embedding + norms stay fp32 in fblob regardless.
+//! Config comes from metadata; vocab is derived from token_embd (some files omit llama.vocab_size).
+def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
     var t : Transformer
+    t.quant = mode
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open gguf '{path}'")
@@ -177,76 +271,92 @@ def load_gguf(path : string) : Transformer {
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         let kv = t.config.kv_dim
-        // blob offsets, same memory_map_weights order as load_checkpoint (no freq_cis section)
-        var off = 0l
-        t.tok_emb_off = off
-        off += vocab * dim
-        t.rms_att_off = off
-        off += layers * dim
-        t.wq_off = off
-        off += layers * dim * dim
-        t.wk_off = off
-        off += layers * dim * kv
-        t.wv_off = off
-        off += layers * dim * kv
-        t.wo_off = off
-        off += layers * dim * dim
-        t.rms_ffn_off = off
-        off += layers * dim
-        t.w1_off = off
-        off += layers * dim * hidden
-        t.w2_off = off
-        off += layers * hidden * dim
-        t.w3_off = off
-        off += layers * dim * hidden
-        t.rms_final_off = off
-        off += dim
-        t.wcls_off = t.config.shared_weights ? t.tok_emb_off : off
-        let total = t.config.shared_weights ? off : off + vocab * dim
-        t.blob |> resize(total)
-        // copy/decode each named tensor (F16 -> fp32) into its blob slot. ggml stores weights
-        // row-major [out x in] = our llama2.c convention, so no transpose is needed.
-        gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.blob, t.tok_emb_off, vocab * dim)
+        let sz = layout_offsets(t)
+        // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
+        reserve_resize(t.fblob, sz.fblob_n)
+        if (mode == QuantMode.q8) {
+            t.qblob |> reserve(sz.wblob_n)
+            t.qblob |> resize(sz.wblob_n)
+            t.qscales |> reserve(sz.wblob_n / 32l)
+            t.qscales |> resize(sz.wblob_n / 32l)
+        } elif (mode == QuantMode.q4) {
+            t.q4blob |> reserve(sz.wblob_n / 2l)
+            t.q4blob |> resize(sz.wblob_n / 2l)
+            t.q4scales |> reserve(sz.wblob_n / 32l)
+            t.q4scales |> resize(sz.wblob_n / 32l)
+        } else {
+            reserve_resize(t.wblob, sz.wblob_n)
+        }
+        // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is)
+        gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
         for (l in range64(layers)) {
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.blob, t.rms_att_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.weight", t.blob, t.wq_off + l * dim * dim, dim * dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.weight", t.blob, t.wk_off + l * dim * kv, dim * kv)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.weight", t.blob, t.wv_off + l * dim * kv, dim * kv)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_output.weight", t.blob, t.wo_off + l * dim * dim, dim * dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_norm.weight", t.blob, t.rms_ffn_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate.weight", t.blob, t.w1_off + l * dim * hidden, dim * hidden)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_down.weight", t.blob, t.w2_off + l * hidden * dim, hidden * dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_up.weight", t.blob, t.w3_off + l * dim * hidden, dim * hidden)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_norm.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
         }
-        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.blob, t.rms_final_off, dim)
+        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
+        // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
+        var scratch : array<float>
+        for (l in range64(layers)) {
+            load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch)
+            load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch)
+            load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch)
+            load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_off + l * dim * dim, dim * dim, scratch)
+            load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
+            load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
+            load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
+        }
         if (!t.config.shared_weights) {
-            gguf_read_tensor_f32(m, bytes, "output.weight", t.blob, t.wcls_off, vocab * dim)
+            load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch)
         }
+        delete scratch
     }
     fclose(f)
     return <- t
 }
 
-//! Quantize all weights to Q8_0 (the whole blob, parallel layout) and switch forward onto the Q8
-//! matmul path. The 1D norm weights live in the blob too but forward never routes them through Q8 —
-//! only the 2D weight matrices and the classifier. Set t.quant back to QuantMode.fp32 to A/B against
-//! the fp32 path on the same model.
+//! Quantize a fp32-loaded model's big weights to Q8_0 in place and switch forward onto the Q8 path.
+//! Requires the fp32 representation (wblob) — i.e. a model loaded with QuantMode.fp32. Keeps wblob
+//! so the same model can be re-quantized to another precision for an A/B comparison.
 def quantize_weights(var t : Transformer) {
-    let n = int64(length(t.blob))
-    var qt <- quantize_q8_0(t.blob, n)
+    let n = int64(length(t.wblob))
+    var qt <- quantize_q8_0(t.wblob, n)
     t.qblob <- qt.q
     t.qscales <- qt.scales
     t.quant = QuantMode.q8
 }
 
-//! Quantize all weights to Q4_0 (GGML split-half layout) and switch forward onto the Q4 matmul
-//! path. Same all-2D-weights scope as quantize_weights; ~8x fewer weight bytes than fp32, lossier.
+//! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
+//! Same fp32-required / wblob-kept contract as quantize_weights.
 def quantize_weights_q4(var t : Transformer) {
-    let n = int64(length(t.blob))
-    var qt <- quantize_q4_0(t.blob, n)
+    let n = int64(length(t.wblob))
+    var qt <- quantize_q4_0(t.wblob, n)
     t.q4blob <- qt.q
     t.q4scales <- qt.scales
     t.quant = QuantMode.q4
+}
+
+//! Resident memory footprint of a loaded model, in bytes, broken down by region. aux_fp32 is the
+//! embedding + norms (always kept); weight_fp32 is the dense big weights (only in fp32 mode — a
+//! quantized model should show this as 0). The detector for the memory-honest refactor.
+struct MemFootprint {
+    aux_fp32_bytes : int64
+    weight_fp32_bytes : int64
+    q8_bytes : int64
+    q8_scale_bytes : int64
+    q4_bytes : int64
+    q4_scale_bytes : int64
+    total : int64
+}
+
+def footprint(t : Transformer) : MemFootprint {
+    let aux = int64(length(t.fblob)) * 4l
+    let wf = int64(length(t.wblob)) * 4l
+    let q8 = int64(length(t.qblob))               // int8 -> 1 byte each
+    let q8s = int64(length(t.qscales)) * 4l
+    let q4 = int64(length(t.q4blob))              // uint8 (two nibbles) -> 1 byte each
+    let q4s = int64(length(t.q4scales)) * 4l
+    return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
+                        q4_bytes = q4, q4_scale_bytes = q4s, total = aux + wf + q8 + q8s + q4 + q4s)
 }
 
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
@@ -283,23 +393,29 @@ def make_run_state(c : Config) : RunState {
     return <- s
 }
 
-// matmul with the weight as a zero-copy view into the model blob at `woff` (len n*d).
+// fp32 matmul with the weight as a zero-copy view into the big-weight blob at `woff` (len n*d).
 def private mm_at(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
-    array_view(t.blob, woff, n * d) $(w : array<float>#) {
+    array_view(t.wblob, woff, n * d) $(w : array<float>#) {
         matmul(y, w, x, n, d)
     }
 }
 
-// rmsnorm with the weight as a zero-copy view into the model blob at `woff` (len size).
+// fp32 matmul with the weight viewed into the fp32 aux blob (used for the tied classifier = embedding).
+def private mm_fblob(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+    array_view(t.fblob, woff, n * d) $(w : array<float>#) {
+        matmul(y, w, x, n, d)
+    }
+}
+
+// rmsnorm with the weight as a zero-copy view into the fp32 aux blob at `woff` (len size).
 def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : array<float> | #; size : int64) {
-    array_view(t.blob, woff, size) $(w : array<float>#) {
+    array_view(t.fblob, woff, size) $(w : array<float>#) {
         rmsnorm(o, x, w, size)
     }
 }
 
-// Q8 matmul with the weight viewed into the quantized blob (int8) + its per-block scales.
-// woff is the same float-element offset as the fp32 path; scales start at woff/32 (woff is
-// block-aligned for every 2D tensor since dims are multiples of 32).
+// Q8 matmul with the weight viewed into the quantized blob (int8) + its per-block scales. woff is the
+// weight-element offset; scales start at woff/32 (woff is block-aligned for every 2D tensor).
 def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
     let total = n * d
     array_view(t.qblob, woff, total) $(wq : array<int8>#) {
@@ -310,8 +426,7 @@ def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : ar
 }
 
 // Q4 matmul with the weight viewed into the quantized blob (4-bit, two per byte) + its per-block
-// scales. woff is the same float-element offset as the fp32 path; bytes start at woff/2 (woff is
-// even — block-aligned for every 2D tensor), scales at woff/32.
+// scales. Bytes start at woff/2 (woff is even), scales at woff/32.
 def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
     let total = n * d
     array_view(t.q4blob, woff / 2l, total / 2l) $(wq : array<uint8>#) {
@@ -321,7 +436,7 @@ def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : ar
     }
 }
 
-// Route a weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
+// Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
     if (t.quant == QuantMode.q8) {
         mm_at_q8(y, t, woff, x, n, d)
@@ -333,7 +448,7 @@ def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<fl
 }
 
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
-//! Faithful port of llama2.c forward(); weights are viewed into the blob, KV cache grows by pos.
+//! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
 def forward(t : Transformer; var s : RunState; token, pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -345,8 +460,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
     let seq_len = c.seq_len
     let scale = 1.0 / sqrt(float(head_size))
 
-    // token embedding: copy row `token` of the embedding table into the residual stream
-    array_view(t.blob, t.tok_emb_off + token * dim, dim) $(row : array<float>#) {
+    // token embedding: copy row `token` of the fp32 embedding table into the residual stream
+    array_view(t.fblob, t.tok_emb_off + token * dim, dim) $(row : array<float>#) {
         for (i in range64(dim)) {
             s.x[i] = row[i]
         }
@@ -411,7 +526,12 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 
     // final rmsnorm (into xb to avoid aliasing x as both in/out), then classifier
     rms_at(s.xb, t, t.rms_final_off, s.x, dim)
-    mm(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
+    if (c.shared_weights) {
+        // tied weights: the classifier IS the fp32 embedding table
+        mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
+    } else {
+        mm(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
+    }
 }
 
 //! Greedy argmax over the current logits; returns the winning token id.
@@ -451,4 +571,3 @@ def generate(t : Transformer; var s : RunState; prompt_tokens : array<int64>; st
     }
     return <- ids
 }
-

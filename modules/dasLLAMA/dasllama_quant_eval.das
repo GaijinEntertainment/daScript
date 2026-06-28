@@ -28,15 +28,15 @@ def story(tk : Tokenizer; ids : array<int64>) {
 def main {
     var t <- load_checkpoint(MODEL_PATH)
     let c = t.config
-    let n = int64(length(t.blob))
+    let n = int64(length(t.wblob))   // the big 2D weights — the part Q8 actually quantizes
     let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
 
-    // 1) reconstruction error over the whole model (per-weight Q8 round-trip)
-    let qt <- quantize_q8_0(t.blob, n)
+    // 1) reconstruction error over the quantized weights (per-weight Q8 round-trip)
+    let qt <- quantize_q8_0(t.wblob, n)
     var deq : array<float>
     deq |> resize(n)
     dequantize_q8_0(qt, deq)
-    let st = quant_error_stats(t.blob, deq, n)
+    let st = quant_error_stats(t.wblob, deq, n)
     let fp32_bytes = n * 4l
     let q8_bytes = int64(length(qt.q)) + int64(length(qt.scales)) * 4l
     print("=== Q8_0 reconstruction ({n} weights) ===\n")
@@ -48,8 +48,8 @@ def main {
     // 2) divergence: fp32 greedy vs the REAL Q8 forward, both from BOS, same model
     with_job_que() {
         var sref <- make_run_state(c)
-        let ref_ids <- generate(t, sref, [1l], N_TOKENS)  // use_q8 still false
-        quantize_weights(t)                               // sets t.use_q8 = true
+        let ref_ids <- generate(t, sref, [1l], N_TOKENS)  // t.quant still fp32
+        quantize_weights(t)                               // sets t.quant = q8
         var sq <- make_run_state(c)
         let q_ids <- generate(t, sq, [1l], N_TOKENS)
 

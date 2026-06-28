@@ -156,3 +156,58 @@ def test_quant_q4(t : T?) {
         t |> success(st.snr_db > 20.0lf, "Q4 SNR should clear 20 dB")
     }
 }
+
+// The *_into variants quantize directly into a pre-allocated, offset slice — the path the
+// memory-honest loader uses. They must produce byte-identical quants/scales to the alloc versions
+// (writing at the given offsets), so a loaded model is the same whether built tensor-at-a-time or not.
+
+[test]
+def test_quant_into(t : T?) {
+    // Q8: quantize_q8_0_into at a non-zero offset must match quantize_q8_0 element-for-element.
+    t |> run("quantize_q8_0_into matches alloc version at offset") @(t : T?) {
+        let n = 96l  // 3 blocks
+        var src : array<float>
+        src |> resize(n)
+        for (i in range64(n)) {
+            src[i] = float(i) * 0.37 - 15.0  // arbitrary multi-block signal
+        }
+        let qoff = 64l  // 2-block lead-in, exercises the offset arithmetic
+        let soff = qoff / 32l
+        let ref <- quantize_q8_0(src, n)
+        var q : array<int8>
+        q |> resize(qoff + n)
+        var s : array<float>
+        s |> resize(soff + n / 32l)
+        quantize_q8_0_into(src, n, q, s, qoff, soff)
+        for (i in range64(n)) {
+            t |> equal(int(q[qoff + i]), int(ref.q[i]))
+        }
+        for (b in range64(n / 32l)) {
+            t |> equal(s[soff + b], ref.scales[b])
+        }
+    }
+    // Q4: same, with byte-offset packing (qoff_bytes = element-offset / 2).
+    t |> run("quantize_q4_0_into matches alloc version at offset") @(t : T?) {
+        let n = 96l
+        var src : array<float>
+        src |> resize(n)
+        for (i in range64(n)) {
+            src[i] = float(i) * 0.37 - 15.0
+        }
+        let qoff = 64l
+        let qoff_bytes = qoff / 2l
+        let soff = qoff / 32l
+        let ref <- quantize_q4_0(src, n)
+        var q : array<uint8>
+        q |> resize(qoff_bytes + n / 2l)
+        var s : array<float>
+        s |> resize(soff + n / 32l)
+        quantize_q4_0_into(src, n, q, s, qoff_bytes, soff)
+        for (i in range64(n / 2l)) {
+            t |> equal(int(q[qoff_bytes + i]), int(ref.q[i]))
+        }
+        for (b in range64(n / 32l)) {
+            t |> equal(s[soff + b], ref.scales[b])
+        }
+    }
+}

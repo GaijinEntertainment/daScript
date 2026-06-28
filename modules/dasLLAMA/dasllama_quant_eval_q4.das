@@ -27,15 +27,15 @@ def story(tk : Tokenizer; ids : array<int64>) {
 def main {
     var t <- load_checkpoint(MODEL_PATH)
     let c = t.config
-    let n = int64(length(t.blob))
+    let n = int64(length(t.wblob))   // the big 2D weights — the part Q4 actually quantizes
     let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
 
-    // 1) reconstruction error over the whole model (per-weight Q4 round-trip)
-    let qt <- quantize_q4_0(t.blob, n)
+    // 1) reconstruction error over the quantized weights (per-weight Q4 round-trip)
+    let qt <- quantize_q4_0(t.wblob, n)
     var deq4 : array<float>
     deq4 |> resize(n)
     dequantize_q4_0(qt, deq4)
-    let st = quant_error_stats(t.blob, deq4, n)
+    let st = quant_error_stats(t.wblob, deq4, n)
     let fp32_bytes = n * 4l
     let q4_bytes = int64(length(qt.q)) + int64(length(qt.scales)) * 4l
     print("=== Q4_0 reconstruction ({n} weights) ===\n")

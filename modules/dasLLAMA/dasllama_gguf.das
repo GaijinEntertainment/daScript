@@ -409,3 +409,65 @@ def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; 
         panic("gguf: tensor '{name}' type {gtype} not supported (have F32/F16/Q8_0/Q4_0)")
     }
 }
+
+//! The on-disk ggml type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
+//! caller pick the direct-transcode path when the disk type already matches the target precision.
+def gguf_tensor_type(m : GGUFMeta; name : string) : int {
+    let ti = gguf_find_tensor(m, name)
+    return ti < 0 ? -1 : m.tensors[ti].ggml_type
+}
+
+//! Transcode a Q8_0 tensor straight from disk into our Q8 layout — no fp32 round-trip. int8 quants
+//! copy verbatim to qdst[qoff..]; the per-block fp16 scale widens to fp32 in sdst[soff..]. Requires
+//! the tensor to be Q8_0 on disk (check gguf_tensor_type first). qoff is the weight-element offset,
+//! soff = qoff / 32. This is the memory-honest load of a pre-quantized GGUF.
+def gguf_transcode_q8_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64) {
+    let ti = gguf_find_tensor(m, name)
+    if (ti < 0) {
+        panic("gguf: tensor '{name}' not found")
+    }
+    if (m.tensors[ti].ggml_type != GGML_TYPE_Q8_0) {
+        panic("gguf: tensor '{name}' is not Q8_0 (type {m.tensors[ti].ggml_type})")
+    }
+    if (m.tensors[ti].n_elem != expect_n) {
+        panic("gguf: tensor '{name}' has {m.tensors[ti].n_elem} elems, expected {expect_n}")
+    }
+    let nb = expect_n / 32l
+    var bo = m.data_offset + m.tensors[ti].offset
+    for (blk in range64(nb)) {
+        sdst[soff + blk] = f16_to_f32(rd_u16(bytes, bo))
+        bo += 2l
+        for (k in range64(32l)) {
+            let u = int(bytes[bo + k])
+            qdst[qoff + blk * 32l + k] = int8(u < 128 ? u : u - 256)
+        }
+        bo += 32l
+    }
+}
+
+//! Transcode a Q4_0 tensor straight from disk into our Q4 layout — no fp32 round-trip. Our Q4 uses
+//! GGML's exact split-half nibble packing, so the 16 packed bytes per block copy verbatim to
+//! qdst[qoff_bytes..] (qoff_bytes = weight-element-offset / 2); the per-block fp16 scale widens to
+//! fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk (check gguf_tensor_type first).
+def gguf_transcode_q4_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64) {
+    let ti = gguf_find_tensor(m, name)
+    if (ti < 0) {
+        panic("gguf: tensor '{name}' not found")
+    }
+    if (m.tensors[ti].ggml_type != GGML_TYPE_Q4_0) {
+        panic("gguf: tensor '{name}' is not Q4_0 (type {m.tensors[ti].ggml_type})")
+    }
+    if (m.tensors[ti].n_elem != expect_n) {
+        panic("gguf: tensor '{name}' has {m.tensors[ti].n_elem} elems, expected {expect_n}")
+    }
+    let nb = expect_n / 32l
+    var bo = m.data_offset + m.tensors[ti].offset
+    for (blk in range64(nb)) {
+        sdst[soff + blk] = f16_to_f32(rd_u16(bytes, bo))
+        bo += 2l
+        for (j in range64(16l)) {
+            qdst[qoff_bytes + blk * 16l + j] = bytes[bo + j]
+        }
+        bo += 16l
+    }
+}

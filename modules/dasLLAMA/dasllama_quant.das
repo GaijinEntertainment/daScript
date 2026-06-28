@@ -47,6 +47,27 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
     return <- qt
 }
 
+//! Quantize a flat fp32 tensor to Q8_0 directly into pre-allocated slices: quants land at
+//! qdst[qoff..], scales at sdst[soff..]. No allocation — the memory-honest loader uses this to
+//! quantize one tensor at a time into the model's shared qblob/qscales. n must be a multiple of 32.
+def quantize_q8_0_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; qoff, soff : int64) {
+    assert(n % QK8 == 0l, "quantize_q8_0_into requires n to be a multiple of 32")
+    let nblocks = n / QK8
+    for (b in range64(nblocks)) {
+        let base = b * QK8
+        var amax = 0.0
+        for (i in range64(QK8)) {
+            amax = max(amax, abs(src[base + i]))
+        }
+        let d = amax / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        sdst[soff + b] = d
+        for (i in range64(QK8)) {
+            qdst[qoff + base + i] = int8(round(src[base + i] * id))
+        }
+    }
+}
+
 //! Dequantize Q8_0 back to fp32 in place: dst[i] = q[i] * scales[i / 32]. The exact
 //! reference the dequant-in-dot kernel must reproduce, and the input to the fp32 forward
 //! when measuring end-to-end quantization loss. dst must be pre-sized to qt.n.
@@ -107,6 +128,36 @@ def quantize_q4_0(src : array<float> | #; n : int64) : Q4Tensor {
         }
     }
     return <- qt
+}
+
+//! Quantize a flat fp32 tensor to Q4_0 (GGML split-half) directly into pre-allocated slices:
+//! packed nibble bytes land at qdst[qoff_bytes..] (qoff_bytes = weight-element-offset / 2), scales
+//! at sdst[soff..]. No allocation — the memory-honest loader's one-tensor-at-a-time path. n % 32 == 0.
+def quantize_q4_0_into(src : array<float> | #; n : int64; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff : int64) {
+    assert(n % QK4 == 0l, "quantize_q4_0_into requires n to be a multiple of 32")
+    let half = QK4 / 2l
+    let nblocks = n / QK4
+    for (b in range64(nblocks)) {
+        let base = b * QK4
+        var amax = 0.0
+        var smax = 0.0
+        for (i in range64(QK4)) {
+            let v = src[base + i]
+            if (abs(v) > amax) {
+                amax = abs(v)
+                smax = v
+            }
+        }
+        let d = smax / -8.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        sdst[soff + b] = d
+        let bbyte = qoff_bytes + b * half
+        for (j in range64(half)) {
+            let lo = clamp(int(src[base + j] * id + 8.5), 0, 15)
+            let hi = clamp(int(src[base + half + j] * id + 8.5), 0, 15)
+            qdst[bbyte + j] = uint8(lo | (hi << 4))
+        }
+    }
 }
 
 //! Dequantize Q4_0 back to fp32 in place: low nibbles -> elements 0..15, high nibbles -> 16..31,

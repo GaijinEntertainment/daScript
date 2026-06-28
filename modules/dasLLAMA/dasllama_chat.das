@@ -97,9 +97,8 @@ def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len
 [export]
 def main {
     print("loading {MODEL} ...\n")
-    var t <- load_gguf(MODEL)  // reads the Q8_0 GGUF: weights dequant to fp32, norms F32
+    let t <- load_gguf(MODEL, QuantMode.q8)  // load straight into Q8: Q8_0 weights transcode, norms+embedding stay fp32
     let tok <- load_tokenizer_gguf(MODEL)
-    quantize_weights(t)  // re-Q8 for speed (~1.6x); near-lossless round-trip
     let c = t.config
     print("TinyLlama-1.1B-Chat-v1.0 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). ")
     print("Type your message; /quit to exit.\n\n")
