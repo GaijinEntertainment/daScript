@@ -4,6 +4,7 @@ module dasllama_tokenizer shared public
 
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
+require dasllama_gguf
 require strings
 
 // llama2.c SentencePiece-BPE tokenizer. tokenizer.bin layout:
@@ -40,6 +41,35 @@ def load_tokenizer(path : string; vocab_size : int64) : Tokenizer {
                 cur += len
             }
         }
+    }
+    fclose(f)
+    return <- tk
+}
+
+//! Load a SentencePiece tokenizer from a llama-arch GGUF (vocab/scores live in metadata).
+//! GGUF stores raw SPM pieces with the '▁' (U+2581) space metasymbol; we substitute
+//! '▁' -> space at load so encode/decode below (written for llama2.c's literal-space
+//! convention) work unchanged. BOS=1 / EOS=2 (Llama-2 SPM) match the hardcoded ids there.
+def load_tokenizer_gguf(path : string) : Tokenizer {
+    var tk : Tokenizer
+    let f = fopen(path, "rb")
+    if (f == null) {
+        panic("dasLLAMA: cannot open gguf '{path}'")
+    }
+    fmap(f) $(var bytes : array<uint8>#) {
+        let m <- parse_gguf_meta(bytes)
+        let toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
+        let scores <- gguf_f32_array(m, bytes, "tokenizer.ggml.scores")
+        let n = length(toks)
+        tk.vocab |> reserve(n)
+        tk.scores |> reserve(n)
+        for (i in range(n)) {
+            let piece = replace(toks[i], "▁", " ")
+            tk.vocab |> push(piece)
+            tk.scores |> push(scores[i])
+            tk.lookup |> insert(piece, int64(i))
+        }
+        tk.max_token_length = 0
     }
     fclose(f)
     return <- tk

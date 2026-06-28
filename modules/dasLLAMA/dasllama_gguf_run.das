@@ -1,23 +1,27 @@
 options gen2
 
 require dasllama_transformer
+require dasllama_tokenizer
 require daslib/jobque_boost
+require strings
 
-// Step 7.1 loader check: load TinyLlama from GGUF (F16 -> fp32), run the existing fp32
-// forward greedy from a known prompt, and compare our continuation token IDs against the
-// oracle (instrumented llama-simple, greedy, same prompt). Tokenizer-independent: the prompt
-// IDs are the oracle's own tokenization, so only the loader + forward are under test.
+// Step 7.2 end-to-end: load TinyLlama from GGUF (F16 -> fp32) + the SentencePiece tokenizer
+// from the same file's metadata, then go text-in -> text-out and compare to llama.cpp.
+//   - encode the prompt string and check it matches llama-tokenize's IDs
+//   - greedy-generate and check the continuation token IDs match the oracle
+//   - decode the whole thing back to text
 //
-// Run with JIT (the F16 decode + 1.1B-param forward are too slow interpreted):
+// Run with JIT (F16 decode + 1.1B-param forward are too slow interpreted):
 //   bin/daslang -jit modules/dasLLAMA/dasllama_gguf_run.das
 
 let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf"
 
 [export]
 def main {
-    // "Once upon a time" tokenized by llama.cpp (add_bos): [1, 9038, 2501, 263, 931]
-    let prompt = [1l, 9038l, 2501l, 263l, 931l]
-    // Oracle greedy continuation (40 tokens) from instrumented llama-simple on the same F16 file.
+    let prompt_text = "Once upon a time"
+    // llama-tokenize "Once upon a time" (add_bos): [1, 9038, 2501, 263, 931]
+    let prompt_oracle = [1l, 9038l, 2501l, 263l, 931l]
+    // instrumented llama-simple greedy continuation (40 tokens) on the same F16 file
     let oracle = [29892l, 727l, 471l, 263l, 4123l, 7826l, 4257l, 365l, 2354l, 29889l,
         2296l, 471l, 263l, 1407l, 15040l, 322l, 12758l, 7826l, 29892l, 2337l,
         3063l, 363l, 716l, 322l, 5566l, 11407l, 2712l, 304l, 5110l, 29889l,
@@ -25,36 +29,56 @@ def main {
 
     print("loading {MODEL}\n")
     let t <- load_gguf(MODEL)
+    let tok <- load_tokenizer_gguf(MODEL)
     let c = t.config
     print("config: dim={c.dim} hidden={c.hidden_dim} layers={c.n_layers} ")
     print("heads={c.n_heads}/{c.n_kv_heads} (kv_mul={c.n_heads / c.n_kv_heads}) ")
-    print("vocab={c.vocab_size} seq_len={c.seq_len} shared_cls={c.shared_weights}\n")
+    print("vocab={c.vocab_size} seq_len={c.seq_len}\n")
 
+    // --- encode check ---
+    let prompt <- encode(tok, prompt_text, true, false)
+    var enc_ok = length(prompt) == length(prompt_oracle)
+    if (enc_ok) {
+        for (i in range(length(prompt))) {
+            enc_ok = enc_ok && prompt[i] == prompt_oracle[i]
+        }
+    }
+    let pstr = build_string() $(var w) {
+        for (p in prompt) {
+            w |> write(p)
+            w |> write(" ")
+        }
+    }
+    let enc_status = enc_ok ? "OK" : "MISMATCH"
+    print("encode('{prompt_text}') = [{pstr}] -> {enc_status}\n")
+
+    // --- generate ---
     var s = make_run_state(c)
     let n_gen = length(oracle)
     with_job_que() {
         let ids <- generate(t, s, prompt, length(prompt) + n_gen)
-        // ids = [prompt echo minus BOS ..., generated ...]; generated start after the echo
-        let echo = length(prompt) - 1
-        var matched = 0
-        print("ours vs oracle (40 generated):\n")
-        var line = ""
-        for (i in range(n_gen)) {
-            let ours = ids[echo + i]
-            let want = oracle[i]
-            if (ours == want) {
-                matched++
-                line += "{ours} "
-            } else {
-                line += "{ours}(!={want}) "
+        // decode the whole emitted sequence back to text
+        let text = build_string() $(var w) {
+            var prev = 1l
+            for (id in ids) {
+                w |> write(decode(tok, prev, id))
+                prev = id
             }
         }
-        print("{line}\n")
-        print("MATCH: {matched}/{n_gen}\n")
-        if (matched == n_gen) {
-            print("PASS: token-for-token with llama.cpp greedy\n")
+        print("OUTPUT: {text}\n")
+        // continuation begins after the prompt echo (prompt minus BOS)
+        let echo = length(prompt) - 1
+        var matched = 0
+        for (i in range(n_gen)) {
+            if (ids[echo + i] == oracle[i]) {
+                matched++
+            }
+        }
+        print("continuation MATCH: {matched}/{n_gen} vs llama.cpp greedy\n")
+        if (enc_ok && matched == n_gen) {
+            print("PASS: encode + forward + decode all match llama.cpp\n")
         } else {
-            print("FAIL: diverged ({matched}/{n_gen})\n")
+            print("FAIL\n")
         }
     }
 }
