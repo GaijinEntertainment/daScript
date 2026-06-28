@@ -114,5 +114,14 @@ def bench_matmul_par(b : B?) {
         b |> run("q8f4 par-4N          ") {
             matmul_q8f4_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 4)
         }
+        b |> run("q8flat par-N         ") {
+            matmul_q8flat_par(yq, qt.q, qt.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q8flat par-2N        ") {
+            matmul_q8flat_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q8flat par-4N        ") {
+            matmul_q8flat_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 4)
+        }
     }
 }

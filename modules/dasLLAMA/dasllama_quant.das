@@ -56,7 +56,7 @@ def dequantize_q8_0(qt : Q8Tensor; var dst : array<float> | #) {
         let blen = min(QK8, qt.n - base)
         let d = qt.scales[b]
         for (i in range64(blen)) {
-            dst[base + i] = float(int(qt.q[base + i])) * d
+            dst[base + i] = float(qt.q[base + i]) * d
         }
     }
 }

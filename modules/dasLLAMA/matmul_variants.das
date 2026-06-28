@@ -160,11 +160,33 @@ def dot_q8(wq : int8 const?; ws : float const?; x : float const?; n : int64) : f
         let base = bi * 32l
         var bs = 0.0
         for [vectorize, vectorize_width = 8, unroll_count = 2] (k in range64(32l)) {
-            bs += float(int(unsafe(wq[base + k]))) * unsafe(x[base + k])
+            bs += float(unsafe(wq[base + k])) * unsafe(x[base + k])
         }
         acc += unsafe(ws[bi]) * bs
     }
     return acc
+}
+
+// Q8 variant FLAT: one vectorized loop over the whole row, scale gathered per element via
+// ws[k/32]. The LLVM JIT proves the scale is constant across each unrolled 32-element chunk
+// (= one block) and emits a single scalar-load + broadcast, so we get the vector sitofp AND
+// loop-carried vector accumulators with ONE horizontal reduce per row (like the fp32 dot).
+[hint(unsafe_range_check, noalias = x, noalias = wq, noalias = ws)]
+def dot_q8_flat(wq : int8 const?; ws : float const?; x : float const?; n : int64) : float {
+    var acc = 0.0
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (k in range64(n)) {
+        acc += unsafe(ws[k / 32l]) * float(unsafe(wq[k])) * unsafe(x[k])
+    }
+    return acc
+}
+def matmul_q8_flat(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; x : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xp = addr(x[0])
+        for (i in range64(d)) {
+            y[i] = dot_q8_flat(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
+        }
+    }
 }
 
 //! Q8_0 matmul: y = W·x with W stored as int8 quants `wq` [d x n] plus per-block scales
@@ -192,7 +214,7 @@ def dequant_row(wq : int8 const?; ws : float const?; var out : float?; n : int64
         let s = unsafe(ws[bi])
         for [vectorize, vectorize_width = 8, unroll_count = 2] (k in range64(32l)) {
             unsafe {
-                out[base + k] = s * float(int(wq[base + k]))
+                out[base + k] = s * float(wq[base + k])
             }
         }
     }
@@ -225,7 +247,7 @@ def dot_q8_f4(wq : int8 const?; ws : float const?; x : float const?; n : int64) 
         while (c < 32l) {
             let off = base + c
             unsafe {
-                let q4 = float4(float(int(wq[off])), float(int(wq[off + 1l])), float(int(wq[off + 2l])), float(int(wq[off + 3l])))
+                let q4 = float4(float(wq[off]), float(wq[off + 1l]), float(wq[off + 2l]), float(wq[off + 3l]))
                 let x4 = *reinterpret<float4?>(addr(x[off]))
                 bacc += q4 * x4
             }
@@ -280,6 +302,27 @@ def matmul_q8f4_par(var y : array<float>; wq : array<int8> | #; ws : array<float
                 var myp = reinterpret<float?>(yp)
                 for (i in range(rb, re)) {
                     myp[i] = dot_q8_f4(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
+                }
+            }
+            wg |> notify_and_release
+        }
+    }
+}
+
+//! Threaded Q8_0 matmul using the flat dot (vector sitofp + loop-carried accumulators,
+//! one reduce per row). Register-only, threads cleanly.
+def matmul_q8flat_par(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; x : array<float>; n, d : int64; num_jobs : int) {
+    let nb = n / 32l
+    unsafe {
+        let yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xp = addr(x[0])
+        parallel_for(0, int(d), num_jobs) $(rb, re, wg) {
+            unsafe {
+                var myp = reinterpret<float?>(yp)
+                for (i in range(rb, re)) {
+                    myp[i] = dot_q8_flat(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
                 }
             }
             wg |> notify_and_release

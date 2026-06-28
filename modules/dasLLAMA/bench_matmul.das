@@ -103,6 +103,9 @@ def bench_matmul(b : B?) {
         b |> run("q8f4  classifier 32000x288") {
             matmul_q8_f4(y, qt.q, qt.scales, x, 288l, 32000l)
         }
+        b |> run("q8flat classifier 32000x288") {
+            matmul_q8_flat(y, qt.q, qt.scales, x, 288l, 32000l)
+        }
     }
 }
 
@@ -113,16 +116,19 @@ def check_q8(b : B?; qt : Q8Tensor; wdeq, x : array<float>; n, d : int) {
     var ya : array<float>
     var yb : array<float>
     var yc : array<float>
+    var yd : array<float>
     yref |> resize(d)
     ya |> resize(d)
     yb |> resize(d)
     yc |> resize(d)
+    yd |> resize(d)
     matmul_llvm_vec(yref, wdeq, x, int64(n), int64(d))
     matmul_q8(ya, qt.q, qt.scales, x, int64(n), int64(d))
     matmul_q8b(yb, qt.q, qt.scales, x, int64(n), int64(d))
     matmul_q8_f4(yc, qt.q, qt.scales, x, int64(n), int64(d))
+    matmul_q8_flat(yd, qt.q, qt.scales, x, int64(n), int64(d))
     for (i in range(d)) {
-        if (abs(yref[i] - ya[i]) > 1.0e-2 || abs(yref[i] - yb[i]) > 1.0e-2 || abs(yref[i] - yc[i]) > 1.0e-2) {
+        if (abs(yref[i] - ya[i]) > 1.0e-2 || abs(yref[i] - yb[i]) > 1.0e-2 || abs(yref[i] - yc[i]) > 1.0e-2 || abs(yref[i] - yd[i]) > 1.0e-2) {
             b->failNow()
         }
     }
