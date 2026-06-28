@@ -3,6 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require matmul_variants
+require dasllama_quant
 require daslib/jobque_boost
 require math
 
@@ -26,6 +27,9 @@ def bench_matmul_par(b : B?) {
     y |> resize(32000)
     yref |> resize(32000)
     matmul_llvm_vec(yref, w, x, 288l, 32000l)
+
+    // Q8 weights for the threaded fp32-vs-Q8 comparison (the production-relevant one).
+    let qt <- quantize_q8_0(w, 288l * 32000l)
 
     // small shapes, to find the threshold below which threading isn't worth it
     var wp : array<float>
@@ -79,6 +83,36 @@ def bench_matmul_par(b : B?) {
         }
         b |> run("par each-dot (32000) ") {
             matmul_par(y, w, x, 288l, 32000l, 32000)
+        }
+        // Q8 threaded: gate against the fp32 reference, then fp32 vs Q8 head-to-head at par-N.
+        var yq : array<float>
+        yq |> resize(32000)
+        matmul_q8_par(yq, qt.q, qt.scales, x, 288l, 32000l, N)
+        for (i in range(32000)) {
+            if (abs(yq[i] - yref[i]) > 1.0) {  // lossy-vs-original sanity gate; exact gate is in bench_matmul.das
+                b->failNow()
+            }
+        }
+        b |> run("fp32 par-N           ") {
+            matmul_par(y, w, x, 288l, 32000l, N)
+        }
+        b |> run("q8   par-N           ") {
+            matmul_q8_par(yq, qt.q, qt.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q8   par-2N          ") {
+            matmul_q8_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q8   par-4N          ") {
+            matmul_q8_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 4)
+        }
+        b |> run("q8f4 par-N           ") {
+            matmul_q8f4_par(yq, qt.q, qt.scales, x, 288l, 32000l, N)
+        }
+        b |> run("q8f4 par-2N          ") {
+            matmul_q8f4_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 2)
+        }
+        b |> run("q8f4 par-4N          ") {
+            matmul_q8f4_par(yq, qt.q, qt.scales, x, 288l, 32000l, N * 4)
         }
     }
 }
