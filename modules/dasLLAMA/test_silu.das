@@ -10,7 +10,7 @@ def test_silu(t : T?) {
     // silu(-1)=-0.2689414 (negative — SiLU is non-monotonic, dips below zero).
     t |> run("known values") @(t : T?) {
         var x <- [0.0, 1.0, 2.0, -1.0]
-        silu(x, 4)
+        silu(x, 4l)
         t |> success(abs(x[0]) < 1e-6)              // 0 * sigmoid(0) = 0 exactly
         t |> success(abs(x[1] - 0.7310586) < 1e-4)
         t |> success(abs(x[2] - 1.7615942) < 1e-4)
@@ -19,7 +19,7 @@ def test_silu(t : T?) {
     // Saturation: sigmoid -> 1 so silu(x) -> x for large +x; sigmoid -> 0 so silu(x) -> 0 for large -x.
     t |> run("saturation") @(t : T?) {
         var x <- [20.0, -20.0]
-        silu(x, 2)
+        silu(x, 2l)
         t |> success(abs(x[0] - 20.0) < 1e-4)
         t |> success(abs(x[1]) < 1e-4)
     }

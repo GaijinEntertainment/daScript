@@ -9,7 +9,7 @@ def test_softmax(t : T?) {
     // Output is a probability distribution: positive, order-preserving, sums to 1.
     t |> run("distribution sums to 1") @(t : T?) {
         var x <- [1.0, 2.0, 3.0]
-        softmax(x, 3)
+        softmax(x, 3l)
         var sum = 0.0
         for (i in range(3)) {
             sum += x[i]
@@ -21,7 +21,7 @@ def test_softmax(t : T?) {
     // Equal scores -> uniform distribution.
     t |> run("uniform input -> uniform output") @(t : T?) {
         var x <- [5.0, 5.0, 5.0, 5.0]
-        softmax(x, 4)
+        softmax(x, 4l)
         for (i in range(4)) {
             t |> success(abs(x[i] - 0.25) < 1e-6)
         }
@@ -31,8 +31,8 @@ def test_softmax(t : T?) {
     t |> run("numerical stability") @(t : T?) {
         var big <- [1000.0, 1001.0, 1002.0]
         var small <- [0.0, 1.0, 2.0]
-        softmax(big, 3)
-        softmax(small, 3)
+        softmax(big, 3l)
+        softmax(small, 3l)
         var sum = 0.0
         for (i in range(3)) {
             sum += big[i]

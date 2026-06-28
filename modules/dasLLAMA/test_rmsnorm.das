@@ -11,7 +11,7 @@ def test_rmsnorm(t : T?) {
         var o <- [0.0, 0.0, 0.0]
         let x <- [7.0, 7.0, 7.0]
         let w <- [1.0, 1.0, 1.0]
-        rmsnorm(o, x, w, 3)
+        rmsnorm(o, x, w, 3l)
         for (j in range(3)) {
             t |> success(abs(o[j] - 1.0) < 1e-4)
         }
@@ -21,7 +21,7 @@ def test_rmsnorm(t : T?) {
         var o <- [0.0, 0.0, 0.0, 0.0]
         let x <- [1.0, 2.0, 3.0, 4.0]
         let w <- [1.0, 1.0, 1.0, 1.0]
-        rmsnorm(o, x, w, 4)
+        rmsnorm(o, x, w, 4l)
         var ss = 0.0
         for (j in range(4)) {
             ss += o[j] * o[j]
@@ -33,7 +33,7 @@ def test_rmsnorm(t : T?) {
         var o <- [0.0, 0.0, 0.0, 0.0]
         let x <- [1.0, 1.0, 1.0, 1.0]
         let w <- [2.0, 3.0, 4.0, 5.0]
-        rmsnorm(o, x, w, 4)
+        rmsnorm(o, x, w, 4l)
         for (j in range(4)) {
             t |> success(abs(o[j] - w[j]) < 1e-3)
         }

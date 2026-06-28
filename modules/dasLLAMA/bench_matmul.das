@@ -23,7 +23,7 @@ def bench_matmul(b : B?) {
         fill(x, 288)
         y |> resize(288)
         b |> run("proj 288x288") {
-            matmul(y, w, x, 288, 288)
+            matmul(y, w, x, 288l, 288l)
         }
     }
     // stories15M classifier head — W is 32000 x 288 (the heaviest single matmul).
@@ -35,7 +35,7 @@ def bench_matmul(b : B?) {
         fill(x, 288)
         y |> resize(32000)
         b |> run("classifier 32000x288") {
-            matmul(y, w, x, 288, 32000)
+            matmul(y, w, x, 288l, 32000l)
         }
     }
 }
