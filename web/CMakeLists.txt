@@ -112,6 +112,13 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasO
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasGlsl/glsl@modules/dasGlsl/glsl")
 #   stbimage, stbimage/stbimage_boost, stbimage/stbimage_ttf -> modules/dasStbImage/stbimage
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasStbImage/stbimage@modules/dasStbImage/stbimage")
+# Embed the HUD font so cache_font("{get_das_root()}/modules/dasStbImage/fonts/
+# droidsansmono.ttf") resolves in the interpreter. opengl_ttf asserts a non-empty
+# font bitmap, so a missing .ttf kills the script in init() — that is why the
+# arcanoid/pac-man playground samples (and any TTF-using example) showed a black
+# canvas. Mounted at /modules/dasStbImage/fonts: get_das_root() is "." on wasm and
+# the MEMFS cwd is "/", so the loader's "./modules/..." resolves to the embed.
+add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasStbImage/fonts@modules/dasStbImage/fonts")
 
 # Embed the dasAudio .das source trees (the matching halves of the statically
 # linked libDasModuleAudio). The native fs resolver looks for
