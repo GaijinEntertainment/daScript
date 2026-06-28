@@ -18,8 +18,8 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **stories15M** (llama2.c toy) | F32, self-Q8, self-Q4 | Llama-2 | SPM (`.bin`) | ✅ | `llama2.c ./run` greedy, token-for-token (Q8 too; Q4 coherent) |
 | **TinyLlama-1.1B-Chat-v0.3** | F16 GGUF | Llama-2 | SPM (GGUF) | ✅ | `llama.cpp`, 40/40 token-for-token (weak model — ChatML) |
 | **TinyLlama-1.1B-Chat-v1.0** | Q8_0 GGUF | Llama-2 | SPM (GGUF) | ✅ | `llama.cpp`, 69/69 token-for-token vs fp32; good chat (Zephyr) |
-| **Llama-3.2-1B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | 🚧 | dev/iterate oracle for the BPE tokenizer arc |
-| **Llama-3.1-8B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | 🚧 | target (needs BPE tokenizer + rope_theta/scaling from metadata) |
+| **Llama-3.2-1B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | ✅ | `llama.cpp` (instrumented `simple_ids`, CPU greedy), 40/40 token-for-token |
+| **Llama-3.1-8B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | ✅ | `llama.cpp` (instrumented `simple_ids`, CPU greedy), 40/40 token-for-token (8.5GB, needs the fmap >4GB fix) |
 
 Models are **not** checked into the repo — they live in `~/Work/llama.cpp/models/`
 (gitignored). Get them with `hf download <repo> <file> --local-dir ~/Work/llama.cpp/models`.
@@ -32,6 +32,13 @@ bin/daslang -jit modules/dasLLAMA/dasllama_run.das          # vs ~/Work/llama2.c
 
 # TinyLlama F16 / Q8_0 GGUF, text-in -> text-out, token-for-token vs llama.cpp
 bin/daslang -jit modules/dasLLAMA/dasllama_gguf_run.das -- ~/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf
+
+# Llama-3 (BPE tokenizer + θ=500000 RoPE + llama3 scaling), token-for-token vs llama.cpp
+bin/daslang -jit modules/dasLLAMA/dasllama_llama3_run.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf
+bin/daslang -jit modules/dasLLAMA/dasllama_llama3_run.das -- ~/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf
+
+# BPE tokenizer corpus gate (no model needed — uses the in-repo ggml-vocab-llama-bpe fixture)
+bin/daslang -jit modules/dasLLAMA/dasllama_bpe_test.das
 
 # Interactive chat (TinyLlama-1.1B-Chat-v1.0 Q8_0, Zephyr template)
 bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
@@ -49,10 +56,11 @@ What a model needs to "just work" today:
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
 | Architecture | `arch == "llama"` only |
 | Attention | MHA **and** GQA (grouped-query) |
-| Normalization | RMSNorm — eps **hardcoded 1e-5** |
-| Positional encoding | RoPE, adjacent-pair convention — θ **hardcoded 10000** |
+| Normalization | RMSNorm — eps hardcoded 1e-5 (correct for Llama-2/3) |
+| Positional encoding | RoPE adjacent-pair; **θ + llama3 NTK-by-parts scaling read from GGUF metadata** (θ=10000 default, 500000 for Llama-3) |
 | FFN | SwiGLU |
-| Tokenizer | **SentencePiece** (llama2.c `.bin` + GGUF, `▁`→space) |
+| Tokenizer | **SentencePiece** (Llama-2 family) **and byte-level BPE / tiktoken** (Llama-3, vocab 128256) |
+| Model size | files >4GB load (needed the fmap >4GB engine fix) |
 | QKV bias | none (not read) |
 | Sampling | greedy, temperature, top-k, repetition penalty |
 | Performance | KV cache, SIMD + JobQue-threaded matmul, activation-quant Q8·Q8 (ARM SDOT) |
@@ -62,12 +70,9 @@ What a model needs to "just work" today:
 So there's no ambiguity about what will fail:
 
 - **`arch != "llama"`** (e.g. Qwen2 `"qwen2"`) — `load_gguf` panics.
-- **BPE / tiktoken tokenizer** (Llama-3 vocab 128256, Qwen BPE) — *in progress*; only SentencePiece works today.
-- **`rope_theta` / `rms_eps` from metadata** — both hardcoded (10000 / 1e-5). Llama-3 needs θ=500000.
-- **llama3 RoPE frequency scaling** — not implemented.
 - **QKV bias** (Qwen2) — attention has no bias term.
 - **Sliding-window attention** (Mistral, long context) — full attention only.
-- Non-chat `generate()` stops on **BOS only** — no EOS/`<|eot_id|>` break yet.
+- Non-chat `generate()` stops on **BOS only** — no EOS/`<|eot_id|>` break yet (chat loops handle their own stop tokens).
 
 ---
 
