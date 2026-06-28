@@ -69,6 +69,43 @@ def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : 
     }
 }
 
+//! Batched fp32 GEMM for prefill: Y [ntok x d] = X [ntok x n] · Wᵀ, W row-major [d x n].
+//! X is token-major (token t at X[t*n..]); Y is token-major (token t at Y[t*d..]). Weight-
+//! stationary nest (rows outer) — each weight row streams from DRAM once and is reused across
+//! all ntok tokens, vs ntok× matmul re-reading W every call. Bit-for-bit ntok× matmul.
+def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n, d, ntok : int64) {
+    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
+        unsafe {
+            let yp = addr(y[0])
+            let wp = reinterpret<float const?>(addr(w[0]))
+            let xp = reinterpret<float const?>(addr(x[0]))
+            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
+                unsafe {
+                    var myp = reinterpret<float?>(yp)
+                    for (i in range(rb, re)) {
+                        let wrow = wp + int64(i) * n
+                        for (tk in range64(ntok)) {
+                            myp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
+                        }
+                    }
+                }
+                wg |> notify_and_release
+            }
+        }
+    } else {
+        unsafe {
+            let wp = reinterpret<float const?>(addr(w[0]))
+            let xp = reinterpret<float const?>(addr(x[0]))
+            for (i in range64(d)) {
+                let wrow = wp + i * n
+                for (tk in range64(ntok)) {
+                    y[tk * d + i] = dot(wrow, xp + tk * n, n)
+                }
+            }
+        }
+    }
+}
+
 //! Q8_0 dequant-in-dot: weights are int8 quants `wq` + one fp32 scale `ws` per 32-block,
 //! activations `x` stay fp32. A float4 accumulator is carried across the blocks (scale
 //! applied per block as a broadcast fma), with a single horizontal reduce at the end —
@@ -178,6 +215,47 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
             let xsp = reinterpret<float const?>(addr(xs[0]))
             for (i in range64(d)) {
                 y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+            }
+        }
+    }
+}
+
+//! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the int8
+//! SDOT kernel. Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]).
+//! Y token-major [ntok x d]. Bit-for-bit ntok× matmul_q8q8. n % 32 == 0.
+def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    let nb = n / 32l
+    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
+        unsafe {
+            let yp = addr(y[0])
+            let wp = reinterpret<int8 const?>(addr(wq[0]))
+            let sp = reinterpret<float const?>(addr(ws[0]))
+            let xqp = reinterpret<int8 const?>(addr(xq[0]))
+            let xsp = reinterpret<float const?>(addr(xs[0]))
+            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
+                unsafe {
+                    var myp = reinterpret<float?>(yp)
+                    for (i in range(rb, re)) {
+                        let wrow = wp + int64(i) * n
+                        let srow = sp + int64(i) * nb
+                        for (tk in range64(ntok)) {
+                            myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                        }
+                    }
+                }
+                wg |> notify_and_release
+            }
+        }
+    } else {
+        unsafe {
+            let xqp = reinterpret<int8 const?>(addr(xq[0]))
+            let xsp = reinterpret<float const?>(addr(xs[0]))
+            for (i in range64(d)) {
+                let wrow = reinterpret<int8 const?>(addr(wq[i * n]))
+                let srow = reinterpret<float const?>(addr(ws[i * nb]))
+                for (tk in range64(ntok)) {
+                    y[tk * d + i] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                }
             }
         }
     }
