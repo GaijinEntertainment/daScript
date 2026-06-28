@@ -307,15 +307,21 @@ jobs:
 
         # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the external
         # dasImgui module, which the universal interpreter can't bind, so there is NO
-        # interpreted fallback (no .das sources to stage). Skip gracefully if the
-        # non-fatal build above produced no artifact.
-        if [ -f web/output64/examples/furier/furier.wasm ]; then
-            mkdir -p _site/examples/furier
+        # interpreted fallback (no .das sources to stage). The card is always listed
+        # in examples.js, so stage the compiled build only when ALL THREE outputs are
+        # present; otherwise stage a small placeholder furier.html so a memory64 engine
+        # loads a friendly "being rebuilt" note instead of 404-ing the iframe (and
+        # flipping the player to a bogus "running" on the 404 page's load event).
+        mkdir -p _site/examples/furier
+        if [ -f web/output64/examples/furier/furier.html ] \
+           && [ -f web/output64/examples/furier/furier.js ] \
+           && [ -f web/output64/examples/furier/furier.wasm ]; then
             cp web/output64/examples/furier/furier.html _site/examples/furier/
             cp web/output64/examples/furier/furier.js   _site/examples/furier/
             cp web/output64/examples/furier/furier.wasm _site/examples/furier/
         else
-            echo "WARNING: web/output64/examples/furier/furier.wasm missing — furier card unavailable this deploy."
+            echo "WARNING: furier wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fourier Series — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/furier/furier.html
         fi
 
         # GitHub Pages control files
