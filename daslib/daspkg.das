@@ -199,7 +199,9 @@ def release_emcc_arg(arg : string) {
 }
 
 //! Declare a file a module needs embedded in the wasm MEMFS for `release wasm`
-//! (emcc `--embed-file src@dst`). `src` is relative to <das_root>; `dst` is the
+//! (emcc `--embed-file src@dst`). `src` is relative to the module dir (this
+//! .das_package's location, like release_main / release_wasm_archive), so it
+//! resolves for an external module under <project>/modules/<dep> too; `dst` is the
 //! absolute MEMFS path the runtime opens at (e.g. dasStbImage embeds its HUD
 //! font at `/modules/dasStbImage/fonts/droidsansmono.ttf`).
 def release_embed_file(src, dst : string) {

@@ -2153,7 +2153,16 @@ def private gather_wasm_module(pkg_dir : string; var emcc_args, embeds : array<s
     var info : PackageReleaseInfo
     if (!run_das_package_release(pkg_file, info)) return
     emcc_args |> push_from(info.emcc_args)
-    embeds |> push_from(info.embed_paths)
+    // release_embed_file() src is module-relative (like release_main / release_wasm_archive); resolve it
+    // against the module dir HERE, where pkg_dir is known, into an absolute path. An external module
+    // lives under <project>/modules/<dep>, NOT <das_root>/modules/<dep>, so a das_root-relative resolve
+    // at link time would miss its embeds (e.g. dasImgui's font).
+    for (e in info.embed_paths) {
+        let at = find(e, "@")
+        if (at < 0) continue
+        let abs_src = get_full_file_name(path_join(pkg_dir, slice(e, 0, at)))
+        embeds |> push("{abs_src}@{slice(e, at + 1)}")
+    }
 }
 
 // An EXTERNAL module (not part of daslang's in-tree web build, so `daspkg build --wasm`
@@ -2226,7 +2235,11 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
     //    --disable-module dashv: libhv is native-only (no wasm archive), so keep it
     //    unloaded on the cross-compile host — a guarded `require ?dashv` then resolves
     //    as absent instead of pulling in a module whose wasm archive can't exist.
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
+    //    -project-root {root}: dyn-module discovery roots at the PACKAGE dir, not the
+    //    main script's dir. They differ when release_main() points outside the package
+    //    (e.g. an example whose .das_package sits beside the source) — without this the
+    //    cross-compile scans the script's folder and misses the package's modules/<dep>.
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -2310,9 +2323,10 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
         for (e in embeds) {
             let at = find(e, "@")
             if (at >= 0) {
+                // src is already an absolute path resolved against the owning module dir (gather_wasm_module).
                 let src = slice(e, 0, at)
                 let dst = slice(e, at + 1)
-                w |> write(" --embed-file \"{das_root}/{src}@{dst}\"")
+                w |> write(" --embed-file \"{src}@{dst}\"")
             }
         }
         w |> write(" --shell-file \"{shell_path}\" -o \"{html_out}\"")
