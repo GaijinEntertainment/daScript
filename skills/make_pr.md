@@ -32,10 +32,16 @@ Drift like this produces preflight failures that look like code bugs but aren't 
 
 ```bash
 rm -rf build                                            # the ONE sanctioned rm -rf build
+# One-time per machine: point OpenSSL at a shared cache so `rm -rf build` doesn't
+# rebuild it from source (several min) every clean build. dasHV reads DASLANG_OPENSSL_DIR
+# (find_package(OpenSSL) then resolves it via OPENSSL_ROOT_DIR and skips the source build);
+# unset → it builds into build/openssl, which the rm -rf just deleted. CI is ephemeral
+# (no cache, sets neither) so it always builds OpenSSL from source — that's fine.
+#   setx DASLANG_OPENSSL_DIR "%LOCALAPPDATA%\daslang\openssl"   (build OpenSSL there once)
 # Configure with CI's release modules ON (mirror ci/release_modules.txt — see skills/preflight.md):
 cmake -S . -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLED=OFF \
   -DDAS_PUGIXML_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_GLFW_DISABLED=OFF
-cmake --build build --config Release -j 64              # full clean build (15-25 min); pass timeout: 0
+cmake --build build --config Release -j 64              # full clean build; pass timeout: 0
 ```
 
 The clean build is the cost of never debugging build-config drift again. It also means preflight runs against generated files that actually match HEAD's source — which is the whole point of the gate.
