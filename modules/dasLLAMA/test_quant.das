@@ -87,3 +87,72 @@ def test_quant(t : T?) {
         t |> success(st.snr_db > 30.0lf, "tail block still quantizes well")
     }
 }
+
+// Q4_0 round-trip properties (GGML layout: d = smax/-8, offset-8, split-half packing). 4 bits, so
+// the step is coarser than Q8: errors are bounded by half a step, and SNR lands ~20 dB lower.
+
+[test]
+def test_quant_q4(t : T?) {
+    // A constant block recovers exactly: smax=c, d=c/-8, every element maps to nibble 0, dq == c.
+    t |> run("constant block round-trips") @(t : T?) {
+        var src : array<float>
+        src |> resize(32)
+        for (i in range(32)) {
+            src[i] = 3.0
+        }
+        let qt <- quantize_q4_0(src, 32l)
+        t |> equal(int64(length(qt.q)), 16l)  // 32 nibbles packed two per byte
+        var deq : array<float>
+        deq |> resize(32)
+        dequantize_q4_0(qt, deq)
+        for (i in range(32)) {
+            t |> success(abs(deq[i] - 3.0) < 1.0e-4, "constant must round-trip")
+        }
+    }
+    // An all-zero block stays zero (the d==0 guard must not divide by zero; nibbles are 8 -> 0).
+    t |> run("zero block stays zero") @(t : T?) {
+        var src : array<float>
+        src |> resize(32)
+        let qt <- quantize_q4_0(src, 32l)
+        t |> equal(qt.scales[0], 0.0)
+        var deq : array<float>
+        deq |> resize(32)
+        dequantize_q4_0(qt, deq)
+        for (i in range(32)) {
+            t |> equal(deq[i], 0.0)
+        }
+    }
+    // With the max-magnitude element = 8 the scale magnitude is exactly 1, so per-element error is
+    // <= 0.5, and that element comes back exactly (it sets the scale, mapping to nibble 0).
+    t |> run("error bounded by half a step") @(t : T?) {
+        let src <- [8.0, 0.4, -0.4, 1.6, -1.6, 2.5, -2.5, 6.3,
+                    -6.3, 5.7, -5.7, 3.0, -3.0, 6.9, -6.9, 0.1,
+                    -0.1, 4.7, -4.7, 4.0, -4.0, 0.49, -0.49, 3.5,
+                    -3.5, 2.0, -2.0, 5.0, -5.0, 5.5, -5.5, 1.0]
+        let qt <- quantize_q4_0(src, 32l)
+        var deq : array<float>
+        deq |> resize(32)
+        dequantize_q4_0(qt, deq)
+        let d = qt.scales[0]
+        t |> success(abs(abs(d) - 1.0) < 1.0e-4, "max-magnitude 8 => |scale| 1")
+        t |> success(abs(deq[0] - 8.0) < 1.0e-3, "max element recovers exactly")
+        for (i in range(32)) {
+            t |> success(abs(deq[i] - src[i]) <= 0.5 + 1.0e-4, "error within half a step")
+        }
+    }
+    // quant_error_stats over a multi-block ramp: bounded max error, SNR clears 20 dB (4-bit).
+    t |> run("error stats on a ramp") @(t : T?) {
+        let n = 96l
+        var src : array<float>
+        src |> resize(n)
+        for (i in range64(n)) {
+            src[i] = float(i) * 0.25 - 12.0  // -12 .. +11.75 across 3 blocks
+        }
+        let qt <- quantize_q4_0(src, n)
+        var deq : array<float>
+        deq |> resize(n)
+        dequantize_q4_0(qt, deq)
+        let st = quant_error_stats(src, deq, n)
+        t |> success(st.snr_db > 20.0lf, "Q4 SNR should clear 20 dB")
+    }
+}
