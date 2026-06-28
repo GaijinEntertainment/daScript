@@ -62,8 +62,13 @@ def decode_ids(tok : Tokenizer; ids : array<int64>; limit : int) : string {
 
 [export]
 def main {
-    print("loading {MODEL}\n")
-    var t <- load_gguf(MODEL)
+    var path = MODEL
+    let args = get_command_line_arguments()
+    if (!empty(args)) {
+        path = args[length(args) - 1]
+    }
+    print("loading {path}\n")
+    var t <- load_gguf(path)
     let tok <- load_tokenizer_gguf(MODEL)
     let c = t.config
     print("config: dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size}\n")
