@@ -63,7 +63,7 @@ struct df_header {
 }
 
 [generic]
-def fload(file : file; size : int; blk : block<(data : array<uint8>) : void>) : void {
+def fload(file : file; size : int64; blk : block<(data : array<uint8>) : void>) : void {
     _builtin_load(file, size, blk)
 }
 
@@ -73,7 +73,7 @@ def fload(f : file; buf : auto(BufType) -const) {
     let r1 = _builtin_read(f, dfh, typeinfo sizeof(type<df_header>))
     if (r1 < 0 || dfh.magic != df_magic) return false
     var loaded = false
-    _builtin_load(f, dfh.size) $(data : array<uint8>) {
+    _builtin_load(f, int64(dfh.size)) $(data : array<uint8>) {
         if (length(data) != 0) {
             binary_load(buf, data)
             loaded = true
