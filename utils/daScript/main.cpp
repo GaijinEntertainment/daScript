@@ -568,6 +568,7 @@ void print_help() {
         << "    -project <path.das_project> path to project file\n"
         << "    -project_root <path> root directory of the project (used for dyn modules)\n"
         << "    -load_module <path> directly load a single dynamic-module folder (the one containing .das_module); repeatable. Bypasses the project_root/modules/<name> scan and shadows same-basename entries from dasroot/project_root.\n"
+        << "    --disable-module <name> never load/register the named dynamic module (case-insensitive folder match); repeatable. Keeps a native-only module (e.g. dashv) out of a wasm cross-compile so a guarded `require ?name` resolves as absent.\n"
         << "    -run-fmt    <-i/-d> <-v2/-v1> {--semicolon} run formatter\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
@@ -659,6 +660,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool dumpLeaks = true;
     string project_root;
     vector<string> load_modules;
+    vector<string> disabled_modules;
     optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
@@ -749,6 +751,14 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     return -1;
                 }
                 load_modules.push_back(argv[i + 1]);
+                i++;
+            } else if ( cmd=="-disable-module" ) {
+                if ( i+1 >= argc ) {
+                    printf("--disable-module requires module-name argument\n");
+                    print_help();
+                    return -1;
+                }
+                disabled_modules.push_back(argv[i + 1]);
                 i++;
             } else if ( cmd=="run-fmt" ) {
                 formatter.emplace();
@@ -892,7 +902,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         daScriptEnvironment::ensure();
         project_root = deduce_project_root(project_root, files.front());
         auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-        require_dynamic_modules(access, getDasRoot(), project_root, load_modules, tout);
+        require_dynamic_modules(access, getDasRoot(), project_root, load_modules, disabled_modules, tout);
     }
     #endif
     Module::Initialize();

@@ -2183,7 +2183,10 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
 
     // 1. Cross-compile to a wasm64 object (link skipped via --jit-emit-object),
     //    with --list-shared-modules writing the referenced-module set.
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
+    //    --disable-module dashv: libhv is native-only (no wasm archive), so keep it
+    //    unloaded on the cross-compile host — a guarded `require ?dashv` then resolves
+    //    as absent instead of pulling in a module whose wasm archive can't exist.
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
