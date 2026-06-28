@@ -612,11 +612,11 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 //! Leaves the KV cache filled for every position and s.logits = the logits at the LAST position
 //! (what you sample the first generated token from). Bit-for-bit identical to calling forward() for
 //! pos 0..npos-1 in sequence. Q4 has no batched kernel, so it falls back to that per-token path.
-def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; npos : int64) {
+def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; npos, start_pos : int64) {
     let c = t.config
     if (t.quant == QuantMode.q4 || npos <= 0l) {
         for (p in range64(npos)) {
-            forward(t, s, tokens[p], p)
+            forward(t, s, tokens[p], start_pos + p)
         }
         return
     }
@@ -665,34 +665,37 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_b(s.q_b, t, t.wq_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
         mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
         mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
-        // RoPE per position, then store k/v into the cache for every position
+        // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
         for (p in range64(npos)) {
+            let ap = start_pos + p
             array_view(s.q_b, p * dim, dim) $(var qv : array<float>#) {
-                rope_scaled(qv, p, head_size, dim, c.rope_freq_base, t.rope_freqs)
+                rope_scaled(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs)
             }
             array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
-                rope_scaled(kvv, p, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
+                rope_scaled(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
             }
-            let kvoff = loff + p * kv_dim
+            let kvoff = loff + ap * kv_dim
             for (i in range64(kv_dim)) {
                 s.key_cache[kvoff + i] = s.k_b[p * kv_dim + i]
                 s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
             }
         }
-        // per-position causal attention into xb_b (position p attends to cached keys 0..p)
+        // per-position causal attention into xb_b (position ap attends to cached keys 0..ap —
+        // includes any earlier positions already in the cache, e.g. previous chat turns)
         for (p in range64(npos)) {
+            let ap = start_pos + p
             for (h in range64(n_heads)) {
                 let qoff = h * head_size
                 let kvhoff = (h / kv_mul) * head_size
-                for (tp in range64(p + 1l)) {
+                for (tp in range64(ap + 1l)) {
                     let koff = loff + tp * kv_dim + kvhoff
                     s.att[tp] = dot(unsafe(addr(s.q_b[p * dim + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
                 }
-                softmax(s.att, p + 1l)
+                softmax(s.att, ap + 1l)
                 for (i in range64(head_size)) {
                     s.xb_b[p * dim + qoff + i] = 0.0
                 }
-                for (tp in range64(p + 1l)) {
+                for (tp in range64(ap + 1l)) {
                     let voff = loff + tp * kv_dim + kvhoff
                     axpy(unsafe(addr(s.xb_b[p * dim + qoff])), unsafe(addr(s.value_cache[voff])), s.att[tp], head_size)
                 }
@@ -737,6 +740,18 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     }
 }
 
+//! Unified batch entry (llama.cpp-style): process `npos` tokens at absolute positions
+//! start_pos..start_pos+npos-1. npos==1 dispatches to the fused per-token forward() (decode, keeping
+//! its mm_qkv group3 + 1N threading); npos>1 to the batched forward_prefill. Leaves s.logits = the
+//! last token's logits and extends the KV cache by npos positions.
+def forward_batch(t : Transformer; var s : RunState; tokens : array<int64>; npos, start_pos : int64) {
+    if (npos == 1l) {
+        forward(t, s, tokens[0], start_pos)
+    } else {
+        forward_prefill(t, s, tokens, npos, start_pos)
+    }
+}
+
 //! Greedy argmax over the current logits; returns the winning token id.
 def private argmax(s : RunState; vocab : int64) : int64 {
     var best = 0l
@@ -757,20 +772,46 @@ def private argmax(s : RunState; vocab : int64) : int64 {
 def generate(t : Transformer; var s : RunState; prompt_tokens : array<int64>; steps : int) : array<int64> {
     var ids : array<int64>
     let n_prompt = int64(length(prompt_tokens))
-    var token = prompt_tokens[0]
-    for (pos in range64(steps)) {
-        forward(t, s, token, pos)
-        var next = 0l
-        if (pos < n_prompt - 1l) {
-            next = prompt_tokens[pos + 1l]  // still consuming the prompt
-        } else {
-            next = argmax(s, t.config.vocab_size)
+    let nsteps = int64(steps)
+    if (nsteps <= 0l || n_prompt <= 0l) {
+        return <- ids
+    }
+    ids |> reserve(nsteps)
+    // prefill the whole prompt in one batched pass (cache 0..n_prompt-1; logits at the last position)
+    forward_batch(t, s, prompt_tokens, n_prompt, 0l)
+    // echo prompt[1..n_prompt-1] (the forced "next" tokens while consuming the prompt), honoring
+    // the step budget and the BOS delimiter
+    for (q in range64(n_prompt - 1l)) {
+        if (int64(length(ids)) >= nsteps) {
+            return <- ids
         }
-        if (next == 1l) {  // BOS delimits sequences
+        let tok = prompt_tokens[q + 1l]
+        if (tok == 1l) {
+            return <- ids
+        }
+        ids |> push(tok)
+    }
+    // greedy continuation: sample from the last prompt position's logits, then decode one token
+    // per step at the next absolute position
+    if (int64(length(ids)) >= nsteps) {
+        return <- ids
+    }
+    var token = argmax(s, t.config.vocab_size)
+    var apos = n_prompt
+    var one : array<int64>
+    one |> resize(1)
+    while (int64(length(ids)) < nsteps) {
+        if (token == 1l) {  // BOS delimits sequences
             break
         }
-        ids |> push(next)
-        token = next
+        ids |> push(token)
+        if (int64(length(ids)) >= nsteps) {
+            break
+        }
+        one[0] = token
+        forward_batch(t, s, one, 1l, apos)
+        apos ++
+        token = argmax(s, t.config.vocab_size)
     }
     return <- ids
 }
