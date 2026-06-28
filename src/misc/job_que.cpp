@@ -154,7 +154,14 @@ namespace das {
                 mFifo.pop_front();
                 mJobsRunning++;
             }
-            SetCurrentThreadPriority(mThreads[threadIndex].currentPriority);
+            // Only touch the OS thread priority when it actually changes — every job otherwise pays
+            // a pthread_setschedparam syscall, and a parallel_for fires the same priority on every
+            // chunk (~thousands of redundant syscalls per LLM token). Only this worker writes its own
+            // appliedPriority, so no lock needed.
+            if ( mThreads[threadIndex].currentPriority != mThreads[threadIndex].appliedPriority ) {
+                SetCurrentThreadPriority(mThreads[threadIndex].currentPriority);
+                mThreads[threadIndex].appliedPriority = mThreads[threadIndex].currentPriority;
+            }
             job();
             {
                 unique_lock<mutex> lock(mFifoMutex);
