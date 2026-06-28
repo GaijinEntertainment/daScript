@@ -63,3 +63,23 @@ def silu(var x : array<float>; size : int) {
         x[i] = v / (1.0 + exp(-v))
     }
 }
+
+//! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1)
+//! within a head by angle pos*freq, freq = 1/10000^(2j/head_size) (low pairs spin fast,
+//! high pairs slow). This encodes position as rotation, so a later Q·K dot product
+//! depends only on the relative offset between the two tokens. In place over the first
+//! `n` elements (n = dim for Q, kv_dim for K); matches llama2.c's adjacent-pairs scheme.
+def rope(var vec : array<float>; pos, head_size, n : int) {
+    for (p in range(n / 2)) {
+        let i = p * 2
+        let head_dim = i % head_size
+        let freq = 1.0 / pow(10000.0, float(head_dim) / float(head_size))
+        let angle = float(pos) * freq
+        let fcr = cos(angle)
+        let fci = sin(angle)
+        let v0 = vec[i]
+        let v1 = vec[i + 1]
+        vec[i] = v0 * fcr - v1 * fci
+        vec[i + 1] = v0 * fci + v1 * fcr
+    }
+}
