@@ -35,3 +35,21 @@ def rmsnorm(var o : array<float>; x : array<float>; weight : array<float>; size 
         o[j] = weight[j] * (x[j] * ss)
     }
 }
+
+//! softmax — turns a score vector into a probability distribution (sums to 1).
+//! In place over the first `size` elements. Subtracts the max first so exp() can't
+//! overflow (exp(x-max)/sum(exp(x-max)) is identical math, numerically safe).
+def softmax(var x : array<float>; size : int) {
+    var maxv = x[0]
+    for (i in range(1, size)) {
+        maxv = max(maxv, x[i])
+    }
+    var sum = 0.0
+    for (i in range(size)) {
+        x[i] = exp(x[i] - maxv)
+        sum += x[i]
+    }
+    for (i in range(size)) {
+        x[i] /= sum
+    }
+}
