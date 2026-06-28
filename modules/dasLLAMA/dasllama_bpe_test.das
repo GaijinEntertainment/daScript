@@ -11,7 +11,6 @@ require dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
-require math
 
 let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/ggml-vocab-llama-bpe.gguf"
 let SEP = "\n__ggml_vocab_test__\n"
@@ -27,6 +26,27 @@ def drop_trailing_empty(var xs : array<string>) {
     if (!empty(xs) && empty(xs[length(xs) - 1])) {
         xs |> erase(length(xs) - 1)
     }
+}
+
+def ids_equal(a, b : array<int64>) : bool {
+    if (length(a) != length(b)) {
+        return false
+    }
+    for (i in range(length(a))) {
+        return false if (a[i] != b[i])
+    }
+    return true
+}
+
+// Independent cross-check: ids captured from `llama-tokenize` (BOS stripped, since
+// bpe_encode is BOS-free) on sentences NOT in the fixture corpus.
+def check_fresh(tk : BPETokenizer; text : string; want : array<int64>) : bool {
+    let got <- bpe_encode(tk, text)
+    let ok = ids_equal(got, want)
+    if (!ok) {
+        to_log(LOG_ERROR, "FRESH FAIL '{text}'\n    want {want}\n    got  {got}\n")
+    }
+    return ok
 }
 
 [export]
@@ -45,11 +65,23 @@ def main() {
         return
     }
 
-    // Sample the first few aligned pairs to eyeball the parse before encode exists.
-    for (i in range(min(3, length(inputs)))) {
+    var npass = 0
+    var nfail = 0
+    for (i in range(length(inputs))) {
         let want = parse_out_ids(outlines[i])
-        to_log(LOG_INFO, "  [{i}] in='{inputs[i]}' -> expect {length(want)} ids: {want}\n")
+        let got <- bpe_encode(tk, inputs[i])
+        if (ids_equal(got, want)) {
+            npass++
+        } else {
+            nfail++
+            to_log(LOG_ERROR, "FAIL [{i}] in='{inputs[i]}'\n    want {want}\n    got  {got}\n")
+        }
     }
+    to_log(LOG_INFO, "BPE corpus: {npass}/{length(inputs)} passed, {nfail} failed\n")
 
-    to_log(LOG_INFO, "harness ready — {length(inputs)} test cases; bpe_encode gate lands next step\n")
+    var fresh_ok = true
+    fresh_ok = fresh_ok && check_fresh(tk, "Hello, world! It's 2026.", [9906l, 11l, 1917l, 0l, 1102l, 596l, 220l, 2366l, 21l, 13l])
+    fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])
+    fresh_ok = fresh_ok && check_fresh(tk, "  spaces   and\ttabs", [220l, 12908l, 256l, 323l, 3324l, 3518l])
+    to_log(LOG_INFO, "fresh cross-check: {fresh_ok ? "PASS" : "FAIL"}\n")
 }

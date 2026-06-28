@@ -4,6 +4,8 @@ module dasllama_bpe shared public
 
 require daslib/fio
 require dasllama_gguf
+require dasllama_unicode
+require strings
 
 //! Byte-level BPE tokenizer (Llama-3 / tiktoken family), loaded from a GGUF.
 //! Distinct from the SentencePiece path in dasllama_tokenizer: merges are *ranked*
@@ -46,4 +48,215 @@ def load_bpe_tokenizer_gguf(path : string) : BPETokenizer {
     }
     fclose(f)
     return <- tk
+}
+
+// ===== GPT-2 byte <-> unicode alphabet =====
+
+// byte -> its visible-unicode piece (utf8). Printable bytes map to themselves;
+// the rest map to codepoints 256+n (in byte order) so every byte is a printable token.
+var private BYTE2UNI : array<string>
+
+[init]
+def init_byte2uni() {
+    BYTE2UNI |> resize(256)
+    var n = 0
+    for (ch in range(256)) {
+        let printable = (ch >= 33 && ch <= 126) || (ch >= 161 && ch <= 172) || (ch >= 174 && ch <= 255)
+        var cpt = ch
+        if (!printable) {
+            cpt = 256 + n
+            n++
+        }
+        BYTE2UNI[ch] = cpt_to_utf8(cpt)
+    }
+}
+
+// ===== llama3 pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3) =====
+// Splits codepoints into word lengths per the llama3 regex; classification via the
+// dasllama_unicode tables so the split matches llama.cpp's exactly.
+
+def private tolower_ascii(c : int) : int {
+    return (c >= 'A' && c <= 'Z') ? c + 32 : c
+}
+
+def private uL(cpts : array<int>; pos : int) : bool {
+    return pos >= 0 && pos < length(cpts) && cpt_is_letter(cpts[pos])
+}
+def private uN(cpts : array<int>; pos : int) : bool {
+    return pos >= 0 && pos < length(cpts) && cpt_is_number(cpts[pos])
+}
+def private uW(cpts : array<int>; pos : int) : bool {
+    return pos >= 0 && pos < length(cpts) && cpt_is_whitespace(cpts[pos])
+}
+def private uC(cpts : array<int>; pos : int) : int {
+    return (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
+}
+
+def private llama3_split(cpts : array<int>) : array<int> {
+    var offs : array<int>
+    let n = length(cpts)
+    var prev_end = 0
+    var pos = 0
+    while (pos < n) {
+        let cpt = cpts[pos]
+
+        // (?i:'s|'t|'re|'ve|'m|'ll|'d)
+        if (cpt == 39 && pos + 1 < n) {
+            let c1 = tolower_ascii(cpts[pos + 1])
+            if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
+                pos += 2
+                offs |> push(pos - prev_end); prev_end = pos
+                continue
+            }
+            if (pos + 2 < n) {
+                let c2 = tolower_ascii(cpts[pos + 2])
+                if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
+                    pos += 3
+                    offs |> push(pos - prev_end); prev_end = pos
+                    continue
+                }
+            }
+        }
+
+        // [^\r\n\p{L}\p{N}]?\p{L}+  (optional non-letter prefix, then letters)
+        if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
+            if (cpt_is_letter(cpt) || uL(cpts, pos + 1)) {
+                pos++
+                while (uL(cpts, pos)) {
+                    pos++
+                }
+                offs |> push(pos - prev_end); prev_end = pos
+                continue
+            }
+        }
+
+        // \p{N}{1,3}  (digits in chunks of up to three)
+        if (cpt_is_number(cpt)) {
+            var ini = pos
+            while (uN(cpts, pos)) {
+                pos++
+                if (pos - ini >= 3) {
+                    offs |> push(pos - prev_end); prev_end = pos
+                    ini = pos
+                }
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // <space>?[^\s\p{L}\p{N}]+[\r\n]*  (optional space, then a non-space/letter/number run)
+        let probe = (cpt == 32) ? pos + 1 : pos
+        if (!(uW(cpts, probe) || uL(cpts, probe) || uN(cpts, probe))) {
+            if (cpt == 32) {
+                pos++
+            }
+            while (!(uW(cpts, pos) || uL(cpts, pos) || uN(cpts, pos)) && pos < n) {
+                pos++
+            }
+            var c2 = uC(cpts, pos)
+            while (c2 == 13 || c2 == 10) {
+                pos++
+                c2 = uC(cpts, pos)
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // remaining whitespace rules: \s*[\r\n]+ | \s+(?!\S) | \s+
+        var num_ws = 0
+        var last_rn = 0
+        while (uW(cpts, pos + num_ws)) {
+            let c2 = uC(cpts, pos + num_ws)
+            if (c2 == 13 || c2 == 10) {
+                last_rn = pos + num_ws + 1
+            }
+            num_ws++
+        }
+        if (last_rn > 0) {
+            pos = last_rn
+        } elif (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
+            pos += num_ws - 1
+        } elif (num_ws > 0) {
+            pos += num_ws
+        } else {
+            pos++  // no match — consume one codepoint
+        }
+        offs |> push(pos - prev_end); prev_end = pos
+    }
+    return <- offs
+}
+
+// ===== merge-rank BPE =====
+
+// Greedily merge the lowest-rank adjacent pair (leftmost on ties), in byte-unicode space.
+def private bpe_merge(tk : BPETokenizer; var symbols : array<string>) {
+    while (length(symbols) > 1) {
+        var best_rank = -1l
+        var best_i = -1
+        for (i in range(length(symbols) - 1)) {
+            let r = tk.merge_rank?[symbols[i] + " " + symbols[i + 1]] ?? -1l
+            if (r >= 0l && (best_i == -1 || r < best_rank)) {
+                best_rank = r
+                best_i = i
+            }
+        }
+        if (best_i == -1) {
+            break
+        }
+        symbols[best_i] = symbols[best_i] + symbols[best_i + 1]
+        symbols |> erase(best_i + 1)
+    }
+}
+
+// Defensive fallback: a symbol that didn't resolve as a token is split back into its
+// base byte-unicode chars (each is always in the vocab). Rarely fires for valid merges.
+def private emit_chars(tk : BPETokenizer; s : string; var ids : array<int64>) {
+    let scpts <- utf8_to_cpts(s)
+    for (c in scpts) {
+        let id = tk.lookup?[cpt_to_utf8(c)] ?? -1l
+        if (id >= 0l) {
+            ids |> push(id)
+        }
+    }
+}
+
+//! Encode text to BPE token IDs (no special tokens / BOS — matches test-tokenizer-0).
+def bpe_encode(tk : BPETokenizer; text : string) : array<int64> {
+    var ids : array<int64>
+    let cpts <- utf8_to_cpts(text)
+    let offs <- llama3_split(cpts)
+    var pos = 0
+    for (off in offs) {
+        var symbols : array<string>
+        for (i in range(pos, pos + off)) {
+            peek_data(cpt_to_utf8(cpts[i])) $(d : array<uint8> const#) {
+                for (k in range(length(d))) {
+                    symbols |> push(BYTE2UNI[int(d[k])])
+                }
+            }
+        }
+        pos += off
+        // ignore_merges: a word that is already a single token is emitted as-is
+        let word = build_string() $(var wr) {
+            for (s in symbols) {
+                write(wr, s)
+            }
+        }
+        let wid = tk.lookup?[word] ?? -1l
+        if (wid >= 0l) {
+            ids |> push(wid)
+        } else {
+            bpe_merge(tk, symbols)
+            for (s in symbols) {
+                let id = tk.lookup?[s] ?? -1l
+                if (id >= 0l) {
+                    ids |> push(id)
+                } else {
+                    emit_chars(tk, s, ids)
+                }
+            }
+        }
+        delete symbols
+    }
+    return <- ids
 }
