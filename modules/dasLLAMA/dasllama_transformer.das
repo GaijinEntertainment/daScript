@@ -386,6 +386,17 @@ struct RunState {
     xs : array<float>         // per-block activation scales (sized max(dim, hidden_dim) / 32)
     key_cache : array<float>  // (n_layers * seq_len * kv_dim)
     value_cache : array<float>
+    // batched prefill scratch — empty until forward_prefill sizes them to npos × ... (see forward_prefill)
+    x_b : array<float>        // residual stream (npos x dim)
+    xb_b : array<float>       // rmsnorm / attention out (npos x dim)
+    xb2_b : array<float>      // attention output projection (npos x dim)
+    q_b : array<float>        // queries (npos x dim)
+    k_b : array<float>        // keys before cache store (npos x kv_dim)
+    v_b : array<float>        // values before cache store (npos x kv_dim)
+    hb_b : array<float>       // FFN hidden (npos x hidden_dim)
+    hb2_b : array<float>      // FFN gate (npos x hidden_dim)
+    xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
+    xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
 }
 
 //! Allocate the run state sized to a model.
@@ -487,6 +498,30 @@ def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<fl
     }
 }
 
+// Batched big-weight matmul for prefill: Y [npos x d] from X [npos x n], via the slice-1 GEMM
+// kernels. Q8 quantizes each of the npos activation columns into the batched xqb/xsb scratch first;
+// fp32 goes straight through. Q4 has no batched kernel, so forward_prefill never routes it here.
+def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
+    let total = n * d
+    if (t.quant == QuantMode.q8) {
+        let nb = n / 32l
+        for (p in range64(npos)) {
+            array_view(x, p * n, n) $(col : array<float>#) {
+                quantize_q8_0_into(col, n, xqb, xsb, p * n, p * nb)
+            }
+        }
+        array_view(t.qblob, woff, total) $(wq : array<int8>#) {
+            array_view(t.qscales, woff / 32l, total / 32l) $(ws : array<float>#) {
+                matmul_q8q8_batch(y, wq, ws, xqb, xsb, n, d, npos)
+            }
+        }
+    } else {
+        array_view(t.wblob, woff, total) $(w : array<float>#) {
+            matmul_batch(y, w, x, n, d, npos)
+        }
+    }
+}
+
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
 def forward(t : Transformer; var s : RunState; token, pos : int64) {
@@ -566,6 +601,136 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
     rms_at(s.xb, t, t.rms_final_off, s.x, dim)
     if (c.shared_weights) {
         // tied weights: the classifier IS the fp32 embedding table
+        mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
+    } else {
+        mm(s.logits, t, t.wcls_off, s.xb, s.xq, s.xs, dim, c.vocab_size)
+    }
+}
+
+//! Prefill: process all `npos` prompt tokens (positions 0..npos-1) in ONE pass per layer — batched
+//! GEMM projections (matmul_batch / matmul_q8q8_batch) plus a per-position causal attention loop.
+//! Leaves the KV cache filled for every position and s.logits = the logits at the LAST position
+//! (what you sample the first generated token from). Bit-for-bit identical to calling forward() for
+//! pos 0..npos-1 in sequence. Q4 has no batched kernel, so it falls back to that per-token path.
+def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; npos : int64) {
+    let c = t.config
+    if (t.quant == QuantMode.q4 || npos <= 0l) {
+        for (p in range64(npos)) {
+            forward(t, s, tokens[p], p)
+        }
+        return
+    }
+    let dim = c.dim
+    let hidden = c.hidden_dim
+    let kv_dim = c.kv_dim
+    let head_size = c.head_size
+    let n_heads = c.n_heads
+    let kv_mul = n_heads / c.n_kv_heads
+    let seq_len = c.seq_len
+    let scale = 1.0 / sqrt(float(head_size))
+    let maxn = max(dim, hidden)
+    // size the batched scratch to this prompt
+    s.x_b |> resize(npos * dim)
+    s.xb_b |> resize(npos * dim)
+    s.xb2_b |> resize(npos * dim)
+    s.q_b |> resize(npos * dim)
+    s.k_b |> resize(npos * kv_dim)
+    s.v_b |> resize(npos * kv_dim)
+    s.hb_b |> resize(npos * hidden)
+    s.hb2_b |> resize(npos * hidden)
+    s.xqb |> resize(npos * maxn)
+    s.xsb |> resize(npos * maxn / 32l)
+
+    // token embeddings -> residual stream x_b [npos x dim]
+    for (p in range64(npos)) {
+        let tok = tokens[p]
+        array_view(t.fblob, t.tok_emb_off + tok * dim, dim) $(row : array<float>#) {
+            for (i in range64(dim)) {
+                s.x_b[p * dim + i] = row[i]
+            }
+        }
+    }
+
+    for (l in range64(c.n_layers)) {
+        let loff = l * seq_len * kv_dim
+        // attention rmsnorm, per position
+        for (p in range64(npos)) {
+            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
+                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
+                    rms_at(ov, t, t.rms_att_off + l * dim, xv, dim)
+                }
+            }
+        }
+        // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
+        mm_b(s.q_b, t, t.wq_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
+        mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+        mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+        // RoPE per position, then store k/v into the cache for every position
+        for (p in range64(npos)) {
+            array_view(s.q_b, p * dim, dim) $(var qv : array<float>#) {
+                rope_scaled(qv, p, head_size, dim, c.rope_freq_base, t.rope_freqs)
+            }
+            array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
+                rope_scaled(kvv, p, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
+            }
+            let kvoff = loff + p * kv_dim
+            for (i in range64(kv_dim)) {
+                s.key_cache[kvoff + i] = s.k_b[p * kv_dim + i]
+                s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
+            }
+        }
+        // per-position causal attention into xb_b (position p attends to cached keys 0..p)
+        for (p in range64(npos)) {
+            for (h in range64(n_heads)) {
+                let qoff = h * head_size
+                let kvhoff = (h / kv_mul) * head_size
+                for (tp in range64(p + 1l)) {
+                    let koff = loff + tp * kv_dim + kvhoff
+                    s.att[tp] = dot(unsafe(addr(s.q_b[p * dim + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
+                }
+                softmax(s.att, p + 1l)
+                for (i in range64(head_size)) {
+                    s.xb_b[p * dim + qoff + i] = 0.0
+                }
+                for (tp in range64(p + 1l)) {
+                    let voff = loff + tp * kv_dim + kvhoff
+                    axpy(unsafe(addr(s.xb_b[p * dim + qoff])), unsafe(addr(s.value_cache[voff])), s.att[tp], head_size)
+                }
+            }
+        }
+        // output projection (batched) + residual
+        mm_b(s.xb2_b, t, t.wo_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
+        for (k in range64(npos * dim)) {
+            s.x_b[k] += s.xb2_b[k]
+        }
+        // ffn rmsnorm, per position
+        for (p in range64(npos)) {
+            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
+                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
+                    rms_at(ov, t, t.rms_ffn_off + l * dim, xv, dim)
+                }
+            }
+        }
+        // SwiGLU (batched): hb = silu(W1·xb) * (W3·xb) — silu/mul are elementwise, so batch-flat
+        mm_b(s.hb_b, t, t.w1_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
+        mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
+        silu(s.hb_b, npos * hidden)
+        for (k in range64(npos * hidden)) {
+            s.hb_b[k] *= s.hb2_b[k]
+        }
+        // down projection (batched) + residual
+        mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
+        for (k in range64(npos * dim)) {
+            s.x_b[k] += s.xb_b[k]
+        }
+    }
+
+    // final rmsnorm + classifier on the LAST position only (that's what we sample next)
+    let last = npos - 1l
+    array_view(s.x_b, last * dim, dim) $(var xv : array<float>#) {
+        rms_at(s.xb, t, t.rms_final_off, xv, dim)
+    }
+    if (c.shared_weights) {
         mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
     } else {
         mm(s.logits, t, t.wcls_off, s.xb, s.xq, s.xs, dim, c.vocab_size)
