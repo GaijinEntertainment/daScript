@@ -452,6 +452,12 @@ extern "C" {
             }
             return true;
         });
+        // Compiler only requests offsets for fields it resolved on the host annotation; a
+        // miss = target runtime annotation diverges (ABI/module mismatch). Fail loud, not -1.
+        if ( offset == (uint32_t)-1 ) {
+            DAS_FATAL_ERROR("jit: unresolved handled-type field offset %s::%s.%s (target runtime annotation diverges from the host).\n",
+                moduleName, typeName, fieldName);
+        }
         return offset;
     }
 
