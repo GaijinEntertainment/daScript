@@ -335,7 +335,9 @@ namespace das {
         fstat(fd, &st);
         void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
         Array arr;
-        array_mark_locked(arr, data, uint32_t(st.st_size));
+        // st.st_size is 64-bit (off_t); array_mark_locked takes a uint64 size and
+        // Array::size is uint64 — a uint32 cast here truncated maps of files >4GB.
+        array_mark_locked(arr, data, uint64_t(st.st_size));
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr, at);
