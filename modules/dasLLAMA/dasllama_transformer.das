@@ -135,18 +135,18 @@ struct RunState {
 //! Allocate the run state sized to a model.
 def make_run_state(c : Config) : RunState {
     var s : RunState
-    s.x |> resize(int(c.dim))
-    s.xb |> resize(int(c.dim))
-    s.xb2 |> resize(int(c.dim))
-    s.hb |> resize(int(c.hidden_dim))
-    s.hb2 |> resize(int(c.hidden_dim))
-    s.q |> resize(int(c.dim))
-    s.k |> resize(int(c.kv_dim))
-    s.v |> resize(int(c.kv_dim))
-    s.att |> resize(int(c.seq_len))
-    s.logits |> resize(int(c.vocab_size))
-    s.key_cache |> resize(int(c.n_layers * c.seq_len * c.kv_dim))
-    s.value_cache |> resize(int(c.n_layers * c.seq_len * c.kv_dim))
+    s.x |> resize(c.dim)
+    s.xb |> resize(c.dim)
+    s.xb2 |> resize(c.dim)
+    s.hb |> resize(c.hidden_dim)
+    s.hb2 |> resize(c.hidden_dim)
+    s.q |> resize(c.dim)
+    s.k |> resize(c.kv_dim)
+    s.v |> resize(c.kv_dim)
+    s.att |> resize(c.seq_len)
+    s.logits |> resize(c.vocab_size)
+    s.key_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
+    s.value_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
     return <- s
 }
 
@@ -253,11 +253,11 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
     mm_at(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
 }
 
-//! Greedy argmax over the current logits.
-def private argmax(s : RunState; vocab : int64) : int {
-    var best = 0
+//! Greedy argmax over the current logits; returns the winning token id.
+def private argmax(s : RunState; vocab : int64) : int64 {
+    var best = 0l
     var bestv = s.logits[0]
-    for (i in range(int(vocab))) {
+    for (i in range64(vocab)) {
         if (s.logits[i] > bestv) {
             bestv = s.logits[i]
             best = i
@@ -268,17 +268,17 @@ def private argmax(s : RunState; vocab : int64) : int {
 
 //! Greedy decode from BOS: run forward at each position, take the argmax token, feed it
 //! back, repeat. Returns the generated token IDs (stops early on BOS, like llama2.c).
-def generate(t : Transformer; var s : RunState; steps : int) : array<int> {
-    var ids : array<int>
+def generate(t : Transformer; var s : RunState; steps : int) : array<int64> {
+    var ids : array<int64>
     var token = 1l  // BOS
-    for (pos in range(steps)) {
-        forward(t, s, token, int64(pos))
+    for (pos in range64(steps)) {
+        forward(t, s, token, pos)
         let next = argmax(s, t.config.vocab_size)
-        if (next == 1) {  // BOS delimits sequences
+        if (next == 1l) {  // BOS delimits sequences
             break
         }
         ids |> push(next)
-        token = int64(next)
+        token = next
     }
     return <- ids
 }

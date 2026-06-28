@@ -8,7 +8,7 @@ let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
 
 // llama2.c stories15M, empty prompt, greedy (-t 0.0): the token IDs after BOS.
 // "Once upon a time, there was a little girl named L..."
-let ORACLE <- [9038, 2501, 263, 931, 29892, 727, 471, 263, 2217, 7826, 4257, 365]
+let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
 
 [export]
 def main {
@@ -21,7 +21,7 @@ def main {
 
     var ok = length(ids) == length(ORACLE)
     for (i in range(length(ids))) {
-        let want = i < length(ORACLE) ? ORACLE[i] : -1
+        let want = i < length(ORACLE) ? ORACLE[i] : -1l
         let hit = ids[i] == want
         ok = ok && hit
         print("step {i}: got {ids[i]}  oracle {want}  {hit ? "ok" : "MISMATCH"}\n")
