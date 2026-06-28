@@ -22,6 +22,7 @@
             tags: ['game', 'opengl', 'wasm'],
             controls: '← →  paddle · space launch',
             poster: 'files/examples/arcanoid-poster.png',
+            aspect: 1024 / 768,           // native window — sizes the player so the game fills it
         },
         {
             id: 'pacman', name: 'Pac-Man', kind: 'maze chase',
@@ -30,6 +31,7 @@
             tags: ['game', 'decs', 'wasm'],
             controls: 'arrow keys  ·  move',
             poster: 'files/examples/pacman-poster.png',
+            aspect: 900 / 760,
         },
     ];
 
@@ -144,7 +146,8 @@
         var overlay = document.createElement('div');
         overlay.className = 'forge-ex-overlay';
         overlay.innerHTML = '' +
-          '<div class="forge-ex-player" role="dialog" aria-modal="true" aria-label="' + esc(ex.name) + ' player">' +
+          '<div class="forge-ex-player" role="dialog" aria-modal="true" aria-label="' + esc(ex.name) + ' player"' +
+            ' style="--ex-aspect:' + (ex.aspect || (4 / 3)).toFixed(4) + '">' +
             '<div class="forge-ex-player__bar">' +
               '<div class="forge-ex-player__lights" aria-hidden="true"><span></span><span></span><span></span></div>' +
               '<span class="forge-ex-player__name">' + esc(ex.name) + '</span>' +
