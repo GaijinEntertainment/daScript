@@ -64,7 +64,7 @@ namespace das
 #ifdef __clang__
       vec4i vv = v_zeroi();
       memcpy(&vv, v, sizeof(int) * 3);
-      return vv;
+      return v_cast_vec4f(vv);
 #else
       return v_cast_vec4f(v_ldui_p3(v));
 #endif

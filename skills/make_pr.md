@@ -4,7 +4,7 @@ Before creating a pull request, complete ALL of the following steps in order. Do
 
 **Shortcut:** `daslang utils/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
 
-## 0. Sync with origin/master and rebase the branch
+## 0. Sync with origin/master, rebase, and start from a clean build dir
 
 **Always do this first.** If you skip it, a stale local `master` will cause your squashed commit to absorb other already-merged PRs as if they were branch-original work — the PR ends up touching files it has no business touching.
 
@@ -20,6 +20,31 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 **Why this matters:** `git reset --soft master` (used to squash N commits into one) collapses everything HEAD-back-to-master into the index. If local `master` is behind origin's by even one merge, that merge's content gets baked into your "single squashed commit" — invisibly. The PR diff against origin/master then shows the leak. Always rebase onto **origin/master** (not local `master`) before squashing.
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
+
+### 0b. Delete and regenerate the build dir — non-negotiable
+
+**Immediately after the rebase, and before any preflight gate, delete `build/` and configure+build fresh.** This is the single sanctioned exception to the "never `rm -rf build`" rule (which otherwise stands — see `feedback_build_and_ci`). A long-lived build dir — especially a worktree carried across sessions or branch switches — drifts in ways no incremental build fixes:
+
+- **Stale generated project files.** A cache var (e.g. `DAS_USE_STATIC_STD_LIBS`) that toggled across configures can leave `.vcxproj`s describing one CRT while the cache says another.
+- **`ExternalProject` byproducts are built once and never rebuilt when their args change.** libhv's `hv_static.lib` freezes at whatever CRT it first built with; a later config change can't move it.
+
+Drift like this produces preflight failures that look like code bugs but aren't — the recurring MSVC `/MT` vs `/MD` `LNK2038` on `dasModuleHV` is the canonical example. **Do not debug a drifted build dir. Replace it.**
+
+```bash
+rm -rf build                                            # the ONE sanctioned rm -rf build
+# One-time per machine: point OpenSSL at a shared cache so `rm -rf build` doesn't
+# rebuild it from source (several min) every clean build. dasHV reads DASLANG_OPENSSL_DIR
+# (find_package(OpenSSL) then resolves it via OPENSSL_ROOT_DIR and skips the source build);
+# unset → it builds into build/openssl, which the rm -rf just deleted. CI is ephemeral
+# (no cache, sets neither) so it always builds OpenSSL from source — that's fine.
+#   setx DASLANG_OPENSSL_DIR "%LOCALAPPDATA%\daslang\openssl"   (build OpenSSL there once)
+# Configure with CI's release modules ON (mirror ci/release_modules.txt — see skills/preflight.md):
+cmake -S . -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLED=OFF \
+  -DDAS_PUGIXML_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_GLFW_DISABLED=OFF
+cmake --build build --config Release -j 64              # full clean build; pass timeout: 0
+```
+
+The clean build is the cost of never debugging build-config drift again. It also means preflight runs against generated files that actually match HEAD's source — which is the whole point of the gate.
 
 ## 1. Lint all changed `.das` files — **zero warnings required**
 

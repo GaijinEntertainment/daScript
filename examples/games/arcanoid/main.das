@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options gc
+options stack = 8_388_608   // 8 MB: decs nested queries overflow the 16 KB default context stack in the cross-compiled (wasm) exe
 // arcanoid live
 require glfw/glfw_boost
 require live/glfw_live
@@ -13,7 +14,7 @@ require daslib/decs_boost
 require live/decs_live    // nolint:STYLE030 — load-bearing for decs entity serialization across live reloads
 require live/opengl_live  // nolint:STYLE030 — load-bearing for OpenGL resource live-reload
 require live/live_commands
-require live/live_api
+require ?dashv live/live_api
 require live/live_watch_boost // nolint:STYLE030 — load-bearing for live file-watch side-effects
 require live/live_vars
 require live/audio_live   // nolint:STYLE030 — load-bearing for audio buffer persistence across reloads
@@ -272,9 +273,7 @@ def start_gameover_music() {
 }
 
 def update_music() {
-    if (game_state == prev_music_state) {
-        return
-    }
+    return if (!music_enabled || game_state == prev_music_state)
     let FADE_OUT = 0.8
     let FADE_IN = 0.5
     // Pause: fade down existing tracks, keep them alive
@@ -525,6 +524,7 @@ var @live god_mode = false
 var @live game_speed = 1.0
 var @live prev_music_state = GameState.menu
 var music_initialized = false
+var music_enabled = false   // threaded strudel music; gated off when the audio backend is single-threaded (wasm)
 
 
 // --- Bonuses ---
@@ -1323,8 +1323,9 @@ def init() {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
+        music_enabled = !audio_is_single_threaded()
     }
-    if (!music_initialized) {
+    if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
@@ -1344,7 +1345,7 @@ def update() {
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.05, 0.02, 0.1, 1.0)
-    glClearDepth(1.0lf)
+    glClearDepthf(1.0)   // glClearDepthf is WebGL2-safe and exists on desktop GL too
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
@@ -1492,7 +1493,9 @@ def update() {
 [export]
 def shutdown() {
     print("Shutting down...\n")
-    strudel_shutdown()
+    if (music_enabled) {
+        strudel_shutdown()
+    }
     audio_system_finalize(asch.command, asch.next_sid)
     delete_gl_objects()
     live_destroy_window()

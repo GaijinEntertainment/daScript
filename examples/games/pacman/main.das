@@ -13,7 +13,7 @@ require daslib/decs_boost
 require live/decs_live    // nolint:STYLE030 — load-bearing: registers decs live-reload hooks
 require live/opengl_live  // nolint:STYLE030 — load-bearing: registers opengl live-reload hooks
 require live/live_commands
-require live/live_api
+require ?dashv live/live_api
 require live/live_watch_boost // nolint:STYLE030 — load-bearing: registers live-watch hooks
 require live/live_vars
 require live/audio_live       // nolint:STYLE030 — load-bearing: registers audio live-reload hooks
@@ -477,6 +477,7 @@ var space_was_pressed = false
 var esc_was_pressed   = false
 var @live prev_music_state = GameState.menu
 var music_initialized = false
+var music_enabled = false   // threaded strudel music; gated off when the audio backend is single-threaded (wasm)
 var @live die_timer = 0.0       // death animation timer
 var @live end_screen_timer = 0.0  // blocks restart input briefly after game over / win
 var @live shake_timer = 0.0     // screen shake remaining time
@@ -733,7 +734,7 @@ def draw_hud() {
 // ===== Update: Music transitions =====
 
 def update_music() {
-    if (game_state == prev_music_state) { return ; }
+    return if (!music_enabled || game_state == prev_music_state)
     let FADE = 0.5
     stop_all_music(FADE)
     if (game_state == GameState.menu) {
@@ -1087,8 +1088,9 @@ def init() {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
+        music_enabled = !audio_is_single_threaded()
     }
-    if (!music_initialized) {
+    if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
@@ -1114,7 +1116,7 @@ def update() {
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.02, 0.02, 0.06, 1.0)
-    glClearDepth(1.0lf)
+    glClearDepthf(1.0)   // glClearDepthf is WebGL2-safe and exists on desktop GL too
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
@@ -1235,7 +1237,9 @@ def update() {
 
 [export]
 def shutdown() {
-    strudel_shutdown()
+    if (music_enabled) {
+        strudel_shutdown()
+    }
     audio_system_finalize(asch.command, asch.next_sid)
     live_destroy_window()
 }

@@ -485,12 +485,31 @@ runTests = function() {
 // touches stdout (fd_write), proc_exit, clock, args/environ stubs, and a few
 // fd_* no-ops emscripten's libc emits at link time. See
 // modules/dasLLVM/README.md "Cross-compilation" for the import surface.
+//
+// The JIT samples are compiled to wasm64 (memory64). Under memory64 every
+// pointer/size argument arrives as a BigInt (not a Number), the iovec struct
+// fields are 8 bytes (not 4), and `__wasi_size_t` outputs are 8 bytes — so the
+// shim must coerce BigInt offsets for DataView and write 64-bit sizes. The
+// helpers below keep it correct for both wasm64 and (legacy) wasm32 modules.
 function makeWasiShim(memoryRef) {
     let stdoutBuf = '';
     const decoder = new TextDecoder('utf-8');
 
     function mem() { return new DataView(memoryRef.buffer); }
     function u8() { return new Uint8Array(memoryRef.buffer); }
+
+    // memory64 passes pointer/size args as BigInt; wasm32 passes Number. Coerce
+    // to a Number for DataView offsets and array slicing — playground linear
+    // memory is far below 2^53, so the narrowing is lossless.
+    const N = (x) => (typeof x === 'bigint' ? Number(x) : x);
+
+    // A WASI `__wasi_size_t` output is 4 bytes under wasm32 and 8 bytes under
+    // wasm64 (it is size_t). Pick the width from whether the destination
+    // pointer arrived as a BigInt (memory64).
+    function putSize(dv, ptr, val) {
+        if (typeof ptr === 'bigint') dv.setBigUint64(Number(ptr), BigInt(val), true);
+        else dv.setUint32(ptr, val, true);
+    }
 
     function flushStdout(force) {
         // Flush by newline so each printed line gets its own output row.
@@ -508,25 +527,30 @@ function makeWasiShim(memoryRef) {
     return {
         fd_write(fd, iovsPtr, iovsLen, nWrittenPtr) {
             const dv = mem();
+            const wide = typeof iovsPtr === 'bigint';
+            const base = N(iovsPtr);
+            const count = N(iovsLen);
+            // iovec = { buf, buf_len }: two pointer-sized fields — 4 bytes each
+            // under wasm32, 8 bytes each under wasm64.
+            const fsz = wide ? 8 : 4;
             let total = 0;
-            for (let i = 0; i < iovsLen; i++) {
-                const off = iovsPtr + i * 8;
-                const bufPtr = dv.getUint32(off, true);
-                const bufLen = dv.getUint32(off + 4, true);
+            for (let i = 0; i < count; i++) {
+                const off = base + i * fsz * 2;
+                const bufPtr = wide ? Number(dv.getBigUint64(off, true)) : dv.getUint32(off, true);
+                const bufLen = wide ? Number(dv.getBigUint64(off + fsz, true)) : dv.getUint32(off + fsz, true);
                 const bytes = u8().subarray(bufPtr, bufPtr + bufLen);
                 stdoutBuf += decoder.decode(bytes, { stream: true });
                 total += bufLen;
             }
-            dv.setUint32(nWrittenPtr, total, true);
+            putSize(dv, nWrittenPtr, total);
             flushStdout(false);
             return 0;
         },
         fd_read() { return 0; },
         fd_close() { return 0; },
-        fd_seek(fd, offLo, offHi, whence, newOffPtr) {
-            const dv = mem();
-            dv.setUint32(newOffPtr, 0, true);
-            dv.setUint32(newOffPtr + 4, 0, true);
+        fd_seek(fd, offset, whence, newOffPtr) {
+            // __wasi_filesize_t result is u64 on both wasm32 and wasm64.
+            mem().setBigUint64(N(newOffPtr), 0n, true);
             return 0;
         },
         fd_fdstat_get() { return 0; },
@@ -535,29 +559,29 @@ function makeWasiShim(memoryRef) {
         fd_prestat_dir_name() { return 8; },
         args_sizes_get(argcPtr, argvBufSizePtr) {
             const dv = mem();
-            dv.setUint32(argcPtr, 0, true);
-            dv.setUint32(argvBufSizePtr, 0, true);
+            putSize(dv, argcPtr, 0);
+            putSize(dv, argvBufSizePtr, 0);
             return 0;
         },
         args_get() { return 0; },
         environ_sizes_get(envcPtr, envBufSizePtr) {
             const dv = mem();
-            dv.setUint32(envcPtr, 0, true);
-            dv.setUint32(envBufSizePtr, 0, true);
+            putSize(dv, envcPtr, 0);
+            putSize(dv, envBufSizePtr, 0);
             return 0;
         },
         environ_get() { return 0; },
         clock_time_get(id, precision, timePtr) {
             const ns = BigInt(Date.now()) * 1000000n;
-            mem().setBigUint64(timePtr, ns, true);
+            mem().setBigUint64(N(timePtr), ns, true);
             return 0;
         },
         clock_res_get(id, resPtr) {
-            mem().setBigUint64(resPtr, 1000000n, true);
+            mem().setBigUint64(N(resPtr), 1000000n, true);
             return 0;
         },
         random_get(bufPtr, bufLen) {
-            const view = u8().subarray(bufPtr, bufPtr + bufLen);
+            const view = u8().subarray(N(bufPtr), N(bufPtr) + N(bufLen));
             crypto.getRandomValues(view);
             return 0;
         },

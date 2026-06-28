@@ -1773,7 +1773,10 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     padding: 40px;
 }
 .forge-ex-player {
-    width: min(900px, 100%);
+    /* Size the player to the game's aspect ratio (--ex-aspect, set per example)
+       so the canvas fills it without letterbox bars; capped by 900px-wide and
+       the viewport's max height. */
+    width: min(900px, 100%, calc(min(62vh, 560px) * var(--ex-aspect, 1.3333)));
     background: var(--bg-2);
     border: 1px solid var(--rule);
     border-radius: 10px;
@@ -1825,7 +1828,8 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 .forge-ex-player__viewport {
     position: relative;
     width: 100%;
-    height: min(62vh, 560px);
+    aspect-ratio: var(--ex-aspect, 1.3333);
+    max-height: min(62vh, 560px);
     background: #070605;
 }
 .forge-ex-player__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }

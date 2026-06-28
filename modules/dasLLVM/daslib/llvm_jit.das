@@ -4203,10 +4203,30 @@ class public LlvmJitVisitor : AstVisitor {
         return blk
     }
 
-    // Handled-type (C++ struct) field offset as an LLVM i32 constant. host==target
-    // (native or wasm64), so the host annotation's offsetof is correct.
+    // Handled-type (C++ struct) field offset, as an LLVM i32 *value*. The JIT bakes
+    // these via the HOST annotation's offsetof. That is correct only when the target
+    // C++ ABI lays the struct out identically to the host. A wasm cross-compile from
+    // an MSVC host does NOT satisfy that for polymorphic/multiple-inheritance classes
+    // like Context (vptr + base ordering diverge MSVC vs clang/wasm) — even at equal
+    // pointer width. On native (host==target) we keep the baked host constant. On wasm
+    // we emit/reuse a per-(type,field) i32 global filled once at init by
+    // jit_get_handled_field_offset against the TARGET annotation, and return a load of it.
     def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
-        return types.ConstI32(uint64(int(get_handled_type_field_offset(ann, fieldName))))
+        let host_offset = int(get_handled_type_field_offset(ann, fieldName))
+        if (!g_target_is_wasm) {
+            return types.ConstI32(uint64(host_offset))
+        }
+        let modName = string(ann._module.name)
+        let typeName = string(ann.name)
+        let globName = "field`offset`{modName}`{typeName}`{fieldName}"
+        var glob = LLVMGetNamedGlobal(g_mod, globName)
+        if (glob == null) {
+            glob = LLVMAddGlobal(g_mod, types.t_int32, globName)
+            set_private_linkage(glob)
+            LLVMSetInitializer(glob, types.ConstI32(0ul))
+            g_handled_field_offset_globals[globName] = (modName = modName, typeName = typeName, fieldName = fieldName)
+        }
+        return LLVMBuildLoad2(g_builder, types.t_int32, glob, "h`field`off`{fieldName}")
     }
 
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {

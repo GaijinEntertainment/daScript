@@ -643,6 +643,22 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
         }
         LLVMBuildCall2(ib, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
     }
+    // Wasm cross-compile: fill the per-(handled-type, field) offset globals from the
+    // TARGET runtime's annotations, now that the modules (hence their annotations) are
+    // registered. Each access then reads a global instead of a wrong host-baked constant.
+    if (!empty(g_handled_field_offset_globals)) {
+        var hfo_fn = LLVMGetNamedFunction(g_mod, FN_JIT_GET_HANDLED_FIELD_OFFSET)
+        let hfo_type = g_fn_types[FN_JIT_GET_HANDLED_FIELD_OFFSET]
+        for (globName, hinfo in keys(g_handled_field_offset_globals), values(g_handled_field_offset_globals)) {
+            var glob = LLVMGetNamedGlobal(g_mod, globName)
+            if (glob == null) continue
+            let mod_str = get_string_constant_ptr(ib, hinfo.modName)
+            let type_str = get_string_constant_ptr(ib, hinfo.typeName)
+            let field_str = get_string_constant_ptr(ib, hinfo.fieldName)
+            let off_val = LLVMBuildCall2(ib, hfo_type, hfo_fn, fixed_array(mod_str, type_str, field_str), "")
+            LLVMBuildStore(ib, off_val, glob)
+        }
+    }
     LLVMBuildRetVoid(ib)
     LLVMDisposeBuilder(ib)
     extern_resolver.uid = null
