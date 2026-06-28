@@ -461,7 +461,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
 
 def gate_dasgen(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    let r = run_argv([ctx.daslang, "dasgen/gen_bind.das"])
+    let r = run_argv([ctx.daslang, "utils/dasgen/gen_bind.das"])
     if (r.rc != 0) {
         return GateResult(name = "dasgen", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "gen_bind.das failed", output = r.out)
