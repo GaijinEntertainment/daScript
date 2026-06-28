@@ -36,6 +36,7 @@ struct Config {
     head_size : int64       // dim / n_heads
     kv_dim : int64          // (dim * n_kv_heads) / n_heads
     shared_weights : bool   // classifier aliases the token-embedding table
+    rope_freq_base : float  // RoPE θ (set by the loader); Llama-2/TinyLlama 10000, Llama-3 500000
 }
 
 //! The whole model. `fblob` holds the fp32 embedding + norm weights at the *_off offsets below;
@@ -66,6 +67,7 @@ struct Transformer {
     w3_off : int64
     wcls_off : int64
     quant : QuantMode
+    rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
 }
 
 struct private LayoutSizes {
@@ -158,6 +160,7 @@ def load_checkpoint(path : string) : Transformer {
         }
         t.config.head_size = t.config.dim / t.config.n_heads
         t.config.kv_dim = (t.config.dim * t.config.n_kv_heads) / t.config.n_heads
+        t.config.rope_freq_base = 10000.0  // llama2.c checkpoints predate configurable θ
         let sz = layout_offsets(t)
         reserve_resize(t.fblob, sz.fblob_n)
         reserve_resize(t.wblob, sz.wblob_n)
@@ -268,6 +271,14 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         t.config.seq_len = seq_len
         t.config.head_size = dim / n_heads
         t.config.kv_dim = (dim * n_kv_heads) / n_heads
+        // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
+        t.config.rope_freq_base = gguf_has(m, "llama.rope.freq_base") ? gguf_f32(m, bytes, "llama.rope.freq_base") : 10000.0
+        // Llama-3.1 ships precomputed per-pair RoPE scaling factors (NTK-by-parts) as a tensor
+        if (gguf_find_tensor(m, "rope_freqs.weight") >= 0) {
+            let nff = t.config.head_size / 2l
+            t.rope_freqs |> resize(nff)
+            gguf_read_tensor_f32(m, bytes, "rope_freqs.weight", t.rope_freqs, 0l, nff)
+        }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         let kv = t.config.kv_dim
@@ -503,8 +514,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
         mm_qkv(s, t, l)
         // RoPE on q (dim) and k (kv_dim)
-        rope(s.q, pos, head_size, dim)
-        rope(s.k, pos, head_size, kv_dim)
+        rope_scaled(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs)
+        rope_scaled(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
         // store k, v for this position into the KV cache
         let kvoff = loff + pos * kv_dim
         for (i in range64(kv_dim)) {

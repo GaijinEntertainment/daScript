@@ -346,3 +346,26 @@ def rope(var vec : array<float> | #; pos, head_size, n : int64) {
         vec[i + 1] = v0 * fci + v1 * fcr
     }
 }
+
+//! RoPE with an explicit base frequency θ and optional per-pair frequency factors
+//! (the GGUF `rope_freqs` tensor — Llama-3.1's NTK-by-parts scaling). Empty factors =>
+//! plain RoPE at base θ, so (θ=10000, empty) reproduces rope() above bit-for-bit.
+//! freq_factors[j] divides the j-th pair's frequency, matching ggml (theta/ff).
+def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #) {
+    let has_ff = !empty(freq_factors)
+    for (p in range64(n / 2l)) {
+        let i = p * 2l
+        let head_dim = i % head_size
+        var freq = 1.0 / pow(theta, float(head_dim) / float(head_size))
+        if (has_ff) {
+            freq /= freq_factors[head_dim / 2l]
+        }
+        let angle = float(pos) * freq
+        let fcr = cos(angle)
+        let fci = sin(angle)
+        let v0 = vec[i]
+        let v1 = vec[i + 1]
+        vec[i] = v0 * fcr - v1 * fci
+        vec[i + 1] = v0 * fci + v1 * fcr
+    }
+}
