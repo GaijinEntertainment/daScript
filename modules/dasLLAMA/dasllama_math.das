@@ -126,6 +126,59 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
     }
 }
 
+//! Q8·Q8 dot: BOTH the weight (wq/ws) and the activation (xq/xs) are Q8 — int8 quants + one fp32
+//! scale per 32-block. The inner block loop is a pure int8·int8 multiply-accumulate, which the LLVM
+//! JIT lowers to ARM SDOT (vdotq_s32: 16 int8 MACs/instr, exact int32 accumulate). The two block
+//! scales multiply in once per 32-wide block. ~3.8x the dequant-in-dot dot_q8 on the kernel bench.
+//! n must be a multiple of 32.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+//! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the
+//! activation PRE-quantized to (xq [n], xs [n/32]) by the caller (it's shared across all d rows, so
+//! quantizing once amortizes). Same auto-dispatch + 2x-worker threading as matmul_q8. n % 32 == 0.
+def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
+    let nb = n / 32l
+    if (n * d >= MATMUL_PAR_THRESHOLD) {
+        unsafe {
+            let yp = addr(y[0])
+            let wp = reinterpret<int8 const?>(addr(wq[0]))
+            let sp = reinterpret<float const?>(addr(ws[0]))
+            let xqp = reinterpret<int8 const?>(addr(xq[0]))
+            let xsp = reinterpret<float const?>(addr(xs[0]))
+            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
+                unsafe {
+                    var myp = reinterpret<float?>(yp)
+                    for (i in range(rb, re)) {
+                        myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                    }
+                }
+                wg |> notify_and_release
+            }
+        }
+    } else {
+        unsafe {
+            let xqp = reinterpret<int8 const?>(addr(xq[0]))
+            let xsp = reinterpret<float const?>(addr(xs[0]))
+            for (i in range64(d)) {
+                y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+            }
+        }
+    }
+}
+
 //! Q4_0 dequant-in-dot: weights are 4-bit quants `wq` in GGML split-half packing (per 32-block,
 //! byte j holds element j low / j+16 high) + one fp32 scale `ws` per block; activations `x` fp32.
 //! Per block: the inner for[vectorize] widens nibbles to float at width 4 (M1 native NEON lane —

@@ -106,6 +106,22 @@ def bench_matmul(b : B?) {
         b |> run("q8flat classifier 32000x288") {
             matmul_q8_flat(y, qt.q, qt.scales, x, 288l, 32000l)
         }
+        // Q8·Q8: quantize the activation x to Q8 too, then the int8·int8 SDOT kernel. The benched
+        // closure re-quantizes x each call, so the timing includes the realistic one-time x-quant cost.
+        var xq : array<int8>
+        var xs : array<float>
+        xq |> resize(288)
+        xs |> resize(288 / 32)
+        let xqt <- quantize_q8_0(x, 288l)
+        var xdeq : array<float>
+        xdeq |> resize(288)
+        dequantize_q8_0(xqt, xdeq)
+        quantize_q8_0_into(x, 288l, xq, xs, 0l, 0l)
+        check_q8q8(b, qt, wdeq, xq, xs, xdeq, 288, 32000)
+        b |> run("q8q8  classifier 32000x288") {
+            quantize_q8_0_into(x, 288l, xq, xs, 0l, 0l)
+            matmul_q8q8(y, qt.q, qt.scales, xq, xs, 288l, 32000l)
+        }
         // Q4_0: 8x fewer weight bytes than fp32, but a costlier unpack (shift+mask per element).
         let qt4 <- quantize_q4_0(w, 288l * 32000l)
         var wdeq4 : array<float>
@@ -147,6 +163,23 @@ def check_q4(b : B?; qt : Q4Tensor; wdeq, x : array<float>; n, d : int) {
     matmul_q4_flat(yc, qt.q, qt.scales, x, int64(n), int64(d))
     for (i in range(d)) {
         if (abs(yref[i] - ya[i]) > 1.0e-2 || abs(yref[i] - yb[i]) > 1.0e-2 || abs(yref[i] - yc[i]) > 1.0e-2) {
+            b->failNow()
+        }
+    }
+}
+
+// Q8·Q8 correctness gate: the activation is quantized too, so the reference is the fp32 kernel on
+// BOTH dequantized weights and the dequantized activation. matmul_q8q8 computes the same block sums
+// (exact int dot * the two scales), so the gap is fp-order only.
+def check_q8q8(b : B?; qt : Q8Tensor; wdeq : array<float>; xq : array<int8>; xs : array<float>; xdeq : array<float>; n, d : int) {
+    var yref : array<float>
+    var ya : array<float>
+    yref |> resize(d)
+    ya |> resize(d)
+    matmul_llvm_vec(yref, wdeq, xdeq, int64(n), int64(d))
+    matmul_q8q8(ya, qt.q, qt.scales, xq, xs, int64(n), int64(d))
+    for (i in range(d)) {
+        if (abs(yref[i] - ya[i]) > 1.0e-2) {
             b->failNow()
         }
     }

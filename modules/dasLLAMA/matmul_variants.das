@@ -330,6 +330,61 @@ def matmul_q8flat_par(var y : array<float>; wq : array<int8> | #; ws : array<flo
     }
 }
 
+// --- Q8·Q8 (activation-quantized). The activation x is ALSO quantized to Q8 per block, so the
+// inner block loop is int8·int8 -> the LLVM JIT emits ARM SDOT (vdotq_s32: 16 int8 MACs/instr,
+// exact int32 accumulate). The two per-block fp32 scales (weight ws[b], activation xs[b]) multiply
+// in once per 32-wide block. This is llama.cpp's Q8_0 kernel shape. x is pre-quantized by the
+// caller (xq int8 [n] + xs fp32 [n/32]); reused across all d output rows.
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+//! Q8·Q8 matmul: x already quantized to (xq, xs). Each row is an SDOT dot.
+def matmul_q8q8(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+//! Threaded Q8·Q8 matmul: split the d rows across workers. x pre-quantized; workers read shared
+//! pointers. Requires an enclosing with_job_que.
+def matmul_q8q8_par(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64; num_jobs : int) {
+    let nb = n / 32l
+    unsafe {
+        let yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        parallel_for(0, int(d), num_jobs) $(rb, re, wg) {
+            unsafe {
+                var myp = reinterpret<float?>(yp)
+                for (i in range(rb, re)) {
+                    myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                }
+            }
+            wg |> notify_and_release
+        }
+    }
+}
+
 // --- Q4_0 dequant-in-dot. Weights are 4-bit (8x fewer bytes than fp32) in GGML's split-half
 // packing: per 32-weight block, 16 bytes where byte j holds element j in the low nibble and
 // element j+16 in the high nibble, plus one fp32 scale. Half the bytes of Q8 to read, but the

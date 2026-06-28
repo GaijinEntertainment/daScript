@@ -371,6 +371,8 @@ struct RunState {
     v : array<float>          // value, this position (kv_dim)
     att : array<float>        // attention scores for one head (seq_len)
     logits : array<float>     // output logits (vocab_size)
+    xq : array<int8>          // activation quantized to Q8 (sized max(dim, hidden_dim)) for the Q8·Q8 kernel
+    xs : array<float>         // per-block activation scales (sized max(dim, hidden_dim) / 32)
     key_cache : array<float>  // (n_layers * seq_len * kv_dim)
     value_cache : array<float>
 }
@@ -388,6 +390,9 @@ def make_run_state(c : Config) : RunState {
     s.v |> resize(c.kv_dim)
     s.att |> resize(c.seq_len)
     s.logits |> resize(c.vocab_size)
+    let maxn = max(c.dim, c.hidden_dim)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
+    s.xq |> resize(maxn)
+    s.xs |> resize(maxn / 32l)
     s.key_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
     s.value_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
     return <- s
@@ -414,13 +419,15 @@ def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : 
     }
 }
 
-// Q8 matmul with the weight viewed into the quantized blob (int8) + its per-block scales. woff is the
-// weight-element offset; scales start at woff/32 (woff is block-aligned for every 2D tensor).
-def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+// Q8 matmul: quantize the activation x to Q8 (into the run-state scratch xq/xs, shared across all d
+// rows), then run the int8·int8 SDOT kernel against the int8 weights. woff is the weight-element
+// offset; scales start at woff/32 (woff is block-aligned for every 2D tensor).
+def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
     let total = n * d
+    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     array_view(t.qblob, woff, total) $(wq : array<int8>#) {
         array_view(t.qscales, woff / 32l, total / 32l) $(ws : array<float>#) {
-            matmul_q8(y, wq, ws, x, n, d)
+            matmul_q8q8(y, wq, ws, xq, xs, n, d)
         }
     }
 }
@@ -437,9 +444,10 @@ def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : ar
 }
 
 // Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
-def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+// xq/xs are the run-state activation-quant scratch (used only by the Q8 path).
+def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
     if (t.quant == QuantMode.q8) {
-        mm_at_q8(y, t, woff, x, n, d)
+        mm_at_q8(y, t, woff, x, xq, xs, n, d)
     } elif (t.quant == QuantMode.q4) {
         mm_at_q4(y, t, woff, x, n, d)
     } else {
@@ -472,9 +480,9 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // attention rmsnorm
         rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
         // q, k, v projections
-        mm(s.q, t, t.wq_off + l * dim * dim, s.xb, dim, dim)
-        mm(s.k, t, t.wk_off + l * dim * kv_dim, s.xb, dim, kv_dim)
-        mm(s.v, t, t.wv_off + l * dim * kv_dim, s.xb, dim, kv_dim)
+        mm(s.q, t, t.wq_off + l * dim * dim, s.xb, s.xq, s.xs, dim, dim)
+        mm(s.k, t, t.wk_off + l * dim * kv_dim, s.xb, s.xq, s.xs, dim, kv_dim)
+        mm(s.v, t, t.wv_off + l * dim * kv_dim, s.xb, s.xq, s.xs, dim, kv_dim)
         // RoPE on q (dim) and k (kv_dim)
         rope(s.q, pos, head_size, dim)
         rope(s.k, pos, head_size, kv_dim)
@@ -504,21 +512,21 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             }
         }
         // output projection, residual
-        mm(s.xb2, t, t.wo_off + l * dim * dim, s.xb, dim, dim)
+        mm(s.xb2, t, t.wo_off + l * dim * dim, s.xb, s.xq, s.xs, dim, dim)
         for (i in range64(dim)) {
             s.x[i] += s.xb2[i]
         }
         // ffn rmsnorm
         rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
         // SwiGLU: hb = silu(W1·xb) * (W3·xb)
-        mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, dim, hidden)
-        mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, dim, hidden)
+        mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
+        mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
         silu(s.hb, hidden)
         for (i in range64(hidden)) {
             s.hb[i] *= s.hb2[i]
         }
         // down projection, residual
-        mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, hidden, dim)
+        mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
         for (i in range64(dim)) {
             s.x[i] += s.xb[i]
         }
@@ -530,7 +538,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // tied weights: the classifier IS the fp32 embedding table
         mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
     } else {
-        mm(s.logits, t, t.wcls_off, s.xb, dim, c.vocab_size)
+        mm(s.logits, t, t.wcls_off, s.xb, s.xq, s.xs, dim, c.vocab_size)
     }
 }
 
