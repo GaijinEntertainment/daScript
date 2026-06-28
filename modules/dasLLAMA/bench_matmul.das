@@ -18,12 +18,15 @@ def fill(var a : array<float>; count : int) {
 def check_same(b : B?; w, x : array<float>; n, d : int) {
     var yn : array<float>
     var yf : array<float>
+    var yv : array<float>
     yn |> resize(d)
     yf |> resize(d)
+    yv |> resize(d)
     matmul_naive(yn, w, x, int64(n), int64(d))
     matmul_f4(yf, w, x, int64(n), int64(d))
+    matmul_llvm_vec(yv, w, x, int64(n), int64(d))
     for (i in range(d)) {
-        if (abs(yn[i] - yf[i]) > 1.0e-2) {
+        if (abs(yn[i] - yf[i]) > 1.0e-2 || abs(yn[i] - yv[i]) > 1.0e-2) {
             b->failNow()
         }
     }
@@ -46,6 +49,9 @@ def bench_matmul(b : B?) {
         b |> run("f4    proj 288x288") {
             matmul_f4(y, w, x, 288l, 288l)
         }
+        b |> run("llvm  proj 288x288") {
+            matmul_llvm_vec(y, w, x, 288l, 288l)
+        }
     }
     // stories15M classifier head — W is 32000 x 288 (the heaviest single matmul).
     {
@@ -61,6 +67,9 @@ def bench_matmul(b : B?) {
         }
         b |> run("f4    classifier 32000x288") {
             matmul_f4(y, w, x, 288l, 32000l)
+        }
+        b |> run("llvm  classifier 32000x288") {
+            matmul_llvm_vec(y, w, x, 288l, 32000l)
         }
     }
 }

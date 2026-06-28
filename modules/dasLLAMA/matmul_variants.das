@@ -19,6 +19,25 @@ def matmul_naive(var y : array<float> | #; w : array<float> | #; x : array<float
     }
 }
 
+// One row's dot product, auto-vectorized by the LLVM JIT (width 8, no bounds checks, non-aliasing).
+[hint(unsafe_range_check, noalias=x, noalias=w)]
+def dot_vec(w, x : float const?; n : int64) {
+    var acc = 0.0
+    for [vectorize, vectorize_width=8] (j in range64(n)) {
+        acc += unsafe(w[j]) * unsafe(x[j])
+    }
+    return acc
+}
+
+//! LLVM auto-vectorize variant: per-row dot_vec with vectorize/noalias/unsafe-range hints.
+def matmul_llvm_vec(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
+    for (i in range64(d)) {
+        let pw = unsafe(addr(w[i * n]))
+        let px = unsafe(addr(x[0]))
+        y[i] = dot_vec(pw, px, n)
+    }
+}
+
 //! float4 SIMD: accumulate the dot product four lanes at a time, horizontal-sum at the end.
 def matmul_f4(var y : array<float> | #; w : array<float> | #; x : array<float> | #; n, d : int64) {
     for (i in range64(d)) {
