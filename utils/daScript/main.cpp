@@ -173,14 +173,14 @@ int das_aot_main ( int argc, char * argv[] ) {
             } else if ( strcmp(argv[ai],"-aot-macros")==0 ) {
                 aotMacros = true;
             } else if ( strcmp(argv[ai],"-project")==0 ) {
-                if ( ai+1 > argc ) {
+                if ( ai+1 >= argc ) {
                     tout << "das-project requires argument";
                     return -1;
                 }
                 projectFile = argv[ai+1];
                 ai += 1;
             } else if ( strcmp(argv[ai],"-dasroot")==0 ) {
-                if ( ai+1 > argc ) {
+                if ( ai+1 >= argc ) {
                     tout << "dasroot requires argument";
                     return -1;
                 }
@@ -669,7 +669,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 scriptArgs = true;
             }
             if ( cmd=="main" ) {
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("main requires argument\n");
                     print_help();
                     return -1;
@@ -677,7 +677,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 mainName = argv[i+1];
                 i += 1;
             } else if ( cmd=="dasroot" ) {
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("dasroot requires argument\n");
                     print_help();
                     return -1;
@@ -704,7 +704,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="aot-macros") {
                 aotMacros = true;   // force quote lowering (daslib/quote) in a normal run
             } else if ( cmd=="output") {
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("output requires argument\n");
                     print_help();
                     return -1;
@@ -798,7 +798,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 pauseAfterErrors = true;
                 pauseAfterDone = true;
             } else if ( cmd=="project") {
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("das-project requires argument\n");
                     print_help();
                     return -1;
@@ -807,7 +807,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="-track-smart-ptr" ) {
                 // script will pick up next argument by itself
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("expecting smart pointer id\n");
                     print_help();
                     return -1;
@@ -821,7 +821,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
                 printf("tracking %" PRIx64 " aka %" PRIu64 "\n", id, id);
             } else if ( cmd=="-track-job-status" ) {
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("expecting job status id\n");
                     print_help();
                     return -1;
@@ -842,7 +842,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 profilerRequired = true;
             } else if ( cmd=="-das-profiler-log-file") {
                 // script will pick up next argument by itself
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("expecting profiler log file name\n");
                     print_help();
                     return -1;
