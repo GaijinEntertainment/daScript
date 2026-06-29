@@ -13,6 +13,7 @@
 
     // ─── Data ───────────────────────────────────────────────────────────
     var REPO_BLOB = 'https://github.com/GaijinEntertainment/daScript/blob/master/web/examples/ui/samples/examples/';
+    var REPO_ROOT = 'https://github.com/GaijinEntertainment/daScript/blob/master/';
 
     var DAS_EXAMPLES = [
         {
@@ -33,12 +34,29 @@
             poster: 'files/examples/pacman-poster.png',
             aspect: 900 / 760,
         },
+        {
+            id: 'furier', name: 'Fourier Series', kind: 'imgui showcase',
+            description: 'Epicycle vectors tracing a Fourier curve — a live OpenGL ' +
+                'visualization driven by Dear ImGui controls. The whole ImGui surface ' +
+                '(daslang theme, font, widgets) is compiled to WebAssembly and runs here.',
+            tags: ['imgui', 'opengl', 'wasm'],
+            controls: 'mouse · imgui widgets',
+            poster: 'files/examples/furier-poster.png',
+            aspect: 1024 / 1024,
+            // Bundles the external dasImgui module compiled to wasm64; the universal
+            // interpreter can't bind it, so this card is memory64-only (no interpreted
+            // fallback) and ships from a source outside the playground samples tree.
+            wasm64Only: true,
+            src: 'examples/graphics/furier_opengl_imgui_example.das',
+        },
     ];
 
     DAS_EXAMPLES.forEach(function (ex) {
         ex.gameUrl = 'examples/' + ex.id + '/' + ex.id + '.html';
-        ex.srcUrl = REPO_BLOB + ex.id + '/main.das';
-        ex.playgroundUrl = 'playground/index.html?example=' + ex.id;
+        ex.srcUrl = ex.src ? (REPO_ROOT + ex.src) : (REPO_BLOB + ex.id + '/main.das');
+        // Examples registered as playground samples get an "open in playground" link.
+        // wasm64-only showcases (external native modules) have no interpreted sample.
+        ex.playgroundUrl = ex.wasm64Only ? null : ('playground/index.html?example=' + ex.id);
     });
 
     // ─── wasm64 (memory64) feature detection ────────────────────────────
@@ -86,7 +104,9 @@
                 '<p class="forge-ex-card__desc">' + esc(ex.description) + '</p>' +
                 '<div class="forge-ex-card__tags">' + tags + '</div>' +
                 '<div class="forge-ex-card__foot">' +
-                  '<a class="forge-ex-card__pglink" href="' + esc(ex.playgroundUrl) + '">open in playground ↗</a>' +
+                  (ex.playgroundUrl
+                    ? '<a class="forge-ex-card__pglink" href="' + esc(ex.playgroundUrl) + '">open in playground ↗</a>'
+                    : '<a class="forge-ex-card__pglink" href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener">view source ↗</a>') +
                 '</div>' +
               '</div>' +
             '</article>';
@@ -133,6 +153,20 @@
         return USE_WASM64 ? ex.gameUrl : ('examples/_interp.html?g=' + encodeURIComponent(ex.id));
     }
     function viewportHTML(ex) {
+        // wasm64-only example on an engine without memory64: there is no interpreted
+        // fallback (the external native module can't run in the interpreter), so show
+        // a clear note instead of an iframe that would never load.
+        if (ex.wasm64Only && !USE_WASM64) {
+            return '<div class="forge-ex-player__fallback">' +
+                     '<div class="forge-ex-player__fallback-glyph" aria-hidden="true">⚠</div>' +
+                     '<div class="forge-ex-player__fallback-head">Needs a memory64 browser</div>' +
+                     '<p class="forge-ex-player__fallback-body">' + esc(ex.name) + ' bundles the Dear ImGui ' +
+                       'module compiled to wasm64 — it runs on Chrome, Edge or Firefox 133+ (engines with ' +
+                       'WebAssembly memory64). The universal interpreter can’t bind a native module, so ' +
+                       'this one has no interpreted fallback.</p>' +
+                     '<a class="forge-ex-player__fallback-btn" href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener">view source ↗</a>' +
+                   '</div>';
+        }
         return '<iframe class="forge-ex-player__frame" id="ex-frame" title="' + esc(ex.name) + '" ' +
                'src="' + esc(runnerUrl(ex)) + '" allow="autoplay; fullscreen"></iframe>';
     }
@@ -140,8 +174,9 @@
     function openPlayer(ex) {
         closePlayer();
 
-        var statusText = USE_WASM64 ? 'loading…' : 'loading · interpreted';
-        var statusClass = 'is-loading';
+        var needs64 = ex.wasm64Only && !USE_WASM64;
+        var statusText = needs64 ? 'needs memory64' : (USE_WASM64 ? 'loading…' : 'loading · interpreted');
+        var statusClass = needs64 ? 'is-fallback' : 'is-loading';
 
         var overlay = document.createElement('div');
         overlay.className = 'forge-ex-overlay';
@@ -165,7 +200,9 @@
               '<span class="forge-ex-player__controls"><span class="forge-ex-player__controls-label">controls</span>&nbsp;&nbsp;' + esc(ex.controls) + '</span>' +
               '<div class="forge-ex-player__links">' +
                 '<a href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener" class="forge-ex-player__link">view source ↗</a>' +
-                '<a href="' + esc(ex.playgroundUrl) + '" class="forge-ex-player__link forge-ex-player__link--amber">open in playground ↗</a>' +
+                (ex.playgroundUrl
+                  ? '<a href="' + esc(ex.playgroundUrl) + '" class="forge-ex-player__link forge-ex-player__link--amber">open in playground ↗</a>'
+                  : '') +
               '</div>' +
             '</div>' +
           '</div>';
@@ -187,7 +224,8 @@
             if (act === 'close') closePlayer();
             else if (act === 'restart') {
                 var f = document.getElementById('ex-frame');
-                if (f) f.src = f.src;
+                if (!f) return;           // no iframe (e.g. memory64-only note) — nothing to restart
+                f.src = f.src;
                 setStatus(USE_WASM64 ? 'loading…' : 'loading · interpreted', 'is-loading');
             } else if (act === 'fullscreen') {
                 var vp = document.getElementById('ex-viewport');
