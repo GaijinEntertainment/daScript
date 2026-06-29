@@ -424,7 +424,8 @@ namespace das {
             }
             fieldOffset = (fieldOffset + fa) & ~fa;
             decl.offset = int(fieldOffset);
-            fieldOffset += decl.type->getSizeOf64();
+            // An empty-struct field is 0 bytes here but >=1 in the AOT-emitted C++.
+            fieldOffset += das::max(uint64_t(1), decl.type->getSizeOf64());
         }
         verifyType(decl.type, false, decl.classMethod);
     }
