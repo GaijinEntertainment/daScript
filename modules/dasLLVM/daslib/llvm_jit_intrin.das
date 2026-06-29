@@ -86,6 +86,8 @@ let g_intrin_lookup <- {
     "math::gather_store_neq_mask" => @@intrinsic_math_gather_store_mask,
     "math::gather_store_stride" => @@intrinsic_math_gather_store_stride,
     "math::u8x4_gather_store" => @@intrinsic_math_u8x4_gather_store,
+// dasLLAMA Q8 GEMM — ARM SDOT proof-of-concept (see dasllama_kernel_opt_findings)
+    "matmul_variants::sdot4" => @@intrinsic_sdot4,
 // math
     "math::sign" => @@intrinsic_math_sign,
     "math::saturate" => @@intrinsic_math_saturate,
@@ -1310,6 +1312,33 @@ def intrinsic_math_gather(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : a
     res = LLVMBuildInsertElement(ctx.builder, res, LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, zaddr, ""), ctx.types.ConstI32(2ul), "")
     res = LLVMBuildInsertElement(ctx.builder, res, LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, waddr, ""), ctx.types.ConstI32(3ul), "")
     return res
+}
+
+// ARM SDOT proof-of-concept (dasLLAMA Q8 GEMM). sdot4(acc:int4; w,x:int8 const?):int4 emits one
+// @llvm.aarch64.neon.sdot: 16 int8·int8 MACs into the 4 lanes of `acc` (each lane sums 4 products),
+// exact int32 accumulate, NO horizontal reduce — the per-block addv that drains the auto-vectorized
+// path. Pointers are passed PRE-offset by the caller, so the emitter just does an unaligned v16i8
+// load. The daslang body of sdot4 is the interp/typecheck fallback. See dasllama_kernel_opt_findings.
+def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
+    let v4i32 = ctx.types.LLVMInt4Type()
+    var wptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
+    var xptr = LLVMBuildPointerCast(ctx.builder, arguments[2], LLVMPointerType(v16i8, 0u), "")
+    var wvec = LLVMBuildLoad2(ctx.builder, v16i8, wptr, "")
+    LLVMSetAlignment(wvec, 1u)
+    var xvec = LLVMBuildLoad2(ctx.builder, v16i8, xptr, "")
+    LLVMSetAlignment(xvec, 1u)
+    let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.sdot")
+    var declTypes <- [v4i32, v16i8]                 // sdot is overloaded on result + operand vector types
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, declTypes)
+    if (decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.aarch64.neon.sdot (non-ARM target?)")
+        return null
+    }
+    var fnArgTypes <- [v4i32, v16i8, v16i8]
+    var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
+    var callArgs <- [arguments[0], wvec, xvec]
+    return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "sdot4")
 }
 
 def intrinsic_math_store_neq_mask(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

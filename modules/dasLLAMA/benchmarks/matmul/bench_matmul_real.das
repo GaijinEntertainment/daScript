@@ -50,6 +50,33 @@ def bench_shape(b : B?; name : string; n, d : int64; hw : int64) {
     b |> run("{name} q8q8 single ") {
         matmul_q8q8(y, qt8.q, qt8.scales, xq, xs, n, d)
     }
+    b |> run("{name} q8q8_w8 single ") {
+        matmul_q8q8_w8(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_w32 single ") {
+        matmul_q8q8_w32(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_w16u2 single ") {
+        matmul_q8q8_w16u2(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_4acc single ") {
+        matmul_q8q8_4acc(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_8acc single ") {
+        matmul_q8q8_8acc(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_sdot4 single ") {
+        matmul_q8q8_sdot4(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_sdot4x4 single ") {
+        matmul_q8q8_sdot4x4(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_8acc_int single ") {
+        matmul_q8q8_8acc_int(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
+    b |> run("{name} q8q8_uf single ") {
+        matmul_q8q8_uf(y, qt8.q, qt8.scales, xq, xs, n, d)
+    }
     b |> run("{name} q8q8 par-1N ") {
         matmul_q8q8_par(y, qt8.q, qt8.scales, xq, xs, n, d, int(hw))
     }
