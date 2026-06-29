@@ -8,6 +8,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
 require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
+require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
 require math
 
 // dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
@@ -516,7 +517,9 @@ struct RunState {
     q : array<float>          // query (dim)
     k : array<float>          // key, this position (kv_dim)
     v : array<float>          // value, this position (kv_dim)
-    att : array<float>        // attention scores for one head (seq_len)
+    att : array<float>        // attention scores for one head (seq_len) — the per-token forward() path
+    att_b : array<float>      // batched prefill attention scores, one (start_pos+npos)-wide row PER HEAD
+                              // so the head loop threads with no shared scratch (sized in forward_prefill)
     logits : array<float>     // output logits (vocab_size)
     xq : array<int8>          // activation quantized to Q8 (sized max(dim, hidden_dim)) for the Q8·Q8 kernel
     xs : array<float>         // per-block activation scales (sized max(dim, hidden_dim) / 32)
@@ -796,6 +799,10 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 // Measurement is UNCONDITIONAL: a handful of ref_time_ticks() + table adds per prefill, negligible
 // against the matmuls, so it always accumulates. Output is on-demand — reset() to start a window,
 // report() to dump it. (We measure a lot; never gate the measurement, only the printing.)
+// Thread the prefill attention over heads once the work proxy (npos × max-cnt × n_heads) clears this;
+// below it the per-job dispatch overhead isn't worth it and we run the head loop inline.
+let ATTN_PAR_THRESHOLD = 100_000l
+
 var g_prefill_prof_acc : table<string; int64>
 
 //! Start a fresh measurement window (zero the per-section accumulators).
@@ -856,6 +863,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     s.hb2_b |> resize(npos * hidden)
     s.xqb |> resize(npos * maxn)
     s.xsb |> resize(npos * maxn / 32l)
+    // per-head attention scratch: each head gets its own (start_pos+npos)-wide score row (= max cnt),
+    // so the head loop threads with no shared `att` row to contend on
+    s.att_b |> resize(n_heads * (start_pos + npos))
 
     // token embeddings -> residual stream x_b [npos x dim]
     let ts_embed = ref_time_ticks()
@@ -921,28 +931,49 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
         // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
         // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
+        // THREADED OVER HEADS: every head does the same causal triangle (perfect load balance) and
+        // writes a disjoint output slice [p*qd + h*head_size ..]; each head owns its own att_b row, so
+        // there is no shared scratch to contend on. Workers run in fork contexts → raw pointers only.
         let ts_attn = ref_time_ticks()
-        for (p in range64(npos)) {
-            let ap = start_pos + p
-            let kstart = (is_sliding && ap + 1l > c.sliding_window) ? (ap + 1l - c.sliding_window) : 0l
-            let cnt = ap + 1l - kstart
-            for (h in range64(n_heads)) {
-                let qoff = h * head_size
-                let kvhoff = (h / kv_mul) * head_size
-                for (j in range64(cnt)) {
-                    let koff = loff + (kstart + j) * kv_dim + kvhoff
-                    s.att[j] = dot(unsafe(addr(s.q_b[p * qd + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
-                }
-                if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                    softcap(s.att, cnt, c.attn_logit_softcap)
-                }
-                softmax(s.att, cnt)
-                for (i in range64(head_size)) {
-                    s.xb_b[p * qd + qoff + i] = 0.0
-                }
-                for (j in range64(cnt)) {
-                    let voff = loff + (kstart + j) * kv_dim + kvhoff
-                    axpy(unsafe(addr(s.xb_b[p * qd + qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
+        let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
+        let sliding_window = c.sliding_window  // hoisted: scalars captured by the worker, not the struct
+        let attn_softcap = c.attn_logit_softcap
+        unsafe {
+            let qp = reinterpret<float const?>(addr(s.q_b[0]))
+            let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
+            let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
+            var xbp = addr(s.xb_b[0])
+            var attp = addr(s.att_b[0])
+            let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let abase = hh * maxctx                // this head's private score row
+                        for (p in range64(npos)) {
+                            let ap = start_pos + p
+                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                            let cnt = ap + 1l - kstart
+                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
+                            for (j in range64(cnt)) {
+                                let koff = loff + (kstart + j) * kv_dim + kvhoff
+                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
+                            }
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                softcap(attp + abase, cnt, attn_softcap)
+                            }
+                            softmax(attp + abase, cnt)
+                            for (i in range64(head_size)) {
+                                xbp[qbase + i] = 0.0
+                            }
+                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
+                                let voff = loff + (kstart + j) * kv_dim + kvhoff
+                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -78,6 +78,9 @@ def test_prefill_fp32(t : T?) {
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         check_prefill(t, tr, prompt)
         check_continuation(t, tr, prompt, 4l)
+        // a long prompt trips ATTN_PAR_THRESHOLD, so this covers the THREADED attention arm
+        let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
+        check_prefill(t, tr, long_prompt)
     }
 }
 
@@ -94,5 +97,8 @@ def test_prefill_q8(t : T?) {
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         check_prefill(t, tr, prompt)
         check_continuation(t, tr, prompt, 4l)
+        // a long prompt trips ATTN_PAR_THRESHOLD, so this covers the THREADED attention arm
+        let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
+        check_prefill(t, tr, long_prompt)
     }
 }

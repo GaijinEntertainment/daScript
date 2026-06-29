@@ -34,6 +34,20 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     }
 }
 
+//! Fork-callable AXPY for the threaded prefill attention. Same width-8 kernel as axpy, but takes
+//! `d` as `const?` so a capture-const fork pointer binds (add-const is allowed) — un-consts inside
+//! to write. NO `noalias` hint on purpose: `const?`+reinterpret under noalias miscompiles. Output
+//! and the value-cache source never overlap, so the vectorizer's runtime alias check always passes.
+[hint(unsafe_range_check)]
+def vaxpy(d : float const?; s : float const?; scale : float; n : int64) {
+    unsafe {
+        var dm = reinterpret<float?>(d)
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+            dm[j] += scale * s[j]
+        }
+    }
+}
+
 // n*d above this -> split the output rows across worker threads. Below it, the per-call
 // job-dispatch overhead (~90us) dwarfs the gain, so stay single-thread. (Measured on M1 Max:
 // classifier 32000x288 = 9.2M threads to ~2x; ffn 768x288 = 0.22M would be ~5x slower.)
@@ -475,19 +489,28 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! softmax — turns a score vector into a probability distribution (sums to 1).
 //! In place over the first `size` elements. Subtracts the max first so exp() can't
 //! overflow (exp(x-max)/sum(exp(x-max)) is identical math, numerically safe).
+//! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
+//! addresses; the array overload forwards here, so both are bit-identical. Takes `const?` so a
+//! capture-const fork pointer binds (add-const is allowed); un-consts internally to write in place.
+def softmax(xc : float const?; size : int64) {
+    unsafe {
+        var x = reinterpret<float?>(xc)
+        var maxv = x[0]
+        for (i in range64(1l, size)) {
+            maxv = max(maxv, x[i])
+        }
+        var sum = 0.0
+        for (i in range64(size)) {
+            x[i] = exp(x[i] - maxv)
+            sum += x[i]
+        }
+        for (i in range64(size)) {
+            x[i] /= sum
+        }
+    }
+}
 def softmax(var x : array<float> | #; size : int64) {
-    var maxv = x[0]
-    for (i in range64(1l, size)) {
-        maxv = max(maxv, x[i])
-    }
-    var sum = 0.0
-    for (i in range64(size)) {
-        x[i] = exp(x[i] - maxv)
-        sum += x[i]
-    }
-    for (i in range64(size)) {
-        x[i] /= sum
-    }
+    softmax(unsafe(addr(x[0])), size)
 }
 
 //! SiLU (a.k.a. swish) activation: silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
@@ -515,11 +538,18 @@ def gelu(var x : array<float> | #; size : int64) {
 //! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
 //! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
 //! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
-def softcap(var x : array<float> | #; size : int64; cap : float) {
+//! Pointer core (see softmax) — threaded prefill attention calls this on raw fork addresses.
+def softcap(xc : float const?; size : int64; cap : float) {
     let inv = 1.0 / cap
-    for (i in range64(size)) {
-        x[i] = cap * tanh(x[i] * inv)
+    unsafe {
+        var x = reinterpret<float?>(xc)
+        for (i in range64(size)) {
+            x[i] = cap * tanh(x[i] * inv)
+        }
     }
+}
+def softcap(var x : array<float> | #; size : int64; cap : float) {
+    softcap(unsafe(addr(x[0])), size, cap)
 }
 
 //! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1)
