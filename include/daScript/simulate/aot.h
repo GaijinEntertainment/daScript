@@ -1260,7 +1260,7 @@ namespace das {
         constexpr auto align = variant_align<TA...>();
         constexpr auto ihdr = round_up(TypeSize<int>::size, align);
         int sizes[] = { TypeSize<TA>::size..., 0 };
-        int ma = 0;
+        int ma = ihdr;  // a variant always carries its index tag, even with no alternatives
         for (size_t i = 0; i != sizeof...(TA); ++i)
             ma = std::max(ihdr + round_up(sizes[i], align), ma);
         return ma;
@@ -1364,6 +1364,23 @@ namespace das {
             memcpy ( (char *)this, &arr, variantSize );
         }
         TData data;
+    };
+
+    // empty variant: no alternatives, just the inherited 4-byte index tag (no payload).
+    // a dedicated specialization avoids the generic template's `char data[variantSize-4]`,
+    // which would be a zero-length array (non-standard) when variantSize == sizeof(int32_t).
+    template <int variantSize, int variantAlign>
+    struct alignas(variantAlign) TVariant<variantSize, variantAlign> : Variant {
+        static_assert(variantSize == variant_sizeof<>());
+        static_assert(variantAlign == variant_align<>());
+        TVariant() {}
+        TVariant(const TVariant & arr) { moveT(arr); }
+        TVariant(TVariant && arr) { moveT(arr); }
+        TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
+        TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
+        __forceinline void moveT ( const TVariant & arr ) {
+            memcpy ( (char *)this, &arr, variantSize );
+        }
     };
 
     template <typename ...TA>

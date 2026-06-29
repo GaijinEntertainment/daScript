@@ -397,6 +397,8 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 ._fold()) |> join(",")
             if (cfg.cross_platform) {
                 write(writer, "AutoVariant<{types}>");
+            } elif (types |> empty()) {     // empty variant: no alternatives, only the index tag
+                write(writer, "TVariant<{typeDecl.variantSize},{typeDecl.variantAlign}>")
             } else {
                 write(writer, "TVariant<{typeDecl.variantSize},{typeDecl.variantAlign},{types}>")
             }
