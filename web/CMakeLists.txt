@@ -240,10 +240,35 @@ else()
     find_program(DAS_HOST_CC  NAMES clang gcc   REQUIRED)
     find_program(DAS_HOST_CXX NAMES clang++ g++ REQUIRED)
     set(_host_compiler_args)
+    set(_host_abi_args)
     if(NOT CMAKE_HOST_WIN32)
         set(_host_compiler_args
             -DCMAKE_C_COMPILER:FILEPATH=${DAS_HOST_CC}
             -DCMAKE_CXX_COMPILER:FILEPATH=${DAS_HOST_CXX})
+        # Match the wasm TARGET's C++ ABI so cross-compiled handled-type layouts
+        # (Context, jobque, std::string-bearing structs) bake identically. The
+        # emscripten target is libc++ + C++ exceptions (-fwasm-exceptions +
+        # DAS_ENABLE_EXCEPTIONS, top of this file); the default Linux host is
+        # libstdc++ + setjmp, whose std::string (32 vs 24) / std::mutex (80 vs 40)
+        # / exception layouts diverge -> the JIT bakes wrong handled-type offsets
+        # and sizes. Building the cross-compile host libc++ + DAS_ENABLE_EXCEPTIONS
+        # makes host==target layout (verified: drops handled-type divergence to
+        # zero on every runtime-live type; only the compiler-only Program residual
+        # remains). _LIBCPP_DISABLE_DEPRECATION_WARNINGS keeps -Werror happy with
+        # libc++ deprecations (codecvt_utf8 in dasUnitTest).
+        # -stdlib=libc++ requires clang; the find_program above prefers clang but
+        # can fall back to gcc, which rejects -stdlib=libc++. Only apply the libc++
+        # ABI args when the host compiler is clang; otherwise warn that the layouts
+        # may diverge (degraded but builds) rather than hard-failing the sub-build.
+        if(DAS_HOST_CXX MATCHES "clang")
+            set(_host_abi_args
+                "-DCMAKE_CXX_FLAGS:STRING=-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS"
+                "-DCMAKE_C_FLAGS:STRING=-DDAS_ENABLE_EXCEPTIONS=1"
+                "-DCMAKE_EXE_LINKER_FLAGS:STRING=-stdlib=libc++"
+                "-DCMAKE_SHARED_LINKER_FLAGS:STRING=-stdlib=libc++")
+        else()
+            message(WARNING "host_daslang: clang not found (using ${DAS_HOST_CXX}); building the wasm cross-compile host with the default stdlib + setjmp — handled-type layouts may diverge from the libc++ emscripten target. Install clang for ABI parity.")
+        endif()
     endif()
     ExternalProject_Add(host_daslang
         EXCLUDE_FROM_ALL TRUE
@@ -253,6 +278,7 @@ else()
         STEP_TARGETS     build
         CMAKE_CACHE_ARGS -DCMAKE_TOOLCHAIN_FILE:STRING=
                          ${_host_compiler_args}
+                         ${_host_abi_args}
                          -DCMAKE_BUILD_TYPE:STRING=Release
                          -DDAS_LLVM_DISABLED:BOOL=OFF
                          -DDAS_PUGIXML_DISABLED:BOOL=OFF

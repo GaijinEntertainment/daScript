@@ -36,10 +36,12 @@ jobs:
     # The host daslang now builds with dasGlfw/dasOpenGL ON so it can drive the
     # /examples game cross-compile (daspkg release wasm). dasGlfw's
     # find_package(OpenGL REQUIRED) needs the GL + X11 dev headers.
-    - name: "Install OpenGL dev libraries"
+    - name: "Install OpenGL + libc++ dev libraries"
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev
+        # libc++ so the wasm cross-compile host can be built with the SAME C++
+        # stdlib as the emscripten target (see the host build step below).
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
 
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
@@ -86,8 +88,28 @@ jobs:
       run: |
         set -eux
         mkdir -p build
+        # This is the wasm CROSS-COMPILE host: `daspkg build --wasm` below runs it
+        # to JIT-codegen the .das games/samples to wasm64, baking C++ handled-type
+        # layouts (Context, jobque, std::string-bearing structs) from the HOST's
+        # ABI. The emscripten target is libc++ + C++ exceptions (-fwasm-exceptions
+        # + DAS_ENABLE_EXCEPTIONS, see web/CMakeLists.txt); a default libstdc++ +
+        # setjmp host bakes the WRONG offsets/sizes (std::string 32 vs 24, mutex 80
+        # vs 40, exception state) -> wasm heap corruption. Building the host libc++
+        # + exceptions makes host==target layout (verified: zero handled-type
+        # divergence on every runtime-live type; only the compiler-only Program
+        # residual remains).
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
+          # Absolute path: setup-emsdk prepends its LLVM snapshot to PATH, so a bare
+          # `clang` would resolve to emsdk's (flaky on ds_parser.cpp, see version note
+          # above). /usr/bin/clang is the runner image's clang — same one every other
+          # Linux clang job uses (build.yml, extended_checks.yml) — paired with the
+          # apt libc++ installed above.
+          -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_FLAGS="-DDAS_ENABLE_EXCEPTIONS=1" \
+          -DCMAKE_CXX_FLAGS="-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
+          -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++" \
           -DDAS_HV_DISABLED=OFF \
           -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=OFF \

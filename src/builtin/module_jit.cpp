@@ -446,7 +446,9 @@ extern "C" {
         Module::foreach([&](Module * module) -> bool {
             if ( module->name != moduleName ) return true;
             auto ann = module->findAnnotation(typeName);
-            if ( ann && (ann->rtti_isHandledTypeAnnotation() || ann->rtti_isStructureAnnotation()) ) {
+            // handled-type annotations only — StructureAnnotation isn't a TypeAnnotation (see note in
+            // jit_find_handled_annotation); the JIT only resolves offsets for handled-type fields.
+            if ( ann && ann->rtti_isHandledTypeAnnotation() ) {
                 offset = ((TypeAnnotation *)ann)->getFieldOffset(fieldName);
                 return false; // stop iterating
             }
@@ -459,6 +461,85 @@ extern "C" {
                 moduleName, typeName, fieldName);
         }
         return offset;
+    }
+
+    // ---- ABI safe-check (opt-in via --jit-check-abi) ------------------------
+    // Cross-compiling from an MSVC host to a wasm/clang target can bake a wrong
+    // handled-type (C++ struct) SIZE or field OFFSET when the two C++ ABIs lay the
+    // struct out differently (vptr/base ordering, or #ifdef WIN32/EMSCRIPTEN-
+    // conditional members). The codegen emits, at startup, one check call per used
+    // handled type (size) and per field (offset) carrying the HOST-baked value;
+    // each compares against the TARGET runtime annotation and records every
+    // divergence. jit_handled_abi_check_report() dumps them all at once and aborts,
+    // so a single run reveals the full magnitude of the layout disaster.
+    static string g_abi_check_report;
+    static int    g_abi_check_count = 0;        // mismatches
+    static int    g_abi_types_checked = 0;      // type-size checks where the target annotation was found
+    static int    g_abi_types_skipped = 0;      // ... not registered on target (module not linked here)
+    static int    g_abi_fields_checked = 0;
+    static int    g_abi_fields_skipped = 0;
+
+    static TypeAnnotation * jit_find_handled_annotation ( const char * moduleName, const char * typeName ) {
+        TypeAnnotation * found = nullptr;
+        Module::foreach([&](Module * module) -> bool {
+            if ( module->name != moduleName ) return true;
+            auto ann = module->findAnnotation(typeName);
+            // handled-type annotations only: StructureAnnotation derives from Annotation (not
+            // TypeAnnotation), so casting one to TypeAnnotation* would be UB. The ABI sweep only
+            // emits checks for handled (BasicStructureAnnotation) types, so this is also exact.
+            if ( ann && ann->rtti_isHandledTypeAnnotation() ) {
+                found = (TypeAnnotation *) ann;
+                return false; // stop iterating
+            }
+            return true;
+        });
+        return found;
+    }
+
+    DAS_API void jit_check_handled_type_size ( const char * moduleName, const char * typeName, uint32_t hostSize ) {
+        auto ann = jit_find_handled_annotation(moduleName, typeName);
+        if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
+        g_abi_types_checked ++;
+        uint32_t targetSize = uint32_t(ann->getSizeOf());
+        if ( targetSize != hostSize ) {
+            char buf[256];
+            snprintf(buf, sizeof(buf), "  size   %s::%s  host=%u target=%u\n",
+                moduleName, typeName, hostSize, targetSize);
+            g_abi_check_report += buf;
+            g_abi_check_count ++;
+        }
+    }
+
+    DAS_API void jit_check_handled_field_offset ( const char * moduleName, const char * typeName,
+                                                  const char * fieldName, uint32_t hostOffset ) {
+        auto ann = jit_find_handled_annotation(moduleName, typeName);
+        if ( !ann ) { g_abi_fields_skipped ++; return; }
+        g_abi_fields_checked ++;
+        uint32_t targetOffset = ann->getFieldOffset(fieldName);
+        if ( targetOffset != hostOffset ) {
+            char buf[256];
+            if ( targetOffset == (uint32_t)-1 ) // field absent on the target annotation
+                snprintf(buf, sizeof(buf), "  offset %s::%s.%s  host=%u target=MISSING\n",
+                    moduleName, typeName, fieldName, hostOffset);
+            else
+                snprintf(buf, sizeof(buf), "  offset %s::%s.%s  host=%u target=%u\n",
+                    moduleName, typeName, fieldName, hostOffset, targetOffset);
+            g_abi_check_report += buf;
+            g_abi_check_count ++;
+        }
+    }
+
+    DAS_API void jit_handled_abi_check_report () {
+        DAS_FATAL_LOG("JIT ABI CHECK: types %d checked / %d skipped, fields %d checked / %d skipped, %d mismatch(es)\n",
+            g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped, g_abi_check_count);
+        if ( g_abi_check_count==0 ) {
+            // reset so a subsequent sweep in the same process reports only its own results
+            g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
+            g_abi_check_report.clear();
+            return;
+        }
+        DAS_FATAL_ERROR("JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime):\n%s",
+            g_abi_check_count, g_abi_check_report.c_str());
     }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
@@ -653,6 +734,9 @@ extern "C" {
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
     void *das_get_jit_get_handled_field_offset() { return (void *)&jit_get_handled_field_offset; }
+    void *das_get_jit_check_handled_type_size() { return (void *)&jit_check_handled_type_size; }
+    void *das_get_jit_check_handled_field_offset() { return (void *)&jit_check_handled_field_offset; }
+    void *das_get_jit_handled_abi_check_report() { return (void *)&jit_handled_abi_check_report; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -1208,6 +1292,12 @@ extern "C" {
                 SideEffects::none, "das_get_jit_get_shared_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_handled_field_offset)>(*this, lib, "get_jit_get_handled_field_offset",
                 SideEffects::none, "das_get_jit_get_handled_field_offset");
+            addExtern<DAS_BIND_FUN(das_get_jit_check_handled_type_size)>(*this, lib, "get_jit_check_handled_type_size",
+                SideEffects::none, "das_get_jit_check_handled_type_size");
+            addExtern<DAS_BIND_FUN(das_get_jit_check_handled_field_offset)>(*this, lib, "get_jit_check_handled_field_offset",
+                SideEffects::none, "das_get_jit_check_handled_field_offset");
+            addExtern<DAS_BIND_FUN(das_get_jit_handled_abi_check_report)>(*this, lib, "get_jit_handled_abi_check_report",
+                SideEffects::none, "das_get_jit_handled_abi_check_report");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",

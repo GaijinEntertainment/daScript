@@ -877,6 +877,11 @@ namespace das {
         return annotation->getFieldOffset(name);
     }
 
+    uint32_t getHandledTypeSize ( TypeAnnotationPtr annotation, Context * context, LineInfoArg * at ) {
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return uint32_t(annotation->getSizeOf());
+    }
+
     bool addModuleRequire ( Module * module, Module * reqModule, bool publ ) {
         auto it = module->requireModule.find(reqModule);
         if ( it != module->requireModule.end() ) {
@@ -1480,6 +1485,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getHandledTypeFieldOffset)>(*this, lib,  "get_handled_type_field_offset",
             SideEffects::none, "getHandledTypeFieldOffset")
                 ->args({"type","field","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeSize)>(*this, lib,  "get_handled_type_size",
+            SideEffects::none, "getHandledTypeSize")
+                ->args({"type","context","line"});
         addExtern<DAS_BIND_FUN(getHandledTypeFieldType)>(*this, lib,  "get_handled_type_field_type",
             SideEffects::none, "getHandledTypeFieldType")
                 ->args({"type","field","context","line"});
