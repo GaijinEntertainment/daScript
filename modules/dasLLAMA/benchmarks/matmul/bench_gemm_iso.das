@@ -6,6 +6,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_quant
 require daslib/jobque_boost
+require daslib/fio
 require math
 
 // Isolated batched-GEMM throughput, ours (production matmul_q8q8_batch) on the REAL Llama matmul
@@ -99,6 +100,12 @@ def bench_one(name : string; n, d : int64; reps : int; laneq : bool) {
 def bench_gemm_iso(b : B?) {
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it
+        let skip_reset = has_env_variable("DAS_FORK_SKIP_HEAP_RESET")
+        if (skip_reset) {
+            set_jobque_fork_skip_heap_reset(true)
+        }
+        to_log(LOG_INFO, "fork_skip_heap_reset = {skip_reset}\n")
         to_log(LOG_INFO, "=== sdot4x4 backend (row-major) ===\n")
         bench_one("qo  2048x2048 ", 2048l, 2048l, 30, false)
         bench_one("w13 2048x5632 ", 2048l, 5632l, 20, false)
