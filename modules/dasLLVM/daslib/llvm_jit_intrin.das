@@ -86,8 +86,6 @@ let g_intrin_lookup <- {
     "math::gather_store_neq_mask" => @@intrinsic_math_gather_store_mask,
     "math::gather_store_stride" => @@intrinsic_math_gather_store_stride,
     "math::u8x4_gather_store" => @@intrinsic_math_u8x4_gather_store,
-// dasLLAMA Q8 GEMM — ARM SDOT proof-of-concept (see dasllama_kernel_opt_findings)
-    "matmul_variants::sdot4" => @@intrinsic_sdot4,
 // math
     "math::sign" => @@intrinsic_math_sign,
     "math::saturate" => @@intrinsic_math_saturate,
@@ -138,6 +136,16 @@ let g_intrin_lookup <- {
     "math::normalize" => @@intrinsic_math_normalize
 }
 
+// AArch64 NEON intrinsics (the llvm/aarch64_neon header). Consulted ONLY when the JIT target is
+// aarch64 (g_target_is_aarch64). On any other target has_intrinsic returns false for these keys, so
+// the call's own daslang body — the portable fallback in the aarch64_neon module — is emitted as a
+// normal function instead. That is the silent, correct cross-platform fallback; nothing here ever
+// fires on x86/wasm/etc. Generalize the dasLLAMA SDOT proof-of-concept (was a hardcoded row in
+// g_intrin_lookup) into the first entry of a proper, target-gated platform-intrinsic table.
+let g_aarch64_intrin_lookup <- {
+    "aarch64_neon::sdot4" => @@intrinsic_sdot4
+}
+
 def public has_intrinsic(expr : ExprCallFunc?) {
     var result = false
     assume argType = expr.arguments[0]._type
@@ -159,6 +167,11 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     g_intrin_lookup |> get(call_name) $(_pfun) {
         result = true
     }
+    if (!result && g_target_is_aarch64) {
+        g_aarch64_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
     return result
 }
 
@@ -167,6 +180,11 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
     let call_name = "{expr.func._module.name}::{expr.func.name}"
     g_intrin_lookup |> get(call_name) $(pfun) {
         result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+    }
+    if (result == null && g_target_is_aarch64) {
+        g_aarch64_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
     }
     // Check initrinsic consistency
     verify(result != null == has_intrinsic(expr))
@@ -1314,11 +1332,12 @@ def intrinsic_math_gather(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : a
     return res
 }
 
-// ARM SDOT proof-of-concept (dasLLAMA Q8 GEMM). sdot4(acc:int4; w,x:int8 const?):int4 emits one
-// @llvm.aarch64.neon.sdot: 16 int8·int8 MACs into the 4 lanes of `acc` (each lane sums 4 products),
-// exact int32 accumulate, NO horizontal reduce — the per-block addv that drains the auto-vectorized
-// path. Pointers are passed PRE-offset by the caller, so the emitter just does an unaligned v16i8
-// load. The daslang body of sdot4 is the interp/typecheck fallback. See dasllama_kernel_opt_findings.
+// Emitter for aarch64_neon::sdot4 (gated by g_aarch64_intrin_lookup, only reached on aarch64).
+// sdot4(acc:int4; w,x:int8 const?):int4 emits one @llvm.aarch64.neon.sdot: 16 int8·int8 MACs into
+// the 4 lanes of `acc` (each lane sums 4 products), exact int32 accumulate, NO horizontal reduce —
+// the per-block addv that drains the auto-vectorized path. Pointers are passed PRE-offset by the
+// caller, so the emitter just does an unaligned v16i8 load. The aarch64_neon module's daslang body
+// of sdot4 is the interp / AOT / non-ARM fallback. See dasllama_kernel_opt_findings.
 def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()

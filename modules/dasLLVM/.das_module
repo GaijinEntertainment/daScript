@@ -18,4 +18,8 @@ def initialize(project_path : string) {
     for (path in bindings_paths) {
         register_native_path("llvm", "bindings/{path}", "{project_path}/bindings/{path}.das")
     }
+    // aarch64_neon: a public NEON-intrinsic header (portable daslang fallbacks + name-based JIT
+    // recognition). Lives at the module root, not under daslib/, so user code requires it as
+    // `require llvm/aarch64_neon`.
+    register_native_path("llvm", "aarch64_neon", "{project_path}/aarch64_neon.das")
 }

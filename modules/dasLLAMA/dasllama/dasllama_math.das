@@ -5,6 +5,7 @@ module dasllama_math shared public
 require math
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
+require llvm/aarch64_neon  // sdot4: JIT-emitted ARM SDOT on arm64, scalar fallback elsewhere
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -148,11 +149,95 @@ def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float c
     return acc
 }
 
+// ===== Q8·Q8 backend selection — dispatched at the MATMUL level =====
+// On arm64 the JIT emits @llvm.aarch64.neon.sdot for sdot4 (see llvm/aarch64_neon), and the sdot4x4
+// kernel below then beats the auto-vectorized dot_q8q8 by ~30% (kernel bench, single-thread). WITHOUT
+// that intrinsic its scalar fallback is ~5x slower than dot_q8q8, so the SDOT path is gated on the
+// host arch and dot_q8q8 stays the portable default. The branch sits ABOVE parallel_for in each
+// public matmul — a platform owns its whole matmul (its own threading/tiling granularity), not just
+// the inner dot — so g_q8q8_use_sdot is read in the main context, never inside a worker.
+var g_q8q8_use_sdot = false
+
+[init]
+def dasllama_math_select_backend() {
+    g_q8q8_use_sdot = get_architecture_name() == "arm64"
+}
+
+//! Force the Q8·Q8 matmul backend (true = arm64 SDOT kernel, false = portable dot_q8q8). The backend
+//! is auto-selected by host arch at startup; this override lets benchmarks compare the two kernels and
+//! lets a parity test check sdot4x4 against the portable kernel on the same machine.
+def set_q8q8_use_sdot(use_sdot : bool) {
+    g_q8q8_use_sdot = use_sdot
+}
+
+//! The Q8·Q8 backend currently selected (see set_q8q8_use_sdot).
+def get_q8q8_use_sdot() : bool {
+    return g_q8q8_use_sdot
+}
+
+// ARM SDOT kernel: 4 blocks/iter, 4 independent int4 accumulators (each block = 2 sdot4 of 16 int8),
+// hsum + dual-scale flushed per block into 4 separate float accumulators. Selected only on arm64,
+// where each sdot4 lowers to one @llvm.aarch64.neon.sdot; bit-for-bit close to dot_q8q8 (~3.8e-6).
+// Not `private`: it is called from inside the parallel_for worker lambdas, which are lifted out of
+// the module and can't see module-private functions (the public dot_q8q8 resolves there for the
+// same reason).
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_sdot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = 0.0
+    var f1 = 0.0
+    var f2 = 0.0
+    var f3 = 0.0
+    var bi = 0l
+    unsafe {
+        while (bi + 4l <= nb) {
+            let bb = bi * 32l
+            var a0 = int4(0, 0, 0, 0)
+            var a1 = int4(0, 0, 0, 0)
+            var a2 = int4(0, 0, 0, 0)
+            var a3 = int4(0, 0, 0, 0)
+            a0 = sdot4(a0, wq + bb, xq + bb)
+            a0 = sdot4(a0, wq + bb + 16l, xq + bb + 16l)
+            a1 = sdot4(a1, wq + bb + 32l, xq + bb + 32l)
+            a1 = sdot4(a1, wq + bb + 48l, xq + bb + 48l)
+            a2 = sdot4(a2, wq + bb + 64l, xq + bb + 64l)
+            a2 = sdot4(a2, wq + bb + 80l, xq + bb + 80l)
+            a3 = sdot4(a3, wq + bb + 96l, xq + bb + 96l)
+            a3 = sdot4(a3, wq + bb + 112l, xq + bb + 112l)
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi + 0l] * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * ws[bi + 1l] * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * ws[bi + 2l] * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * ws[bi + 3l] * xs[bi + 3l]
+            bi += 4l
+        }
+        while (bi < nb) {
+            let base = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4(acc, wq + base, xq + base)
+            acc = sdot4(acc, wq + base + 16l, xq + base + 16l)
+            f0 += float(acc.x + acc.y + acc.z + acc.w) * ws[bi] * xs[bi]
+            bi++
+        }
+    }
+    return f0 + f1 + f2 + f3
+}
+
 //! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the
 //! activation PRE-quantized to (xq [n], xs [n/32]) by the caller (it's shared across all d rows, so
-//! quantizing once amortizes). Large matmuls thread the rows at 1 chunk per hw job (1N — measured
-//! fastest for this compute-light kernel); small ones stay single-thread. n % 32 == 0.
+//! quantizing once amortizes). On arm64 dispatches to the SDOT kernel, else the portable kernel
+//! (selected once at startup). n % 32 == 0.
 def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
+    if (g_q8q8_use_sdot) {
+        matmul_q8q8_sdot(y, wq, ws, xq, xs, n, d)
+    } else {
+        matmul_q8q8_base(y, wq, ws, xq, xs, n, d)
+    }
+}
+
+// Portable kernel (auto-vectorized dot_q8q8). Large matmuls thread the rows at 1 chunk per hw job
+// (1N — measured fastest for this compute-light kernel: ~52 vs ~51 tok/s at 2N end-to-end); small
+// ones stay single-thread.
+def private matmul_q8q8_base(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
     let nb = n / 32l
     unsafe {
         var yp = addr(y[0])
@@ -160,9 +245,6 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
         let sp = reinterpret<float const?>(addr(ws[0]))
         let xqp = reinterpret<int8 const?>(addr(xq[0]))
         let xsp = reinterpret<float const?>(addr(xs[0]))
-        // 1N (one chunk per hw job) measured best on the real shapes with the cond-var + fork-pool
-        // job manager — both in the kernel microbench and end-to-end (~52 vs ~51 tok/s at 2N).
-        // The compute-light SDOT kernel gains nothing from more chunks; they only add dispatch cost.
         maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
@@ -173,10 +255,38 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
     }
 }
 
+// arm64 SDOT kernel. Same 1N threading as the portable path for now; free to diverge (tiling,
+// chunk granularity) independently since the dispatch is per-platform at the matmul level.
+def private matmul_q8q8_sdot(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q8q8_sdot4x4(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                }
+            }
+        }
+    }
+}
+
 //! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the int8
 //! SDOT kernel. Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]).
-//! Y token-major [ntok x d]. Bit-for-bit ntok× matmul_q8q8. n % 32 == 0.
+//! Y token-major [ntok x d]. Bit-for-bit ntok× matmul_q8q8. Dispatches by host arch. n % 32 == 0.
 def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    if (g_q8q8_use_sdot) {
+        matmul_q8q8_batch_sdot(y, wq, ws, xq, xs, n, d, ntok)
+    } else {
+        matmul_q8q8_batch_base(y, wq, ws, xq, xs, n, d, ntok)
+    }
+}
+
+def private matmul_q8q8_batch_base(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
     let nb = n / 32l
     unsafe {
         var yp = addr(y[0])
@@ -198,16 +308,49 @@ def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<flo
     }
 }
 
+def private matmul_q8q8_batch_sdot(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    let nb = n / 32l
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    let wrow = wp + int64(i) * n
+                    let srow = sp + int64(i) * nb
+                    for (tk in range64(ntok)) {
+                        yp[tk * d + int64(i)] = dot_q8q8_sdot4x4(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Fused Q8·Q8 for three independent row-groups that share the activation (attention Q/K/V): one
 //! parallel_for over the combined d0+d1+d2 output rows, so idle workers fill in on the small K/V rows
 //! that would otherwise run single-thread while the pool sits idle (~23% faster than the sequential
 //! Q-parallel + K,V-single on the real shapes). wq/ws is the whole quantized blob; woff{0,1,2} are the
 //! per-group weight-element offsets; the activation is pre-quantized once into (xq, xs).
 // wq/ws are the whole owning quantized blob (not a view), so plain array types — keeping the kernel
-// non-generic also keeps its inner dot_q8q8 resolving here, not in a caller that sees another dot_q8q8.
+// non-generic also keeps its inner dot resolving here, not in a caller that sees another dot_q8q8.
+// Dispatches by host arch like matmul_q8q8 (branch above parallel_for, in the main context).
 def matmul_q8q8_group3(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
                        wq : array<int8>; ws : array<float>; woff0, woff1, woff2 : int64;
                        xq : array<int8>; xs : array<float>; n, d0, d1, d2 : int64) {
+    if (g_q8q8_use_sdot) {
+        matmul_q8q8_group3_sdot(y0, y1, y2, wq, ws, woff0, woff1, woff2, xq, xs, n, d0, d1, d2)
+    } else {
+        matmul_q8q8_group3_base(y0, y1, y2, wq, ws, woff0, woff1, woff2, xq, xs, n, d0, d1, d2)
+    }
+}
+
+def private matmul_q8q8_group3_base(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
+                                    wq : array<int8>; ws : array<float>; woff0, woff1, woff2 : int64;
+                                    xq : array<int8>; xs : array<float>; n, d0, d1, d2 : int64) {
     let nb = n / 32l
     let dtot = d0 + d1 + d2
     unsafe {
@@ -233,6 +376,42 @@ def matmul_q8q8_group3(var y0 : array<float>; var y1 : array<float>; var y2 : ar
                     } else {
                         let r = g - d0 - d1
                         w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    }
+                }
+            }
+            wg |> notify_and_release
+        }
+    }
+}
+
+def private matmul_q8q8_group3_sdot(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
+                                    wq : array<int8>; ws : array<float>; woff0, woff1, woff2 : int64;
+                                    xq : array<int8>; xs : array<float>; n, d0, d1, d2 : int64) {
+    let nb = n / 32l
+    let dtot = d0 + d1 + d2
+    unsafe {
+        let y0p = addr(y0[0])
+        let y1p = addr(y1[0])
+        let y2p = addr(y2[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        parallel_for(0, int(dtot), get_total_hw_jobs()) $(rb, re, wg) {
+            unsafe {
+                var w0 = reinterpret<float?>(y0p)
+                var w1 = reinterpret<float?>(y1p)
+                var w2 = reinterpret<float?>(y2p)
+                for (gi in range(rb, re)) {
+                    let g = int64(gi)
+                    if (g < d0) {
+                        w0[g] = dot_q8q8_sdot4x4(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    } elif (g < d0 + d1) {
+                        let r = g - d0
+                        w1[r] = dot_q8q8_sdot4x4(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    } else {
+                        let r = g - d0 - d1
+                        w2[r] = dot_q8q8_sdot4x4(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
                     }
                 }
             }

@@ -3,6 +3,7 @@ options gen2
 module matmul_variants shared public
 
 require daslib/jobque_boost
+require llvm/aarch64_neon  // sdot4: JIT-emitted ARM SDOT (scalar fallback elsewhere)
 
 // Experiment ledger for the matmul kernel. Every optimization attempt lives here as
 // its own function so bench_matmul.das can compare them head-to-head (and against the
@@ -363,25 +364,7 @@ def matmul_q8q8(var y : array<float> | #; wq : array<int8> | #; ws : array<float
     }
 }
 
-// ===== TRUE SDOT via JIT intrinsic =====
-//! ARM SDOT: 16 int8·int8 MACs into the 4 lanes of `acc` (lane j = acc[j] + sum_{e in 0..3}
-//! w[4j+e]·x[4j+e]), exact int32. JIT-emitted as @llvm.aarch64.neon.sdot (see llvm_jit_intrin.das);
-//! THIS body is the interp/typecheck fallback only. Caller passes pointers PRE-offset.
-def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4 {
-    var s0 = 0
-    var s1 = 0
-    var s2 = 0
-    var s3 = 0
-    unsafe {
-        for (e in range(4)) {
-            s0 += int(w[e]) * int(x[e])
-            s1 += int(w[4 + e]) * int(x[4 + e])
-            s2 += int(w[8 + e]) * int(x[8 + e])
-            s3 += int(w[12 + e]) * int(x[12 + e])
-        }
-    }
-    return acc + int4(s0, s1, s2, s3)
-}
+// ===== TRUE SDOT via JIT intrinsic (sdot4 lives in llvm/aarch64_neon now) =====
 
 // sdot4: per block, 2 sdot (16+16 int8) into one int4 accumulator, hsum once per block.
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
