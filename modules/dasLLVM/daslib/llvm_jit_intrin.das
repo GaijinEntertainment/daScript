@@ -1377,7 +1377,19 @@ def intrinsic_sdot4_laneq(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : a
     LLVMSetAlignment(wvec, 1u)
     var xvec = LLVMBuildLoad2(ctx.builder, v16i8, xptr, "")
     LLVMSetAlignment(xvec, 1u)
-    let lane = int(LLVMConstIntGetZExtValue(arguments[3]))   // lane is a compile-time literal (0..3) at every call site
+    // lane indexes a 32-bit group of `x` and is baked into the shuffle mask, so it MUST be a
+    // compile-time constant in 0..3 — the indexed SDOT has no runtime-lane form. Every call site passes
+    // a literal, but sdot4_laneq is public, so reject a non-constant / out-of-range lane with a clear
+    // compile error rather than letting LLVMConstIntGetZExtValue assert or miscompile.
+    if (LLVMIsAConstantInt(arguments[3]) == null) {
+        failed_E(_expr, "aarch64_neon::sdot4_laneq: lane must be a compile-time constant")
+        return null
+    }
+    let lane = int(LLVMConstIntGetZExtValue(arguments[3]))
+    if (lane < 0 || lane > 3) {
+        failed_E(_expr, "aarch64_neon::sdot4_laneq: lane must be in 0..3")
+        return null
+    }
     var xi32 = LLVMBuildBitCast(ctx.builder, xvec, v4i32, "")
     var xspl = LLVMBuildShuffleVector(ctx.builder, ctx.types, xi32, xi32, [lane, lane, lane, lane], "xlane")
     var xbcast = LLVMBuildBitCast(ctx.builder, xspl, v16i8, "")
