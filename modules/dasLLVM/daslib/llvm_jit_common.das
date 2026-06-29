@@ -988,7 +988,20 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
-    with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
+    // JIT host artifact on aarch64: force +dotprod into the feature set. On macOS
+    // LLVMGetHostCPUFeatures() is empty — the features are implied by the CPU name
+    // (e.g. apple-m1) — so when LLVM maps a chip it doesn't recognize (a newer Apple
+    // part on an older LLVM) to "generic", SDOT (@llvm.aarch64.neon.sdot, emitted for
+    // the dasLLAMA Q8 kernels) has no instruction to select and codegen aborts. Every
+    // aarch64 host daslang JITs on has dotprod, so add the feature explicitly rather
+    // than trusting CPU-name recognition. (Verified: -mcpu=generic fails to select
+    // SDOT; -mcpu=generic -mattr=+dotprod emits `sdot.4s`.)
+    if (use_host_cpu && g_target_is_aarch64) {
+        let feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
+        with_target_machine(triple_msg, cpu_msg, feats, opt_level, blk)
+    } else {
+        with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
+    }
 
     if (use_host_cpu) {
         LLVMDisposeMessage(cpu_msg)
