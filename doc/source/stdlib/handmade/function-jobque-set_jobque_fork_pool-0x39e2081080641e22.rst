@@ -1,0 +1,2 @@
+Opt into pooling of per-job fork contexts on the current context: when keep is true, the contexts cloned for new_job dispatches are reused across jobs instead of being cloned and destroyed every time, removing the per-dispatch clone cost.
+When skip_init is true the pooled forks are cloned without running the global init (and, symmetrically, shutdown) script, which is only safe for pure-data jobs such as a parallel_for over numeric data that touch no globals and hold no Features referencing the fork.
