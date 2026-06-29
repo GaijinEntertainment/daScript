@@ -1,7 +1,7 @@
 options gen2
 
 require dasllama/dasllama_transformer
-require dasllama/dasllama_bpe
+require dasllama/dasllama_tokenizer
 require dasllama/dasllama_math
 require daslib/jobque_boost
 require daslib/random
@@ -9,22 +9,27 @@ require daslib/fio
 require strings
 require math
 
-// Interactive chat over a Llama-3 Instruct GGUF (default Llama-3.1-8B). Byte-level BPE
-// tokenizer + the Llama-3 chat template — special tokens injected by id, the text segments
-// between them BPE-encoded (exactly how llama.cpp splits a templated prompt). The whole
-// conversation stays in the KV cache across turns; reply stops on <|eot_id|>/<|end_of_text|>.
+// Interactive chat over a Gemma-2-it GGUF (default gemma-2-2b-it). SentencePiece tokenizer
+// (add_space_prefix=false) + the Gemma chat template — <bos>/<start_of_turn>/<end_of_turn>
+// injected by id, the "{role}\n{content}" segments between them SPM-encoded. Gemma has no
+// system role (the system line is folded into the first user turn). Reply stops on <end_of_turn>.
 //
-//   bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das [-- <model.gguf>]
-//   printf 'hi\n/quit\n' | bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das
+//   bin/daslang -jit examples/dasLLAMA/gemma_chat.das [-- <model.gguf>]
+//   printf 'hi\n/quit\n' | bin/daslang -jit examples/dasLLAMA/gemma_chat.das
 
-let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/gemma-2-2b-it-Q8_0.gguf"
 let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
-let TEMP = 0.6
+let TEMP = 0.7
 let TOP_K = 40l         // sample only from the K most-likely tokens (kills long-tail drift)
 let PENALTY = 1.1       // repetition penalty on tokens already emitted this turn
 let MAX_NEW = 256l      // max tokens per reply
-let CTX = 8192l         // cap context: the KV cache is n_layers*ctx*kv_dim — Llama-3's full
-                        // 131072 would be ~34GB for the 8B. 8192 is plenty for a chat session.
+let CTX = 4096l         // cap the KV-cache context (also Gemma-2's sliding-window size)
+
+// Gemma chat special tokens (ids confirmed against the GGUF tokenizer metadata).
+let BOS_TOK = 2l        // <bos>
+let SOT_TOK = 106l      // <start_of_turn>
+let EOT_TOK = 107l      // <end_of_turn>
+let EOS_TOK = 1l        // <eos>
 
 // Sample the next token from s.logits with repetition penalty + temperature + top-k.
 def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
@@ -98,14 +103,6 @@ def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len
     return p
 }
 
-// Append a Llama-3 header: <|start_header_id|>{role}<|end_header_id|>. The "\n\n{content}"
-// that follows is encoded separately by the caller (matches llama.cpp's special-split).
-def push_header(var pre : array<int64>; tok : BPETokenizer; sh, eh : int64; role : string) {
-    pre |> push(sh)
-    pre |> push_from(bpe_encode(tok, role))
-    pre |> push(eh)
-}
-
 [export]
 def main {
     var model = DEFAULT_MODEL
@@ -115,17 +112,10 @@ def main {
     }
     print("loading {model} ...\n")
     var t <- load_gguf(model, QuantMode.q8)
-    t.config.seq_len = min(t.config.seq_len, CTX)  // cap KV-cache context (forward + run-state agree on seq_len)
-    let tok <- load_bpe_tokenizer_gguf(model)
+    t.config.seq_len = min(t.config.seq_len, CTX)
+    let tok <- load_tokenizer_gguf(model)
     let c = t.config
-    let sh = special_id(tok, "<|start_header_id|>")
-    let eh = special_id(tok, "<|end_header_id|>")
-    let eot = special_id(tok, "<|eot_id|>")
-    let eod = special_id(tok, "<|end_of_text|>")
-    if (sh < 0l || eh < 0l || eot < 0l) {
-        panic("dasLLAMA: model is missing Llama-3 chat special tokens")
-    }
-    print("Llama-3 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). The 8B is ~slow on CPU — be patient. /quit to exit.\n\n")
+    print("Gemma-2 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). Type your message; /quit to exit.\n\n")
 
     var s = make_run_state(c)
     var seed = random_seed(1234)
@@ -147,20 +137,24 @@ def main {
                 break
             }
 
-            // Build this turn's prefill (specials by id; segments between them BPE-encoded).
+            // Build this turn's Gemma prefill. <bos> once; then a user turn and an empty model
+            // turn. Gemma has no system role, so on the first turn the system line is folded
+            // into the user content.
+            var content = line
             var pre : array<int64>
             if (first) {
-                pre |> push(tok.bos_id)  // <|begin_of_text|>
-                push_header(pre, tok, sh, eh, "system")
-                pre |> push_from(bpe_encode(tok, "\n\n{SYSTEM}"))
-                pre |> push(eot)
+                pre |> push(BOS_TOK)
+                if (!empty(SYSTEM)) {
+                    content = "{SYSTEM}\n\n{line}"
+                }
                 first = false
             }
-            push_header(pre, tok, sh, eh, "user")
-            pre |> push_from(bpe_encode(tok, "\n\n{line}"))
-            pre |> push(eot)
-            push_header(pre, tok, sh, eh, "assistant")
-            pre |> push_from(bpe_encode(tok, "\n\n"))
+            pre |> push(SOT_TOK)
+            pre |> push_from(encode(tok, "user\n{content}", false, false))
+            pre |> push(EOT_TOK)
+            pre |> push_from(encode(tok, "\n", false, false))
+            pre |> push(SOT_TOK)
+            pre |> push_from(encode(tok, "model\n", false, false))
 
             if (pos + int64(length(pre)) >= c.seq_len) {
                 print("\n[context full — restart to continue]\n")
@@ -168,26 +162,29 @@ def main {
             }
             pos = prefill(t, s, pre, pos, c.seq_len)
 
-            // Stream the reply until <|eot_id|> / <|end_of_text|> / budget.
+            // Stream the reply until <end_of_turn> / <eos> / budget.
             fprint(fstdout(), "Bot: ")
+            var prev = EOT_TOK  // a non-BOS prev, so decode won't strip a leading space spuriously
             var recent : array<int64>
             var nout = 0l
             while (nout < MAX_NEW && pos < c.seq_len) {
                 let next = sample(s, c.vocab_size, TEMP, PENALTY, TOP_K, recent, scratch, seed)
-                if (next == eot || next == eod) {
+                if (next == EOT_TOK || next == EOS_TOK) {
                     break
                 }
-                fprint(fstdout(), bpe_decode(tok, next))
+                fprint(fstdout(), decode(tok, prev, next))
                 fflush(fstdout())
                 recent |> push(next)
+                prev = next
                 forward(t, s, next, pos)
                 pos++
                 nout++
             }
             print("\n\n")
 
-            // Close the assistant turn in the KV context so the next turn continues cleanly.
-            pos = prefill(t, s, [eot], pos, c.seq_len)
+            // Close the model turn in the KV context (<end_of_turn>\n) so the next turn continues cleanly.
+            pos = prefill(t, s, [EOT_TOK], pos, c.seq_len)
+            pos = prefill(t, s, encode(tok, "\n", false, false), pos, c.seq_len)
         }
     }
     print("bye\n")

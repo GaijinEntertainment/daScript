@@ -839,6 +839,7 @@ namespace das
         bool                            skipInitShutdownScript = false; // this (cloned) context skipped global init, so skip shutdown too
         bool                            keepForkContexts = false;   // pool job-fork contexts on this context instead of clone/destroy per job
         bool                            forkSkipInitScript = false; // when pooling, clone job-forks with CopyOptions::skipInitScript (pure-data jobs)
+        bool                            forkSkipHeapReset = false;  // when pooling, skip restartHeaps() on reuse (pure-compute jobs whose only fork-heap alloc, the lambda capture, is freed LIFO per job — see acquireForkContext)
     public:
         // Job-fork context pooling (opt-in via keepForkContexts). Forks are reused across new_job
         // dispatches instead of cloned/destroyed each time; acquire runs on the dispatching thread,

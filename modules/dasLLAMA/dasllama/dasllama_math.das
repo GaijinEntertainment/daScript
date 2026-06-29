@@ -4,6 +4,7 @@ module dasllama_math shared public
 
 require math
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
+require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -44,26 +45,15 @@ let MATMUL_PAR_THRESHOLD = 2_000_000l
 //! Large matmuls thread the output rows across workers (requires an enclosing with_job_que);
 //! small ones stay single-thread. Workers read y/w/x via raw pointers (unsafe cross-context).
 def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : int64) {
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<float const?>(addr(w[0]))  // strip the `#` if w is a view
-            let xp = addr(x[0])
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)  // var: lambda capture would const-bind the write pointer
-                    for (i in range(rb, re)) {
-                        myp[i] = dot(wp + int64(i) * n, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])                              // var: stays a writable pointer when captured
+        let wp = reinterpret<float const?>(addr(w[0]))   // strip the `#` if w is a view
+        let xp = addr(x[0])
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot(wp + int64(i) * n, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot(reinterpret<float const?>(addr(w[i * n])), xp, n)
             }
         }
     }
@@ -74,32 +64,17 @@ def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : 
 //! stationary nest (rows outer) — each weight row streams from DRAM once and is reused across
 //! all ntok tokens, vs ntok× matmul re-reading W every call. Bit-for-bit ntok× matmul.
 def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n, d, ntok : int64) {
-    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<float const?>(addr(w[0]))
-            let xp = reinterpret<float const?>(addr(x[0]))
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        let wrow = wp + int64(i) * n
-                        for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
-                        }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<float const?>(addr(w[0]))
+        let xp = reinterpret<float const?>(addr(x[0]))
+        maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    let wrow = wp + int64(i) * n
+                    for (tk in range64(ntok)) {
+                        yp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
                     }
-                }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let wp = reinterpret<float const?>(addr(w[0]))
-            let xp = reinterpret<float const?>(addr(x[0]))
-            for (i in range64(d)) {
-                let wrow = wp + i * n
-                for (tk in range64(ntok)) {
-                    y[tk * d + i] = dot(wrow, xp + tk * n, n)
                 }
             }
         }
@@ -137,27 +112,17 @@ def dot_q8(wq : int8 const?; ws : float const?; x : float const?; n : int64) : f
 //! rows (2x the worker count — Q8 is compute-bound and threads better than fp32). n % 32 == 0.
 def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xp = addr(x[0])
-            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q8(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xp = addr(x[0])
+        // 2N (2 chunks per hw job): Q8 dequant-in-dot is compute-bound and threads better than fp32
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), 2 * get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q8(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot_q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
             }
         }
     }
@@ -183,58 +148,163 @@ def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float c
     return acc
 }
 
-//! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the
-//! activation PRE-quantized to (xq [n], xs [n/32]) by the caller (it's shared across all d rows, so
-//! quantizing once amortizes). Large matmuls thread the rows at 1 chunk per hw job (1N — measured
-//! fastest for this compute-light kernel); small ones stay single-thread. n % 32 == 0.
-def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
+// ===== Q8·Q8 matmul: platform backend dispatched via function pointers =====
+// The three public matmuls extract raw pointers ONCE in the main context and call through a function
+// pointer. dasllama_math owns the pointers + the portable kernels (the default, set at the var-init
+// below); dasllama_math_aarch64_neon overrides them at [init] on arm64 with SDOT kernels (via
+// use_q8q8_kernels). Dispatch is at the MATMUL level — a platform owns its whole matmul, threading
+// and tiling included — so the wrapper itself is backend-agnostic and the pointer is read in the main
+// context, never inside a worker. Kernels take raw pointers (a function pointer can't carry the
+// `array<T> | #` owning-or-view union), so the array->pointer extraction lives in the wrappers.
+//
+// TODO (deferred — NOT before the prefill profiler results + more refactoring): move the portable
+// kernels below out into their own dasllama_math_default module, symmetric with
+// dasllama_math_aarch64_neon, so dasllama_math holds only the typedefs + dispatch pointers + wrappers
+// + setter. Holding off until we know where prefill time actually goes and the surrounding code settles.
+typedef MatmulQ8Q8Fn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64) : void>
+typedef MatmulQ8Q8BatchFn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64; ntok : int64) : void>
+typedef MatmulQ8Q8Group3Fn = function<(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?; woff0 : int64; woff1 : int64; woff2 : int64; xqp : int8 const?; xsp : float const?; n : int64; d0 : int64; d1 : int64; d2 : int64) : void>
+// In-place repack of one Q8 weight region [d rows x n cols] (raw pointers at the region start) into
+// the active backend's preferred layout. Default = no-op (row-major). n % 32 == 0.
+typedef RepackQ8Q8Fn = function<(var wp : int8?; var sp : float?; n : int64; d : int64) : void>
+
+var g_mm_q8q8 = @@q8q8_kernel
+var g_mm_q8q8_batch = @@q8q8_batch_kernel
+var g_mm_q8q8_group3 = @@q8q8_group3_kernel
+var g_repack_q8q8 = @@repack_q8q8_identity
+
+// Registered alternate backend (the arm64 laneq + interleaved-repack pair). Registered at [init] but
+// NOT active by default — direct matmul callers (tests, benches) keep the row-major sdot4x4/portable
+// backend, since the laneq kernels read an interleaved layout that only exists after the model's blob
+// is repacked at load. enable_q8q8_laneq swaps it in; load_gguf calls that on the Q8 path, then repacks.
+var g_q8q8_laneq_available = false
+var g_q8q8_laneq_enabled = true   // user/bench toggle: set false before load_gguf to force the sdot4x4 baseline
+var g_lq_mm = @@q8q8_kernel
+var g_lq_batch = @@q8q8_batch_kernel
+var g_lq_group3 = @@q8q8_group3_kernel
+var g_lq_repack = @@repack_q8q8_identity
+
+//! Default repack: no-op — weights stay row-major for the portable / sdot4x4 kernels.
+[unused_argument(wp, sp, n, d)]
+def repack_q8q8_identity(var wp : int8?; var sp : float?; n, d : int64) {}
+
+//! Override the active Q8·Q8 matmul kernels + repack. Called by dasllama_math_aarch64_neon at [init] on
+//! arm64 to set the default (sdot4x4 + no-op repack); the portable kernels are the default elsewhere.
+def use_q8q8_kernels(mm : MatmulQ8Q8Fn; batch : MatmulQ8Q8BatchFn; group3 : MatmulQ8Q8Group3Fn; repack : RepackQ8Q8Fn) {
+    g_mm_q8q8 = mm
+    g_mm_q8q8_batch = batch
+    g_mm_q8q8_group3 = group3
+    g_repack_q8q8 = repack
+}
+
+//! Restore the portable kernels (+ no-op repack) as the active backend. For benchmarks that A/B the
+//! default against a platform backend on the same binary.
+def use_q8q8_default_kernels() {
+    use_q8q8_kernels(@@q8q8_kernel, @@q8q8_batch_kernel, @@q8q8_group3_kernel, @@repack_q8q8_identity)
+}
+
+//! Register the alternate laneq backend (arm64 SDOT lane-indexed kernels + interleaved repack). Called
+//! by dasllama_math_aarch64_neon at [init] on arm64. Does NOT activate it — enable_q8q8_laneq does, at
+//! model load, because the laneq kernels require the interleaved weight layout the repack produces.
+def register_q8q8_laneq(mm : MatmulQ8Q8Fn; batch : MatmulQ8Q8BatchFn; group3 : MatmulQ8Q8Group3Fn; repack : RepackQ8Q8Fn) {
+    g_lq_mm = mm
+    g_lq_batch = batch
+    g_lq_group3 = group3
+    g_lq_repack = repack
+    g_q8q8_laneq_available = true
+}
+
+//! Activate the registered laneq backend if one exists (arm64). Returns true when activated — the
+//! caller (load_gguf, Q8 path) MUST then repack every weight tensor via repack_q8q8_weight before any
+//! matmul runs. Returns false where there is no laneq backend (portable stays active, weights row-major).
+def enable_q8q8_laneq() : bool {
+    if (!g_q8q8_laneq_available || !g_q8q8_laneq_enabled) {
+        return false
+    }
+    use_q8q8_kernels(g_lq_mm, g_lq_batch, g_lq_group3, g_lq_repack)
+    return true
+}
+
+//! Toggle the laneq backend on/off (default on). Set false BEFORE load_gguf to load a Q8 model on the
+//! row-major sdot4x4 backend (the pre-laneq baseline) — for A/B benchmarking on one binary.
+def set_q8q8_laneq_enabled(on : bool) {
+    g_q8q8_laneq_enabled = on
+}
+
+//! Repack one Q8 weight tensor (region at element offset woff in qblob, shape [d rows x n cols]) into
+//! the active backend's layout, IN PLACE. No-op unless the laneq backend is enabled. n % 32 == 0.
+def repack_q8q8_weight(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
+    unsafe {
+        invoke(g_repack_q8q8, addr(qblob[woff]), addr(qscales[woff / 32l]), n, d)
+    }
+}
+
+// ----- parallel_for dispatch profiler (off by default) -----
+// When on, the batch kernel records each worker's start time (relative to the parallel_for start) into
+// g_pf_ws[rb], then aggregates the first/last worker start and the wall time per call. A large gap
+// between pf-start and last-worker-start = workers trickling in (the job pool waking from sleep), which
+// is the suspected prefill stall. The recorder lives here (not the neon module) so the A/B harness can
+// force the portable kernels and measure the same parallel_for behavior in one module.
+var g_pf_prof = false
+var g_pf_ws : array<int64>   // per-call worker start (ns, relative to pf-start), indexed by chunk start row
+var g_pf_first_sum = 0l      // Σ first-worker start (us) over calls
+var g_pf_last_sum = 0l       // Σ last-worker start (us) over calls
+var g_pf_wall_sum = 0l       // Σ parallel_for wall (us) over calls
+var g_pf_n = 0l
+
+//! Enable/disable the parallel_for dispatch profiler. max_rows must be >= the largest matmul output d.
+def pf_prof_enable(on : bool; max_rows : int64) {
+    g_pf_prof = on
+    g_pf_ws |> resize(max_rows)
+    g_pf_first_sum = 0l
+    g_pf_last_sum = 0l
+    g_pf_wall_sum = 0l
+    g_pf_n = 0l
+}
+
+def pf_prof_report() {
+    if (g_pf_n == 0l) {
+        return
+    }
+    to_log(LOG_INFO, "=== parallel_for dispatch ({g_pf_n} batch-matmul calls) ===\n")
+    to_log(LOG_INFO, "  avg first-worker start = {g_pf_first_sum / g_pf_n} us\n")
+    to_log(LOG_INFO, "  avg last-worker start  = {g_pf_last_sum / g_pf_n} us  (time to full parallelism)\n")
+    to_log(LOG_INFO, "  avg parallel_for wall  = {g_pf_wall_sum / g_pf_n} us\n")
+    to_log(LOG_INFO, "  last-start as % of wall = {100l * g_pf_last_sum / max(g_pf_wall_sum, 1l)}% (high = workers trickle in / pool wake-up stall)\n")
+}
+
+// Portable kernels (auto-vectorized dot_q8q8) — the default backend. 1N threading (one chunk per hw
+// job) measured fastest for this compute-light kernel (~52 vs ~51 tok/s at 2N end-to-end).
+def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
+    var myp = yp
+    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            // 1N (one chunk per hw job) measured best on the real shapes with the cond-var + fork-pool
-            // job manager — both in the kernel microbench and end-to-end (~52 vs ~51 tok/s at 2N).
-            // The compute-light SDOT kernel gains nothing from more chunks; they only add dispatch cost.
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-                    }
-                }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            for (i in range64(d)) {
-                y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+            for (i in range(rb, re)) {
+                myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
             }
         }
     }
 }
 
-//! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the int8
-//! SDOT kernel. Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]).
-//! Y token-major [ntok x d]. Bit-for-bit ntok× matmul_q8q8. n % 32 == 0.
-def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
-    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
+    var myp = yp
+    if (g_pf_prof) {
+        // instrumented path: raw parallel_for + per-worker start capture (see pf_prof_report)
         unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
+            var wsp0 = reinterpret<int64?>(addr(g_pf_ws[0]))
+            for (k in range(int(d))) {
+                wsp0[k] = 0l
+            }
+        }
+        let pf0 = ref_time_ticks()
+        unsafe {
+            let wsbase = addr(g_pf_ws[0])
             parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
                 unsafe {
-                    var myp = reinterpret<float?>(yp)
+                    var wsw = reinterpret<int64?>(wsbase)
+                    wsw[rb] = ref_time_ticks() - pf0
                     for (i in range(rb, re)) {
                         let wrow = wp + int64(i) * n
                         let srow = sp + int64(i) * nb
@@ -246,18 +316,80 @@ def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<flo
                 wg |> notify_and_release
             }
         }
-    } else {
+        let wall = (ref_time_ticks() - pf0) / 1000l
+        var fs = 1l << 62l
+        var ls = 0l
+        for (k in range(int(d))) {
+            let v = g_pf_ws[k]
+            if (v != 0l) {
+                fs = min(fs, v)
+                ls = max(ls, v)
+            }
+        }
+        g_pf_first_sum += fs / 1000l
+        g_pf_last_sum += ls / 1000l
+        g_pf_wall_sum += wall
+        g_pf_n ++
+        return
+    }
+    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            for (i in range64(d)) {
-                let wrow = reinterpret<int8 const?>(addr(wq[i * n]))
-                let srow = reinterpret<float const?>(addr(ws[i * nb]))
+            for (i in range(rb, re)) {
+                let wrow = wp + int64(i) * n
+                let srow = sp + int64(i) * nb
                 for (tk in range64(ntok)) {
-                    y[tk * d + i] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                    myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                 }
             }
         }
+    }
+}
+
+def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                               woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
+    let nb = n / 32l
+    let dtot = d0 + d1 + d2
+    var w0 = y0p
+    var w1 = y1p
+    var w2 = y2p
+    parallel_for(0, int(dtot), get_total_hw_jobs()) $(rb, re, wg) {
+        unsafe {
+            for (gi in range(rb, re)) {
+                let g = int64(gi)
+                if (g < d0) {
+                    w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                } elif (g < d0 + d1) {
+                    let r = g - d0
+                    w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                } else {
+                    let r = g - d0 - d1
+                    w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                }
+            }
+        }
+        wg |> notify_and_release
+    }
+}
+
+//! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the
+//! activation PRE-quantized to (xq [n], xs [n/32]) by the caller (it's shared across all d rows, so
+//! quantizing once amortizes). Dispatches to the active backend (g_mm_q8q8). n % 32 == 0.
+def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
+    unsafe {
+        invoke(g_mm_q8q8, addr(y[0]),
+            reinterpret<int8 const?>(addr(wq[0])), reinterpret<float const?>(addr(ws[0])),
+            reinterpret<int8 const?>(addr(xq[0])), reinterpret<float const?>(addr(xs[0])), n, d)
+    }
+}
+
+//! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the SDOT kernel.
+//! Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]). Y token-major
+//! [ntok x d]. Bit-for-bit ntok× matmul_q8q8. Dispatches to the active backend. n % 32 == 0.
+def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    unsafe {
+        invoke(g_mm_q8q8_batch, addr(y[0]),
+            reinterpret<int8 const?>(addr(wq[0])), reinterpret<float const?>(addr(ws[0])),
+            reinterpret<int8 const?>(addr(xq[0])), reinterpret<float const?>(addr(xs[0])), n, d, ntok)
     }
 }
 
@@ -265,42 +397,16 @@ def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<flo
 //! parallel_for over the combined d0+d1+d2 output rows, so idle workers fill in on the small K/V rows
 //! that would otherwise run single-thread while the pool sits idle (~23% faster than the sequential
 //! Q-parallel + K,V-single on the real shapes). wq/ws is the whole quantized blob; woff{0,1,2} are the
-//! per-group weight-element offsets; the activation is pre-quantized once into (xq, xs).
-// wq/ws are the whole owning quantized blob (not a view), so plain array types — keeping the kernel
-// non-generic also keeps its inner dot_q8q8 resolving here, not in a caller that sees another dot_q8q8.
+//! per-group weight-element offsets; the activation is pre-quantized once into (xq, xs). Dispatches to
+//! the active backend.
 def matmul_q8q8_group3(var y0 : array<float>; var y1 : array<float>; var y2 : array<float>;
                        wq : array<int8>; ws : array<float>; woff0, woff1, woff2 : int64;
                        xq : array<int8>; xs : array<float>; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let dtot = d0 + d1 + d2
     unsafe {
-        let y0p = addr(y0[0])
-        let y1p = addr(y1[0])
-        let y2p = addr(y2[0])
-        let wp = reinterpret<int8 const?>(addr(wq[0]))
-        let sp = reinterpret<float const?>(addr(ws[0]))
-        let xqp = reinterpret<int8 const?>(addr(xq[0]))
-        let xsp = reinterpret<float const?>(addr(xs[0]))
-        parallel_for(0, int(dtot), get_total_hw_jobs()) $(rb, re, wg) {
-            unsafe {
-                var w0 = reinterpret<float?>(y0p)
-                var w1 = reinterpret<float?>(y1p)
-                var w2 = reinterpret<float?>(y2p)
-                for (gi in range(rb, re)) {
-                    let g = int64(gi)
-                    if (g < d0) {
-                        w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
-                    } elif (g < d0 + d1) {
-                        let r = g - d0
-                        w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
-                    } else {
-                        let r = g - d0 - d1
-                        w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
-                    }
-                }
-            }
-            wg |> notify_and_release
-        }
+        invoke(g_mm_q8q8_group3, addr(y0[0]), addr(y1[0]), addr(y2[0]),
+            reinterpret<int8 const?>(addr(wq[0])), reinterpret<float const?>(addr(ws[0])),
+            woff0, woff1, woff2,
+            reinterpret<int8 const?>(addr(xq[0])), reinterpret<float const?>(addr(xs[0])), n, d0, d1, d2)
     }
 }
 
@@ -333,44 +439,33 @@ def dot_q4(wq : uint8 const?; ws : float const?; x : float const?; n : int64) : 
 def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
     let nh = n / 2l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<uint8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xp = addr(x[0])
-            // 4N measured fastest for Q4 on the real shapes: the heavy nibble unpack makes each row
-            // compute-bound, so finer splitting balances better (esp. the classifier) — more than the
-            // compute-light Q8 path, which prefers 1N.
-            parallel_for(0, int(d), 4 * get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<uint8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xp = addr(x[0])
+        // 4N (4 chunks per hw job): the heavy nibble unpack makes each row compute-bound, so finer
+        // splitting balances better (esp. the classifier) — more than the compute-light Q8 path.
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), 4 * get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot_q4(reinterpret<uint8 const?>(addr(wq[i * nh])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
             }
         }
     }
 }
 
 //! RMSNorm — root-mean-square normalization (no mean subtraction, no bias).
-//! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). Matches llama2.c (eps = 1e-5).
-def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64) {
+//! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). eps defaults to 1e-5 (Llama-2/3);
+//! Qwen2 / Gemma2 pass 1e-6 from the model's metadata.
+def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64; eps : float = 1.0e-5) {
     var ss = 0.0
     for (j in range64(size)) {
         ss += x[j] * x[j]
     }
     ss /= float(size)
-    ss += 1e-5
+    ss += eps
     ss = 1.0 / sqrt(ss)
     for (j in range64(size)) {
         o[j] = weight[j] * (x[j] * ss)
@@ -402,6 +497,28 @@ def silu(var x : array<float> | #; size : int64) {
     for (i in range64(size)) {
         let v = x[i]
         x[i] = v / (1.0 + exp(-v))
+    }
+}
+
+//! GELU, tanh approximation (HF's gelu_pytorch_tanh): the GeGLU gate nonlinearity (Gemma2).
+//! gelu(x) = 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))). In place over the first `size`
+//! elements. ggml's LLM_FFN_GELU approximates this same form via an fp16 lookup table; we
+//! compute it directly (more accurate — near-ties against the LUT are expected, not bugs).
+def gelu(var x : array<float> | #; size : int64) {
+    let k = 0.7978845608028654  // sqrt(2/pi)
+    for (i in range64(size)) {
+        let v = x[i]
+        x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+    }
+}
+
+//! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
+//! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
+//! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
+def softcap(var x : array<float> | #; size : int64; cap : float) {
+    let inv = 1.0 / cap
+    for (i in range64(size)) {
+        x[i] = cap * tanh(x[i] * inv)
     }
 }
 
@@ -445,5 +562,40 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
         let v1 = vec[i + 1]
         vec[i] = v0 * fcr - v1 * fci
         vec[i + 1] = v0 * fci + v1 * fcr
+    }
+}
+
+//! NEOX-style RoPE (Qwen2 / Phi3 / Gemma2): the rotated pair is offset by head_size/2 — vec[base+j]
+//! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
+//! Same per-pair frequencies; only the pairing differs.
+def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; mscale : float = 1.0) {
+    let has_ff = !empty(freq_factors)
+    let half = head_size / 2l
+    for (h in range64(n / head_size)) {
+        let base = h * head_size
+        for (j in range64(half)) {
+            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+            if (has_ff) {
+                freq /= freq_factors[j]
+            }
+            let angle = float(pos) * freq
+            // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
+            let fcr = cos(angle) * mscale
+            let fci = sin(angle) * mscale
+            let v0 = vec[base + j]
+            let v1 = vec[base + j + half]
+            vec[base + j] = v0 * fcr - v1 * fci
+            vec[base + j + half] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
+//! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
+//! mscale is the LongRoPE magnitude factor (1.0 for everything but Phi3); only the NEOX path uses it.
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
+    if (neox) {
+        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors, mscale)
+    } else {
+        rope_scaled(vec, pos, head_size, n, theta, freq_factors)
     }
 }

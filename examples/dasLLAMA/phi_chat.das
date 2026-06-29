@@ -1,7 +1,7 @@
 options gen2
 
 require dasllama/dasllama_transformer
-require dasllama/dasllama_bpe
+require dasllama/dasllama_tokenizer
 require dasllama/dasllama_math
 require daslib/jobque_boost
 require daslib/random
@@ -9,22 +9,28 @@ require daslib/fio
 require strings
 require math
 
-// Interactive chat over a Llama-3 Instruct GGUF (default Llama-3.1-8B). Byte-level BPE
-// tokenizer + the Llama-3 chat template — special tokens injected by id, the text segments
-// between them BPE-encoded (exactly how llama.cpp splits a templated prompt). The whole
-// conversation stays in the KV cache across turns; reply stops on <|eot_id|>/<|end_of_text|>.
+// Interactive chat over a Phi-3.5-mini-instruct GGUF. SentencePiece tokenizer + the Phi-3
+// chat template — <|system|>/<|user|>/<|assistant|>/<|end|> injected by id, the "\n{content}"
+// segments between them SPM-encoded (dummy-space prefix included, exactly as llama.cpp splits
+// a templated prompt). The whole conversation stays in the KV cache; reply stops on <|end|>.
 //
-//   bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das [-- <model.gguf>]
-//   printf 'hi\n/quit\n' | bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das
+//   bin/daslang -jit examples/dasLLAMA/phi_chat.das [-- <model.gguf>]
+//   printf 'hi\n/quit\n' | bin/daslang -jit examples/dasLLAMA/phi_chat.das
 
-let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Phi-3.5-mini-instruct-Q8_0.gguf"
 let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
-let TEMP = 0.6
+let TEMP = 0.7
 let TOP_K = 40l         // sample only from the K most-likely tokens (kills long-tail drift)
 let PENALTY = 1.1       // repetition penalty on tokens already emitted this turn
 let MAX_NEW = 256l      // max tokens per reply
-let CTX = 8192l         // cap context: the KV cache is n_layers*ctx*kv_dim — Llama-3's full
-                        // 131072 would be ~34GB for the 8B. 8192 is plenty for a chat session.
+let CTX = 4096l         // cap the KV-cache context (Phi-3.5's native 131072 is far too large)
+
+// Phi-3 chat special tokens (ids confirmed against the GGUF tokenizer metadata).
+let SYS_TOK = 32006l    // <|system|>
+let USR_TOK = 32010l    // <|user|>
+let ASST_TOK = 32001l   // <|assistant|>
+let END_TOK = 32007l    // <|end|>
+let EOD_TOK = 32000l    // <|endoftext|>
 
 // Sample the next token from s.logits with repetition penalty + temperature + top-k.
 def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
@@ -98,14 +104,6 @@ def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len
     return p
 }
 
-// Append a Llama-3 header: <|start_header_id|>{role}<|end_header_id|>. The "\n\n{content}"
-// that follows is encoded separately by the caller (matches llama.cpp's special-split).
-def push_header(var pre : array<int64>; tok : BPETokenizer; sh, eh : int64; role : string) {
-    pre |> push(sh)
-    pre |> push_from(bpe_encode(tok, role))
-    pre |> push(eh)
-}
-
 [export]
 def main {
     var model = DEFAULT_MODEL
@@ -115,17 +113,10 @@ def main {
     }
     print("loading {model} ...\n")
     var t <- load_gguf(model, QuantMode.q8)
-    t.config.seq_len = min(t.config.seq_len, CTX)  // cap KV-cache context (forward + run-state agree on seq_len)
-    let tok <- load_bpe_tokenizer_gguf(model)
+    t.config.seq_len = min(t.config.seq_len, CTX)
+    let tok <- load_tokenizer_gguf(model)
     let c = t.config
-    let sh = special_id(tok, "<|start_header_id|>")
-    let eh = special_id(tok, "<|end_header_id|>")
-    let eot = special_id(tok, "<|eot_id|>")
-    let eod = special_id(tok, "<|end_of_text|>")
-    if (sh < 0l || eh < 0l || eot < 0l) {
-        panic("dasLLAMA: model is missing Llama-3 chat special tokens")
-    }
-    print("Llama-3 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). The 8B is ~slow on CPU — be patient. /quit to exit.\n\n")
+    print("Phi-3.5-mini ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). The 3.8B is ~slow on CPU — be patient. /quit to exit.\n\n")
 
     var s = make_run_state(c)
     var seed = random_seed(1234)
@@ -147,20 +138,21 @@ def main {
                 break
             }
 
-            // Build this turn's prefill (specials by id; segments between them BPE-encoded).
+            // Build this turn's Phi-3 prefill (specials by id; "\n{content}" segments SPM-encoded).
             var pre : array<int64>
             if (first) {
-                pre |> push(tok.bos_id)  // <|begin_of_text|>
-                push_header(pre, tok, sh, eh, "system")
-                pre |> push_from(bpe_encode(tok, "\n\n{SYSTEM}"))
-                pre |> push(eot)
+                pre |> push(SYS_TOK)
+                pre |> push_from(encode(tok, "\n{SYSTEM}", false, false))
+                pre |> push(END_TOK)
+                pre |> push_from(encode(tok, "\n", false, false))
                 first = false
             }
-            push_header(pre, tok, sh, eh, "user")
-            pre |> push_from(bpe_encode(tok, "\n\n{line}"))
-            pre |> push(eot)
-            push_header(pre, tok, sh, eh, "assistant")
-            pre |> push_from(bpe_encode(tok, "\n\n"))
+            pre |> push(USR_TOK)
+            pre |> push_from(encode(tok, "\n{line}", false, false))
+            pre |> push(END_TOK)
+            pre |> push_from(encode(tok, "\n", false, false))
+            pre |> push(ASST_TOK)
+            pre |> push_from(encode(tok, "\n", false, false))
 
             if (pos + int64(length(pre)) >= c.seq_len) {
                 print("\n[context full — restart to continue]\n")
@@ -168,26 +160,29 @@ def main {
             }
             pos = prefill(t, s, pre, pos, c.seq_len)
 
-            // Stream the reply until <|eot_id|> / <|end_of_text|> / budget.
+            // Stream the reply until <|end|> / <|endoftext|> / budget.
             fprint(fstdout(), "Bot: ")
+            var prev = END_TOK  // != BOS(1), so decode won't strip a leading space spuriously
             var recent : array<int64>
             var nout = 0l
             while (nout < MAX_NEW && pos < c.seq_len) {
                 let next = sample(s, c.vocab_size, TEMP, PENALTY, TOP_K, recent, scratch, seed)
-                if (next == eot || next == eod) {
+                if (next == END_TOK || next == EOD_TOK) {
                     break
                 }
-                fprint(fstdout(), bpe_decode(tok, next))
+                fprint(fstdout(), decode(tok, prev, next))
                 fflush(fstdout())
                 recent |> push(next)
+                prev = next
                 forward(t, s, next, pos)
                 pos++
                 nout++
             }
             print("\n\n")
 
-            // Close the assistant turn in the KV context so the next turn continues cleanly.
-            pos = prefill(t, s, [eot], pos, c.seq_len)
+            // Close the assistant turn in the KV context (<|end|>\n) so the next turn continues cleanly.
+            pos = prefill(t, s, [END_TOK], pos, c.seq_len)
+            pos = prefill(t, s, encode(tok, "\n", false, false), pos, c.seq_len)
         }
     }
     print("bye\n")

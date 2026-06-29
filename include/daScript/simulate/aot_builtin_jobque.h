@@ -178,6 +178,7 @@ namespace das {
     DAS_API uint64_t count_jobque_leaks();
     DAS_API void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void set_jobque_fork_pool ( bool keep, bool skipInit, Context * context, LineInfoArg * at );
+    DAS_API void set_jobque_fork_skip_heap_reset ( bool skip, Context * context, LineInfoArg * at );
     DAS_API void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
     DAS_API int getTotalHwJobs( Context * context, LineInfoArg * at );

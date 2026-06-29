@@ -384,6 +384,11 @@ var public g_handled_field_offset_globals : table<string; tuple<modName : string
 // wasm32-only miscompiles.
 var public g_target_is_wasm = false
 
+// Set by init_jit when the JIT target is aarch64 (arm64). Gates the g_aarch64_intrin_lookup
+// platform-intrinsic table in llvm_jit_intrin: NEON instructions (e.g. SDOT) are only emitted when
+// this is true; on every other target the intrinsic's daslang fallback body is emitted instead.
+var public g_target_is_aarch64 = false
+
 // Cross-compile a wasm object compatible with a -pthread (SharedArrayBuffer)
 // runtime: add +atomics,+bulk-memory to the target_features section so wasm-ld
 // links it into a --shared-memory build. Set from the --jit-threads CLI flag in
@@ -474,6 +479,11 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
     // GEP bakes in the wrong stride and the loop never terminates. The native
     // path (empty triple) keeps the host default.
     g_target_is_wasm = target_triple |> starts_with("wasm")
+    // Host path (empty triple): the module targets the host, so the daslang binary's own arch is the
+    // JIT target arch. Explicit cross-compile triple: read the arch off the triple prefix.
+    g_target_is_aarch64 = (empty(target_triple)
+        ? get_architecture_name() == "arm64"
+        : (starts_with(target_triple, "aarch64") || starts_with(target_triple, "arm64")))
     if (!(target_triple |> empty())) {
         // wasm32 target isn't always part of LLVMInitializeAllTargets in
         // prebuilt LLVM.dll — call the explicit wasm initializer when needed.
@@ -978,7 +988,20 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
-    with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
+    // JIT host artifact on aarch64: force +dotprod into the feature set. On macOS
+    // LLVMGetHostCPUFeatures() is empty — the features are implied by the CPU name
+    // (e.g. apple-m1) — so when LLVM maps a chip it doesn't recognize (a newer Apple
+    // part on an older LLVM) to "generic", SDOT (@llvm.aarch64.neon.sdot, emitted for
+    // the dasLLAMA Q8 kernels) has no instruction to select and codegen aborts. Every
+    // aarch64 host daslang JITs on has dotprod, so add the feature explicitly rather
+    // than trusting CPU-name recognition. (Verified: -mcpu=generic fails to select
+    // SDOT; -mcpu=generic -mattr=+dotprod emits `sdot.4s`.)
+    if (use_host_cpu && g_target_is_aarch64) {
+        let feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
+        with_target_machine(triple_msg, cpu_msg, feats, opt_level, blk)
+    } else {
+        with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
+    }
 
     if (use_host_cpu) {
         LLVMDisposeMessage(cpu_msg)

@@ -3,6 +3,7 @@ options gen2
 module matmul_variants shared public
 
 require daslib/jobque_boost
+require llvm/daslib/aarch64_neon  // sdot4: JIT-emitted ARM SDOT (scalar fallback elsewhere)
 
 // Experiment ledger for the matmul kernel. Every optimization attempt lives here as
 // its own function so bench_matmul.das can compare them head-to-head (and against the
@@ -359,6 +360,541 @@ def matmul_q8q8(var y : array<float> | #; wq : array<int8> | #; ws : array<float
         let xsp = reinterpret<float const?>(addr(xs[0]))
         for (i in range64(d)) {
             y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// ===== TRUE SDOT via JIT intrinsic (sdot4 lives in llvm/aarch64_neon now) =====
+
+// sdot4: per block, 2 sdot (16+16 int8) into one int4 accumulator, hsum once per block.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_sdot4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var facc = 0.0
+    let nb = n / 32l
+    unsafe {
+        for (bi in range64(nb)) {
+            let base = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4(acc, wq + base, xq + base)
+            acc = sdot4(acc, wq + base + 16l, xq + base + 16l)
+            facc += float(acc.x + acc.y + acc.z + acc.w) * ws[bi] * xs[bi]
+        }
+    }
+    return facc
+}
+
+// sdot4 + 4 blocks/iter with 4 independent int4 accumulators (the unrolled form, prior PoC's 1.99×).
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_sdot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = 0.0
+    var f1 = 0.0
+    var f2 = 0.0
+    var f3 = 0.0
+    var bi = 0l
+    unsafe {
+        while (bi + 4l <= nb) {
+            let bb = bi * 32l
+            var a0 = int4(0, 0, 0, 0)
+            var a1 = int4(0, 0, 0, 0)
+            var a2 = int4(0, 0, 0, 0)
+            var a3 = int4(0, 0, 0, 0)
+            a0 = sdot4(a0, wq + bb, xq + bb)
+            a0 = sdot4(a0, wq + bb + 16l, xq + bb + 16l)
+            a1 = sdot4(a1, wq + bb + 32l, xq + bb + 32l)
+            a1 = sdot4(a1, wq + bb + 48l, xq + bb + 48l)
+            a2 = sdot4(a2, wq + bb + 64l, xq + bb + 64l)
+            a2 = sdot4(a2, wq + bb + 80l, xq + bb + 80l)
+            a3 = sdot4(a3, wq + bb + 96l, xq + bb + 96l)
+            a3 = sdot4(a3, wq + bb + 112l, xq + bb + 112l)
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi + 0l] * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * ws[bi + 1l] * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * ws[bi + 2l] * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * ws[bi + 3l] * xs[bi + 3l]
+            bi += 4l
+        }
+        while (bi < nb) {
+            let base = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4(acc, wq + base, xq + base)
+            acc = sdot4(acc, wq + base + 16l, xq + base + 16l)
+            f0 += float(acc.x + acc.y + acc.z + acc.w) * ws[bi] * xs[bi]
+            bi++
+        }
+    }
+    return f0 + f1 + f2 + f3
+}
+
+def matmul_q8q8_sdot4(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_sdot4(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_sdot4x4(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_sdot4x4(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// ===== laneq + interleaved repack (4-row tile, 1 token) — the lane-indexed SDOT endgame =====
+// Repack [d x n] row-major int8 weights into 4-row-interleaved groups so the laneq kernel keeps each
+// accumulator lane on a distinct output row (no per-block addv, ever). Done ONCE at model load — the
+// weights are static — so the kernel below pays no repack cost. Layout per 4-row group g (rows 4g..4g+3):
+// for each 4-col group kg (n/4 of them) write 16 bytes = [row0[kg], row1[kg], row2[kg], row3[kg]], each
+// [..] = 4 contiguous int8. Block scales are interleaved as [s0,s1,s2,s3] per 32-block. Tail rows (d%4)
+// stay row-major after the groups and run the sdot4x4 fallback.
+def repack_q8q8_4(wq : array<int8>; ws : array<float>; n, d : int64; var wout : array<int8>; var sout : array<float>) {
+    let nb = n / 32l
+    let ng = d / 4l
+    let ncg = n / 4l
+    wout |> resize(d * n)
+    sout |> resize(d * nb)
+    unsafe {
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        var wo = addr(wout[0])
+        var so = addr(sout[0])
+        for (g in range64(ng)) {
+            let gbase = g * 4l * n
+            for (kg in range64(ncg)) {
+                let dst = gbase + kg * 16l
+                for (r in range64(4l)) {
+                    let src = (g * 4l + r) * n + kg * 4l
+                    wo[dst + r * 4l + 0l] = wp[src + 0l]
+                    wo[dst + r * 4l + 1l] = wp[src + 1l]
+                    wo[dst + r * 4l + 2l] = wp[src + 2l]
+                    wo[dst + r * 4l + 3l] = wp[src + 3l]
+                }
+            }
+            let sgbase = g * 4l * nb
+            for (bi in range64(nb)) {
+                for (r in range64(4l)) {
+                    so[sgbase + bi * 4l + r] = sp[(g * 4l + r) * nb + bi]
+                }
+            }
+        }
+        for (i in range64(ng * 4l * n, d * n)) {
+            wo[i] = wp[i]
+        }
+        for (i in range64(ng * 4l * nb, d * nb)) {
+            so[i] = sp[i]
+        }
+    }
+}
+
+//! Lane-indexed SDOT over one 4-row interleaved group against one token. 8 sdot4_laneq per 32-block
+//! (two 16-k chunks × lanes 0..3); the int4 accumulator's lane L is output row L, flushed to a float4
+//! with the 4 rows' block scales × the token block scale — no horizontal reduce anywhere.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
+def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
+    let nb = n / 32l
+    var f = float4(0.0, 0.0, 0.0, 0.0)
+    unsafe {
+        for (bi in range64(nb)) {
+            let wb = bi * 128l
+            let xb = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4_laneq(acc, wg + wb, xq + xb, 0)
+            acc = sdot4_laneq(acc, wg + wb + 16l, xq + xb, 1)
+            acc = sdot4_laneq(acc, wg + wb + 32l, xq + xb, 2)
+            acc = sdot4_laneq(acc, wg + wb + 48l, xq + xb, 3)
+            acc = sdot4_laneq(acc, wg + wb + 64l, xq + xb + 16l, 0)
+            acc = sdot4_laneq(acc, wg + wb + 80l, xq + xb + 16l, 1)
+            acc = sdot4_laneq(acc, wg + wb + 96l, xq + xb + 16l, 2)
+            acc = sdot4_laneq(acc, wg + wb + 112l, xq + xb + 16l, 3)
+            let s = float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+            let xsb = xs[bi]
+            f += float4(acc) * s * float4(xsb, xsb, xsb, xsb)
+        }
+    }
+    return f
+}
+
+// Driver over repacked weights (wgq/wgs from repack_q8q8_4). Tail rows are row-major → sdot4x4.
+def matmul_q8q8_laneq(var y : array<float> | #; wgq : array<int8> | #; wgs : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    let ng = d / 4l
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wgq[0]))
+        let sp = reinterpret<float const?>(addr(wgs[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (g in range64(ng)) {
+            let f = dot_q8q8_laneq4(wp + g * 4l * n, sp + g * 4l * nb, xqp, xsp, n)
+            yp[g * 4l + 0l] = f.x
+            yp[g * 4l + 1l] = f.y
+            yp[g * 4l + 2l] = f.z
+            yp[g * 4l + 3l] = f.w
+        }
+        for (i in range64(ng * 4l, d)) {
+            yp[i] = dot_q8q8_sdot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
+        }
+    }
+}
+
+// uf: original nested, inner 32-element reduction marked unroll_full (llvm.loop.unroll.full).
+// Only the inner loop has a compile-time trip count (32) — the runtime block loop can't full-unroll.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_uf(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16, unroll_full] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+def matmul_q8q8_uf(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_uf(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// ===== q8q8 inner-loop vectorize sweep (the part skipped earlier) =====
+// Each keeps the original outer block-loop + scalar float accumulate; only the inner int8·int8
+// reduction's [vectorize] hint changes. The matmul wrapper is identical bar the dot fn it calls.
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_w8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 8] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_w32(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 32] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_w16u2(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    let nb = n / 32l
+    for (bi in range64(nb)) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16, unroll_count = 2] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+    }
+    return acc
+}
+
+// 4acc: 4 blocks per outer iter, each its OWN inline vectorized inner loop (keeps SDOT) + its own
+// int + float accumulator, so 4 independent dependency chains run in parallel (more loads in flight).
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_4acc(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var a0 = 0.0
+    var a1 = 0.0
+    var a2 = 0.0
+    var a3 = 0.0
+    var bi = 0l
+    while (bi + 4l <= nb) {
+        let b0 = (bi + 0l) * 32l
+        let b1 = (bi + 1l) * 32l
+        let b2 = (bi + 2l) * 32l
+        let b3 = (bi + 3l) * 32l
+        var i0 = 0
+        var i1 = 0
+        var i2 = 0
+        var i3 = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            i0 += int(unsafe(wq[b0 + k])) * int(unsafe(xq[b0 + k]))
+        }
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            i1 += int(unsafe(wq[b1 + k])) * int(unsafe(xq[b1 + k]))
+        }
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            i2 += int(unsafe(wq[b2 + k])) * int(unsafe(xq[b2 + k]))
+        }
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            i3 += int(unsafe(wq[b3 + k])) * int(unsafe(xq[b3 + k]))
+        }
+        a0 += float(i0) * unsafe(ws[bi + 0l]) * unsafe(xs[bi + 0l])
+        a1 += float(i1) * unsafe(ws[bi + 1l]) * unsafe(xs[bi + 1l])
+        a2 += float(i2) * unsafe(ws[bi + 2l]) * unsafe(xs[bi + 2l])
+        a3 += float(i3) * unsafe(ws[bi + 3l]) * unsafe(xs[bi + 3l])
+        bi += 4l
+    }
+    var acc = a0 + a1 + a2 + a3
+    while (bi < nb) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+        bi++
+    }
+    return acc
+}
+
+def matmul_q8q8_w8(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_w8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_w32(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_w32(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_w16u2(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_w16u2(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_4acc(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_4acc(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// 8acc: same idea, 8 independent chains.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_8acc(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var a : float[8]
+    var bi = 0l
+    while (bi + 8l <= nb) {
+        for (lane in range64(8l)) {
+            let base = (bi + lane) * 32l
+            var iacc = 0
+            for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+                iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+            }
+            a[int(lane)] += float(iacc) * unsafe(ws[bi + lane]) * unsafe(xs[bi + lane])
+        }
+        bi += 8l
+    }
+    var acc = 0.0
+    for (lane in range(8)) {
+        acc += a[lane]
+    }
+    while (bi < nb) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+        bi++
+    }
+    return acc
+}
+
+def matmul_q8q8_8acc(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_8acc(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// 8acc_int: stage 8 block sums as int[8] (the SDOT phase), THEN a separate float scale/flush phase.
+// Splitting int-MAC from float-convert lets each pipeline (8 SDOTs back-to-back, then a flat float
+// flush over the 8 lanes) instead of interleaving an sitofp + 2 float muls into every block.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_8acc_int(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var facc = 0.0
+    var bi = 0l
+    while (bi + 8l <= nb) {
+        var s : int[8]
+        for (lane in range(8)) {
+            let base = (bi + int64(lane)) * 32l
+            var iacc = 0
+            for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+                iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+            }
+            s[lane] = iacc
+        }
+        for (lane in range(8)) {
+            facc += float(s[lane]) * unsafe(ws[bi + int64(lane)]) * unsafe(xs[bi + int64(lane)])
+        }
+        bi += 8l
+    }
+    while (bi < nb) {
+        let base = bi * 32l
+        var iacc = 0
+        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
+        }
+        facc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
+        bi++
+    }
+    return facc
+}
+
+def matmul_q8q8_8acc_int(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_8acc_int(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+// ===== FLAT q8q8: ONE loop over the whole row, NO 32-element inner block loop =====
+// Scale gathered per element (k>>5 = block). int8·int8 -> float per element (abandons int32 SDOT),
+// the q8q8 analog of dot_q8_flat. Different vectorize settings; _wXuY = width X, unroll Y.
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_flat(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    for [vectorize, vectorize_width = 16] (k in range64(n)) {
+        acc += float(int(unsafe(wq[k])) * int(unsafe(xq[k]))) * unsafe(ws[k >> 5l]) * unsafe(xs[k >> 5l])
+    }
+    return acc
+}
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_flat_w8u2(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (k in range64(n)) {
+        acc += float(int(unsafe(wq[k])) * int(unsafe(xq[k]))) * unsafe(ws[k >> 5l]) * unsafe(xs[k >> 5l])
+    }
+    return acc
+}
+
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_flat_w16u4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var acc = 0.0
+    for [vectorize, vectorize_width = 16, unroll_count = 4] (k in range64(n)) {
+        acc += float(int(unsafe(wq[k])) * int(unsafe(xq[k]))) * unsafe(ws[k >> 5l]) * unsafe(xs[k >> 5l])
+    }
+    return acc
+}
+
+// FLAT with INTEGER accumulator: ONE loop over the whole row, an int32 accumulator that flushes to
+// float ONLY at each 32-block boundary (where the scale changes). Keeps the cheap int MAC; converts
+// once per block like the nested form, but with no explicit inner loop. The "flat" the float variants
+// above weren't.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_flat_int(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    var facc = 0.0
+    var iacc = 0
+    for (k in range64(n)) {
+        iacc += int(unsafe(wq[k])) * int(unsafe(xq[k]))
+        if ((k & 31l) == 31l) {
+            let b = k >> 5l
+            facc += float(iacc) * unsafe(ws[b]) * unsafe(xs[b])
+            iacc = 0
+        }
+    }
+    return facc
+}
+
+def matmul_q8q8_flat_int(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_flat_int(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_flat(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_flat(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_flat_w8u2(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_flat_w8u2(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
+        }
+    }
+}
+
+def matmul_q8q8_flat_w16u4(var y : array<float> | #; wq : array<int8> | #; ws : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    unsafe {
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (i in range64(d)) {
+            y[i] = dot_q8q8_flat_w16u4(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
         }
     }
 }

@@ -359,16 +359,25 @@ namespace das
     }
 
     Context * Context::acquireForkContext ( uint32_t category_ ) {
+        Context * fork = nullptr;
         {
             lock_guard<mutex> guard(forkContextPoolMutex);
             if ( !forkContextPool.empty() ) {
-                Context * fork = forkContextPool.back();
+                fork = forkContextPool.back();
                 forkContextPool.pop_back();
-                // reset for reuse — drop the previous job's heap/stack state
-                fork->restart();
-                fork->restartHeaps();
-                return fork;
             }
+        }
+        if ( fork ) {
+            // reset for reuse — OUTSIDE the pool mutex: the fork is exclusively owned by this thread
+            // after the pop, so resetting it needs no lock, and keeping restartHeaps() (two
+            // MemoryModel::reset() walks) off the critical section unblocks concurrent dispatches.
+            fork->restart();
+            // forkSkipHeapReset: skip the heap reset for pure-compute jobs. Safe because the only
+            // fork-heap allocation in the pooled new_job path is the lambda capture, freed LIFO by
+            // das_delete at job end — so the heap does not grow across reuses. A job that LEAKS onto
+            // the fork heap would accumulate; same pure-data contract as keepForkContexts.
+            if ( !forkSkipHeapReset ) fork->restartHeaps();
+            return fork;
         }
         // none pooled: clone a fresh fork (skip the init script for pure-data jobs)
         CopyOptions opts;

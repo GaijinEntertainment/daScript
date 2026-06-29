@@ -617,6 +617,13 @@ namespace das {
         context->forkSkipInitScript = skipInit;
     }
 
+    void set_jobque_fork_skip_heap_reset ( bool skip, Context * context, LineInfoArg * ) {
+        // Skip restartHeaps() when reusing a pooled fork (see Context::acquireForkContext). Only safe
+        // when the dispatched jobs are pure compute that never leaks onto the fork heap — e.g.
+        // parallel_for matmul, whose only fork-heap alloc (the lambda capture) is freed LIFO per job.
+        context->forkSkipHeapReset = skip;
+    }
+
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
         if ( context->keepForkContexts ) {
@@ -1004,6 +1011,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(set_jobque_fork_pool)>(*this, lib,  "set_jobque_fork_pool",
                 SideEffects::modifyExternal, "set_jobque_fork_pool")
                     ->args({"keep","skip_init","context","line"});
+            addExtern<DAS_BIND_FUN(set_jobque_fork_skip_heap_reset)>(*this, lib,  "set_jobque_fork_skip_heap_reset",
+                SideEffects::modifyExternal, "set_jobque_fork_skip_heap_reset")
+                    ->args({"skip","context","line"});
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue")
                     ->args({"block","context","line"});

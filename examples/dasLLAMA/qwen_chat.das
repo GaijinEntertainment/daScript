@@ -9,22 +9,21 @@ require daslib/fio
 require strings
 require math
 
-// Interactive chat over a Llama-3 Instruct GGUF (default Llama-3.1-8B). Byte-level BPE
-// tokenizer + the Llama-3 chat template — special tokens injected by id, the text segments
-// between them BPE-encoded (exactly how llama.cpp splits a templated prompt). The whole
-// conversation stays in the KV cache across turns; reply stops on <|eot_id|>/<|end_of_text|>.
+// Interactive chat over a Qwen2.5-Instruct GGUF (default Qwen2.5-1.5B). Byte-level BPE
+// tokenizer (qwen2 pre-tokenizer) + the ChatML template — <|im_start|>/<|im_end|> injected
+// by id, the text segments between them BPE-encoded (exactly how llama.cpp splits a templated
+// prompt). The whole conversation stays in the KV cache across turns; reply stops on <|im_end|>.
 //
-//   bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das [-- <model.gguf>]
-//   printf 'hi\n/quit\n' | bin/daslang -jit modules/dasLLAMA/dasllama_llama3_chat.das
+//   bin/daslang -jit examples/dasLLAMA/qwen_chat.das [-- <model.gguf>]
+//   printf 'hi\n/quit\n' | bin/daslang -jit examples/dasLLAMA/qwen_chat.das
 
-let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
-let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
-let TEMP = 0.6
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Qwen2.5-1.5B-Instruct-Q8_0.gguf"
+let SYSTEM = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
+let TEMP = 0.7
 let TOP_K = 40l         // sample only from the K most-likely tokens (kills long-tail drift)
 let PENALTY = 1.1       // repetition penalty on tokens already emitted this turn
 let MAX_NEW = 256l      // max tokens per reply
-let CTX = 8192l         // cap context: the KV cache is n_layers*ctx*kv_dim — Llama-3's full
-                        // 131072 would be ~34GB for the 8B. 8192 is plenty for a chat session.
+let CTX = 4096l         // cap the KV-cache context (forward + run-state agree on seq_len)
 
 // Sample the next token from s.logits with repetition penalty + temperature + top-k.
 def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
@@ -98,14 +97,6 @@ def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len
     return p
 }
 
-// Append a Llama-3 header: <|start_header_id|>{role}<|end_header_id|>. The "\n\n{content}"
-// that follows is encoded separately by the caller (matches llama.cpp's special-split).
-def push_header(var pre : array<int64>; tok : BPETokenizer; sh, eh : int64; role : string) {
-    pre |> push(sh)
-    pre |> push_from(bpe_encode(tok, role))
-    pre |> push(eh)
-}
-
 [export]
 def main {
     var model = DEFAULT_MODEL
@@ -115,17 +106,16 @@ def main {
     }
     print("loading {model} ...\n")
     var t <- load_gguf(model, QuantMode.q8)
-    t.config.seq_len = min(t.config.seq_len, CTX)  // cap KV-cache context (forward + run-state agree on seq_len)
+    t.config.seq_len = min(t.config.seq_len, CTX)
     let tok <- load_bpe_tokenizer_gguf(model)
     let c = t.config
-    let sh = special_id(tok, "<|start_header_id|>")
-    let eh = special_id(tok, "<|end_header_id|>")
-    let eot = special_id(tok, "<|eot_id|>")
-    let eod = special_id(tok, "<|end_of_text|>")
-    if (sh < 0l || eh < 0l || eot < 0l) {
-        panic("dasLLAMA: model is missing Llama-3 chat special tokens")
+    let ims = special_id(tok, "<|im_start|>")
+    let ime = special_id(tok, "<|im_end|>")
+    let eod = special_id(tok, "<|endoftext|>")
+    if (ims < 0l || ime < 0l) {
+        panic("dasLLAMA: model is missing Qwen ChatML special tokens")
     }
-    print("Llama-3 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). The 8B is ~slow on CPU — be patient. /quit to exit.\n\n")
+    print("Qwen2.5 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). Type your message; /quit to exit.\n\n")
 
     var s = make_run_state(c)
     var seed = random_seed(1234)
@@ -147,20 +137,21 @@ def main {
                 break
             }
 
-            // Build this turn's prefill (specials by id; segments between them BPE-encoded).
+            // Build this turn's ChatML prefill (specials by id; segments between them BPE-encoded).
             var pre : array<int64>
             if (first) {
-                pre |> push(tok.bos_id)  // <|begin_of_text|>
-                push_header(pre, tok, sh, eh, "system")
-                pre |> push_from(bpe_encode(tok, "\n\n{SYSTEM}"))
-                pre |> push(eot)
+                pre |> push(ims)
+                pre |> push_from(bpe_encode(tok, "system\n{SYSTEM}"))
+                pre |> push(ime)
+                pre |> push_from(bpe_encode(tok, "\n"))
                 first = false
             }
-            push_header(pre, tok, sh, eh, "user")
-            pre |> push_from(bpe_encode(tok, "\n\n{line}"))
-            pre |> push(eot)
-            push_header(pre, tok, sh, eh, "assistant")
-            pre |> push_from(bpe_encode(tok, "\n\n"))
+            pre |> push(ims)
+            pre |> push_from(bpe_encode(tok, "user\n{line}"))
+            pre |> push(ime)
+            pre |> push_from(bpe_encode(tok, "\n"))
+            pre |> push(ims)
+            pre |> push_from(bpe_encode(tok, "assistant\n"))
 
             if (pos + int64(length(pre)) >= c.seq_len) {
                 print("\n[context full — restart to continue]\n")
@@ -168,13 +159,13 @@ def main {
             }
             pos = prefill(t, s, pre, pos, c.seq_len)
 
-            // Stream the reply until <|eot_id|> / <|end_of_text|> / budget.
+            // Stream the reply until <|im_end|> / <|endoftext|> / budget.
             fprint(fstdout(), "Bot: ")
             var recent : array<int64>
             var nout = 0l
             while (nout < MAX_NEW && pos < c.seq_len) {
                 let next = sample(s, c.vocab_size, TEMP, PENALTY, TOP_K, recent, scratch, seed)
-                if (next == eot || next == eod) {
+                if (next == ime || next == eod) {
                     break
                 }
                 fprint(fstdout(), bpe_decode(tok, next))
@@ -186,8 +177,9 @@ def main {
             }
             print("\n\n")
 
-            // Close the assistant turn in the KV context so the next turn continues cleanly.
-            pos = prefill(t, s, [eot], pos, c.seq_len)
+            // Close the assistant turn in the KV context (<|im_end|>\n) so the next turn continues cleanly.
+            pos = prefill(t, s, [ime], pos, c.seq_len)
+            pos = prefill(t, s, bpe_encode(tok, "\n"), pos, c.seq_len)
         }
     }
     print("bye\n")
