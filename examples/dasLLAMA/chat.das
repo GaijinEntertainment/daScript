@@ -29,8 +29,13 @@ let MAX_NEW = 220l      // max tokens per reply
 // `recent` are tokens already emitted this turn; `scratch` is a reusable vocab-sized buffer.
 def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
            recent : array<int64>; var scratch : array<float>; var seed : int4&) : int64 {
-    // repetition penalty: push down logits of tokens we already produced
-    for (id in recent) {
+    // repetition penalty over only the last `pwin` tokens (bounded window, like llama.cpp's
+    // penalty_last_n) — an unbounded window eventually suppresses frequent structural tokens
+    // (newlines, spaces) and the reply collapses into a wall of text on long answers.
+    let pwin = 64
+    let pstart = length(recent) > pwin ? length(recent) - pwin : 0
+    for (k in range(pstart, length(recent))) {
+        let id = recent[k]
         let v = s.logits[id]
         s.logits[id] = v > 0.0 ? v / penalty : v * penalty
     }
