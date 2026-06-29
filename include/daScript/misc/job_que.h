@@ -113,6 +113,7 @@ namespace das {
             };
             unique_ptr<thread>  threadPointer;
             JobPriority         currentPriority = JobPriority::Inactive;
+            JobPriority         appliedPriority = JobPriority::Inactive;  // last priority actually pushed to the OS thread
             JobCategory         currentCategory = 0;
         };
     protected:

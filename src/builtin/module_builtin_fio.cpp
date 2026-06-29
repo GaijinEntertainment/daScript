@@ -335,7 +335,9 @@ namespace das {
         fstat(fd, &st);
         void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
         Array arr;
-        array_mark_locked(arr, data, uint32_t(st.st_size));
+        // st.st_size is 64-bit (off_t); array_mark_locked takes a uint64 size and
+        // Array::size is uint64 — a uint32 cast here truncated maps of files >4GB.
+        array_mark_locked(arr, data, uint64_t(st.st_size));
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr, at);
@@ -437,20 +439,23 @@ namespace das {
     vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) {
         auto fp = cast<FILE *>::to(args[0]);
         if ( !fp ) context.throw_error_at(node->debugInfo, "can't load NULL");
-        int32_t len = cast<int32_t>::to(args[1]);
-        if (len < 0) context.throw_error_at(node->debugInfo, "can't read negative number from binary save, %d", len);
+        int64_t len = cast<int64_t>::to(args[1]);
+        if (len < 0) context.throw_error_at(node->debugInfo, "can't read negative number from binary save, %lld", (long long)len);
+        // On 32-bit (size_t < int64), len near SIZE_MAX truncates and `size_t(len)+1` can wrap to 0,
+        // giving a tiny malloc + a huge fread (OOB write). Reject loads that don't fit size_t. No-op on 64-bit.
+        if ( uint64_t(len) >= uint64_t(SIZE_MAX) ) context.throw_error_at(node->debugInfo, "can't read. file too large to load on this platform, %lld", (long long)len);
         Block * block = cast<Block *>::to(args[2]);
-        char * buf = (char *) malloc(len + 1);
-        if (!buf) context.throw_error_at(node->debugInfo, "can't read. out of memory, %d", len);
+        char * buf = (char *) malloc(size_t(len) + 1);
+        if (!buf) context.throw_error_at(node->debugInfo, "can't read. out of memory, %lld", (long long)len);
         vec4f bargs[1];
-        int32_t rlen = int32_t(fread(buf, 1, len, fp));
+        int64_t rlen = int64_t(fread(buf, 1, size_t(len), fp));
         if ( rlen != len ) {
             bargs[0] = v_zero();
             context.invoke(*block, bargs, nullptr, &node->debugInfo);
         }  else {
             buf[rlen] = 0;
             das::Array arr;
-            array_mark_locked(arr, buf, uint32_t(rlen));
+            array_mark_locked(arr, buf, uint64_t(rlen));
             bargs[0] = cast<das::Array*>::from(&arr);
             context.invoke(*block, bargs, nullptr, &node->debugInfo);
         }
@@ -1902,7 +1907,7 @@ namespace das {
             addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",
                 SideEffects::modifyExternal, "builtin_write")
                     ->args({"file","buffer","length"});
-            addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",
+            addInterop<builtin_load,void,const FILE*,int64_t,const Block &>(*this, lib, "_builtin_load",
                 das::SideEffects::modifyExternal, "builtin_load")
                     ->args({"file","length","block"});
             addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name",

@@ -75,7 +75,12 @@ namespace das {
     }
 
     void JobQue::join() {
-        mShutdown = true;
+        {
+            // Set the flag and wake every parked worker under the lock so none misses the wakeup.
+            lock_guard<mutex> lock(mFifoMutex);
+            mShutdown = true;
+            mCond.notify_all();
+        }
         while ( mThreadCount ) {
             this_thread::yield();
         }
@@ -134,19 +139,29 @@ namespace das {
             Job job;
             {
                 unique_lock<mutex> lock(mFifoMutex);
-                if ( mCond.wait_for(lock, chrono::milliseconds(mSleepMs), [&]() { return mFifo.size() != 0; }) ) {
-                    DAS_VERIFYF(mFifo.size() > 0, "There must be at least one job available");
-                    job = das::move(mFifo.front().function);
-                    mThreads[threadIndex].currentPriority = mFifo.front().priority;
-                    mThreads[threadIndex].currentCategory = mFifo.front().category;
-                    mFifo.pop_front();
-                    mJobsRunning++;
-                } else {
-                    this_thread::yield();
-                    continue;
-                }
+                // Block until a job is available or we're shutting down. A plain wait (no periodic
+                // timeout) means idle workers stay parked instead of waking every mSleepMs to grab
+                // mFifoMutex and yield — that periodic wakeup contended on exactly the lock the
+                // dispatch path needs, throttling parallel_for when most workers are idle between
+                // a token's many small matmuls. push()/parallel_for already notify, so latency is
+                // unaffected; join() sets mShutdown under the lock and notifies to wake all workers.
+                mCond.wait(lock, [&]() { return mFifo.size() != 0 || mShutdown.load(); });
+                if ( mShutdown ) break;
+                DAS_VERIFYF(mFifo.size() > 0, "There must be at least one job available");
+                job = das::move(mFifo.front().function);
+                mThreads[threadIndex].currentPriority = mFifo.front().priority;
+                mThreads[threadIndex].currentCategory = mFifo.front().category;
+                mFifo.pop_front();
+                mJobsRunning++;
             }
-            SetCurrentThreadPriority(mThreads[threadIndex].currentPriority);
+            // Only touch the OS thread priority when it actually changes — every job otherwise pays
+            // a pthread_setschedparam syscall, and a parallel_for fires the same priority on every
+            // chunk (~thousands of redundant syscalls per LLM token). Only this worker writes its own
+            // appliedPriority, so no lock needed.
+            if ( mThreads[threadIndex].currentPriority != mThreads[threadIndex].appliedPriority ) {
+                SetCurrentThreadPriority(mThreads[threadIndex].currentPriority);
+                mThreads[threadIndex].appliedPriority = mThreads[threadIndex].currentPriority;
+            }
             job();
             {
                 unique_lock<mutex> lock(mFifoMutex);

@@ -609,8 +609,36 @@ namespace das {
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
 
 namespace das {
+    void set_jobque_fork_pool ( bool keep, bool skipInit, Context * context, LineInfoArg * ) {
+        // Pool the per-job fork contexts on this (dispatching) context instead of cloning/destroying
+        // one per new_job, and optionally clone them skip-init. Only safe when the dispatched jobs are
+        // pure data processing (no globals, no Features referencing the fork) — e.g. parallel_for matmul.
+        context->keepForkContexts = keep;
+        context->forkSkipInitScript = skipInit;
+    }
+
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
+        if ( context->keepForkContexts ) {
+            // pooled path: borrow a reusable fork, return it to the pool when the job finishes
+            Context * forkContext = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
+            auto ptr = forkContext->allocate(lambdaSize + 16, lineinfo);
+            forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
+            memset ( ptr, 0, lambdaSize + 16 );
+            ptr += 16;
+            das_invoke_function<void>::invoke(forkContext, lineinfo, fn, ptr, lambda.capture);
+            das_delete<Lambda>::clear(context, lambda);
+            auto bound = daScriptEnvironment::getBound();
+            Context * parent = context;
+            g_jobQue->push([=]() mutable {
+                daScriptEnvironment::setBound(bound);
+                Lambda flambda(ptr);
+                das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
+                das_delete<Lambda>::clear(forkContext, flambda);
+                parent->releaseForkContext(forkContext);
+            }, 0, JobPriority::Default);
+            return;
+        }
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
         forkContext->sharedPtrContext = true;
@@ -973,6 +1001,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
                 SideEffects::modifyExternal, "new_job_invoke")
                     ->args({"lambda","function","lambdaSize","context","line"});
+            addExtern<DAS_BIND_FUN(set_jobque_fork_pool)>(*this, lib,  "set_jobque_fork_pool",
+                SideEffects::modifyExternal, "set_jobque_fork_pool")
+                    ->args({"keep","skip_init","context","line"});
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue")
                     ->args({"block","context","line"});

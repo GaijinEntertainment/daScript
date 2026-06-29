@@ -885,10 +885,22 @@ namespace das {
         static __forceinline const TT & at ( const TT * value, uint32_t index, Context * ) {
             return value[index];
         }
+        static __forceinline const TT & at ( const TT * value, int64_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const TT & at ( const TT * value, uint64_t index, Context * ) {
+            return value[index];
+        }
         static __forceinline const TT * safe_at ( const TT * value, int32_t index, Context * ) {
             return value ? value + index : nullptr;
         }
         static __forceinline const TT * safe_at ( const TT * value, uint32_t index, Context * ) {
+            return value ? value + index : nullptr;
+        }
+        static __forceinline const TT * safe_at ( const TT * value, int64_t index, Context * ) {
+            return value ? value + index : nullptr;
+        }
+        static __forceinline const TT * safe_at ( const TT * value, uint64_t index, Context * ) {
             return value ? value + index : nullptr;
         }
     };
