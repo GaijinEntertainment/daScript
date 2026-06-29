@@ -24,6 +24,12 @@ enum QuantMode {
     q4
 }
 
+//! FFN gate activation: silu = SwiGLU (Llama family), gelu = GeGLU (Gemma).
+enum FfnAct {
+    silu
+    gelu
+}
+
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
     dim : int64
@@ -37,6 +43,16 @@ struct Config {
     kv_dim : int64          // (dim * n_kv_heads) / n_heads
     shared_weights : bool   // classifier aliases the token-embedding table
     rope_freq_base : float  // RoPE θ (set by the loader); Llama-2/TinyLlama 10000, Llama-3 500000
+    // per-architecture capability flags — defaults encode the Llama family; the loader overrides per arch
+    attn_qkv_bias : bool = false       // Qwen2: additive bias on the Q/K/V projections
+    ffn_act : FfnAct = FfnAct.silu     // SwiGLU (silu) vs GeGLU (gelu, Gemma2)
+    embed_scale : float = 1.0          // token-embedding multiplier (Gemma2: sqrt(dim))
+    norm_eps : float = 1.0e-5          // RMSNorm epsilon (Gemma2: 1e-6)
+    rmsnorm_offset : float = 0.0       // added to each norm weight — the (1+w) form (Gemma2: 1.0)
+    attn_logit_softcap : float = 0.0   // attention-score soft cap, 0 = off (Gemma2: 50)
+    final_logit_softcap : float = 0.0  // output-logit soft cap, 0 = off (Gemma2: 30)
+    sliding_window : int64 = 0         // sliding-window attention span, 0 = off (Gemma2: 4096, alt layers)
+    pre_post_norm : bool = false       // Gemma2: extra post-attention / post-FFN norms
 }
 
 //! The whole model. `fblob` holds the fp32 embedding + norm weights at the *_off offsets below;
@@ -45,7 +61,7 @@ struct Config {
 //! all three — Q8 scales at off/32, Q4 bytes at off/2). For shared_weights the classifier reads the
 //! fp32 embedding from fblob, so wcls_off is unused.
 struct Transformer {
-    config : Config
+    config : Config = Config()
     // fp32 aux: embedding + norms
     fblob : array<float>
     tok_emb_off : int64
@@ -135,7 +151,7 @@ def private copy_floats(src : array<float> | #; soff : int64; var dst : array<fl
 def load_checkpoint(path : string) : Transformer {
     let HEADER_INTS = 7
     let HEADER_BYTES = 28
-    var t : Transformer
+    var t = Transformer()
     t.quant = QuantMode.fp32
     let f = fopen(path, "rb")
     if (f == null) {
@@ -232,13 +248,24 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
     }
 }
 
+//! Validate the GGUF architecture and apply its per-arch capability flags to the config. The Config
+//! defaults already encode the Llama family, so each arch overrides only its own deltas. An arch we
+//! can't run correctly panics here — better to fail loudly than feed weights through the wrong path.
+[unused_argument(c)] def private configure_arch(var c : Config; arch : string) {
+    if (arch == "llama") {
+        // Llama / Llama-2 / Llama-3 / TinyLlama — every Config default is already correct
+    } else {
+        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama)")
+    }
+}
+
 //! Load a llama-architecture GGUF into the split layout at the requested precision. The big weights
 //! go straight into `mode`'s storage (pre-quantized tensors transcode block-for-block with no fp32
 //! round-trip; F16/F32 tensors dequant one at a time through a small reused scratch), so a Q8/Q4
 //! load never holds the dense fp32 weights. The embedding + norms stay fp32 in fblob regardless.
 //! Config comes from metadata; vocab is derived from token_embd (some files omit llama.vocab_size).
 def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
-    var t : Transformer
+    var t = Transformer()
     t.quant = mode
     let f = fopen(path, "rb")
     if (f == null) {
@@ -247,15 +274,14 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
     fmap(f) $(var bytes : array<uint8>#) {
         let m <- parse_gguf_meta(bytes)
         let arch = gguf_str(m, bytes, "general.architecture")
-        if (arch != "llama") {
-            panic("dasLLAMA: unsupported architecture '{arch}' (only llama)")
-        }
-        let dim = gguf_int(m, bytes, "llama.embedding_length")
-        let hidden = gguf_int(m, bytes, "llama.feed_forward_length")
-        let layers = gguf_int(m, bytes, "llama.block_count")
-        let n_heads = gguf_int(m, bytes, "llama.attention.head_count")
-        let n_kv_heads = gguf_int(m, bytes, "llama.attention.head_count_kv")
-        let seq_len = gguf_int(m, bytes, "llama.context_length")
+        configure_arch(t.config, arch)
+        // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
+        let dim = gguf_int(m, bytes, "{arch}.embedding_length")
+        let hidden = gguf_int(m, bytes, "{arch}.feed_forward_length")
+        let layers = gguf_int(m, bytes, "{arch}.block_count")
+        let n_heads = gguf_int(m, bytes, "{arch}.attention.head_count")
+        let n_kv_heads = gguf_int(m, bytes, "{arch}.attention.head_count_kv")
+        let seq_len = gguf_int(m, bytes, "{arch}.context_length")
         // vocab from the token-embedding tensor: rows = vocab, cols = dim
         let temb = gguf_find_tensor(m, "token_embd.weight")
         if (temb < 0) {
@@ -272,7 +298,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         t.config.head_size = dim / n_heads
         t.config.kv_dim = (dim * n_kv_heads) / n_heads
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
-        t.config.rope_freq_base = gguf_has(m, "llama.rope.freq_base") ? gguf_f32(m, bytes, "llama.rope.freq_base") : 10000.0
+        t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
         // Llama-3.1 ships precomputed per-pair RoPE scaling factors (NTK-by-parts) as a tensor
         if (gguf_find_tensor(m, "rope_freqs.weight") >= 0) {
             let nff = t.config.head_size / 2l
