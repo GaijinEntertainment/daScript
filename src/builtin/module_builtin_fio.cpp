@@ -441,6 +441,9 @@ namespace das {
         if ( !fp ) context.throw_error_at(node->debugInfo, "can't load NULL");
         int64_t len = cast<int64_t>::to(args[1]);
         if (len < 0) context.throw_error_at(node->debugInfo, "can't read negative number from binary save, %lld", (long long)len);
+        // On 32-bit (size_t < int64), len near SIZE_MAX truncates and `size_t(len)+1` can wrap to 0,
+        // giving a tiny malloc + a huge fread (OOB write). Reject loads that don't fit size_t. No-op on 64-bit.
+        if ( uint64_t(len) >= uint64_t(SIZE_MAX) ) context.throw_error_at(node->debugInfo, "can't read. file too large to load on this platform, %lld", (long long)len);
         Block * block = cast<Block *>::to(args[2]);
         char * buf = (char *) malloc(size_t(len) + 1);
         if (!buf) context.throw_error_at(node->debugInfo, "can't read. out of memory, %lld", (long long)len);
