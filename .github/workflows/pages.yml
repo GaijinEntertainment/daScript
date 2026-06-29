@@ -159,6 +159,21 @@ jobs:
         set -eux
         REPO="$PWD"
 
+        # daspkg install builds a dep's NATIVE module (dasImgui -> dasModuleImgui.shared_module)
+        # via plain `cmake`, and the HOST daslang dlopen's that module during the wasm cross-compile
+        # (release wasm) to resolve `require imgui`. So it must be built with the SAME C++ ABI as the
+        # host — which is libc++ + exceptions (see the host build step). In this emsdk-activated step,
+        # an unpinned `cmake` grabs emsdk's clang + default libstdc++ instead -> ABI mismatch -> the
+        # host can't load the module -> the cross-compile fails `error[20605] missing prerequisite 'imgui'`.
+        # Pin the host ABI for install only; the emcmake builds below set their own (emscripten) toolchain.
+        das_install() {
+            env CC=/usr/bin/clang CXX=/usr/bin/clang++ \
+                CFLAGS="-DDAS_ENABLE_EXCEPTIONS=1" \
+                CXXFLAGS="-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
+                LDFLAGS="-stdlib=libc++" \
+                ./bin/daslang utils/daspkg/main.das -- install "$@"
+        }
+
         # 0. dasImgui for the playground showcases (furier, path_tracer_lab). The threaded
         #    daslang_static interpreter binds it so those samples run in the playground itself —
         #    not only as the wasm64 examples-card builds. daspkg installs dasImgui from the package
@@ -169,7 +184,7 @@ jobs:
         #    the two imgui samples are unavailable that deploy (same non-fatal stance as the cards).
         IMGUI_DIR="$REPO/examples/graphics/path_tracer_lab/modules/dasImgui"
         PLAYGROUND_IMGUI=""
-        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/path_tracer_lab \
+        if das_install --root examples/graphics/path_tracer_lab \
            && ( cd "$IMGUI_DIR" \
                 && emcmake cmake -S . -B _wasm_build32mt -G Ninja -DCMAKE_BUILD_TYPE=Release \
                      -DDASLANG_DIR="$REPO" -DDAS_IMGUI_WASM_MEMORY64=OFF -DDAS_IMGUI_WASM_PTHREADS=ON \
@@ -236,7 +251,7 @@ jobs:
         #    not red the whole deploy; the furier card is skipped at stage time
         #    below (examples.js shows a "needs memory64" note when the iframe is
         #    unavailable).
-        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/furier \
+        if das_install --root examples/graphics/furier \
            && ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/furier --out "$REPO/web/output64/examples"; then
             echo "furier wasm build OK"
@@ -250,13 +265,38 @@ jobs:
         #    Workers. Non-fatal for the same reason as furier; staged below only when
         #    all three outputs are present. The page serves it cross-origin-isolated
         #    via coi-serviceworker.js (required for the -pthread module to instantiate).
-        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/path_tracer_lab \
+        if das_install --root examples/graphics/path_tracer_lab \
            && ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/path_tracer_lab --out "$REPO/web/output64/examples"; then
             echo "path_tracer_lab wasm build OK"
         else
             echo "WARNING: path_tracer_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
         fi
+
+    - name: "Verify wasm example artifacts (catch silent fallbacks)"
+      # The example builds above are non-fatal (one run surfaces EVERY failure
+      # instead of dying on the first), and the staging step degrades a missing
+      # build to a placeholder / interpreted fallback — so without this the deploy
+      # goes GREEN with broken cards and you only notice on the live site. Fail
+      # here if any card that is supposed to compile to wasm64 didn't produce its
+      # artifact. A card meant to ship interpreted-only simply isn't listed.
+      # Always runs (no cache gate), so a partial cached state is caught too.
+      run: |
+        set -eu
+        MISSING=""
+        for f in \
+            web/output/daslang_static.wasm \
+            web/output64/examples/arcanoid/arcanoid.wasm \
+            web/output64/examples/pacman/pacman.wasm \
+            web/output64/examples/furier/furier.wasm \
+            web/output64/examples/path_tracer_lab/path_tracer_lab.wasm; do
+            [ -f "$f" ] || MISSING="$MISSING $f"
+        done
+        if [ -n "$MISSING" ]; then
+            echo "::error::expected wasm artifacts missing — a card fell back to placeholder/interpreted:$MISSING"
+            exit 1
+        fi
+        echo "all expected wasm artifacts present"
 
     - name: "Fetch dasProfile per-platform benchmark JSONs"
       # dasProfile now ships a per-platform JSON file
