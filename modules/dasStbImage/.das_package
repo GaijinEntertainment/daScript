@@ -11,6 +11,7 @@ def package() {
 def release() {
     // wasm (`daspkg release wasm`): the HUD font is loaded from MEMFS at runtime
     // (cache_font opens `/modules/dasStbImage/fonts/...`), so embed it. Ignored
-    // by the native bundle path, where the file is read from disk.
-    release_embed_file("modules/dasStbImage/fonts/droidsansmono.ttf", "/modules/dasStbImage/fonts/droidsansmono.ttf")
+    // by the native bundle path, where the file is read from disk. src is
+    // module-relative (resolved against this .das_package's dir).
+    release_embed_file("fonts/droidsansmono.ttf", "/modules/dasStbImage/fonts/droidsansmono.ttf")
 }

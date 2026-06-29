@@ -1662,6 +1662,10 @@ def test_run_das_package_release(t : T?) {
         tt |> equal(2, length(info.forced_modules))
         tt |> equal("dasSQLITE", info.forced_modules[0])
         tt |> equal("dasGlfw", info.forced_modules[1])
+        tt |> equal("emcmake cmake -S . -B _wasm && cmake --build _wasm", info.wasm_build_command)
+        tt |> equal(2, length(info.wasm_archives))
+        tt |> equal("_wasm/liblibDasModuleTest.a", info.wasm_archives[0])
+        tt |> equal("_wasm/liblibTestApp.a", info.wasm_archives[1])
     }
     t |> run("returns true with empty spec when release() is missing") @(tt : T?) {
         var info : PackageReleaseInfo
