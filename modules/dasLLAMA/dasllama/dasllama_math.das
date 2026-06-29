@@ -4,6 +4,7 @@ module dasllama_math shared public
 
 require math
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
+require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -44,26 +45,15 @@ let MATMUL_PAR_THRESHOLD = 2_000_000l
 //! Large matmuls thread the output rows across workers (requires an enclosing with_job_que);
 //! small ones stay single-thread. Workers read y/w/x via raw pointers (unsafe cross-context).
 def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : int64) {
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<float const?>(addr(w[0]))  // strip the `#` if w is a view
-            let xp = addr(x[0])
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)  // var: lambda capture would const-bind the write pointer
-                    for (i in range(rb, re)) {
-                        myp[i] = dot(wp + int64(i) * n, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])                              // var: stays a writable pointer when captured
+        let wp = reinterpret<float const?>(addr(w[0]))   // strip the `#` if w is a view
+        let xp = addr(x[0])
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot(wp + int64(i) * n, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot(reinterpret<float const?>(addr(w[i * n])), xp, n)
             }
         }
     }
@@ -74,32 +64,17 @@ def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : 
 //! stationary nest (rows outer) — each weight row streams from DRAM once and is reused across
 //! all ntok tokens, vs ntok× matmul re-reading W every call. Bit-for-bit ntok× matmul.
 def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n, d, ntok : int64) {
-    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<float const?>(addr(w[0]))
-            let xp = reinterpret<float const?>(addr(x[0]))
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        let wrow = wp + int64(i) * n
-                        for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
-                        }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<float const?>(addr(w[0]))
+        let xp = reinterpret<float const?>(addr(x[0]))
+        maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    let wrow = wp + int64(i) * n
+                    for (tk in range64(ntok)) {
+                        yp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
                     }
-                }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let wp = reinterpret<float const?>(addr(w[0]))
-            let xp = reinterpret<float const?>(addr(x[0]))
-            for (i in range64(d)) {
-                let wrow = wp + i * n
-                for (tk in range64(ntok)) {
-                    y[tk * d + i] = dot(wrow, xp + tk * n, n)
                 }
             }
         }
@@ -137,27 +112,17 @@ def dot_q8(wq : int8 const?; ws : float const?; x : float const?; n : int64) : f
 //! rows (2x the worker count — Q8 is compute-bound and threads better than fp32). n % 32 == 0.
 def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xp = addr(x[0])
-            parallel_for(0, int(d), 2 * get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q8(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xp = addr(x[0])
+        // 2N (2 chunks per hw job): Q8 dequant-in-dot is compute-bound and threads better than fp32
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), 2 * get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q8(wp + int64(i) * n, sp + int64(i) * nb, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot_q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
             }
         }
     }
@@ -189,32 +154,20 @@ def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float c
 //! fastest for this compute-light kernel); small ones stay single-thread. n % 32 == 0.
 def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d : int64) {
     let nb = n / 32l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            // 1N (one chunk per hw job) measured best on the real shapes with the cond-var + fork-pool
-            // job manager — both in the kernel microbench and end-to-end (~52 vs ~51 tok/s at 2N).
-            // The compute-light SDOT kernel gains nothing from more chunks; they only add dispatch cost.
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        // 1N (one chunk per hw job) measured best on the real shapes with the cond-var + fork-pool
+        // job manager — both in the kernel microbench and end-to-end (~52 vs ~51 tok/s at 2N).
+        // The compute-light SDOT kernel gains nothing from more chunks; they only add dispatch cost.
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            for (i in range64(d)) {
-                y[i] = dot_q8q8(reinterpret<int8 const?>(addr(wq[i * n])), reinterpret<float const?>(addr(ws[i * nb])), xqp, xsp, n)
             }
         }
     }
@@ -225,36 +178,20 @@ def matmul_q8q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | 
 //! Y token-major [ntok x d]. Bit-for-bit ntok× matmul_q8q8. n % 32 == 0.
 def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
     let nb = n / 32l
-    if (n * d * ntok >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<int8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        let wrow = wp + int64(i) * n
-                        let srow = sp + int64(i) * nb
-                        for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                        }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    let wrow = wp + int64(i) * n
+                    let srow = sp + int64(i) * nb
+                    for (tk in range64(ntok)) {
+                        yp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                     }
-                }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xqp = reinterpret<int8 const?>(addr(xq[0]))
-            let xsp = reinterpret<float const?>(addr(xs[0]))
-            for (i in range64(d)) {
-                let wrow = reinterpret<int8 const?>(addr(wq[i * n]))
-                let srow = reinterpret<float const?>(addr(ws[i * nb]))
-                for (tk in range64(ntok)) {
-                    y[tk * d + i] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                 }
             }
         }
@@ -333,30 +270,18 @@ def dot_q4(wq : uint8 const?; ws : float const?; x : float const?; n : int64) : 
 def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
     let nh = n / 2l
-    if (n * d >= MATMUL_PAR_THRESHOLD) {
-        unsafe {
-            let yp = addr(y[0])
-            let wp = reinterpret<uint8 const?>(addr(wq[0]))
-            let sp = reinterpret<float const?>(addr(ws[0]))
-            let xp = addr(x[0])
-            // 4N measured fastest for Q4 on the real shapes: the heavy nibble unpack makes each row
-            // compute-bound, so finer splitting balances better (esp. the classifier) — more than the
-            // compute-light Q8 path, which prefers 1N.
-            parallel_for(0, int(d), 4 * get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var myp = reinterpret<float?>(yp)
-                    for (i in range(rb, re)) {
-                        myp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
-                    }
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<uint8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        let xp = addr(x[0])
+        // 4N (4 chunks per hw job): the heavy nibble unpack makes each row compute-bound, so finer
+        // splitting balances better (esp. the classifier) — more than the compute-light Q8 path.
+        maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), 4 * get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    yp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
                 }
-                wg |> notify_and_release
-            }
-        }
-    } else {
-        unsafe {
-            let xp = addr(x[0])
-            for (i in range64(d)) {
-                y[i] = dot_q4(reinterpret<uint8 const?>(addr(wq[i * nh])), reinterpret<float const?>(addr(ws[i * nb])), xp, n)
             }
         }
     }
