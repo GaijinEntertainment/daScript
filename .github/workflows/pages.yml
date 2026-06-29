@@ -98,13 +98,13 @@ jobs:
         # + exceptions makes host==target layout (verified: zero handled-type
         # divergence on every runtime-live type; only the compiler-only Program
         # residual remains).
+        # /usr/bin/clang (absolute): setup-emsdk prepends its LLVM snapshot to PATH, so a
+        # bare `clang` resolves to emsdk's (flaky on ds_parser.cpp, see version note above).
+        # /usr/bin/clang is the runner-image clang every other Linux clang job uses
+        # (build.yml, extended_checks.yml), paired with the apt libc++ installed above.
+        # NB: a `#` comment inside the `\`-continued cmake call below terminates it (exit 127).
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
-          # Absolute path: setup-emsdk prepends its LLVM snapshot to PATH, so a bare
-          # `clang` would resolve to emsdk's (flaky on ds_parser.cpp, see version note
-          # above). /usr/bin/clang is the runner image's clang — same one every other
-          # Linux clang job uses (build.yml, extended_checks.yml) — paired with the
-          # apt libc++ installed above.
           -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
           -DCMAKE_C_FLAGS="-DDAS_ENABLE_EXCEPTIONS=1" \
           -DCMAKE_CXX_FLAGS="-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
