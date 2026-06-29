@@ -155,6 +155,75 @@ def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : 
     return f
 }
 
+//! 4-row × 4-token tile (the llama.cpp ggml_gemm_q8_0_4x4 structure): one 4-row interleaved group
+//! against 4 tokens at once, 4 independent int4 accumulators (one per token). Per chunk-lane the same
+//! weight v16i8 feeds all 4 tokens — LLVM CSEs it to one load (4× fewer weight loads than 4× laneq4) —
+//! and the 4 independent accumulator chains give the SDOT pipeline the ILP a single chain can't, so it
+//! approaches throughput instead of being latency-bound. Writes 16 outputs token-major into yp. Not
+//! `private`: called from inside the lifted parallel_for worker lambda. t0 % 1, ntok-t0 >= 4 assumed.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp)]
+def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; n, d, g, t0 : int64) {
+    let nb = n / 32l
+    var f0 = float4(0.0, 0.0, 0.0, 0.0)
+    var f1 = float4(0.0, 0.0, 0.0, 0.0)
+    var f2 = float4(0.0, 0.0, 0.0, 0.0)
+    var f3 = float4(0.0, 0.0, 0.0, 0.0)
+    unsafe {
+        let x0 = xqp + (t0 + 0l) * n
+        let x1 = xqp + (t0 + 1l) * n
+        let x2 = xqp + (t0 + 2l) * n
+        let x3 = xqp + (t0 + 3l) * n
+        let xs0 = xsp + (t0 + 0l) * nb
+        let xs1 = xsp + (t0 + 1l) * nb
+        let xs2 = xsp + (t0 + 2l) * nb
+        let xs3 = xsp + (t0 + 3l) * nb
+        for (bi in range64(nb)) {
+            let wb = bi * 128l
+            let xb = bi * 32l
+            var a0 = int4(0, 0, 0, 0)
+            var a1 = int4(0, 0, 0, 0)
+            var a2 = int4(0, 0, 0, 0)
+            var a3 = int4(0, 0, 0, 0)
+            // chunk 0 (k 0..15): weight v16i8 per lane shared across the 4 tokens
+            a0 = sdot4_laneq(a0, wg + wb, x0 + xb, 0); a1 = sdot4_laneq(a1, wg + wb, x1 + xb, 0); a2 = sdot4_laneq(a2, wg + wb, x2 + xb, 0); a3 = sdot4_laneq(a3, wg + wb, x3 + xb, 0)
+            a0 = sdot4_laneq(a0, wg + wb + 16l, x0 + xb, 1); a1 = sdot4_laneq(a1, wg + wb + 16l, x1 + xb, 1); a2 = sdot4_laneq(a2, wg + wb + 16l, x2 + xb, 1); a3 = sdot4_laneq(a3, wg + wb + 16l, x3 + xb, 1)
+            a0 = sdot4_laneq(a0, wg + wb + 32l, x0 + xb, 2); a1 = sdot4_laneq(a1, wg + wb + 32l, x1 + xb, 2); a2 = sdot4_laneq(a2, wg + wb + 32l, x2 + xb, 2); a3 = sdot4_laneq(a3, wg + wb + 32l, x3 + xb, 2)
+            a0 = sdot4_laneq(a0, wg + wb + 48l, x0 + xb, 3); a1 = sdot4_laneq(a1, wg + wb + 48l, x1 + xb, 3); a2 = sdot4_laneq(a2, wg + wb + 48l, x2 + xb, 3); a3 = sdot4_laneq(a3, wg + wb + 48l, x3 + xb, 3)
+            // chunk 1 (k 16..31)
+            a0 = sdot4_laneq(a0, wg + wb + 64l, x0 + xb + 16l, 0); a1 = sdot4_laneq(a1, wg + wb + 64l, x1 + xb + 16l, 0); a2 = sdot4_laneq(a2, wg + wb + 64l, x2 + xb + 16l, 0); a3 = sdot4_laneq(a3, wg + wb + 64l, x3 + xb + 16l, 0)
+            a0 = sdot4_laneq(a0, wg + wb + 80l, x0 + xb + 16l, 1); a1 = sdot4_laneq(a1, wg + wb + 80l, x1 + xb + 16l, 1); a2 = sdot4_laneq(a2, wg + wb + 80l, x2 + xb + 16l, 1); a3 = sdot4_laneq(a3, wg + wb + 80l, x3 + xb + 16l, 1)
+            a0 = sdot4_laneq(a0, wg + wb + 96l, x0 + xb + 16l, 2); a1 = sdot4_laneq(a1, wg + wb + 96l, x1 + xb + 16l, 2); a2 = sdot4_laneq(a2, wg + wb + 96l, x2 + xb + 16l, 2); a3 = sdot4_laneq(a3, wg + wb + 96l, x3 + xb + 16l, 2)
+            a0 = sdot4_laneq(a0, wg + wb + 112l, x0 + xb + 16l, 3); a1 = sdot4_laneq(a1, wg + wb + 112l, x1 + xb + 16l, 3); a2 = sdot4_laneq(a2, wg + wb + 112l, x2 + xb + 16l, 3); a3 = sdot4_laneq(a3, wg + wb + 112l, x3 + xb + 16l, 3)
+            let s = float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+            let q0 = xs0[bi]
+            let q1 = xs1[bi]
+            let q2 = xs2[bi]
+            let q3 = xs3[bi]
+            f0 += float4(a0) * s * float4(q0, q0, q0, q0)
+            f1 += float4(a1) * s * float4(q1, q1, q1, q1)
+            f2 += float4(a2) * s * float4(q2, q2, q2, q2)
+            f3 += float4(a3) * s * float4(q3, q3, q3, q3)
+        }
+        let r = g * 4l
+        yp[(t0 + 0l) * d + r + 0l] = f0.x
+        yp[(t0 + 0l) * d + r + 1l] = f0.y
+        yp[(t0 + 0l) * d + r + 2l] = f0.z
+        yp[(t0 + 0l) * d + r + 3l] = f0.w
+        yp[(t0 + 1l) * d + r + 0l] = f1.x
+        yp[(t0 + 1l) * d + r + 1l] = f1.y
+        yp[(t0 + 1l) * d + r + 2l] = f1.z
+        yp[(t0 + 1l) * d + r + 3l] = f1.w
+        yp[(t0 + 2l) * d + r + 0l] = f2.x
+        yp[(t0 + 2l) * d + r + 1l] = f2.y
+        yp[(t0 + 2l) * d + r + 2l] = f2.z
+        yp[(t0 + 2l) * d + r + 3l] = f2.w
+        yp[(t0 + 3l) * d + r + 0l] = f3.x
+        yp[(t0 + 3l) * d + r + 1l] = f3.y
+        yp[(t0 + 3l) * d + r + 2l] = f3.z
+        yp[(t0 + 3l) * d + r + 3l] = f3.w
+    }
+}
+
 // In-place repack of one Q8 weight region [d x n] into 4-row-interleaved groups (+ float4-per-block
 // scales). Copies the region to a scratch, then writes the interleaved layout back; tail rows (d % 4)
 // stay row-major. Runs once per weight tensor at load, on the main context.
@@ -225,6 +294,7 @@ def private q8q8_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp : float
 def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let ng = d / 4l
+    let nt4 = (ntok / 4l) * 4l   // tokens covered by full 4-token tiles
     var myp = yp
     maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
         unsafe {
@@ -232,18 +302,24 @@ def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp :
                 let g = int64(gi)
                 let wgp = wp + g * 4l * n
                 let sgp = sp + g * 4l * nb
-                for (tk in range64(ntok)) {
+                var tk = 0l
+                while (tk < nt4) {     // 4-row × 4-token tiles (the throughput path)
+                    dot_q8q8_laneq4x4(myp, wgp, sgp, xqp, xsp, n, d, g, tk)
+                    tk += 4l
+                }
+                while (tk < ntok) {    // token tail (ntok % 4): one token at a time
                     let f = dot_q8q8_laneq4(wgp, sgp, xqp + tk * n, xsp + tk * nb, n)
                     myp[tk * d + g * 4l + 0l] = f.x
                     myp[tk * d + g * 4l + 1l] = f.y
                     myp[tk * d + g * 4l + 2l] = f.z
                     myp[tk * d + g * 4l + 3l] = f.w
+                    tk++
                 }
             }
         }
     }
     unsafe {
-        for (i in range64(ng * 4l, d)) {
+        for (i in range64(ng * 4l, d)) {   // row tail (d % 4): row-major sdot4x4
             let wrow = wp + i * n
             let srow = sp + i * nb
             for (tk in range64(ntok)) {
