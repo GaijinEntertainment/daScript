@@ -11,21 +11,36 @@ das::mutex      das::Feature::sTrackMutex;
 
 namespace das {
 
+    // Worker count = logical cores - 1, capped at DAS_MAX_HW_JOBS. parallel_for has the CALLING (main)
+    // thread run one chunk too and then wait, so it occupies a core for the bulk of the call; spawning a
+    // worker per core therefore oversubscribes (N workers + main = N+1 threads on N cores), and the
+    // surplus worker can't get a core until another yields — measured as workers "trickling in" over the
+    // first ~37% of every matmul on a 10-core machine. cores-1 workers + the main thread == cores, which
+    // removes that oversubscription at no throughput cost. DAS_MAX_HW_JOBS (default 4; raise via
+    // -DDAS_MAX_HW_JOBS=N) is the hard upper bound — it keeps a wasm/web build from spawning one Web
+    // Worker per logical core, and on a desktop build with the cap raised the cores-1 rule then applies.
+    // DAS_JOBQUE_THREADS is an explicit override that bypasses both (0/unset = the default).
+    static int jobque_thread_count(int hw) {
+        static int forced = []{ const char * e = getenv("DAS_JOBQUE_THREADS"); return e ? atoi(e) : 0; }();
+        if ( forced > 0 ) return forced;
+        return max(1, min(DAS_MAX_HW_JOBS, hw - 1));
+    }
+
 #if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO) && !defined(_M_ARM64)
 
     int GetLogicalProcessorCountInWindows();
 
     int JobQue::get_num_threads() {
-        int nThreads = GetLogicalProcessorCountInWindows();
-        if ( nThreads==0 ) nThreads = static_cast<int>(thread::hardware_concurrency());
-        return max(1,min(DAS_MAX_HW_JOBS,nThreads));
+        int hw = GetLogicalProcessorCountInWindows();
+        if ( hw <= 0 ) hw = max(1,static_cast<int>(thread::hardware_concurrency()));
+        return jobque_thread_count(hw);
     }
 
 
 #else
 
     int JobQue::get_num_threads() {
-        return max(1,min(DAS_MAX_HW_JOBS,static_cast<int>(thread::hardware_concurrency())));
+        return jobque_thread_count(max(1,static_cast<int>(thread::hardware_concurrency())));
     }
 
 #endif
