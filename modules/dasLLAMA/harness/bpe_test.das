@@ -12,7 +12,8 @@ require daslib/fio
 require strings
 require daslib/strings_boost
 
-let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/ggml-vocab-llama-bpe.gguf"
+// Default fixture; override with a CLI path arg to test another BPE vocab (e.g. ggml-vocab-qwen2.gguf).
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/ggml-vocab-llama-bpe.gguf"
 let SEP = "\n__ggml_vocab_test__\n"
 
 // Parse one .out line (" 1142 220 19 ...") into token ids; tolerant of the leading space.
@@ -51,11 +52,16 @@ def check_fresh(tk : BPETokenizer; text : string; want : array<int64>) : bool {
 
 [export]
 def main() {
-    let tk = load_bpe_tokenizer_gguf(MODEL)
+    var model = DEFAULT_MODEL
+    let args <- get_command_line_arguments()
+    if (!empty(args) && ends_with(args[length(args) - 1], ".gguf")) {
+        model = args[length(args) - 1]
+    }
+    let tk = load_bpe_tokenizer_gguf(model)
     to_log(LOG_INFO, "BPE loaded: vocab={length(tk.vocab)} merges={length(tk.merge_rank)} pre='{tk.pre}' bos={tk.bos_id} eos={tk.eos_id}\n")
 
-    var inputs <- split(fread(MODEL + ".inp"), SEP)
-    var outlines <- split(fread(MODEL + ".out"), "\n")
+    var inputs <- split(fread(model + ".inp"), SEP)
+    var outlines <- split(fread(model + ".out"), "\n")
     drop_trailing_empty(inputs)
     drop_trailing_empty(outlines)
 
@@ -79,11 +85,13 @@ def main() {
     }
     to_log(LOG_INFO, "BPE corpus: {npass}/{length(inputs)} passed, {nfail} failed\n")
 
-    var fresh_ok = true
-    fresh_ok = fresh_ok && check_fresh(tk, "Hello, world! It's 2026.", [9906l, 11l, 1917l, 0l, 1102l, 596l, 220l, 2366l, 21l, 13l])
-    fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])
-    fresh_ok = fresh_ok && check_fresh(tk, "  spaces   and\ttabs", [220l, 12908l, 256l, 323l, 3324l, 3518l])
-    to_log(LOG_INFO, "fresh cross-check: {fresh_ok ? "PASS" : "FAIL"}\n")
+    if (tk.pre == "llama-bpe") {  // golden ids captured from llama-tokenize on this exact vocab
+        var fresh_ok = true
+        fresh_ok = fresh_ok && check_fresh(tk, "Hello, world! It's 2026.", [9906l, 11l, 1917l, 0l, 1102l, 596l, 220l, 2366l, 21l, 13l])
+        fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])
+        fresh_ok = fresh_ok && check_fresh(tk, "  spaces   and\ttabs", [220l, 12908l, 256l, 323l, 3324l, 3518l])
+        to_log(LOG_INFO, "fresh cross-check: {fresh_ok ? "PASS" : "FAIL"}\n")
+    }
 
     // decode round-trip: byte-level BPE is lossless, so decode(encode(x)) == x
     var rt_ok = 0

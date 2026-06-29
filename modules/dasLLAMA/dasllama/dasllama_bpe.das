@@ -74,9 +74,11 @@ def init_byte2uni() {
     }
 }
 
-// ===== llama3 pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3) =====
-// Splits codepoints into word lengths per the llama3 regex; classification via the
-// dasllama_unicode tables so the split matches llama.cpp's exactly.
+// ===== BPE pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3 / _qwen2) =====
+// Splits codepoints into word lengths per the regex; classification via the dasllama_unicode
+// tables so the split matches llama.cpp's exactly. llama3 and qwen2 differ in exactly one
+// rule — digit runs: llama3 chunks \p{N}{1,3}, qwen2 emits one digit per token (\p{N}).
+// `group_digits` selects between them (true = llama3, false = qwen2); everything else is shared.
 
 def private tolower_ascii(c : int) : int {
     return (c >= 'A' && c <= 'Z') ? c + 32 : c
@@ -95,7 +97,7 @@ def private uC(cpts : array<int>; pos : int) : int {
     return (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
 }
 
-def private llama3_split(cpts : array<int>) : array<int> {
+def private pretok_split(cpts : array<int>; group_digits : bool) : array<int> {
     var offs : array<int>
     let n = length(cpts)
     var prev_end = 0
@@ -133,15 +135,19 @@ def private llama3_split(cpts : array<int>) : array<int> {
             }
         }
 
-        // \p{N}{1,3}  (digits in chunks of up to three)
+        // \p{N}{1,3} (llama3, chunks of up to three) | \p{N} (qwen2, one digit per token)
         if (cpt_is_number(cpt)) {
-            var ini = pos
-            while (uN(cpts, pos)) {
-                pos++
-                if (pos - ini >= 3) {
-                    offs |> push(pos - prev_end); prev_end = pos
-                    ini = pos
+            if (group_digits) {
+                var ini = pos
+                while (uN(cpts, pos)) {
+                    pos++
+                    if (pos - ini >= 3) {
+                        offs |> push(pos - prev_end); prev_end = pos
+                        ini = pos
+                    }
                 }
+            } else {
+                pos++
             }
             offs |> push(pos - prev_end); prev_end = pos
             continue
@@ -227,7 +233,8 @@ def private emit_chars(tk : BPETokenizer; s : string; var ids : array<int64>) {
 def bpe_encode(tk : BPETokenizer; text : string) : array<int64> {
     var ids : array<int64>
     let cpts <- utf8_to_cpts(text)
-    let offs <- llama3_split(cpts)
+    // qwen2 splits digits one-at-a-time (\p{N}); llama3 / default groups up to three (\p{N}{1,3})
+    let offs <- pretok_split(cpts, tk.pre != "qwen2")
     var pos = 0
     for (off in offs) {
         var symbols : array<string>

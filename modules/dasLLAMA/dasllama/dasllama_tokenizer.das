@@ -16,11 +16,12 @@ struct Tokenizer {
     scores : array<float>
     lookup : table<string; int64>  // piece text -> id, for encode
     max_token_length : int
+    add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
 }
 
 //! Load tokenizer.bin. vocab_size comes from the model Config (it isn't stored in the file).
 def load_tokenizer(path : string; vocab_size : int64) : Tokenizer {
-    var tk : Tokenizer
+    var tk = Tokenizer()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open tokenizer '{path}'")
@@ -51,7 +52,7 @@ def load_tokenizer(path : string; vocab_size : int64) : Tokenizer {
 //! '▁' -> space at load so encode/decode below (written for llama2.c's literal-space
 //! convention) work unchanged. BOS=1 / EOS=2 (Llama-2 SPM) match the hardcoded ids there.
 def load_tokenizer_gguf(path : string) : Tokenizer {
-    var tk : Tokenizer
+    var tk = Tokenizer()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open gguf '{path}'")
@@ -70,6 +71,9 @@ def load_tokenizer_gguf(path : string) : Tokenizer {
             tk.lookup |> insert(piece, int64(i))
         }
         tk.max_token_length = 0
+        if (gguf_has(m, "tokenizer.ggml.add_space_prefix")) {
+            tk.add_space_prefix = gguf_int(m, bytes, "tokenizer.ggml.add_space_prefix") != 0l
+        }
     }
     fclose(f)
     return <- tk
@@ -126,8 +130,8 @@ def encode(tk : Tokenizer; text : string; bos, eos : bool) : array<int64> {
     if (bos) {
         tokens |> push(1l)
     }
-    // sentencepiece add_dummy_prefix: a leading space token when text is non-empty
-    if (!empty(text)) {
+    // sentencepiece add_dummy_prefix: a leading space token when text is non-empty (Gemma disables it)
+    if (tk.add_space_prefix && !empty(text)) {
         tokens |> push(tk.lookup?[" "] ?? -1l)
     }
     // split into UTF-8 codepoints; each -> its vocab token, or byte fallback (byte + 3)
