@@ -117,17 +117,28 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		-DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
 		-DOPENSSL_LIBRARIES="${OPENSSL_CRYPTO_LIBRARY};${OPENSSL_SSL_LIBRARY}"
 	)
+	# Forward the parent build's C/C++ + linker flags into the libhv sub-build so its
+	# stdlib/ABI matches daslang. Without this a libc++ host build (-stdlib=libc++, the
+	# wasm cross-compile host) leaves libhv on clang's default libstdc++, and the resulting
+	# dasModuleHV.shared_module carries undefined std::__cxx11 symbols that fail to dlopen
+	# under the libc++ daslang (surfaces as a misleading error[20605] missing prereq 'dashv').
+	SET(_HV_C_FLAGS "${CMAKE_C_FLAGS}")
+	SET(_HV_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 	IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
 		IF(MSVC)
 			SET(_HV_ASAN_FLAG "/fsanitize=address")
 		ELSE()
 			SET(_HV_ASAN_FLAG "-fsanitize=address")
 		ENDIF()
-		LIST(APPEND HV_CMAKE_FLAGS
-			"-DCMAKE_C_FLAGS=${_HV_ASAN_FLAG}"
-			"-DCMAKE_CXX_FLAGS=${_HV_ASAN_FLAG}"
-		)
+		SET(_HV_C_FLAGS "${_HV_C_FLAGS} ${_HV_ASAN_FLAG}")
+		SET(_HV_CXX_FLAGS "${_HV_CXX_FLAGS} ${_HV_ASAN_FLAG}")
 	ENDIF()
+	LIST(APPEND HV_CMAKE_FLAGS
+		"-DCMAKE_C_FLAGS:STRING=${_HV_C_FLAGS}"
+		"-DCMAKE_CXX_FLAGS:STRING=${_HV_CXX_FLAGS}"
+		"-DCMAKE_EXE_LINKER_FLAGS:STRING=${CMAKE_EXE_LINKER_FLAGS}"
+		"-DCMAKE_SHARED_LINKER_FLAGS:STRING=${CMAKE_SHARED_LINKER_FLAGS}"
+	)
 	# libhv's ExternalProject picks its own CRT; if it disagrees with daslang's,
 	# hv_static.lib fails to link into dasModuleHV (LNK2038 RuntimeLibrary
 	# mismatch: MT_StaticRelease vs MD_DynamicRelease). daslang uses the dynamic
