@@ -63,7 +63,9 @@ def dot_q8q8_sdot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs :
     return f0 + f1 + f2 + f3
 }
 
-def private q8q8_kernel_neon(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+// ===== default backend (sdot4x4 on row-major weights) — direct callers (tests, benches) =====
+
+def private q8q8_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
     maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
@@ -75,7 +77,7 @@ def private q8q8_kernel_neon(var yp : float?; wp : int8 const?; sp : float const
     }
 }
 
-def private q8q8_batch_kernel_neon(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+def private q8q8_batch_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     var myp = yp
     maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
@@ -91,8 +93,8 @@ def private q8q8_batch_kernel_neon(var yp : float?; wp : int8 const?; sp : float
     }
 }
 
-def private q8q8_group3_kernel_neon(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
-                                    woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
+def private q8q8_group3_kernel_neon_sdot4x4(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                                            woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
     let nb = n / 32l
     let dtot = d0 + d1 + d2
     var w0 = y0p
@@ -117,9 +119,198 @@ def private q8q8_group3_kernel_neon(var y0p : float?; var y1p : float?; var y2p 
     }
 }
 
+// ===== laneq backend (lane-indexed SDOT over interleaved 4-row groups) — Q8 model load only =====
+// Weights are repacked at load (repack_q8q8_neon) so each accumulator lane is a distinct output row:
+// no per-block horizontal reduce. Activated by enable_q8q8_laneq, never by default (the row-major
+// direct callers would read the interleaved layout as garbage). Group base + block stride match the
+// repack: a 4-row group is 4*n int8, block bi at +bi*128 (32 k's × 4 rows). Tail rows (d % 4) are kept
+// row-major after the groups and run the sdot4x4 fallback.
+
+//! Lane-indexed SDOT over one 4-row interleaved group against one token. 8 sdot4_laneq per 32-block
+//! (two 16-k chunks × lanes 0..3); the int4 accumulator's lane L is output row L, flushed to a float4
+//! with the 4 rows' block scales × the token block scale — no horizontal reduce anywhere. Not `private`:
+//! called from inside the lifted parallel_for worker lambdas.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
+def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
+    let nb = n / 32l
+    var f = float4(0.0, 0.0, 0.0, 0.0)
+    unsafe {
+        for (bi in range64(nb)) {
+            let wb = bi * 128l
+            let xb = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4_laneq(acc, wg + wb, xq + xb, 0)
+            acc = sdot4_laneq(acc, wg + wb + 16l, xq + xb, 1)
+            acc = sdot4_laneq(acc, wg + wb + 32l, xq + xb, 2)
+            acc = sdot4_laneq(acc, wg + wb + 48l, xq + xb, 3)
+            acc = sdot4_laneq(acc, wg + wb + 64l, xq + xb + 16l, 0)
+            acc = sdot4_laneq(acc, wg + wb + 80l, xq + xb + 16l, 1)
+            acc = sdot4_laneq(acc, wg + wb + 96l, xq + xb + 16l, 2)
+            acc = sdot4_laneq(acc, wg + wb + 112l, xq + xb + 16l, 3)
+            let s = float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+            let xsb = xs[bi]
+            f += float4(acc) * s * float4(xsb, xsb, xsb, xsb)
+        }
+    }
+    return f
+}
+
+// In-place repack of one Q8 weight region [d x n] into 4-row-interleaved groups (+ float4-per-block
+// scales). Copies the region to a scratch, then writes the interleaved layout back; tail rows (d % 4)
+// stay row-major. Runs once per weight tensor at load, on the main context.
+def private repack_q8q8_neon(var wp : int8?; var sp : float?; n, d : int64) {
+    let nb = n / 32l
+    let ng = d / 4l
+    let ncg = n / 4l
+    var tw : array<int8>
+    var ts : array<float>
+    tw |> resize(d * n)
+    ts |> resize(d * nb)
+    unsafe {
+        var twp = addr(tw[0])
+        var tsp = addr(ts[0])
+        for (i in range64(d * n)) {
+            twp[i] = wp[i]
+        }
+        for (i in range64(d * nb)) {
+            tsp[i] = sp[i]
+        }
+        for (g in range64(ng)) {
+            let gbase = g * 4l * n
+            for (kg in range64(ncg)) {
+                let dst = gbase + kg * 16l
+                for (r in range64(4l)) {
+                    let src = (g * 4l + r) * n + kg * 4l
+                    wp[dst + r * 4l + 0l] = twp[src + 0l]
+                    wp[dst + r * 4l + 1l] = twp[src + 1l]
+                    wp[dst + r * 4l + 2l] = twp[src + 2l]
+                    wp[dst + r * 4l + 3l] = twp[src + 3l]
+                }
+            }
+            let sgbase = g * 4l * nb
+            for (bi in range64(nb)) {
+                for (r in range64(4l)) {
+                    sp[sgbase + bi * 4l + r] = tsp[(g * 4l + r) * nb + bi]
+                }
+            }
+        }
+    }
+    delete tw
+    delete ts
+}
+
+def private q8q8_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    let nb = n / 32l
+    let ng = d / 4l
+    var myp = yp
+    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
+        unsafe {
+            for (gi in range(rb, re)) {
+                let g = int64(gi)
+                let f = dot_q8q8_laneq4(wp + g * 4l * n, sp + g * 4l * nb, xqp, xsp, n)
+                myp[g * 4l + 0l] = f.x
+                myp[g * 4l + 1l] = f.y
+                myp[g * 4l + 2l] = f.z
+                myp[g * 4l + 3l] = f.w
+            }
+        }
+    }
+    unsafe {
+        for (i in range64(ng * 4l, d)) {
+            myp[i] = dot_q8q8_sdot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
+        }
+    }
+}
+
+def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    let nb = n / 32l
+    let ng = d / 4l
+    var myp = yp
+    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
+        unsafe {
+            for (gi in range(rb, re)) {
+                let g = int64(gi)
+                let wgp = wp + g * 4l * n
+                let sgp = sp + g * 4l * nb
+                for (tk in range64(ntok)) {
+                    let f = dot_q8q8_laneq4(wgp, sgp, xqp + tk * n, xsp + tk * nb, n)
+                    myp[tk * d + g * 4l + 0l] = f.x
+                    myp[tk * d + g * 4l + 1l] = f.y
+                    myp[tk * d + g * 4l + 2l] = f.z
+                    myp[tk * d + g * 4l + 3l] = f.w
+                }
+            }
+        }
+    }
+    unsafe {
+        for (i in range64(ng * 4l, d)) {
+            let wrow = wp + i * n
+            let srow = sp + i * nb
+            for (tk in range64(ntok)) {
+                myp[tk * d + i] = dot_q8q8_sdot4x4(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+            }
+        }
+    }
+}
+
+def private q8q8_group3_kernel_neon_laneq(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                                          woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
+    let nb = n / 32l
+    let ng0 = d0 / 4l
+    let ng1 = d1 / 4l
+    let ng2 = d2 / 4l
+    let ngtot = ng0 + ng1 + ng2
+    var w0 = y0p
+    var w1 = y1p
+    var w2 = y2p
+    parallel_for(0, int(ngtot), get_total_hw_jobs()) $(rb, re, wg) {
+        unsafe {
+            for (gi in range(rb, re)) {
+                let g = int64(gi)
+                if (g < ng0) {
+                    let f = dot_q8q8_laneq4(wp + woff0 + g * 4l * n, sp + woff0 / 32l + g * 4l * nb, xqp, xsp, n)
+                    w0[g * 4l + 0l] = f.x
+                    w0[g * 4l + 1l] = f.y
+                    w0[g * 4l + 2l] = f.z
+                    w0[g * 4l + 3l] = f.w
+                } elif (g < ng0 + ng1) {
+                    let r = g - ng0
+                    let f = dot_q8q8_laneq4(wp + woff1 + r * 4l * n, sp + woff1 / 32l + r * 4l * nb, xqp, xsp, n)
+                    w1[r * 4l + 0l] = f.x
+                    w1[r * 4l + 1l] = f.y
+                    w1[r * 4l + 2l] = f.z
+                    w1[r * 4l + 3l] = f.w
+                } else {
+                    let r = g - ng0 - ng1
+                    let f = dot_q8q8_laneq4(wp + woff2 + r * 4l * n, sp + woff2 / 32l + r * 4l * nb, xqp, xsp, n)
+                    w2[r * 4l + 0l] = f.x
+                    w2[r * 4l + 1l] = f.y
+                    w2[r * 4l + 2l] = f.z
+                    w2[r * 4l + 3l] = f.w
+                }
+            }
+        }
+        wg |> notify_and_release
+    }
+    unsafe {
+        for (i in range64(ng0 * 4l, d0)) {
+            w0[i] = dot_q8q8_sdot4x4(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
+        }
+        for (i in range64(ng1 * 4l, d1)) {
+            w1[i] = dot_q8q8_sdot4x4(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
+        }
+        for (i in range64(ng2 * 4l, d2)) {
+            w2[i] = dot_q8q8_sdot4x4(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
+        }
+    }
+}
+
 [init]
 def dasllama_math_aarch64_neon_register() {
     if (get_architecture_name() == "arm64") {
-        use_q8q8_kernels(@@q8q8_kernel_neon, @@q8q8_batch_kernel_neon, @@q8q8_group3_kernel_neon)
+        // default active backend: sdot4x4 on row-major weights (direct callers — tests, benchmarks)
+        use_q8q8_kernels(@@q8q8_kernel_neon_sdot4x4, @@q8q8_batch_kernel_neon_sdot4x4, @@q8q8_group3_kernel_neon_sdot4x4, @@repack_q8q8_identity)
+        // alternate backend: laneq + interleaved repack, activated by enable_q8q8_laneq at Q8 model load
+        register_q8q8_laneq(@@q8q8_kernel_neon_laneq, @@q8q8_batch_kernel_neon_laneq, @@q8q8_group3_kernel_neon_laneq, @@repack_q8q8_neon)
     }
 }

@@ -293,6 +293,30 @@ def private configure_arch(var c : Config; arch : string) {
 }
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision. The big weights
+// Repack every Q8 2D weight tensor in qblob/qscales into the active backend's interleaved layout, IN
+// PLACE, once at load. Mirrors forward()'s per-tensor offsets/shapes exactly; the embedding + norms
+// live in fblob and are never touched. Called only after enable_q8q8_laneq() succeeds (arm64); the
+// repack pointer is otherwise identity, so this would be a no-op regardless.
+def private repack_q8_weights(var t : Transformer) {
+    let c = t.config
+    let dim = c.dim
+    let hidden = c.hidden_dim
+    let kv = c.kv_dim
+    let qd = c.n_heads * c.head_size
+    for (l in range64(c.n_layers)) {
+        repack_q8q8_weight(t.qblob, t.qscales, t.wq_off + l * dim * qd, dim, qd)
+        repack_q8q8_weight(t.qblob, t.qscales, t.wk_off + l * dim * kv, dim, kv)
+        repack_q8q8_weight(t.qblob, t.qscales, t.wv_off + l * dim * kv, dim, kv)
+        repack_q8q8_weight(t.qblob, t.qscales, t.wo_off + l * qd * dim, qd, dim)
+        repack_q8q8_weight(t.qblob, t.qscales, t.w1_off + l * dim * hidden, dim, hidden)
+        repack_q8q8_weight(t.qblob, t.qscales, t.w2_off + l * hidden * dim, hidden, dim)
+        repack_q8q8_weight(t.qblob, t.qscales, t.w3_off + l * dim * hidden, dim, hidden)
+    }
+    if (!c.shared_weights) {
+        repack_q8q8_weight(t.qblob, t.qscales, t.wcls_off, dim, c.vocab_size)
+    }
+}
+
 //! go straight into `mode`'s storage (pre-quantized tensors transcode block-for-block with no fp32
 //! round-trip; F16/F32 tensors dequant one at a time through a small reused scratch), so a Q8/Q4
 //! load never holds the dense fp32 weights. The embedding + norms stay fp32 in fblob regardless.
@@ -423,6 +447,11 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
             }
         }
         delete scratch
+        // arm64: switch to the laneq backend and repack the just-loaded Q8 weights into its interleaved
+        // layout. enable returns false off-ARM (portable stays, weights stay row-major).
+        if (mode == QuantMode.q8 && enable_q8q8_laneq()) {
+            repack_q8_weights(t)
+        }
     }
     fclose(f)
     return <- t
@@ -437,6 +466,10 @@ def quantize_weights(var t : Transformer) {
     t.qblob <- qt.q
     t.qscales <- qt.scales
     t.quant = QuantMode.q8
+    // same laneq enable + in-place repack as the load_gguf Q8 path (no-op off-ARM)
+    if (enable_q8q8_laneq()) {
+        repack_q8_weights(t)
+    }
 }
 
 //! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
@@ -621,16 +654,20 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
     let total = n * d
     if (t.quant == QuantMode.q8) {
         let nb = n / 32l
+        let ts_rq = ref_time_ticks()
         for (p in range64(npos)) {
             array_view(x, p * n, n) $(col : array<float>#) {
                 quantize_q8_0_into(col, n, xqb, xsb, p * n, p * nb)
             }
         }
+        prof_add("mm_requant", ts_rq)
+        let ts_gemm = ref_time_ticks()
         array_view(t.qblob, woff, total) $(wq : array<int8>#) {
             array_view(t.qscales, woff / 32l, total / 32l) $(ws : array<float>#) {
                 matmul_q8q8_batch(y, wq, ws, xqb, xsb, n, d, npos)
             }
         }
+        prof_add("mm_gemm", ts_gemm)
     } else {
         array_view(t.wblob, woff, total) $(w : array<float>#) {
             matmul_batch(y, w, x, n, d, npos)
@@ -755,6 +792,35 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
     }
 }
 
+// ----- forward_prefill section profiler -----
+// Measurement is UNCONDITIONAL: a handful of ref_time_ticks() + table adds per prefill, negligible
+// against the matmuls, so it always accumulates. Output is on-demand — reset() to start a window,
+// report() to dump it. (We measure a lot; never gate the measurement, only the printing.)
+var g_prefill_prof_acc : table<string; int64>
+
+//! Start a fresh measurement window (zero the per-section accumulators).
+def prefill_profile_reset() {
+    g_prefill_prof_acc |> clear()
+}
+
+def private prof_add(name : string; t0 : int64) {
+    let cur = g_prefill_prof_acc?[name] ?? 0l
+    g_prefill_prof_acc[name] = cur + int64(get_time_usec(t0))
+}
+
+//! Print the accumulated per-section times (us) since the last reset.
+def prefill_profile_report() {
+    var total = 0l
+    for (v in values(g_prefill_prof_acc)) {
+        total += v
+    }
+    to_log(LOG_INFO, "=== forward_prefill profile (us, summed over the window) ===\n")
+    for (k, v in keys(g_prefill_prof_acc), values(g_prefill_prof_acc)) {
+        to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%)\n")
+    }
+    to_log(LOG_INFO, "  TOTAL: {total}\n")
+}
+
 //! Prefill: process all `npos` prompt tokens (positions 0..npos-1) in ONE pass per layer — batched
 //! GEMM projections (matmul_batch / matmul_q8q8_batch) plus a per-position causal attention loop.
 //! Leaves the KV cache filled for every position and s.logits = the logits at the LAST position
@@ -792,6 +858,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     s.xsb |> resize(npos * maxn / 32l)
 
     // token embeddings -> residual stream x_b [npos x dim]
+    let ts_embed = ref_time_ticks()
     for (p in range64(npos)) {
         let tok = tokens[p]
         array_view(t.fblob, t.tok_emb_off + tok * dim, dim) $(row : array<float>#) {
@@ -805,12 +872,14 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             s.x_b[k] *= c.embed_scale
         }
     }
+    prof_add("embed", ts_embed)
 
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
         // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
         let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
         // attention rmsnorm, per position
+        let ts_norm0 = ref_time_ticks()
         for (p in range64(npos)) {
             array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
                 array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
@@ -818,7 +887,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
+        prof_add("norm", ts_norm0)
         // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
+        let ts_qkv = ref_time_ticks()
         mm_b(s.q_b, t, t.wq_off + l * dim * qd, s.xb_b, s.xqb, s.xsb, dim, qd, npos)
         mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
         mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
@@ -829,7 +900,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 add_bias(s.v_b, p * kv_dim, t.bv, l * kv_dim, kv_dim)
             }
         }
+        prof_add("mm_qkv", ts_qkv)
         // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
+        let ts_rope = ref_time_ticks()
         for (p in range64(npos)) {
             let ap = start_pos + p
             array_view(s.q_b, p * qd, qd) $(var qv : array<float>#) {
@@ -844,9 +917,11 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
             }
         }
+        prof_add("rope", ts_rope)
         // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
         // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
         // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
+        let ts_attn = ref_time_ticks()
         for (p in range64(npos)) {
             let ap = start_pos + p
             let kstart = (is_sliding && ap + 1l > c.sliding_window) ? (ap + 1l - c.sliding_window) : 0l
@@ -871,8 +946,12 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
+        prof_add("attn", ts_attn)
         // output projection (batched, qd -> dim) + optional post-attn norm + residual
+        let ts_wo = ref_time_ticks()
         mm_b(s.xb2_b, t, t.wo_off + l * qd * dim, s.xb_b, s.xqb, s.xsb, qd, dim, npos)
+        prof_add("mm_wo", ts_wo)
+        let ts_resid0 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
             for (p in range64(npos)) {
                 array_view(s.xb2_b, p * dim, dim) $(var ov : array<float>#) {
@@ -883,7 +962,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         for (k in range64(npos * dim)) {
             s.x_b[k] += s.xb2_b[k]
         }
+        prof_add("act_resid", ts_resid0)
         // ffn rmsnorm, per position
+        let ts_norm1 = ref_time_ticks()
         for (p in range64(npos)) {
             array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
                 array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
@@ -891,9 +972,13 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
+        prof_add("norm", ts_norm1)
         // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
+        let ts_ffn = ref_time_ticks()
         mm_b(s.hb_b, t, t.w1_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
         mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
+        prof_add("mm_ffn", ts_ffn)
+        let ts_act = ref_time_ticks()
         if (c.ffn_act == FfnAct.gelu) {
             gelu(s.hb_b, npos * hidden)
         } else {
@@ -902,8 +987,12 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         for (k in range64(npos * hidden)) {
             s.hb_b[k] *= s.hb2_b[k]
         }
+        prof_add("act_resid", ts_act)
         // down projection (batched) + optional post-FFN norm + residual
+        let ts_ffn2 = ref_time_ticks()
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
+        prof_add("mm_ffn", ts_ffn2)
+        let ts_resid1 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
             for (p in range64(npos)) {
                 array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
@@ -914,9 +1003,11 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         for (k in range64(npos * dim)) {
             s.x_b[k] += s.xb_b[k]
         }
+        prof_add("act_resid", ts_resid1)
     }
 
     // final rmsnorm + classifier on the LAST position only (that's what we sample next)
+    let ts_final = ref_time_ticks()
     let last = npos - 1l
     array_view(s.x_b, last * dim, dim) $(var xv : array<float>#) {
         rms_at(s.xb, t, t.rms_final_off, xv, dim)
@@ -929,6 +1020,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     if (c.final_logit_softcap > 0.0) {  // Gemma2: soft-cap the output logits
         softcap(s.logits, c.vocab_size, c.final_logit_softcap)
     }
+    prof_add("final", ts_final)
 }
 
 //! Unified batch entry (llama.cpp-style): process `npos` tokens at absolute positions

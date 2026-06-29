@@ -143,7 +143,8 @@ let g_intrin_lookup <- {
 // fires on x86/wasm/etc. Generalize the dasLLAMA SDOT proof-of-concept (was a hardcoded row in
 // g_intrin_lookup) into the first entry of a proper, target-gated platform-intrinsic table.
 let g_aarch64_intrin_lookup <- {
-    "aarch64_neon::sdot4" => @@intrinsic_sdot4
+    "aarch64_neon::sdot4" => @@intrinsic_sdot4,
+    "aarch64_neon::sdot4_laneq" => @@intrinsic_sdot4_laneq
 }
 
 def public has_intrinsic(expr : ExprCallFunc?) {
@@ -1358,6 +1359,39 @@ def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
     var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
     var callArgs <- [arguments[0], wvec, xvec]
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "sdot4")
+}
+
+// Emitter for aarch64_neon::sdot4_laneq (gated by g_aarch64_intrin_lookup, only reached on aarch64).
+// sdot4_laneq(acc:int4; w,x:int8 const?; lane:int):int4 — the lane-indexed SDOT. `w` is loaded as a
+// v16i8 (4 weight rows interleaved); `x` as a v16i8 (one token's 16 int8), of which the 32-bit group
+// `lane` is splatted across all 4 lanes (the i32-view shufflevector the AArch64 backend folds into the
+// `Vm.4b[lane]` indexed sdot form) and fed as the second operand. `lane` is read as a compile-time
+// constant — it is a literal (0..3) at every call site. One @llvm.aarch64.neon.sdot, no addv: each
+// accumulator lane is a distinct output row. See dasllama_kernel_opt_findings.
+def intrinsic_sdot4_laneq(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
+    let v4i32 = ctx.types.LLVMInt4Type()
+    var wptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
+    var xptr = LLVMBuildPointerCast(ctx.builder, arguments[2], LLVMPointerType(v16i8, 0u), "")
+    var wvec = LLVMBuildLoad2(ctx.builder, v16i8, wptr, "")
+    LLVMSetAlignment(wvec, 1u)
+    var xvec = LLVMBuildLoad2(ctx.builder, v16i8, xptr, "")
+    LLVMSetAlignment(xvec, 1u)
+    let lane = int(LLVMConstIntGetZExtValue(arguments[3]))   // lane is a compile-time literal (0..3) at every call site
+    var xi32 = LLVMBuildBitCast(ctx.builder, xvec, v4i32, "")
+    var xspl = LLVMBuildShuffleVector(ctx.builder, ctx.types, xi32, xi32, [lane, lane, lane, lane], "xlane")
+    var xbcast = LLVMBuildBitCast(ctx.builder, xspl, v16i8, "")
+    let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.sdot")
+    var declTypes <- [v4i32, v16i8]
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, declTypes)
+    if (decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.aarch64.neon.sdot (non-ARM target?)")
+        return null
+    }
+    var fnArgTypes <- [v4i32, v16i8, v16i8]
+    var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
+    var callArgs <- [arguments[0], wvec, xbcast]
+    return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "sdot4_laneq")
 }
 
 def intrinsic_math_store_neq_mask(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

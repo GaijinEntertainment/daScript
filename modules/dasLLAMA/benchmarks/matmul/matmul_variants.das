@@ -447,6 +447,103 @@ def matmul_q8q8_sdot4x4(var y : array<float> | #; wq : array<int8> | #; ws : arr
     }
 }
 
+// ===== laneq + interleaved repack (4-row tile, 1 token) — the lane-indexed SDOT endgame =====
+// Repack [d x n] row-major int8 weights into 4-row-interleaved groups so the laneq kernel keeps each
+// accumulator lane on a distinct output row (no per-block addv, ever). Done ONCE at model load — the
+// weights are static — so the kernel below pays no repack cost. Layout per 4-row group g (rows 4g..4g+3):
+// for each 4-col group kg (n/4 of them) write 16 bytes = [row0[kg], row1[kg], row2[kg], row3[kg]], each
+// [..] = 4 contiguous int8. Block scales are interleaved as [s0,s1,s2,s3] per 32-block. Tail rows (d%4)
+// stay row-major after the groups and run the sdot4x4 fallback.
+def repack_q8q8_4(wq : array<int8>; ws : array<float>; n, d : int64; var wout : array<int8>; var sout : array<float>) {
+    let nb = n / 32l
+    let ng = d / 4l
+    let ncg = n / 4l
+    wout |> resize(d * n)
+    sout |> resize(d * nb)
+    unsafe {
+        let wp = reinterpret<int8 const?>(addr(wq[0]))
+        let sp = reinterpret<float const?>(addr(ws[0]))
+        var wo = addr(wout[0])
+        var so = addr(sout[0])
+        for (g in range64(ng)) {
+            let gbase = g * 4l * n
+            for (kg in range64(ncg)) {
+                let dst = gbase + kg * 16l
+                for (r in range64(4l)) {
+                    let src = (g * 4l + r) * n + kg * 4l
+                    wo[dst + r * 4l + 0l] = wp[src + 0l]
+                    wo[dst + r * 4l + 1l] = wp[src + 1l]
+                    wo[dst + r * 4l + 2l] = wp[src + 2l]
+                    wo[dst + r * 4l + 3l] = wp[src + 3l]
+                }
+            }
+            let sgbase = g * 4l * nb
+            for (bi in range64(nb)) {
+                for (r in range64(4l)) {
+                    so[sgbase + bi * 4l + r] = sp[(g * 4l + r) * nb + bi]
+                }
+            }
+        }
+        for (i in range64(ng * 4l * n, d * n)) {
+            wo[i] = wp[i]
+        }
+        for (i in range64(ng * 4l * nb, d * nb)) {
+            so[i] = sp[i]
+        }
+    }
+}
+
+//! Lane-indexed SDOT over one 4-row interleaved group against one token. 8 sdot4_laneq per 32-block
+//! (two 16-k chunks × lanes 0..3); the int4 accumulator's lane L is output row L, flushed to a float4
+//! with the 4 rows' block scales × the token block scale — no horizontal reduce anywhere.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
+def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
+    let nb = n / 32l
+    var f = float4(0.0, 0.0, 0.0, 0.0)
+    unsafe {
+        for (bi in range64(nb)) {
+            let wb = bi * 128l
+            let xb = bi * 32l
+            var acc = int4(0, 0, 0, 0)
+            acc = sdot4_laneq(acc, wg + wb, xq + xb, 0)
+            acc = sdot4_laneq(acc, wg + wb + 16l, xq + xb, 1)
+            acc = sdot4_laneq(acc, wg + wb + 32l, xq + xb, 2)
+            acc = sdot4_laneq(acc, wg + wb + 48l, xq + xb, 3)
+            acc = sdot4_laneq(acc, wg + wb + 64l, xq + xb + 16l, 0)
+            acc = sdot4_laneq(acc, wg + wb + 80l, xq + xb + 16l, 1)
+            acc = sdot4_laneq(acc, wg + wb + 96l, xq + xb + 16l, 2)
+            acc = sdot4_laneq(acc, wg + wb + 112l, xq + xb + 16l, 3)
+            let s = float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+            let xsb = xs[bi]
+            f += float4(acc) * s * float4(xsb, xsb, xsb, xsb)
+        }
+    }
+    return f
+}
+
+// Driver over repacked weights (wgq/wgs from repack_q8q8_4). Tail rows are row-major → sdot4x4.
+def matmul_q8q8_laneq(var y : array<float> | #; wgq : array<int8> | #; wgs : array<float> | #; xq : array<int8> | #; xs : array<float> | #; n, d : int64) {
+    let nb = n / 32l
+    let ng = d / 4l
+    unsafe {
+        var yp = addr(y[0])
+        let wp = reinterpret<int8 const?>(addr(wgq[0]))
+        let sp = reinterpret<float const?>(addr(wgs[0]))
+        let xqp = reinterpret<int8 const?>(addr(xq[0]))
+        let xsp = reinterpret<float const?>(addr(xs[0]))
+        for (g in range64(ng)) {
+            let f = dot_q8q8_laneq4(wp + g * 4l * n, sp + g * 4l * nb, xqp, xsp, n)
+            yp[g * 4l + 0l] = f.x
+            yp[g * 4l + 1l] = f.y
+            yp[g * 4l + 2l] = f.z
+            yp[g * 4l + 3l] = f.w
+        }
+        for (i in range64(ng * 4l, d)) {
+            yp[i] = dot_q8q8_sdot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
+        }
+    }
+}
+
 // uf: original nested, inner 32-element reduction marked unroll_full (llvm.loop.unroll.full).
 // Only the inner loop has a compile-time trip count (32) — the runtime block loop can't full-unroll.
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
