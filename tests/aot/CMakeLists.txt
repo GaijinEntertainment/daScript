@@ -105,6 +105,7 @@ FILE(GLOB AOT_DASLLAMA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "t
 # Leaf modules first so cross-module deps resolve.
 SET(AOT_DASLLAMA_MODULE_FILES
     modules/dasLLAMA/dasllama/dasllama_math.das
+    modules/dasLLAMA/dasllama/dasllama_math_aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_quant.das
     modules/dasLLAMA/dasllama/dasllama_gguf.das
     modules/dasLLAMA/dasllama/dasllama_unicode.das

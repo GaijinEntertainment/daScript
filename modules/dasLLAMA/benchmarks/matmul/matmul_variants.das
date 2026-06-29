@@ -3,7 +3,7 @@ options gen2
 module matmul_variants shared public
 
 require daslib/jobque_boost
-require llvm/aarch64_neon  // sdot4: JIT-emitted ARM SDOT (scalar fallback elsewhere)
+require llvm/daslib/aarch64_neon  // sdot4: JIT-emitted ARM SDOT (scalar fallback elsewhere)
 
 // Experiment ledger for the matmul kernel. Every optimization attempt lives here as
 // its own function so bench_matmul.das can compare them head-to-head (and against the
