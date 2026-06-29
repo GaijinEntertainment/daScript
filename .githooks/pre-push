@@ -45,7 +45,13 @@ if [ ${#LOCAL_SHAS[@]} -eq 0 ]; then
     exit 0
 fi
 
-# ----- (1) based on the latest origin/master -----
+# ----- (1) not too far behind origin/master -----
+# The gate exists to catch a branch tested against a long-stale master ("didn't
+# rebase for a week, green here but breaks on merge"), NOT to force a full
+# re-preflight every time an unrelated PR lands mid-run. So we allow up to
+# MAX_BEHIND merge commits (≈ PRs) of drift between the branch base and the
+# master tip, instead of demanding the exact tip.
+MAX_BEHIND=3
 # Fetch so the check is authoritative; fall back to the local ref if offline.
 if GIT_TERMINAL_PROMPT=0 git fetch -q origin master 2>/dev/null; then
     MASTER="$(git rev-parse FETCH_HEAD)"
@@ -54,19 +60,24 @@ else
     [ -n "$MASTER" ] && echo "pre-push: warning: could not fetch origin/master; checking against the local ref" >&2
 fi
 
-# If neither the fetch nor the local ref resolved master, the base check can't
-# run — warn rather than silently passing it (the token below is still enforced).
-[ -n "$MASTER" ] || echo "pre-push: warning: cannot resolve origin/master — based-on-master check skipped (token still enforced)" >&2
+# If neither the fetch nor the local ref resolved master, the staleness check
+# can't run — warn rather than silently passing it (the token below is still enforced).
+[ -n "$MASTER" ] || echo "pre-push: warning: cannot resolve origin/master — staleness check skipped (token still enforced)" >&2
 
 if [ -n "$MASTER" ]; then
     for sha in "${LOCAL_SHAS[@]}"; do
         BASE="$(git merge-base "$sha" "$MASTER" 2>/dev/null || true)"
         if [ "$BASE" != "$MASTER" ]; then
-            block "branch is not based on the latest origin/master (it is behind ${MASTER:0:12})" \
+            # Count merge commits between the branch base and the master tip.
+            # On error (unknown ref etc.) fail closed with a large count.
+            BEHIND="$(git rev-list --count --merges "$BASE..$MASTER" 2>/dev/null || echo 9999)"
+            if [ "$BEHIND" -gt "$MAX_BEHIND" ]; then
+                block "branch base is $BEHIND merges behind origin/master (max $MAX_BEHIND) — too stale to trust the preflight" \
 "  Rebase onto latest master, then re-run full preflight:
     git fetch origin master
     git rebase origin/master
     daslang utils/preflight/main.das -- --full"
+            fi
         fi
     done
 fi

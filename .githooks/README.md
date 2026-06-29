@@ -12,9 +12,11 @@ Reverts via `git config --unset core.hooksPath`. Skip once with `git push --no-v
 
 ## The full-preflight gate
 
-`pre-push` blocks a push unless **both** hold for the pushed commit: it is based
-on the latest `origin/master` (the hook fetches to check; a stale base prints a
-rebase remedy), **and** it has a fresh **full-preflight token**. Tag pushes
+`pre-push` blocks a push unless **both** hold for the pushed commit: its base is
+**within `MAX_BEHIND` (3) merge commits of `origin/master`** (the hook fetches to
+check; a base further behind than that prints a rebase remedy — the gate catches
+a branch tested against a long-stale master, not the normal churn of unrelated
+PRs landing mid-run), **and** it has a fresh **full-preflight token**. Tag pushes
 (`refs/tags/*`) are not gated. The token is minted only by a clean, complete
 full run of preflight:
 
