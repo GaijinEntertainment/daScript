@@ -13,6 +13,7 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
 
     ADD_MODULE_CPP(LiveHost)
     ADD_MODULE_DAS(live live live_commands)
+    ADD_MODULE_DAS(live live live_vars)
     ADD_MODULE_DAS(live live live_api_builtins)
     ADD_MODULE_DAS(live live live_api)
     ADD_MODULE_DAS(live live live_api_stdio)

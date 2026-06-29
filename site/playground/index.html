@@ -6,6 +6,11 @@
     <title>Playground — Daslang</title>
     <meta name="description" content="Run daslang in your browser. Multi-file workspace, sample picker, WebAssembly." />
 
+    <!-- Cross-origin isolation so threaded (-pthread) wasm can run here. Must run
+         before anything else so the one-time reload happens up front. Self-registers
+         only on memory64 engines; scoped to /examples* + /playground* (see the file). -->
+    <script src="/coi-serviceworker.js"></script>
+
     <link rel="icon" type="image/svg+xml" href="../files/daslang-favicon.svg" />
     <link rel="alternate icon" type="image/x-icon" href="../files/daslang.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

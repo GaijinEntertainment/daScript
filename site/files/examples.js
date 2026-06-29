@@ -43,11 +43,32 @@
             controls: 'mouse · imgui widgets',
             poster: 'files/examples/furier-poster.png',
             aspect: 1024 / 1024,
-            // Bundles the external dasImgui module compiled to wasm64; the universal
-            // interpreter can't bind it, so this card is memory64-only (no interpreted
-            // fallback) and ships from a source outside the playground samples tree.
+            // The in-page player is the dasImgui-bundling wasm64 build, so it is
+            // memory64-only (no interpreted fallback in the iframe). The playground,
+            // though, runs the threaded daslang_static interpreter — which now binds
+            // dasImgui — so it can host this sample there: playgroundSlug names it.
             wasm64Only: true,
+            playgroundSlug: 'furier',
             src: 'examples/graphics/furier_opengl_imgui_example.das',
+        },
+        {
+            id: 'path_tracer_lab', name: 'Path Tracer Lab', kind: 'jobque + opengl showcase',
+            description: 'Watch a path tracer fill in — pick CPU single-thread, the job ' +
+                'queue, OS threads, or the GPU, and see the same scene render in parallel. ' +
+                'daslang threads map to real Web Workers; the whole OpenGL + Dear ImGui ' +
+                'surface is compiled to WebAssembly and runs here.',
+            tags: ['imgui', 'opengl', 'jobque', 'threads', 'wasm'],
+            controls: 'mouse · imgui widgets · pick a render mode',
+            poster: 'files/examples/path_tracer_lab-poster.jpg',
+            aspect: 512 / 512,
+            // In-page player: threaded (-pthread) wasm64 bundling dasImgui, running
+            // new_thread / JobQue on real Web Workers — memory64-only, and the page must
+            // be crossOriginIsolated (coi-serviceworker.js). The playground hosts the
+            // same sample on the threaded daslang_static interpreter (playgroundSlug),
+            // which is likewise isolated (the worker drops the memory64 gate for /playground).
+            wasm64Only: true,
+            playgroundSlug: 'path_tracer_lab',
+            src: 'examples/graphics/path_tracer_lab_opengl_imgui_example.das',
         },
     ];
 
@@ -55,8 +76,13 @@
         ex.gameUrl = 'examples/' + ex.id + '/' + ex.id + '.html';
         ex.srcUrl = ex.src ? (REPO_ROOT + ex.src) : (REPO_BLOB + ex.id + '/main.das');
         // Examples registered as playground samples get an "open in playground" link.
-        // wasm64-only showcases (external native modules) have no interpreted sample.
-        ex.playgroundUrl = ex.wasm64Only ? null : ('playground/index.html?example=' + ex.id);
+        // playgroundSlug names the data.json sample to deep-link (?example=<slug>). The
+        // ImGui showcases set it explicitly: they bind the external dasImgui module, so
+        // their in-page player is wasm64-only, but the threaded daslang_static
+        // interpreter now hosts them in the playground. A plain (non-wasm64-only) sample
+        // defaults to its id; a wasm64-only card with no slug has no playground link.
+        var pgSlug = ex.playgroundSlug || (ex.wasm64Only ? null : ex.id);
+        ex.playgroundUrl = pgSlug ? ('playground/index.html?example=' + pgSlug) : null;
     });
 
     // ─── wasm64 (memory64) feature detection ────────────────────────────

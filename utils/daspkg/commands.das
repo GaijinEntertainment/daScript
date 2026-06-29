@@ -1038,10 +1038,13 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
         return 1
     }
 
-    // Configure web/build64 for memory64 if it isn't already.
+    // Configure web/build64 for memory64 + threads if it isn't already. DAS_WASM_PTHREADS makes
+    // new_thread / JobQue / parallel_for map to real Web Workers (the runtime caps the pool at
+    // DAS_MAX_HW_JOBS so a 64-core box does not spawn 64 workers). The released app is linked
+    // -pthread to match, and must be served cross-origin-isolated (COOP/COEP) to instantiate.
     if (!fexist("{build_dir}/CMakeCache.txt")) {
-        log("build --wasm: configuring {build_dir} (memory64)...\n")
-        let cfg = "emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" -DDAS_WASM_MEMORY64=ON -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1"
+        log("build --wasm: configuring {build_dir} (memory64 + threads)...\n")
+        let cfg = "emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" -DDAS_WASM_MEMORY64=ON -DDAS_WASM_PTHREADS=ON -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1"
         var cfg_out : string
         let cfg_rc = run_cmd(cfg, cfg_out)
         if (cfg_rc != 0) {
@@ -2239,7 +2242,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
     //    main script's dir. They differ when release_main() points outside the package
     //    (e.g. an example whose .das_package sits beside the source) — without this the
     //    cross-compile scans the script's folder and misses the package's modules/<dep>.
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-runtime-lib=\"{runtime_archive}\""
+    // --jit-threads: emit +atomics,+bulk-memory so the object's ABI matches the -pthread runtime
+    // archive (the wasm build is threaded — see cmd_build_wasm). The link below adds -pthread.
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -2315,8 +2320,11 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
             w |> write(" \"{a}\"")
         }
         w |> write(" \"{runtime_archive}\"")
-        // Release defaults: wasm64 + WebGL2/ES3 + modern wasm EH + filesystem.
-        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1")
+        // Release defaults: wasm64 + WebGL2/ES3 + modern wasm EH + filesystem + threads. -pthread
+        // matches the threaded runtime archive (new_thread / JobQue map to Web Workers); the pool is
+        // pre-sized for the DAS_MAX_HW_JOBS-capped worker count. A -pthread module only instantiates
+        // cross-origin-isolated, so the host page must send COOP same-origin + COEP require-corp.
+        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -pthread -sPTHREAD_POOL_SIZE=16")
         for (a in emcc_args) {
             w |> write(" {a}")
         }

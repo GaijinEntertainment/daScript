@@ -16,6 +16,16 @@
       "files" : ["examples/pacman/main.das", "examples/pacman/live_stub.das"]
     },
     {
+      "name" : "ImGui: Fourier Series (epicycles)",
+      "slug" : "furier",
+      "files" : ["examples/furier.das"]
+    },
+    {
+      "name" : "Path Tracer Lab (jobque + threads + GPU)",
+      "slug" : "path_tracer_lab",
+      "files" : ["examples/path_tracer_lab/main.das", "examples/path_tracer_lab/path_tracer.das"]
+    },
+    {
       "name" : "OpenGL: mandelbrot",
       "files" : ["examples/gl_02_mandelbrot.das"]
     },
