@@ -46,5 +46,35 @@ bin/daslang -jit modules/dasLLAMA/harness/parity.das -- \
   -m <model.gguf> -n 40 --quant q8 --ids 1,9038,2501,263,931
 ```
 
-Frozen fixtures (prompt IDs + reference GEN_IDS) live with the suite in `tests/dasLLAMA/` so CI checks
-parity without needing llama.cpp at test time.
+Frozen fixtures (prompt IDs + reference GEN_IDS) live with the suite in `tests/dasLLAMA/test_parity.das`
+so the parity gate runs without llama.cpp/the oracle at test time. The GGUF models themselves are
+gitignored, so each case skips cleanly when its model is absent (a real local regression, a no-op in
+CI). **Run model tests with the JIT** — interpreted is far too slow for any real model:
+
+```sh
+bin/daslang -jit dastest/dastest.das -- --test tests/dasLLAMA/test_parity.das
+```
+
+## Sliding-window attention (Gemma2) — long-context check
+
+Gemma2 uses sliding-window (local) attention on its even layers (window 4096, `swa_period=2`) and
+global attention on the odd layers. It's a **no-op for contexts ≤ 4096**, so the short parity prompts
+above never exercise the window. To test it, feed a prompt that tokenizes past 4096 and diff the
+continuation against the oracle (which applies SWA correctly):
+
+```sh
+# build a >4096-token prompt (distinctive early fact + filler + a recall query), then:
+modules/dasLLAMA/harness/parity.sh ~/Work/llama.cpp/models/gemma-2-2b-it-Q8_0.gguf 12 q8 "$(cat long_prompt.txt)"
+```
+
+Verified: a 4168-token context is **11/11 token-for-token** vs the oracle — the window path is correct.
+
+Two caveats worth knowing:
+- **It's slow.** The prefill attention loop is single-threaded (only the matmuls thread), so a
+  ~4k-token prefill is ~9 minutes. That's why this stays a manual harness check, not a CI fixture.
+- **Token-level parity is a weak SWA discriminator on Gemma.** Its *global* (odd) layers carry the
+  long-range signal, so toggling the sliding layers off often yields the *same* tokens. The window is
+  still load-bearing: at the last position of a 4168-token context (where the sliding layers exclude
+  the early tokens) the last-position logits shift by up to **~2.06** (on the ~30 soft-capped scale)
+  between SWA-on and SWA-off — i.e. a near-tie prompt *would* flip, so the oracle gate can catch a
+  broken window given a sensitive enough prompt.
