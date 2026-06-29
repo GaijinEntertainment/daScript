@@ -406,6 +406,28 @@ def silu(var x : array<float> | #; size : int64) {
     }
 }
 
+//! GELU, tanh approximation (HF's gelu_pytorch_tanh): the GeGLU gate nonlinearity (Gemma2).
+//! gelu(x) = 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))). In place over the first `size`
+//! elements. ggml's LLM_FFN_GELU approximates this same form via an fp16 lookup table; we
+//! compute it directly (more accurate — near-ties against the LUT are expected, not bugs).
+def gelu(var x : array<float> | #; size : int64) {
+    let k = 0.7978845608028654  // sqrt(2/pi)
+    for (i in range64(size)) {
+        let v = x[i]
+        x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+    }
+}
+
+//! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
+//! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
+//! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
+def softcap(var x : array<float> | #; size : int64; cap : float) {
+    let inv = 1.0 / cap
+    for (i in range64(size)) {
+        x[i] = cap * tanh(x[i] * inv)
+    }
+}
+
 //! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1)
 //! within a head by angle pos*freq, freq = 1/10000^(2j/head_size) (low pairs spin fast,
 //! high pairs slow). This encodes position as rotation, so a later Q·K dot product

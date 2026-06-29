@@ -51,7 +51,6 @@ struct Config {
     ffn_act : FfnAct = FfnAct.silu     // SwiGLU (silu) vs GeGLU (gelu, Gemma2)
     embed_scale : float = 1.0          // token-embedding multiplier (Gemma2: sqrt(dim))
     norm_eps : float = 1.0e-5          // RMSNorm epsilon (Gemma2: 1e-6)
-    rmsnorm_offset : float = 0.0       // added to each norm weight — the (1+w) form (Gemma2: 1.0)
     attn_logit_softcap : float = 0.0   // attention-score soft cap, 0 = off (Gemma2: 50)
     final_logit_softcap : float = 0.0  // output-logit soft cap, 0 = off (Gemma2: 30)
     sliding_window : int64 = 0         // sliding-window attention span, 0 = off (Gemma2: 4096, alt layers)
@@ -71,6 +70,10 @@ struct Transformer {
     rms_att_off : int64
     rms_ffn_off : int64
     rms_final_off : int64
+    // Gemma2 post-norms (extra RMSNorm after attn-out and after FFN-out); offsets valid only
+    // when config.pre_post_norm, otherwise unused
+    rms_post_att_off : int64
+    rms_post_ffn_off : int64
     // big 2D weights — exactly one representation populated per `quant`
     wblob : array<float>
     qblob : array<int8>
@@ -116,6 +119,12 @@ def private layout_offsets(var t : Transformer) : LayoutSizes {
     fo += layers * dim
     t.rms_ffn_off = fo
     fo += layers * dim
+    if (c.pre_post_norm) {  // Gemma2: extra post-attention + post-FFN norms
+        t.rms_post_att_off = fo
+        fo += layers * dim
+        t.rms_post_ffn_off = fo
+        fo += layers * dim
+    }
     t.rms_final_off = fo
     fo += dim
     var wo = 0l
@@ -268,8 +277,17 @@ def private configure_arch(var c : Config; arch : string) {
     } elif (arch == "phi3") {
         c.rope_neox = true       // Phi3: NEOX rope + LongRoPE (freq factors + mscale, read in the loader)
         c.fused_qkv = true       // ...with fused attn_qkv + ffn_up (gate_up) tensors, split at load
+    } elif (arch == "gemma2") {
+        c.rope_neox = true                  // NEOX rope, full-rotary over head_size
+        c.ffn_act = FfnAct.gelu             // GeGLU (tanh-approx gelu) instead of SwiGLU
+        c.attn_logit_softcap = 50.0         // soft-cap attention scores before softmax
+        c.final_logit_softcap = 30.0        // soft-cap the classifier logits
+        c.sliding_window = 4096l            // local attention on even layers (swa_period=2)
+        c.pre_post_norm = true              // extra post-attn + post-FFN norms (4 norms/layer)
+        // embed_scale (sqrt(dim)), head_size (key_length) and the (1+w) norm weights are
+        // resolved in the loader: dim isn't known here, and Gemma's GGUF pre-bakes the +1
     } else {
-        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2, phi3)")
+        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2, phi3, gemma2)")
     }
 }
 
@@ -309,8 +327,16 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         t.config.n_kv_heads = n_kv_heads
         t.config.vocab_size = vocab
         t.config.seq_len = seq_len
-        t.config.head_size = dim / n_heads
-        t.config.kv_dim = (dim * n_kv_heads) / n_heads
+        // head_size from metadata key_length when present (Gemma2: 256, != dim/n_heads=288);
+        // kv_dim = n_kv_heads * head_size. Both reduce to the llama formulas when head_size = dim/n_heads.
+        t.config.head_size = (gguf_has(m, "{arch}.attention.key_length")
+            ? gguf_int(m, bytes, "{arch}.attention.key_length")
+            : dim / n_heads)
+        t.config.kv_dim = n_kv_heads * t.config.head_size
+        // Gemma2 scales the embedding by sqrt(dim); configure_arch can't (dim unknown there)
+        if (arch == "gemma2") {
+            t.config.embed_scale = sqrt(float(dim))
+        }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
         // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
@@ -332,6 +358,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         let kv = t.config.kv_dim
+        let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
         let sz = layout_offsets(t)
         // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
         reserve_resize(t.fblob, sz.fblob_n)
@@ -353,27 +380,31 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         for (l in range64(layers)) {
             gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_norm.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
+            }
         }
         gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
         // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
         var scratch : array<float>
         for (l in range64(layers)) {
             if (t.config.fused_qkv) {
-                // Phi3: attn_qkv rows are [q (dim) ; k (kv) ; v (kv)], ffn_up rows are [gate ; up] (hidden each).
+                // Phi3: attn_qkv rows are [q (qd) ; k (kv) ; v (kv)], ffn_up rows are [gate ; up] (hidden each).
                 // src_off slices the fused tensor, preserving its Q8 blocks (no fp32 requantize).
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch, 0l)
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch, dim * dim)
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch, dim * dim + dim * kv)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_off + l * dim * qd, dim * qd, scratch, 0l)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch, dim * qd)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch, dim * qd + dim * kv)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch, 0l)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch, dim * hidden)
             } else {
-                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch)
+                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * qd, dim * qd, scratch)
                 load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch)
                 load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch)
                 load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
             }
-            load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_off + l * dim * dim, dim * dim, scratch)
+            load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_off + l * qd * dim, qd * dim, scratch)
             load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
         }
         if (!t.config.shared_weights) {
@@ -381,11 +412,11 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {
-            t.bq |> resize(layers * dim)
+            t.bq |> resize(layers * qd)
             t.bk |> resize(layers * kv)
             t.bv |> resize(layers * kv)
             for (l in range64(layers)) {
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * dim, dim)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * qd, qd)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.bias", t.bk, l * kv, kv)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.bias", t.bv, l * kv, kv)
             }
@@ -473,17 +504,21 @@ struct RunState {
 //! Allocate the run state sized to a model.
 def make_run_state(c : Config) : RunState {
     var s : RunState
+    // qd = n_heads * head_size, the query / attention-output width. == dim for the llama family,
+    // but Gemma2 has qd (2048) != dim (2304), so q and the attention scratch xb size to max(dim, qd).
+    let qd = c.n_heads * c.head_size
+    let xdim = max(c.dim, qd)
     s.x |> resize(c.dim)
-    s.xb |> resize(c.dim)
+    s.xb |> resize(xdim)
     s.xb2 |> resize(c.dim)
     s.hb |> resize(c.hidden_dim)
     s.hb2 |> resize(c.hidden_dim)
-    s.q |> resize(c.dim)
+    s.q |> resize(qd)
     s.k |> resize(c.kv_dim)
     s.v |> resize(c.kv_dim)
     s.att |> resize(c.seq_len)
     s.logits |> resize(c.vocab_size)
-    let maxn = max(c.dim, c.hidden_dim)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
+    let maxn = max(xdim, c.hidden_dim)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
     s.xq |> resize(maxn)
     s.xs |> resize(maxn / 32l)
     s.key_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
@@ -552,14 +587,15 @@ def private mm_qkv(var s : RunState; t : Transformer; l : int64) {
     let c = t.config
     let dim = c.dim
     let kv = c.kv_dim
-    let qoff = t.wq_off + l * dim * dim
+    let qd = c.n_heads * c.head_size   // query width; == dim except Gemma2 (qd != dim)
+    let qoff = t.wq_off + l * dim * qd
     let koff = t.wk_off + l * dim * kv
     let voff = t.wv_off + l * dim * kv
-    if (t.quant == QuantMode.q8 && dim * (dim + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
+    if (t.quant == QuantMode.q8 && dim * (qd + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-        matmul_q8q8_group3(s.q, s.k, s.v, t.qblob, t.qscales, qoff, koff, voff, s.xq, s.xs, dim, dim, kv, kv)
+        matmul_q8q8_group3(s.q, s.k, s.v, t.qblob, t.qscales, qoff, koff, voff, s.xq, s.xs, dim, qd, kv, kv)
     } else {
-        mm(s.q, t, qoff, s.xb, s.xq, s.xs, dim, dim)
+        mm(s.q, t, qoff, s.xb, s.xq, s.xs, dim, qd)
         mm(s.k, t, koff, s.xb, s.xq, s.xs, dim, kv)
         mm(s.v, t, voff, s.xb, s.xq, s.xs, dim, kv)
     }
@@ -610,6 +646,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
     let kv_dim = c.kv_dim
     let head_size = c.head_size
     let n_heads = c.n_heads
+    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2)
     let kv_mul = n_heads / c.n_kv_heads
     let seq_len = c.seq_len
     let scale = 1.0 / sqrt(float(head_size))
@@ -620,20 +657,30 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             s.x[i] = row[i]
         }
     }
+    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        for (i in range64(dim)) {
+            s.x[i] *= c.embed_scale
+        }
+    }
 
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
+        // Gemma2: even layers use sliding-window (local) attention; odd layers are global. The window
+        // covers all positions when pos < window, so this is a no-op for short contexts.
+        let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
+        let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
+        let cnt = pos + 1l - kstart
         // attention rmsnorm
         rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
         // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
         mm_qkv(s, t, l)
         if (c.attn_qkv_bias) {  // Qwen2: + bias before RoPE
-            add_bias(s.q, 0l, t.bq, l * dim, dim)
+            add_bias(s.q, 0l, t.bq, l * qd, qd)
             add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
             add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
         }
-        // RoPE on q (dim) and k (kv_dim)
-        rope_apply(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+        // RoPE on q (qd) and k (kv_dim)
+        rope_apply(s.q, pos, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
         rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
         // store k, v for this position into the KV cache
         let kvoff = loff + pos * kv_dim
@@ -641,41 +688,54 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             s.key_cache[kvoff + i] = s.k[i]
             s.value_cache[kvoff + i] = s.v[i]
         }
-        // multi-head attention
+        // multi-head attention. att[0..cnt) holds the scores for keys kstart..pos (kstart=0 unless
+        // a sliding-window layer past the window), scaled by 1/sqrt(head_size).
         for (h in range64(n_heads)) {
             let qoff = h * head_size
             let kvhoff = (h / kv_mul) * head_size  // GQA: which kv head this query head reads
-            // scores against all cached keys 0..pos, scaled by 1/sqrt(head_size)
-            for (tp in range64(pos + 1l)) {
-                let koff = loff + tp * kv_dim + kvhoff
-                s.att[tp] = dot(unsafe(addr(s.q[qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
+            for (j in range64(cnt)) {
+                let koff = loff + (kstart + j) * kv_dim + kvhoff
+                s.att[j] = dot(unsafe(addr(s.q[qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
             }
-            softmax(s.att, pos + 1l)
+            if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                softcap(s.att, cnt, c.attn_logit_softcap)
+            }
+            softmax(s.att, cnt)
             // weighted sum of values into xb[qoff..]
             for (i in range64(head_size)) {
                 s.xb[qoff + i] = 0.0
             }
-            for (tp in range64(pos + 1l)) {
-                let voff = loff + tp * kv_dim + kvhoff
-                axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[tp], head_size)
+            for (j in range64(cnt)) {
+                let voff = loff + (kstart + j) * kv_dim + kvhoff
+                axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
             }
         }
-        // output projection, residual
-        mm(s.xb2, t, t.wo_off + l * dim * dim, s.xb, s.xq, s.xs, dim, dim)
+        // output projection (qd -> dim), optional post-attention norm, residual
+        mm(s.xb2, t, t.wo_off + l * qd * dim, s.xb, s.xq, s.xs, qd, dim)
+        if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
+            rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
+        }
         for (i in range64(dim)) {
             s.x[i] += s.xb2[i]
         }
         // ffn rmsnorm
         rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-        // SwiGLU: hb = silu(W1·xb) * (W3·xb)
+        // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
         mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
         mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
-        silu(s.hb, hidden)
+        if (c.ffn_act == FfnAct.gelu) {
+            gelu(s.hb, hidden)
+        } else {
+            silu(s.hb, hidden)
+        }
         for (i in range64(hidden)) {
             s.hb[i] *= s.hb2[i]
         }
-        // down projection, residual
+        // down projection, optional post-FFN norm, residual
         mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
+        if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
+            rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
+        }
         for (i in range64(dim)) {
             s.x[i] += s.xb[i]
         }
@@ -688,6 +748,9 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
     } else {
         mm(s.logits, t, t.wcls_off, s.xb, s.xq, s.xs, dim, c.vocab_size)
+    }
+    if (c.final_logit_softcap > 0.0) {  // Gemma2: soft-cap the output logits
+        softcap(s.logits, c.vocab_size, c.final_logit_softcap)
     }
 }
 
@@ -709,15 +772,17 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     let kv_dim = c.kv_dim
     let head_size = c.head_size
     let n_heads = c.n_heads
+    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2)
+    let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
     let kv_mul = n_heads / c.n_kv_heads
     let seq_len = c.seq_len
     let scale = 1.0 / sqrt(float(head_size))
-    let maxn = max(dim, hidden)
+    let maxn = max(xdim, hidden)
     // size the batched scratch to this prompt
     s.x_b |> resize(npos * dim)
-    s.xb_b |> resize(npos * dim)
+    s.xb_b |> resize(npos * xdim)
     s.xb2_b |> resize(npos * dim)
-    s.q_b |> resize(npos * dim)
+    s.q_b |> resize(npos * qd)
     s.k_b |> resize(npos * kv_dim)
     s.v_b |> resize(npos * kv_dim)
     s.hb_b |> resize(npos * hidden)
@@ -734,9 +799,16 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
     }
+    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        for (k in range64(npos * dim)) {
+            s.x_b[k] *= c.embed_scale
+        }
+    }
 
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
+        // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
+        let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
         // attention rmsnorm, per position
         for (p in range64(npos)) {
             array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
@@ -746,12 +818,12 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
         // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
-        mm_b(s.q_b, t, t.wq_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
+        mm_b(s.q_b, t, t.wq_off + l * dim * qd, s.xb_b, s.xqb, s.xsb, dim, qd, npos)
         mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
         mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
         if (c.attn_qkv_bias) {  // Qwen2: + bias per position before RoPE
             for (p in range64(npos)) {
-                add_bias(s.q_b, p * dim, t.bq, l * dim, dim)
+                add_bias(s.q_b, p * qd, t.bq, l * qd, qd)
                 add_bias(s.k_b, p * kv_dim, t.bk, l * kv_dim, kv_dim)
                 add_bias(s.v_b, p * kv_dim, t.bv, l * kv_dim, kv_dim)
             }
@@ -759,8 +831,8 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
         for (p in range64(npos)) {
             let ap = start_pos + p
-            array_view(s.q_b, p * dim, dim) $(var qv : array<float>#) {
-                rope_apply(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+            array_view(s.q_b, p * qd, qd) $(var qv : array<float>#) {
+                rope_apply(qv, ap, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
             }
             array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
                 rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
@@ -771,29 +843,42 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
             }
         }
-        // per-position causal attention into xb_b (position ap attends to cached keys 0..ap —
-        // includes any earlier positions already in the cache, e.g. previous chat turns)
+        // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
+        // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
+        // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
         for (p in range64(npos)) {
             let ap = start_pos + p
+            let kstart = (is_sliding && ap + 1l > c.sliding_window) ? (ap + 1l - c.sliding_window) : 0l
+            let cnt = ap + 1l - kstart
             for (h in range64(n_heads)) {
                 let qoff = h * head_size
                 let kvhoff = (h / kv_mul) * head_size
-                for (tp in range64(ap + 1l)) {
-                    let koff = loff + tp * kv_dim + kvhoff
-                    s.att[tp] = dot(unsafe(addr(s.q_b[p * dim + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
+                for (j in range64(cnt)) {
+                    let koff = loff + (kstart + j) * kv_dim + kvhoff
+                    s.att[j] = dot(unsafe(addr(s.q_b[p * qd + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
                 }
-                softmax(s.att, ap + 1l)
+                if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                    softcap(s.att, cnt, c.attn_logit_softcap)
+                }
+                softmax(s.att, cnt)
                 for (i in range64(head_size)) {
-                    s.xb_b[p * dim + qoff + i] = 0.0
+                    s.xb_b[p * qd + qoff + i] = 0.0
                 }
-                for (tp in range64(ap + 1l)) {
-                    let voff = loff + tp * kv_dim + kvhoff
-                    axpy(unsafe(addr(s.xb_b[p * dim + qoff])), unsafe(addr(s.value_cache[voff])), s.att[tp], head_size)
+                for (j in range64(cnt)) {
+                    let voff = loff + (kstart + j) * kv_dim + kvhoff
+                    axpy(unsafe(addr(s.xb_b[p * qd + qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
                 }
             }
         }
-        // output projection (batched) + residual
-        mm_b(s.xb2_b, t, t.wo_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
+        // output projection (batched, qd -> dim) + optional post-attn norm + residual
+        mm_b(s.xb2_b, t, t.wo_off + l * qd * dim, s.xb_b, s.xqb, s.xsb, qd, dim, npos)
+        if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
+            for (p in range64(npos)) {
+                array_view(s.xb2_b, p * dim, dim) $(var ov : array<float>#) {
+                    rms_at(ov, t, t.rms_post_att_off + l * dim, ov, dim)
+                }
+            }
+        }
         for (k in range64(npos * dim)) {
             s.x_b[k] += s.xb2_b[k]
         }
@@ -805,15 +890,26 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
-        // SwiGLU (batched): hb = silu(W1·xb) * (W3·xb) — silu/mul are elementwise, so batch-flat
+        // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
         mm_b(s.hb_b, t, t.w1_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
         mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
-        silu(s.hb_b, npos * hidden)
+        if (c.ffn_act == FfnAct.gelu) {
+            gelu(s.hb_b, npos * hidden)
+        } else {
+            silu(s.hb_b, npos * hidden)
+        }
         for (k in range64(npos * hidden)) {
             s.hb_b[k] *= s.hb2_b[k]
         }
-        // down projection (batched) + residual
+        // down projection (batched) + optional post-FFN norm + residual
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
+        if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
+            for (p in range64(npos)) {
+                array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
+                    rms_at(ov, t, t.rms_post_ffn_off + l * dim, ov, dim)
+                }
+            }
+        }
         for (k in range64(npos * dim)) {
             s.x_b[k] += s.xb_b[k]
         }
@@ -828,6 +924,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_fblob(s.logits, t, t.tok_emb_off, s.xb, dim, c.vocab_size)
     } else {
         mm(s.logits, t, t.wcls_off, s.xb, s.xq, s.xs, dim, c.vocab_size)
+    }
+    if (c.final_logit_softcap > 0.0) {  // Gemma2: soft-cap the output logits
+        softcap(s.logits, c.vocab_size, c.final_logit_softcap)
     }
 }
 
