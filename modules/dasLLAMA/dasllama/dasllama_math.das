@@ -48,6 +48,27 @@ def vaxpy(d : float const?; s : float const?; scale : float; n : int64) {
     }
 }
 
+//! d[j] += s[j], width-8 vectorized (the residual-stream update). The plain `for k; a[k]+=b[k]`
+//! over bounds-checked arrays does NOT vectorize under the JIT — this pointer form is ~5x faster.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def add_inplace(var d : float?; s : float const?; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] += s[j]
+        }
+    }
+}
+
+//! d[j] *= s[j], width-8 vectorized — the SwiGLU/GeGLU gate multiply (act(W1·x) * (W3·x)).
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def mul_inplace(var d : float?; s : float const?; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] *= s[j]
+        }
+    }
+}
+
 // n*d above this -> split the output rows across worker threads. Below it, the per-call
 // job-dispatch overhead (~90us) dwarfs the gain, so stay single-thread. (Measured on M1 Max:
 // classifier 32000x288 = 9.2M threads to ~2x; ffn 768x288 = 0.22M would be ~5x slower.)
@@ -495,17 +516,20 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 def softmax(xc : float const?; size : int64) {
     unsafe {
         var x = reinterpret<float?>(xc)
+        // max is exact + idempotent, so the vectorized reduce (any order, x[0] folded in twice) is bit-exact
         var maxv = x[0]
-        for (i in range64(1l, size)) {
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
             maxv = max(maxv, x[i])
         }
         var sum = 0.0
-        for (i in range64(size)) {
-            x[i] = exp(x[i] - maxv)
-            sum += x[i]
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+            let e = exp(x[i] - maxv)
+            x[i] = e
+            sum += e
         }
-        for (i in range64(size)) {
-            x[i] /= sum
+        let inv_sum = 1.0 / sum   // scale by the reciprocal (matches ggml_vec_scale_f32), not a per-element /=
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+            x[i] *= inv_sum
         }
     }
 }

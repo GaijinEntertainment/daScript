@@ -990,9 +990,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
-        for (k in range64(npos * dim)) {
-            s.x_b[k] += s.xb2_b[k]
-        }
+        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
         prof_add("act_resid", ts_resid0)
         // ffn rmsnorm, per position
         let ts_norm1 = ref_time_ticks()
@@ -1015,9 +1013,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         } else {
             silu(s.hb_b, npos * hidden)
         }
-        for (k in range64(npos * hidden)) {
-            s.hb_b[k] *= s.hb2_b[k]
-        }
+        mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
         prof_add("act_resid", ts_act)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
@@ -1031,9 +1027,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 }
             }
         }
-        for (k in range64(npos * dim)) {
-            s.x_b[k] += s.xb_b[k]
-        }
+        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
         prof_add("act_resid", ts_resid1)
     }
 
