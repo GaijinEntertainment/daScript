@@ -12,8 +12,9 @@ Chat: `bin/daslang -jit examples/dasLLAMA/chat.das`
 ## Module layout & usage
 
 dasLLAMA is a pure-daslang module under the `dasllama/` namespace. The core library
-lives in `modules/dasLLAMA/dasllama/`; runnable demos are in `examples/dasLLAMA/` and
-tests in `tests/dasLLAMA/`.
+lives in `modules/dasLLAMA/dasllama/`; perf benchmarks and verification harnesses sit
+beside it under `modules/dasLLAMA/benchmarks/` and `modules/dasLLAMA/harness/`; runnable
+demos are in `examples/dasLLAMA/` and tests in `tests/dasLLAMA/`.
 
 ```
 modules/dasLLAMA/
@@ -27,8 +28,11 @@ modules/dasLLAMA/
     dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family)
     dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3)
     dasllama_transformer.das  #   Config / Transformer / RunState, load + forward + generate
+  benchmarks/                 # perf harnesses (gen tok/s, prefill TTFT)
+    matmul/                   #   matmul kernel micro-bench ledger
+  harness/                    # verification / eval test beds + GGUF inspection tools
 tests/dasLLAMA/               # dastest [test] suites (model-gated ones self-skip)
-examples/dasLLAMA/            # runnable demos, perf harnesses, and bench/ (matmul ledger)
+examples/dasLLAMA/            # runnable demos only — run a prompt, chat
 ```
 
 Pull the pieces you need:
@@ -71,7 +75,7 @@ bin/daslang -jit examples/dasLLAMA/llama3_run.das -- ~/Work/llama.cpp/models/Lla
 bin/daslang -jit examples/dasLLAMA/llama3_run.das -- ~/Work/llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf
 
 # BPE tokenizer corpus gate (no model needed — uses the in-repo ggml-vocab-llama-bpe fixture)
-bin/daslang -jit examples/dasLLAMA/bpe_test.das
+bin/daslang -jit modules/dasLLAMA/harness/bpe_test.das
 
 # Interactive chat (TinyLlama-1.1B-Chat-v1.0 Q8_0, Zephyr template)
 bin/daslang -jit examples/dasLLAMA/chat.das
