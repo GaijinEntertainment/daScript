@@ -77,7 +77,10 @@ jobs:
           web/output64
           site/playground/samples
           site/playground/tutorials
-        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+        # The workflow file itself is a build input (it carries the configure flags
+        # for web/build64 below), so hash it too — a change to the build steps must
+        # miss a stale cache rather than skip the rebuild and reuse old archives.
+        key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -193,10 +196,17 @@ jobs:
         #    the prebuilt host (so the compute foreach reuses it instead of
         #    rebuilding daslang) + memory64; daspkg build --wasm then populates the
         #    runtime/module archives into it.
+        #    DAS_WASM_PTHREADS=ON: daspkg `release wasm` now ALWAYS links -pthread
+        #    (--shared-memory), so the module archives it links (dasGlfw/dasOpenGL/...)
+        #    MUST be compiled with +atomics,+bulk-memory or wasm-ld rejects the link
+        #    ("--shared-memory is disallowed by dasGLFW.cpp.o"). cmd_build_wasm only
+        #    self-configures threads when build64 has no cache yet, but we pre-create
+        #    the cache here (for the host override), so set the flag explicitly.
         emcmake cmake -S web -B web/build64 -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DDAS_WEB_OUTPUT_DIR="$REPO/web/output64" \
           -DDAS_WASM_MEMORY64=ON \
+          -DDAS_WASM_PTHREADS=ON \
           -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 \
           -DDAS_HOST_DASLANG_OVERRIDE="$REPO/bin/daslang"
         ./bin/daslang utils/daspkg/main.das -- build --wasm
@@ -204,10 +214,17 @@ jobs:
         # 3. compute playground samples → wasm64 (web/output64/samples/examples)
         cmake --build web/build64 --target all_wasm
 
-        # 4. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/)
+        # 4. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/).
+        #    Non-fatal per game: a game's wasm build must never red the whole deploy
+        #    (which would take the playground + the other example cards down with it).
+        #    The staging step degrades a missing game wasm to its interpreted fallback.
         for g in arcanoid pacman; do
-            ./bin/daslang utils/daspkg/main.das -- \
-                release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"
+            if ./bin/daslang utils/daspkg/main.das -- \
+                 release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"; then
+                echo "$g wasm build OK"
+            else
+                echo "WARNING: $g wasm build failed — its card falls back to interpreted this deploy."
+            fi
         done
 
         # 5. /examples furier — the ImGui-in-wasm showcase. Unlike the games (all
