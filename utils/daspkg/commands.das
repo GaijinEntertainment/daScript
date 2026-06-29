@@ -2324,7 +2324,10 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
         // matches the threaded runtime archive (new_thread / JobQue map to Web Workers); the pool is
         // pre-sized for the DAS_MAX_HW_JOBS-capped worker count. A -pthread module only instantiates
         // cross-origin-isolated, so the host page must send COOP same-origin + COEP require-corp.
-        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -pthread -sPTHREAD_POOL_SIZE=16")
+        // AUDIO_WORKLET + WASM_WORKERS: under -pthread, dasAudio builds its AudioWorklet backend
+        // (MA_ENABLE_AUDIO_WORKLETS), which references emscripten_*_audio_worklet_* — those symbols
+        // come from -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 at the link (matches web/CMakeLists' pthread block).
+        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1")
         for (a in emcc_args) {
             w |> write(" {a}")
         }
