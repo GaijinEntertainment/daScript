@@ -999,6 +999,7 @@ src/hal/crash_handler.cpp
 src/hal/project_specific.cpp
 src/hal/project_specific_file_info.cpp
 src/hal/project_specific_crash_handler.cpp
+src/hal/wasm_thread_malloc.cpp
 include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
 src/misc/network.cpp
