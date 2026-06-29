@@ -584,6 +584,25 @@ def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : 
     }
 }
 
+// Threaded per-position rmsnorm: out[p*dim..] = rmsnorm(src[p*dim..]) with the layer weight at fblob+woff.
+// `out` and `src` may be the same array (Gemma post-norms run in place). Fork workers touch raw addresses.
+def private rms_batch(var out : array<float>; src : array<float>; t : Transformer; woff : int64; dim, npos : int64) {
+    let eps = t.config.norm_eps
+    unsafe {
+        var op = addr(out[0])
+        let ip = reinterpret<float const?>(addr(src[0]))
+        let wp = reinterpret<float const?>(addr(t.fblob[woff]))
+        maybe_parallel_for(dim * npos >= NORM_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let off = int64(p) * dim
+                    rmsnorm(op + off, ip + off, wp, dim, eps)
+                }
+            }
+        }
+    }
+}
+
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
 def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
@@ -816,6 +835,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 let ATTN_PAR_THRESHOLD = 100_000l
 // Thread the per-position activation requant (mm_b) once n × npos clears this.
 let REQUANT_PAR_THRESHOLD = 256_000l
+// Thread the per-position rmsnorm once dim × npos clears this.
+let NORM_PAR_THRESHOLD = 256_000l
 
 var g_prefill_prof_acc : table<string; int64>
 
@@ -904,13 +925,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
         // attention rmsnorm, per position
         let ts_norm0 = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
-                    rms_at(ov, t, t.rms_att_off + l * dim, xv, dim)
-                }
-            }
-        }
+        rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
         prof_add("norm", ts_norm0)
         // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
         let ts_qkv = ref_time_ticks()
@@ -998,23 +1013,13 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("mm_wo", ts_wo)
         let ts_resid0 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
-            for (p in range64(npos)) {
-                array_view(s.xb2_b, p * dim, dim) $(var ov : array<float>#) {
-                    rms_at(ov, t, t.rms_post_att_off + l * dim, ov, dim)
-                }
-            }
+            rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
         }
         add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
         prof_add("act_resid", ts_resid0)
         // ffn rmsnorm, per position
         let ts_norm1 = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
-                    rms_at(ov, t, t.rms_ffn_off + l * dim, xv, dim)
-                }
-            }
-        }
+        rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
         prof_add("norm", ts_norm1)
         // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
         let ts_ffn = ref_time_ticks()
@@ -1035,11 +1040,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("mm_ffn", ts_ffn2)
         let ts_resid1 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
-            for (p in range64(npos)) {
-                array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                    rms_at(ov, t, t.rms_post_ffn_off + l * dim, ov, dim)
-                }
-            }
+            rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
         }
         add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
         prof_add("act_resid", ts_resid1)

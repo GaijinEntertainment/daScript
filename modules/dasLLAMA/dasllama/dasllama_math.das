@@ -494,16 +494,28 @@ def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #
 //! RMSNorm — root-mean-square normalization (no mean subtraction, no bias).
 //! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). eps defaults to 1e-5 (Llama-2/3);
 //! Qwen2 / Gemma2 pass 1e-6 from the model's metadata.
-def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64; eps : float = 1.0e-5) {
-    var ss = 0.0
-    for (j in range64(size)) {
-        ss += x[j] * x[j]
+//! Pointer core — the batched prefill norm threads over positions in fork contexts (raw addresses
+//! only). `o`/`x` may alias (in-place post-norms): the sum over x completes before any write to o.
+def rmsnorm(o : float const?; x : float const?; weight : float const?; size : int64; eps : float = 1.0e-5) {
+    unsafe {
+        var oo = reinterpret<float?>(o)
+        var ss = 0.0
+        for (j in range64(size)) {
+            ss += x[j] * x[j]
+        }
+        ss /= float(size)
+        ss += eps
+        ss = 1.0 / sqrt(ss)
+        for (j in range64(size)) {
+            oo[j] = weight[j] * (x[j] * ss)
+        }
     }
-    ss /= float(size)
-    ss += eps
-    ss = 1.0 / sqrt(ss)
-    for (j in range64(size)) {
-        o[j] = weight[j] * (x[j] * ss)
+}
+def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64; eps : float = 1.0e-5) {
+    // reinterpret strips the temporary (#) qualifier — rms_at passes array_view (#) slices
+    unsafe {
+        rmsnorm(reinterpret<float const?>(addr(o[0])), reinterpret<float const?>(addr(x[0])),
+            reinterpret<float const?>(addr(weight[0])), size, eps)
     }
 }
 
