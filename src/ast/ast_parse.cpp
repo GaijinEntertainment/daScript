@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_gc_report.h"
+#include "daScript/ast/ast_escape_analysis.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
@@ -932,6 +933,21 @@ namespace das {
                             fn->notInferred();
                         });
                         goto restartInfer;
+                    }
+                }
+            }
+            // escape analysis after buildAccessFlags so callee sideEffectFlags (rws) are final, but
+            // before lint/foldUnsafe so the re-infer of the inserted scope_free matches the original
+            // (in-infer-loop) ordering and does not re-trip the already-folded unsafe checks.
+            // the inserted scope_free is a generated terminal call creating no new candidate and
+            // changing no rws, so a single dirty re-type is the fixpoint - goto restartInfer would
+            // re-run the whole macro/pod/relocate infer leg for nothing
+            if ( !program->failed() ) {
+                escapeAnalysis(program.get(), logs);
+                if ( scopeFreeOptimization(program.get(), logs) ) {
+                    inferTypesDirty(program.get(), logs, true);
+                    if ( program->failed() ) {
+                        program->error("internal compiler error: escape free optimization infer to fail", "", "", LineInfo(), CompilationError::internal_pod_analysis_infer);
                     }
                 }
             }

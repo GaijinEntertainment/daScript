@@ -385,6 +385,7 @@ namespace das
                 bool    escapes_return : 1;         // escapes via a return
                 bool    escapes_argument : 1;       // escapes by being passed as a call/operator argument
                 bool    escapes_global : 1;         // escapes by being stored (assignment, into a global/outer location)
+                bool    escape_no_stack : 1;        // does_not_escape, but a copy-alias forbids stack relocation (still freeable, not stackable)
             };
             uint32_t flags = 0;
         };
@@ -1601,6 +1602,7 @@ namespace das
         /*option*/ bool log_inscope_pod = false;                   // log in-scope for POD-like types
         /*option*/ bool force_escape_free = false;                 // escape analysis: statically free non-escaping new-pointer locals at scope exit
         /*option*/ bool force_allocate_on_stack = true;            // escape analysis: stack-allocate non-escaping new-pointer locals (no heap)
+        /*option*/ bool force_partial_escape_free = false;         // flow-sensitive escape: build a CFG and free objects on the paths where they don't escape (off = simple EA only, no CFG)
         /*option*/ bool log_escape_analysis = false;               // log escape-analysis static frees
         /*option*/ bool log_gc_time = false;                       // log gc time
     // debugger
@@ -1714,8 +1716,6 @@ namespace das
         bool verifyAndFoldContracts();
         void validateAst();
         bool inScopePodAnalysis(TextWriter & logs);
-        bool escapeAnalysis(TextWriter & logs);             // pure analysis: sets Variable::does_not_escape
-        bool scopeFreeOptimization(TextWriter & logs);      // consumes the analysis result: emits scope-exit frees
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);

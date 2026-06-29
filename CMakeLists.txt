@@ -1180,6 +1180,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_generate.cpp
     src/ast/ast_inscope_pod.cpp
     src/ast/ast_escape_analysis.cpp
+    src/ast/ast_cfg.cpp
     src/ast/ast_validate.cpp
 
     src/builtin/module_builtin_ast.cpp
