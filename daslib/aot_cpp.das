@@ -1471,7 +1471,7 @@ class public CppAot : AstVisitor {
         ss |> string_builder_clear();
         write(*ss, "\n");
         prog.getThisModule |> for_each_module_function($(var fn : FunctionPtr) {
-            if (!fn.flags.builtIn && !fn.flags.noAot) {
+            if (!fn.flags.builtIn && !fn.flags.noAot && !fn.moreFlags.isTemplate) {
                 write(*ss, "{describeCppFunc(fn,collector,cross_platform)};\n");
             }
         });
