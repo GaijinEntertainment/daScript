@@ -658,9 +658,21 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
     if (t.quant == QuantMode.q8) {
         let nb = n / 32l
         let ts_rq = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(x, p * n, n) $(col : array<float>#) {
-                quantize_q8_0_into(col, n, xqb, xsb, p * n, p * nb)
+        // quantize each of the npos activation columns into xqb/xsb — independent per position, so
+        // thread it (it was the largest serial bucket once attention + GEMM threaded). Fork workers
+        // touch raw addresses only; quantize_q8_0_into_ptr un-consts the captured destinations.
+        unsafe {
+            let xp = reinterpret<float const?>(addr(x[0]))
+            var qp = addr(xqb[0])
+            var sp = addr(xsb[0])
+            let rq_par = n * npos >= REQUANT_PAR_THRESHOLD
+            maybe_parallel_for(rq_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (p in range(rb, re)) {
+                        let pp = int64(p)
+                        quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
+                    }
+                }
             }
         }
         prof_add("mm_requant", ts_rq)
@@ -802,6 +814,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 // Thread the prefill attention over heads once the work proxy (npos × max-cnt × n_heads) clears this;
 // below it the per-job dispatch overhead isn't worth it and we run the head loop inline.
 let ATTN_PAR_THRESHOLD = 100_000l
+// Thread the per-position activation requant (mm_b) once n × npos clears this.
+let REQUANT_PAR_THRESHOLD = 256_000l
 
 var g_prefill_prof_acc : table<string; int64>
 
