@@ -2483,8 +2483,23 @@ namespace das
         // platform and architecture
         addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
             SideEffects::none, "das_get_platform_name");
+        // Same C++ query, but registered with a side effect so the optimizer never const-folds it.
+        // get_platform_name() (SideEffects::none) folds at compile time to the HOST platform, which is
+        // wrong inside a wasm cross-compile (host is e.g. windows, the code will RUN under emscripten).
+        // get_running_platform_name() stays a real call, so in the cross-compiled binary it resolves to
+        // the wasm runtime's das_get_platform_name -> "emscripten". Use it for runtime "where am I
+        // actually executing" decisions; use get_platform_name() for compile-time / macro decisions.
+        addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_running_platform_name",
+            SideEffects::accessExternal, "das_get_platform_name");
+        // SideEffects::none so it FOLDS at compile time -> usable in static_if. The cross-compile
+        // target is a compile-time property (the --jit-target triple is fixed for the whole compile),
+        // so folding to it is correct: e.g. static_if(get_platform_name()=="emscripten" ||
+        // get_cross_platform_name()=="emscripten") picks the WebGL2 draw path and drops the desktop-only
+        // glDrawElementsBaseVertex branch before symbol resolution. Folds to "" on a non-cross run, so a
+        // desktop compile keeps the BaseVertex branch. (get_running_platform_name stays accessExternal —
+        // it must NOT fold; it reports where the code actually executes.)
         addExtern<DAS_BIND_FUN(das_get_cross_platform_name)>(*this, lib, "get_cross_platform_name",
-            SideEffects::accessExternal, "das_get_cross_platform_name");
+            SideEffects::none, "das_get_cross_platform_name");
         addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
         // fmt
