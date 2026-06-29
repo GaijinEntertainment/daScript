@@ -104,6 +104,7 @@ FILE(GLOB AOT_DASLLAMA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "t
 # shared-module functions get one canonical AOT registration matching the runtime).
 # Leaf modules first so cross-module deps resolve.
 SET(AOT_DASLLAMA_MODULE_FILES
+    modules/dasLLVM/daslib/aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_math.das
     modules/dasLLAMA/dasllama/dasllama_math_aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_quant.das
