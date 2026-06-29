@@ -695,6 +695,12 @@ runScript = function(text,onComplete)
 
 
 var Module = {
+        // Threaded build: pthread workers load their script from Module.mainScriptUrlOrBlob, falling
+        // back to emscripten's _scriptName (= document.currentScript.src). We load daslang_static.js
+        // via $.getScript (XHR + eval), so document.currentScript is null during eval and _scriptName
+        // is undefined — the worker pool would then spawn `new Worker(undefined)`, 404 to an HTML page
+        // ("Unexpected token '<'"), and the threaded runtime would hang. Name the script explicitly.
+        mainScriptUrlOrBlob: "daslang_static.js",
         preRun: [],
         postRun: [],
         print: (function() {

@@ -16,15 +16,16 @@ namespace das {
     int GetLogicalProcessorCountInWindows();
 
     int JobQue::get_num_threads() {
-        if ( int nThreads = GetLogicalProcessorCountInWindows() ) return nThreads;
-        return max(1,static_cast<int>(thread::hardware_concurrency()));
+        int nThreads = GetLogicalProcessorCountInWindows();
+        if ( nThreads==0 ) nThreads = static_cast<int>(thread::hardware_concurrency());
+        return max(1,min(DAS_MAX_HW_JOBS,nThreads));
     }
 
 
 #else
 
     int JobQue::get_num_threads() {
-        return max(1,static_cast<int>(thread::hardware_concurrency()));
+        return max(1,min(DAS_MAX_HW_JOBS,static_cast<int>(thread::hardware_concurrency())));
     }
 
 #endif

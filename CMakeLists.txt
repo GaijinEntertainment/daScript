@@ -47,6 +47,14 @@ option(DAS_ENABLE_PIC "Build static libs as position-independent code (UNIX, req
 # (all daslang targets, every config) and libhv's BUILD_FOR_MT (modules/dasHV) in
 # lockstep, so no target can disagree on /MT vs /MD. See CMakeCommon.txt.
 option(DAS_USE_STATIC_STD_LIBS "Link the static MSVC runtime (/MT); OFF = dynamic (/MD)" OFF)
+# Upper bound on JobQue worker threads (caps get_total_hw_threads / get_total_hw_jobs and the
+# persistent job pool). Empty = platform.h default (4), which keeps a wasm/web build from spawning
+# one Web Worker per logical core. Set e.g. -DDAS_MAX_HW_JOBS=64 for a desktop build that wants the
+# full core count.
+set(DAS_MAX_HW_JOBS "" CACHE STRING "Max JobQue worker threads (empty = platform.h default of 4)")
+if(DAS_MAX_HW_JOBS)
+    add_compile_definitions(DAS_MAX_HW_JOBS=${DAS_MAX_HW_JOBS})
+endif()
 # RelWithDebInfo is permanently our heap-leak tracking / audit build.
 # DAS_TRACK_ALLOC=1 (and the global new/delete override) are auto-enabled below
 # via generator expressions; tracker source files are #if DAS_TRACK_ALLOC-gated
@@ -574,6 +582,40 @@ FOREACH(_module ${_modules})
         INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
     ENDIF()
 ENDFOREACH()
+
+# ===== External dasImgui -> wasm interpreter (daslang_static) =====
+# The /examples furier + path_tracer_lab playground cards run their .das in the
+# interpreter-in-wasm. dasImgui is an EXTERNAL module (not under modules/), so bind it
+# here when DAS_WEB_IMGUI_DIR points at a built dasImgui (its _wasm32 archives + the
+# widgets/ .das tree). Replicate the module's .das_module register_native_path list as
+# static NATIVE_MODULE entries -- the dynamic register path is gated behind
+# das_is_dll_build(), which is false in the static wasm monolith. The archive link +
+# the .das/font embeds live in web/CMakeLists.txt; this block only registers names so the
+# generated external_*.inc pick them up. Inert for every non-web build (var unset).
+IF(EMSCRIPTEN AND DAS_WEB_IMGUI_DIR)
+    MESSAGE(STATUS "daslang_static: binding external dasImgui (${DAS_WEB_IMGUI_DIR})")
+    # require imgui/<name> -> modules/dasImgui/imgui/<name>.das (the embedded widgets tree).
+    SET(_module dasImgui)
+    FILE(GLOB _imgui_das_files "${DAS_WEB_IMGUI_DIR}/widgets/*.das")
+    FOREACH(_f ${_imgui_das_files})
+        GET_FILENAME_COMPONENT(_n "${_f}" NAME_WE)
+        # imgui_boost is the v1 module name, intentionally non-compileable during the
+        # v2 refactor; the FILE widgets/imgui_boost.das actually holds module
+        # imgui_boost_v2 (registered explicitly below, name != file stem). Skip the stem.
+        IF(NOT "${_n}" STREQUAL "imgui_boost")
+            ADD_MODULE_DAS(imgui imgui ${_n})
+        ENDIF()
+    ENDFOREACH()
+    # imgui_boost_v2: module name differs from its file (widgets/imgui_boost.das). The
+    # web embed mounts that file as imgui_boost_v2.das so this resolves.
+    ADD_MODULE_DAS(imgui imgui imgui_boost_v2)
+    UNSET(_module)
+    # C++ binding modules: register_Module_dasIMGUI / _imgui_app / _imgui_app_headless,
+    # pulled from the prebuilt wasm32 archives linked in web/CMakeLists.txt.
+    ADD_MODULE_CPP(dasIMGUI)
+    ADD_MODULE_CPP(imgui_app)
+    ADD_MODULE_CPP(imgui_app_headless)
+ENDIF()
 
 # Clean stale .shared_module files. When a module is disabled, its .shared_module
 # from a previous build may remain and cause crashes at startup (the dynamic module

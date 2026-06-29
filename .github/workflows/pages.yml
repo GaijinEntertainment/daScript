@@ -77,7 +77,7 @@ jobs:
           web/output64
           site/playground/samples
           site/playground/tutorials
-        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+        key: wasm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -156,12 +156,37 @@ jobs:
         set -eux
         REPO="$PWD"
 
-        # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the
-        #    cross-compiled example .das sources staged into site/playground.
-        #    (stage_site_playground_wasm is gone — compute samples are wasm64 now,
-        #    built below; it is gated off under non-memory64 in web/CMakeLists.)
+        # 0. dasImgui for the playground showcases (furier, path_tracer_lab). The threaded
+        #    daslang_static interpreter binds it so those samples run in the playground itself —
+        #    not only as the wasm64 examples-card builds. daspkg installs dasImgui from the package
+        #    index into the path_tracer_lab package; build its threaded wasm32 archives (-pthread,
+        #    no memory64 -> _wasm32mt) so the ABI matches the threaded daslang_static. If any of
+        #    this fails (e.g. the dasImgui wasm release isn't in the index yet), fall back to a
+        #    plain single-thread daslang_static so the rest of the playground still deploys; only
+        #    the two imgui samples are unavailable that deploy (same non-fatal stance as the cards).
+        IMGUI_DIR="$REPO/examples/graphics/path_tracer_lab/modules/dasImgui"
+        PLAYGROUND_IMGUI=""
+        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/path_tracer_lab \
+           && ( cd "$IMGUI_DIR" \
+                && emcmake cmake -S . -B _wasm_build32mt -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                     -DDASLANG_DIR="$REPO" -DDAS_IMGUI_WASM_MEMORY64=OFF -DDAS_IMGUI_WASM_PTHREADS=ON \
+                && cmake --build _wasm_build32mt --target dasModuleImgui imguiApp imguiAppHeadless ); then
+            PLAYGROUND_IMGUI="-DDAS_WASM_PTHREADS=ON -DDAS_WEB_IMGUI_DIR=$IMGUI_DIR"
+            echo "playground: threaded daslang_static + dasImgui bound (furier + path_tracer_lab enabled)"
+        else
+            echo "WARNING: dasImgui wasm32mt archives unavailable — building plain daslang_static; the furier + path_tracer_lab playground samples will not run this deploy."
+        fi
+
+        # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the example .das
+        #    sources staged into site/playground. When the dasImgui archives built above, this is
+        #    the THREADED build (-pthread + dasImgui), so new_thread / JobQue map to Web Workers and
+        #    every playground sample runs cross-origin-isolated (coi-serviceworker drops the
+        #    memory64 gate for /playground). stage_site_playground also generates the furier +
+        #    path_tracer_lab samples from the canonical examples/graphics sources.
+        #    (stage_site_playground_wasm is gone — compute samples are wasm64 now, built below;
+        #    it is gated off under non-memory64 in web/CMakeLists.)
         ( cd web && mkdir -p build && cd build \
-            && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja .. \
+            && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja $PLAYGROUND_IMGUI .. \
             && ninja daslang_static stage_site_playground )
 
         # 2. wasm64 archives + compute samples + games. Configure web/build64 with
@@ -202,6 +227,20 @@ jobs:
             echo "WARNING: furier wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
         fi
 
+        # 6. /examples path_tracer_lab — the jobque + OpenGL showcase. Same external
+        #    dasImgui dependency as furier; the threaded daspkg wasm pipeline (always
+        #    -pthread, see step 2) maps its new_thread / JobQue modes to real Web
+        #    Workers. Non-fatal for the same reason as furier; staged below only when
+        #    all three outputs are present. The page serves it cross-origin-isolated
+        #    via coi-serviceworker.js (required for the -pthread module to instantiate).
+        if ./bin/daslang utils/daspkg/main.das -- install --root examples/graphics/path_tracer_lab \
+           && ./bin/daslang utils/daspkg/main.das -- \
+                release wasm --root examples/graphics/path_tracer_lab --out "$REPO/web/output64/examples"; then
+            echo "path_tracer_lab wasm build OK"
+        else
+            echo "WARNING: path_tracer_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+        fi
+
     - name: "Fetch dasProfile per-platform benchmark JSONs"
       # dasProfile now ships a per-platform JSON file
       # (profile_results_<platform>.json). forge.js's bench cycler fetches
@@ -229,6 +268,12 @@ jobs:
         cp site/examples.html _site/
         cp site/robots.txt _site/
         cp -r site/files _site/files
+
+        # Cross-origin isolation worker — must sit at site root so its scope (/) can
+        # control the root-level /examples.html navigation. It only rewrites headers
+        # under /examples* and /playground* (the threaded -pthread wasm subtrees);
+        # every other page passes through untouched. See site/coi-serviceworker.js.
+        cp site/coi-serviceworker.js _site/coi-serviceworker.js
 
         # Freshly-built Sphinx HTML docs
         cp -r build/site _site/doc
@@ -344,6 +389,22 @@ jobs:
         else
             echo "WARNING: furier wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fourier Series — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/furier/furier.html
+        fi
+
+        # path_tracer_lab — the jobque + OpenGL showcase. Same wasm64-only / external
+        # dasImgui story as furier (no interpreted fallback): stage the compiled build
+        # only when all three outputs are present, else a "being rebuilt" placeholder so
+        # the always-listed card never 404s its iframe.
+        mkdir -p _site/examples/path_tracer_lab
+        if [ -f web/output64/examples/path_tracer_lab/path_tracer_lab.html ] \
+           && [ -f web/output64/examples/path_tracer_lab/path_tracer_lab.js ] \
+           && [ -f web/output64/examples/path_tracer_lab/path_tracer_lab.wasm ]; then
+            cp web/output64/examples/path_tracer_lab/path_tracer_lab.html _site/examples/path_tracer_lab/
+            cp web/output64/examples/path_tracer_lab/path_tracer_lab.js   _site/examples/path_tracer_lab/
+            cp web/output64/examples/path_tracer_lab/path_tracer_lab.wasm _site/examples/path_tracer_lab/
+        else
+            echo "WARNING: path_tracer_lab wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Path Tracer Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/path_tracer_lab/path_tracer_lab.html
         fi
 
         # GitHub Pages control files

@@ -577,6 +577,14 @@ private:
 #define WIN_EH_NO_ASAN
 #endif
 
+// Upper bound on JobQue worker threads, and therefore on get_total_hw_threads / get_total_hw_jobs.
+// Default 4 so a wasm/web build does not spawn navigator.hardwareConcurrency Web Workers (one per
+// logical core) for the persistent job pool. Override in CMake (-DDAS_MAX_HW_JOBS=N) for desktop
+// builds that want the full core count.
+#ifndef DAS_MAX_HW_JOBS
+#define DAS_MAX_HW_JOBS 4
+#endif
+
 #include "daScript/misc/smart_ptr.h"
 
 
