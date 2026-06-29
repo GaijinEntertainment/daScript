@@ -46,6 +46,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT (-exe wasm cross-compile): emit a -pthread-compatible object (+atomics,+bulk-memory) for linking against the threaded runtime archives (web/output64mt). The emcc link must also pass -pthread."
     threads : Option<bool>
 
+    @clarg_name = "jit-check-abi"
+    @clarg_doc = "JIT (-exe): emit a startup safe-check that compares every used handled-type's HOST-baked size + field offsets against the TARGET runtime annotation and aborts — reporting ALL divergences — on any mismatch. Diagnostic for the cross-compile C++ ABI layout class (wasm). Off by default."
+    check_abi : Option<bool>
+
     @clarg_name = "jit-linker-string"
     @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd (e.g. -fsanitize=undefined)"
     linker_string : Option<string>

@@ -33,7 +33,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x29ul
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x2Aul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -190,6 +190,9 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     // Set the codegen global before any IR is built so both the data-layout machine
     // and write_wasm's emission machine pick up the threaded feature set.
     g_target_wasm_threads = cli_opts.threads |> unwrap_or(false)
+    // --jit-check-abi: emit the handled-type host-vs-target layout safe-check into
+    // initialize_modules(). Set before codegen so llvm_exe's sweep sees the flag.
+    g_jit_check_handled_abi = cli_opts.check_abi |> unwrap_or(false)
     // Extra args appended verbatim to the host linker cmd. CLI > script option.
     let linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
 

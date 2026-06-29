@@ -659,12 +659,60 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildStore(ib, off_val, glob)
         }
     }
+    // --jit-check-abi: sweep every handled-type the program uses and emit
+    // host-vs-target size + field-offset checks, then a report/kaboom call.
+    if (g_jit_check_handled_abi) {
+        emit_handled_abi_check(ib, prog)
+    }
     LLVMBuildRetVoid(ib)
     LLVMDisposeBuilder(ib)
     extern_resolver.uid = null
     extern_resolver.types = null
     unsafe { delete extern_resolver; }
     return (any_unimplemented = any_unimp, needs_whole_lib = whole_lib)
+}
+
+// --jit-check-abi: emit, into initialize_modules(), a host-vs-target layout
+// safe-check for every handled type the program references. For each handled
+// (BasicStructure) annotation across all program modules we bake the HOST size +
+// each field's HOST offset into a check call; at runtime those resolve the TARGET
+// runtime annotation and record every divergence, then jit_handled_abi_check_report()
+// dumps them all and aborts. The whole magnitude of the layout disaster in one run.
+def private emit_handled_abi_check(ib : LLVMBuilderRef; prog : Program?) {
+    let size_fn = LLVMGetNamedFunction(g_mod, FN_JIT_CHECK_HANDLED_TYPE_SIZE)
+    let size_type = g_fn_types[FN_JIT_CHECK_HANDLED_TYPE_SIZE]
+    let off_fn = LLVMGetNamedFunction(g_mod, FN_JIT_CHECK_HANDLED_FIELD_OFFSET)
+    let off_type = g_fn_types[FN_JIT_CHECK_HANDLED_FIELD_OFFSET]
+    var seen : table<string; bool>
+    var n_types = 0
+    var n_fields = 0
+    prog |> for_each_module() $(m) {
+        module_for_each_annotation(m) $(value) {
+            if (!value.isBasicStructureAnnotation) return
+            let modName = string(m.name)
+            let typeName = string(value.name)
+            let key = "{modName}`{typeName}"
+            if (key_exists(seen, key)) return
+            seen[key] = true
+            let host_size = int(get_handled_type_size(unsafe(reinterpret<TypeAnnotation?>(value))))
+            let mod_str = get_string_constant_ptr(ib, modName)
+            let type_str = get_string_constant_ptr(ib, typeName)
+            LLVMBuildCall2(ib, size_type, size_fn,
+                fixed_array(mod_str, type_str, g_prim_t.ConstI32(uint64(host_size))), "")
+            n_types ++
+            for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
+                if (offset == -1u) return
+                let field_str = get_string_constant_ptr(ib, name)
+                LLVMBuildCall2(ib, off_type, off_fn,
+                    fixed_array(mod_str, type_str, field_str, g_prim_t.ConstI32(uint64(offset))), "")
+                n_fields ++
+            }
+        }
+    }
+    to_log(LOG_INFO, "ABI-CHECK sweep emitted: {n_types} handled types, {n_fields} fields\n")
+    let rep_fn = LLVMGetNamedFunction(g_mod, FN_JIT_HANDLED_ABI_CHECK_REPORT)
+    let rep_type = g_fn_types[FN_JIT_HANDLED_ABI_CHECK_REPORT]
+    LLVMBuildCall2(ib, rep_type, rep_fn, array<LLVMValueRef>(), "")
 }
 
 // Suffix from the last "modules/" segment onwards; "" → caller falls back to abs path.

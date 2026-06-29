@@ -52,6 +52,9 @@ let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
 // runtime's annotation registry (the host's offsetof is wrong when the target C++
 // ABI lays the struct out differently; see handled_field_offset_value in llvm_jit.das).
 let public FN_JIT_GET_HANDLED_FIELD_OFFSET = "jit_get_handled_field_offset"
+let public FN_JIT_CHECK_HANDLED_TYPE_SIZE = "jit_check_handled_type_size"
+let public FN_JIT_CHECK_HANDLED_FIELD_OFFSET = "jit_check_handled_field_offset"
+let public FN_JIT_HANDLED_ABI_CHECK_REPORT = "jit_handled_abi_check_report"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -390,6 +393,13 @@ var public g_target_is_wasm = false
 // +simd128 vec4f-sret match documented in write_wasm.
 var public g_target_wasm_threads = false
 
+// --jit-check-abi: emit a startup sweep that compares every used handled-type's
+// HOST-baked size + field offsets against the TARGET runtime annotation and
+// kabooms — reporting ALL divergences — on any mismatch. Diagnostic for the
+// MSVC-host vs wasm/clang-target C++ ABI layout class (vptr/base ordering or
+// #ifdef WIN32/EMSCRIPTEN-conditional members). Opt-in; off by default.
+var public g_jit_check_handled_abi = false
+
 def private wasm_target_features() : string {
     return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
 }
@@ -577,6 +587,29 @@ def public init_jit(cg_opt_level : uint; target_triple : string = "") {
             fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_get_handled_field_offset, get_jit_get_handled_field_offset())
     LLVMAddAttributesToFunction(jit_get_handled_field_offset, fixed_array(nounwind, willreturn))
+    // --jit-check-abi safe-check trio (declared unconditionally; only called from the
+    // init function when g_jit_check_handled_abi). The host bakes its layout into the
+    // call args; these resolve the TARGET annotation and record/abort on mismatch.
+    // void jit_check_handled_type_size ( const char * module, const char * type, uint32_t hostSize )
+    var jit_check_handled_type_size = LLVMAddFunctionWithType(g_mod, FN_JIT_CHECK_HANDLED_TYPE_SIZE,
+        LLVMFunctionType(g_prim_t.t_void,
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32)))
+    LLVMAddGlobalMapping(g_engine, jit_check_handled_type_size, get_jit_check_handled_type_size())
+    LLVMAddAttributesToFunction(jit_check_handled_type_size, fixed_array(nounwind, willreturn))
+    // void jit_check_handled_field_offset ( const char * module, const char * type, const char * field, uint32_t hostOffset )
+    var jit_check_handled_field_offset = LLVMAddFunctionWithType(g_mod, FN_JIT_CHECK_HANDLED_FIELD_OFFSET,
+        LLVMFunctionType(g_prim_t.t_void,
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32)))
+    LLVMAddGlobalMapping(g_engine, jit_check_handled_field_offset, get_jit_check_handled_field_offset())
+    LLVMAddAttributesToFunction(jit_check_handled_field_offset, fixed_array(nounwind, willreturn))
+    // void jit_handled_abi_check_report ()
+    // NO willreturn: this aborts (DAS_FATAL_ERROR) on any mismatch, so it may not
+    // return normally — willreturn would be UB. (The two check fns above DO always
+    // return, so they keep willreturn.)
+    var jit_handled_abi_check_report = LLVMAddFunctionWithType(g_mod, FN_JIT_HANDLED_ABI_CHECK_REPORT,
+        LLVMFunctionType(g_prim_t.t_void, array<LLVMTypeRef>()))
+    LLVMAddGlobalMapping(g_engine, jit_handled_abi_check_report, get_jit_handled_abi_check_report())
+    LLVMAddAttributesToFunction(jit_handled_abi_check_report, fixed_array(nounwind))
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),

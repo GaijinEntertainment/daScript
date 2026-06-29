@@ -1,0 +1,1 @@
+Returns the size in bytes (sizeof) of a handled (C++) type from its annotation. Mirrors get_handled_type_field_offset for whole-type size; used by the JIT to validate that a cross-compile target's handled-type layout matches the host-baked one.
