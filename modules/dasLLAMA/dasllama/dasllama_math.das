@@ -363,14 +363,15 @@ def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #
 }
 
 //! RMSNorm — root-mean-square normalization (no mean subtraction, no bias).
-//! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). Matches llama2.c (eps = 1e-5).
-def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64) {
+//! o[i] = weight[i] * x[i] / sqrt(mean(x^2) + eps). eps defaults to 1e-5 (Llama-2/3);
+//! Qwen2 / Gemma2 pass 1e-6 from the model's metadata.
+def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64; eps : float = 1.0e-5) {
     var ss = 0.0
     for (j in range64(size)) {
         ss += x[j] * x[j]
     }
     ss /= float(size)
-    ss += 1e-5
+    ss += eps
     ss = 1.0 / sqrt(ss)
     for (j in range64(size)) {
         o[j] = weight[j] * (x[j] * ss)
@@ -445,5 +446,38 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
         let v1 = vec[i + 1]
         vec[i] = v0 * fcr - v1 * fci
         vec[i + 1] = v0 * fci + v1 * fcr
+    }
+}
+
+//! NEOX-style RoPE (Qwen2 / Phi3 / Gemma2): the rotated pair is offset by head_size/2 — vec[base+j]
+//! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
+//! Same per-pair frequencies; only the pairing differs.
+def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #) {
+    let has_ff = !empty(freq_factors)
+    let half = head_size / 2l
+    for (h in range64(n / head_size)) {
+        let base = h * head_size
+        for (j in range64(half)) {
+            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+            if (has_ff) {
+                freq /= freq_factors[j]
+            }
+            let angle = float(pos) * freq
+            let fcr = cos(angle)
+            let fci = sin(angle)
+            let v0 = vec[base + j]
+            let v1 = vec[base + j + half]
+            vec[base + j] = v0 * fcr - v1 * fci
+            vec[base + j + half] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
+//! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool) {
+    if (neox) {
+        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors)
+    } else {
+        rope_scaled(vec, pos, head_size, n, theta, freq_factors)
     }
 }

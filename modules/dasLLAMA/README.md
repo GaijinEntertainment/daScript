@@ -1,6 +1,6 @@
 # dasLLAMA
 
-daslang-native **CPU** LLM inference (Llama-architecture transformers). Loads GGUF
+daslang-native **CPU** LLM inference (Llama- and Qwen2-architecture transformers). Loads GGUF
 (or llama2.c `.bin`), runs the forward pass + KV cache, tokenizes, and decodes —
 all in daslang, JIT tier. Verified token-for-token against `llama.cpp` / `llama2.c`.
 
@@ -57,6 +57,7 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **TinyLlama-1.1B-Chat-v1.0** | Q8_0 GGUF | Llama-2 | SPM (GGUF) | ✅ | `llama.cpp`, 69/69 token-for-token vs fp32; good chat (Zephyr) |
 | **Llama-3.2-1B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | ✅ | `llama.cpp` (instrumented `simple_ids`, CPU greedy), 40/40 token-for-token |
 | **Llama-3.1-8B-Instruct** | Q8_0 GGUF | Llama-3 | BPE/tiktoken | ✅ | `llama.cpp` (instrumented `simple_ids`, CPU greedy), 40/40 token-for-token (8.5GB, needs the fmap >4GB fix) |
+| **Qwen2.5-0.5B / 1.5B-Instruct** | Q8_0 GGUF | Qwen2 (QKV bias, NEOX rope, eps 1e-6) | BPE (qwen2 pre — *pending*) | ✅ forward | `llama.cpp` `simple_ids` / `harness/parity.sh`: 1.5B 40/40; 0.5B matches to ~0.02 logits, flips only genuine near-ties (tiny model) |
 
 Models are **not** checked into the repo — they live in `~/Work/llama.cpp/models/`
 (gitignored). Get them with `hf download <repo> <file> --local-dir ~/Work/llama.cpp/models`.
@@ -95,14 +96,14 @@ What a model needs to "just work" today:
 |---|---|
 | GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0** |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
-| Architecture | `arch == "llama"` only |
+| Architecture | `llama` **and** `qwen2` (data-driven per-arch capability flags; the loader uses the arch name as the metadata prefix) |
 | Attention | MHA **and** GQA (grouped-query) |
-| Normalization | RMSNorm — eps hardcoded 1e-5 (correct for Llama-2/3) |
-| Positional encoding | RoPE adjacent-pair; **θ + llama3 NTK-by-parts scaling read from GGUF metadata** (θ=10000 default, 500000 for Llama-3) |
+| Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama, 1e-6 Qwen2) |
+| Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) **and NEOX** (Qwen2, pairs offset by head_size/2); **θ + llama3 NTK-by-parts scaling read from GGUF metadata** (θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5) |
 | FFN | SwiGLU |
-| Tokenizer | **SentencePiece** (Llama-2 family) **and byte-level BPE / tiktoken** (Llama-3, vocab 128256) |
+| Tokenizer | **SentencePiece** (Llama-2 family) **and byte-level BPE / tiktoken** (Llama-3, vocab 128256) — Qwen2 BPE pre-tokenizer pending |
 | Model size | files >4GB load (needed the fmap >4GB engine fix) |
-| QKV bias | none (not read) |
+| QKV bias | **Qwen2** — learned bias on the Q/K/V projections |
 | Sampling | greedy, temperature, top-k, repetition penalty |
 | Performance | KV cache, SIMD + JobQue-threaded matmul, activation-quant Q8·Q8 (ARM SDOT) |
 
@@ -110,9 +111,9 @@ What a model needs to "just work" today:
 
 So there's no ambiguity about what will fail:
 
-- **`arch != "llama"`** (e.g. Qwen2 `"qwen2"`) — `load_gguf` panics.
-- **QKV bias** (Qwen2) — attention has no bias term.
-- **Sliding-window attention** (Mistral, long context) — full attention only.
+- **`arch` other than `llama` / `qwen2`** (e.g. `phi3`, `gemma2`) — `load_gguf` panics (supported list grows per phase).
+- **Qwen2 BPE tokenizer** — the forward is verified, but the `qwen2` pre-tokenizer isn't wired yet, so the interactive demo / `run` path for Qwen is pending (parity is tested by feeding reference IDs).
+- **GeGLU FFN, logit soft-capping, sliding-window attention** (Gemma2) — SwiGLU + full attention only.
 - Non-chat `generate()` stops on **BOS only** — no EOS/`<|eot_id|>` break yet (chat loops handle their own stop tokens).
 
 ---
@@ -123,10 +124,14 @@ Correctness is proven by reproducing a reference **token-for-token** (greedy / `
 keeping the tokenizer out of the loop so only the loader + forward pass are under test:
 
 1. **Prompt token IDs** from the reference: `llama-tokenize -m <model> -p "<prompt>" --ids`.
-2. **Expected output IDs** from an instrumented reference — `scratchpad/simple_ids.cpp`
-   (a copy of llama.cpp `examples/simple` that prints each token id), or `run_ids` for the
+2. **Expected output IDs** from the instrumented reference oracle `harness/oracle/simple_ids.cpp`
+   (a copy of llama.cpp `examples/simple` that prints greedy token ids), or `run_ids` for the
    llama2.c toy. Greedy via `llama_sampler_init_greedy`.
-3. Feed the same prompt IDs through dasLLAMA's forward pass and diff the generated IDs.
+3. Feed the same prompt IDs through dasLLAMA's forward pass (`harness/parity.das`) and diff the
+   generated IDs — `harness/parity.sh <model> [N] [quant] [prompt]` wires both sides automatically.
+   Note: on tiny models a near-tie argmax can flip from sub-ULP numerical differences vs llama.cpp's
+   libm — diagnose by the top-2 logit margin (a ~0.02 gap is a tie, not a bug), and prefer a larger
+   model for a clean token-for-token gate.
 4. For the tokenizer itself: the `ggml-vocab-*.gguf.inp`/`.out` fixtures in
    `~/Work/llama.cpp/models/` are ready-made round-trip test vectors.
 

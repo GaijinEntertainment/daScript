@@ -45,6 +45,7 @@ struct Config {
     rope_freq_base : float  // RoPE θ (set by the loader); Llama-2/TinyLlama 10000, Llama-3 500000
     // per-architecture capability flags — defaults encode the Llama family; the loader overrides per arch
     attn_qkv_bias : bool = false       // Qwen2: additive bias on the Q/K/V projections
+    rope_neox : bool = false           // NEOX rope (pairs offset by head_size/2): Qwen2 / Phi3 / Gemma2
     ffn_act : FfnAct = FfnAct.silu     // SwiGLU (silu) vs GeGLU (gelu, Gemma2)
     embed_scale : float = 1.0          // token-embedding multiplier (Gemma2: sqrt(dim))
     norm_eps : float = 1.0e-5          // RMSNorm epsilon (Gemma2: 1e-6)
@@ -84,6 +85,11 @@ struct Transformer {
     wcls_off : int64
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
+    // QKV projection biases (Qwen2) — fp32, per layer (q: layers×dim, k/v: layers×kv_dim);
+    // empty unless config.attn_qkv_bias
+    bq : array<float>
+    bk : array<float>
+    bv : array<float>
 }
 
 struct private LayoutSizes {
@@ -251,11 +257,14 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
 //! Validate the GGUF architecture and apply its per-arch capability flags to the config. The Config
 //! defaults already encode the Llama family, so each arch overrides only its own deltas. An arch we
 //! can't run correctly panics here — better to fail loudly than feed weights through the wrong path.
-[unused_argument(c)] def private configure_arch(var c : Config; arch : string) {
+def private configure_arch(var c : Config; arch : string) {
     if (arch == "llama") {
         // Llama / Llama-2 / Llama-3 / TinyLlama — every Config default is already correct
+    } elif (arch == "qwen2") {
+        c.attn_qkv_bias = true   // Qwen2 adds a learned bias on the Q/K/V projections
+        c.rope_neox = true       // ...and uses NEOX-style rope
     } else {
-        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama)")
+        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2)")
     }
 }
 
@@ -299,6 +308,9 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         t.config.kv_dim = (dim * n_kv_heads) / n_heads
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
+        // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
+        let epskey = "{arch}.attention.layer_norm_rms_epsilon"
+        t.config.norm_eps = gguf_has(m, epskey) ? gguf_f32(m, bytes, epskey) : 1.0e-5
         // Llama-3.1 ships precomputed per-pair RoPE scaling factors (NTK-by-parts) as a tensor
         if (gguf_find_tensor(m, "rope_freqs.weight") >= 0) {
             let nff = t.config.head_size / 2l
@@ -344,6 +356,17 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch)
+        }
+        // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
+        if (t.config.attn_qkv_bias) {
+            t.bq |> resize(layers * dim)
+            t.bk |> resize(layers * kv)
+            t.bv |> resize(layers * kv)
+            for (l in range64(layers)) {
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * dim, dim)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.bias", t.bk, l * kv, kv)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.bias", t.bv, l * kv, kv)
+            }
         }
         delete scratch
     }
@@ -463,7 +486,15 @@ def private mm_fblob(var y : array<float>; t : Transformer; woff : int64; x : ar
 // rmsnorm with the weight as a zero-copy view into the fp32 aux blob at `woff` (len size).
 def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : array<float> | #; size : int64) {
     array_view(t.fblob, woff, size) $(w : array<float>#) {
-        rmsnorm(o, x, w, size)
+        rmsnorm(o, x, w, size, t.config.norm_eps)
+    }
+}
+
+// Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
+// p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
+def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
+    for (i in range64(n)) {
+        y[yoff + i] += b[boff + i]
     }
 }
 
@@ -574,9 +605,14 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
         // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
         mm_qkv(s, t, l)
+        if (c.attn_qkv_bias) {  // Qwen2: + bias before RoPE
+            add_bias(s.q, 0l, t.bq, l * dim, dim)
+            add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
+            add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
+        }
         // RoPE on q (dim) and k (kv_dim)
-        rope_scaled(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs)
-        rope_scaled(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
+        rope_apply(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
+        rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
         // store k, v for this position into the KV cache
         let kvoff = loff + pos * kv_dim
         for (i in range64(kv_dim)) {
@@ -691,14 +727,21 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_b(s.q_b, t, t.wq_off + l * dim * dim, s.xb_b, s.xqb, s.xsb, dim, dim, npos)
         mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
         mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+        if (c.attn_qkv_bias) {  // Qwen2: + bias per position before RoPE
+            for (p in range64(npos)) {
+                add_bias(s.q_b, p * dim, t.bq, l * dim, dim)
+                add_bias(s.k_b, p * kv_dim, t.bk, l * kv_dim, kv_dim)
+                add_bias(s.v_b, p * kv_dim, t.bv, l * kv_dim, kv_dim)
+            }
+        }
         // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
         for (p in range64(npos)) {
             let ap = start_pos + p
             array_view(s.q_b, p * dim, dim) $(var qv : array<float>#) {
-                rope_scaled(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs)
+                rope_apply(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
             }
             array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
-                rope_scaled(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs)
+                rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
             }
             let kvoff = loff + ap * kv_dim
             for (i in range64(kv_dim)) {
