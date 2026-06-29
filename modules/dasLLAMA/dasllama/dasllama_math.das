@@ -452,7 +452,7 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
 //! NEOX-style RoPE (Qwen2 / Phi3 / Gemma2): the rotated pair is offset by head_size/2 — vec[base+j]
 //! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
 //! Same per-pair frequencies; only the pairing differs.
-def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #) {
+def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; mscale : float = 1.0) {
     let has_ff = !empty(freq_factors)
     let half = head_size / 2l
     for (h in range64(n / head_size)) {
@@ -463,8 +463,9 @@ def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; thet
                 freq /= freq_factors[j]
             }
             let angle = float(pos) * freq
-            let fcr = cos(angle)
-            let fci = sin(angle)
+            // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
+            let fcr = cos(angle) * mscale
+            let fci = sin(angle) * mscale
             let v0 = vec[base + j]
             let v1 = vec[base + j + half]
             vec[base + j] = v0 * fcr - v1 * fci
@@ -474,9 +475,10 @@ def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; thet
 }
 
 //! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
-def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool) {
+//! mscale is the LongRoPE magnitude factor (1.0 for everything but Phi3); only the NEOX path uses it.
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
     if (neox) {
-        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors)
+        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors, mscale)
     } else {
         rope_scaled(vec, pos, head_size, n, theta, freq_factors)
     }

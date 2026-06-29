@@ -46,6 +46,8 @@ struct Config {
     // per-architecture capability flags — defaults encode the Llama family; the loader overrides per arch
     attn_qkv_bias : bool = false       // Qwen2: additive bias on the Q/K/V projections
     rope_neox : bool = false           // NEOX rope (pairs offset by head_size/2): Qwen2 / Phi3 / Gemma2
+    rope_mscale : float = 1.0          // LongRoPE magnitude factor on cos/sin (Phi3 attn_factor)
+    fused_qkv : bool = false           // Phi3: attn_qkv + ffn_up (gate_up) stored fused, split at load
     ffn_act : FfnAct = FfnAct.silu     // SwiGLU (silu) vs GeGLU (gelu, Gemma2)
     embed_scale : float = 1.0          // token-embedding multiplier (Gemma2: sqrt(dim))
     norm_eps : float = 1.0e-5          // RMSNorm epsilon (Gemma2: 1e-6)
@@ -232,25 +234,25 @@ def load_checkpoint(path : string) : Transformer {
 // Read one big 2D weight tensor into the active representation: transcode straight from disk when
 // the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
 // and quantize into the shared blob. `woff` is the weight-element offset; `scratch` is reused.
-def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Transformer; woff, n : int64; var scratch : array<float>) {
+def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Transformer; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l) {
     if (t.quant == QuantMode.q8) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q8_0) {
-            gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n)
+            gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
         } else {
             scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n)
+            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
         }
     } elif (t.quant == QuantMode.q4) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q4_0) {
-            gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n)
+            gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n, src_off)
         } else {
             scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n)
+            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
         }
     } else {
-        gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n)
+        gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n, src_off)
     }
 }
 
@@ -263,8 +265,11 @@ def private configure_arch(var c : Config; arch : string) {
     } elif (arch == "qwen2") {
         c.attn_qkv_bias = true   // Qwen2 adds a learned bias on the Q/K/V projections
         c.rope_neox = true       // ...and uses NEOX-style rope
+    } elif (arch == "phi3") {
+        c.rope_neox = true       // Phi3: NEOX rope + LongRoPE (freq factors + mscale, read in the loader)
+        c.fused_qkv = true       // ...with fused attn_qkv + ffn_up (gate_up) tensors, split at load
     } else {
-        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2)")
+        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2, phi3)")
     }
 }
 
@@ -311,12 +316,19 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
         let epskey = "{arch}.attention.layer_norm_rms_epsilon"
         t.config.norm_eps = gguf_has(m, epskey) ? gguf_f32(m, bytes, epskey) : 1.0e-5
-        // Llama-3.1 ships precomputed per-pair RoPE scaling factors (NTK-by-parts) as a tensor
-        if (gguf_find_tensor(m, "rope_freqs.weight") >= 0) {
+        // Per-pair RoPE frequency factors: Llama-3.1 NTK-by-parts (rope_freqs.weight) or Phi3 LongRoPE
+        // short-context factors (rope_factors_short.weight). Both divide θ per pair (head_size/2 values).
+        let rf_name = (gguf_find_tensor(m, "rope_factors_short.weight") >= 0
+            ? "rope_factors_short.weight"
+            : (gguf_find_tensor(m, "rope_freqs.weight") >= 0 ? "rope_freqs.weight" : ""))
+        if (rf_name != "") {
             let nff = t.config.head_size / 2l
             t.rope_freqs |> resize(nff)
-            gguf_read_tensor_f32(m, bytes, "rope_freqs.weight", t.rope_freqs, 0l, nff)
+            gguf_read_tensor_f32(m, bytes, rf_name, t.rope_freqs, 0l, nff)
         }
+        // Phi3 LongRoPE magnitude factor (attn_factor) scales the rope output; absent (=1.0) elsewhere
+        let mskey = "{arch}.rope.scaling.attn_factor"
+        t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         let kv = t.config.kv_dim
@@ -346,13 +358,23 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
         // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
         var scratch : array<float>
         for (l in range64(layers)) {
-            load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch)
-            load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch)
-            load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch)
+            if (t.config.fused_qkv) {
+                // Phi3: attn_qkv rows are [q (dim) ; k (kv) ; v (kv)], ffn_up rows are [gate ; up] (hidden each).
+                // src_off slices the fused tensor, preserving its Q8 blocks (no fp32 requantize).
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch, 0l)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch, dim * dim)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch, dim * dim + dim * kv)
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch, 0l)
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch, dim * hidden)
+            } else {
+                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * dim, dim * dim, scratch)
+                load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch)
+                load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
+            }
             load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_off + l * dim * dim, dim * dim, scratch)
-            load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
             load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
-            load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch)
@@ -611,8 +633,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
             add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
         }
         // RoPE on q (dim) and k (kv_dim)
-        rope_apply(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
-        rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
+        rope_apply(s.q, pos, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+        rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
         // store k, v for this position into the KV cache
         let kvoff = loff + pos * kv_dim
         for (i in range64(kv_dim)) {
@@ -738,10 +760,10 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         for (p in range64(npos)) {
             let ap = start_pos + p
             array_view(s.q_b, p * dim, dim) $(var qv : array<float>#) {
-                rope_apply(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
+                rope_apply(qv, ap, head_size, dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
             }
             array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
-                rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox)
+                rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
             }
             let kvoff = loff + ap * kv_dim
             for (i in range64(kv_dim)) {

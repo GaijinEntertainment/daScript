@@ -352,27 +352,29 @@ def gguf_find_tensor(m : GGUFMeta; name : string) : int {
 //! Decode tensor `name` (F32 or F16 on disk) into dst[dst_off ..] as fp32. Panics if the
 //! tensor is missing, has a different element count than expected, or uses a type we don't
 //! yet read (quantized types are wired in a later step).
-def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64) {
+def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
     }
     let nelem = m.tensors[ti].n_elem
-    if (nelem != expect_n) {
-        panic("gguf: tensor '{name}' has {nelem} elems, expected {expect_n}")
+    // src_off (element offset into the tensor) reads a sub-range — used to split fused qkv / gate_up
+    // tensors (Phi3). For quantized types it must be 32-aligned so it lands on a block boundary.
+    if (src_off + expect_n > nelem) {
+        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {nelem} elems")
     }
     let gtype = m.tensors[ti].ggml_type
     let base = m.data_offset + m.tensors[ti].offset
     if (gtype == GGML_TYPE_F32) {
         unsafe {
-            let src = temp_array(reinterpret<float?>(addr(bytes[base])), expect_n, type<float>)
+            let src = temp_array(reinterpret<float?>(addr(bytes[base + src_off * 4l])), expect_n, type<float>)
             for (i in range64(expect_n)) {
                 dst[dst_off + i] = src[i]
             }
         }
     } elif (gtype == GGML_TYPE_F16) {
         unsafe {
-            let src = temp_array(reinterpret<uint16?>(addr(bytes[base])), expect_n, type<uint16>)
+            let src = temp_array(reinterpret<uint16?>(addr(bytes[base + src_off * 2l])), expect_n, type<uint16>)
             for (i in range64(expect_n)) {
                 dst[dst_off + i] = f16_to_f32(uint(src[i]))
             }
@@ -380,7 +382,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; 
     } elif (gtype == GGML_TYPE_Q8_0) {
         // block of 32: fp16 scale d (2 bytes) + 32 int8 quants; x[i] = q[i] * d
         let nb = expect_n / 32l
-        var bo = base
+        var bo = base + (src_off / 32l) * 34l
         for (blk in range64(nb)) {
             let d = f16_to_f32(rd_u16(bytes, bo))
             bo += 2l
@@ -394,7 +396,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; 
     } elif (gtype == GGML_TYPE_Q4_0) {
         // block of 32: fp16 scale d (2 bytes) + 16 bytes (split-half nibbles); x = (nibble - 8) * d
         let nb = expect_n / 32l
-        var bo = base
+        var bo = base + (src_off / 32l) * 18l
         for (blk in range64(nb)) {
             let d = f16_to_f32(rd_u16(bytes, bo))
             bo += 2l
@@ -421,7 +423,7 @@ def gguf_tensor_type(m : GGUFMeta; name : string) : int {
 //! copy verbatim to qdst[qoff..]; the per-block fp16 scale widens to fp32 in sdst[soff..]. Requires
 //! the tensor to be Q8_0 on disk (check gguf_tensor_type first). qoff is the weight-element offset,
 //! soff = qoff / 32. This is the memory-honest load of a pre-quantized GGUF.
-def gguf_transcode_q8_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64) {
+def gguf_transcode_q8_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -429,11 +431,13 @@ def gguf_transcode_q8_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; v
     if (m.tensors[ti].ggml_type != GGML_TYPE_Q8_0) {
         panic("gguf: tensor '{name}' is not Q8_0 (type {m.tensors[ti].ggml_type})")
     }
-    if (m.tensors[ti].n_elem != expect_n) {
-        panic("gguf: tensor '{name}' has {m.tensors[ti].n_elem} elems, expected {expect_n}")
+    // src_off (32-aligned element offset) transcodes a sub-range — preserves the original Q8 blocks
+    // when splitting a fused tensor (Phi3 attn_qkv / gate_up), so there's no lossy fp32 requantize
+    if (src_off + expect_n > m.tensors[ti].n_elem) {
+        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
     }
     let nb = expect_n / 32l
-    var bo = m.data_offset + m.tensors[ti].offset
+    var bo = m.data_offset + m.tensors[ti].offset + (src_off / 32l) * 34l
     for (blk in range64(nb)) {
         sdst[soff + blk] = f16_to_f32(rd_u16(bytes, bo))
         bo += 2l
@@ -449,7 +453,7 @@ def gguf_transcode_q8_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; v
 //! GGML's exact split-half nibble packing, so the 16 packed bytes per block copy verbatim to
 //! qdst[qoff_bytes..] (qoff_bytes = weight-element-offset / 2); the per-block fp16 scale widens to
 //! fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk (check gguf_tensor_type first).
-def gguf_transcode_q4_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64) {
+def gguf_transcode_q4_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -457,11 +461,11 @@ def gguf_transcode_q4_0(m : GGUFMeta; bytes : array<uint8> | #; name : string; v
     if (m.tensors[ti].ggml_type != GGML_TYPE_Q4_0) {
         panic("gguf: tensor '{name}' is not Q4_0 (type {m.tensors[ti].ggml_type})")
     }
-    if (m.tensors[ti].n_elem != expect_n) {
-        panic("gguf: tensor '{name}' has {m.tensors[ti].n_elem} elems, expected {expect_n}")
+    if (src_off + expect_n > m.tensors[ti].n_elem) {
+        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
     }
     let nb = expect_n / 32l
-    var bo = m.data_offset + m.tensors[ti].offset
+    var bo = m.data_offset + m.tensors[ti].offset + (src_off / 32l) * 18l
     for (blk in range64(nb)) {
         sdst[soff + blk] = f16_to_f32(rd_u16(bytes, bo))
         bo += 2l
