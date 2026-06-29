@@ -103,6 +103,16 @@ namespace das {
         mkl->dispatch(vis);
     }
 
+    // escape analysis stack-allocates a non-escaping `new` pointee into the frame (allocate_on_stack).
+    // That pointee is the variable's backing storage and must live to scope exit, so the scoped
+    // allocator must NOT reclaim it together with the initializer's temporaries.
+    static bool initAllocatesOnStack ( Expression * init ) {
+        if ( !init ) return false;
+        if ( init->rtti_isAscend() ) return static_cast<ExprAscend *>(init)->allocate_on_stack;
+        if ( init->rtti_isNewExpr() ) return static_cast<ExprNew *>(init)->allocate_on_stack;
+        return false;
+    }
+
     class VarCMRes : public Visitor {
     public:
         VarCMRes( const ProgramPtr & prog, bool everything ) {
@@ -703,12 +713,16 @@ namespace das {
                 }
             }
             if (!var->type->ref && var->type->baseType != Type::tBlock) {
+                // a stack-allocated pointee is the variable's storage, not a temporary - keep it past
+                // the init's stack-reuse scope so a later local does not clobber the live pointee
+                if ( initAllocatesOnStack(var->init) ) doNotOptimize++;
                 pushSp(); // Free everything allocated to init let (not let itself)
             }
         }
         virtual VariablePtr visitLet ( ExprLet * /*expr*/, const VariablePtr & var, bool /*last*/ ) override {
             if (!inStruct && !var->type->ref && var->type->baseType != Type::tBlock) {
                 popSp();
+                if ( initAllocatesOnStack(var->init) ) doNotOptimize--;
             }
             return var;
         }
