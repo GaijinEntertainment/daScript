@@ -39,6 +39,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_struct_decl_order.das | AOT required-module struct topo-sort (#3212) — by-value field of a later-declared struct | |
 | _aot_so_mod.das | *(helper)* #3212 fixture module — Outer holds Inner by value, declared Outer-first | |
 | t_invoke_void.das | AOT `invoke` dispatch — void-returning function pointer via AOT path | |
+| test_variant_alias_aot.das | AOT variant-alias codegen (#3269) — delete of handled variant alias, builtin push of a variant element | |
 
 ## apply/
 

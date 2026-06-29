@@ -3756,7 +3756,8 @@ class public CppAot : AstVisitor {
         write(*ss, "{get_aot_arg_prefix(call.func, call, argIndex)}");
         assume argType = call.arguments[argIndex]._type;
         assume funArgType = call.func.arguments[argIndex]._type;
-        if (funArgType.isAotAlias) {
+        // alias wrap (structural -> alias spelling) is only correct for builtIn callees; emitter-generated callees spell params structurally
+        if (call.func.flags.builtIn && funArgType.isAotAlias) {
             if (funArgType.alias |> empty()) {
                 let fun_t_str = describeCppTypeEx(funArgType, DescribeConfig(skip_ref = true, redundant_const = true, cross_platform = cross_platform), CpptUseAlias.yes);
                 write(*ss, "das_reinterpret<{fun_t_str}>::pass(");
@@ -3817,7 +3818,7 @@ class public CppAot : AstVisitor {
         if (!call.func.flags.noPointerCast && needPtrCast(funArgType, arg._type, arg)) {
             write(*ss, ")");
         }
-        if (funArgType.isAotAlias) write(*ss, ")");
+        if (call.func.flags.builtIn && funArgType.isAotAlias) write(*ss, ")");
         write(*ss, "{get_aot_arg_suffix(call.func, call, argIndex)}");
         if (!last) {
             write(*ss, ",");
