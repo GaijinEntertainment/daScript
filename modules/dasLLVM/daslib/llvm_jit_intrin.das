@@ -862,7 +862,18 @@ def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
     var c = arguments[2]
     let bt = expr._type.baseType
     if (bt == Type.tFloat || bt == Type.tDouble || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) {
-        var a_mul_b = LLVMBuildFMul(ctx.builder, a, b, "")
+        // fused multiply-add: a*b+c as @llvm.fmuladd (the backend fuses to one fmla; mad is a MAC).
+        // Falls back to the plain fmul+fadd whenever the intrinsic isn't resolvable on this LLVM.
+        let lt = type_to_llvm_abi_type(expr._type)
+        let id = LLVMLookupIntrinsicID(build_op_name("fmuladd", expr._type))
+        var fatys <- [ lt]
+        var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, fatys) : null
+        if (decl != null) {
+            var fargs <- [ a, b, c]
+            var ftyp = LLVMFunctionType(lt, [ lt, lt, lt])
+            return LLVMBuildCall2(ctx.builder, ftyp, decl, fargs, "mad")
+        }
+        var a_mul_b = LLVMBuildFMul(ctx.builder, a, b, "")   // fallback: fmuladd unavailable
         return LLVMBuildFAdd(ctx.builder, a_mul_b, c, "mad")
     } else {
         var a_mul_b = LLVMBuildMul(ctx.builder, a, b, "")

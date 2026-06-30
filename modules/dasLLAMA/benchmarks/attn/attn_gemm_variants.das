@@ -3,6 +3,7 @@ options gen2
 module attn_gemm_variants shared public
 
 require daslib/jobque_boost
+require math   // mad (fused multiply-add) in the tiled kernel
 
 // fp32 micro-GEMM for flash attention: C[M x N] += A[M x K] * B[K x N], all row-major, with B's
 // N as the contiguous (SIMD) dimension. This is the form that makes QKᵀ and P·V fast — a
@@ -63,13 +64,13 @@ def private uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, N : int64
             let b0 = *reinterpret<float4 const?>(bp + bo);      let b1 = *reinterpret<float4 const?>(bp + bo + 4l)
             let b2 = *reinterpret<float4 const?>(bp + bo + 8l); let b3 = *reinterpret<float4 const?>(bp + bo + 12l)
             let a0 = ap[(i0 + 0l) * K + kk]; let v0 = float4(a0, a0, a0, a0)
-            r0a += b0 * v0; r0b += b1 * v0; r0c += b2 * v0; r0d += b3 * v0
+            r0a = mad(b0, v0, r0a); r0b = mad(b1, v0, r0b); r0c = mad(b2, v0, r0c); r0d = mad(b3, v0, r0d)
             let a1 = ap[(i0 + 1l) * K + kk]; let v1 = float4(a1, a1, a1, a1)
-            r1a += b0 * v1; r1b += b1 * v1; r1c += b2 * v1; r1d += b3 * v1
+            r1a = mad(b0, v1, r1a); r1b = mad(b1, v1, r1b); r1c = mad(b2, v1, r1c); r1d = mad(b3, v1, r1d)
             let a2 = ap[(i0 + 2l) * K + kk]; let v2 = float4(a2, a2, a2, a2)
-            r2a += b0 * v2; r2b += b1 * v2; r2c += b2 * v2; r2d += b3 * v2
+            r2a = mad(b0, v2, r2a); r2b = mad(b1, v2, r2b); r2c = mad(b2, v2, r2c); r2d = mad(b3, v2, r2d)
             let a3 = ap[(i0 + 3l) * K + kk]; let v3 = float4(a3, a3, a3, a3)
-            r3a += b0 * v3; r3b += b1 * v3; r3c += b2 * v3; r3d += b3 * v3
+            r3a = mad(b0, v3, r3a); r3b = mad(b1, v3, r3b); r3c = mad(b2, v3, r3c); r3d = mad(b3, v3, r3d)
         }
         *reinterpret<float4?>(cp + o0) = r0a;       *reinterpret<float4?>(cp + o0 + 4l) = r0b
         *reinterpret<float4?>(cp + o0 + 8l) = r0c;  *reinterpret<float4?>(cp + o0 + 12l) = r0d
