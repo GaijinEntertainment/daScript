@@ -39,7 +39,7 @@ enum FfnAct {
 //! key-order V accumulation). `flash` is tiled flash attention — QKᵀ and P·V as register-tiled fp32
 //! GEMMs (gemm_f32) with online softmax, the form that avoids the per-pair horizontal reduce; NOT
 //! bit-identical (online-softmax FP reorder), validated token-for-token vs the oracle + logit-diff.
-//! Select via set_prefill_attn_mode (default classic).
+//! Select via set_prefill_attn_mode (default flash).
 enum AttnPrefillMode {
     classic
     blocked
@@ -906,9 +906,9 @@ let ATTN_BLOCK_Q = 8l
 let ATTN_FLASH_QT = 64l
 let ATTN_FLASH_KV = 64l
 
-var g_attn_prefill_mode = AttnPrefillMode.classic   // A/B toggle; see AttnPrefillMode
+var g_attn_prefill_mode = AttnPrefillMode.flash   // A/B toggle; see AttnPrefillMode (flash is fastest)
 
-//! Select the prefill attention algorithm (default classic). See AttnPrefillMode.
+//! Select the prefill attention algorithm (default flash). See AttnPrefillMode.
 def set_prefill_attn_mode(m : AttnPrefillMode) {
     g_attn_prefill_mode = m
 }
