@@ -739,7 +739,7 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
 // with the vectorized copy_floats (bounds-checked array copy doesn't vectorize), threaded over the
 // positions (each worker owns a disjoint cache slice). Self-gates on KV_STORE_PAR_THRESHOLD.
 def private kv_store_batch(var key_cache : array<float>; var value_cache : array<float>;
-                          k_b : array<float>; v_b : array<float>; loff, start_pos, npos, kv_dim : int64) {
+                           k_b : array<float>; v_b : array<float>; loff, start_pos, npos, kv_dim : int64) {
     let dstbase = loff + start_pos * kv_dim
     unsafe {
         var kcp = addr(key_cache[0])
