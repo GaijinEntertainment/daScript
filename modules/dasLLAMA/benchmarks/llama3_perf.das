@@ -1,4 +1,5 @@
 options gen2
+options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
 require dasllama/dasllama_transformer
 require daslib/jobque_boost
