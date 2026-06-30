@@ -152,7 +152,7 @@ def private gemm_f32_uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, 
         var r2c = *reinterpret<float4?>(cp + o2 + 8l);  var r2d = *reinterpret<float4?>(cp + o2 + 12l)
         var r3a = *reinterpret<float4?>(cp + o3);       var r3b = *reinterpret<float4?>(cp + o3 + 4l)
         var r3c = *reinterpret<float4?>(cp + o3 + 8l);  var r3d = *reinterpret<float4?>(cp + o3 + 12l)
-        for (kk in range64(K)) {
+        for [unroll_count = 2] (kk in range64(K)) {     // ~3% over the rolled loop; same accumulation order
             let bo = kk * N + j0
             let b0 = *reinterpret<float4 const?>(bp + bo);      let b1 = *reinterpret<float4 const?>(bp + bo + 4l)
             let b2 = *reinterpret<float4 const?>(bp + bo + 8l); let b3 = *reinterpret<float4 const?>(bp + bo + 12l)

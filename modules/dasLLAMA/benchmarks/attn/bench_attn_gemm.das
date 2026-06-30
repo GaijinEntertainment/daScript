@@ -55,6 +55,30 @@ def time_tiled(var c : array<float>; a, b : array<float>; M, K, N : int64; reps 
     }
 }
 
+def time_nofma(var c : array<float>; a, b : array<float>; M, K, N : int64; reps : int) : float {
+    for (i in range64(M * N)) { c[i] = 0.0 }
+    unsafe {
+        gemm_tiled_nofma(addr(c[0]), addr(a[0]), addr(b[0]), M, K, N)
+        let t0 = ref_time_ticks()
+        for (_r in range(reps)) {
+            gemm_tiled_nofma(addr(c[0]), addr(a[0]), addr(b[0]), M, K, N)
+        }
+        return float(double(M * K * N) * double(reps) / double(ref_time_ticks() - t0))
+    }
+}
+
+def time_u2(var c : array<float>; a, b : array<float>; M, K, N : int64; reps : int) : float {
+    for (i in range64(M * N)) { c[i] = 0.0 }
+    unsafe {
+        gemm_tiled_u2(addr(c[0]), addr(a[0]), addr(b[0]), M, K, N)
+        let t0 = ref_time_ticks()
+        for (_r in range(reps)) {
+            gemm_tiled_u2(addr(c[0]), addr(a[0]), addr(b[0]), M, K, N)
+        }
+        return float(double(M * K * N) * double(reps) / double(ref_time_ticks() - t0))
+    }
+}
+
 def bench_shape(name : string; M, K, N : int64; reps : int) {
     var a : array<float>
     var b : array<float>
@@ -70,11 +94,13 @@ def bench_shape(name : string; M, K, N : int64; reps : int) {
         gemm_ref(addr(cref[0]), addr(a[0]), addr(b[0]), M, K, N)
         gemm_tiled(addr(ctil[0]), addr(a[0]), addr(b[0]), M, K, N)
     }
-    let mad = max_abs_diff(cref, ctil, M * N)
-    verify(mad < 1.0e-3)
+    let md = max_abs_diff(cref, ctil, M * N)
+    verify(md < 1.0e-3)
     let gref = time_ref(cref, a, b, M, K, N, reps)
+    let gnof = time_nofma(ctil, a, b, M, K, N, reps)
     let gtil = time_tiled(ctil, a, b, M, K, N, reps)
-    to_log(LOG_INFO, "{name} M={M} K={K} N={N}  max|tiled-ref|={mad}  ref {gref} GMAC/s  tiled {gtil} GMAC/s  {gtil / gref}x\n")
+    let gu2 = time_u2(ctil, a, b, M, K, N, reps)
+    to_log(LOG_INFO, "{name} M={M} K={K} N={N}  ref {gref}  nofma {gnof}  mad {gtil}  mad+u2 {gu2} GMAC/s  | mad/nofma {gtil / gnof}x  u2/mad {gu2 / gtil}x\n")
     delete a; delete b; delete cref; delete ctil
 }
 
