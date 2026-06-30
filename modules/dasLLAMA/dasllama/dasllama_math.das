@@ -19,7 +19,7 @@ require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel 
 def dot(a, b : float const?; n : int64) : float {
     var acc = 0.0
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-        acc += unsafe(a[j]) * unsafe(b[j])
+        acc = mad(unsafe(a[j]), unsafe(b[j]), acc)   // fused multiply-add (vectorizes to fmla)
     }
     return acc
 }
@@ -29,7 +29,7 @@ def dot(a, b : float const?; n : int64) : float {
 def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
         unsafe {
-            d[j] += scale * s[j]
+            d[j] = mad(scale, s[j], d[j])
         }
     }
 }
@@ -43,7 +43,7 @@ def vaxpy(d : float const?; s : float const?; scale : float; n : int64) {
     unsafe {
         var dm = reinterpret<float?>(d)
         for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-            dm[j] += scale * s[j]
+            dm[j] = mad(scale, s[j], dm[j])
         }
     }
 }
