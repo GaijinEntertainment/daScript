@@ -649,6 +649,7 @@ def softmax(var x : float?; size : int64) {
     }
 }
 def softmax(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
     softmax(unsafe(addr(x[0])), size)
 }
 
@@ -690,6 +691,7 @@ def silu(var x : float?; size : int64) {
     }
 }
 def silu(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
     silu(unsafe(addr(x[0])), size)
 }
 
@@ -708,6 +710,7 @@ def gelu(var x : float?; size : int64) {
     }
 }
 def gelu(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
     gelu(unsafe(addr(x[0])), size)
 }
 

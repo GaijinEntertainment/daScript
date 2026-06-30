@@ -23,4 +23,16 @@ def test_silu(t : T?) {
         t |> success(abs(x[0] - 20.0) < 1e-4)
         t |> success(abs(x[1]) < 1e-4)
     }
+    // Regression: the array overload forwards via addr(x[0]), which index-faults on an empty
+    // array. size <= 0 must be a safe no-op (both silu and gelu).
+    t |> run("empty / zero size is a no-op") @(t : T?) {
+        var e : array<float>
+        silu(e, 0l)
+        gelu(e, 0l)
+        var x <- [1.0, 2.0, 3.0]
+        silu(x, 0l)
+        gelu(x, 0l)
+        t |> success(abs(x[0] - 1.0) < 1e-6)   // untouched by the zero-count calls
+        t |> success(true)                      // reached here ⇒ no index-fault
+    }
 }
