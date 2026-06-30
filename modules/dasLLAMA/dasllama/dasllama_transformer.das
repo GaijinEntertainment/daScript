@@ -1258,7 +1258,7 @@ def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size
                                     let ap = start_pos + p
                                     let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
                                     let qbase = p * qd + qoff
-                                    vaxpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
+                                    axpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
                                 }
                             }
                             p0 += ATTN_BLOCK_Q
@@ -1292,7 +1292,7 @@ def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size
                             }
                             for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
                                 let voff = loff + (kstart + j) * kv_dim + kvhoff
-                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                                axpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
                             }
                         }
                     }

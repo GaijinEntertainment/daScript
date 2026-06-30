@@ -24,24 +24,14 @@ def dot(a, b : float const?; n : int64) : float {
     return acc
 }
 
-//! AXPY: d[j] += scale * s[j] over n elements, same auto-vectorization.
+//! AXPY: d[j] += scale * s[j] over n elements, auto-vectorized. Used single-threaded AND as the
+//! V-accumulate in threaded prefill attention — `d` (output) and `s` (value-cache) never overlap, so
+//! the noalias holds inside fork workers too (a hoisted/captured `var d : float?` writes straight
+//! through: capture freezes the binding, not the pointee, and `d + off` stays a mutable `float?`).
 [hint(unsafe_range_check, noalias = d, noalias = s)]
 def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
         unsafe {
-            d[j] = mad(scale, s[j], d[j])
-        }
-    }
-}
-
-//! Fork-callable AXPY for the threaded prefill attention. Same width-8 kernel as axpy; the output `d`
-//! is a plain `var float?`, so a hoisted/captured fork pointer writes through it directly — capture
-//! freezes the binding, not the pointee, and `d + off` stays a mutable `float?`. No `noalias` hint:
-//! output and the value-cache source never overlap, so the vectorizer's runtime alias check is free.
-[hint(unsafe_range_check)]
-def vaxpy(var d : float?; s : float const?; scale : float; n : int64) {
-    unsafe {
-        for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
             d[j] = mad(scale, s[j], d[j])
         }
     }
@@ -593,6 +583,8 @@ def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #
 //! Qwen2 / Gemma2 pass 1e-6 from the model's metadata.
 //! Pointer core — the batched prefill norm threads over positions in fork contexts (raw addresses
 //! only). `o`/`x` may alias (in-place post-norms): the sum over x completes before any write to o.
+// noalias only on `weight` — `o` and `x` alias in-place for the Gemma2 post-norms (rms_at(buf,…,buf)).
+[hint(noalias = weight)]
 def rmsnorm(var o : float?; x : float const?; weight : float const?; size : int64; eps : float = 1.0e-5) {
     unsafe {
         var ss = 0.0
@@ -711,6 +703,7 @@ def rope(var vec : array<float> | #; pos, head_size, n : int64) {
 //! freq_factors[j] divides the j-th pair's frequency, matching ggml (theta/ff).
 //! Pointer core (see softmax) — the threaded prefill ropes q_b/k_b in fork contexts on raw addresses.
 //! `has_ff` gates the `ff` freq-factors pointer (empty() can't test a pointer); pass null when false.
+[hint(noalias = v, noalias = ff)]
 def rope_scaled(var v : float?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?) {
     unsafe {
         for (p in range64(n / 2l)) {
@@ -742,6 +735,7 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
 //! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
 //! Same per-pair frequencies; only the pairing differs.
 //! Pointer core (see rope_scaled) — fork-callable NEOX rope on a raw address.
+[hint(noalias = v, noalias = ff)]
 def rope_scaled_neox(var v : float?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; mscale : float = 1.0) {
     unsafe {
         let half = head_size / 2l
@@ -780,6 +774,7 @@ def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; thet
 //! than over a flat p with j = p % half: the per-pair integer modulo dominated the rotation (it's all
 //! cheap arithmetic) — dropping it is ~2.3x on the kernel. (NEON [vectorize] does NOT help: the
 //! interleaved stride-2 in-place rotation is bandwidth-bound, measured slightly slower vectorized.)
+[hint(noalias = v, noalias = cosrow, noalias = sinrow)]
 def rope_scaled_tab(var v : float?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
     unsafe {
         let half = head_size / 2l
@@ -804,6 +799,7 @@ def rope_scaled_tab(var v : float?; head_size, n : int64; cosrow : float const?;
 //! the inner loop vectorizes width-8 natively (~5-10% over scalar) — measured Δ=0, i.e. plain mul/sub
 //! under [vectorize] does NOT contract to fma, so it stays bit-exact (no `mad`). The NORM leaf above
 //! can't do this: its interleaved (2j, 2j+1) layout is stride-2 and the JIT won't emit vld2/vst2 for it.
+[hint(noalias = v, noalias = cosrow, noalias = sinrow)]
 def rope_scaled_neox_tab(var v : float?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
     unsafe {
         let half = head_size / 2l

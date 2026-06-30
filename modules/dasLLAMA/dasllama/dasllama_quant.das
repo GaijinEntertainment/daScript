@@ -59,6 +59,7 @@ def quantize_q8_0_into(src : array<float> | #; n : int64; var qdst : array<int8>
 //! contexts, which can only touch raw addresses. The destinations are `var int8?` / `var float?`,
 //! written directly (a hoisted/captured fork pointer binds straight through). Bit-identical to the
 //! array overload, which forwards here.
+[hint(noalias = src, noalias = qdst, noalias = sdst)]
 def quantize_q8_0_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; qoff, soff : int64) {
     let nblocks = n / QK8
     unsafe {
