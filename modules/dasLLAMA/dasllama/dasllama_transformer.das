@@ -32,6 +32,20 @@ enum FfnAct {
     gelu
 }
 
+//! Prefill attention algorithm (A/B selectable; all variants kept). `classic` streams the full causal
+//! K/V range from the cache per query — threaded over heads, O(npos²) with K/V re-read every query.
+//! `blocked` query-blocks so each K/V tile is loaded once and reused across the whole block, cutting
+//! K/V cache traffic ~ATTN_BLOCK_Q×; it is BIT-IDENTICAL to classic (same per-query softmax + same
+//! key-order V accumulation). `flash` is tiled flash attention — QKᵀ and P·V as register-tiled fp32
+//! GEMMs (gemm_f32) with online softmax, the form that avoids the per-pair horizontal reduce; NOT
+//! bit-identical (online-softmax FP reorder), validated token-for-token vs the oracle + logit-diff.
+//! Select via set_prefill_attn_mode (default classic).
+enum AttnPrefillMode {
+    classic
+    blocked
+    flash
+}
+
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
     dim : int64
@@ -536,6 +550,13 @@ struct RunState {
     hb2_b : array<float>      // FFN gate (npos x hidden_dim)
     xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
     xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
+    // flash-attention per-head packing scratch (empty unless AttnPrefillMode.flash; sized in
+    // forward_prefill to n_heads × tile, so each head's tile work is contention-free when threaded)
+    fa_q : array<float>       // packed Q tile [n_heads × QT × head_size]
+    fa_k : array<float>       // packed Kᵀ tile [n_heads × head_size × KV]
+    fa_v : array<float>       // packed V tile  [n_heads × KV × head_size]
+    fa_kq : array<float>      // score / prob tile [n_heads × QT × KV]
+    fa_vkq : array<float>     // output accumulator [n_heads × QT × head_size]
 }
 
 //! Allocate the run state sized to a model.
@@ -878,6 +899,24 @@ let REQUANT_PAR_THRESHOLD = 256_000l
 let NORM_PAR_THRESHOLD = 256_000l
 // Thread the per-position rope (q_b + k_b) once (qd + kv_dim) × npos clears this.
 let ROPE_PAR_THRESHOLD = 100_000l
+// Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).
+let ATTN_BLOCK_Q = 8l
+// Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
+// per-query running max/sum use fixed arrays sized ATTN_FLASH_QT — keep that a literal 64 in sync.
+let ATTN_FLASH_QT = 64l
+let ATTN_FLASH_KV = 64l
+
+var g_attn_prefill_mode = AttnPrefillMode.classic   // A/B toggle; see AttnPrefillMode
+
+//! Select the prefill attention algorithm (default classic). See AttnPrefillMode.
+def set_prefill_attn_mode(m : AttnPrefillMode) {
+    g_attn_prefill_mode = m
+}
+
+//! The prefill attention algorithm currently selected.
+def get_prefill_attn_mode() : AttnPrefillMode {
+    return g_attn_prefill_mode
+}
 
 var g_prefill_prof_acc : table<string; int64>
 
@@ -902,6 +941,256 @@ def prefill_profile_report() {
         to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%)\n")
     }
     to_log(LOG_INFO, "  TOTAL: {total}\n")
+}
+
+// Prefill attention, threaded over heads (perfect load balance: every head walks the same causal
+// triangle into a disjoint qd-strided output slice; no shared scratch). Dispatches on g_attn_prefill_mode.
+// Workers run in fork contexts → raw pointers only; scalars are passed by value (never the struct).
+//   classic — per query, stream cached K[kstart..ap] then V[kstart..ap] (O(npos²), K/V re-read per query).
+//   blocked — query-block of ATTN_BLOCK_Q: load each K[kk]/V[kk] ONCE, reuse across the block's queries.
+//     Bit-identical to classic: same per-query score row + softmax, and the V accumulation visits keys in
+//     increasing order (== increasing j), so the per-output FMA order matches classic exactly.
+// One head of tiled flash attention (online softmax). Q/K/V tiles are packed into this head's
+// private scratch, QKᵀ and P·V run through the register-tiled gemm_f32 (no per-pair reduce), and a
+// per-query running max/sum (mrun/srun) folds each KV tile in. All pointers are pre-offset to this
+// head; qpk/kpk/vpk/kqp/vkqp are this head's scratch bases. NOT bit-exact vs classic (online reorder).
+def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
+                            var qpk, kpk, vpk, kqp, vkqp : float?;
+                            loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff : int64;
+                            scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+    let QT = ATTN_FLASH_QT
+    let KV = ATTN_FLASH_KV
+    unsafe {
+        var p0 = 0l
+        while (p0 < npos) {
+            let tile_rows = min(QT, npos - p0)
+            let ap0 = start_pos + p0
+            let apL = ap0 + tile_rows - 1l                 // max query position in this tile
+            let kstart_min = (is_sliding && ap0 + 1l > sliding_window) ? (ap0 + 1l - sliding_window) : 0l
+            // pack the Q tile contiguous [tile_rows × head_size] (q rows are qd-strided in q_b)
+            for (qt in range64(tile_rows)) {
+                let qsrc = (p0 + qt) * qd + qoff
+                for (d in range64(head_size)) {
+                    qpk[qt * head_size + d] = qp[qsrc + d]
+                }
+            }
+            var mrun : float[64]   // must equal ATTN_FLASH_QT (fixed-array dim needs an int32 literal)
+            var srun : float[64]
+            for (qt in range64(tile_rows)) {
+                mrun[int(qt)] = -1.0e30
+                srun[int(qt)] = 0.0
+                for (d in range64(head_size)) {
+                    vkqp[qt * head_size + d] = 0.0
+                }
+            }
+            var kt0 = kstart_min
+            while (kt0 <= apL) {
+                let kvalid = min(KV, apL + 1l - kt0)
+                // pack Kᵀ tile [head_size × KV] and V tile [KV × head_size], zero-padding the tail
+                for (kt in range64(KV)) {
+                    if (kt < kvalid) {
+                        let ksrc = loff + (kt0 + kt) * kv_dim + kvhoff
+                        for (d in range64(head_size)) {
+                            kpk[d * KV + kt] = kcp[ksrc + d]
+                            vpk[kt * head_size + d] = vcp[ksrc + d]
+                        }
+                    } else {
+                        for (d in range64(head_size)) {
+                            kpk[d * KV + kt] = 0.0
+                            vpk[kt * head_size + d] = 0.0
+                        }
+                    }
+                }
+                // scores: kq[tile_rows × KV] = Q · Kᵀ  (gemm_f32 accumulates, so zero first)
+                for (i in range64(tile_rows * KV)) {
+                    kqp[i] = 0.0
+                }
+                gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
+                // scale + softcap + causal/sliding mask, then online-softmax fold per query row
+                for (qt in range64(tile_rows)) {
+                    let ap = ap0 + qt
+                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                    let row = qt * KV
+                    var tmax = -1.0e30
+                    for (kt in range64(KV)) {
+                        let kabs = kt0 + kt
+                        if (kt < kvalid && kabs <= ap && kabs >= kstart_p) {
+                            var sc = kqp[row + kt] * scale
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                sc = attn_softcap * tanh(sc / attn_softcap)
+                            }
+                            kqp[row + kt] = sc
+                            tmax = max(tmax, sc)
+                        } else {
+                            kqp[row + kt] = -1.0e30   // masked → exp() to 0 below
+                        }
+                    }
+                    let mold = mrun[int(qt)]
+                    let mnew = max(mold, tmax)
+                    if (mnew > mold) {                 // new running max → rescale this row's accumulator
+                        let ms = exp(mold - mnew)
+                        for (d in range64(head_size)) {
+                            vkqp[qt * head_size + d] *= ms
+                        }
+                        srun[int(qt)] *= ms
+                    }
+                    mrun[int(qt)] = mnew
+                    for (kt in range64(KV)) {          // kq row becomes the (un-normalized) prob row
+                        let pe = kqp[row + kt] <= -1.0e29 ? 0.0 : exp(kqp[row + kt] - mnew)
+                        kqp[row + kt] = pe
+                        srun[int(qt)] += pe
+                    }
+                }
+                // accumulate output: vkq[tile_rows × head_size] += P[tile_rows × KV] · V[KV × head_size]
+                gemm_f32(vkqp, kqp, vpk, tile_rows, KV, head_size)
+                kt0 += KV
+            }
+            // normalize by the running sum and write the qd-strided output slice
+            for (qt in range64(tile_rows)) {
+                let inv = srun[int(qt)] > 0.0 ? 1.0 / srun[int(qt)] : 0.0
+                let dst = (p0 + qt) * qd + qoff
+                for (d in range64(head_size)) {
+                    xbp[dst + d] = vkqp[qt * head_size + d] * inv
+                }
+            }
+            p0 += QT
+        }
+    }
+}
+
+def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size, qd, kv_dim,
+                              n_heads, kv_mul : int64; scale : float;
+                              is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+    let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
+    let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
+    unsafe {
+        let qp = reinterpret<float const?>(addr(s.q_b[0]))
+        let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
+        let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
+        var xbp = addr(s.xb_b[0])
+        var attp = addr(s.att_b[0])
+        if (g_attn_prefill_mode == AttnPrefillMode.flash) {
+            // per-head packing scratch bases (sized in forward_prefill for this mode)
+            var qpk0 = addr(s.fa_q[0]);  var kpk0 = addr(s.fa_k[0]);  var vpk0 = addr(s.fa_v[0])
+            var kqp0 = addr(s.fa_kq[0]); var vkqp0 = addr(s.fa_vkq[0])
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        attn_head_flash(qp, kcp, vcp, xbp,
+                            qpk0 + hh * ATTN_FLASH_QT * head_size,
+                            kpk0 + hh * head_size * ATTN_FLASH_KV,
+                            vpk0 + hh * ATTN_FLASH_KV * head_size,
+                            kqp0 + hh * ATTN_FLASH_QT * ATTN_FLASH_KV,
+                            vkqp0 + hh * ATTN_FLASH_QT * head_size,
+                            loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff,
+                            scale, is_sliding, sliding_window, attn_softcap)
+                    }
+                }
+            }
+        } elif (g_attn_prefill_mode == AttnPrefillMode.blocked) {
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let hblock = hh * ATTN_BLOCK_Q * maxctx   // this head's ATTN_BLOCK_Q score rows
+                        var p0 = 0l
+                        while (p0 < npos) {
+                            let bq = min(ATTN_BLOCK_Q, npos - p0)
+                            let ap_first = start_pos + p0
+                            let ap_last = ap_first + bq - 1l
+                            let kstart_block = (is_sliding && ap_first + 1l > sliding_window) ? (ap_first + 1l - sliding_window) : 0l
+                            // PASS 1: scores — each K[kk] loaded once, reused across the block's queries
+                            for (kk in range64(kstart_block, ap_last + 1l)) {
+                                let koff = loff + kk * kv_dim + kvhoff
+                                let bi_lo = max(0l, kk - ap_first)            // causal: keep queries with ap >= kk
+                                var bi_hi = bq
+                                if (is_sliding) {                            // window: keep queries with kstart_p <= kk
+                                    bi_hi = min(bq, kk + sliding_window - ap_first)
+                                }
+                                for (bi in range64(bi_lo, bi_hi)) {
+                                    let p = p0 + bi
+                                    let ap = start_pos + p
+                                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                    let qbase = p * qd + qoff
+                                    attp[hblock + bi * maxctx + (kk - kstart_p)] = dot(qp + qbase, kcp + koff, head_size) * scale
+                                }
+                            }
+                            // softcap + softmax per query, then zero its output slice
+                            for (bi in range64(bq)) {
+                                let p = p0 + bi
+                                let ap = start_pos + p
+                                let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                let cnt = ap + 1l - kstart_p
+                                let rbase = hblock + bi * maxctx
+                                if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                    softcap(attp + rbase, cnt, attn_softcap)
+                                }
+                                softmax(attp + rbase, cnt)
+                                let qbase = p * qd + qoff
+                                for (i in range64(head_size)) {
+                                    xbp[qbase + i] = 0.0
+                                }
+                            }
+                            // PASS 2: output += Σ att[j]·V[j] — each V[kk] loaded once, reused across the block
+                            for (kk in range64(kstart_block, ap_last + 1l)) {
+                                let voff = loff + kk * kv_dim + kvhoff
+                                let bi_lo = max(0l, kk - ap_first)
+                                var bi_hi = bq
+                                if (is_sliding) {
+                                    bi_hi = min(bq, kk + sliding_window - ap_first)
+                                }
+                                for (bi in range64(bi_lo, bi_hi)) {
+                                    let p = p0 + bi
+                                    let ap = start_pos + p
+                                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                    let qbase = p * qd + qoff
+                                    vaxpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
+                                }
+                            }
+                            p0 += ATTN_BLOCK_Q
+                        }
+                    }
+                }
+            }
+        } else {
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let abase = hh * maxctx                // this head's private score row
+                        for (p in range64(npos)) {
+                            let ap = start_pos + p
+                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                            let cnt = ap + 1l - kstart
+                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
+                            for (j in range64(cnt)) {
+                                let koff = loff + (kstart + j) * kv_dim + kvhoff
+                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
+                            }
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                softcap(attp + abase, cnt, attn_softcap)
+                            }
+                            softmax(attp + abase, cnt)
+                            for (i in range64(head_size)) {
+                                xbp[qbase + i] = 0.0
+                            }
+                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
+                                let voff = loff + (kstart + j) * kv_dim + kvhoff
+                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 //! Prefill: process all `npos` prompt tokens (positions 0..npos-1) in ONE pass per layer — batched
@@ -939,9 +1228,17 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     s.hb2_b |> resize(npos * hidden)
     s.xqb |> resize(npos * maxn)
     s.xsb |> resize(npos * maxn / 32l)
-    // per-head attention scratch: each head gets its own (start_pos+npos)-wide score row (= max cnt),
-    // so the head loop threads with no shared `att` row to contend on
-    s.att_b |> resize(n_heads * (start_pos + npos))
+    // per-head attention scratch. classic uses one (start_pos+npos)-wide score row per head; blocked
+    // needs ATTN_BLOCK_Q such rows per head (one per query in the block). Size for blocked — classic
+    // indexes the first row of each head's block, so the wider allocation is a harmless superset.
+    s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+    if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see RunState)
+        s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)
+        s.fa_k |> resize(n_heads * head_size * ATTN_FLASH_KV)
+        s.fa_v |> resize(n_heads * ATTN_FLASH_KV * head_size)
+        s.fa_kq |> resize(n_heads * ATTN_FLASH_QT * ATTN_FLASH_KV)
+        s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
+    }
 
     // token embeddings -> residual stream x_b [npos x dim]
     let ts_embed = ref_time_ticks()
@@ -996,55 +1293,12 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
         prof_add("rope", ts_rope)
-        // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
-        // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
-        // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
-        // THREADED OVER HEADS: every head does the same causal triangle (perfect load balance) and
-        // writes a disjoint output slice [p*qd + h*head_size ..]; each head owns its own att_b row, so
-        // there is no shared scratch to contend on. Workers run in fork contexts → raw pointers only.
+        // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
+        // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
+        // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
         let ts_attn = ref_time_ticks()
-        let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-        let sliding_window = c.sliding_window  // hoisted: scalars captured by the worker, not the struct
-        let attn_softcap = c.attn_logit_softcap
-        unsafe {
-            let qp = reinterpret<float const?>(addr(s.q_b[0]))
-            let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
-            let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
-            var xbp = addr(s.xb_b[0])
-            var attp = addr(s.att_b[0])
-            let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
-            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
-                unsafe {
-                    for (h in range(rb, re)) {
-                        let hh = int64(h)
-                        let qoff = hh * head_size
-                        let kvhoff = (hh / kv_mul) * head_size
-                        let abase = hh * maxctx                // this head's private score row
-                        for (p in range64(npos)) {
-                            let ap = start_pos + p
-                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                            let cnt = ap + 1l - kstart
-                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
-                            for (j in range64(cnt)) {
-                                let koff = loff + (kstart + j) * kv_dim + kvhoff
-                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
-                            }
-                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                                softcap(attp + abase, cnt, attn_softcap)
-                            }
-                            softmax(attp + abase, cnt)
-                            for (i in range64(head_size)) {
-                                xbp[qbase + i] = 0.0
-                            }
-                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
-                                let voff = loff + (kstart + j) * kv_dim + kvhoff
-                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        prefill_attention(s, loff, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
+                          is_sliding, c.sliding_window, c.attn_logit_softcap)
         prof_add("attn", ts_attn)
         // output projection (batched, qd -> dim) + optional post-attn norm + residual
         let ts_wo = ref_time_ticks()
