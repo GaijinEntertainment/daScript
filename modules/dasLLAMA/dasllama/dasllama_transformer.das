@@ -557,6 +557,12 @@ struct RunState {
     fa_v : array<float>       // packed V tile  [n_heads × KV × head_size]
     fa_kq : array<float>      // score / prob tile [n_heads × QT × KV]
     fa_vkq : array<float>     // output accumulator [n_heads × QT × head_size]
+    // RoPE cos/sin table (empty until forward_prefill builds it once per prefill, sized npos × head_size/2).
+    // angle = pos*freq is identical across all heads AND layers, so cos/sin is precomputed once here
+    // instead of recomputed per head/layer. Kept LOCAL (run-state, not a module global) so jobque
+    // fork-context cloning stays cheap — fork heaps copy module/[init] data, not the run state.
+    rope_cos : array<float>
+    rope_sin : array<float>
 }
 
 //! Allocate the run state sized to a model.
@@ -656,6 +662,70 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Trans
                     } else {
                         rope_scaled(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp)
                         rope_scaled(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Precompute the prefill RoPE cos/sin table once: cos_tab[pi*half + j] = cos((start_pos+pi)*freq[j]),
+// sin likewise, for every position pi in [0,npos) and frequency-pair j in [0, head_size/2). freq[j] is
+// position-independent (one pow per pair, hoisted out of the position loop) and identical for NORM and
+// NEOX; the NEOX mscale magnitude factor is folded in here so the tab leaves just look up. Built once
+// before the layer loop, then reused by rope_batch_tab across all heads and layers (the redundancy the
+// table removes). Bit-identical to the classic leaves — the same float expressions, just deduplicated.
+def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Transformer; start_pos, npos, head_size : int64) {
+    let c = t.config
+    let theta = c.rope_freq_base
+    let half = head_size / 2l
+    let scale = c.rope_neox ? c.rope_mscale : 1.0   // NEOX scales cos/sin by mscale; NORM leaves it 1.0
+    let has_ff = !empty(t.rope_freqs)
+    cos_tab |> resize(npos * half)
+    sin_tab |> resize(npos * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        let ffp = has_ff ? reinterpret<float const?>(addr(t.rope_freqs[0])) : null
+        for (j in range64(half)) {
+            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+            if (has_ff) {
+                freq /= ffp[j]
+            }
+            for (pi in range64(npos)) {
+                let angle = float(start_pos + pi) * freq
+                cp[pi * half + j] = cos(angle) * scale
+                sp[pi * half + j] = sin(angle) * scale
+            }
+        }
+    }
+}
+
+// Table-driven prefill RoPE: rope q_b[p*qd..] and k_b[p*kv_dim..] in place using the precomputed cos/sin
+// table (no transcendentals here — just lookups). Mirrors rope_batch's threading + two-pass contract,
+// and like it calls the LEAF rope_scaled_*_tab DIRECTLY (not a dispatch wrapper) to avoid the JIT
+// pass-through-const-write-elision bug. crow/srow point at position p's table row (half entries).
+def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_tab : array<float>; sin_tab : array<float>;
+                           neox : bool; npos, head_size, qd, kv_dim : int64) {
+    let half = head_size / 2l
+    unsafe {
+        var qp = addr(q_b[0])
+        var kp = addr(k_b[0])
+        let cp = reinterpret<float const?>(addr(cos_tab[0]))
+        let sp = reinterpret<float const?>(addr(sin_tab[0]))
+        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    let crow = cp + pp * half
+                    let srow = sp + pp * half
+                    if (neox) {
+                        rope_scaled_neox_tab(qp + pp * qd, head_size, qd, crow, srow)
+                        rope_scaled_neox_tab(kp + pp * kv_dim, head_size, kv_dim, crow, srow)
+                    } else {
+                        rope_scaled_tab(qp + pp * qd, head_size, qd, crow, srow)
+                        rope_scaled_tab(kp + pp * kv_dim, head_size, kv_dim, crow, srow)
                     }
                 }
             }
@@ -918,6 +988,21 @@ def get_prefill_attn_mode() : AttnPrefillMode {
     return g_attn_prefill_mode
 }
 
+// Prefill RoPE: when true (default) precompute the cos/sin table once per prefill and look it up;
+// when false fall back to the classic per-position pow/cos/sin path. A/B toggle for benchmarking
+// (the two paths are bit-identical — the table just deduplicates the transcendentals across heads/layers).
+var g_use_rope_table = true
+
+//! Select the prefill RoPE path: table lookup (default true) vs classic per-position pow/cos/sin.
+def set_rope_table_mode(on : bool) {
+    g_use_rope_table = on
+}
+
+//! Whether prefill RoPE uses the precomputed cos/sin table.
+def get_rope_table_mode() : bool {
+    return g_use_rope_table
+}
+
 var g_prefill_prof_acc : table<string; int64>
 
 //! Start a fresh measurement window (zero the per-section accumulators).
@@ -928,6 +1013,11 @@ def prefill_profile_reset() {
 def private prof_add(name : string; t0 : int64) {
     let cur = g_prefill_prof_acc?[name] ?? 0l
     g_prefill_prof_acc[name] = cur + int64(get_time_usec(t0))
+}
+
+//! The accumulated time (us) for one section since the last reset (0 if the section never ran).
+def prefill_profile_get(name : string) : int64 {
+    return g_prefill_prof_acc?[name] ?? 0l
 }
 
 //! Print the accumulated per-section times (us) since the last reset.
@@ -1257,6 +1347,16 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     }
     prof_add("embed", ts_embed)
 
+    // Precompute the RoPE cos/sin table ONCE for this prefill (angle = pos*freq is identical across
+    // every head and layer, so this replaces the per-head/per-layer pow/cos/sin recomputation with a
+    // single npos × head_size/2 table that rope_batch_tab looks up). Built outside the layer loop.
+    let use_rope_tab = g_use_rope_table
+    let ts_rope_build = ref_time_ticks()
+    if (use_rope_tab) {
+        build_rope_table(s.rope_cos, s.rope_sin, t, start_pos, npos, head_size)
+    }
+    prof_add("rope", ts_rope_build)   // fold the one-time build into the rope bucket for honest A/B
+
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
         // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
@@ -1284,7 +1384,11 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         // and keeps the rope-write cleanly separated from the cache-read. rope_batch self-gates the
         // threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
         let ts_rope = ref_time_ticks()
-        rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
+        if (use_rope_tab) {
+            rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
+        } else {
+            rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
+        }
         for (p in range64(npos)) {
             let kvoff = loff + (start_pos + p) * kv_dim
             for (i in range64(kv_dim)) {
