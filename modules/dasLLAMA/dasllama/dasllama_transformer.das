@@ -1355,7 +1355,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     if (use_rope_tab) {
         build_rope_table(s.rope_cos, s.rope_sin, t, start_pos, npos, head_size)
     }
-    prof_add("rope", ts_rope_build)   // fold the one-time build into the rope bucket for honest A/B
+    prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
@@ -1378,17 +1378,19 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
         prof_add("mm_qkv", ts_qkv)
-        // RoPE per position (absolute pos = start_pos + p) in place, THEN store k/v into the cache as a
-        // SEPARATE pass. Two passes (rope-all, then copy-all) instead of interleaving per position is
-        // provably identical (rope of pos p touches only q_b[p]/k_b[p]; the copy reads only k_b[p]/v_b[p])
-        // and keeps the rope-write cleanly separated from the cache-read. rope_batch self-gates the
-        // threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
+        // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
+        // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
         let ts_rope = ref_time_ticks()
         if (use_rope_tab) {
             rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
         } else {
             rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
         }
+        prof_add("rope", ts_rope)
+        // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
+        // interleaving: rope of pos p touches only q_b[p]/k_b[p], the copy reads only k_b[p]/v_b[p]).
+        // Serial + memory-bound; its own bucket so the rope rotation cost is measured cleanly.
+        let ts_kv = ref_time_ticks()
         for (p in range64(npos)) {
             let kvoff = loff + (start_pos + p) * kv_dim
             for (i in range64(kv_dim)) {
@@ -1396,7 +1398,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
                 s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
             }
         }
-        prof_add("rope", ts_rope)
+        prof_add("kv_store", ts_kv)
         // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
         // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
         // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
