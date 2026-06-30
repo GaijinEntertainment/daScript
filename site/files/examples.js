@@ -70,6 +70,26 @@
             playgroundSlug: 'path_tracer_lab',
             src: 'examples/graphics/path_tracer_lab_opengl_imgui_example.das',
         },
+        {
+            id: 'physarum_lab', name: 'Physarum Lab', kind: 'threads + audio showcase',
+            description: 'Millions of slime-mold agents sense and steer along their own ' +
+                'trails, building emergent transport networks — partitioned across worker ' +
+                'threads you control live (watch agents/sec climb as you add threads). daslang ' +
+                'threads map to real Web Workers, and a strudel soundtrack swells as you stir the ' +
+                'slime — OpenGL + Dear ImGui + audio, all compiled to WebAssembly.',
+            tags: ['imgui', 'opengl', 'threads', 'audio', 'wasm'],
+            controls: 'drag to attract the slime · imgui widgets · worker-thread slider',
+            poster: 'files/examples/physarum_lab-poster.jpg',
+            aspect: 1024 / 1024,
+            // Same wasm64-only / external-dasImgui story as the path tracer: the in-page player is
+            // the threaded (-pthread) wasm64 build bundling dasImgui + dasAudio, on real Web Workers
+            // and crossOriginIsolated (coi-serviceworker.js). The playground hosts the same sample on
+            // the threaded daslang_static interpreter (playgroundSlug), which binds dasImgui and the
+            // in-tree dasAudio/strudel.
+            wasm64Only: true,
+            playgroundSlug: 'physarum_lab',
+            src: 'examples/graphics/physarum_lab_opengl_imgui_example.das',
+        },
     ];
 
     DAS_EXAMPLES.forEach(function (ex) {

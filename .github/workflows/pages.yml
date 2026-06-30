@@ -273,6 +273,19 @@ jobs:
             echo "WARNING: path_tracer_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
         fi
 
+        # 7. /examples physarum_lab — the threads + audio showcase. Same external dasImgui dependency
+        #    as the path tracer (installed under its own package dir); the threaded daspkg wasm
+        #    pipeline maps its worker threads to Web Workers, and the daspkg wasm link's AudioWorklet
+        #    flags carry the strudel soundtrack. Non-fatal; staged below only when all three outputs
+        #    are present. Served cross-origin-isolated (coi-serviceworker.js).
+        if das_install --root examples/graphics/physarum_lab \
+           && ./bin/daslang utils/daspkg/main.das -- \
+                release wasm --root examples/graphics/physarum_lab --out "$REPO/web/output64/examples"; then
+            echo "physarum_lab wasm build OK"
+        else
+            echo "WARNING: physarum_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+        fi
+
     - name: "Verify wasm example artifacts (catch silent fallbacks)"
       # The example builds above are non-fatal (one run surfaces EVERY failure
       # instead of dying on the first), and the staging step degrades a missing
@@ -289,7 +302,8 @@ jobs:
             web/output64/examples/arcanoid/arcanoid.wasm \
             web/output64/examples/pacman/pacman.wasm \
             web/output64/examples/furier/furier.wasm \
-            web/output64/examples/path_tracer_lab/path_tracer_lab.wasm; do
+            web/output64/examples/path_tracer_lab/path_tracer_lab.wasm \
+            web/output64/examples/physarum_lab/physarum_lab.wasm; do
             [ -f "$f" ] || MISSING="$MISSING $f"
         done
         if [ -n "$MISSING" ]; then
@@ -462,6 +476,21 @@ jobs:
         else
             echo "WARNING: path_tracer_lab wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Path Tracer Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/path_tracer_lab/path_tracer_lab.html
+        fi
+
+        # physarum_lab — the threads + audio showcase. Same wasm64-only / external dasImgui story as
+        # the path tracer (no interpreted fallback in the iframe): stage the compiled build only when
+        # all three outputs are present, else a "being rebuilt" placeholder so the card never 404s.
+        mkdir -p _site/examples/physarum_lab
+        if [ -f web/output64/examples/physarum_lab/physarum_lab.html ] \
+           && [ -f web/output64/examples/physarum_lab/physarum_lab.js ] \
+           && [ -f web/output64/examples/physarum_lab/physarum_lab.wasm ]; then
+            cp web/output64/examples/physarum_lab/physarum_lab.html _site/examples/physarum_lab/
+            cp web/output64/examples/physarum_lab/physarum_lab.js   _site/examples/physarum_lab/
+            cp web/output64/examples/physarum_lab/physarum_lab.wasm _site/examples/physarum_lab/
+        else
+            echo "WARNING: physarum_lab wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
+            printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Physarum Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/physarum_lab/physarum_lab.html
         fi
 
         # GitHub Pages control files
