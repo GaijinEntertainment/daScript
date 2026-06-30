@@ -1170,11 +1170,19 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
                         srun[int(qt)] *= ms
                     }
                     mrun[int(qt)] = mnew
-                    for (kt in range64(KV)) {          // kq row becomes the (un-normalized) prob row
-                        let pe = kqp[row + kt] <= -1.0e29 ? 0.0 : exp(kqp[row + kt] - mnew)
-                        kqp[row + kt] = pe
-                        srun[int(qt)] += pe
+                    // kq row becomes the (un-normalized) prob row — vectorized exp4 over KV (mult of 4).
+                    // Masked entries (-1e30) clamp to -80 so exp4's fast path stays in range and yields ~0
+                    // (1.8e-35, negligible vs the real probs); flash is already non-bit-exact (online reorder).
+                    let mnew4 = float4(mnew, mnew, mnew, mnew)
+                    let floor4 = float4(-80.0, -80.0, -80.0, -80.0)
+                    var sum4 = float4(0.0, 0.0, 0.0, 0.0)
+                    var prow = reinterpret<float4?>(kqp + row)
+                    for (kc in range64(KV / 4l)) {
+                        let pe4 = exp4(max(prow[kc] - mnew4, floor4))
+                        prow[kc] = pe4
+                        sum4 += pe4
                     }
+                    srun[int(qt)] += sum4.x + sum4.y + sum4.z + sum4.w
                 }
                 // accumulate output: vkq[tile_rows × head_size] += P[tile_rows × KV] · V[KV × head_size]
                 gemm_f32(vkqp, kqp, vpk, tile_rows, KV, head_size)

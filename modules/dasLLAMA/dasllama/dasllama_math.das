@@ -651,6 +651,26 @@ def softmax(var x : array<float> | #; size : int64) {
     softmax(unsafe(addr(x[0])), size)
 }
 
+//! Vectorized expf, 4 lanes — ggml_v_expf (ARM optimized-routines): a degree-4 poly on the
+//! ln2-reduced argument times the 2^n exponent rebuilt by the round-to-int magic-number trick.
+//! Max rel err ~2 ulp vs libm, ~7x faster than scalar exp() (which the JIT lowers to libm expf —
+//! no vector libm on Darwin-ARM, so exp(float4) scalarizes). FAST PATH ONLY (no |n|>126 guard):
+//! valid for x in ~[-87, 88]; outside that it returns garbage, so callers must clamp. The flash
+//! softmax fold clamps masked/underflow entries to -87 (exp -> ~0) before calling.
+def exp4(x : float4) : float4 {
+    let z = mad(x, float4(1.4426950216293335), float4(12582912.0))   // x*log2e + 1.5*2^23
+    let n = z - float4(12582912.0)                                   // round(x*log2e)
+    let b = mad(n, float4(-1.428606765330187e-06), mad(n, float4(-0.693145751953125), x))  // x - n*ln2
+    let u = b * b
+    let p = mad(mad(mad(float4(0.008247390389442444), b, float4(0.04189976677298546)), u,
+        mad(float4(0.16668395698070526), b, float4(0.4999912679195404))), u, float4(0.9999994039535522) * b)
+    unsafe {
+        let zbits = reinterpret<uint4>(z)
+        let k = reinterpret<float4>((zbits << 23) + uint4(0x3f800000u, 0x3f800000u, 0x3f800000u, 0x3f800000u))
+        return mad(p, k, k)                                          // 2^n * (1 + poly(b))
+    }
+}
+
 //! SiLU (a.k.a. swish) activation: silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
 //! In place over the first `size` elements. The nonlinearity in the SwiGLU FFN gate;
 //! smooth, ~identity for large x, dips slightly negative just below zero.
