@@ -618,9 +618,10 @@ def softmax(var x : float?; size : int64) {
     unsafe {
         // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
         // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
-        // emit it — bit-exactness). max IS associative+exact, so two float4 lane accumulators (width-8, the
-        // original hint's intent — 2 accs hide the fmax latency, ~9x over scalar) + a horizontal max is
-        // bit-identical to the scalar fold. The broadcast seed folds x[0] in (idempotent) and never reads
+        // emit it — bit-exactness). On NaN-free inputs (softmax scores are always finite) max is
+        // associative+exact, so two float4 lane accumulators (width-8, the original hint's intent — 2 accs
+        // hide the fmax latency, ~9x over scalar) + a horizontal max is bit-identical to the scalar fold
+        // (fcmp+select is order-dependent only when a NaN is present). The broadcast seed folds x[0] in (idempotent) and never reads
         // past the buffer, so it stays safe for size < 8 (early decode).
         let pf4 = reinterpret<float4 const?>(x)
         let n8 = size / 8l

@@ -1476,7 +1476,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("act", ts_act)
         let ts_gate = ref_time_ticks()
         mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
-        prof_add("act_resid", ts_gate)
+        prof_add("gate", ts_gate)   // SwiGLU/GeGLU gate multiply — own bucket (act_resid is residual-adds)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
