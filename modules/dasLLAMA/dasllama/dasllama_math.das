@@ -612,56 +612,85 @@ def rope(var vec : array<float> | #; pos, head_size, n : int64) {
 //! (the GGUF `rope_freqs` tensor — Llama-3.1's NTK-by-parts scaling). Empty factors =>
 //! plain RoPE at base θ, so (θ=10000, empty) reproduces rope() above bit-for-bit.
 //! freq_factors[j] divides the j-th pair's frequency, matching ggml (theta/ff).
+//! Pointer core (see softmax) — the threaded prefill ropes q_b/k_b in fork contexts on raw addresses.
+//! `has_ff` gates the `ff` freq-factors pointer (empty() can't test a pointer); pass null when false.
+def rope_scaled(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        for (p in range64(n / 2l)) {
+            let i = p * 2l
+            let head_dim = i % head_size
+            var freq = 1.0 / pow(theta, float(head_dim) / float(head_size))
+            if (has_ff) {
+                freq /= ff[head_dim / 2l]
+            }
+            let angle = float(pos) * freq
+            let fcr = cos(angle)
+            let fci = sin(angle)
+            let v0 = v[i]
+            let v1 = v[i + 1]
+            v[i] = v0 * fcr - v1 * fci
+            v[i + 1] = v0 * fci + v1 * fcr
+        }
+    }
+}
 def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #) {
     let has_ff = !empty(freq_factors)
-    for (p in range64(n / 2l)) {
-        let i = p * 2l
-        let head_dim = i % head_size
-        var freq = 1.0 / pow(theta, float(head_dim) / float(head_size))
-        if (has_ff) {
-            freq /= freq_factors[head_dim / 2l]
-        }
-        let angle = float(pos) * freq
-        let fcr = cos(angle)
-        let fci = sin(angle)
-        let v0 = vec[i]
-        let v1 = vec[i + 1]
-        vec[i] = v0 * fcr - v1 * fci
-        vec[i + 1] = v0 * fci + v1 * fcr
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_scaled(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff)
     }
 }
 
 //! NEOX-style RoPE (Qwen2 / Phi3 / Gemma2): the rotated pair is offset by head_size/2 — vec[base+j]
 //! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
 //! Same per-pair frequencies; only the pairing differs.
+//! Pointer core (see rope_scaled) — fork-callable NEOX rope on a raw address.
+def rope_scaled_neox(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; mscale : float = 1.0) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        let half = head_size / 2l
+        for (h in range64(n / head_size)) {
+            let base = h * head_size
+            for (j in range64(half)) {
+                var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+                if (has_ff) {
+                    freq /= ff[j]
+                }
+                let angle = float(pos) * freq
+                // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
+                let fcr = cos(angle) * mscale
+                let fci = sin(angle) * mscale
+                let v0 = v[base + j]
+                let v1 = v[base + j + half]
+                v[base + j] = v0 * fcr - v1 * fci
+                v[base + j + half] = v0 * fci + v1 * fcr
+            }
+        }
+    }
+}
 def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; mscale : float = 1.0) {
     let has_ff = !empty(freq_factors)
-    let half = head_size / 2l
-    for (h in range64(n / head_size)) {
-        let base = h * head_size
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= freq_factors[j]
-            }
-            let angle = float(pos) * freq
-            // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
-            let fcr = cos(angle) * mscale
-            let fci = sin(angle) * mscale
-            let v0 = vec[base + j]
-            let v1 = vec[base + j + half]
-            vec[base + j] = v0 * fcr - v1 * fci
-            vec[base + j + half] = v0 * fci + v1 * fcr
-        }
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_scaled_neox(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, mscale)
     }
 }
 
 //! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
 //! mscale is the LongRoPE magnitude factor (1.0 for everything but Phi3); only the NEOX path uses it.
-def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
+//! Pointer core (see rope_scaled) — fork-callable rope dispatch on a raw address.
+def rope_apply(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; neox : bool; mscale : float = 1.0) {
     if (neox) {
-        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors, mscale)
+        rope_scaled_neox(vec, pos, head_size, n, theta, has_ff, ff, mscale)
     } else {
-        rope_scaled(vec, pos, head_size, n, theta, freq_factors)
+        rope_scaled(vec, pos, head_size, n, theta, has_ff, ff)
+    }
+}
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
+    let has_ff = !empty(freq_factors)
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_apply(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, neox, mscale)
     }
 }

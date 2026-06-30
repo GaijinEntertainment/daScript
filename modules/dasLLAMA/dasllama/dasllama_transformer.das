@@ -603,6 +603,45 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Transforme
     }
 }
 
+// Threaded per-position RoPE (pass 1 of the two-pass rope+store): rope q_b[p*qd..] and k_b[p*kv_dim..]
+// in place for every position, at absolute pos start_pos+p. Fork workers touch raw addresses only —
+// q_b/k_b are hoisted to base pointers, the read-only freq-factors to a const pointer. The KV-cache
+// copy is a SEPARATE pass in the caller.
+//   We call the leaf rope_scaled / rope_scaled_neox DIRECTLY (branching on neox here) rather than the
+//   rope_apply dispatch wrapper — same reason rms_batch calls rmsnorm directly. Routing a hoisted
+//   pointer THROUGH the rope_apply pass-through (whose param is `float const?`) lets the JIT mark that
+//   param readonly and eliminate the leaf's reinterpret-back write — the rope silently no-ops. A
+//   call-site reinterpret launders it, but that can't be lint-suppressed inside maybe_parallel_for, so
+//   calling the leaf directly is the clean fix.
+def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Transformer; start_pos, npos, head_size, qd, kv_dim : int64) {
+    let c = t.config
+    let theta = c.rope_freq_base
+    let neox = c.rope_neox
+    let mscale = c.rope_mscale
+    let has_ff = !empty(t.rope_freqs)
+    unsafe {
+        var qp = addr(q_b[0])
+        var kp = addr(k_b[0])
+        let ffp = has_ff ? reinterpret<float const?>(addr(t.rope_freqs[0])) : null
+        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    let ap = start_pos + pp
+                    if (neox) {
+                        rope_scaled_neox(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp, mscale)
+                        rope_scaled_neox(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp, mscale)
+                    } else {
+                        rope_scaled(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp)
+                        rope_scaled(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
 def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
@@ -837,6 +876,8 @@ let ATTN_PAR_THRESHOLD = 100_000l
 let REQUANT_PAR_THRESHOLD = 256_000l
 // Thread the per-position rmsnorm once dim × npos clears this.
 let NORM_PAR_THRESHOLD = 256_000l
+// Thread the per-position rope (q_b + k_b) once (qd + kv_dim) × npos clears this.
+let ROPE_PAR_THRESHOLD = 100_000l
 
 var g_prefill_prof_acc : table<string; int64>
 
@@ -940,17 +981,15 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
         prof_add("mm_qkv", ts_qkv)
-        // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
+        // RoPE per position (absolute pos = start_pos + p) in place, THEN store k/v into the cache as a
+        // SEPARATE pass. Two passes (rope-all, then copy-all) instead of interleaving per position is
+        // provably identical (rope of pos p touches only q_b[p]/k_b[p]; the copy reads only k_b[p]/v_b[p])
+        // and keeps the rope-write cleanly separated from the cache-read. rope_batch self-gates the
+        // threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
         let ts_rope = ref_time_ticks()
+        rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
         for (p in range64(npos)) {
-            let ap = start_pos + p
-            array_view(s.q_b, p * qd, qd) $(var qv : array<float>#) {
-                rope_apply(qv, ap, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-            }
-            array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
-                rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-            }
-            let kvoff = loff + ap * kv_dim
+            let kvoff = loff + (start_pos + p) * kv_dim
             for (i in range64(kv_dim)) {
                 s.key_cache[kvoff + i] = s.k_b[p * kv_dim + i]
                 s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
