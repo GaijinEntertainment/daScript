@@ -39,6 +39,12 @@ let {
     TRACE_H = 256    // 4-thread cap means a 512^2 single-thread pass is ~6 s; 256^2 is a snappy ~1.6 s)
     WIN_W = 512      // display window — CSS-scales to the examples-page card; 2x NEAREST upscale of the trace
     WIN_H = 512
+    // Threads-mode band ceiling. Decoupled from get_total_hw_threads() on purpose: the lab lets you
+    // oversubscribe the real cores to watch starved threads. 16 == the wasm64 build's PTHREAD_POOL_SIZE
+    // (daspkg), so the bands map 1:1 onto pre-spawned Web Workers — going higher trips emscripten's
+    // pool-exhausted warning. Privacy browsers (Vivaldi clamps navigator.hardwareConcurrency to 2) can
+    // still reach 16 here even though their detected count is 1.
+    MAX_BANDS = 16
 }
 
 enum Mode {
@@ -60,7 +66,7 @@ var g_render_epoch = -1               // epoch the render state machine is synce
 var g_pass = -1                       // completed accumulation passes (frameCount-1)
 var g_last_rays = 0                   // rays of the last completed full-image pass (stats)
 var g_last_pass_us = 0                // microseconds of the last completed pass (stats)
-var g_max_threads = 1                 // Threads-mode band count (slider; set to hw count in init)
+var g_max_threads = 1                 // Threads-mode band count (slider 1..MAX_BANDS; default set in init)
 
 var backbuffer : array<float3>        // TRACE_W*TRACE_H accumulation surface (linear color)
 var upload_rgba : array<float4>       // RGBA staging for the CPU->texture upload (WebGL2 requires RGBA/FLOAT for an RGBA32F texture, not RGB)
@@ -273,7 +279,7 @@ def advance_render {
     if (mode == int(Mode.SingleThread)) {
         start_threads_pass(g_pass + 1, 1)        // one background band-thread; UI stays free (no main-thread crawl)
     } elif (mode == int(Mode.Threads)) {
-        start_threads_pass(g_pass + 1, clamp(g_max_threads, 1, get_total_hw_threads()))
+        start_threads_pass(g_pass + 1, clamp(g_max_threads, 1, MAX_BANDS))
     }
 }
 
@@ -356,7 +362,7 @@ def build_ui {
 
     // per-mode control (the slider value doubles as the parallelism readout)
     if (g_mode == int(Mode.Threads)) {
-        SliderInt("max threads", safe_addr(g_max_threads), 1, get_total_hw_threads())
+        SliderInt("max threads", safe_addr(g_max_threads), 1, MAX_BANDS)
     } else {
         Text("{mode_label(g_mode)}")
     }
@@ -431,7 +437,10 @@ def init() {
     create_gl_objects()
     backbuffer |> resize(TRACE_W * TRACE_H)
     upload_rgba |> resize(TRACE_W * TRACE_H)
-    g_max_threads = get_total_hw_threads()
+    // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
+    // that clamps navigator.hardwareConcurrency (e.g. Vivaldi -> 2 -> get_total_hw_threads() == 1),
+    // and capped at the MAX_BANDS ceiling. Drag the slider up to MAX_BANDS to oversubscribe.
+    g_max_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
 }
 
 [export]
