@@ -656,7 +656,7 @@ def softmax(var x : array<float> | #; size : int64) {
 //! Max rel err ~2 ulp vs libm, ~7x faster than scalar exp() (which the JIT lowers to libm expf —
 //! no vector libm on Darwin-ARM, so exp(float4) scalarizes). FAST PATH ONLY (no |n|>126 guard):
 //! valid for x in ~[-87, 88]; outside that it returns garbage, so callers must clamp. The flash
-//! softmax fold clamps masked/underflow entries to -87 (exp -> ~0) before calling.
+//! softmax fold clamps masked/underflow entries to -80 (exp -> ~0) before calling.
 //! NOTE: the JIT now also emits this same ggml_v_expf as the lowering for exp(floatN) directly
 //! (build_vector_expf in modules/dasLLVM/daslib/llvm_jit_intrin.das) — but full-range (always pays the
 //! |n|>126 guard, ~2.9x) and gated to aarch64 pending x64 hardware validation. This local exp4 is kept
