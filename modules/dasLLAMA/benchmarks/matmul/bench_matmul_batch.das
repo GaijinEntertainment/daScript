@@ -80,6 +80,10 @@ def bench_batch_shape(b : B?; name : string; n, d : int64) {
 
 [benchmark]
 def bench_matmul_batch(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     with_job_que() {
         set_jobque_fork_pool(true, true)
         bench_batch_shape(b, "qo  2048x2048", 2048l, 2048l)

@@ -8,11 +8,12 @@ require daslib/jobque_boost public  // kernels expand parallel_for; consumers ne
 require dasllama/dasllama_par  // maybe_parallel_for
 
 // arm64 SDOT backend for the Q8·Q8 matmuls. dasllama_math owns the public matmul wrappers + the
-// portable kernels (the default); this module supplies the NEON kernels and, on an arm64 host,
-// registers them as the active backend at [init] (use_q8q8_kernels). On every other host
-// get_architecture_name() != "arm64" so the portable kernels stay selected — and dot_q8q8_sdot4x4's
-// sdot4 calls would hit their scalar fallback anyway. Under JIT each sdot4 lowers to one
-// @llvm.aarch64.neon.sdot (see llvm/daslib/aarch64_neon + g_aarch64_intrin_lookup in llvm_jit_intrin).
+// portable kernels (the default); this module supplies the NEON kernels and, on an arm64 JIT host,
+// registers them as the active backend at [init] (use_q8q8_kernels). The registration is gated on
+// `jit_enabled()`: only under JIT does each sdot4 lower to one @llvm.aarch64.neon.sdot (see
+// llvm/daslib/aarch64_neon + g_aarch64_intrin_lookup in llvm_jit_intrin). Off-JIT (interpreter or
+// AOT) sdot4 hits its scalar fallback — slower than the portable dot_q8q8 — so the portable kernels
+// stay selected there, as they do on every non-arm64 host (get_architecture_name() != "arm64").
 //
 // The kernels mirror the portable ones in dasllama_math (same raw-pointer signatures = the
 // MatmulQ8Q8*Fn typedefs, same 1N threading) and differ only in the inner dot. They are free to
@@ -383,7 +384,10 @@ def private q8q8_group3_kernel_neon_laneq(var y0p : float?; var y1p : float?; va
 
 [init]
 def dasllama_math_aarch64_neon_register() {
-    if (get_architecture_name() == "arm64") {
+    // Only register the SDOT backend under JIT on arm64. Off-JIT (interpreter or AOT) sdot4/sdot4_laneq
+    // run their SCALAR fallback body — slower than the portable dot_q8q8, which the vectorizer handles —
+    // so leaving the portable kernels active is faster everywhere the hardware SDOT isn't emitted.
+    if (get_architecture_name() == "arm64" && jit_enabled()) {
         // default active backend: sdot4x4 on row-major weights (direct callers — tests, benchmarks)
         use_q8q8_kernels(@@q8q8_kernel_neon_sdot4x4, @@q8q8_batch_kernel_neon_sdot4x4, @@q8q8_group3_kernel_neon_sdot4x4, @@repack_q8q8_identity)
         // alternate backend: laneq + interleaved repack, activated by enable_q8q8_laneq at Q8 model load

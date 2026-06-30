@@ -29,6 +29,10 @@ def same(a, b : array<int64>) : bool {
 [test]
 def test_forward_end_to_end(t : T?) {
     t |> run("forward + tokenizer match llama2.c (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
             return
@@ -52,6 +56,10 @@ def test_forward_end_to_end(t : T?) {
 [test]
 def test_forward_q8(t : T?) {
     t |> run("all-weights Q8 forward matches fp32 oracle (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
             return
@@ -73,6 +81,10 @@ def test_forward_q8(t : T?) {
 [test]
 def test_forward_q8_pooled(t : T?) {
     t |> run("Q8 forward with pooled fork contexts still matches the oracle (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
             return
@@ -96,6 +108,10 @@ def test_forward_q8_pooled(t : T?) {
 [test]
 def test_forward_q4(t : T?) {
     t |> run("all-weights Q4 forward matches the fp32 oracle prefix (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
             return

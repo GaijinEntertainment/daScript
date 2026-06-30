@@ -32,6 +32,10 @@ def argmax_logits(s : RunState; vocab : int64) : int64 {
 
 [export]
 def main {
+    if (!jit_enabled()) {
+        print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
+        return
+    }
     var path = DEFAULT_MODEL
     let args = get_command_line_arguments()
     if (!empty(args) && ends_with(args[length(args) - 1], ".gguf")) {

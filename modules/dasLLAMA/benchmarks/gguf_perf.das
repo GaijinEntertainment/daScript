@@ -62,6 +62,10 @@ def decode_ids(tok : Tokenizer; ids : array<int64>; limit : int) : string {
 
 [export]
 def main {
+    if (!jit_enabled()) {
+        print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
+        return
+    }
     var path = MODEL
     let args = get_command_line_arguments()
     if (!empty(args)) {

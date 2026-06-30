@@ -106,6 +106,10 @@ def bench_shape(name : string; M, K, N : int64; reps : int) {
 
 [benchmark, unused_argument(b)]
 def bench_attn_gemm(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     to_log(LOG_INFO, "=== fp32 micro-GEMM: scalar ref vs 4x16 register tile (single thread) ===\n")
     bench_shape("score 64^3 ", 64l, 64l, 64l, 4000)     // QKᵀ: Qtile×head×KVtile
     bench_shape("out   64^3 ", 64l, 64l, 64l, 4000)     // P·V:  Qtile×KVtile×head (same shape @1B)
