@@ -789,13 +789,17 @@ def rope_scaled_tab(vec : float const?; head_size, n : int64; cosrow : float con
 
 //! Table-driven NEOX RoPE (pair offset by head_size/2). Same table as rope_scaled_tab; the NEOX
 //! mscale magnitude factor is baked into cosrow/sinrow by build_rope_table. Bit-identical to rope_scaled_neox.
+//! The NEOX split layout (v0 in [base..base+half), v1 in [base+half..)) is four contiguous arrays, so
+//! the inner loop vectorizes width-8 natively (~5-10% over scalar) — measured Δ=0, i.e. plain mul/sub
+//! under [vectorize] does NOT contract to fma, so it stays bit-exact (no `mad`). The NORM leaf above
+//! can't do this: its interleaved (2j, 2j+1) layout is stride-2 and the JIT won't emit vld2/vst2 for it.
 def rope_scaled_neox_tab(vec : float const?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
     unsafe {
         var v = reinterpret<float?>(vec)
         let half = head_size / 2l
         for (h in range64(n / head_size)) {
             let base = h * head_size
-            for (j in range64(half)) {
+            for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(half)) {
                 let fcr = cosrow[j]
                 let fci = sinrow[j]
                 let v0 = v[base + j]
