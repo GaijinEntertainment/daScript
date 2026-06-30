@@ -757,6 +757,29 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
     }
 }
 
+// Threaded per-position FFN activation: act(hb[p*hidden..]) in place for every position. Each element's
+// silu/gelu is independent (no cross-position reduce), so threading is bit-exact — the reorder risk is only
+// in VECTORIZING the transcendental, never in splitting positions across workers. Fork workers touch the
+// raw base pointer; self-gates on ACT_PAR_THRESHOLD so small prompts run inline.
+def private act_batch(var hb : array<float>; act : FfnAct; hidden, npos : int64) {
+    let is_gelu = act == FfnAct.gelu
+    unsafe {
+        var hp = addr(hb[0])
+        maybe_parallel_for(hidden * npos >= ACT_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let off = int64(p) * hidden
+                    if (is_gelu) {
+                        gelu(hp + off, hidden)
+                    } else {
+                        silu(hp + off, hidden)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
 [hint(unsafe_range_check)]
@@ -988,6 +1011,9 @@ let NORM_PAR_THRESHOLD = 256_000l
 let ROPE_PAR_THRESHOLD = 100_000l
 // Thread the KV-cache store once kv_dim × npos clears this (it's a memory-bound contiguous copy).
 let KV_STORE_PAR_THRESHOLD = 256_000l
+// Thread the per-position FFN activation (silu/gelu) once hidden × npos clears this. Lower than the
+// memory-bound passes — each element pays a transcendental (exp/tanh), so the compute justifies threading sooner.
+let ACT_PAR_THRESHOLD = 100_000l
 // Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).
 let ATTN_BLOCK_Q = 8l
 // Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
@@ -1144,11 +1170,19 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
                         srun[int(qt)] *= ms
                     }
                     mrun[int(qt)] = mnew
-                    for (kt in range64(KV)) {          // kq row becomes the (un-normalized) prob row
-                        let pe = kqp[row + kt] <= -1.0e29 ? 0.0 : exp(kqp[row + kt] - mnew)
-                        kqp[row + kt] = pe
-                        srun[int(qt)] += pe
+                    // kq row becomes the (un-normalized) prob row — vectorized exp4 over KV (mult of 4).
+                    // Masked entries (-1e30) clamp to -80 so exp4's fast path stays in range and yields ~0
+                    // (1.8e-35, negligible vs the real probs); flash is already non-bit-exact (online reorder).
+                    let mnew4 = float4(mnew, mnew, mnew, mnew)
+                    let floor4 = float4(-80.0, -80.0, -80.0, -80.0)
+                    var sum4 = float4(0.0, 0.0, 0.0, 0.0)
+                    var prow = reinterpret<float4?>(kqp + row)
+                    for (kc in range64(KV / 4l)) {
+                        let pe4 = exp4(max(prow[kc] - mnew4, floor4))
+                        prow[kc] = pe4
+                        sum4 += pe4
                     }
+                    srun[int(qt)] += sum4.x + sum4.y + sum4.z + sum4.w
                 }
                 // accumulate output: vkq[tile_rows × head_size] += P[tile_rows × KV] · V[KV × head_size]
                 gemm_f32(vkqp, kqp, vpk, tile_rows, KV, head_size)
@@ -1438,13 +1472,11 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
         prof_add("mm_ffn", ts_ffn)
         let ts_act = ref_time_ticks()
-        if (c.ffn_act == FfnAct.gelu) {
-            gelu(s.hb_b, npos * hidden)
-        } else {
-            silu(s.hb_b, npos * hidden)
-        }
+        act_batch(s.hb_b, c.ffn_act, hidden, npos)
+        prof_add("act", ts_act)
+        let ts_gate = ref_time_ticks()
         mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
-        prof_add("act_resid", ts_act)
+        prof_add("gate", ts_gate)   // SwiGLU/GeGLU gate multiply — own bucket (act_resid is residual-adds)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)

@@ -40,4 +40,14 @@ def test_softmax(t : T?) {
         }
         t |> success(abs(sum - 1.0) < 1e-5)  // would be NaN without the max-subtract
     }
+    // Regression: the array overload forwards via addr(x[0]), which index-faults on an empty
+    // array; size <= 0 must be a safe no-op.
+    t |> run("empty / zero size is a no-op") @(t : T?) {
+        var e : array<float>
+        softmax(e, 0l)
+        var x <- [1.0, 2.0, 3.0]
+        softmax(x, 0l)
+        t |> success(abs(x[0] - 1.0) < 1e-6)   // untouched
+        t |> success(true)                      // reached here ⇒ no index-fault
+    }
 }

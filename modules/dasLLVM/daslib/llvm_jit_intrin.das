@@ -94,7 +94,7 @@ let g_intrin_lookup <- {
     "math::lerp" => @@intrinsic_math_lerp_op3,
     "math::rcp" => @@intrinsic_math_rcp,
     "math::rcp_est" => @@intrinsic_math_rcp,
-    "math::exp" => @@intrinsic_math_float_op1,
+    "math::exp" => @@intrinsic_math_exp,
     "math::log" => @@intrinsic_math_float_op1,
     "math::exp2" => @@intrinsic_math_float_op1,
     "math::log2" => @@intrinsic_math_float_op1,
@@ -851,6 +851,84 @@ def intrinsic_math_fmod(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
 
 def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return intrinsic_math_any_float_op1(string(expr.name), ctx.builder, expr, arguments)
+}
+
+def private vexpf_fma(builder : LLVMOpaqueBuilder?; decl : LLVMOpaqueValue?; fty : LLVMOpaqueType?;
+                      a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    if (decl != null) {
+        return LLVMBuildCall2(builder, fty, decl, [ a, b, c], "")   // @llvm.fmuladd: a*b+c
+    }
+    return LLVMBuildFAdd(builder, LLVMBuildFMul(builder, a, b, ""), c, "")
+}
+
+def private vexpf_isplat(ctx : JitCtx; dim : int; v : uint64) : LLVMOpaqueValue? {
+    var res = LLVMGetUndef(LLVMVectorType(ctx.types.t_int32, uint(dim)))
+    let cv = LLVMConstInt(ctx.types.t_int32, v, 0)
+    for (d in range(dim)) {
+        res = LLVMBuildInsertElement(ctx.builder, res, cv, LLVMConstInt(ctx.types.t_int32, uint64(d), 0), "")
+    }
+    return res
+}
+
+def private vexpf_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMOpaqueValue? {
+    return build_broadcast_vector(ctx.builder, opType, LLVMConstReal(ctx.types.t_float, v))
+}
+
+// Vectorized expf emitted as inline IR — ggml_v_expf (ARM optimized-routines), max rel err ~2 ulp.
+// The default lowering (@llvm.exp.vNf32) scalarizes to N libm expf calls on targets without a vector
+// libm (Darwin-ARM, most others) — ~7x slower. The |n|>126 overflow/underflow path is a branchless
+// select tree (correct inf/0), so this is a full-range drop-in: callers need no clamp.
+// The always-computed guard costs ~2.4x of the throughput (~2.9x vs scalar here, vs ~7x for a fast-path-
+// only form like dasLLAMA's exp4). TODO (post-x64): add ggml's fast-path branch — reduce-OR the |n|>126
+// mask, cond-br past the slow path when no lane overflows — to recover ~7x on the common case, then
+// dasLLAMA's exp4 can be retired in favor of plain exp(float4).
+def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let bld = ctx.builder
+    let dim = opType.vectorDim
+    let lt = type_to_llvm_type(opType)
+    let fty = LLVMFunctionType(lt, [ lt, lt, lt])
+    let fid = LLVMLookupIntrinsicID(build_op_name("fmuladd", opType))
+    let fma_decl = fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
+    let R = vexpf_fsplat(ctx, opType, 12582912.0lf); let LE = vexpf_fsplat(ctx, opType, 1.4426950216293335lf)
+    let NH = vexpf_fsplat(ctx, opType, -0.693145751953125lf); let NL = vexpf_fsplat(ctx, opType, -1.428606765330187e-06lf)
+    let C0 = vexpf_fsplat(ctx, opType, 0.9999994039535522lf); let C1 = vexpf_fsplat(ctx, opType, 0.4999912679195404lf)
+    let C2 = vexpf_fsplat(ctx, opType, 0.16668395698070526lf); let C3 = vexpf_fsplat(ctx, opType, 0.04189976677298546lf)
+    let C4 = vexpf_fsplat(ctx, opType, 0.008247390389442444lf)
+    let z = vexpf_fma(bld, fma_decl, fty, x, LE, R)                          // x*log2e + magic
+    let n = LLVMBuildFSub(bld, z, R, "")                                     // round(x*log2e)
+    let bred = vexpf_fma(bld, fma_decl, fty, n, NL, vexpf_fma(bld, fma_decl, fty, n, NH, x))  // x - n*ln2
+    let u = LLVMBuildFMul(bld, bred, bred, "")
+    let inner = vexpf_fma(bld, fma_decl, fty, vexpf_fma(bld, fma_decl, fty, C4, bred, C3), u,
+        vexpf_fma(bld, fma_decl, fty, C2, bred, C1))
+    let poly = vexpf_fma(bld, fma_decl, fty, inner, u, LLVMBuildFMul(bld, C0, bred, ""))
+    let e = LLVMBuildShl(bld, LLVMBuildBitCast(bld, z, LLVMVectorType(ctx.types.t_int32, uint(dim)), ""),
+        vexpf_isplat(ctx, dim, 23ul), "")                                   // exponent field of 2^n
+    let k = LLVMBuildBitCast(bld, LLVMBuildAdd(bld, e, vexpf_isplat(ctx, dim, 0x3f800000ul), ""), lt, "")
+    let fast = vexpf_fma(bld, fma_decl, fty, poly, k, k)                     // k*(1+poly), normal range
+    let fabs_decl = LLVMGetIntrinsicDeclaration(g_mod, LLVMLookupIntrinsicID(build_op_name("fabs", opType)), [ lt])
+    let nabs = LLVMBuildCall2(bld, LLVMFunctionType(lt, [ lt]), fabs_decl, [ n], "")
+    let c126 = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOGT, nabs, vexpf_fsplat(ctx, opType, 126.0lf), "")
+    let c192 = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOGT, nabs, vexpf_fsplat(ctx, opType, 192.0lf), "")
+    let nlez = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOLE, n, vexpf_fsplat(ctx, opType, 0.0lf), "")
+    let d = LLVMBuildSelect(bld, nlez, vexpf_isplat(ctx, dim, 0x82000000ul), vexpf_isplat(ctx, dim, 0ul), "")
+    let s1 = LLVMBuildBitCast(bld, LLVMBuildAdd(bld, d, vexpf_isplat(ctx, dim, 0x7f000000ul), ""), lt, "")
+    let s2 = LLVMBuildBitCast(bld, LLVMBuildSub(bld, e, d, ""), lt, "")
+    let mid = LLVMBuildFMul(bld, vexpf_fma(bld, fma_decl, fty, s2, poly, s2), s1, "")  // |n|>126 underflow/overflow
+    let big = LLVMBuildFMul(bld, s1, s1, "")                                 // |n|>192 saturates to inf/0
+    return LLVMBuildSelect(bld, c192, big, LLVMBuildSelect(bld, c126, mid, fast, ""), "")
+}
+
+// exp: on aarch64, vector-float gets the inline polynomial (the default @llvm.exp.vNf32 scalarizes to
+// libm). The IR is generic vector ops, so it lowers fine on x64 too (verified via llc: SSE2/AVX2/AVX-512
+// all vectorize, zero scalarization) — but it's GATED to aarch64 pending validation on real x64 hardware;
+// flip g_target_is_aarch64 to drop the gate. Scalar float/double, and all non-aarch64 vector exp, keep
+// @llvm.exp (libm, correctly rounded — a single scalar call carries no scalarization penalty).
+def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat) {
+        return build_vector_expf(ctx, opType, arguments[0])
+    }
+    return intrinsic_math_any_float_op1("exp", ctx.builder, expr, arguments)
 }
 
 def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

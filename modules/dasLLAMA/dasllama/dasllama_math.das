@@ -615,10 +615,26 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
 //! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
 def softmax(var x : float?; size : int64) {
+    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
     unsafe {
-        // max is exact + idempotent, so the vectorized reduce (any order, x[0] folded in twice) is bit-exact
-        var maxv = x[0]
-        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+        // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
+        // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
+        // emit it — bit-exactness). On NaN-free inputs (softmax scores are always finite) max is
+        // associative+exact, so two float4 lane accumulators (width-8, the original hint's intent — 2 accs
+        // hide the fmax latency, ~9x over scalar) + a horizontal max is bit-identical to the scalar fold
+        // (fcmp+select is order-dependent only when a NaN is present). The broadcast seed folds x[0] in (idempotent) and never reads
+        // past the buffer, so it stays safe for size < 8 (early decode).
+        let pf4 = reinterpret<float4 const?>(x)
+        let n8 = size / 8l
+        var acc0 = float4(x[0], x[0], x[0], x[0])
+        var acc1 = acc0
+        for (k in 0l..n8) {
+            acc0 = max(acc0, pf4[2l * k])
+            acc1 = max(acc1, pf4[2l * k + 1l])
+        }
+        let acc = max(acc0, acc1)
+        var maxv = max(max(acc.x, acc.y), max(acc.z, acc.w))
+        for (i in n8 * 8l .. size) {
             maxv = max(maxv, x[i])
         }
         var sum = 0.0
@@ -634,31 +650,69 @@ def softmax(var x : float?; size : int64) {
     }
 }
 def softmax(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
     softmax(unsafe(addr(x[0])), size)
+}
+
+//! Vectorized expf, 4 lanes — ggml_v_expf (ARM optimized-routines): a degree-4 poly on the
+//! ln2-reduced argument times the 2^n exponent rebuilt by the round-to-int magic-number trick.
+//! Max rel err ~2 ulp vs libm, ~7x faster than scalar exp() (which the JIT lowers to libm expf —
+//! no vector libm on Darwin-ARM, so exp(float4) scalarizes). FAST PATH ONLY (no |n|>126 guard):
+//! valid for x in ~[-87, 88]; outside that it returns garbage, so callers must clamp. The flash
+//! softmax fold clamps masked/underflow entries to -80 (exp -> ~0) before calling.
+//! NOTE: the JIT now also emits this same ggml_v_expf as the lowering for exp(floatN) directly
+//! (build_vector_expf in modules/dasLLVM/daslib/llvm_jit_intrin.das) — but full-range (always pays the
+//! |n|>126 guard, ~2.9x) and gated to aarch64 pending x64 hardware validation. This local exp4 is kept
+//! separate because it's the cheaper fast-path-only form. Once x64 is verified, add a fast-path branch
+//! to the intrinsic and replace this with exp(float4); until then they coexist deliberately.
+def exp4(x : float4) : float4 {
+    let z = mad(x, float4(1.4426950216293335), float4(12582912.0))   // x*log2e + 1.5*2^23
+    let n = z - float4(12582912.0)                                   // round(x*log2e)
+    let b = mad(n, float4(-1.428606765330187e-06), mad(n, float4(-0.693145751953125), x))  // x - n*ln2
+    let u = b * b
+    let p = mad(mad(mad(float4(0.008247390389442444), b, float4(0.04189976677298546)), u,
+        mad(float4(0.16668395698070526), b, float4(0.4999912679195404))), u, float4(0.9999994039535522) * b)
+    unsafe {
+        let zbits = reinterpret<uint4>(z)
+        let k = reinterpret<float4>((zbits << 23) + uint4(0x3f800000u, 0x3f800000u, 0x3f800000u, 0x3f800000u))
+        return mad(p, k, k)                                          // 2^n * (1 + poly(b))
+    }
 }
 
 //! SiLU (a.k.a. swish) activation: silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
 //! In place over the first `size` elements. The nonlinearity in the SwiGLU FFN gate;
 //! smooth, ~identity for large x, dips slightly negative just below zero.
-[hint(unsafe_range_check)]
-def silu(var x : array<float> | #; size : int64) {
-    for (i in range64(size)) {
-        let v = x[i]
-        x[i] = v / (1.0 + exp(-v))
+//! Pointer core (see softmax) — the threaded prefill FFN runs act_batch in fork contexts on raw addresses.
+def silu(var x : float?; size : int64) {
+    unsafe {
+        for (i in range64(size)) {
+            let v = x[i]
+            x[i] = v / (1.0 + exp(-v))
+        }
     }
+}
+def silu(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
+    silu(unsafe(addr(x[0])), size)
 }
 
 //! GELU, tanh approximation (HF's gelu_pytorch_tanh): the GeGLU gate nonlinearity (Gemma2).
 //! gelu(x) = 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))). In place over the first `size`
 //! elements. ggml's LLM_FFN_GELU approximates this same form via an fp16 lookup table; we
 //! compute it directly (more accurate — near-ties against the LUT are expected, not bugs).
-[hint(unsafe_range_check)]
-def gelu(var x : array<float> | #; size : int64) {
+//! Pointer core (see softmax) — threaded prefill act_batch calls this on raw fork addresses.
+def gelu(var x : float?; size : int64) {
     let k = 0.7978845608028654  // sqrt(2/pi)
-    for (i in range64(size)) {
-        let v = x[i]
-        x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+    unsafe {
+        for (i in range64(size)) {
+            let v = x[i]
+            x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+        }
     }
+}
+def gelu(var x : array<float> | #; size : int64) {
+    if (size <= 0) return   // empty array: addr(x[0]) would index out of range; old loop form no-op'd
+    gelu(unsafe(addr(x[0])), size)
 }
 
 //! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
