@@ -127,6 +127,13 @@ var g_tweak_audio = false             // perc layer currently swelled (slider be
 var g_tweak_hold = 0                  // frames the perc layer stays up after the last slider change
 var g_ui_tweaked = false              // a slider/picker moved this frame (set by build_ui)
 
+// TEMPORARY: audio is gated off on the web build. The threaded wasm64 AudioWorklet mixer holds mutexes
+// on the real-time audio thread (which cannot block), so a few seconds after audio starts the worklet
+// deadlocks under this card's load and wedges the page. The root fix (a realtime-safe mixer — no
+// mutex/malloc on the worklet thread) is being done separately; REMOVE this gate + restore unconditional
+// audio once that lands. Desktop is unaffected (it has a real OS audio thread). Set in init().
+var g_audio_enabled = false
+
 // ----- gl objects -----
 var display_program : uint
 var vao, vbo, ebo : uint
@@ -614,7 +621,12 @@ def init() {
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
     // that clamps navigator.hardwareConcurrency, and capped at MAX_BANDS. Drag the slider up to oversubscribe.
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
-    setup_audio()
+    // get_running_platform_name() (not get_platform_name(), which const-folds to the compile host) so the
+    // cross-compiled in-browser exe reports "emscripten" at runtime — see the g_audio_enabled note above.
+    g_audio_enabled = get_running_platform_name() != "emscripten"
+    if (g_audio_enabled) {
+        setup_audio()
+    }
 }
 
 [export]
@@ -622,12 +634,18 @@ def update() {
     if (!harness_begin_frame()) {
         return
     }
-    strudel_tick()           // advance the strudel scheduler on the main thread
+    if (g_audio_enabled) {
+        strudel_tick()       // advance the strudel scheduler on the main thread
+    }
     harness_new_frame()
     build_ui()
-    drive_audio()            // fade the lead/perc layers from mouse + slider state (reads ImGui io)
+    if (g_audio_enabled) {
+        drive_audio()        // fade the lead/perc layers from mouse + slider state (reads ImGui io)
+    }
     advance_sim()
-    strudel_tick()           // top up audio after the heavy collect/diffuse, while the workers run
+    if (g_audio_enabled) {
+        strudel_tick()       // top up audio after the heavy collect/diffuse, while the workers run
+    }
     upload_field()
     draw_surface()
     end_of_frame()
@@ -645,12 +663,14 @@ def shutdown() {
         }
         g_status = null
     }
-    strudel_shutdown()
-    // Only finalize the audio system if WE created it — an embedded host / playground that already
-    // owns the audio stream keeps it (and g_asch is unset, so finalizing it would deref a null command).
-    if (g_audio_owned) {
-        audio_system_finalize(g_asch.command, g_asch.next_sid)
-        g_audio_owned = false
+    if (g_audio_enabled) {
+        strudel_shutdown()
+        // Only finalize the audio system if WE created it — an embedded host / playground that already
+        // owns the audio stream keeps it (and g_asch is unset, so finalizing it would deref a null command).
+        if (g_audio_owned) {
+            audio_system_finalize(g_asch.command, g_asch.next_sid)
+            g_audio_owned = false
+        }
     }
     harness_shutdown()
 }
