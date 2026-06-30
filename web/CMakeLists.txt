@@ -61,7 +61,7 @@ if(DAS_WASM_PTHREADS)
     # -sSHARED_MEMORY pins initial memory (no auto-grow at startup), so it must be
     # large enough for daslang's static data + embedded daslib (~55MB). 128MB gives
     # headroom; ALLOW_MEMORY_GROWTH still lets the heap grow past it at runtime.
-    add_link_options(-pthread -sPTHREAD_POOL_SIZE=8 -sINITIAL_MEMORY=134217728)
+    add_link_options(-pthread -sPTHREAD_POOL_SIZE=16 -sINITIAL_MEMORY=134217728)
     # AudioWorklet backend for dasAudio (mixer on the dedicated audio thread).
     # WASM_WORKERS backs the worklet thread; AUDIO_WORKLET enables the API. No
     # -sASYNCIFY (incompatible with -fwasm-exceptions) — the non-blocking
