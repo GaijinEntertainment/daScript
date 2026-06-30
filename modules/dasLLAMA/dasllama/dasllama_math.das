@@ -654,25 +654,35 @@ def softmax(var x : array<float> | #; size : int64) {
 //! SiLU (a.k.a. swish) activation: silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
 //! In place over the first `size` elements. The nonlinearity in the SwiGLU FFN gate;
 //! smooth, ~identity for large x, dips slightly negative just below zero.
-[hint(unsafe_range_check)]
-def silu(var x : array<float> | #; size : int64) {
-    for (i in range64(size)) {
-        let v = x[i]
-        x[i] = v / (1.0 + exp(-v))
+//! Pointer core (see softmax) — the threaded prefill FFN runs act_batch in fork contexts on raw addresses.
+def silu(var x : float?; size : int64) {
+    unsafe {
+        for (i in range64(size)) {
+            let v = x[i]
+            x[i] = v / (1.0 + exp(-v))
+        }
     }
+}
+def silu(var x : array<float> | #; size : int64) {
+    silu(unsafe(addr(x[0])), size)
 }
 
 //! GELU, tanh approximation (HF's gelu_pytorch_tanh): the GeGLU gate nonlinearity (Gemma2).
 //! gelu(x) = 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))). In place over the first `size`
 //! elements. ggml's LLM_FFN_GELU approximates this same form via an fp16 lookup table; we
 //! compute it directly (more accurate — near-ties against the LUT are expected, not bugs).
-[hint(unsafe_range_check)]
-def gelu(var x : array<float> | #; size : int64) {
+//! Pointer core (see softmax) — threaded prefill act_batch calls this on raw fork addresses.
+def gelu(var x : float?; size : int64) {
     let k = 0.7978845608028654  // sqrt(2/pi)
-    for (i in range64(size)) {
-        let v = x[i]
-        x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+    unsafe {
+        for (i in range64(size)) {
+            let v = x[i]
+            x[i] = 0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))
+        }
     }
+}
+def gelu(var x : array<float> | #; size : int64) {
+    gelu(unsafe(addr(x[0])), size)
 }
 
 //! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
