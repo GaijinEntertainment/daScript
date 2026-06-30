@@ -733,6 +733,30 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
     }
 }
 
+// Store the roped k / raw v for all npos positions into the layer's KV cache. The destination offset
+// loff + (start_pos+p)*kv_dim and the source offset p*kv_dim both advance by kv_dim per position, so
+// the whole k_b -> key_cache store is ONE contiguous block of npos*kv_dim floats (v likewise) — copied
+// with the vectorized copy_floats (bounds-checked array copy doesn't vectorize), threaded over the
+// positions (each worker owns a disjoint cache slice). Self-gates on KV_STORE_PAR_THRESHOLD.
+def private kv_store_batch(var key_cache : array<float>; var value_cache : array<float>;
+                          k_b : array<float>; v_b : array<float>; loff, start_pos, npos, kv_dim : int64) {
+    let dstbase = loff + start_pos * kv_dim
+    unsafe {
+        var kcp = addr(key_cache[0])
+        var vcp = addr(value_cache[0])
+        let kbp = reinterpret<float const?>(addr(k_b[0]))
+        let vbp = reinterpret<float const?>(addr(v_b[0]))
+        maybe_parallel_for(kv_dim * npos >= KV_STORE_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            let m0 = int64(rb) * kv_dim
+            let cnt = (int64(re) - int64(rb)) * kv_dim
+            unsafe {
+                copy_floats(kcp + dstbase + m0, kbp + m0, cnt)
+                copy_floats(vcp + dstbase + m0, vbp + m0, cnt)
+            }
+        }
+    }
+}
+
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
 def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
@@ -969,6 +993,8 @@ let REQUANT_PAR_THRESHOLD = 256_000l
 let NORM_PAR_THRESHOLD = 256_000l
 // Thread the per-position rope (q_b + k_b) once (qd + kv_dim) × npos clears this.
 let ROPE_PAR_THRESHOLD = 100_000l
+// Thread the KV-cache store once kv_dim × npos clears this (it's a memory-bound contiguous copy).
+let KV_STORE_PAR_THRESHOLD = 256_000l
 // Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).
 let ATTN_BLOCK_Q = 8l
 // Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
@@ -1389,15 +1415,8 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("rope", ts_rope)
         // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
         // interleaving: rope of pos p touches only q_b[p]/k_b[p], the copy reads only k_b[p]/v_b[p]).
-        // Serial + memory-bound; its own bucket so the rope rotation cost is measured cleanly.
         let ts_kv = ref_time_ticks()
-        for (p in range64(npos)) {
-            let kvoff = loff + (start_pos + p) * kv_dim
-            for (i in range64(kv_dim)) {
-                s.key_cache[kvoff + i] = s.k_b[p * kv_dim + i]
-                s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
-            }
-        }
+        kv_store_batch(s.key_cache, s.value_cache, s.k_b, s.v_b, loff, start_pos, npos, kv_dim)
         prof_add("kv_store", ts_kv)
         // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
         // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]

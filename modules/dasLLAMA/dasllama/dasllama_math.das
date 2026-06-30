@@ -69,6 +69,18 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {
     }
 }
 
+//! d[j] = s[j], width-8 vectorized contiguous copy (the KV-cache store). Same reason as add_inplace:
+//! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
+//! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def copy_floats(var d : float?; s : float const?; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] = s[j]
+        }
+    }
+}
+
 // n*d above this -> split the output rows across worker threads. Below it, the per-call
 // job-dispatch overhead (~90us) dwarfs the gain, so stay single-thread. (Measured on M1 Max:
 // classifier 32000x288 = 9.2M threads to ~2x; ffn 768x288 = 0.22M would be ~5x slower.)
