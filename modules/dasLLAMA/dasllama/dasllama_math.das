@@ -19,7 +19,7 @@ require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel 
 def dot(a, b : float const?; n : int64) : float {
     var acc = 0.0
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-        acc += unsafe(a[j]) * unsafe(b[j])
+        acc = mad(unsafe(a[j]), unsafe(b[j]), acc)   // fused multiply-add (vectorizes to fmla)
     }
     return acc
 }
@@ -29,7 +29,7 @@ def dot(a, b : float const?; n : int64) : float {
 def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
         unsafe {
-            d[j] += scale * s[j]
+            d[j] = mad(scale, s[j], d[j])
         }
     }
 }
@@ -43,7 +43,7 @@ def vaxpy(d : float const?; s : float const?; scale : float; n : int64) {
     unsafe {
         var dm = reinterpret<float?>(d)
         for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-            dm[j] += scale * s[j]
+            dm[j] = mad(scale, s[j], dm[j])
         }
     }
 }
@@ -65,6 +65,18 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {
     for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
         unsafe {
             d[j] *= s[j]
+        }
+    }
+}
+
+//! d[j] = s[j], width-8 vectorized contiguous copy (the KV-cache store). Same reason as add_inplace:
+//! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
+//! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def copy_floats(var d : float?; s : float const?; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] = s[j]
         }
     }
 }
@@ -113,6 +125,89 @@ def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n
                 }
             }
         }
+    }
+}
+
+// ===== fp32 micro-GEMM: C[M x N] += A[M x K] * B[K x N] (B's N contiguous = SIMD dim) =====
+// The broadcast-A FMA register-tile form (zero horizontal reduce) that makes flash attention's
+// QKᵀ and P·V fast — mirrors llama.cpp ggml simd-gemm.h. Single-thread (callers thread above it,
+// e.g. over heads); pointers so it is fork/thread-callable. Experiment ledger + A/B bench live in
+// benchmarks/attn/. Tolerance-equal to a scalar triple loop (FMA contraction reorders low bits).
+
+// Scalar C += A·B over rows [i0,i1) × cols [j0,j1) — the L-shaped remainder the 4×16 tile leaves.
+def private gemm_f32_region(var cp : float?; ap, bp : float const?; i0, i1, j0, j1, K, N : int64) {
+    unsafe {
+        for (i in range64(i0, i1)) {
+            let crow = i * N
+            for (kk in range64(K)) {
+                let a = ap[i * K + kk]
+                let brow = kk * N
+                for (j in range64(j0, j1)) {
+                    cp[crow + j] += a * bp[brow + j]
+                }
+            }
+        }
+    }
+}
+
+// 4-row × 16-col tile: 16 float4 accumulators, broadcast-A FMA, no horizontal reduce. C += (cols
+// [j0,j0+16) of rows [i0,i0+4)). N is the row stride of C/B; K the row stride / inner dim of A/B.
+def private gemm_f32_uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, N : int64) {
+    unsafe {
+        let o0 = (i0 + 0l) * N + j0; let o1 = (i0 + 1l) * N + j0
+        let o2 = (i0 + 2l) * N + j0; let o3 = (i0 + 3l) * N + j0
+        var r0a = *reinterpret<float4?>(cp + o0);       var r0b = *reinterpret<float4?>(cp + o0 + 4l)
+        var r0c = *reinterpret<float4?>(cp + o0 + 8l);  var r0d = *reinterpret<float4?>(cp + o0 + 12l)
+        var r1a = *reinterpret<float4?>(cp + o1);       var r1b = *reinterpret<float4?>(cp + o1 + 4l)
+        var r1c = *reinterpret<float4?>(cp + o1 + 8l);  var r1d = *reinterpret<float4?>(cp + o1 + 12l)
+        var r2a = *reinterpret<float4?>(cp + o2);       var r2b = *reinterpret<float4?>(cp + o2 + 4l)
+        var r2c = *reinterpret<float4?>(cp + o2 + 8l);  var r2d = *reinterpret<float4?>(cp + o2 + 12l)
+        var r3a = *reinterpret<float4?>(cp + o3);       var r3b = *reinterpret<float4?>(cp + o3 + 4l)
+        var r3c = *reinterpret<float4?>(cp + o3 + 8l);  var r3d = *reinterpret<float4?>(cp + o3 + 12l)
+        for [unroll_count = 2] (kk in range64(K)) {     // ~3% over the rolled loop; same accumulation order
+            let bo = kk * N + j0
+            let b0 = *reinterpret<float4 const?>(bp + bo);      let b1 = *reinterpret<float4 const?>(bp + bo + 4l)
+            let b2 = *reinterpret<float4 const?>(bp + bo + 8l); let b3 = *reinterpret<float4 const?>(bp + bo + 12l)
+            let a0 = ap[(i0 + 0l) * K + kk]; let v0 = float4(a0, a0, a0, a0)
+            r0a = mad(b0, v0, r0a); r0b = mad(b1, v0, r0b); r0c = mad(b2, v0, r0c); r0d = mad(b3, v0, r0d)
+            let a1 = ap[(i0 + 1l) * K + kk]; let v1 = float4(a1, a1, a1, a1)
+            r1a = mad(b0, v1, r1a); r1b = mad(b1, v1, r1b); r1c = mad(b2, v1, r1c); r1d = mad(b3, v1, r1d)
+            let a2 = ap[(i0 + 2l) * K + kk]; let v2 = float4(a2, a2, a2, a2)
+            r2a = mad(b0, v2, r2a); r2b = mad(b1, v2, r2b); r2c = mad(b2, v2, r2c); r2d = mad(b3, v2, r2d)
+            let a3 = ap[(i0 + 3l) * K + kk]; let v3 = float4(a3, a3, a3, a3)
+            r3a = mad(b0, v3, r3a); r3b = mad(b1, v3, r3b); r3c = mad(b2, v3, r3c); r3d = mad(b3, v3, r3d)
+        }
+        *reinterpret<float4?>(cp + o0) = r0a;       *reinterpret<float4?>(cp + o0 + 4l) = r0b
+        *reinterpret<float4?>(cp + o0 + 8l) = r0c;  *reinterpret<float4?>(cp + o0 + 12l) = r0d
+        *reinterpret<float4?>(cp + o1) = r1a;       *reinterpret<float4?>(cp + o1 + 4l) = r1b
+        *reinterpret<float4?>(cp + o1 + 8l) = r1c;  *reinterpret<float4?>(cp + o1 + 12l) = r1d
+        *reinterpret<float4?>(cp + o2) = r2a;       *reinterpret<float4?>(cp + o2 + 4l) = r2b
+        *reinterpret<float4?>(cp + o2 + 8l) = r2c;  *reinterpret<float4?>(cp + o2 + 12l) = r2d
+        *reinterpret<float4?>(cp + o3) = r3a;       *reinterpret<float4?>(cp + o3 + 4l) = r3b
+        *reinterpret<float4?>(cp + o3 + 8l) = r3c;  *reinterpret<float4?>(cp + o3 + 12l) = r3d
+    }
+}
+
+//! Register-tiled fp32 GEMM, C[M x N] += A[M x K] · B[K x N]. 4×16 tile over the bulk; the
+//! L-shaped remainder (cols N%16, rows M%4) falls back to scalar. General over M/K/N. C must be
+//! pre-initialized (the kernel accumulates). 2-3.5× the scalar form on the attention tile shapes.
+def gemm_f32(var cp : float?; ap, bp : float const?; M, K, N : int64) {
+    let m4 = M - M % 4l
+    let n16 = N - N % 16l
+    var ii = 0l
+    while (ii < m4) {
+        var jj = 0l
+        while (jj < n16) {
+            gemm_f32_uk_4x16(cp, ap, bp, ii, jj, K, N)
+            jj += 16l
+        }
+        ii += 4l
+    }
+    if (n16 < N) {                                   // right strip: rows [0,m4) × cols [n16,N)
+        gemm_f32_region(cp, ap, bp, 0l, m4, n16, N, K, N)
+    }
+    if (m4 < M) {                                    // bottom strip: rows [m4,M) × all cols
+        gemm_f32_region(cp, ap, bp, m4, M, 0l, N, K, N)
     }
 }
 
@@ -612,56 +707,136 @@ def rope(var vec : array<float> | #; pos, head_size, n : int64) {
 //! (the GGUF `rope_freqs` tensor — Llama-3.1's NTK-by-parts scaling). Empty factors =>
 //! plain RoPE at base θ, so (θ=10000, empty) reproduces rope() above bit-for-bit.
 //! freq_factors[j] divides the j-th pair's frequency, matching ggml (theta/ff).
+//! Pointer core (see softmax) — the threaded prefill ropes q_b/k_b in fork contexts on raw addresses.
+//! `has_ff` gates the `ff` freq-factors pointer (empty() can't test a pointer); pass null when false.
+def rope_scaled(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        for (p in range64(n / 2l)) {
+            let i = p * 2l
+            let head_dim = i % head_size
+            var freq = 1.0 / pow(theta, float(head_dim) / float(head_size))
+            if (has_ff) {
+                freq /= ff[head_dim / 2l]
+            }
+            let angle = float(pos) * freq
+            let fcr = cos(angle)
+            let fci = sin(angle)
+            let v0 = v[i]
+            let v1 = v[i + 1]
+            v[i] = v0 * fcr - v1 * fci
+            v[i + 1] = v0 * fci + v1 * fcr
+        }
+    }
+}
 def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #) {
     let has_ff = !empty(freq_factors)
-    for (p in range64(n / 2l)) {
-        let i = p * 2l
-        let head_dim = i % head_size
-        var freq = 1.0 / pow(theta, float(head_dim) / float(head_size))
-        if (has_ff) {
-            freq /= freq_factors[head_dim / 2l]
-        }
-        let angle = float(pos) * freq
-        let fcr = cos(angle)
-        let fci = sin(angle)
-        let v0 = vec[i]
-        let v1 = vec[i + 1]
-        vec[i] = v0 * fcr - v1 * fci
-        vec[i + 1] = v0 * fci + v1 * fcr
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_scaled(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff)
     }
 }
 
 //! NEOX-style RoPE (Qwen2 / Phi3 / Gemma2): the rotated pair is offset by head_size/2 — vec[base+j]
 //! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
 //! Same per-pair frequencies; only the pairing differs.
+//! Pointer core (see rope_scaled) — fork-callable NEOX rope on a raw address.
+def rope_scaled_neox(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; mscale : float = 1.0) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        let half = head_size / 2l
+        for (h in range64(n / head_size)) {
+            let base = h * head_size
+            for (j in range64(half)) {
+                var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+                if (has_ff) {
+                    freq /= ff[j]
+                }
+                let angle = float(pos) * freq
+                // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
+                let fcr = cos(angle) * mscale
+                let fci = sin(angle) * mscale
+                let v0 = v[base + j]
+                let v1 = v[base + j + half]
+                v[base + j] = v0 * fcr - v1 * fci
+                v[base + j + half] = v0 * fci + v1 * fcr
+            }
+        }
+    }
+}
 def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; mscale : float = 1.0) {
     let has_ff = !empty(freq_factors)
-    let half = head_size / 2l
-    for (h in range64(n / head_size)) {
-        let base = h * head_size
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= freq_factors[j]
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_scaled_neox(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, mscale)
+    }
+}
+
+//! Table-driven RoPE (NORM, adjacent pairs). cosrow/sinrow are this position's row of the cos/sin
+//! table (head_size/2 entries) precomputed once by build_rope_table. Bit-identical to rope_scaled —
+//! the angle pos*freq is identical across every head and layer, so its cos/sin is hoisted out of the
+//! per-head/per-layer loop into the table and just looked up here.
+//! Looped per head (frequency-pair j is the inner index, 0..half-1, the same for every head) rather
+//! than over a flat p with j = p % half: the per-pair integer modulo dominated the rotation (it's all
+//! cheap arithmetic) — dropping it is ~2.3x on the kernel. (NEON [vectorize] does NOT help: the
+//! interleaved stride-2 in-place rotation is bandwidth-bound, measured slightly slower vectorized.)
+def rope_scaled_tab(vec : float const?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        let half = head_size / 2l
+        for (h in range64(n / head_size)) {
+            let base = h * head_size
+            for (j in range64(half)) {
+                let i = base + j * 2l
+                let fcr = cosrow[j]
+                let fci = sinrow[j]
+                let v0 = v[i]
+                let v1 = v[i + 1]
+                v[i] = v0 * fcr - v1 * fci
+                v[i + 1] = v0 * fci + v1 * fcr
             }
-            let angle = float(pos) * freq
-            // mscale (LongRoPE attn_factor) scales cos/sin — i.e. the rotated magnitude (Phi3 = 1.19)
-            let fcr = cos(angle) * mscale
-            let fci = sin(angle) * mscale
-            let v0 = vec[base + j]
-            let v1 = vec[base + j + half]
-            vec[base + j] = v0 * fcr - v1 * fci
-            vec[base + j + half] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
+//! Table-driven NEOX RoPE (pair offset by head_size/2). Same table as rope_scaled_tab; the NEOX
+//! mscale magnitude factor is baked into cosrow/sinrow by build_rope_table. Bit-identical to rope_scaled_neox.
+//! The NEOX split layout (v0 in [base..base+half), v1 in [base+half..)) is four contiguous arrays, so
+//! the inner loop vectorizes width-8 natively (~5-10% over scalar) — measured Δ=0, i.e. plain mul/sub
+//! under [vectorize] does NOT contract to fma, so it stays bit-exact (no `mad`). The NORM leaf above
+//! can't do this: its interleaved (2j, 2j+1) layout is stride-2 and the JIT won't emit vld2/vst2 for it.
+def rope_scaled_neox_tab(vec : float const?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
+    unsafe {
+        var v = reinterpret<float?>(vec)
+        let half = head_size / 2l
+        for (h in range64(n / head_size)) {
+            let base = h * head_size
+            for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(half)) {
+                let fcr = cosrow[j]
+                let fci = sinrow[j]
+                let v0 = v[base + j]
+                let v1 = v[base + j + half]
+                v[base + j] = v0 * fcr - v1 * fci
+                v[base + j + half] = v0 * fci + v1 * fcr
+            }
         }
     }
 }
 
 //! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
 //! mscale is the LongRoPE magnitude factor (1.0 for everything but Phi3); only the NEOX path uses it.
-def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
+//! Pointer core (see rope_scaled) — fork-callable rope dispatch on a raw address.
+def rope_apply(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; neox : bool; mscale : float = 1.0) {
     if (neox) {
-        rope_scaled_neox(vec, pos, head_size, n, theta, freq_factors, mscale)
+        rope_scaled_neox(vec, pos, head_size, n, theta, has_ff, ff, mscale)
     } else {
-        rope_scaled(vec, pos, head_size, n, theta, freq_factors)
+        rope_scaled(vec, pos, head_size, n, theta, has_ff, ff)
+    }
+}
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
+    let has_ff = !empty(freq_factors)
+    unsafe {
+        let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
+        rope_apply(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, neox, mscale)
     }
 }

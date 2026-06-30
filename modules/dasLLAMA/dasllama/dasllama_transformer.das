@@ -32,6 +32,20 @@ enum FfnAct {
     gelu
 }
 
+//! Prefill attention algorithm (A/B selectable; all variants kept). `classic` streams the full causal
+//! K/V range from the cache per query — threaded over heads, O(npos²) with K/V re-read every query.
+//! `blocked` query-blocks so each K/V tile is loaded once and reused across the whole block, cutting
+//! K/V cache traffic ~ATTN_BLOCK_Q×; it is BIT-IDENTICAL to classic (same per-query softmax + same
+//! key-order V accumulation). `flash` is tiled flash attention — QKᵀ and P·V as register-tiled fp32
+//! GEMMs (gemm_f32) with online softmax, the form that avoids the per-pair horizontal reduce; NOT
+//! bit-identical (online-softmax FP reorder), validated token-for-token vs the oracle + logit-diff.
+//! Select via set_prefill_attn_mode (default flash).
+enum AttnPrefillMode {
+    classic
+    blocked
+    flash
+}
+
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
     dim : int64
@@ -536,6 +550,19 @@ struct RunState {
     hb2_b : array<float>      // FFN gate (npos x hidden_dim)
     xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
     xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
+    // flash-attention per-head packing scratch (empty unless AttnPrefillMode.flash; sized in
+    // forward_prefill to n_heads × tile, so each head's tile work is contention-free when threaded)
+    fa_q : array<float>       // packed Q tile [n_heads × QT × head_size]
+    fa_k : array<float>       // packed Kᵀ tile [n_heads × head_size × KV]
+    fa_v : array<float>       // packed V tile  [n_heads × KV × head_size]
+    fa_kq : array<float>      // score / prob tile [n_heads × QT × KV]
+    fa_vkq : array<float>     // output accumulator [n_heads × QT × head_size]
+    // RoPE cos/sin table (empty until forward_prefill builds it once per prefill, sized npos × head_size/2).
+    // angle = pos*freq is identical across all heads AND layers, so cos/sin is precomputed once here
+    // instead of recomputed per head/layer. Kept LOCAL (run-state, not a module global) so jobque
+    // fork-context cloning stays cheap — fork heaps copy module/[init] data, not the run state.
+    rope_cos : array<float>
+    rope_sin : array<float>
 }
 
 //! Allocate the run state sized to a model.
@@ -598,6 +625,133 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Transforme
                     let off = int64(p) * dim
                     rmsnorm(op + off, ip + off, wp, dim, eps)
                 }
+            }
+        }
+    }
+}
+
+// Threaded per-position RoPE (pass 1 of the two-pass rope+store): rope q_b[p*qd..] and k_b[p*kv_dim..]
+// in place for every position, at absolute pos start_pos+p. Fork workers touch raw addresses only —
+// q_b/k_b are hoisted to base pointers, the read-only freq-factors to a const pointer. The KV-cache
+// copy is a SEPARATE pass in the caller.
+//   We call the leaf rope_scaled / rope_scaled_neox DIRECTLY (branching on neox here) rather than the
+//   rope_apply dispatch wrapper — same reason rms_batch calls rmsnorm directly. Routing a hoisted
+//   pointer THROUGH the rope_apply pass-through (whose param is `float const?`) lets the JIT mark that
+//   param readonly and eliminate the leaf's reinterpret-back write — the rope silently no-ops. A
+//   call-site reinterpret launders it, but that can't be lint-suppressed inside maybe_parallel_for, so
+//   calling the leaf directly is the clean fix.
+def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Transformer; start_pos, npos, head_size, qd, kv_dim : int64) {
+    let c = t.config
+    let theta = c.rope_freq_base
+    let neox = c.rope_neox
+    let mscale = c.rope_mscale
+    let has_ff = !empty(t.rope_freqs)
+    unsafe {
+        var qp = addr(q_b[0])
+        var kp = addr(k_b[0])
+        let ffp = has_ff ? reinterpret<float const?>(addr(t.rope_freqs[0])) : null
+        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    let ap = start_pos + pp
+                    if (neox) {
+                        rope_scaled_neox(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp, mscale)
+                        rope_scaled_neox(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp, mscale)
+                    } else {
+                        rope_scaled(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp)
+                        rope_scaled(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Precompute the prefill RoPE cos/sin table once: cos_tab[pi*half + j] = cos((start_pos+pi)*freq[j]),
+// sin likewise, for every position pi in [0,npos) and frequency-pair j in [0, head_size/2). freq[j] is
+// position-independent (one pow per pair, hoisted out of the position loop) and identical for NORM and
+// NEOX; the NEOX mscale magnitude factor is folded in here so the tab leaves just look up. Built once
+// before the layer loop, then reused by rope_batch_tab across all heads and layers (the redundancy the
+// table removes). Bit-identical to the classic leaves — the same float expressions, just deduplicated.
+def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Transformer; start_pos, npos, head_size : int64) {
+    let c = t.config
+    let theta = c.rope_freq_base
+    let half = head_size / 2l
+    let scale = c.rope_neox ? c.rope_mscale : 1.0   // NEOX scales cos/sin by mscale; NORM leaves it 1.0
+    let has_ff = !empty(t.rope_freqs)
+    cos_tab |> resize(npos * half)
+    sin_tab |> resize(npos * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        let ffp = has_ff ? reinterpret<float const?>(addr(t.rope_freqs[0])) : null
+        for (j in range64(half)) {
+            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
+            if (has_ff) {
+                freq /= ffp[j]
+            }
+            for (pi in range64(npos)) {
+                let angle = float(start_pos + pi) * freq
+                cp[pi * half + j] = cos(angle) * scale
+                sp[pi * half + j] = sin(angle) * scale
+            }
+        }
+    }
+}
+
+// Table-driven prefill RoPE: rope q_b[p*qd..] and k_b[p*kv_dim..] in place using the precomputed cos/sin
+// table (no transcendentals here — just lookups). Mirrors rope_batch's threading + two-pass contract,
+// and like it calls the LEAF rope_scaled_*_tab DIRECTLY (not a dispatch wrapper) to avoid the JIT
+// pass-through-const-write-elision bug. crow/srow point at position p's table row (half entries).
+def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_tab : array<float>; sin_tab : array<float>;
+                           neox : bool; npos, head_size, qd, kv_dim : int64) {
+    let half = head_size / 2l
+    unsafe {
+        var qp = addr(q_b[0])
+        var kp = addr(k_b[0])
+        let cp = reinterpret<float const?>(addr(cos_tab[0]))
+        let sp = reinterpret<float const?>(addr(sin_tab[0]))
+        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    let crow = cp + pp * half
+                    let srow = sp + pp * half
+                    if (neox) {
+                        rope_scaled_neox_tab(qp + pp * qd, head_size, qd, crow, srow)
+                        rope_scaled_neox_tab(kp + pp * kv_dim, head_size, kv_dim, crow, srow)
+                    } else {
+                        rope_scaled_tab(qp + pp * qd, head_size, qd, crow, srow)
+                        rope_scaled_tab(kp + pp * kv_dim, head_size, kv_dim, crow, srow)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Store the roped k / raw v for all npos positions into the layer's KV cache. The destination offset
+// loff + (start_pos+p)*kv_dim and the source offset p*kv_dim both advance by kv_dim per position, so
+// the whole k_b -> key_cache store is ONE contiguous block of npos*kv_dim floats (v likewise) — copied
+// with the vectorized copy_floats (bounds-checked array copy doesn't vectorize), threaded over the
+// positions (each worker owns a disjoint cache slice). Self-gates on KV_STORE_PAR_THRESHOLD.
+def private kv_store_batch(var key_cache : array<float>; var value_cache : array<float>;
+                           k_b : array<float>; v_b : array<float>; loff, start_pos, npos, kv_dim : int64) {
+    let dstbase = loff + start_pos * kv_dim
+    unsafe {
+        var kcp = addr(key_cache[0])
+        var vcp = addr(value_cache[0])
+        let kbp = reinterpret<float const?>(addr(k_b[0]))
+        let vbp = reinterpret<float const?>(addr(v_b[0]))
+        maybe_parallel_for(kv_dim * npos >= KV_STORE_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            let m0 = int64(rb) * kv_dim
+            let cnt = (int64(re) - int64(rb)) * kv_dim
+            unsafe {
+                copy_floats(kcp + dstbase + m0, kbp + m0, cnt)
+                copy_floats(vcp + dstbase + m0, vbp + m0, cnt)
             }
         }
     }
@@ -837,6 +991,43 @@ let ATTN_PAR_THRESHOLD = 100_000l
 let REQUANT_PAR_THRESHOLD = 256_000l
 // Thread the per-position rmsnorm once dim × npos clears this.
 let NORM_PAR_THRESHOLD = 256_000l
+// Thread the per-position rope (q_b + k_b) once (qd + kv_dim) × npos clears this.
+let ROPE_PAR_THRESHOLD = 100_000l
+// Thread the KV-cache store once kv_dim × npos clears this (it's a memory-bound contiguous copy).
+let KV_STORE_PAR_THRESHOLD = 256_000l
+// Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).
+let ATTN_BLOCK_Q = 8l
+// Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
+// per-query running max/sum use fixed arrays sized ATTN_FLASH_QT — keep that a literal 64 in sync.
+let ATTN_FLASH_QT = 64l
+let ATTN_FLASH_KV = 64l
+
+var g_attn_prefill_mode = AttnPrefillMode.flash   // A/B toggle; see AttnPrefillMode (flash is fastest)
+
+//! Select the prefill attention algorithm (default flash). See AttnPrefillMode.
+def set_prefill_attn_mode(m : AttnPrefillMode) {
+    g_attn_prefill_mode = m
+}
+
+//! The prefill attention algorithm currently selected.
+def get_prefill_attn_mode() : AttnPrefillMode {
+    return g_attn_prefill_mode
+}
+
+// Prefill RoPE: when true (default) precompute the cos/sin table once per prefill and look it up;
+// when false fall back to the classic per-position pow/cos/sin path. A/B toggle for benchmarking
+// (the two paths are bit-identical — the table just deduplicates the transcendentals across heads/layers).
+var g_use_rope_table = true
+
+//! Select the prefill RoPE path: table lookup (default true) vs classic per-position pow/cos/sin.
+def set_rope_table_mode(on : bool) {
+    g_use_rope_table = on
+}
+
+//! Whether prefill RoPE uses the precomputed cos/sin table.
+def get_rope_table_mode() : bool {
+    return g_use_rope_table
+}
 
 var g_prefill_prof_acc : table<string; int64>
 
@@ -850,6 +1041,11 @@ def private prof_add(name : string; t0 : int64) {
     g_prefill_prof_acc[name] = cur + int64(get_time_usec(t0))
 }
 
+//! The accumulated time (us) for one section since the last reset (0 if the section never ran).
+def prefill_profile_get(name : string) : int64 {
+    return g_prefill_prof_acc?[name] ?? 0l
+}
+
 //! Print the accumulated per-section times (us) since the last reset.
 def prefill_profile_report() {
     var total = 0l
@@ -861,6 +1057,256 @@ def prefill_profile_report() {
         to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%)\n")
     }
     to_log(LOG_INFO, "  TOTAL: {total}\n")
+}
+
+// Prefill attention, threaded over heads (perfect load balance: every head walks the same causal
+// triangle into a disjoint qd-strided output slice; no shared scratch). Dispatches on g_attn_prefill_mode.
+// Workers run in fork contexts → raw pointers only; scalars are passed by value (never the struct).
+//   classic — per query, stream cached K[kstart..ap] then V[kstart..ap] (O(npos²), K/V re-read per query).
+//   blocked — query-block of ATTN_BLOCK_Q: load each K[kk]/V[kk] ONCE, reuse across the block's queries.
+//     Bit-identical to classic: same per-query score row + softmax, and the V accumulation visits keys in
+//     increasing order (== increasing j), so the per-output FMA order matches classic exactly.
+// One head of tiled flash attention (online softmax). Q/K/V tiles are packed into this head's
+// private scratch, QKᵀ and P·V run through the register-tiled gemm_f32 (no per-pair reduce), and a
+// per-query running max/sum (mrun/srun) folds each KV tile in. All pointers are pre-offset to this
+// head; qpk/kpk/vpk/kqp/vkqp are this head's scratch bases. NOT bit-exact vs classic (online reorder).
+def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
+                            var qpk, kpk, vpk, kqp, vkqp : float?;
+                            loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff : int64;
+                            scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+    let QT = ATTN_FLASH_QT
+    let KV = ATTN_FLASH_KV
+    unsafe {
+        var p0 = 0l
+        while (p0 < npos) {
+            let tile_rows = min(QT, npos - p0)
+            let ap0 = start_pos + p0
+            let apL = ap0 + tile_rows - 1l                 // max query position in this tile
+            let kstart_min = (is_sliding && ap0 + 1l > sliding_window) ? (ap0 + 1l - sliding_window) : 0l
+            // pack the Q tile contiguous [tile_rows × head_size] (q rows are qd-strided in q_b)
+            for (qt in range64(tile_rows)) {
+                let qsrc = (p0 + qt) * qd + qoff
+                for (d in range64(head_size)) {
+                    qpk[qt * head_size + d] = qp[qsrc + d]
+                }
+            }
+            var mrun : float[64]   // must equal ATTN_FLASH_QT (fixed-array dim needs an int32 literal)
+            var srun : float[64]
+            for (qt in range64(tile_rows)) {
+                mrun[int(qt)] = -1.0e30
+                srun[int(qt)] = 0.0
+                for (d in range64(head_size)) {
+                    vkqp[qt * head_size + d] = 0.0
+                }
+            }
+            var kt0 = kstart_min
+            while (kt0 <= apL) {
+                let kvalid = min(KV, apL + 1l - kt0)
+                // pack Kᵀ tile [head_size × KV] and V tile [KV × head_size], zero-padding the tail
+                for (kt in range64(KV)) {
+                    if (kt < kvalid) {
+                        let ksrc = loff + (kt0 + kt) * kv_dim + kvhoff
+                        for (d in range64(head_size)) {
+                            kpk[d * KV + kt] = kcp[ksrc + d]
+                            vpk[kt * head_size + d] = vcp[ksrc + d]
+                        }
+                    } else {
+                        for (d in range64(head_size)) {
+                            kpk[d * KV + kt] = 0.0
+                            vpk[kt * head_size + d] = 0.0
+                        }
+                    }
+                }
+                // scores: kq[tile_rows × KV] = Q · Kᵀ  (gemm_f32 accumulates, so zero first)
+                for (i in range64(tile_rows * KV)) {
+                    kqp[i] = 0.0
+                }
+                gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
+                // scale + softcap + causal/sliding mask, then online-softmax fold per query row
+                for (qt in range64(tile_rows)) {
+                    let ap = ap0 + qt
+                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                    let row = qt * KV
+                    var tmax = -1.0e30
+                    for (kt in range64(KV)) {
+                        let kabs = kt0 + kt
+                        if (kt < kvalid && kabs <= ap && kabs >= kstart_p) {
+                            var sc = kqp[row + kt] * scale
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                sc = attn_softcap * tanh(sc / attn_softcap)
+                            }
+                            kqp[row + kt] = sc
+                            tmax = max(tmax, sc)
+                        } else {
+                            kqp[row + kt] = -1.0e30   // masked → exp() to 0 below
+                        }
+                    }
+                    let mold = mrun[int(qt)]
+                    let mnew = max(mold, tmax)
+                    if (mnew > mold) {                 // new running max → rescale this row's accumulator
+                        let ms = exp(mold - mnew)
+                        for (d in range64(head_size)) {
+                            vkqp[qt * head_size + d] *= ms
+                        }
+                        srun[int(qt)] *= ms
+                    }
+                    mrun[int(qt)] = mnew
+                    for (kt in range64(KV)) {          // kq row becomes the (un-normalized) prob row
+                        let pe = kqp[row + kt] <= -1.0e29 ? 0.0 : exp(kqp[row + kt] - mnew)
+                        kqp[row + kt] = pe
+                        srun[int(qt)] += pe
+                    }
+                }
+                // accumulate output: vkq[tile_rows × head_size] += P[tile_rows × KV] · V[KV × head_size]
+                gemm_f32(vkqp, kqp, vpk, tile_rows, KV, head_size)
+                kt0 += KV
+            }
+            // normalize by the running sum and write the qd-strided output slice
+            for (qt in range64(tile_rows)) {
+                let inv = srun[int(qt)] > 0.0 ? 1.0 / srun[int(qt)] : 0.0
+                let dst = (p0 + qt) * qd + qoff
+                for (d in range64(head_size)) {
+                    xbp[dst + d] = vkqp[qt * head_size + d] * inv
+                }
+            }
+            p0 += QT
+        }
+    }
+}
+
+def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size, qd, kv_dim,
+                              n_heads, kv_mul : int64; scale : float;
+                              is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+    let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
+    let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
+    unsafe {
+        let qp = reinterpret<float const?>(addr(s.q_b[0]))
+        let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
+        let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
+        var xbp = addr(s.xb_b[0])
+        var attp = addr(s.att_b[0])
+        if (g_attn_prefill_mode == AttnPrefillMode.flash) {
+            // per-head packing scratch bases (sized in forward_prefill for this mode)
+            var qpk0 = addr(s.fa_q[0]);  var kpk0 = addr(s.fa_k[0]);  var vpk0 = addr(s.fa_v[0])
+            var kqp0 = addr(s.fa_kq[0]); var vkqp0 = addr(s.fa_vkq[0])
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        attn_head_flash(qp, kcp, vcp, xbp,
+                            qpk0 + hh * ATTN_FLASH_QT * head_size,
+                            kpk0 + hh * head_size * ATTN_FLASH_KV,
+                            vpk0 + hh * ATTN_FLASH_KV * head_size,
+                            kqp0 + hh * ATTN_FLASH_QT * ATTN_FLASH_KV,
+                            vkqp0 + hh * ATTN_FLASH_QT * head_size,
+                            loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff,
+                            scale, is_sliding, sliding_window, attn_softcap)
+                    }
+                }
+            }
+        } elif (g_attn_prefill_mode == AttnPrefillMode.blocked) {
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let hblock = hh * ATTN_BLOCK_Q * maxctx   // this head's ATTN_BLOCK_Q score rows
+                        var p0 = 0l
+                        while (p0 < npos) {
+                            let bq = min(ATTN_BLOCK_Q, npos - p0)
+                            let ap_first = start_pos + p0
+                            let ap_last = ap_first + bq - 1l
+                            let kstart_block = (is_sliding && ap_first + 1l > sliding_window) ? (ap_first + 1l - sliding_window) : 0l
+                            // PASS 1: scores — each K[kk] loaded once, reused across the block's queries
+                            for (kk in range64(kstart_block, ap_last + 1l)) {
+                                let koff = loff + kk * kv_dim + kvhoff
+                                let bi_lo = max(0l, kk - ap_first)            // causal: keep queries with ap >= kk
+                                var bi_hi = bq
+                                if (is_sliding) {                            // window: keep queries with kstart_p <= kk
+                                    bi_hi = min(bq, kk + sliding_window - ap_first)
+                                }
+                                for (bi in range64(bi_lo, bi_hi)) {
+                                    let p = p0 + bi
+                                    let ap = start_pos + p
+                                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                    let qbase = p * qd + qoff
+                                    attp[hblock + bi * maxctx + (kk - kstart_p)] = dot(qp + qbase, kcp + koff, head_size) * scale
+                                }
+                            }
+                            // softcap + softmax per query, then zero its output slice
+                            for (bi in range64(bq)) {
+                                let p = p0 + bi
+                                let ap = start_pos + p
+                                let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                let cnt = ap + 1l - kstart_p
+                                let rbase = hblock + bi * maxctx
+                                if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                    softcap(attp + rbase, cnt, attn_softcap)
+                                }
+                                softmax(attp + rbase, cnt)
+                                let qbase = p * qd + qoff
+                                for (i in range64(head_size)) {
+                                    xbp[qbase + i] = 0.0
+                                }
+                            }
+                            // PASS 2: output += Σ att[j]·V[j] — each V[kk] loaded once, reused across the block
+                            for (kk in range64(kstart_block, ap_last + 1l)) {
+                                let voff = loff + kk * kv_dim + kvhoff
+                                let bi_lo = max(0l, kk - ap_first)
+                                var bi_hi = bq
+                                if (is_sliding) {
+                                    bi_hi = min(bq, kk + sliding_window - ap_first)
+                                }
+                                for (bi in range64(bi_lo, bi_hi)) {
+                                    let p = p0 + bi
+                                    let ap = start_pos + p
+                                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                                    let qbase = p * qd + qoff
+                                    vaxpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
+                                }
+                            }
+                            p0 += ATTN_BLOCK_Q
+                        }
+                    }
+                }
+            }
+        } else {
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let abase = hh * maxctx                // this head's private score row
+                        for (p in range64(npos)) {
+                            let ap = start_pos + p
+                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                            let cnt = ap + 1l - kstart
+                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
+                            for (j in range64(cnt)) {
+                                let koff = loff + (kstart + j) * kv_dim + kvhoff
+                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
+                            }
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                softcap(attp + abase, cnt, attn_softcap)
+                            }
+                            softmax(attp + abase, cnt)
+                            for (i in range64(head_size)) {
+                                xbp[qbase + i] = 0.0
+                            }
+                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
+                                let voff = loff + (kstart + j) * kv_dim + kvhoff
+                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 //! Prefill: process all `npos` prompt tokens (positions 0..npos-1) in ONE pass per layer — batched
@@ -898,9 +1344,17 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     s.hb2_b |> resize(npos * hidden)
     s.xqb |> resize(npos * maxn)
     s.xsb |> resize(npos * maxn / 32l)
-    // per-head attention scratch: each head gets its own (start_pos+npos)-wide score row (= max cnt),
-    // so the head loop threads with no shared `att` row to contend on
-    s.att_b |> resize(n_heads * (start_pos + npos))
+    // per-head attention scratch. classic uses one (start_pos+npos)-wide score row per head; blocked
+    // needs ATTN_BLOCK_Q such rows per head (one per query in the block). Size for blocked — classic
+    // indexes the first row of each head's block, so the wider allocation is a harmless superset.
+    s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+    if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see RunState)
+        s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)
+        s.fa_k |> resize(n_heads * head_size * ATTN_FLASH_KV)
+        s.fa_v |> resize(n_heads * ATTN_FLASH_KV * head_size)
+        s.fa_kq |> resize(n_heads * ATTN_FLASH_QT * ATTN_FLASH_KV)
+        s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
+    }
 
     // token embeddings -> residual stream x_b [npos x dim]
     let ts_embed = ref_time_ticks()
@@ -918,6 +1372,16 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         }
     }
     prof_add("embed", ts_embed)
+
+    // Precompute the RoPE cos/sin table ONCE for this prefill (angle = pos*freq is identical across
+    // every head and layer, so this replaces the per-head/per-layer pow/cos/sin recomputation with a
+    // single npos × head_size/2 table that rope_batch_tab looks up). Built outside the layer loop.
+    let use_rope_tab = g_use_rope_table
+    let ts_rope_build = ref_time_ticks()
+    if (use_rope_tab) {
+        build_rope_table(s.rope_cos, s.rope_sin, t, start_pos, npos, head_size)
+    }
+    prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 
     for (l in range64(c.n_layers)) {
         let loff = l * seq_len * kv_dim
@@ -940,72 +1404,26 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
             }
         }
         prof_add("mm_qkv", ts_qkv)
-        // RoPE per position (absolute pos = start_pos + p), then store k/v into the cache
+        // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
+        // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
         let ts_rope = ref_time_ticks()
-        for (p in range64(npos)) {
-            let ap = start_pos + p
-            array_view(s.q_b, p * qd, qd) $(var qv : array<float>#) {
-                rope_apply(qv, ap, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-            }
-            array_view(s.k_b, p * kv_dim, kv_dim) $(var kvv : array<float>#) {
-                rope_apply(kvv, ap, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-            }
-            let kvoff = loff + ap * kv_dim
-            for (i in range64(kv_dim)) {
-                s.key_cache[kvoff + i] = s.k_b[p * kv_dim + i]
-                s.value_cache[kvoff + i] = s.v_b[p * kv_dim + i]
-            }
+        if (use_rope_tab) {
+            rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
+        } else {
+            rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
         }
         prof_add("rope", ts_rope)
-        // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
-        // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
-        // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
-        // THREADED OVER HEADS: every head does the same causal triangle (perfect load balance) and
-        // writes a disjoint output slice [p*qd + h*head_size ..]; each head owns its own att_b row, so
-        // there is no shared scratch to contend on. Workers run in fork contexts → raw pointers only.
+        // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
+        // interleaving: rope of pos p touches only q_b[p]/k_b[p], the copy reads only k_b[p]/v_b[p]).
+        let ts_kv = ref_time_ticks()
+        kv_store_batch(s.key_cache, s.value_cache, s.k_b, s.v_b, loff, start_pos, npos, kv_dim)
+        prof_add("kv_store", ts_kv)
+        // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
+        // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
+        // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
         let ts_attn = ref_time_ticks()
-        let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-        let sliding_window = c.sliding_window  // hoisted: scalars captured by the worker, not the struct
-        let attn_softcap = c.attn_logit_softcap
-        unsafe {
-            let qp = reinterpret<float const?>(addr(s.q_b[0]))
-            let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
-            let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
-            var xbp = addr(s.xb_b[0])
-            var attp = addr(s.att_b[0])
-            let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
-            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
-                unsafe {
-                    for (h in range(rb, re)) {
-                        let hh = int64(h)
-                        let qoff = hh * head_size
-                        let kvhoff = (hh / kv_mul) * head_size
-                        let abase = hh * maxctx                // this head's private score row
-                        for (p in range64(npos)) {
-                            let ap = start_pos + p
-                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                            let cnt = ap + 1l - kstart
-                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
-                            for (j in range64(cnt)) {
-                                let koff = loff + (kstart + j) * kv_dim + kvhoff
-                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
-                            }
-                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                                softcap(attp + abase, cnt, attn_softcap)
-                            }
-                            softmax(attp + abase, cnt)
-                            for (i in range64(head_size)) {
-                                xbp[qbase + i] = 0.0
-                            }
-                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
-                                let voff = loff + (kstart + j) * kv_dim + kvhoff
-                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        prefill_attention(s, loff, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
+                          is_sliding, c.sliding_window, c.attn_logit_softcap)
         prof_add("attn", ts_attn)
         // output projection (batched, qd -> dim) + optional post-attn norm + residual
         let ts_wo = ref_time_ticks()
