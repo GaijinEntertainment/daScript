@@ -37,6 +37,33 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x2eul   // exp(floatN) → inline ggml_
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
+// `options _jit_fast_math = true` stamps every FP instruction with all fast-math flags before opt — lets
+// reductions reassociate/vectorize and FP contract everywhere. NON-bit-exact, but this is the same FP
+// laxity llama.cpp/ggml already runs with (hand-coded FMA + ~2ulp poly exp + reassociated SIMD reductions;
+// ggml CPU is just -O3, no -ffast-math flag — it hand-writes the equivalent). Measured greedy-STABLE on
+// Llama-3.2-1B prefill (identical next token @512/1024/2048, ~1% logit drift) for +8-10% end-to-end.
+// Default off (bit-exact). The magic-number exp survives reassoc — LLVM keeps `z` (its bits feed the
+// exponent bitcast), so it does NOT fold `(x*log2e + M) - M` away.
+var g_jit_fast_math = false
+
+def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
+    var fn = LLVMGetFirstFunction(m)
+    while (fn != null) {
+        var bb = LLVMGetFirstBasicBlock(fn)
+        while (bb != null) {
+            var inst = LLVMGetFirstInstruction(bb)
+            while (inst != null) {
+                if (LLVMCanValueUseFastMathFlags(inst) != 0) {
+                    LLVMSetFastMathFlags(inst, 0x7fu)   // reassoc|nnan|ninf|nsz|arcp|contract|afn
+                }
+                inst = LLVMGetNextInstruction(inst)
+            }
+            bb = LLVMGetNextBasicBlock(bb)
+        }
+        fn = LLVMGetNextFunction(fn)
+    }
+}
+
 def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
                      emit_prologue : bool; debug_info : bool) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
@@ -47,6 +74,7 @@ def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : i
     h = (h ^ uint64(size_level)) * JIT_FNV_PRIME
     h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (debug_info ? 1ul : 0ul)) * JIT_FNV_PRIME
+    h = (h ^ (g_jit_fast_math ? 1ul : 0ul)) * JIT_FNV_PRIME   // fast-math changes codegen → distinct cache
     return "{h}"
 }
 
@@ -198,6 +226,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
 
     // Set global options
     LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
+    g_jit_fast_math = prog._options |> find_arg("_jit_fast_math") ?as tBool ?? false
 
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         prog |> for_each_module() $(mod) {
@@ -309,6 +338,9 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                 panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
             }
             generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
+            if (g_jit_fast_math) {
+                apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
+            }
             optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, !gen_exe)
             if (dump_ir) {
                 // Let's remove unused attributes before we print IR.
