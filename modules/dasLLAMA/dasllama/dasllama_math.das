@@ -135,6 +135,7 @@ def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n
 // benchmarks/attn/. Tolerance-equal to a scalar triple loop (FMA contraction reorders low bits).
 
 // Scalar C += A·B over rows [i0,i1) × cols [j0,j1) — the L-shaped remainder the 4×16 tile leaves.
+[hint(noalias = cp, noalias = ap, noalias = bp)]
 def private gemm_f32_region(var cp : float?; ap, bp : float const?; i0, i1, j0, j1, K, N : int64) {
     unsafe {
         for (i in range64(i0, i1)) {
@@ -152,6 +153,7 @@ def private gemm_f32_region(var cp : float?; ap, bp : float const?; i0, i1, j0, 
 
 // 4-row × 16-col tile: 16 float4 accumulators, broadcast-A FMA, no horizontal reduce. C += (cols
 // [j0,j0+16) of rows [i0,i0+4)). N is the row stride of C/B; K the row stride / inner dim of A/B.
+[hint(noalias = cp, noalias = ap, noalias = bp)]
 def private gemm_f32_uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, N : int64) {
     unsafe {
         let o0 = (i0 + 0l) * N + j0; let o1 = (i0 + 1l) * N + j0
@@ -191,6 +193,7 @@ def private gemm_f32_uk_4x16(var cp : float?; ap, bp : float const?; i0, j0, K, 
 //! Register-tiled fp32 GEMM, C[M x N] += A[M x K] · B[K x N]. 4×16 tile over the bulk; the
 //! L-shaped remainder (cols N%16, rows M%4) falls back to scalar. General over M/K/N. C must be
 //! pre-initialized (the kernel accumulates). 2-3.5× the scalar form on the attention tile shapes.
+[hint(noalias = cp, noalias = ap, noalias = bp)]
 def gemm_f32(var cp : float?; ap, bp : float const?; M, K, N : int64) {
     let m4 = M - M % 4l
     let n16 = N - N % 16l
