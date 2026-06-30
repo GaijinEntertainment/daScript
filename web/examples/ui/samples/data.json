@@ -26,6 +26,11 @@
       "files" : ["examples/path_tracer_lab/main.das", "examples/path_tracer_lab/path_tracer.das"]
     },
     {
+      "name" : "Physarum Lab (threads + audio)",
+      "slug" : "physarum_lab",
+      "files" : ["examples/physarum_lab.das"]
+    },
+    {
       "name" : "OpenGL: mandelbrot",
       "files" : ["examples/gl_02_mandelbrot.das"]
     },

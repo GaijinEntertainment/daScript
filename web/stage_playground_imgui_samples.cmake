@@ -1,4 +1,4 @@
-# Generate the dasImgui playground samples (furier, path_tracer_lab) from the canonical
+# Generate the dasImgui playground samples (furier, path_tracer_lab, physarum_lab) from the canonical
 # examples/graphics sources — no committed copies, single source of truth. Run at stage time
 # (stage_site_playground), so they live only in the gitignored staged samples tree.
 #
@@ -46,4 +46,10 @@ string(REPLACE
     _pt_main "${_pt_main}")
 file(WRITE "${DEST}/path_tracer_lab/main.das" "${_pt_main}")
 
-message(STATUS "Staged dasImgui playground samples (furier, path_tracer_lab) into ${DEST}")
+# physarum_lab — self-contained single file (no cross-tree require to rewrite), verbatim like furier.
+configure_file(
+    "${REPO}/examples/graphics/physarum_lab_opengl_imgui_example.das"
+    "${DEST}/physarum_lab.das"
+    COPYONLY)
+
+message(STATUS "Staged dasImgui playground samples (furier, path_tracer_lab, physarum_lab) into ${DEST}")
