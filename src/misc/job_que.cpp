@@ -546,7 +546,12 @@ namespace das {
     void Feature::setFrom ( Context * c ) {
         from = c;
         if ( c && c->sharedPtrContext ) {
-            fromShared = c->shared_from_this();
+            // Standalone-AOT/exe contexts are member objects (not make_shared), so their
+            // weak_from_this() is empty and shared_from_this() throws bad_weak_ptr. Fall back
+            // to a null owner: such a context lives for the whole program, so the Feature never
+            // needs to keep it alive. Mirrors debugAgentContextOrNull in context.cpp.
+            auto wp = c->weak_from_this();
+            fromShared = wp.expired() ? nullptr : wp.lock();
         } else {
             fromShared.reset();
         }
