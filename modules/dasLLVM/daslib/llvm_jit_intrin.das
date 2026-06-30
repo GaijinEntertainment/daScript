@@ -878,6 +878,10 @@ def private vexpf_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 // The default lowering (@llvm.exp.vNf32) scalarizes to N libm expf calls on targets without a vector
 // libm (Darwin-ARM, most others) — ~7x slower. The |n|>126 overflow/underflow path is a branchless
 // select tree (correct inf/0), so this is a full-range drop-in: callers need no clamp.
+// The always-computed guard costs ~2.4x of the throughput (~2.9x vs scalar here, vs ~7x for a fast-path-
+// only form like dasLLAMA's exp4). TODO (post-x64): add ggml's fast-path branch — reduce-OR the |n|>126
+// mask, cond-br past the slow path when no lane overflows — to recover ~7x on the common case, then
+// dasLLAMA's exp4 can be retired in favor of plain exp(float4).
 def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let dim = opType.vectorDim

@@ -657,6 +657,11 @@ def softmax(var x : array<float> | #; size : int64) {
 //! no vector libm on Darwin-ARM, so exp(float4) scalarizes). FAST PATH ONLY (no |n|>126 guard):
 //! valid for x in ~[-87, 88]; outside that it returns garbage, so callers must clamp. The flash
 //! softmax fold clamps masked/underflow entries to -87 (exp -> ~0) before calling.
+//! NOTE: the JIT now also emits this same ggml_v_expf as the lowering for exp(floatN) directly
+//! (build_vector_expf in modules/dasLLVM/daslib/llvm_jit_intrin.das) — but full-range (always pays the
+//! |n|>126 guard, ~2.9x) and gated to aarch64 pending x64 hardware validation. This local exp4 is kept
+//! separate because it's the cheaper fast-path-only form. Once x64 is verified, add a fast-path branch
+//! to the intrinsic and replace this with exp(float4); until then they coexist deliberately.
 def exp4(x : float4) : float4 {
     let z = mad(x, float4(1.4426950216293335), float4(12582912.0))   // x*log2e + 1.5*2^23
     let n = z - float4(12582912.0)                                   // round(x*log2e)
