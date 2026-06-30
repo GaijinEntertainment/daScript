@@ -759,6 +759,7 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
 
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
+[hint(unsafe_range_check)]
 def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
     for (i in range64(n)) {
         y[yoff + i] += b[boff + i]
