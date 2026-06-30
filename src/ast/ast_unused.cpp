@@ -373,6 +373,30 @@ namespace das {
                 propagatePassMutable(operand);
             }
         }
+        // a modifyArgument callee writes through SOME argument — mark which of the call-site
+        // arguments inherit that write (so the caller's own modifyArgument / DCE is correct)
+        void propagateModifiedArguments ( const Function * fn, const vector<ExpressionPtr> & arguments, bool inCycle ) {
+            // bound by the signature too (matching markPassMutableArguments) — argVar indexes
+            // fn->arguments[ai], so a call shape with more args than params can't go OOB
+            for ( size_t ai=0, ais=das::min(arguments.size(), fn->arguments.size()); ai!=ais; ++ai ) {
+                const auto & argVar = fn->arguments[ai];
+                const auto & argT = argVar->type;
+                if ( inCycle ) {
+                    // recursive callee still mid-analysis: conservative signature rule
+                    if ( argT->canWrite() ) propagateWrite(arguments[ai]);
+                } else if ( !fn->builtIn ) {
+                    // canWrite() is false for a `const`-pointee/`const`-ref argument, but a callee
+                    // can still write through it by const-stripping (reinterpret to mutable). Its
+                    // per-argument access_ref records that real write, so honor it — otherwise the
+                    // forwarded write is invisible and the call is wrongly DCE'd (issue #3311).
+                    const bool argWritten = argT->canWrite()
+                        || ( argVar->access_ref && argT->isRefOrPointer() );
+                    if ( fn->knownSideEffects && argWritten ) propagateWrite(arguments[ai]);
+                } else {
+                    if ( argT->canWrite() && fn->modifyArgument ) propagateWrite(arguments[ai]);
+                }
+            }
+        }
         // a pointer value copied out of a const variable is itself const (`Foo? const`) and no
         // longer matches a mutable-pointee destination (error 30915/30343) — flowing a pointer
         // into such a slot demands the source variable stay mutable. const-pointer (`Foo? const`),
@@ -639,22 +663,7 @@ namespace das {
                 const bool inCycle = !expr->func->knownSideEffects
                     && asked.find(expr->func) != asked.end();
                 if ( inCycle || (sef & uint32_t(SideEffects::modifyArgument)) ) {
-                    for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
-                        const auto & argT = expr->func->arguments[ai]->type;
-                        if ( argT->canWrite() ) {
-                            if ( inCycle ) {
-                                propagateWrite(expr->arguments[ai]);
-                            } else if ( !expr->func->builtIn ) {
-                                if ( expr->func->knownSideEffects ) {
-                                    propagateWrite(expr->arguments[ai]);
-                                }
-                            } else {
-                                if ( expr->func->modifyArgument ) {
-                                    propagateWrite(expr->arguments[ai]);
-                                }
-                            }
-                        }
-                    }
+                    propagateModifiedArguments(expr->func, expr->arguments, inCycle);
                 }
             }
         }
@@ -696,22 +705,7 @@ namespace das {
             const bool inCycle = !expr->func->knownSideEffects
                 && asked.find(expr->func) != asked.end();
             if ( inCycle || (sef & uint32_t(SideEffects::modifyArgument)) ) {
-                for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
-                    const auto & argT = expr->func->arguments[ai]->type;
-                    if ( argT->canWrite() ) {
-                        if ( inCycle ) {
-                            propagateWrite(expr->arguments[ai]);
-                        } else if ( !expr->func->builtIn ) {
-                            if ( expr->func->knownSideEffects ) {
-                                propagateWrite(expr->arguments[ai]);
-                            }
-                        } else {
-                            if ( expr->func->modifyArgument ) {
-                                propagateWrite(expr->arguments[ai]);
-                            }
-                        }
-                    }
-                }
+                propagateModifiedArguments(expr->func, expr->arguments, inCycle);
             }
         }
     // LooksLikeCall
