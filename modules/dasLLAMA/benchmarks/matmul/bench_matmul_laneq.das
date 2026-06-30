@@ -66,6 +66,10 @@ def bench_shape(b : B?; name : string; n, d : int64) {
 
 [benchmark]
 def bench_matmul_laneq(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     bench_shape(b, "kv  256x2048 ", 2048l, 256l)
     bench_shape(b, "qo  2048x2048", 2048l, 2048l)
     bench_shape(b, "w13 5632x2048", 2048l, 5632l)

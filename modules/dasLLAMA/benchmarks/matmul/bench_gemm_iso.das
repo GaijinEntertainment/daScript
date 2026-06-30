@@ -98,6 +98,10 @@ def bench_one(name : string; n, d : int64; reps : int; laneq : bool) {
 
 [benchmark, unused_argument(b)]
 def bench_gemm_iso(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     with_job_que() {
         set_jobque_fork_pool(true, true)
         // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it

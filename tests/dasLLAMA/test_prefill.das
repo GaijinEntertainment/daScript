@@ -73,6 +73,10 @@ def check_continuation(t : T?; tr : Transformer; prompt : array<int64>; split : 
 [test]
 def test_prefill_fp32(t : T?) {
     t |> run("prefill == N× forward, fp32 (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin not present")
             return
@@ -92,6 +96,10 @@ def test_prefill_fp32(t : T?) {
 [test]
 def test_prefill_q8(t : T?) {
     t |> run("prefill == N× forward, Q8 (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin not present")
             return

@@ -35,6 +35,10 @@ def check_same(b : B?; w, x : array<float>; n, d : int) {
 
 [benchmark]
 def bench_matmul(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     // stories15M attention/FFN projection — W is 288 x 288.
     {
         var w : array<float>

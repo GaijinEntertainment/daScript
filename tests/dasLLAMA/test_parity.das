@@ -63,6 +63,10 @@ let GEMMA2_GEN <- [235269l, 575l, 476l, 2840l, 10545l, 675l, 166962l, 27836l, 57
 [test]
 def test_parity_gemma2(t : T?) {
     t |> run("gemma2 forward (gemma-2-2b-it Q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")

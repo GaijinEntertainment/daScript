@@ -56,14 +56,13 @@ def quantize_q8_0_into(src : array<float> | #; n : int64; var qdst : array<int8>
 }
 
 //! Pointer core of quantize_q8_0_into — the batched prefill requant threads over positions in fork
-//! contexts, which can only touch raw addresses. Takes the destinations as `const?` so capture-const
-//! fork pointers bind (add-const is allowed); un-consts internally to write. Bit-identical to the
+//! contexts, which can only touch raw addresses. The destinations are `var int8?` / `var float?`,
+//! written directly (a hoisted/captured fork pointer binds straight through). Bit-identical to the
 //! array overload, which forwards here.
-def quantize_q8_0_into_ptr(src : float const?; n : int64; qdst : int8 const?; sdst : float const?; qoff, soff : int64) {
+[hint(noalias = src, noalias = qdst, noalias = sdst)]
+def quantize_q8_0_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; qoff, soff : int64) {
     let nblocks = n / QK8
     unsafe {
-        var q = reinterpret<int8?>(qdst)
-        var s = reinterpret<float?>(sdst)
         for (b in range64(nblocks)) {
             let base = b * QK8
             var amax = 0.0
@@ -72,9 +71,9 @@ def quantize_q8_0_into_ptr(src : float const?; n : int64; qdst : int8 const?; sd
             }
             let d = amax / 127.0
             let id = d != 0.0 ? 1.0 / d : 0.0
-            s[soff + b] = d
+            sdst[soff + b] = d
             for (i in range64(QK8)) {
-                q[qoff + base + i] = int8(round(src[base + i] * id))
+                qdst[qoff + base + i] = int8(round(src[base + i] * id))
             }
         }
     }

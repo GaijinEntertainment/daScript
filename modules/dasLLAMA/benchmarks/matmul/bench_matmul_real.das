@@ -154,6 +154,10 @@ def bench_qkv(b : B?; hw : int64) {
 
 [benchmark]
 def bench_matmul_real(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     with_job_que() {
         set_jobque_fork_pool(true, true)
         let hw = int64(get_total_hw_jobs())

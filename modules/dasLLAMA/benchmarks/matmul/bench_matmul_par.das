@@ -18,6 +18,10 @@ def fill(var a : array<float>; count : int) {
 // "each dot" = num_jobs = d; "each 10 dots" = d/10; N = hw worker count.
 [benchmark]
 def bench_matmul_par(b : B?) {
+    if (!jit_enabled()) {
+        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        return
+    }
     var w : array<float>
     var x : array<float>
     var y : array<float>

@@ -86,6 +86,10 @@ def run_all(t : T?; tr : Transformer; tk : Tokenizer) {
 [test]
 def test_flash_fp32(t : T?) {
     t |> run("flash ~= classic, fp32 (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin not present")
             return
@@ -99,6 +103,10 @@ def test_flash_fp32(t : T?) {
 [test]
 def test_flash_q8(t : T?) {
     t |> run("flash ~= classic, Q8 + forced sliding window (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> success(true, "skipped: stories15M.bin not present")
             return

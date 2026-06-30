@@ -759,6 +759,7 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
 
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
+[hint(unsafe_range_check)]
 def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
     for (i in range64(n)) {
         y[yoff + i] += b[boff + i]
@@ -833,7 +834,7 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
         let ts_rq = ref_time_ticks()
         // quantize each of the npos activation columns into xqb/xsb — independent per position, so
         // thread it (it was the largest serial bucket once attention + GEMM threaded). Fork workers
-        // touch raw addresses only; quantize_q8_0_into_ptr un-consts the captured destinations.
+        // touch raw addresses only; the captured destinations bind straight through as `var int8?`/`var float?`.
         unsafe {
             let xp = reinterpret<float const?>(addr(x[0]))
             var qp = addr(xqb[0])
@@ -910,10 +911,8 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
         // store k, v for this position into the KV cache
         let kvoff = loff + pos * kv_dim
-        for (i in range64(kv_dim)) {
-            s.key_cache[kvoff + i] = s.k[i]
-            s.value_cache[kvoff + i] = s.v[i]
-        }
+        copy_floats(unsafe(addr(s.key_cache[kvoff])), unsafe(addr(s.k[0])), kv_dim)
+        copy_floats(unsafe(addr(s.value_cache[kvoff])), unsafe(addr(s.v[0])), kv_dim)
         // multi-head attention. att[0..cnt) holds the scores for keys kstart..pos (kstart=0 unless
         // a sliding-window layer past the window), scaled by 1/sqrt(head_size).
         for (h in range64(n_heads)) {
@@ -941,9 +940,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
             rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
         }
-        for (i in range64(dim)) {
-            s.x[i] += s.xb2[i]
-        }
+        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
         // ffn rmsnorm
         rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
         // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
@@ -954,17 +951,13 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         } else {
             silu(s.hb, hidden)
         }
-        for (i in range64(hidden)) {
-            s.hb[i] *= s.hb2[i]
-        }
+        mul_inplace(unsafe(addr(s.hb[0])), unsafe(addr(s.hb2[0])), hidden)
         // down projection, optional post-FFN norm, residual
         mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
             rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
         }
-        for (i in range64(dim)) {
-            s.x[i] += s.xb[i]
-        }
+        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
     }
 
     // final rmsnorm (into xb to avoid aliasing x as both in/out), then classifier
@@ -1265,7 +1258,7 @@ def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size
                                     let ap = start_pos + p
                                     let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
                                     let qbase = p * qd + qoff
-                                    vaxpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
+                                    axpy(xbp + qbase, vcp + voff, attp[hblock + bi * maxctx + (kk - kstart_p)], head_size)
                                 }
                             }
                             p0 += ATTN_BLOCK_Q
@@ -1299,7 +1292,7 @@ def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size
                             }
                             for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
                                 let voff = loff + (kstart + j) * kv_dim + kvhoff
-                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                                axpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
                             }
                         }
                     }
