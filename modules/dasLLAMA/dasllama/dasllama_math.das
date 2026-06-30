@@ -616,9 +616,23 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
 def softmax(var x : float?; size : int64) {
     unsafe {
-        // max is exact + idempotent, so the vectorized reduce (any order, x[0] folded in twice) is bit-exact
-        var maxv = x[0]
-        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+        // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
+        // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
+        // emit it — bit-exactness). max IS associative+exact, so two float4 lane accumulators (width-8, the
+        // original hint's intent — 2 accs hide the fmax latency, ~9x over scalar) + a horizontal max is
+        // bit-identical to the scalar fold. The broadcast seed folds x[0] in (idempotent) and never reads
+        // past the buffer, so it stays safe for size < 8 (early decode).
+        let pf4 = reinterpret<float4 const?>(x)
+        let n8 = size / 8l
+        var acc0 = float4(x[0], x[0], x[0], x[0])
+        var acc1 = acc0
+        for (k in 0l..n8) {
+            acc0 = max(acc0, pf4[2l * k])
+            acc1 = max(acc1, pf4[2l * k + 1l])
+        }
+        let acc = max(acc0, acc1)
+        var maxv = max(max(acc.x, acc.y), max(acc.z, acc.w))
+        for (i in n8 * 8l .. size) {
             maxv = max(maxv, x[i])
         }
         var sum = 0.0
