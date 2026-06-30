@@ -8,6 +8,9 @@
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #endif
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/threading.h>   // emscripten_num_logical_cores
+#endif
 
 // Feature tracking statics
 das::Feature *  das::Feature::sTrackHead = nullptr;
@@ -59,7 +62,16 @@ namespace das {
 #else
 
     int JobQue::get_num_threads() {
-        return jobque_thread_count(max(1,static_cast<int>(thread::hardware_concurrency())));
+#if defined(__EMSCRIPTEN__)
+        // emscripten's std::thread::hardware_concurrency() does NOT reflect
+        // navigator.hardwareConcurrency in the wasm64/memory64 build (it returns a
+        // low default ~2); emscripten_num_logical_cores() reads it directly and is
+        // correct on both wasm32/64.
+        int hw = emscripten_num_logical_cores();
+#else
+        int hw = static_cast<int>(thread::hardware_concurrency());
+#endif
+        return jobque_thread_count(max(1, hw));
     }
 
 #endif
