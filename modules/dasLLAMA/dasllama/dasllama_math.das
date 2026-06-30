@@ -615,6 +615,7 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
 //! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
 def softmax(var x : float?; size : int64) {
+    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
     unsafe {
         // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
         // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
