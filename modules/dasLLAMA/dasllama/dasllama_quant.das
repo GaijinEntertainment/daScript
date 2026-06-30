@@ -52,18 +52,30 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
 //! quantize one tensor at a time into the model's shared qblob/qscales. n must be a multiple of 32.
 def quantize_q8_0_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; qoff, soff : int64) {
     assert(n % QK8 == 0l, "quantize_q8_0_into requires n to be a multiple of 32")
+    quantize_q8_0_into_ptr(unsafe(addr(src[0])), n, unsafe(addr(qdst[0])), unsafe(addr(sdst[0])), qoff, soff)
+}
+
+//! Pointer core of quantize_q8_0_into — the batched prefill requant threads over positions in fork
+//! contexts, which can only touch raw addresses. Takes the destinations as `const?` so capture-const
+//! fork pointers bind (add-const is allowed); un-consts internally to write. Bit-identical to the
+//! array overload, which forwards here.
+def quantize_q8_0_into_ptr(src : float const?; n : int64; qdst : int8 const?; sdst : float const?; qoff, soff : int64) {
     let nblocks = n / QK8
-    for (b in range64(nblocks)) {
-        let base = b * QK8
-        var amax = 0.0
-        for (i in range64(QK8)) {
-            amax = max(amax, abs(src[base + i]))
-        }
-        let d = amax / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        sdst[soff + b] = d
-        for (i in range64(QK8)) {
-            qdst[qoff + base + i] = int8(round(src[base + i] * id))
+    unsafe {
+        var q = reinterpret<int8?>(qdst)
+        var s = reinterpret<float?>(sdst)
+        for (b in range64(nblocks)) {
+            let base = b * QK8
+            var amax = 0.0
+            for (i in range64(QK8)) {
+                amax = max(amax, abs(src[base + i]))
+            }
+            let d = amax / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            s[soff + b] = d
+            for (i in range64(QK8)) {
+                q[qoff + base + i] = int8(round(src[base + i] * id))
+            }
         }
     }
 }

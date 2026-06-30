@@ -8,6 +8,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
 require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
+require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
 require math
 
 // dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
@@ -516,7 +517,9 @@ struct RunState {
     q : array<float>          // query (dim)
     k : array<float>          // key, this position (kv_dim)
     v : array<float>          // value, this position (kv_dim)
-    att : array<float>        // attention scores for one head (seq_len)
+    att : array<float>        // attention scores for one head (seq_len) — the per-token forward() path
+    att_b : array<float>      // batched prefill attention scores, one (start_pos+npos)-wide row PER HEAD
+                              // so the head loop threads with no shared scratch (sized in forward_prefill)
     logits : array<float>     // output logits (vocab_size)
     xq : array<int8>          // activation quantized to Q8 (sized max(dim, hidden_dim)) for the Q8·Q8 kernel
     xs : array<float>         // per-block activation scales (sized max(dim, hidden_dim) / 32)
@@ -578,6 +581,25 @@ def private mm_fblob(var y : array<float>; t : Transformer; woff : int64; x : ar
 def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : array<float> | #; size : int64) {
     array_view(t.fblob, woff, size) $(w : array<float>#) {
         rmsnorm(o, x, w, size, t.config.norm_eps)
+    }
+}
+
+// Threaded per-position rmsnorm: out[p*dim..] = rmsnorm(src[p*dim..]) with the layer weight at fblob+woff.
+// `out` and `src` may be the same array (Gemma post-norms run in place). Fork workers touch raw addresses.
+def private rms_batch(var out : array<float>; src : array<float>; t : Transformer; woff : int64; dim, npos : int64) {
+    let eps = t.config.norm_eps
+    unsafe {
+        var op = addr(out[0])
+        let ip = reinterpret<float const?>(addr(src[0]))
+        let wp = reinterpret<float const?>(addr(t.fblob[woff]))
+        maybe_parallel_for(dim * npos >= NORM_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let off = int64(p) * dim
+                    rmsnorm(op + off, ip + off, wp, dim, eps)
+                }
+            }
+        }
     }
 }
 
@@ -655,9 +677,21 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
     if (t.quant == QuantMode.q8) {
         let nb = n / 32l
         let ts_rq = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(x, p * n, n) $(col : array<float>#) {
-                quantize_q8_0_into(col, n, xqb, xsb, p * n, p * nb)
+        // quantize each of the npos activation columns into xqb/xsb — independent per position, so
+        // thread it (it was the largest serial bucket once attention + GEMM threaded). Fork workers
+        // touch raw addresses only; quantize_q8_0_into_ptr un-consts the captured destinations.
+        unsafe {
+            let xp = reinterpret<float const?>(addr(x[0]))
+            var qp = addr(xqb[0])
+            var sp = addr(xsb[0])
+            let rq_par = n * npos >= REQUANT_PAR_THRESHOLD
+            maybe_parallel_for(rq_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (p in range(rb, re)) {
+                        let pp = int64(p)
+                        quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
+                    }
+                }
             }
         }
         prof_add("mm_requant", ts_rq)
@@ -796,6 +830,14 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
 // Measurement is UNCONDITIONAL: a handful of ref_time_ticks() + table adds per prefill, negligible
 // against the matmuls, so it always accumulates. Output is on-demand — reset() to start a window,
 // report() to dump it. (We measure a lot; never gate the measurement, only the printing.)
+// Thread the prefill attention over heads once the work proxy (npos × max-cnt × n_heads) clears this;
+// below it the per-job dispatch overhead isn't worth it and we run the head loop inline.
+let ATTN_PAR_THRESHOLD = 100_000l
+// Thread the per-position activation requant (mm_b) once n × npos clears this.
+let REQUANT_PAR_THRESHOLD = 256_000l
+// Thread the per-position rmsnorm once dim × npos clears this.
+let NORM_PAR_THRESHOLD = 256_000l
+
 var g_prefill_prof_acc : table<string; int64>
 
 //! Start a fresh measurement window (zero the per-section accumulators).
@@ -856,6 +898,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     s.hb2_b |> resize(npos * hidden)
     s.xqb |> resize(npos * maxn)
     s.xsb |> resize(npos * maxn / 32l)
+    // per-head attention scratch: each head gets its own (start_pos+npos)-wide score row (= max cnt),
+    // so the head loop threads with no shared `att` row to contend on
+    s.att_b |> resize(n_heads * (start_pos + npos))
 
     // token embeddings -> residual stream x_b [npos x dim]
     let ts_embed = ref_time_ticks()
@@ -880,13 +925,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
         // attention rmsnorm, per position
         let ts_norm0 = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
-                    rms_at(ov, t, t.rms_att_off + l * dim, xv, dim)
-                }
-            }
-        }
+        rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
         prof_add("norm", ts_norm0)
         // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
         let ts_qkv = ref_time_ticks()
@@ -921,28 +960,49 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         // per-position causal attention into xb_b (position ap attends to cached keys kstart..ap;
         // kstart = 0 unless a Gemma2 sliding-window layer past the window). The attention output for
         // position p is written at xb_b[p*qd..] (qd-strided), feeding the wo projection below.
+        // THREADED OVER HEADS: every head does the same causal triangle (perfect load balance) and
+        // writes a disjoint output slice [p*qd + h*head_size ..]; each head owns its own att_b row, so
+        // there is no shared scratch to contend on. Workers run in fork contexts → raw pointers only.
         let ts_attn = ref_time_ticks()
-        for (p in range64(npos)) {
-            let ap = start_pos + p
-            let kstart = (is_sliding && ap + 1l > c.sliding_window) ? (ap + 1l - c.sliding_window) : 0l
-            let cnt = ap + 1l - kstart
-            for (h in range64(n_heads)) {
-                let qoff = h * head_size
-                let kvhoff = (h / kv_mul) * head_size
-                for (j in range64(cnt)) {
-                    let koff = loff + (kstart + j) * kv_dim + kvhoff
-                    s.att[j] = dot(unsafe(addr(s.q_b[p * qd + qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
-                }
-                if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                    softcap(s.att, cnt, c.attn_logit_softcap)
-                }
-                softmax(s.att, cnt)
-                for (i in range64(head_size)) {
-                    s.xb_b[p * qd + qoff + i] = 0.0
-                }
-                for (j in range64(cnt)) {
-                    let voff = loff + (kstart + j) * kv_dim + kvhoff
-                    axpy(unsafe(addr(s.xb_b[p * qd + qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
+        let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
+        let sliding_window = c.sliding_window  // hoisted: scalars captured by the worker, not the struct
+        let attn_softcap = c.attn_logit_softcap
+        unsafe {
+            let qp = reinterpret<float const?>(addr(s.q_b[0]))
+            let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
+            let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
+            var xbp = addr(s.xb_b[0])
+            var attp = addr(s.att_b[0])
+            let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
+            maybe_parallel_for(attn_par, 0, int(n_heads), get_total_hw_jobs()) $(rb, re) {
+                unsafe {
+                    for (h in range(rb, re)) {
+                        let hh = int64(h)
+                        let qoff = hh * head_size
+                        let kvhoff = (hh / kv_mul) * head_size
+                        let abase = hh * maxctx                // this head's private score row
+                        for (p in range64(npos)) {
+                            let ap = start_pos + p
+                            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
+                            let cnt = ap + 1l - kstart
+                            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
+                            for (j in range64(cnt)) {
+                                let koff = loff + (kstart + j) * kv_dim + kvhoff
+                                attp[abase + j] = dot(qp + qbase, kcp + koff, head_size) * scale
+                            }
+                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+                                softcap(attp + abase, cnt, attn_softcap)
+                            }
+                            softmax(attp + abase, cnt)
+                            for (i in range64(head_size)) {
+                                xbp[qbase + i] = 0.0
+                            }
+                            for (j in range64(cnt)) {   // output += Σ att[j]·V[j]
+                                let voff = loff + (kstart + j) * kv_dim + kvhoff
+                                vaxpy(xbp + qbase, vcp + voff, attp[abase + j], head_size)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -953,25 +1013,13 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("mm_wo", ts_wo)
         let ts_resid0 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
-            for (p in range64(npos)) {
-                array_view(s.xb2_b, p * dim, dim) $(var ov : array<float>#) {
-                    rms_at(ov, t, t.rms_post_att_off + l * dim, ov, dim)
-                }
-            }
+            rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
         }
-        for (k in range64(npos * dim)) {
-            s.x_b[k] += s.xb2_b[k]
-        }
+        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
         prof_add("act_resid", ts_resid0)
         // ffn rmsnorm, per position
         let ts_norm1 = ref_time_ticks()
-        for (p in range64(npos)) {
-            array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                array_view(s.x_b, p * dim, dim) $(var xv : array<float>#) {
-                    rms_at(ov, t, t.rms_ffn_off + l * dim, xv, dim)
-                }
-            }
-        }
+        rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
         prof_add("norm", ts_norm1)
         // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
         let ts_ffn = ref_time_ticks()
@@ -984,9 +1032,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         } else {
             silu(s.hb_b, npos * hidden)
         }
-        for (k in range64(npos * hidden)) {
-            s.hb_b[k] *= s.hb2_b[k]
-        }
+        mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
         prof_add("act_resid", ts_act)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
@@ -994,15 +1040,9 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         prof_add("mm_ffn", ts_ffn2)
         let ts_resid1 = ref_time_ticks()
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
-            for (p in range64(npos)) {
-                array_view(s.xb_b, p * dim, dim) $(var ov : array<float>#) {
-                    rms_at(ov, t, t.rms_post_ffn_off + l * dim, ov, dim)
-                }
-            }
+            rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
         }
-        for (k in range64(npos * dim)) {
-            s.x_b[k] += s.xb_b[k]
-        }
+        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
         prof_add("act_resid", ts_resid1)
     }
 
