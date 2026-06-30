@@ -834,7 +834,7 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
         let ts_rq = ref_time_ticks()
         // quantize each of the npos activation columns into xqb/xsb — independent per position, so
         // thread it (it was the largest serial bucket once attention + GEMM threaded). Fork workers
-        // touch raw addresses only; quantize_q8_0_into_ptr un-consts the captured destinations.
+        // touch raw addresses only; the captured destinations bind straight through as `var int8?`/`var float?`.
         unsafe {
             let xp = reinterpret<float const?>(addr(x[0]))
             var qp = addr(xqb[0])

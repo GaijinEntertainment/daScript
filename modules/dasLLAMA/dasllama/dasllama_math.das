@@ -34,16 +34,15 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {
     }
 }
 
-//! Fork-callable AXPY for the threaded prefill attention. Same width-8 kernel as axpy, but takes
-//! `d` as `const?` so a capture-const fork pointer binds (add-const is allowed) — un-consts inside
-//! to write. NO `noalias` hint on purpose: `const?`+reinterpret under noalias miscompiles. Output
-//! and the value-cache source never overlap, so the vectorizer's runtime alias check always passes.
+//! Fork-callable AXPY for the threaded prefill attention. Same width-8 kernel as axpy; the output `d`
+//! is a plain `var float?`, so a hoisted/captured fork pointer writes through it directly — capture
+//! freezes the binding, not the pointee, and `d + off` stays a mutable `float?`. No `noalias` hint:
+//! output and the value-cache source never overlap, so the vectorizer's runtime alias check is free.
 [hint(unsafe_range_check)]
-def vaxpy(d : float const?; s : float const?; scale : float; n : int64) {
+def vaxpy(var d : float?; s : float const?; scale : float; n : int64) {
     unsafe {
-        var dm = reinterpret<float?>(d)
         for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
-            dm[j] = mad(scale, s[j], dm[j])
+            d[j] = mad(scale, s[j], d[j])
         }
     }
 }
@@ -594,9 +593,8 @@ def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #
 //! Qwen2 / Gemma2 pass 1e-6 from the model's metadata.
 //! Pointer core — the batched prefill norm threads over positions in fork contexts (raw addresses
 //! only). `o`/`x` may alias (in-place post-norms): the sum over x completes before any write to o.
-def rmsnorm(o : float const?; x : float const?; weight : float const?; size : int64; eps : float = 1.0e-5) {
+def rmsnorm(var o : float?; x : float const?; weight : float const?; size : int64; eps : float = 1.0e-5) {
     unsafe {
-        var oo = reinterpret<float?>(o)
         var ss = 0.0
         for (j in range64(size)) {
             ss += x[j] * x[j]
@@ -605,14 +603,15 @@ def rmsnorm(o : float const?; x : float const?; weight : float const?; size : in
         ss += eps
         ss = 1.0 / sqrt(ss)
         for (j in range64(size)) {
-            oo[j] = weight[j] * (x[j] * ss)
+            o[j] = weight[j] * (x[j] * ss)
         }
     }
 }
 def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float> | #; size : int64; eps : float = 1.0e-5) {
-    // reinterpret strips the temporary (#) qualifier — rms_at passes array_view (#) slices
+    // reinterpret strips the temporary (#) qualifier — rms_at passes array_view (#) slices. Output `o`
+    // keeps a non-const pointer (it's written); the read-only x/weight add const.
     unsafe {
-        rmsnorm(reinterpret<float const?>(addr(o[0])), reinterpret<float const?>(addr(x[0])),
+        rmsnorm(reinterpret<float?>(addr(o[0])), reinterpret<float const?>(addr(x[0])),
             reinterpret<float const?>(addr(weight[0])), size, eps)
     }
 }
@@ -621,11 +620,10 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! In place over the first `size` elements. Subtracts the max first so exp() can't
 //! overflow (exp(x-max)/sum(exp(x-max)) is identical math, numerically safe).
 //! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
-//! addresses; the array overload forwards here, so both are bit-identical. Takes `const?` so a
-//! capture-const fork pointer binds (add-const is allowed); un-consts internally to write in place.
-def softmax(xc : float const?; size : int64) {
+//! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
+//! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
+def softmax(var x : float?; size : int64) {
     unsafe {
-        var x = reinterpret<float?>(xc)
         // max is exact + idempotent, so the vectorized reduce (any order, x[0] folded in twice) is bit-exact
         var maxv = x[0]
         for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
@@ -675,10 +673,9 @@ def gelu(var x : array<float> | #; size : int64) {
 //! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
 //! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
 //! Pointer core (see softmax) — threaded prefill attention calls this on raw fork addresses.
-def softcap(xc : float const?; size : int64; cap : float) {
+def softcap(var x : float?; size : int64; cap : float) {
     let inv = 1.0 / cap
     unsafe {
-        var x = reinterpret<float?>(xc)
         for (i in range64(size)) {
             x[i] = cap * tanh(x[i] * inv)
         }
@@ -714,9 +711,8 @@ def rope(var vec : array<float> | #; pos, head_size, n : int64) {
 //! freq_factors[j] divides the j-th pair's frequency, matching ggml (theta/ff).
 //! Pointer core (see softmax) — the threaded prefill ropes q_b/k_b in fork contexts on raw addresses.
 //! `has_ff` gates the `ff` freq-factors pointer (empty() can't test a pointer); pass null when false.
-def rope_scaled(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?) {
+def rope_scaled(var v : float?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?) {
     unsafe {
-        var v = reinterpret<float?>(vec)
         for (p in range64(n / 2l)) {
             let i = p * 2l
             let head_dim = i % head_size
@@ -738,7 +734,7 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
     let has_ff = !empty(freq_factors)
     unsafe {
         let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
-        rope_scaled(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff)
+        rope_scaled(reinterpret<float?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff)
     }
 }
 
@@ -746,9 +742,8 @@ def rope_scaled(var vec : array<float> | #; pos, head_size, n : int64; theta : f
 //! with vec[base+j+half] — instead of the adjacent (2j, 2j+1) pair the Llama-family NORM rope uses.
 //! Same per-pair frequencies; only the pairing differs.
 //! Pointer core (see rope_scaled) — fork-callable NEOX rope on a raw address.
-def rope_scaled_neox(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; mscale : float = 1.0) {
+def rope_scaled_neox(var v : float?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; mscale : float = 1.0) {
     unsafe {
-        var v = reinterpret<float?>(vec)
         let half = head_size / 2l
         for (h in range64(n / head_size)) {
             let base = h * head_size
@@ -773,7 +768,7 @@ def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; thet
     let has_ff = !empty(freq_factors)
     unsafe {
         let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
-        rope_scaled_neox(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, mscale)
+        rope_scaled_neox(reinterpret<float?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, mscale)
     }
 }
 
@@ -785,9 +780,8 @@ def rope_scaled_neox(var vec : array<float> | #; pos, head_size, n : int64; thet
 //! than over a flat p with j = p % half: the per-pair integer modulo dominated the rotation (it's all
 //! cheap arithmetic) — dropping it is ~2.3x on the kernel. (NEON [vectorize] does NOT help: the
 //! interleaved stride-2 in-place rotation is bandwidth-bound, measured slightly slower vectorized.)
-def rope_scaled_tab(vec : float const?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
+def rope_scaled_tab(var v : float?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
     unsafe {
-        var v = reinterpret<float?>(vec)
         let half = head_size / 2l
         for (h in range64(n / head_size)) {
             let base = h * head_size
@@ -810,9 +804,8 @@ def rope_scaled_tab(vec : float const?; head_size, n : int64; cosrow : float con
 //! the inner loop vectorizes width-8 natively (~5-10% over scalar) — measured Δ=0, i.e. plain mul/sub
 //! under [vectorize] does NOT contract to fma, so it stays bit-exact (no `mad`). The NORM leaf above
 //! can't do this: its interleaved (2j, 2j+1) layout is stride-2 and the JIT won't emit vld2/vst2 for it.
-def rope_scaled_neox_tab(vec : float const?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
+def rope_scaled_neox_tab(var v : float?; head_size, n : int64; cosrow : float const?; sinrow : float const?) {
     unsafe {
-        var v = reinterpret<float?>(vec)
         let half = head_size / 2l
         for (h in range64(n / head_size)) {
             let base = h * head_size
@@ -831,7 +824,7 @@ def rope_scaled_neox_tab(vec : float const?; head_size, n : int64; cosrow : floa
 //! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or the default NORM (Llama).
 //! mscale is the LongRoPE magnitude factor (1.0 for everything but Phi3); only the NEOX path uses it.
 //! Pointer core (see rope_scaled) — fork-callable rope dispatch on a raw address.
-def rope_apply(vec : float const?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; neox : bool; mscale : float = 1.0) {
+def rope_apply(var vec : float?; pos, head_size, n : int64; theta : float; has_ff : bool; ff : float const?; neox : bool; mscale : float = 1.0) {
     if (neox) {
         rope_scaled_neox(vec, pos, head_size, n, theta, has_ff, ff, mscale)
     } else {
@@ -842,6 +835,6 @@ def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta : fl
     let has_ff = !empty(freq_factors)
     unsafe {
         let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
-        rope_apply(reinterpret<float const?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, neox, mscale)
+        rope_apply(reinterpret<float?>(addr(vec[0])), pos, head_size, n, theta, has_ff, ff, neox, mscale)
     }
 }
