@@ -203,9 +203,10 @@ def _default_launcher() -> list[str]:
     return [os.path.join(REPO_ROOT, "bin", "daslang"), main_das]  # best-guess fallback
 
 
-def write_mcp_json(repo_root: str) -> str:
+def write_mcp_json(repo_root: str) -> bool:
     """Set mcpServers.daslang to spawn this supervisor over stdio, preserving
-    every other server (github, …). Atomic; never clobbers an unparseable file."""
+    every other server (github, …). Atomic; never clobbers an unparseable file.
+    Returns True if the file was (re)written, False if left untouched."""
     path = os.path.join(repo_root, ".mcp.json")
     data = {"mcpServers": {}}
     if os.path.exists(path):
@@ -214,17 +215,17 @@ def write_mcp_json(repo_root: str) -> str:
                 data = json.load(f)
         except Exception as e:
             print(f"  WARNING: {path} did not parse ({e}); leaving it untouched", flush=True)
-            return path
+            return False
         if not isinstance(data, dict):
             print(f"  WARNING: {path} is not a JSON object; leaving it untouched", flush=True)
-            return path
+            return False
     servers = data.get("mcpServers")
     if servers is None:
         servers = {}
         data["mcpServers"] = servers
     elif not isinstance(servers, dict):
         print(f"  WARNING: {path} has a non-object 'mcpServers'; leaving it untouched", flush=True)
-        return path
+        return False
     prev = servers.get("daslang", {})
     entry = {"command": "python", "args": ["utils/mcp/mcp_supervisor.py"]}
     if isinstance(prev, dict) and "defer_loading" in prev:
@@ -235,7 +236,7 @@ def write_mcp_json(repo_root: str) -> str:
         json.dump(data, f, indent=2)
         f.write("\n")
     os.replace(tmp, path)
-    return path
+    return True
 
 
 def serve(repo_root: str, stderr_log: str):
@@ -283,8 +284,8 @@ def main():
     repo_root = os.path.abspath(args.repo_root)
 
     if args.emit_config:
-        path = write_mcp_json(repo_root)
-        print(f"wrote {path}: daslang -> stdio supervisor (utils/mcp/mcp_supervisor.py)")
+        if write_mcp_json(repo_root):
+            print(f"wrote {os.path.join(repo_root, '.mcp.json')}: daslang -> stdio supervisor (utils/mcp/mcp_supervisor.py)")
         return
     serve(repo_root, args.stderr_log)
 
