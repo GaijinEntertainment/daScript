@@ -310,7 +310,9 @@ def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp :
     // Token-blocked: TB tokens outer, groups inner — the TB×n activation slice stays L2-resident and is
     // reused across this thread's groups, instead of re-streaming the whole activation once per group
     // (which goes DRAM-bound at large ntok, e.g. the FFN-down n=8192, ntok=2048 = 16MB restreamed d/4×).
-    let TB = g_q8_token_block
+    // Clamp to keep TB×n within the per-box L2 budget (inert at the default TB=128): above ~L2/n the
+    // slice spills and prefill cliffs (measured n=8192 ~TB 1024, n=14336 ~512 on M1 Max).
+    let TB = effective_token_block(g_q8_token_block, n)
     maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             var tb = 0l

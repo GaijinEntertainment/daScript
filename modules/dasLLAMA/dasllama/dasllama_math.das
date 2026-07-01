@@ -284,6 +284,24 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
     }
 }
 
+// ===== Token-block L2 budget (shared, ISA-agnostic) =====
+// A token-blocked Q8·Q8 GEMM keeps a TB×n activation slice L2-resident and reuses it across the weight
+// groups; if TB×n exceeds L2 the slice spills and prefill falls off a cliff (measured M1 Max, ntok=2048:
+// n=8192 breaks ~TB 1024, n=14336 ~512 — i.e. the knee is TB ≈ L2/n). So TB is clamped to keep TB×n
+// within a per-box budget. `effective_token_block` is pure L2 arithmetic — the arm64 laneq kernel calls
+// it and a future x64 token-blocked kernel reuses it unchanged. Default 4 MB is PROVISIONAL (one box,
+// M1 Max); it is inert at the default TB=128 for every realistic n (4MB/n >> 128), so this changes
+// nothing today — it only caps a raised TB or a very-large-n kernel below the cliff.
+var g_q8_l2_budget = 4l * 1024l * 1024l
+def public set_q8_l2_budget(bytes : int64) { g_q8_l2_budget = max(bytes, 1l) }
+def public get_q8_l2_budget() : int64 { return g_q8_l2_budget }
+
+//! Clamp a requested token-block width so the TB×n int8 activation slice stays within the per-box L2
+//! budget. n = contraction dim (one int8 per activation element). Returns >= 1.
+def public effective_token_block(tb, n : int64) : int64 {
+    return clamp(tb, 1l, max(1l, g_q8_l2_budget / max(n, 1l)))   // floor 1 (a 0 block width infinite-loops the kernel)
+}
+
 // ===== Q8·Q8 matmul: pluggable kernel-backend registry =====
 // The three public matmuls (matmul_q8q8 / _batch / _group3) extract raw pointers ONCE in the main
 // context and call through a function pointer (g_mm_q8q8 / _batch / _group3). A *backend* is a named set
