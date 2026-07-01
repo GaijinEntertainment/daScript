@@ -103,6 +103,7 @@ struct ArchBlocks {
 struct Model {
     config : Config = Config()
     arch : string = ""              // GGUF general.architecture, resolved at load — drives the chat template
+    chat_template_str : string = "" // GGUF tokenizer.chat_template (verbatim Jinja source, "" if absent) — sniffed, never executed
     tok : Tokenizer = Tokenizer()   // tokenizer loaded alongside the weights (unset unless loaded via load_model)
     blocks : ArchBlocks = ArchBlocks()   // per-arch attention/ffn kernels, resolved from the registry at load
     // fp32 aux: embedding + norms
@@ -435,6 +436,9 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         let m <- parse_gguf_meta(bytes)
         let arch = gguf_str(m, bytes, "general.architecture")
         resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
+        if (gguf_has(m, "tokenizer.chat_template")) {
+            t.chat_template_str = gguf_str(m, bytes, "tokenizer.chat_template")
+        }
         // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
         let dim = gguf_int(m, bytes, "{arch}.embedding_length")
         let hidden = gguf_int(m, bytes, "{arch}.feed_forward_length")

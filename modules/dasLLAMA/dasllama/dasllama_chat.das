@@ -54,10 +54,53 @@ def private zephyr_chat_template() : ChatTemplate {
     return <- ct
 }
 
-//! The chat template for a loaded model. GGUF general.architecture is "llama" for BOTH Llama-3
-//! (byte-level BPE) and Llama-2/TinyLlama (SentencePiece) — different chat formats — so disambiguate
-//! by tokenizer backend: BPE => the registry's Llama-3 instruct template, SPM => Zephyr.
+// The Mistral-Instruct template (v0.3). [INST] / [/INST] are control tokens in the v0.3 vocab, so
+// they render as specials. No system role — the renderer folds it into the first user turn.
+def private mistral_instruct_template() : ChatTemplate {
+    var ct = ChatTemplate()
+    ct.add_bos = true   // <s>
+    ct.user.parts <- [chat_special("[INST]"), chat_text(" "), chat_content(), chat_text(" "), chat_special("[/INST]")]
+    ct.stop <- ["</s>"]
+    return <- ct
+}
+
+// Pick a named template by sniffing the GGUF's embedded Jinja source for each family's distinctive
+// marker — detection only, the Jinja is never executed. This is what resolves fine-tunes and the
+// arch-name collisions (a Mistral GGUF is arch "llama" but spells [INST]). Checked most-specific
+// first: Phi-3's source spells both <|user|> and <|end|>, Zephyr's only <|user|>.
+def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
+    let src = m.chat_template_str
+    if (empty(src)) {
+        return false
+    }
+    if (contains(src, "<|start_header_id|>")) {   // Llama-3 instruct
+        out <- arch_chat("llama")
+    } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
+        out <- arch_chat("qwen2")
+    } elif (contains(src, "<start_of_turn>")) {   // Gemma
+        out <- arch_chat("gemma2")
+    } elif (contains(src, "<|end|>")) {           // Phi-3
+        out <- arch_chat("phi3")
+    } elif (contains(src, "[INST]")) {            // Mistral instruct
+        out <- mistral_instruct_template()
+    } elif (contains(src, "<|user|>")) {          // Zephyr / TinyLlama-chat
+        out <- zephyr_chat_template()
+    } else {
+        return false
+    }
+    return true
+}
+
+//! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template` first
+//! (see detect_chat_template). When the GGUF carries none, fall back to the arch heuristic — GGUF
+//! general.architecture is "llama" for BOTH Llama-3 (byte-level BPE) and Llama-2/TinyLlama
+//! (SentencePiece), so disambiguate by tokenizer backend: BPE => the registry's Llama-3 instruct
+//! template, SPM => Zephyr.
 def chat_template(m : Model) : ChatTemplate {
+    var det = ChatTemplate()
+    if (detect_chat_template(m, det)) {
+        return <- det
+    }
     if (m.arch == "llama" && m.tok.kind == TokKind.spm) {
         return <- zephyr_chat_template()
     }

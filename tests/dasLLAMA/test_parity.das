@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // Mistral-7B's Q8 blob is a single >4GB array — over LinearChunkAllocator's per-chunk uint32 cap
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
@@ -131,5 +132,102 @@ def test_parity_llama3_2_1b(t : T?) {
             return
         }
         t |> success(parity_ok(path, QuantMode.q8, LLAMA32_1B_PROMPT, LLAMA32_1B_GEN), "llama-3.2-1b token-for-token")
+    }
+}
+
+// Qwen2.5-1.5B-Instruct Q8, prompt "1, 2, 3, 4, 5, 6, 7," (no BOS). The counting prompt is the
+// confident one — prose prompts flip on genuine near-ties vs the oracle's libm/kernels (~0.02
+// logit gaps; documented in the README oracle notes), which a frozen fixture must not depend on.
+let QWEN25_15B_PROMPT <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l,
+                          11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
+let QWEN25_15B_GEN <- [220l, 23l, 11l, 220l, 24l, 11l, 220l, 16l, 15l, 11l,
+                       220l, 16l, 16l, 11l, 220l, 16l, 17l, 11l, 220l, 16l,
+                       18l, 11l, 220l, 16l, 19l, 11l, 220l, 16l, 20l, 11l,
+                       220l, 16l, 21l, 11l, 220l, 16l, 22l, 11l, 220l, 16l]
+
+[test]
+def test_parity_qwen25_15b(t : T?) {
+    t |> run("qwen2 forward (Qwen2.5-1.5B-Instruct Q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Qwen2.5-1.5B-Instruct-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, QWEN25_15B_PROMPT, QWEN25_15B_GEN), "qwen2.5-1.5b token-for-token")
+    }
+}
+
+// Phi-3.5-mini-instruct Q8, prompt "1, 2, 3, 4, 5, 6, 7," (no BOS) — same confident-prompt
+// reasoning as the Qwen fixture (Phi matches prose to ~0.06 logits and flips only near-ties).
+let PHI35_PROMPT <- [29871l, 29896l, 29892l, 29871l, 29906l, 29892l, 29871l, 29941l, 29892l, 29871l,
+                     29946l, 29892l, 29871l, 29945l, 29892l, 29871l, 29953l, 29892l, 29871l, 29955l, 29892l]
+let PHI35_GEN <- [29871l, 29947l, 29892l, 29871l, 29929l, 29892l, 29871l, 29896l, 29900l, 29892l,
+                  29871l, 29896l, 29896l, 29892l, 29871l, 29896l, 29906l, 29892l, 29871l, 29896l,
+                  29941l, 29892l, 29871l, 29896l, 29946l, 29892l, 29871l, 29896l, 29945l, 29892l,
+                  29871l, 29896l, 29953l, 29892l, 29871l, 29896l, 29955l, 29892l, 29871l, 29896l]
+
+[test]
+def test_parity_phi35(t : T?) {
+    t |> run("phi3 forward (Phi-3.5-mini-instruct Q8, fused QKV + LongRoPE)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Phi-3.5-mini-instruct-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, PHI35_PROMPT, PHI35_GEN), "phi-3.5 token-for-token")
+    }
+}
+
+// SmolLM2-1.7B-Instruct Q8, "Once upon a time" (BPE, no BOS) — runs on the unmodified llama arch.
+let SMOLLM2_PROMPT <- [6403l, 1980l, 253l, 655l]
+let SMOLLM2_GEN <- [28l, 281l, 253l, 1165l, 6560l, 32047l, 826l, 827l, 1109l, 8718l,
+                    28l, 665l, 4161l, 253l, 1805l, 44586l, 3365l, 414l, 3792l, 30l,
+                    2306l, 436l, 253l, 10632l, 392l, 10247l, 28l, 1343l, 327l, 874l,
+                    28418l, 18375l, 338l, 443l, 9086l, 1283l, 702l, 260l, 5703l, 335l]
+
+[test]
+def test_parity_smollm2(t : T?) {
+    t |> run("llama forward (SmolLM2-1.7B-Instruct Q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}SmolLM2-1.7B-Instruct-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, SMOLLM2_PROMPT, SMOLLM2_GEN), "smollm2 token-for-token")
+    }
+}
+
+// Mistral-7B-Instruct-v0.3 Q8, "Once upon a time" (SPM, BOS=1) — arch "llama" (v0.3 has no SWA).
+let MISTRAL7B_PROMPT <- [1l, 6481l, 4482l, 1032l, 1495l]
+let MISTRAL7B_GEN <- [29493l, 1504l, 1171l, 1032l, 3286l, 1444l, 5928l, 5067l, 29491l, 5067l,
+                      1171l, 1032l, 2624l, 21635l, 1072l, 28981l, 4003l, 1461l, 5767l, 1054l,
+                      1070l, 3260l, 1032l, 1909l, 1122l, 3490l, 1065l, 1040l, 2294l, 1070l,
+                      2723l, 29491l, 1418l, 1321l, 1032l, 3598l, 2913l, 1065l, 1040l, 6282l]
+
+[test]
+def test_parity_mistral7b(t : T?) {
+    t |> run("llama forward (Mistral-7B-Instruct-v0.3 Q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Mistral-7B-Instruct-v0.3-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, MISTRAL7B_PROMPT, MISTRAL7B_GEN), "mistral-7b-v0.3 token-for-token")
     }
 }

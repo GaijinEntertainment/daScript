@@ -205,3 +205,48 @@ def test_chat_end_to_end(t : T?) {
         }
     }
 }
+
+// ===== Template detection (model-free) =====
+
+// Distinctive first special of a template's user turn — "" when the user turn opens with plain
+// text (Zephyr's role markers are text; its only special is </s>).
+def private first_user_special(ct : ChatTemplate) : string {
+    for (p in ct.user.parts) {
+        if (p.kind == ChatPartKind.special) {
+            return p.s
+        }
+    }
+    return ""
+}
+
+def private detected_special(src : string) : string {
+    var m = Model()
+    m.arch = "llama"   // deliberately the colliding arch: detection must not consult it
+    m.chat_template_str = src
+    let ct <- chat_template(m)
+    return first_user_special(ct)
+}
+
+[test]
+def test_chat_template_detection(t : T?) {
+    t |> run("template sniffed from GGUF tokenizer.chat_template") @(t : T?) {
+        // fragments carry each family's distinctive marker (no braces — das strings interpolate {})
+        t |> equal(detected_special("xx <|start_header_id|> role <|end_header_id|> xx"), "<|start_header_id|>")
+        t |> equal(detected_special("xx <|im_start|> role xx <|im_end|>"), "<|im_start|>")
+        t |> equal(detected_special("xx <start_of_turn> role xx <end_of_turn>"), "<start_of_turn>")
+        t |> equal(detected_special("xx <|user|> xx <|end|> xx"), "<|user|>")      // Phi-3: both markers
+        t |> equal(detected_special("bos_token xx [INST] xx [/INST] eos_token"), "[INST]")
+        t |> equal(detected_special("xx <|user|> xx eos_token xx"), "</s>")        // Zephyr: text markers
+    }
+    t |> run("arch fallback when the GGUF carries no template") @(t : T?) {
+        var m = Model()
+        m.arch = "qwen2"
+        let ct <- chat_template(m)
+        t |> equal(first_user_special(ct), "<|im_start|>")
+        var m2 = Model()
+        m2.arch = "llama"
+        m2.tok.kind = TokKind.spm
+        let ct2 <- chat_template(m2)
+        t |> equal(first_user_special(ct2), "</s>")   // llama + SPM => Zephyr
+    }
+}
