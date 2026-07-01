@@ -41,7 +41,7 @@ def ids_equal(a, b : array<int64>) : bool {
 
 // Independent cross-check: ids captured from `llama-tokenize` (BOS stripped, since
 // bpe_encode is BOS-free) on sentences NOT in the fixture corpus.
-def check_fresh(tk : BPETokenizer; text : string; want : array<int64>) : bool {
+def check_fresh(tk : BpeTokenizer; text : string; want : array<int64>) : bool {
     let got <- bpe_encode(tk, text)
     let ok = ids_equal(got, want)
     if (!ok) {

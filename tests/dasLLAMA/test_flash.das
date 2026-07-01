@@ -74,7 +74,7 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
     }
 }
 
-def run_all(t : T?; tr : Model; tk : Tokenizer) {
+def run_all(t : T?; tr : Model; tk : SpmTokenizer) {
     let short <- encode(tk, "Once upon a time, there was a little girl", true, false)
     check_flash(t, tr, short, 0l, true)
     check_flash(t, tr, short, 4l, true)                            // continuation

@@ -48,7 +48,7 @@ def match_len(a, b : array<int64>) : int {
     return i
 }
 
-def decode_ids(tok : Tokenizer; ids : array<int64>; limit : int) : string {
+def decode_ids(tok : SpmTokenizer; ids : array<int64>; limit : int) : string {
     return build_string() $(var w) {
         var prev = 1l
         var n = 0

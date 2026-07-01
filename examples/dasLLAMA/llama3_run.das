@@ -14,7 +14,7 @@ require strings
 let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf"
 
 // Build [BOS] + BPE(text) — the prompt as llama.cpp tokenizes it (add_special=true).
-def prompt_ids(tk : BPETokenizer; text : string) : array<int64> {
+def prompt_ids(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
     ids |> push(tk.bos_id)
     ids |> push_from(bpe_encode(tk, text))

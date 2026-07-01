@@ -8,6 +8,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
 require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
+require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
 require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
 require math
 
@@ -80,6 +81,7 @@ struct Config {
 //! fp32 embedding from fblob, so wcls_off is unused.
 struct Model {
     config : Config = Config()
+    tok : Tokenizer = Tokenizer()   // tokenizer loaded alongside the weights (unset unless loaded via load_model)
     // fp32 aux: embedding + norms
     fblob : array<float>
     tok_emb_off : int64
@@ -604,6 +606,29 @@ def eval(t : Model; var s : Session; tokens : array<int64>) {
     if (npos <= 0l) return
     forward_batch(t, s, tokens, npos, s.n_past)
     s.n_past += npos
+}
+
+//! Load a model AND its tokenizer from a GGUF — the full user-facing entry point. Arch and
+//! tokenizer backend are both auto-selected from GGUF metadata; `mode` picks the weight quant.
+def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+    var m <- load_gguf(path, mode)
+    m.tok <- load_tokenizer_auto(path)
+    return <- m
+}
+
+//! Encode text to token ids using the model's tokenizer.
+def encode(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
+    return <- encode(m.tok, text, add_special, parse_special)
+}
+
+//! Decode a full id sequence to text using the model's tokenizer.
+def decode(m : Model; ids : array<int64>) : string {
+    return decode(m.tok, ids)
+}
+
+//! Decode a single token to text (streaming) using the model's tokenizer.
+def piece(m : Model; id : int64) : string {
+    return piece(m.tok, id)
 }
 
 // fp32 matmul with the weight as a zero-copy view into the big-weight blob at `woff` (len n*d).

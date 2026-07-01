@@ -101,7 +101,7 @@ def prefill(t : Model; var s : Session; toks : array<int64>; pos, seq_len : int6
 
 // Append a Llama-3 header: <|start_header_id|>{role}<|end_header_id|>. The "\n\n{content}"
 // that follows is encoded separately by the caller (matches llama.cpp's special-split).
-def push_header(var pre : array<int64>; tok : BPETokenizer; sh, eh : int64; role : string) {
+def push_header(var pre : array<int64>; tok : BpeTokenizer; sh, eh : int64; role : string) {
     pre |> push(sh)
     pre |> push_from(bpe_encode(tok, role))
     pre |> push(eh)

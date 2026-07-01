@@ -15,7 +15,7 @@ let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
 let TOKENIZER_PATH = "/Users/borisbatkin/Work/llama2.c/tokenizer.bin"
 let N_TOKENS = 64
 
-def story(tk : Tokenizer; ids : array<int64>) {
+def story(tk : SpmTokenizer; ids : array<int64>) {
     var prev = 1l
     for (id in ids) {
         print(decode(tk, prev, id))
