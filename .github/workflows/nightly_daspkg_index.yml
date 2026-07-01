@@ -33,6 +33,10 @@ permissions:
 
 jobs:
   index_sweep:
+    # the nightly cron only sweeps on the canonical repo — forks don't run it
+    # (the sweep exit-1s on any package failure, which would email every fork
+    # owner). Manual workflow_dispatch still works anywhere (branch ABI sweeps).
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

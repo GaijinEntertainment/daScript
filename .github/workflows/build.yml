@@ -613,7 +613,10 @@ jobs:
     # gate on pre_job.should_skip — a nightly run must fire even when master is
     # unchanged (skip-duplicate-actions would otherwise skip it and we'd never
     # catch a toolchain/runner regression on an idle day).
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # scheduled cron runs the toolchains only on the canonical repo, so forks
+    # don't run (and fail) the nightly — that would email every fork owner.
+    # Manual workflow_dispatch still runs them anywhere.
+    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     defaults:
       run:
@@ -771,7 +774,10 @@ jobs:
     needs: pre_job
     # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Does NOT gate on
     # pre_job.should_skip — a nightly run must fire even when master is unchanged.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # scheduled cron runs the toolchains only on the canonical repo, so forks
+    # don't run (and fail) the nightly — that would email every fork owner.
+    # Manual workflow_dispatch still runs them anywhere.
+    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
     - name: "SCM Checkout"

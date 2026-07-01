@@ -34,8 +34,10 @@ jobs:
   analyze:
     name: analyze (c-cpp)
     # fork PRs get a read-only GITHUB_TOKEN, so the SARIF upload would fail —
-    # skip them; the post-merge master push scans their code anyway
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # skip them; the post-merge master push scans their code anyway. The weekly
+    # schedule only runs on the canonical repo so forks don't run the cron
+    # (push/PR-triggered scans on a fork still work).
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
