@@ -339,6 +339,10 @@ namespace das {
 
     string getDasRoot ( void );
 
+    static string get_builtin_path() {
+        return getDasRoot() + "/daslib/builtin.das";
+    }
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           string &modName,
@@ -816,6 +820,13 @@ namespace das {
             program->library.addModule(pm);
             return true;
         },"*");
+        if ( !isDep ) {
+            for ( const auto & modName : access->getAutoRequiredModules() ) {
+                if ( auto m = program->library.findModule(modName) ) {
+                    program->thisModule->addDependency(m, false);
+                }
+            }
+        }
         DasParserState parserState;
         parserState.g_Access = access;
         parserState.g_Program = program;
@@ -1226,6 +1237,10 @@ namespace das {
         notAllowed.clear();
         vector<FileInfo *> chain;
         string modName;
+        addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &tw);
+        for ( const auto & em : access->getExtraModules() ) {
+            addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &tw);
+        }
         getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain, dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, false);
         auto program = make_smart<Program>();
         program->policies = policies;
@@ -1396,8 +1411,7 @@ namespace das {
         string modName;
         [[maybe_unused]] auto builtinModule = Module::require("$");
         DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.");
-        auto builtin_path = getDasRoot() + "/daslib/builtin.das";
-        bool allGood = addExtraDependency("builtin", builtin_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+        bool allGood = addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
         if ( !allGood ) {
             auto res = make_smart<Program>();
             res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::internal_module);
