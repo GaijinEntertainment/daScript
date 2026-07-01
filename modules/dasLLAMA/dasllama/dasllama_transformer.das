@@ -757,22 +757,25 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
     }
 }
 
-// Threaded per-position FFN activation: act(hb[p*hidden..]) in place for every position. Each element's
-// silu/gelu is independent (no cross-position reduce), so threading is bit-exact — the reorder risk is only
-// in VECTORIZING the transcendental, never in splitting positions across workers. Fork workers touch the
-// raw base pointer; self-gates on ACT_PAR_THRESHOLD so small prompts run inline.
-def private act_batch(var hb : array<float>; act : FfnAct; hidden, npos : int64) {
+// Fused activation + gate multiply: hb[p] = act(W1·x[p]) * (W3·x[p]) in place, threaded per position.
+// One memory pass (vs silu-then-mul), and the transcendental is vectorized via exp4 unless g_act_vec is
+// off. Each element is independent (no cross-position reduce), so threading never changes the result;
+// the only non-bit-exactness is exp4's ~2 ulp. Fork workers touch raw base pointers; self-gates on
+// ACT_PAR_THRESHOLD so small prompts (and decode, npos=1) run inline.
+def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
     let is_gelu = act == FfnAct.gelu
+    let vec = g_act_vec
     unsafe {
-        var hp = addr(hb[0])
+        var gp = addr(g[0])
+        var up = reinterpret<float const?>(addr(u[0]))
         maybe_parallel_for(hidden * npos >= ACT_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
                     let off = int64(p) * hidden
-                    if (is_gelu) {
-                        gelu(hp + off, hidden)
+                    if (vec) {
+                        if (is_gelu) { geglu4(gp + off, up + off, hidden) } else { swiglu4(gp + off, up + off, hidden) }
                     } else {
-                        silu(hp + off, hidden)
+                        if (is_gelu) { geglu(gp + off, up + off, hidden) } else { swiglu(gp + off, up + off, hidden) }
                     }
                 }
             }
@@ -969,12 +972,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
         mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
         mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
-        if (c.ffn_act == FfnAct.gelu) {
-            gelu(s.hb, hidden)
-        } else {
-            silu(s.hb, hidden)
-        }
-        mul_inplace(unsafe(addr(s.hb[0])), unsafe(addr(s.hb2[0])), hidden)
+        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
         // down projection, optional post-FFN norm, residual
         mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
@@ -1046,6 +1044,22 @@ def set_rope_table_mode(on : bool) {
 //! Whether prefill RoPE uses the precomputed cos/sin table.
 def get_rope_table_mode() : bool {
     return g_use_rope_table
+}
+
+// FFN gate activation: when true (default) use the vectorized exp4 fused kernels (swiglu4/geglu4,
+// ~2 ulp, non-bit-exact); when false the scalar libm swiglu/geglu (bit-exact reference). The oracle
+// tests flip this off for their token-for-token gate; production leaves it on. Same fusion either way.
+var g_act_vec = true
+
+//! Select the FFN gate transcendental: vectorized exp4 (default true, fast, ~2 ulp) vs scalar libm
+//! (bit-exact). Off is the reference path the token-for-token oracle tests pin.
+def set_act_vec(on : bool) {
+    g_act_vec = on
+}
+
+//! Whether the FFN gate uses the vectorized exp4 kernels.
+def get_act_vec() : bool {
+    return g_act_vec
 }
 
 var g_prefill_prof_acc : table<string; int64>
@@ -1141,32 +1155,33 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
                     kqp[i] = 0.0
                 }
                 gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
-                // scale + softcap + causal/sliding mask, then online-softmax fold per query row
+                // ggml-style decomposition (ops.cpp:8771): scale — then soft-cap — the whole score tile
+                // in one vectorized sweep each, replacing the scalar per-element multiply in the mask branch.
+                scale_inplace(kqp, scale, tile_rows * KV)
+                if (attn_softcap > 0.0) {   // Gemma2: soft-cap scores before softmax
+                    softcap4(kqp, tile_rows * KV, attn_softcap)
+                }
+                // online-softmax fold per query row. The causal + sliding mask is a CONTIGUOUS column
+                // span [lo, hi] (cached keys kstart_p..ap), so masking is two boundary fills (no
+                // per-element branch) and the row max is hand-vectorized (hmax).
                 for (qt in range64(tile_rows)) {
                     let ap = ap0 + qt
                     let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
                     let row = qt * KV
-                    var tmax = -1.0e30
-                    for (kt in range64(KV)) {
-                        let kabs = kt0 + kt
-                        if (kt < kvalid && kabs <= ap && kabs >= kstart_p) {
-                            var sc = kqp[row + kt] * scale
-                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                                sc = attn_softcap * tanh(sc / attn_softcap)
-                            }
-                            kqp[row + kt] = sc
-                            tmax = max(tmax, sc)
-                        } else {
-                            kqp[row + kt] = -1.0e30   // masked → exp() to 0 below
-                        }
+                    let lo = max(0l, kstart_p - kt0)              // first valid tile-local column
+                    let hi = min(kvalid - 1l, ap - kt0)           // last valid tile-local column (causal)
+                    if (hi < lo) {                                // no valid keys here → contributes nothing
+                        for (kt in range64(KV)) { kqp[row + kt] = 0.0 }
+                        continue
                     }
+                    for (kt in range64(0l, lo))      { kqp[row + kt] = -1.0e30 }   // below the sliding window
+                    for (kt in range64(hi + 1l, KV)) { kqp[row + kt] = -1.0e30 }   // above causal / zero-padded
+                    let tmax = hmax(kqp + row, KV)
                     let mold = mrun[int(qt)]
                     let mnew = max(mold, tmax)
                     if (mnew > mold) {                 // new running max → rescale this row's accumulator
                         let ms = exp(mold - mnew)
-                        for (d in range64(head_size)) {
-                            vkqp[qt * head_size + d] *= ms
-                        }
+                        scale_inplace(vkqp + qt * head_size, ms, head_size)
                         srun[int(qt)] *= ms
                     }
                     mrun[int(qt)] = mnew
@@ -1472,11 +1487,8 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
         prof_add("mm_ffn", ts_ffn)
         let ts_act = ref_time_ticks()
-        act_batch(s.hb_b, c.ffn_act, hidden, npos)
+        gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
         prof_add("act", ts_act)
-        let ts_gate = ref_time_ticks()
-        mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
-        prof_add("gate", ts_gate)   // SwiGLU/GeGLU gate multiply — own bucket (act_resid is residual-adds)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)

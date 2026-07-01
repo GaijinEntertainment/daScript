@@ -58,6 +58,18 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {
     }
 }
 
+//! d[j] *= scale (broadcast scalar), width-8 vectorized — ggml_vec_scale_f32. Flash attention
+//! multiplies the whole Q×KV score tile by 1/sqrt(head_size) in one sweep, replacing the old scalar
+//! per-element multiply buried in the mask branch.
+[hint(unsafe_range_check, noalias = d)]
+def scale_inplace(var d : float?; scale : float; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] *= scale
+        }
+    }
+}
+
 //! d[j] = s[j], width-8 vectorized contiguous copy (the KV-cache store). Same reason as add_inplace:
 //! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
 //! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
@@ -611,21 +623,17 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! softmax — turns a score vector into a probability distribution (sums to 1).
 //! In place over the first `size` elements. Subtracts the max first so exp() can't
 //! overflow (exp(x-max)/sum(exp(x-max)) is identical math, numerically safe).
-//! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
-//! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
-//! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
-def softmax(var x : float?; size : int64) {
-    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
+//! Horizontal max of the first `n` floats, hand-vectorized (two float4 lane accumulators + a horizontal
+//! max). LLVM won't auto-vectorize a max-reduction without nnan/nsz fast-math, which we don't emit for
+//! bit-exactness (max lowers to fcmp+select, order-dependent only when a NaN is present), so we do the
+//! reassociation by hand — bit-identical to a scalar fold on NaN-free input (attention scores are always
+//! finite). Two accumulators hide the fmax latency (~9x over scalar). Seeds with x[0] (idempotent) and
+//! never reads past the buffer, so it is safe for n < 8. Returns -FLT_MAX for n <= 0.
+def hmax(x : float const?; n : int64) : float {
+    if (n <= 0l) return -3.4028235e38
     unsafe {
-        // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
-        // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
-        // emit it — bit-exactness). On NaN-free inputs (softmax scores are always finite) max is
-        // associative+exact, so two float4 lane accumulators (width-8, the original hint's intent — 2 accs
-        // hide the fmax latency, ~9x over scalar) + a horizontal max is bit-identical to the scalar fold
-        // (fcmp+select is order-dependent only when a NaN is present). The broadcast seed folds x[0] in (idempotent) and never reads
-        // past the buffer, so it stays safe for size < 8 (early decode).
         let pf4 = reinterpret<float4 const?>(x)
-        let n8 = size / 8l
+        let n8 = n / 8l
         var acc0 = float4(x[0], x[0], x[0], x[0])
         var acc1 = acc0
         for (k in 0l..n8) {
@@ -634,9 +642,20 @@ def softmax(var x : float?; size : int64) {
         }
         let acc = max(acc0, acc1)
         var maxv = max(max(acc.x, acc.y), max(acc.z, acc.w))
-        for (i in n8 * 8l .. size) {
+        for (i in n8 * 8l .. n) {
             maxv = max(maxv, x[i])
         }
+        return maxv
+    }
+}
+
+//! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
+//! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
+//! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
+def softmax(var x : float?; size : int64) {
+    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
+    unsafe {
+        let maxv = hmax(x, size)   // hand-vectorized max reduction (see hmax)
         var sum = 0.0
         for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
             let e = exp(x[i] - maxv)
@@ -715,6 +734,93 @@ def gelu(var x : array<float> | #; size : int64) {
     gelu(unsafe(addr(x[0])), size)
 }
 
+//! Fused SwiGLU gate: g[i] = silu(g[i]) * u[i] in place (g = W1·x gate, u = W3·x up). One pass
+//! instead of silu-then-mul_inplace — the intermediate silu result never round-trips through memory,
+//! halving the gate/act traffic. Bit-exact: same `silu(v) * u[i]` value and order as the split path.
+//! Pointer core (see silu) — the threaded prefill FFN runs gate_batch in fork contexts on raw addresses.
+def swiglu(var g : float?; u : float const?; size : int64) {
+    unsafe {
+        for (i in range64(size)) {
+            let v = g[i]
+            g[i] = (v / (1.0 + exp(-v))) * u[i]
+        }
+    }
+}
+def swiglu(var g : array<float> | #; u : array<float> | #; size : int64) {
+    if (size <= 0) return
+    swiglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
+}
+
+//! Fused GeGLU gate (Gemma2): g[i] = gelu(g[i]) * u[i] in place, tanh-approx gelu. Same fusion
+//! rationale and bit-exactness as swiglu.
+def geglu(var g : float?; u : float const?; size : int64) {
+    let k = 0.7978845608028654  // sqrt(2/pi)
+    unsafe {
+        for (i in range64(size)) {
+            let v = g[i]
+            g[i] = (0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))) * u[i]
+        }
+    }
+}
+def geglu(var g : array<float> | #; u : array<float> | #; size : int64) {
+    if (size <= 0) return
+    geglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
+}
+
+// exp4 valid range (fast-path, no overflow guard) — clamp the exp argument here so an outlier
+// gate value can never feed exp4 out of range (silu saturates to 0/v, gelu to ±1 there anyway).
+let EXP4_LO = float4(-80.0, -80.0, -80.0, -80.0)
+let EXP4_HI = float4(80.0, 80.0, 80.0, 80.0)
+
+//! Vectorized fused SwiGLU gate (default): g[i] = silu(g[i]) * u[i], float4 with exp4. sigmoid =
+//! 1/(1+exp4(-v)); ~4.5x the scalar swiglu (which pays a libm expf per element). ~2 ulp, NOT bit-exact
+//! (that's the scalar swiglu, kept as the opt-in reference). Tail (<4 elems) runs the scalar form.
+def swiglu4(var g : float?; u : float const?; size : int64) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    unsafe {
+        var g4 = reinterpret<float4?>(g)
+        var u4 = reinterpret<float4 const?>(u)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let v = g4[k]
+            let arg = clamp(-v, EXP4_LO, EXP4_HI)
+            g4[k] = (v / (one + exp4(arg))) * u4[k]
+        }
+        for (i in range64(n4 * 4l, size)) {
+            let v = g[i]
+            g[i] = (v / (1.0 + exp(-v))) * u[i]
+        }
+    }
+}
+
+//! Vectorized fused GeGLU gate (default, Gemma2): g[i] = gelu(g[i]) * u[i], float4 with exp4 via the
+//! identity tanh(a) = 1 - 2/(1+exp(2a)); ~4.8x the scalar geglu (which pays a libm tanhf per element —
+//! the slowest transcendental, no vector path). ~2 ulp, NOT bit-exact. Tail runs the scalar form.
+def geglu4(var g : float?; u : float const?; size : int64) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let two = float4(2.0, 2.0, 2.0, 2.0)
+    let half = float4(0.5, 0.5, 0.5, 0.5)
+    let gk = float4(0.7978845608028654)   // sqrt(2/pi)
+    let cc = float4(0.044715)
+    unsafe {
+        var g4 = reinterpret<float4?>(g)
+        var u4 = reinterpret<float4 const?>(u)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let v = g4[k]
+            let a = gk * (v + cc * v * v * v)
+            let arg = clamp(two * a, EXP4_LO, EXP4_HI)
+            let th = one - two / (one + exp4(arg))   // tanh(a)
+            g4[k] = (half * v * (one + th)) * u4[k]
+        }
+        let kk = 0.7978845608028654
+        for (i in range64(n4 * 4l, size)) {
+            let v = g[i]
+            g[i] = (0.5 * v * (1.0 + tanh(kk * (v + 0.044715 * v * v * v)))) * u[i]
+        }
+    }
+}
+
 //! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
 //! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
 //! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
@@ -729,6 +835,29 @@ def softcap(var x : float?; size : int64; cap : float) {
 }
 def softcap(var x : array<float> | #; size : int64; cap : float) {
     softcap(unsafe(addr(x[0])), size, cap)
+}
+
+//! Vectorized logit soft-capping: x = cap * tanh(x/cap), float4 with exp4 via the same identity as
+//! geglu4 (tanh(a) = 1 - 2/(1+exp(2a))). ~2 ulp, NOT bit-exact vs the scalar libm-tanh softcap. Flash
+//! attention soft-caps the whole Q×KV score tile in one sweep. Tail runs the scalar form.
+def softcap4(var x : float?; size : int64; cap : float) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let two = float4(2.0, 2.0, 2.0, 2.0)
+    let cap4 = float4(cap)
+    let invcap4 = float4(1.0 / cap)
+    unsafe {
+        var x4 = reinterpret<float4?>(x)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let arg = clamp(two * (x4[k] * invcap4), EXP4_LO, EXP4_HI)   // 2 * (x/cap)
+            let th = one - two / (one + exp4(arg))                       // tanh(x/cap)
+            x4[k] = cap4 * th
+        }
+        let inv = 1.0 / cap
+        for (i in range64(n4 * 4l, size)) {
+            x[i] = cap * tanh(x[i] * inv)
+        }
+    }
 }
 
 //! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1)

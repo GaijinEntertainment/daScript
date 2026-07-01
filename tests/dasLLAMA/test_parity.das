@@ -40,6 +40,10 @@ def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int
     // tolerance is what test_flash covers. Restore the prior mode so we don't leak global state.
     let prev_attn = get_prefill_attn_mode()
     set_prefill_attn_mode(AttnPrefillMode.classic)
+    // ...and the scalar libm silu/gelu, not the default exp4 gate (~2 ulp) — same token-exact-oracle
+    // reasoning as the attention pin above. exp4 staying within tolerance is covered by test_silu.
+    let prev_act = get_act_vec()
+    set_act_vec(false)
     with_job_que() {
         set_jobque_fork_pool(true, true)
         var s = make_run_state(tr.config)
@@ -51,6 +55,7 @@ def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int
         ok = same(got, want)
     }
     set_prefill_attn_mode(prev_attn)
+    set_act_vec(prev_act)
     return ok
 }
 

@@ -36,3 +36,57 @@ def test_silu(t : T?) {
         t |> success(true)                      // reached here ⇒ no index-fault
     }
 }
+
+// Realistic gate/up pre-activations for the fused-kernel tests (n=12, mix of signs/magnitudes).
+def private gate_inputs() : tuple<array<float>; array<float>> {
+    var g <- [0.0, 1.0, 2.0, -1.0, 3.5, -4.0, 0.25, -0.1, 5.0, -2.5, 0.75, -0.5]
+    var u <- [1.0, 2.0, -1.0, 0.5, 2.0, -0.5, 3.0, 1.0, -1.5, 0.25, -2.0, 4.0]
+    return g => u
+}
+
+def private maxdiff(a, b : array<float>) : float {
+    var m = 0.0
+    for (i in range(length(a))) { m = max(m, abs(a[i] - b[i])) }
+    return m
+}
+
+[test]
+def test_gate(t : T?) {
+    let n = 12l
+    // The scalar fused gate is the bit-exact reference: swiglu(g,u) == silu(g) then *u, same order.
+    t |> run("swiglu scalar == silu*u (bit-exact)") @(t : T?) {
+        let inp <- gate_inputs()
+        var ref := inp._0
+        silu(ref, n)
+        for (i in range(int(n))) { ref[i] *= inp._1[i] }
+        var got := inp._0
+        swiglu(got, inp._1, n)
+        t |> success(maxdiff(ref, got) == 0.0, "swiglu bit-exact vs silu then *u")
+    }
+    t |> run("geglu scalar == gelu*u (bit-exact)") @(t : T?) {
+        let inp <- gate_inputs()
+        var ref := inp._0
+        gelu(ref, n)
+        for (i in range(int(n))) { ref[i] *= inp._1[i] }
+        var got := inp._0
+        geglu(got, inp._1, n)
+        t |> success(maxdiff(ref, got) == 0.0, "geglu bit-exact vs gelu then *u")
+    }
+    // The exp4 fused gate (production default) is ~2 ulp — within tolerance of the scalar reference.
+    t |> run("swiglu4 ≈ swiglu (exp4 tolerance)") @(t : T?) {
+        let inp <- gate_inputs()
+        var ref := inp._0
+        swiglu(ref, inp._1, n)
+        var got := inp._0
+        swiglu4(unsafe(addr(got[0])), unsafe(addr(inp._1[0])), n)
+        t |> success(maxdiff(ref, got) < 1e-3, "swiglu4 within tolerance of scalar swiglu")
+    }
+    t |> run("geglu4 ≈ geglu (exp4 tolerance)") @(t : T?) {
+        let inp <- gate_inputs()
+        var ref := inp._0
+        geglu(ref, inp._1, n)
+        var got := inp._0
+        geglu4(unsafe(addr(got[0])), unsafe(addr(inp._1[0])), n)
+        t |> success(maxdiff(ref, got) < 1e-3, "geglu4 within tolerance of scalar geglu")
+    }
+}
