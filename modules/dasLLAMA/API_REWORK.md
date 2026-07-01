@@ -197,7 +197,18 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    streaming `generate()`. Examples collapsed: `chat.das` (one REPL, any model) + `run.das` (one
    completion + stats); the 4 other chat REPLs + 2 runners deleted, their oracles migrated into
    `test_parity.das` (TinyLlama-v0.3, Llama-3.2-1B). Full suite 100/100 JIT + AOT.
-6. **Kernel-backend registry** *(current)* — formalize so x64 can mirror the NEON self-registration.
+6. **Arch files + kernel-backend registry** *(current)* —
+   - **Arch files (done):** split the `dasllama_transformer.das` monolith so each architecture lives
+     in its own `dasllama_arch_*.das` (config setter + `[init]` registration + chat template). The
+     shared engine is `dasllama_common.das`; `dasllama_transformer.das` is now a thin umbrella
+     (`require dasllama_common public` + one require per arch, firing each arch's `[init]`), so every
+     existing `require dasllama/dasllama_transformer` is unchanged — zero consumer churn. `std_blocks()`
+     is the only symbol promoted to public (the arch files' one pull from common); block bodies, forward
+     loops, and config are byte-for-byte unchanged, so the suite stays **token-identical** (100/100 JIT
+     + AOT). Adding an arch = a new file, never touching the core; MoE brings its own blocks in its own
+     file. See [What split into files](#what-split-into-files-done--phase-6).
+   - **Kernel-backend registry (next):** formalize the ISA seam so `dasllama_math_x64_avx.das` can mirror
+     the NEON self-registration (SDOT → VNNI `vpdpbusd`).
 7. **Tune macro + loop-attribute reification** — depends on 6.
 
 **AOT note (phase 5):** the `Model`↔`ArchBlocks` cycle (Model holds ArchBlocks by value; ArchBlocks's
@@ -220,3 +231,32 @@ with no reach into internals, the API is right), tool use.
 - The old chat demos hand-rolled a token-by-token `prefill()` that never called the fast
   `forward_prefill`; `respond` prefills the whole rendered turn in one `eval()`, so the collapse also
   sped them up.
+
+## What split into files (done — Phase 6)
+
+The `dasllama` submodule layout, before → after:
+
+| Before | After | Role |
+|---|---|---|
+| `dasllama_transformer.das` (2024 lines) | `dasllama_common.das` (~1940) | the whole engine: types, loader, kernels, std blocks, forward loops, sampling, registry |
+| — | `dasllama_arch_llama.das` | config setter + `[init]` registration + Llama-3 chat template |
+| — | `dasllama_arch_qwen2.das` | Qwen2 (QKV bias, NEOX rope) + ChatML template |
+| — | `dasllama_arch_phi3.das` | Phi-3 (NEOX rope, fused QKV) + `<|user|>` template |
+| — | `dasllama_arch_gemma2.das` | Gemma-2 (GeGLU, softcaps, SWA, 4 norms) + `<start_of_turn>` template |
+| `dasllama_transformer.das` (same name) | `dasllama_transformer.das` (11 lines) | thin umbrella — `require dasllama_common public` + one require per arch |
+
+- **The require cycle forces the umbrella.** Arch files `require dasllama_common` (they need
+  `ArchDesc`/`Config`/`std_blocks`); common can't require them back (and doesn't — arches self-register
+  at `[init]`). daslang forbids require cycles, so a third file requires common (public, re-export) + each
+  arch (side-effect require, firing its `[init]`). That third file kept the name `dasllama_transformer.das`
+  so no consumer require changed.
+- **Only `std_blocks()` went public** — the single symbol the arch files pull from common. Everything else
+  they touch (`ArchDesc`, `Config`, `FfnAct`, `ChatTemplate`, `register_arch`, `chat_text/special/content`)
+  was already public. `resolve_arch` dispatches through the stored `ArchDesc.configure` fn-ptr, so the
+  `configure_*` leaves detach with no dangling refs.
+- **Both CMake lists updated** — `modules/dasLLAMA/CMakeLists.txt` (`ADD_MODULE_DAS`) and
+  `tests/aot/CMakeLists.txt` (`AOT_DASLLAMA_MODULE_FILES`, leaf-order: common before the arches before the
+  umbrella) — plus the `.das_module` `register_native_path` list.
+- **Pure refactor** — block bodies / forward loops / config unchanged, so token output is identical
+  (100/100 JIT + AOT). Adding a new arch (or MoE, with its own blocks) is now a new file + one require
+  line in the umbrella, never an edit to the core.
