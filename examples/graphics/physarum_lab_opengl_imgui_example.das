@@ -127,12 +127,7 @@ var g_tweak_audio = false             // perc layer currently swelled (slider be
 var g_tweak_hold = 0                  // frames the perc layer stays up after the last slider change
 var g_ui_tweaked = false              // a slider/picker moved this frame (set by build_ui)
 
-// TEMPORARY: audio is gated off on the web build. The threaded wasm64 AudioWorklet mixer holds mutexes
-// on the real-time audio thread (which cannot block), so a few seconds after audio starts the worklet
-// deadlocks under this card's load and wedges the page. The root fix (a realtime-safe mixer — no
-// mutex/malloc on the worklet thread) is being done separately; REMOVE this gate + restore unconditional
-// audio once that lands. Desktop is unaffected (it has a real OS audio thread). Set in init().
-var g_audio_enabled = false
+var g_audio_enabled = true            // gates the audio-owned paths below (audio runs on desktop and web)
 
 // ----- gl objects -----
 var display_program : uint
@@ -331,7 +326,7 @@ def start_update_pass(n : int) {
             st |> notify_and_release   // more bands than agents — balance the wait-group, skip the thread
             continue
         }
-        new_thread() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
+        new_job() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
             update_agents_band(pagents, pfield, read_offset, lo, hi, prm)
             st |> notify_and_release
         }
@@ -623,9 +618,9 @@ def init() {
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
     // that clamps navigator.hardwareConcurrency, and capped at MAX_BANDS. Drag the slider up to oversubscribe.
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
-    // get_running_platform_name() (not get_platform_name(), which const-folds to the compile host) so the
-    // cross-compiled in-browser exe reports "emscripten" at runtime — see the g_audio_enabled note above.
-    g_audio_enabled = get_running_platform_name() != "emscripten"
+    // Persistent job queue for the agent passes (start_update_pass uses new_job). Created once here so it
+    // spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
+    create_job_que()
     if (g_audio_enabled) {
         setup_audio()
     }
@@ -674,6 +669,7 @@ def shutdown() {
             g_audio_owned = false
         }
     }
+    destroy_job_que()
     harness_shutdown()
 }
 

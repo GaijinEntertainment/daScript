@@ -62,6 +62,10 @@ if(DAS_WASM_PTHREADS)
     # large enough for daslang's static data + embedded daslib (~55MB). 128MB gives
     # headroom; ALLOW_MEMORY_GROWTH still lets the heap grow past it at runtime.
     add_link_options(-pthread -sPTHREAD_POOL_SIZE=16 -sINITIAL_MEMORY=134217728)
+    # The AudioWorklet is a Wasm Worker (not a pthread): a contended pthread_mutex futex-aborts it.
+    # __wrap_emscripten_futex_wait (in libDaScript_runtime) busy-polls the worklet instead. Mirror the
+    # daspkg release-wasm link (utils/daspkg/commands.das) so CMake-built threaded web apps get it too.
+    add_link_options(-Wl,--wrap=emscripten_futex_wait)
     # AudioWorklet backend for dasAudio (mixer on the dedicated audio thread).
     # WASM_WORKERS backs the worklet thread; AUDIO_WORKLET enables the API. No
     # -sASYNCIFY (incompatible with -fwasm-exceptions) — the non-blocking

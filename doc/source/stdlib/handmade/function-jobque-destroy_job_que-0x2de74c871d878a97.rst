@@ -1,0 +1,1 @@
+Destroys the persistent job queue created by create_job_que, draining and joining its worker threads. Intended to be called at shutdown once no more jobs will be dispatched; has no effect if no persistent queue is active.
