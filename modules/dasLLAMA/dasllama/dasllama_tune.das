@@ -116,6 +116,22 @@ def private apply_perm(var clone : FunctionPtr; perm : TunePerm) {
     unsafe { delete vis }
 }
 
+// Clone `tmpl` as `<tmpl.name>__<perm.suffix>`, stamp the permutation's hints onto the
+// [tune=N] loops, and register it in `mod`. Shared by [dasllama_tune] (in-module scan) and
+// [dasllama_grid] (cross-module targeted emission). The clone name IS the registry key.
+def private emit_variant(var mod : Module?; tmpl : FunctionPtr; perm : TunePerm; var errors : das_string) : bool {
+    var clone = clone_function(tmpl)
+    clone.name := "{tmpl.name}__{perm.suffix}"
+    clone.moreFlags.isTemplate = false
+    clone.flags.generated = true
+    apply_perm(clone, perm)
+    if (!(mod |> add_function(clone))) {
+        errors := "dasllama grid: failed to add {clone.name}"
+        return false
+    }
+    return true
+}
+
 // ===== the trigger =====
 
 //! `[dasllama_tune]` on any (dummy) struct scans the compiling module for `def template`
@@ -136,18 +152,69 @@ class private TuneMacro : AstStructureAnnotation {
         let grid <- build_grid()
         for (func in tunable) {
             for (perm in grid) {
-                var clone = clone_function(func)
-                clone.name := "{func.name}__{perm.suffix}"
-                clone.moreFlags.isTemplate = false
-                clone.flags.generated = true
-                apply_perm(clone, perm)
-                if (!(mod |> add_function(clone))) {
-                    errors := "dasllama_tune: failed to add {clone.name}"
-                    return false
-                }
+                if (!emit_variant(mod, func, perm, errors)) return false
             }
         }
         return true
+    }
+}
+
+// ===== [dasllama_grid]: targeted grid emission + fn-ptr registry =====
+
+// Build `<tmpl.name>_variants() : array<tuple<string; <sig>>>`, one row per grid perm:
+// `(suffix, @@<tmpl.name>__<suffix>)`. `<sig>` is the template's own function type, so the
+// registry is generic across kernels (no shared Variant type). The profiler benches these.
+def private emit_registry(var mod : Module?; tmpl : FunctionPtr; grid : array<TunePerm>; var errors : das_string) : bool {
+    let sig = function_to_type(tmpl)
+    var body : array<ExpressionPtr>
+    body |> reserve(length(grid) + 2)   // decl + one row per perm + return
+    body |> push <| qmacro_expr() {
+        var result : array<tuple<string; $t(sig)>>
+    }
+    for (perm in grid) {
+        var fnAddr = new ExprAddr(at = tmpl.at, target := "{tmpl.name}__{perm.suffix}")
+        body |> push <| qmacro_expr() {
+            result |> push(($v(perm.suffix), $e(fnAddr)))
+        }
+    }
+    body |> push <| qmacro_expr() {
+        return <- result
+    }
+    var fn = qmacro_function("{tmpl.name}_variants") $() : array<tuple<string; $t(sig)>> {
+        $b(body)
+    }
+    fn.flags.generated = true
+    if (!(mod |> add_function(fn))) {
+        errors := "dasllama_grid: failed to add {tmpl.name}_variants"
+        return false
+    }
+    return true
+}
+
+//! `[dasllama_grid(src="dot_template")]` on any (dummy) struct emits the full grid of
+//! `<src>__<suffix>` variant clones (cross-module: `src` may live in a required module) plus
+//! a `<src>_variants()` fn-ptr registry the profiler harness benches. Replaces the hand-written
+//! per-perm `[tuned]` stubs + `variants()` array.
+[structure_macro(name="dasllama_grid")]
+class private GridMacro : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup;
+                       args : AnnotationArgumentList; var errors : das_string) : bool {
+        let src = find_arg(args, "src")
+        if (!(src is tString)) {
+            errors := "dasllama_grid: requires src=\"<template_name>\""
+            return false
+        }
+        var tmpl = find_template_function(src as tString)
+        if (tmpl == null) {
+            errors := "dasllama_grid: template function not found: {src as tString}"
+            return false
+        }
+        var mod = compiling_module()
+        let grid <- build_grid()
+        for (perm in grid) {
+            if (!emit_variant(mod, tmpl, perm, errors)) return false
+        }
+        return emit_registry(mod, tmpl, grid, errors)
     }
 }
 
