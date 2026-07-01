@@ -12,6 +12,7 @@ require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model pop
 require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
 require math
 require daslib/random  // int4 RNG state + random_float for token sampling
+require daslib/strings_boost  // join() for the arch-registry diagnostic
 
 // dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
 // (the embedding table + the norm weights, which forward always reads as fp32) and the big 2D
@@ -83,6 +84,7 @@ struct Config {
 struct Model {
     config : Config = Config()
     tok : Tokenizer = Tokenizer()   // tokenizer loaded alongside the weights (unset unless loaded via load_model)
+    blocks : ArchBlocks = ArchBlocks()   // per-arch attention/ffn kernels, resolved from the registry at load
     // fp32 aux: embedding + norms
     fblob : array<float>
     tok_emb_off : int64
@@ -114,6 +116,67 @@ struct Model {
     bq : array<float>
     bk : array<float>
     bv : array<float>
+}
+
+// ===== Arch registry: per-architecture blocks + chat template =====
+
+//! A chat-template part: literal `text`, a `special`-token spelling (the chat layer resolves it to an
+//! id), or the `content` slot the message text fills. Data only in this phase — the chat engine that
+//! renders these lands in phase 5.
+enum ChatPartKind {
+    text
+    special
+    content
+}
+
+struct ChatPart {
+    kind : ChatPartKind = ChatPartKind.text
+    s : string = ""   // literal for `text`; special-token spelling for `special`; unused for `content`
+}
+
+//! One templated turn as an ordered part list.
+struct ChatTurn {
+    parts : array<ChatPart>
+}
+
+//! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
+//! `stop` lists the special-token spellings that end a turn. `system` is empty for arches with no
+//! system role (folded into the first user turn, e.g. Gemma).
+struct ChatTemplate {
+    add_bos : bool = false                    // prepend the tokenizer BOS at conversation start
+    system : ChatTurn = ChatTurn()
+    user : ChatTurn = ChatTurn()
+    assistant_open : ChatTurn = ChatTurn()
+    stop : array<string>
+}
+
+// Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
+// single-token path (forward); prefill is the batched path (forward_prefill). A new block (MoE,
+// QK-norm attention, …) registers a different function here without editing the forward loops.
+typedef AttnDecodeFn  = function<(t : Model; var s : Session; l : int64; pos : int64) : void>
+typedef FfnDecodeFn   = function<(t : Model; var s : Session; l : int64) : void>
+typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) : void>
+typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
+
+//! The copyable hot-path block pointers, resolved onto the Model at load and called per layer.
+struct ArchBlocks {
+    attn_decode : AttnDecodeFn
+    ffn_decode : FfnDecodeFn
+    attn_prefill : AttnPrefillFn
+    ffn_prefill : FfnPrefillFn
+}
+
+// Sets the Config flags for one architecture. Runs before dim/vocab are known, so the loader
+// finalizes dim-dependent fields (Gemma's embed_scale) after calling it.
+typedef ConfigureFn = function<(var c : Config) : void>
+
+//! Full architecture descriptor. Lives only in the registry — non-copyable, because it holds a
+//! ChatTemplate. `blocks` (copyable) is copied onto the Model at load; `chat` is read by the chat layer.
+struct ArchDesc {
+    name : string = ""
+    configure : ConfigureFn
+    blocks : ArchBlocks = ArchBlocks()
+    chat : ChatTemplate = ChatTemplate()
 }
 
 struct private LayoutSizes {
@@ -256,6 +319,7 @@ def load_checkpoint(path : string) : Model {
         }
     }
     fclose(f)
+    resolve_arch(t, "llama")   // llama2.c checkpoints are always the llama arch — bind its blocks
     return <- t
 }
 
@@ -284,30 +348,73 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
     }
 }
 
-//! Validate the GGUF architecture and apply its per-arch capability flags to the config. The Config
-//! defaults already encode the Llama family, so each arch overrides only its own deltas. An arch we
-//! can't run correctly panics here — better to fail loudly than feed weights through the wrong path.
-def private configure_arch(var c : Config; arch : string) {
-    if (arch == "llama") {
-        // Llama / Llama-2 / Llama-3 / TinyLlama — every Config default is already correct
-    } elif (arch == "qwen2") {
-        c.attn_qkv_bias = true   // Qwen2 adds a learned bias on the Q/K/V projections
-        c.rope_neox = true       // ...and uses NEOX-style rope
-    } elif (arch == "phi3") {
-        c.rope_neox = true       // Phi3: NEOX rope + LongRoPE (freq factors + mscale, read in the loader)
-        c.fused_qkv = true       // ...with fused attn_qkv + ffn_up (gate_up) tensors, split at load
-    } elif (arch == "gemma2") {
-        c.rope_neox = true                  // NEOX rope, full-rotary over head_size
-        c.ffn_act = FfnAct.gelu             // GeGLU (tanh-approx gelu) instead of SwiGLU
-        c.attn_logit_softcap = 50.0         // soft-cap attention scores before softmax
-        c.final_logit_softcap = 30.0        // soft-cap the classifier logits
-        c.sliding_window = 4096l            // local attention on even layers (swa_period=2)
-        c.pre_post_norm = true              // extra post-attn + post-FFN norms (4 norms/layer)
-        // embed_scale (sqrt(dim)), head_size (key_length) and the (1+w) norm weights are
-        // resolved in the loader: dim isn't known here, and Gemma's GGUF pre-bakes the +1
-    } else {
-        panic("dasLLAMA: unsupported architecture '{arch}' (supported: llama, qwen2, phi3, gemma2)")
+// ===== Per-architecture config setters =====
+// The Config defaults already encode the Llama family, so each arch overrides only its own deltas.
+// These run before dim/vocab are known (see the loader for dim-dependent finalization).
+
+[unused_argument(c)]
+def private configure_llama(var c : Config) {
+    // Llama / Llama-2 / Llama-3 / TinyLlama — every Config default is already correct
+    pass
+}
+def private configure_qwen2(var c : Config) {
+    c.attn_qkv_bias = true   // Qwen2 adds a learned bias on the Q/K/V projections
+    c.rope_neox = true       // ...and uses NEOX-style rope
+}
+def private configure_phi3(var c : Config) {
+    c.rope_neox = true       // Phi3: NEOX rope + LongRoPE (freq factors + mscale, read in the loader)
+    c.fused_qkv = true       // ...with fused attn_qkv + ffn_up (gate_up) tensors, split at load
+}
+def private configure_gemma2(var c : Config) {
+    c.rope_neox = true                  // NEOX rope, full-rotary over head_size
+    c.ffn_act = FfnAct.gelu             // GeGLU (tanh-approx gelu) instead of SwiGLU
+    c.attn_logit_softcap = 50.0         // soft-cap attention scores before softmax
+    c.final_logit_softcap = 30.0        // soft-cap the classifier logits
+    c.sliding_window = 4096l            // local attention on even layers (swa_period=2)
+    c.pre_post_norm = true              // extra post-attn + post-FFN norms (4 norms/layer)
+    // embed_scale (sqrt(dim)), head_size (key_length) and the (1+w) norm weights are
+    // resolved in the loader: dim isn't known here, and Gemma's GGUF pre-bakes the +1
+}
+
+// ===== Arch registry =====
+// Each architecture self-registers its config setter, block kernels, and chat template at [init]
+// (see the register_arch_* functions after the forward pass). load_gguf looks the arch up by its
+// GGUF `general.architecture` string — an arch we can't run panics, better than feeding weights
+// through the wrong path.
+
+var private g_arch_registry : table<string; ArchDesc>
+
+//! Register an architecture descriptor under `name` (its GGUF architecture string). Called from [init].
+def register_arch(name : string; var desc : ArchDesc) {
+    g_arch_registry[name] <- desc
+}
+
+//! Is `name` a registered architecture?
+def has_arch(name : string) : bool {
+    return key_exists(g_arch_registry, name)
+}
+
+//! The registered architecture names (for diagnostics / tests).
+def arch_names() : array<string> {
+    return <- [for (k in keys(g_arch_registry)); k]
+}
+
+//! A clone of `name`'s chat template (the chat layer / tests consume this).
+def arch_chat(name : string) : ChatTemplate {
+    var out = ChatTemplate()
+    out := g_arch_registry[name].chat
+    return <- out
+}
+
+// Look the arch up, apply its config flags, and copy its (copyable) block kernels onto the model.
+// The full descriptor stays in the registry; only the hot-path pointers ride on the Model.
+def private resolve_arch(var t : Model; arch : string) {
+    if (!key_exists(g_arch_registry, arch)) {
+        let registered = join(arch_names(), ", ")
+        panic("dasLLAMA: unsupported architecture '{arch}' (registered: {registered})")
     }
+    g_arch_registry[arch].configure(t.config)
+    t.blocks = g_arch_registry[arch].blocks
 }
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision. The big weights
@@ -349,7 +456,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     fmap(f) $(var bytes : array<uint8>#) {
         let m <- parse_gguf_meta(bytes)
         let arch = gguf_str(m, bytes, "general.architecture")
-        configure_arch(t.config, arch)
+        resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
         // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
         let dim = gguf_int(m, bytes, "{arch}.embedding_length")
         let hidden = gguf_int(m, bytes, "{arch}.feed_forward_length")
@@ -376,7 +483,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             ? gguf_int(m, bytes, "{arch}.attention.key_length")
             : dim / n_heads)
         t.config.kv_dim = n_kv_heads * t.config.head_size
-        // Gemma2 scales the embedding by sqrt(dim); configure_arch can't (dim unknown there)
+        // Gemma2 scales the embedding by sqrt(dim); configure_gemma2 can't (dim unknown there)
         if (arch == "gemma2") {
             t.config.embed_scale = sqrt(float(dim))
         }
@@ -939,10 +1046,15 @@ def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>
 
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
-def forward(t : Model; var s : Session; token, pos : int64) {
+// ===== std/dense block kernels (decode, single-token) =====
+// The default llama-family blocks the registry binds for every dense arch. Extracted verbatim from
+// the per-layer loop so the seam is a function-pointer swap: a new arch registers a different block
+// here without touching forward(). Bit-identical to the inlined form.
+
+// attn-norm → QKV(+bias) → RoPE → KV-store → GQA multi-head attention → out-proj(+post-norm) → residual.
+def private attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) {
     let c = t.config
     let dim = c.dim
-    let hidden = c.hidden_dim
     let kv_dim = c.kv_dim
     let head_size = c.head_size
     let n_heads = c.n_heads
@@ -950,6 +1062,80 @@ def forward(t : Model; var s : Session; token, pos : int64) {
     let kv_mul = n_heads / c.n_kv_heads
     let seq_len = c.seq_len
     let scale = 1.0 / sqrt(float(head_size))
+    let loff = l * seq_len * kv_dim
+    // Gemma2: even layers use sliding-window (local) attention; odd layers are global. The window
+    // covers all positions when pos < window, so this is a no-op for short contexts.
+    let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
+    let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
+    let cnt = pos + 1l - kstart
+    // attention rmsnorm
+    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
+    // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
+    mm_qkv(s, t, l)
+    if (c.attn_qkv_bias) {  // Qwen2: + bias before RoPE
+        add_bias(s.q, 0l, t.bq, l * qd, qd)
+        add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
+        add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
+    }
+    // RoPE on q (qd) and k (kv_dim)
+    rope_apply(s.q, pos, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+    rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+    // store k, v for this position into the KV cache
+    let kvoff = loff + pos * kv_dim
+    copy_floats(unsafe(addr(s.key_cache[kvoff])), unsafe(addr(s.k[0])), kv_dim)
+    copy_floats(unsafe(addr(s.value_cache[kvoff])), unsafe(addr(s.v[0])), kv_dim)
+    // multi-head attention. att[0..cnt) holds the scores for keys kstart..pos (kstart=0 unless
+    // a sliding-window layer past the window), scaled by 1/sqrt(head_size).
+    for (h in range64(n_heads)) {
+        let qoff = h * head_size
+        let kvhoff = (h / kv_mul) * head_size  // GQA: which kv head this query head reads
+        for (j in range64(cnt)) {
+            let koff = loff + (kstart + j) * kv_dim + kvhoff
+            s.att[j] = dot(unsafe(addr(s.q[qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
+        }
+        if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
+            softcap(s.att, cnt, c.attn_logit_softcap)
+        }
+        softmax(s.att, cnt)
+        // weighted sum of values into xb[qoff..]
+        for (i in range64(head_size)) {
+            s.xb[qoff + i] = 0.0
+        }
+        for (j in range64(cnt)) {
+            let voff = loff + (kstart + j) * kv_dim + kvhoff
+            axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
+        }
+    }
+    // output projection (qd -> dim), optional post-attention norm, residual
+    mm(s.xb2, t, t.wo_off + l * qd * dim, s.xb, s.xq, s.xs, qd, dim)
+    if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
+        rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
+    }
+    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
+}
+
+// ffn-norm → gated FFN (act(W1·x) * (W3·x)) → down-proj(+post-norm) → residual.
+def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let hidden = c.hidden_dim
+    // ffn rmsnorm
+    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
+    // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
+    mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
+    mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
+    gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
+    // down projection, optional post-FFN norm, residual
+    mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
+    if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
+        rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
+    }
+    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
+}
+
+def forward(t : Model; var s : Session; token, pos : int64) {
+    let c = t.config
+    let dim = c.dim
 
     // token embedding: copy row `token` of the fp32 embedding table into the residual stream
     array_view(t.fblob, t.tok_emb_off + token * dim, dim) $(row : array<float>#) {
@@ -963,69 +1149,10 @@ def forward(t : Model; var s : Session; token, pos : int64) {
         }
     }
 
+    // per-layer transformer stack — attention then FFN, each through the arch's registered block
     for (l in range64(c.n_layers)) {
-        let loff = l * seq_len * kv_dim
-        // Gemma2: even layers use sliding-window (local) attention; odd layers are global. The window
-        // covers all positions when pos < window, so this is a no-op for short contexts.
-        let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
-        let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
-        let cnt = pos + 1l - kstart
-        // attention rmsnorm
-        rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-        // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
-        mm_qkv(s, t, l)
-        if (c.attn_qkv_bias) {  // Qwen2: + bias before RoPE
-            add_bias(s.q, 0l, t.bq, l * qd, qd)
-            add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
-            add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
-        }
-        // RoPE on q (qd) and k (kv_dim)
-        rope_apply(s.q, pos, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-        rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-        // store k, v for this position into the KV cache
-        let kvoff = loff + pos * kv_dim
-        copy_floats(unsafe(addr(s.key_cache[kvoff])), unsafe(addr(s.k[0])), kv_dim)
-        copy_floats(unsafe(addr(s.value_cache[kvoff])), unsafe(addr(s.v[0])), kv_dim)
-        // multi-head attention. att[0..cnt) holds the scores for keys kstart..pos (kstart=0 unless
-        // a sliding-window layer past the window), scaled by 1/sqrt(head_size).
-        for (h in range64(n_heads)) {
-            let qoff = h * head_size
-            let kvhoff = (h / kv_mul) * head_size  // GQA: which kv head this query head reads
-            for (j in range64(cnt)) {
-                let koff = loff + (kstart + j) * kv_dim + kvhoff
-                s.att[j] = dot(unsafe(addr(s.q[qoff])), unsafe(addr(s.key_cache[koff])), head_size) * scale
-            }
-            if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                softcap(s.att, cnt, c.attn_logit_softcap)
-            }
-            softmax(s.att, cnt)
-            // weighted sum of values into xb[qoff..]
-            for (i in range64(head_size)) {
-                s.xb[qoff + i] = 0.0
-            }
-            for (j in range64(cnt)) {
-                let voff = loff + (kstart + j) * kv_dim + kvhoff
-                axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
-            }
-        }
-        // output projection (qd -> dim), optional post-attention norm, residual
-        mm(s.xb2, t, t.wo_off + l * qd * dim, s.xb, s.xq, s.xs, qd, dim)
-        if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
-            rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
-        }
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-        // ffn rmsnorm
-        rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-        // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
-        mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
-        mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
-        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
-        // down projection, optional post-FFN norm, residual
-        mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
-        if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
-            rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
-        }
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
+        t.blocks.attn_decode(t, s, l, pos)
+        t.blocks.ffn_decode(t, s, l)
     }
 
     // final rmsnorm (into xb to avoid aliasing x as both in/out), then classifier
@@ -1403,6 +1530,105 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
 //! Leaves the KV cache filled for every position and s.logits = the logits at the LAST position
 //! (what you sample the first generated token from). Bit-for-bit identical to calling forward() for
 //! pos 0..npos-1 in sequence. Q4 has no batched kernel, so it falls back to that per-token path.
+// ===== std/dense block kernels (prefill, batched) =====
+// The batched counterparts to attention_std_decode / ffn_dense_decode; the registry binds these for
+// every dense arch. Keep the per-section profiler buckets (prof_add) so prefill_profile_report stays
+// intact. Bit-identical to the inlined form.
+
+// attn-norm → batched QKV(+bias) → RoPE → KV-store → prefill attention → out-proj(+post-norm) → residual.
+def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let kv_dim = c.kv_dim
+    let head_size = c.head_size
+    let n_heads = c.n_heads
+    let qd = n_heads * head_size
+    let kv_mul = n_heads / c.n_kv_heads
+    let seq_len = c.seq_len
+    let scale = 1.0 / sqrt(float(head_size))
+    let use_rope_tab = g_use_rope_table
+    let loff = l * seq_len * kv_dim
+    // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
+    let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
+    // attention rmsnorm, per position
+    let ts_norm0 = ref_time_ticks()
+    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
+    prof_add("norm", ts_norm0)
+    // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
+    let ts_qkv = ref_time_ticks()
+    mm_b(s.q_b, t, t.wq_off + l * dim * qd, s.xb_b, s.xqb, s.xsb, dim, qd, npos)
+    mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+    mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+    if (c.attn_qkv_bias) {  // Qwen2: + bias per position before RoPE
+        for (p in range64(npos)) {
+            add_bias(s.q_b, p * qd, t.bq, l * qd, qd)
+            add_bias(s.k_b, p * kv_dim, t.bk, l * kv_dim, kv_dim)
+            add_bias(s.v_b, p * kv_dim, t.bv, l * kv_dim, kv_dim)
+        }
+    }
+    prof_add("mm_qkv", ts_qkv)
+    // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
+    // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
+    let ts_rope = ref_time_ticks()
+    if (use_rope_tab) {
+        rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
+    } else {
+        rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
+    }
+    prof_add("rope", ts_rope)
+    // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
+    // interleaving: rope of pos p touches only q_b[p]/k_b[p], the copy reads only k_b[p]/v_b[p]).
+    let ts_kv = ref_time_ticks()
+    kv_store_batch(s.key_cache, s.value_cache, s.k_b, s.v_b, loff, start_pos, npos, kv_dim)
+    prof_add("kv_store", ts_kv)
+    // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
+    // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
+    // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
+    let ts_attn = ref_time_ticks()
+    prefill_attention(s, loff, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
+                      is_sliding, c.sliding_window, c.attn_logit_softcap)
+    prof_add("attn", ts_attn)
+    // output projection (batched, qd -> dim) + optional post-attn norm + residual
+    let ts_wo = ref_time_ticks()
+    mm_b(s.xb2_b, t, t.wo_off + l * qd * dim, s.xb_b, s.xqb, s.xsb, qd, dim, npos)
+    prof_add("mm_wo", ts_wo)
+    let ts_resid0 = ref_time_ticks()
+    if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
+        rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
+    }
+    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    prof_add("act_resid", ts_resid0)
+}
+
+// ffn-norm → batched gated FFN → down-proj(+post-norm) → residual.
+def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let hidden = c.hidden_dim
+    // ffn rmsnorm, per position
+    let ts_norm1 = ref_time_ticks()
+    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
+    prof_add("norm", ts_norm1)
+    // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
+    let ts_ffn = ref_time_ticks()
+    mm_b(s.hb_b, t, t.w1_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
+    mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
+    prof_add("mm_ffn", ts_ffn)
+    let ts_act = ref_time_ticks()
+    gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
+    prof_add("act", ts_act)
+    // down projection (batched) + optional post-FFN norm + residual
+    let ts_ffn2 = ref_time_ticks()
+    mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
+    prof_add("mm_ffn", ts_ffn2)
+    let ts_resid1 = ref_time_ticks()
+    if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
+        rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
+    }
+    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
+    prof_add("act_resid", ts_resid1)
+}
+
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let c = t.config
     if (t.quant == QuantMode.q4 || npos <= 0l) {
@@ -1418,9 +1644,6 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     let n_heads = c.n_heads
     let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2)
     let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
-    let kv_mul = n_heads / c.n_kv_heads
-    let seq_len = c.seq_len
-    let scale = 1.0 / sqrt(float(head_size))
     let maxn = max(xdim, hidden)
     // size the batched scratch to this prompt
     s.x_b |> resize(npos * dim)
@@ -1472,80 +1695,10 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 
+    // per-layer transformer stack — batched attention then FFN, each through the arch's registered block
     for (l in range64(c.n_layers)) {
-        let loff = l * seq_len * kv_dim
-        // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
-        let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
-        // attention rmsnorm, per position
-        let ts_norm0 = ref_time_ticks()
-        rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-        prof_add("norm", ts_norm0)
-        // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
-        let ts_qkv = ref_time_ticks()
-        mm_b(s.q_b, t, t.wq_off + l * dim * qd, s.xb_b, s.xqb, s.xsb, dim, qd, npos)
-        mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
-        mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
-        if (c.attn_qkv_bias) {  // Qwen2: + bias per position before RoPE
-            for (p in range64(npos)) {
-                add_bias(s.q_b, p * qd, t.bq, l * qd, qd)
-                add_bias(s.k_b, p * kv_dim, t.bk, l * kv_dim, kv_dim)
-                add_bias(s.v_b, p * kv_dim, t.bv, l * kv_dim, kv_dim)
-            }
-        }
-        prof_add("mm_qkv", ts_qkv)
-        // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
-        // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
-        let ts_rope = ref_time_ticks()
-        if (use_rope_tab) {
-            rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
-        } else {
-            rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
-        }
-        prof_add("rope", ts_rope)
-        // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
-        // interleaving: rope of pos p touches only q_b[p]/k_b[p], the copy reads only k_b[p]/v_b[p]).
-        let ts_kv = ref_time_ticks()
-        kv_store_batch(s.key_cache, s.value_cache, s.k_b, s.v_b, loff, start_pos, npos, kv_dim)
-        prof_add("kv_store", ts_kv)
-        // causal attention into xb_b (position ap attends to cached keys kstart..ap; kstart = 0 unless a
-        // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
-        // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
-        let ts_attn = ref_time_ticks()
-        prefill_attention(s, loff, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
-                          is_sliding, c.sliding_window, c.attn_logit_softcap)
-        prof_add("attn", ts_attn)
-        // output projection (batched, qd -> dim) + optional post-attn norm + residual
-        let ts_wo = ref_time_ticks()
-        mm_b(s.xb2_b, t, t.wo_off + l * qd * dim, s.xb_b, s.xqb, s.xsb, qd, dim, npos)
-        prof_add("mm_wo", ts_wo)
-        let ts_resid0 = ref_time_ticks()
-        if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
-            rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
-        }
-        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-        prof_add("act_resid", ts_resid0)
-        // ffn rmsnorm, per position
-        let ts_norm1 = ref_time_ticks()
-        rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
-        prof_add("norm", ts_norm1)
-        // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
-        let ts_ffn = ref_time_ticks()
-        mm_b(s.hb_b, t, t.w1_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
-        mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
-        prof_add("act", ts_act)
-        // down projection (batched) + optional post-FFN norm + residual
-        let ts_ffn2 = ref_time_ticks()
-        mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)
-        prof_add("mm_ffn", ts_ffn2)
-        let ts_resid1 = ref_time_ticks()
-        if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
-            rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
-        }
-        add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
-        prof_add("act_resid", ts_resid1)
+        t.blocks.attn_prefill(t, s, l, npos, start_pos)
+        t.blocks.ffn_prefill(t, s, l, npos)
     }
 
     // final rmsnorm + classifier on the LAST position only (that's what we sample next)
@@ -1735,4 +1888,79 @@ def generate(t : Model; var s : Session; prompt : array<int64>; params : Samplin
         eval(t, s, one)
     }
     return nout
+}
+
+// ===== Architecture registration =====
+// Each arch self-registers at [init]: its config setter, block kernels, and chat template. All four
+// current arches are dense llama-likes, so they share std_blocks() and differ only in config flags,
+// tokenizer backend, and chat template — the seam earns its keep when a non-dense block (MoE, …)
+// registers different kernels here without touching the forward loops.
+//
+// The chat template is the arch's DEFAULT. GGUF's general.architecture is "llama" for BOTH Llama-3
+// and Llama-2/TinyLlama, which use different chat formats — so per-model disambiguation (reading the
+// GGUF tokenizer.chat_template, or detecting special tokens) is a phase-5 concern. "llama" here
+// carries the Llama-3 instruct format (the flagship).
+
+def private ctext(s : string) : ChatPart {
+    return ChatPart(kind = ChatPartKind.text, s = s)
+}
+def private cspec(s : string) : ChatPart {
+    return ChatPart(kind = ChatPartKind.special, s = s)
+}
+def private ccontent() : ChatPart {
+    return ChatPart(kind = ChatPartKind.content, s = "")
+}
+
+// The default llama-family blocks (std attention, dense gated FFN), shared by every dense arch.
+def private std_blocks() : ArchBlocks {
+    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
+                      attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_dense_prefill)
+}
+
+[init]
+def register_arch_llama() {
+    var d = ArchDesc(name = "llama", configure = @@configure_llama)
+    d.blocks = std_blocks()
+    d.chat.add_bos = true   // BOS = <|begin_of_text|>
+    d.chat.system.parts <- [cspec("<|start_header_id|>"), ctext("system"), cspec("<|end_header_id|>"),
+                            ctext("\n\n"), ccontent(), cspec("<|eot_id|>")]
+    d.chat.user.parts <- [cspec("<|start_header_id|>"), ctext("user"), cspec("<|end_header_id|>"),
+                          ctext("\n\n"), ccontent(), cspec("<|eot_id|>")]
+    d.chat.assistant_open.parts <- [cspec("<|start_header_id|>"), ctext("assistant"),
+                                    cspec("<|end_header_id|>"), ctext("\n\n")]
+    d.chat.stop <- ["<|eot_id|>", "<|end_of_text|>"]
+    register_arch("llama", d)
+}
+
+[init]
+def register_arch_qwen2() {
+    var d = ArchDesc(name = "qwen2", configure = @@configure_qwen2)
+    d.blocks = std_blocks()
+    d.chat.system.parts <- [cspec("<|im_start|>"), ctext("system\n"), ccontent(), cspec("<|im_end|>"), ctext("\n")]
+    d.chat.user.parts <- [cspec("<|im_start|>"), ctext("user\n"), ccontent(), cspec("<|im_end|>"), ctext("\n")]
+    d.chat.assistant_open.parts <- [cspec("<|im_start|>"), ctext("assistant\n")]
+    d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
+    register_arch("qwen2", d)
+}
+
+[init]
+def register_arch_phi3() {
+    var d = ArchDesc(name = "phi3", configure = @@configure_phi3)
+    d.blocks = std_blocks()
+    d.chat.system.parts <- [cspec("<|system|>"), ctext("\n"), ccontent(), cspec("<|end|>"), ctext("\n")]
+    d.chat.user.parts <- [cspec("<|user|>"), ctext("\n"), ccontent(), cspec("<|end|>"), ctext("\n")]
+    d.chat.assistant_open.parts <- [cspec("<|assistant|>"), ctext("\n")]
+    d.chat.stop <- ["<|end|>", "<|endoftext|>"]
+    register_arch("phi3", d)
+}
+
+[init]
+def register_arch_gemma2() {
+    var d = ArchDesc(name = "gemma2", configure = @@configure_gemma2)
+    d.blocks = std_blocks()
+    d.chat.add_bos = true   // BOS = <bos>; Gemma has no system role — fold it into the first user turn
+    d.chat.user.parts <- [cspec("<start_of_turn>"), ctext("user\n"), ccontent(), cspec("<end_of_turn>"), ctext("\n")]
+    d.chat.assistant_open.parts <- [cspec("<start_of_turn>"), ctext("model\n")]
+    d.chat.stop <- ["<end_of_turn>", "<eos>"]
+    register_arch("gemma2", d)
 }

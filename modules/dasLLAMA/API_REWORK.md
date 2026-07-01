@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** in progress — Phase 1. Design locked 2026-07-01.
+**Status:** in progress — Phase 4 done, Phase 5 next. Design locked 2026-07-01.
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -77,23 +77,37 @@ def respond(var chat; params : SamplingParams) ...               // template →
 
 ## The two backend seams
 
-### Arch/block seam
-`configure_arch`'s monolithic `switch` becomes an **arch registry**. Each arch
-self-registers via `[init]` — the same pattern `dasllama_math_aarch64_neon.das` already
-uses to register its kernels:
+### Arch/block seam  *(built — Phase 4)*
+`configure_arch`'s monolithic `switch` is now an **arch registry** — each arch self-registers
+via `[init]` (the same pattern `dasllama_math_aarch64_neon.das` uses for its kernels). As built:
 ```
-register_arch("llama",    { configure, attn = std,     ffn = dense_swiglu, tok = spm, chat = llama3 })
-register_arch("qwen3moe", { configure, attn = qk_norm, ffn = moe,          tok = bpe, chat = chatml })
+struct ArchBlocks { attn_decode; ffn_decode; attn_prefill; ffn_prefill }   // copyable fn-ptrs, ride on the Model
+struct ArchDesc   { name; configure; blocks : ArchBlocks; chat : ChatTemplate }   // registry-only
+register_arch("llama", { configure_llama, std_blocks(), LLAMA3_CHAT })
 ```
-The per-layer loop calls **swappable blocks**:
-```
-x += attention(block.attn, model, session, x, layer)   // std | qk_norm | ...
-x += ffn      (block.ffn,  model, x, layer)            // dense_swiglu | dense_geglu | MoE(router + experts)
-```
-MoE is the one genuinely new block. **Build it general — shared experts + routed top-k,
-gating pluggable (sigmoid | softmax)** — the GLM / DeepSeek / Qwen2-MoE shape, *not*
-Mixtral's plain-routed special case, or GLM/DeepSeek force a re-plumb. First MoE oracle: a
-small shared-expert MoE (lean Qwen1.5-MoE-A2.7B), decided when we get there.
+Blocks are **function pointers, one per (attention|ffn) × (decode|prefill)** — decode is the fused
+single-token path, prefill the batched path, so the two forward loops call `t.blocks.attn_decode(t, s,
+l, pos)` / `t.blocks.ffn_prefill(t, s, l, npos)` etc. `ArchBlocks` (all fn-ptrs, copyable) is copied
+onto the `Model` at load; the full `ArchDesc` (non-copyable — holds a `ChatTemplate`) stays in the
+registry. All four current arches are dense llama-likes → they share `std_blocks()` and differ only in
+config flags, tokenizer backend, and chat template. **Bit-identical**: the block bodies are the old
+per-layer code moved verbatim (proven token-for-token via the oracle suite + an A/B source diff across
+all 5 GGUF arches). GeGLU-vs-SwiGLU stays a `ffn_act` flag *inside* the shared dense FFN block.
+
+MoE is the one genuinely new block — it registers a different `ffn_*` here without touching the
+forward loops. **Build it general — shared experts + routed top-k, gating pluggable (sigmoid |
+softmax)** — the GLM / DeepSeek / Qwen2-MoE shape, *not* Mixtral's plain-routed special case, or
+GLM/DeepSeek force a re-plumb. First MoE oracle: a small shared-expert MoE (lean Qwen1.5-MoE-A2.7B),
+decided when we get there.
+
+**Chat template — data only in Phase 4.** `ChatTemplate` is an ordered part list per turn
+(`text` | `special`-token-spelling | `content` slot) + `add_bos` + stop-token spellings; the four
+arches' templates live in the registry, validated for well-formedness by `test_arch_registry.das`.
+The **renderer** (parts → token ids, resolving special spellings) lands with the Phase-5 chat engine.
+One known wrinkle it must handle: GGUF `general.architecture` is `"llama"` for *both* Llama-3 and
+Llama-2/TinyLlama, which use different chat formats — so per-model disambiguation (reading the GGUF
+`tokenizer.chat_template`, or detecting special tokens) is a Phase-5 concern. The registry's `"llama"`
+template carries the Llama-3 instruct format (the flagship).
 
 ### Kernel/ISA seam
 The scaffolding half-exists: `dasllama_math.das` holds the portable/default kernels;
@@ -156,9 +170,15 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    window (`recent`) + top-k scratch. `sample(session, params)` lifts the copy-pasted demo
    `sample()`; streaming `generate(model, session, prompt, params, max, blk)` with a callback block
    (`return false` to stop). `set_seed`. *(test_sampling.das)*
-4. **Arch registry + block seam** — relocate the existing 4 arches; prove all 5 models
-   still token-exact. No new arch yet. Chat-template descriptor becomes a registry field. *(current)*
-5. **Minimal unified chat app** — collapse the 5 REPLs → 1 engine + per-arch descriptors.
+4. **Arch registry + block seam** ✅ — `configure_arch` switch → `[init]` self-registering
+   registry (`ArchDesc` = configure + `ArchBlocks` fn-ptrs + `ChatTemplate`); attention/FFN are
+   function-pointer blocks (decode + prefill) the forward loops dispatch through; chat-template
+   descriptor is a registry field (data only — renderer is Phase 5). Blocks resolved onto the Model at
+   load (also for the llama2.c `load_checkpoint` path). No new arch; dense path bit-identical, proven
+   token-for-token (oracle suite + A/B source diff on all 5 GGUF arches). *(test_arch_registry.das)*
+5. **Minimal unified chat app** *(current)* — collapse the 5 REPLs → 1 engine + per-arch
+   descriptors. Consumes the Phase-4 `ChatTemplate` (build the renderer + special-token resolution;
+   handle the `"llama"` = Llama-3-vs-TinyLlama template split, e.g. via GGUF `tokenizer.chat_template`).
 6. **Kernel-backend registry** — formalize so x64 can mirror the NEON self-registration.
 7. **Tune macro + loop-attribute reification** — depends on 6.
 
