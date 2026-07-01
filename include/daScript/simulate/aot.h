@@ -1197,7 +1197,7 @@ namespace das {
     };
 
     template <typename... TA>
-    constexpr int max_alignof() { return std::max({TypeAlign<TA>::align...}); }
+    constexpr int max_alignof() { return std::max({TypeAlign<TA>::align..., 1}); }
 
     template <typename... TA>
     constexpr int variant_align() {
@@ -1291,6 +1291,16 @@ namespace das {
             memcpy ( data, &arr, tupleSize );
         }
         alignas(max_alignof<TA...>()) char data[tupleSize];
+    };
+
+    template <int tupleSize>
+    struct TTuple<tupleSize> : Tuple {
+        static_assert(tupleSize == 0);
+        TTuple() {}
+        TTuple(const TTuple &) {}
+        TTuple(TTuple &&) {}
+        TTuple & operator = ( const TTuple & ) { return *this; }
+        TTuple & operator = ( TTuple && ) { return *this; }
     };
 
     template <typename ...TA>
