@@ -199,11 +199,10 @@
     }
 
     // The "⤢ fullscreen" button fullscreens the parent viewport element, which
-    // (a) leaves keyboard focus on the parent so the game — whose input listener
+    // (a) leaves keyboard focus on the parent so a game — whose input listener
     // lives inside the iframe — goes deaf, and (b) doesn't resize the iframe's
-    // fixed-backing-store canvas (max-width/height can only shrink it, so in a
-    // big fullscreen box it stays tiny). Reaching into the same-origin game frame
-    // fixes both: refocus it, and let the canvas fill the box letterboxed.
+    // fixed-backing-store canvas. Reaching into the same-origin game frame fixes
+    // both: refocus it, and let a game canvas fill the box letterboxed.
     function onFsChange() {
         var frame = document.getElementById('ex-frame');
         var vp = document.getElementById('ex-viewport');
@@ -213,13 +212,31 @@
             var idoc = frame.contentDocument;
             var canvas = idoc && idoc.getElementById('canvas');
             if (canvas) {
-                // object-fit:contain scales the fixed backing store up to fill while
-                // preserving the game aspect (no squish); reverted to the letterbox
-                // default on exit.
-                canvas.style.width = entering ? '100%' : '';
-                canvas.style.height = entering ? '100%' : '';
-                canvas.style.objectFit = entering ? 'contain' : '';
-                if (entering && canvas.focus) canvas.focus();
+                if (entering) {
+                    // Fill ONLY a fixed-backing (game) canvas — object-fit:contain scales
+                    // it up preserving aspect (no squish). A canvas whose size emscripten
+                    // manages itself (GLFW_SCALE_TO_MONITOR imgui cards set an inline
+                    // width/height + a HiDPI backing store) must be left alone: overriding
+                    // it desyncs emscripten's device-pixel cursor mapping, so on a HiDPI
+                    // display clicks land in the wrong place. Those cards fill via their
+                    // own in-app F11 (which routes through emscripten's real fullscreen).
+                    if (!canvas.style.width && !canvas.style.height) {
+                        canvas.style.width = '100%';
+                        canvas.style.height = '100%';
+                        canvas.style.objectFit = 'contain';
+                    }
+                    if (canvas.focus) canvas.focus();
+                } else if (canvas.style.width === '100%' && canvas.style.objectFit === 'contain') {
+                    // Revert only the fill WE applied, matched by its exact inline signature
+                    // (100% + contain — a value we alone set; games start with no inline size,
+                    // imgui cards carry emscripten's px). Stateless, so a cross-session
+                    // fullscreenchange race (exitFullscreen is async; opening another card
+                    // re-attaches this listener before the pending event lands) can never
+                    // clear a different card's inline sizing.
+                    canvas.style.width = '';
+                    canvas.style.height = '';
+                    canvas.style.objectFit = '';
+                }
             }
         } catch (e) {}
         if (entering && frame.contentWindow) { try { frame.contentWindow.focus(); } catch (e) {} }
