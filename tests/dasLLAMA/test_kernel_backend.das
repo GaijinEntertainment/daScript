@@ -45,6 +45,10 @@ def test_select_and_pin(t : T?) {
         // pin forces a specific backend, overriding auto-select
         pin_kernel_backend("portable")
         t |> equal(active_kernel_backend(), "portable")
+        // an unknown pin name is a no-op that keeps the current backend (regression: Copilot #3340 —
+        // it must not stick an invalid pin that wedges the active kernels)
+        pin_kernel_backend("no-such-backend")
+        t |> equal(active_kernel_backend(), "portable", "unknown pin keeps the current backend")
         // restore the pre-test selection so later test files see the same active backend
         clear_kernel_backend_pin()
         if (saved != "") {

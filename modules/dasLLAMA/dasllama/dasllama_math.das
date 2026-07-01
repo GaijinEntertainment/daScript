@@ -395,6 +395,13 @@ def select_kernel_backend(name : string) {
 //! Pin the active backend to `name` (forces it; suppresses auto-select on later registrations). For A/B
 //! benchmarking on one binary — e.g. pin "arm64-sdot" to measure the row-major baseline against laneq.
 def pin_kernel_backend(name : string) {
+    // Reject an unknown name rather than sticking an invalid pin: a bad pin would suppress
+    // auto-activation AND keep select_matmul_backend_for_load from picking the best (repack) backend,
+    // silently degrading to whatever is currently active. Keep the current backend and warn instead.
+    if (!key_exists(g_kernel_backends, name)) {
+        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') — no such backend registered; keeping '{g_active_backend}'\n")
+        return
+    }
     g_backend_pin = name
     select_kernel_backend(name)
 }
