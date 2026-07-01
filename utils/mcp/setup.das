@@ -2,7 +2,6 @@ options gen2
 
 require daslib/clargs
 require daslib/fio
-require daslib/json_boost
 
 // daslang MCP worktree bootstrap.
 //
@@ -14,7 +13,9 @@ require daslib/json_boost
 // built `bin/` binary, or the tree-sitter grammar shared lib — so a Claude
 // session there has zero daslang tools. This tool fixes that: it builds a
 // worktree-local daslang (+ tree-sitter grammar), copies the platform
-// `sgconfig.yml`, and writes/merges `.mcp.json` with the daslang server entry.
+// `sgconfig.yml`, and points `.mcp.json` at the stdio supervisor
+// (mcp_supervisor.py, via `--emit-config`) — Claude Code spawns the supervisor,
+// which forwards to a daslang child and respawns it on death/rebuild.
 //
 // It adds no NEW secrets; an existing .mcp.json is rewritten with any other
 // server entries (e.g. github, including their env blocks) preserved as-is.
@@ -122,57 +123,21 @@ def ensure_sgconfig(root : string) {
     }
 }
 
-// The daslang MCP server entry, as a JsonValue object.
-def daslang_server_entry(rel_binary : string) : JsonValue? {
-    var entry : table<string; JsonValue?>
-    entry["command"] = JV(rel_binary)
-    var args_arr : array<JsonValue?>
-    args_arr |> push(JV("utils/mcp/main.das"))
-    entry["args"] = JV(args_arr)
-    entry["defer_loading"] = JV(false)
-    return JV(entry)
-}
-
-// Write or merge .mcp.json: set/replace the `daslang` server entry while
-// preserving any other existing servers (e.g. github). Never writes secrets.
-def write_mcp_json(root, rel_binary : string) : bool {
-    let mcp_path = path_join(root, ".mcp.json")
-    var servers : table<string; JsonValue?>
-    if (fexist(mcp_path)) {
-        let txt = fread(mcp_path)
-        var err : string
-        var existing = read_json(txt, err)
-        if (existing == null) {
-            print("WARNING: existing .mcp.json did not parse ({err}) — rewriting from scratch\n")
-        } elif (existing is _object) {
-            // Navigate the parsed tree mutably (read_json data is mutable) so the
-            // preserved server values come back non-const and move into the output
-            // tree directly — no const-strip needed.
-            unsafe {
-                var root_obj & = existing.value as _object
-                if (key_exists(root_obj, "mcpServers")) {
-                    var srv & = root_obj["mcpServers"]
-                    if (srv != null && srv is _object) {
-                        var srv_obj & = srv.value as _object
-                        let ks <- [for (k in keys(srv_obj)); k]
-                        for (k in ks) {
-                            if (k != "daslang") {
-                                servers[k] = srv_obj?[k] ?? null
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    servers["daslang"] = daslang_server_entry(rel_binary)
-    var root_obj : table<string; JsonValue?>
-    root_obj["mcpServers"] = JV(servers)
-    if (!fwrite(mcp_path, write_json(JV(root_obj)))) {
-        print("ERROR: failed to write {mcp_path}\n")
+// Point .mcp.json at the stdio supervisor (mcp_supervisor.py). The supervisor
+// owns the .mcp.json merge (preserving other servers like github), so setup
+// just invokes it. Requires python on PATH — Claude Code spawns the supervisor
+// as `python utils/mcp/mcp_supervisor.py`.
+def emit_mcp_config(root : string) : bool {
+    let script = path_join(root, "utils/mcp/mcp_supervisor.py")
+    if (!fexist(script)) {
+        print("ERROR: {script} not found\n")
         return false
     }
-    print("Wrote .mcp.json (daslang -> {rel_binary})\n")
+    let rc = run_visible("python \"{script}\" --emit-config --repo-root \"{root}\"")
+    if (rc != 0) {
+        print("ERROR: emit-config failed (exit {rc}); is python on PATH?\n")
+        return false
+    }
     return true
 }
 
@@ -238,11 +203,12 @@ def main() : int {
     }
 
     ensure_sgconfig(root)
-    if (!write_mcp_json(root, binary)) {
+    if (!emit_mcp_config(root)) {
         return 1
     }
 
-    print("\nDone. Restart the Claude Code session in {root} to pick up the MCP server.\n")
+    print("\nDone. Restart the Claude Code session in {root} to pick up the daslang MCP server.\n")
+    print("Claude Code spawns the stdio supervisor (utils/mcp/mcp_supervisor.py); no persistent process to keep running.\n")
     print("NOTE: the parse-aware tools (grep_usage/outline/cpp_*) also need the ast-grep `sg` CLI on PATH.\n")
     return 0
 }
