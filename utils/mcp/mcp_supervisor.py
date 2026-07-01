@@ -124,17 +124,21 @@ class DaslangChild:
 
     # ---- forwarding -----------------------------------------------------
     def request(self, msg: dict) -> str:
-        """Forward a request (has id) and return the daslang response line."""
+        """Forward a request (has id) and return the daslang response line.
+        The retry covers a child that's dead / dies *before* the request is
+        delivered (the build-guard case). Once the write succeeds we do NOT
+        re-send on a later failure — a retry could double-execute a
+        side-effecting tool (run_test, live_*, format_file); a child that dies
+        while we read the response surfaces as an error instead."""
         with self.lock:
             line = json.dumps(msg, separators=(",", ":"))
             try:
                 self._ensure_alive()
                 self._write_line(line)
-                return self._read_line()
             except ChildDead:
-                self._spawn_and_replay()        # died mid-exchange -> respawn + retry once
+                self._spawn_and_replay()        # not yet delivered -> respawn + resend once
                 self._write_line(line)
-                return self._read_line()
+            return self._read_line()            # ChildDead here propagates (no re-send)
 
     def notify(self, msg: dict):
         """Forward a notification (no id) to a live child; skip if dead (state
@@ -188,8 +192,9 @@ def handle(child: DaslangChild, msg: dict) -> str | None:
 def _default_launcher() -> list[str]:
     if IS_WINDOWS:
         return ["cmd", "/c", os.path.join(SCRIPT_DIR, "daslang-mcp-msvc.cmd")]
-    # POSIX: run the built binary directly. Mirror setup.das locate_binary's
-    # candidate order — single/multi-config generators land it in bin/ or build/.
+    # POSIX: run the built binary directly, trying the usual single/multi-config
+    # output locations (bin/ and build/, cf. setup.das locate_binary) — first
+    # existing wins.
     main_das = os.path.join(SCRIPT_DIR, "main.das")
     for rel in ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang"):
         cand = os.path.join(REPO_ROOT, rel)
@@ -213,7 +218,13 @@ def write_mcp_json(repo_root: str) -> str:
         if not isinstance(data, dict):
             print(f"  WARNING: {path} is not a JSON object; leaving it untouched", flush=True)
             return path
-    servers = data.setdefault("mcpServers", {})
+    servers = data.get("mcpServers")
+    if servers is None:
+        servers = {}
+        data["mcpServers"] = servers
+    elif not isinstance(servers, dict):
+        print(f"  WARNING: {path} has a non-object 'mcpServers'; leaving it untouched", flush=True)
+        return path
     prev = servers.get("daslang", {})
     entry = {"command": "python", "args": ["utils/mcp/mcp_supervisor.py"]}
     if isinstance(prev, dict) and "defer_loading" in prev:
