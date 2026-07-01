@@ -125,7 +125,7 @@ def decode(tk : SpmTokenizer; prev_token, token : int64) : string {
         return string([uint8(bv)])
     }
     // sentencepiece strips a single leading space directly after BOS
-    if (prev_token == 1l && !empty(piece) && first_character(piece) == ' ') {
+    if (prev_token == tk.bos_id && !empty(piece) && first_character(piece) == ' ') {
         return slice(piece, 1)
     }
     return piece
@@ -137,7 +137,7 @@ def decode(tk : SpmTokenizer; prev_token, token : int64) : string {
 def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
     var tokens : array<int64>
     if (bos) {
-        tokens |> push(1l)
+        tokens |> push(tk.bos_id)
     }
     // sentencepiece add_dummy_prefix: a leading space token when text is non-empty (Gemma disables it)
     if (tk.add_space_prefix && !empty(text)) {
@@ -183,7 +183,7 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
         tokens |> erase(best_idx + 1)
     }
     if (eos) {
-        tokens |> push(2l)
+        tokens |> push(tk.eos_id)
     }
     return <- tokens
 }
@@ -252,7 +252,7 @@ def decode(tk : Tokenizer; ids : array<int64>) : string {
         return bpe_decode_ids(tk.bpe, ids)
     }
     return build_string() $(var wr) {
-        var prev = 1l   // BOS as the initial prev, so a leading space right after BOS is stripped (llama2.c)
+        var prev = tk.spm.bos_id   // BOS as the initial prev, so a leading space right after BOS is stripped (llama2.c)
         for (id in ids) {
             write(wr, decode(tk.spm, prev, id))
             prev = id

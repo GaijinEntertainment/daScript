@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** in progress — Phases 1-5 done, Phase 6 (kernel-backend registry) next. Design locked 2026-07-01.
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01.
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current

@@ -24,6 +24,22 @@ def private same(a, b : array<int64>) : bool {
     return true
 }
 
+// Regression (Copilot #3340): SPM encode/decode must use the per-model bos_id/eos_id loaded from
+// GGUF, not the llama2.c literals 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
+// framing (no vocab lookup), so this needs no model file.
+[test]
+def test_spm_encode_respects_model_bos_eos(t : T?) {
+    let tk = SpmTokenizer(bos_id = 2l, eos_id = 1l, add_space_prefix = false)
+    let ids <- encode(tk, "", true, true)
+    t |> equal(length(ids), 2, "empty text with bos+eos -> [bos, eos]")
+    t |> equal(ids[0], 2l, "encode uses per-model bos_id (Gemma=2), not literal 1")
+    t |> equal(ids[1], 1l, "encode uses per-model eos_id (Gemma=1), not literal 2")
+    let def2 = SpmTokenizer()   // defaults (Llama-2) stay bit-identical
+    let ids2 <- encode(def2, "", true, true)
+    t |> equal(ids2[0], 1l, "default bos_id=1 unchanged")
+    t |> equal(ids2[1], 2l, "default eos_id=2 unchanged")
+}
+
 [test]
 def test_facade_spm(t : T?) {
     t |> run("SPM facade auto-dispatch matches raw SentencePiece") @(t : T?) {
