@@ -84,7 +84,33 @@ class DaslangChild:
             self.initialized_seen = True
 
     # ---- lifecycle ------------------------------------------------------
+    def _kill_proc(self):
+        """Terminate (if alive), reap, and close the pipes of the current child.
+        Run before every respawn and on stop() so a long kill-rebuild session
+        never orphans a live daslang or leaks its pipe fds."""
+        p = self.proc
+        self.proc = None
+        if p is None:
+            return
+        try:
+            if p.poll() is None:
+                if IS_WINDOWS:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    p.terminate()
+                p.wait(timeout=10)
+        except Exception:
+            pass
+        for pipe in (p.stdin, p.stdout):
+            try:
+                if pipe is not None:
+                    pipe.close()
+            except Exception:
+                pass
+
     def _spawn_and_replay(self):
+        self._kill_proc()   # clean up any prior child before respawning
         if self._stderr_fh is None:
             self._stderr_fh = open(self.stderr_log, "ab", buffering=0)
         self.proc = subprocess.Popen(
@@ -153,17 +179,7 @@ class DaslangChild:
 
     def stop(self):
         with self.lock:
-            if self.proc is not None and self.proc.poll() is None:
-                try:
-                    if IS_WINDOWS:
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    else:
-                        self.proc.terminate()
-                    self.proc.wait(timeout=10)
-                except Exception:
-                    pass
-            self.proc = None
+            self._kill_proc()
             if self._stderr_fh is not None:
                 try:
                     self._stderr_fh.close()
@@ -294,7 +310,8 @@ def main():
     if args.emit_config:
         if write_mcp_json(repo_root):
             print(f"wrote {os.path.join(repo_root, '.mcp.json')}: daslang -> stdio supervisor (utils/mcp/mcp_supervisor.py)")
-        return
+            return
+        sys.exit(1)   # left an existing malformed .mcp.json untouched -> fail so callers surface it
     serve(repo_root, args.stderr_log)
 
 
