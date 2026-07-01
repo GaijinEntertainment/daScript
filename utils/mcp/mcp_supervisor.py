@@ -99,7 +99,11 @@ class DaslangChild:
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 else:
                     p.terminate()
-                p.wait(timeout=10)
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    p.kill()            # graceful terminate ignored -> force (POSIX SIGKILL)
+                    p.wait(timeout=10)
         except Exception:
             pass
         for pipe in (p.stdin, p.stdout):
