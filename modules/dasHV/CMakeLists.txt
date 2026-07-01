@@ -124,6 +124,17 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	# under the libc++ daslang (surfaces as a misleading error[20605] missing prereq 'dashv').
 	SET(_HV_C_FLAGS "${CMAKE_C_FLAGS}")
 	SET(_HV_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	# libhv's parse_json() (http/http_content.cpp) wraps nlohmann::json::parse in
+	# try/catch, so libhv MUST build with C++ exceptions. daslang strips /EHsc from
+	# CMAKE_CXX_FLAGS (CMakeCommon.txt) and re-adds /EHa only to the per-config flag
+	# vars, which are NOT forwarded here — so the sub-build inherits no /EH at all.
+	# Plain cl only warns (C4530); clang-cl (the ClangCL-toolset nightly lane) makes
+	# it a hard error ("cannot use 'try' with exceptions disabled"). Re-add /EHsc for
+	# the MSVC drivers (cl + clang-cl); non-MSVC (emscripten host, gcc/clang) is
+	# untouched — those keep exceptions on by default.
+	IF(MSVC)
+		SET(_HV_CXX_FLAGS "${_HV_CXX_FLAGS} /EHsc")
+	ENDIF()
 	IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
 		IF(MSVC)
 			SET(_HV_ASAN_FLAG "/fsanitize=address")
