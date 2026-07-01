@@ -415,7 +415,13 @@ SET(DAS_MODULES_LIBS)
 
 SET(DAS_ALL_EXAMPLES)
 SET(DAS_EXAMPLES_TO_RUN)
-FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" CONFIGURE_DEPENDS "modules/*")
+# Honour a curated module list (DAS_MODULES_INCLUDE) when the consuming
+# build sets one; otherwise glob every module (default).
+IF(DEFINED DAS_MODULES_INCLUDE)
+    SET(_modules ${DAS_MODULES_INCLUDE})
+ELSE()
+    FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" CONFIGURE_DEPENDS "modules/*")
+ENDIF()
 
 # Every dynamic module should pass through this macro.
 MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
