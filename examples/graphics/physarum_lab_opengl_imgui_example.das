@@ -379,13 +379,15 @@ def apply_mouse_seed {
         return
     }
     let mp = GetMousePos()
-    var w, h : int
-    live_get_framebuffer_size(w, h)
-    if (w <= 0 || h <= 0) {
+    // GetMousePos is in ImGui DisplaySize (logical) coordinates, so normalise by DisplaySize -- NOT the
+    // framebuffer size. Under HiDPI (SCALE_TO_MONITOR) the framebuffer is DisplaySize x devicePixelRatio,
+    // so dividing by it would land the seed at 1/DPR of the cursor (half the click on a 2x display).
+    let ds = GetIO().DisplaySize
+    if (ds.x <= 0.0f || ds.y <= 0.0f) {
         return
     }
-    let cx = wrap_i(int(mp.x / float(w) * float(TW)), TW)
-    let cy = wrap_i(int((1.0f - mp.y / float(h)) * float(TH)), TH)   // flip Y: GL origin is bottom-left
+    let cx = wrap_i(int(mp.x / ds.x * float(TW)), TW)
+    let cy = wrap_i(int((1.0f - mp.y / ds.y) * float(TH)), TH)   // flip Y: GL origin is bottom-left
     let off = read_off()
     let R = 9
     for (dy in range(-R, R + 1)) {
