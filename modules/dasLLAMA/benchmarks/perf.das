@@ -15,7 +15,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def run_once(t : Transformer; c : Config; tag : string) : double {
+def run_once(t : Model; c : Config; tag : string) : double {
     var s <- make_run_state(c)
     let t0 = ref_time_ticks()
     let ids <- generate(t, s, [1l], N_TOKENS)

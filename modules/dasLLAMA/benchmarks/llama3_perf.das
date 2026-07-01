@@ -19,7 +19,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def argmax_logits(s : RunState; vocab : int64) : int64 {
+def argmax_logits(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
     for (i in range64(vocab)) {

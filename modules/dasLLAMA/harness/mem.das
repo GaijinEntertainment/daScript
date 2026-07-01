@@ -19,7 +19,7 @@ def heap_mb() : double {
     return double(int64(heap_bytes_allocated())) / 1048576.0lf
 }
 
-def report(tag : string; t : Transformer) {
+def report(tag : string; t : Model) {
     let f = footprint(t)
     print("  {tag}: heap {heap_mb()} MB | footprint {mb(f.total)} MB"
         + " (aux-fp32 {mb(f.aux_fp32_bytes)} | weight-fp32 {mb(f.weight_fp32_bytes)}"

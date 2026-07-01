@@ -24,7 +24,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def run_capture(t : Transformer; c : Config; tag : string; var out_tps : double&) : array<int64> {
+def run_capture(t : Model; c : Config; tag : string; var out_tps : double&) : array<int64> {
     var s <- make_run_state(c)
     let prompt = [1l, 9038l, 2501l, 263l, 931l]  // "Once upon a time"
     let t0 = ref_time_ticks()

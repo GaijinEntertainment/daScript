@@ -78,7 +78,7 @@ struct Config {
 //! (Q4) per `quant`, at the w*_off offsets (parallel layout: the same weight-element offset indexes
 //! all three — Q8 scales at off/32, Q4 bytes at off/2). For shared_weights the classifier reads the
 //! fp32 embedding from fblob, so wcls_off is unused.
-struct Transformer {
+struct Model {
     config : Config = Config()
     // fp32 aux: embedding + norms
     fblob : array<float>
@@ -121,7 +121,7 @@ struct private LayoutSizes {
 // Fill both offset tables from the config; return the element counts of each region. The big-weight
 // offsets are 32-aligned (every dim/kv/hidden is a multiple of 32), so Q8/Q4 scale and byte indices
 // divide cleanly. qd = n_heads * head_size (== dim for the llama family).
-def private layout_offsets(var t : Transformer) : LayoutSizes {
+def private layout_offsets(var t : Model) : LayoutSizes {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -181,10 +181,10 @@ def private copy_floats(src : array<float> | #; soff : int64; var dst : array<fl
 
 //! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed file order. Distributes
 //! them into the split fp32 layout (embedding + norms -> fblob, the 2D matrices -> wblob).
-def load_checkpoint(path : string) : Transformer {
+def load_checkpoint(path : string) : Model {
     let HEADER_INTS = 7
     let HEADER_BYTES = 28
-    var t = Transformer()
+    var t = Model()
     t.quant = QuantMode.fp32
     let f = fopen(path, "rb")
     if (f == null) {
@@ -259,7 +259,7 @@ def load_checkpoint(path : string) : Transformer {
 // Read one big 2D weight tensor into the active representation: transcode straight from disk when
 // the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
 // and quantize into the shared blob. `woff` is the weight-element offset; `scratch` is reused.
-def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Transformer; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l) {
+def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l) {
     if (t.quant == QuantMode.q8) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q8_0) {
             gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
@@ -312,7 +312,7 @@ def private configure_arch(var c : Config; arch : string) {
 // PLACE, once at load. Mirrors forward()'s per-tensor offsets/shapes exactly; the embedding + norms
 // live in fblob and are never touched. Called only after enable_q8q8_laneq() succeeds (arm64); the
 // repack pointer is otherwise identity, so this would be a no-op regardless.
-def private repack_q8_weights(var t : Transformer) {
+def private repack_q8_weights(var t : Model) {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -336,8 +336,8 @@ def private repack_q8_weights(var t : Transformer) {
 //! round-trip; F16/F32 tensors dequant one at a time through a small reused scratch), so a Q8/Q4
 //! load never holds the dense fp32 weights. The embedding + norms stay fp32 in fblob regardless.
 //! Config comes from metadata; vocab is derived from token_embd (some files omit llama.vocab_size).
-def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
-    var t = Transformer()
+def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+    var t = Model()
     t.quant = mode
     let f = fopen(path, "rb")
     if (f == null) {
@@ -475,7 +475,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Transformer {
 //! Quantize a fp32-loaded model's big weights to Q8_0 in place and switch forward onto the Q8 path.
 //! Requires the fp32 representation (wblob) — i.e. a model loaded with QuantMode.fp32. Keeps wblob
 //! so the same model can be re-quantized to another precision for an A/B comparison.
-def quantize_weights(var t : Transformer) {
+def quantize_weights(var t : Model) {
     let n = int64(length(t.wblob))
     var qt <- quantize_q8_0(t.wblob, n)
     t.qblob <- qt.q
@@ -489,7 +489,7 @@ def quantize_weights(var t : Transformer) {
 
 //! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
 //! Same fp32-required / wblob-kept contract as quantize_weights.
-def quantize_weights_q4(var t : Transformer) {
+def quantize_weights_q4(var t : Model) {
     let n = int64(length(t.wblob))
     var qt <- quantize_q4_0(t.wblob, n)
     t.q4blob <- qt.q
@@ -510,7 +510,7 @@ struct MemFootprint {
     total : int64
 }
 
-def footprint(t : Transformer) : MemFootprint {
+def footprint(t : Model) : MemFootprint {
     let aux = int64(length(t.fblob)) * 4l
     let wf = int64(length(t.wblob)) * 4l
     let q8 = int64(length(t.qblob))               // int8 -> 1 byte each
@@ -522,7 +522,8 @@ def footprint(t : Transformer) : MemFootprint {
 }
 
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
-struct RunState {
+struct Session {
+    n_past : int64            // absolute position of the next token to eval (0 at session start); advanced by eval()
     x : array<float>          // residual stream (dim)
     xb : array<float>         // scratch (dim): rmsnorm out, attention out
     xb2 : array<float>        // scratch (dim): attention output projection
@@ -566,8 +567,8 @@ struct RunState {
 }
 
 //! Allocate the run state sized to a model.
-def make_run_state(c : Config) : RunState {
-    var s : RunState
+def make_run_state(c : Config) : Session {
+    var s : Session
     // qd = n_heads * head_size, the query / attention-output width. == dim for the llama family,
     // but Gemma2 has qd (2048) != dim (2304), so q and the attention scratch xb size to max(dim, qd).
     let qd = c.n_heads * c.head_size
@@ -590,22 +591,37 @@ def make_run_state(c : Config) : RunState {
     return <- s
 }
 
+//! Create a fresh session (KV cache + scratch) sized to `model`. A model serves many sessions,
+//! each with its own position and cache — so one model drives many independent conversations.
+def create_session(model : Model) : Session {
+    return <- make_run_state(model.config)
+}
+
+//! THE eval primitive: run `tokens` at the session's current position and advance it. Prefill =
+//! eval(prompt); each step = eval([token]) — same call, different batch size. Logits → `s.logits`.
+def eval(t : Model; var s : Session; tokens : array<int64>) {
+    let npos = int64(length(tokens))
+    if (npos <= 0l) return
+    forward_batch(t, s, tokens, npos, s.n_past)
+    s.n_past += npos
+}
+
 // fp32 matmul with the weight as a zero-copy view into the big-weight blob at `woff` (len n*d).
-def private mm_at(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+def private mm_at(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d : int64) {
     array_view(t.wblob, woff, n * d) $(w : array<float>#) {
         matmul(y, w, x, n, d)
     }
 }
 
 // fp32 matmul with the weight viewed into the fp32 aux blob (used for the tied classifier = embedding).
-def private mm_fblob(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+def private mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d : int64) {
     array_view(t.fblob, woff, n * d) $(w : array<float>#) {
         matmul(y, w, x, n, d)
     }
 }
 
 // rmsnorm with the weight as a zero-copy view into the fp32 aux blob at `woff` (len size).
-def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : array<float> | #; size : int64) {
+def private rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float> | #; size : int64) {
     array_view(t.fblob, woff, size) $(w : array<float>#) {
         rmsnorm(o, x, w, size, t.config.norm_eps)
     }
@@ -613,7 +629,7 @@ def private rms_at(var o : array<float> | #; t : Transformer; woff : int64; x : 
 
 // Threaded per-position rmsnorm: out[p*dim..] = rmsnorm(src[p*dim..]) with the layer weight at fblob+woff.
 // `out` and `src` may be the same array (Gemma post-norms run in place). Fork workers touch raw addresses.
-def private rms_batch(var out : array<float>; src : array<float>; t : Transformer; woff : int64; dim, npos : int64) {
+def private rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int64; dim, npos : int64) {
     let eps = t.config.norm_eps
     unsafe {
         var op = addr(out[0])
@@ -640,7 +656,7 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Transforme
 //   param readonly and eliminate the leaf's reinterpret-back write — the rope silently no-ops. A
 //   call-site reinterpret launders it, but that can't be lint-suppressed inside maybe_parallel_for, so
 //   calling the leaf directly is the clean fix.
-def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Transformer; start_pos, npos, head_size, qd, kv_dim : int64) {
+def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model; start_pos, npos, head_size, qd, kv_dim : int64) {
     let c = t.config
     let theta = c.rope_freq_base
     let neox = c.rope_neox
@@ -675,7 +691,7 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Trans
 // NEOX; the NEOX mscale magnitude factor is folded in here so the tab leaves just look up. Built once
 // before the layer loop, then reused by rope_batch_tab across all heads and layers (the redundancy the
 // table removes). Bit-identical to the classic leaves — the same float expressions, just deduplicated.
-def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Transformer; start_pos, npos, head_size : int64) {
+def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; start_pos, npos, head_size : int64) {
     let c = t.config
     let theta = c.rope_freq_base
     let half = head_size / 2l
@@ -795,7 +811,7 @@ def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff,
 // Q8 matmul: quantize the activation x to Q8 (into the run-state scratch xq/xs, shared across all d
 // rows), then run the int8·int8 SDOT kernel against the int8 weights. woff is the weight-element
 // offset; scales start at woff/32 (woff is block-aligned for every 2D tensor).
-def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
+def private mm_at_q8(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
     let total = n * d
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     array_view(t.qblob, woff, total) $(wq : array<int8>#) {
@@ -807,7 +823,7 @@ def private mm_at_q8(var y : array<float>; t : Transformer; woff : int64; x : ar
 
 // Q4 matmul with the weight viewed into the quantized blob (4-bit, two per byte) + its per-block
 // scales. Bytes start at woff/2 (woff is even), scales at woff/32.
-def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : array<float>; n, d : int64) {
+def private mm_at_q4(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d : int64) {
     let total = n * d
     array_view(t.q4blob, woff / 2l, total / 2l) $(wq : array<uint8>#) {
         array_view(t.q4scales, woff / 32l, total / 32l) $(ws : array<float>#) {
@@ -820,7 +836,7 @@ def private mm_at_q4(var y : array<float>; t : Transformer; woff : int64; x : ar
 // model is Q8 and the combined matmul clears the parallel threshold: the small K/V projections ride
 // along on the worker pool instead of running single-thread while it idles, and the activation is
 // quantized once. Otherwise fall back to three separate matmuls (each handling its own threshold).
-def private mm_qkv(var s : RunState; t : Transformer; l : int64) {
+def private mm_qkv(var s : Session; t : Model; l : int64) {
     let c = t.config
     let dim = c.dim
     let kv = c.kv_dim
@@ -840,7 +856,7 @@ def private mm_qkv(var s : RunState; t : Transformer; l : int64) {
 
 // Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 // xq/xs are the run-state activation-quant scratch (used only by the Q8 path).
-def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
+def private mm(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
     if (t.quant == QuantMode.q8) {
         mm_at_q8(y, t, woff, x, xq, xs, n, d)
     } elif (t.quant == QuantMode.q4) {
@@ -853,7 +869,7 @@ def private mm(var y : array<float>; t : Transformer; woff : int64; x : array<fl
 // Batched big-weight matmul for prefill: Y [npos x d] from X [npos x n], via the slice-1 GEMM
 // kernels. Q8 quantizes each of the npos activation columns into the batched xqb/xsb scratch first;
 // fp32 goes straight through. Q4 has no batched kernel, so forward_prefill never routes it here.
-def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
+def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
     let total = n * d
     if (t.quant == QuantMode.q8) {
         let nb = n / 32l
@@ -892,7 +908,7 @@ def private mm_b(var y : array<float>; t : Transformer; woff : int64; x : array<
 
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
-def forward(t : Transformer; var s : RunState; token, pos : int64) {
+def forward(t : Model; var s : Session; token, pos : int64) {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -1216,7 +1232,7 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
     }
 }
 
-def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size, qd, kv_dim,
+def private prefill_attention(var s : Session; loff, npos, start_pos, head_size, qd, kv_dim,
                               n_heads, kv_mul : int64; scale : float;
                               is_sliding : bool; sliding_window : int64; attn_softcap : float) {
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
@@ -1356,7 +1372,7 @@ def private prefill_attention(var s : RunState; loff, npos, start_pos, head_size
 //! Leaves the KV cache filled for every position and s.logits = the logits at the LAST position
 //! (what you sample the first generated token from). Bit-for-bit identical to calling forward() for
 //! pos 0..npos-1 in sequence. Q4 has no batched kernel, so it falls back to that per-token path.
-def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; npos, start_pos : int64) {
+def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let c = t.config
     if (t.quant == QuantMode.q4 || npos <= 0l) {
         for (p in range64(npos)) {
@@ -1390,7 +1406,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
     // needs ATTN_BLOCK_Q such rows per head (one per query in the block). Size for blocked — classic
     // indexes the first row of each head's block, so the wider allocation is a harmless superset.
     s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
-    if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see RunState)
+    if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
         s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_k |> resize(n_heads * head_size * ATTN_FLASH_KV)
         s.fa_v |> resize(n_heads * ATTN_FLASH_KV * head_size)
@@ -1522,7 +1538,7 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
 //! start_pos..start_pos+npos-1. npos==1 dispatches to the fused per-token forward() (decode, keeping
 //! its mm_qkv group3 + 1N threading); npos>1 to the batched forward_prefill. Leaves s.logits = the
 //! last token's logits and extends the KV cache by npos positions.
-def forward_batch(t : Transformer; var s : RunState; tokens : array<int64>; npos, start_pos : int64) {
+def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)
     } else {
@@ -1531,7 +1547,7 @@ def forward_batch(t : Transformer; var s : RunState; tokens : array<int64>; npos
 }
 
 //! Greedy argmax over the current logits; returns the winning token id.
-def private argmax(s : RunState; vocab : int64) : int64 {
+def private argmax(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bestv = s.logits[0]
     for (i in range64(vocab)) {
@@ -1547,7 +1563,7 @@ def private argmax(s : RunState; vocab : int64) : int64 {
 //! inside it, the next token is forced from the prompt, otherwise it's the argmax of the
 //! logits. Returns the emitted token IDs (prompt echo minus BOS, then the continuation;
 //! stops early on BOS, like llama2.c).
-def generate(t : Transformer; var s : RunState; prompt_tokens : array<int64>; steps : int) : array<int64> {
+def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : int) : array<int64> {
     var ids : array<int64>
     let n_prompt = int64(length(prompt_tokens))
     let nsteps = int64(steps)

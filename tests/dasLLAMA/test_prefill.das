@@ -28,7 +28,7 @@ def feq(a, b : array<float>) : bool {
 // forward_batch over the whole prompt (one batched pass from position 0) == N× forward. Only the
 // bit-exact-by-design modes (classic, blocked) are checked here; flash is online-softmax (tolerance,
 // not bit-exact) and has its own oracle test.
-def check_prefill(t : T?; tr : Transformer; prompt : array<int64>; mode : AttnPrefillMode) {
+def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
     let n = int64(length(prompt))
     with_job_que() {
@@ -48,7 +48,7 @@ def check_prefill(t : T?; tr : Transformer; prompt : array<int64>; mode : AttnPr
 
 // Prefill that CONTINUES a populated cache: warm positions 0..split-1 one token at a time, then
 // prefill the tail at start_pos=split. Must match running all positions per-token.
-def check_continuation(t : T?; tr : Transformer; prompt : array<int64>; split : int64; mode : AttnPrefillMode) {
+def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64; mode : AttnPrefillMode) {
     let c = tr.config
     let n = int64(length(prompt))
     with_job_que() {

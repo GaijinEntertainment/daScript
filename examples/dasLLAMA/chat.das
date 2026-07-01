@@ -28,7 +28,7 @@ let MAX_NEW = 220l      // max tokens per reply
 
 // Sample the next token from s.logits with repetition penalty + temperature + top-k.
 // `recent` are tokens already emitted this turn; `scratch` is a reusable vocab-sized buffer.
-def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
+def sample(var s : Session; vocab : int64; temp, penalty : float; top_k : int64;
            recent : array<int64>; var scratch : array<float>; var seed : int4&) : int64 {
     // repetition penalty over only the last `pwin` tokens (bounded window, like llama.cpp's
     // penalty_last_n) — an unbounded window eventually suppresses frequent structural tokens
@@ -90,7 +90,7 @@ def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64
 }
 
 // Forward each token into the KV cache, advancing pos. Returns the new pos.
-def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len : int64) : int64 {
+def prefill(t : Model; var s : Session; toks : array<int64>; pos, seq_len : int64) : int64 {
     var p = pos
     for (tk in toks) {
         break if (p >= seq_len)
