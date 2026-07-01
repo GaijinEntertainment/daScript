@@ -87,12 +87,21 @@ jobs:
         root_file: daslangstdlib.tex
         working_directory: build/doc/doc_latex
         continue_on_error: true
+        # Raise TeX's input-stack limit: the generated stdlib PDF has very deep cross-ref anchors
+        # (e.g. json_boost parse_json's fully-mangled type) that overflow texlive-alpine's default
+        # (input_stack_size=10000). pre_compile runs in latexmk's shell, so the env override applies.
+        pre_compile: |
+          export input_stack_size=100000
+          for f in $(kpsewhich -a texmf.cnf); do sed -i -E 's/^([[:space:]]*input_stack_size[[:space:]]*=).*/\1 100000/' "$f" 2>/dev/null || true; done
     - name: Compile LaTeX document
       uses: xu-cheng/latex-action@v4
       with:
         root_file: daslang.tex
         working_directory: build/doc/doc_latex
         continue_on_error: true
+        pre_compile: |
+          export input_stack_size=100000
+          for f in $(kpsewhich -a texmf.cnf); do sed -i -E 's/^([[:space:]]*input_stack_size[[:space:]]*=).*/\1 100000/' "$f" 2>/dev/null || true; done
     - name: Check pdf file
       run: |
         find . -name "*.pdf"
