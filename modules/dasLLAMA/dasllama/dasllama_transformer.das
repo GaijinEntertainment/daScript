@@ -11,6 +11,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
 require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
 require math
+require daslib/random  // int4 RNG state + random_float for token sampling
 
 // dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
 // (the embedding table + the norm weights, which forward always reads as fp32) and the big 2D
@@ -526,6 +527,9 @@ def footprint(t : Model) : MemFootprint {
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
 struct Session {
     n_past : int64            // absolute position of the next token to eval (0 at session start); advanced by eval()
+    rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
+    recent : array<int64>     // recently generated tokens, for the repetition penalty
+    sample_scratch : array<float>  // vocab-sized scratch for top-k selection
     x : array<float>          // residual stream (dim)
     xb : array<float>         // scratch (dim): rmsnorm out, attention out
     xb2 : array<float>        // scratch (dim): attention output projection
@@ -590,6 +594,8 @@ def make_run_state(c : Config) : Session {
     s.xs |> resize(maxn / 32l)
     s.key_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
     s.value_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
+    s.sample_scratch |> resize(c.vocab_size)
+    s.rng = random_seed(1234)
     return <- s
 }
 
@@ -1633,4 +1639,100 @@ def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : i
         token = argmax(s, t.config.vocab_size)
     }
     return <- ids
+}
+
+// ===== Sampling =====
+
+//! Sampling parameters. Defaults are greedy (temp = 0, penalty = 1.0) — bit-identical to argmax.
+struct SamplingParams {
+    temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
+    top_k : int64 = 0l             // <= 0 or >= vocab => no top-k cutoff
+    penalty : float = 1.0          // repetition penalty over recent tokens (1.0 = none)
+    penalty_last_n : int64 = 64l   // repetition-penalty window (most recent N generated tokens)
+}
+
+//! Seed the session's sampling RNG for reproducible generation.
+def set_seed(var s : Session; seed : int) {
+    s.rng = random_seed(seed)
+}
+
+//! Sample the next token from `s.logits` per `params`: repetition penalty over the last
+//! `penalty_last_n` of `s.recent`, then temperature + top-k + softmax + CDF (or greedy argmax when
+//! temp <= 0). Consumes `s.logits` in place and advances `s.rng`.
+def sample(var s : Session; params : SamplingParams) : int64 {
+    let vocab = int64(length(s.logits))
+    if (params.penalty != 1.0) {
+        let n = length(s.recent)
+        let win = int(params.penalty_last_n)
+        let pstart = n > win ? n - win : 0
+        for (k in range(pstart, n)) {
+            let id = s.recent[k]
+            let v = s.logits[id]
+            s.logits[id] = v > 0.0 ? v / params.penalty : v * params.penalty
+        }
+    }
+    if (params.temp <= 0.0) {
+        return argmax(s, vocab)
+    }
+    let inv = 1.0 / params.temp
+    for (i in range64(vocab)) {
+        s.logits[i] *= inv
+    }
+    if (params.top_k > 0l && params.top_k < vocab) {
+        for (i in range64(vocab)) {
+            s.sample_scratch[i] = s.logits[i]
+        }
+        var kth = -1.0e30
+        for (_j in range64(params.top_k)) {
+            var mx = -1.0e30
+            var mi = 0l
+            for (i in range64(vocab)) {
+                if (s.sample_scratch[i] > mx) {
+                    mx = s.sample_scratch[i]
+                    mi = i
+                }
+            }
+            kth = mx
+            s.sample_scratch[mi] = -1.0e30
+        }
+        for (i in range64(vocab)) {
+            if (s.logits[i] < kth) {
+                s.logits[i] = -1.0e30
+            }
+        }
+    }
+    softmax(s.logits, vocab)
+    let r = random_float(s.rng)
+    var cdf = 0.0
+    for (i in range64(vocab)) {
+        cdf += s.logits[i]
+        if (r < cdf) {
+            return i
+        }
+    }
+    return vocab - 1l
+}
+
+//! Stream-generate up to `max_tokens` from `prompt`, invoking `blk(id, piece)` per token; return
+//! false from the block to stop early (e.g. on a stop token). Prefills `prompt`, then samples one
+//! token at a time, advancing the session. Returns the number of tokens emitted. (The greedy
+//! `generate(t, s, prompt, steps)` above stays for the token-exact oracle path.)
+def generate(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams;
+             max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
+    s.recent |> clear()
+    eval(t, s, prompt)
+    var one : array<int64>
+    one |> resize(1)
+    var nout = 0l
+    for (_step in range64(max_tokens)) {
+        let tok = sample(s, params)
+        if (!invoke(blk, tok, piece(t, tok))) {
+            break
+        }
+        nout++
+        s.recent |> push(tok)
+        one[0] = tok
+        eval(t, s, one)
+    }
+    return nout
 }

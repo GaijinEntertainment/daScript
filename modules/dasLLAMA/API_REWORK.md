@@ -151,10 +151,13 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    `Tokenizer` (`kind` + both backends); `load_tokenizer_auto` picks the backend from the GGUF's
    `tokenizer.ggml.model`. `encode` / `decode` / `piece` on both `Tokenizer` and `Model`;
    `load_model` loads weights **and** tokenizer. Existing raw paths unchanged. *(test_facade.das)*
-3. **Sampling** — `SamplingParams` + sampling `generate` + callback. Greedy (temp=0)
-   bit-identical to today's `argmax`. *(current)*
+3. **Sampling** ✅ — `SamplingParams` (defaults = greedy: temp 0, penalty 1.0 → the greedy branch
+   calls the existing `argmax`, so bit-identical). `Session` owns the RNG (`rng`) + repetition
+   window (`recent`) + top-k scratch. `sample(session, params)` lifts the copy-pasted demo
+   `sample()`; streaming `generate(model, session, prompt, params, max, blk)` with a callback block
+   (`return false` to stop). `set_seed`. *(test_sampling.das)*
 4. **Arch registry + block seam** — relocate the existing 4 arches; prove all 5 models
-   still token-exact. No new arch yet. Chat-template descriptor becomes a registry field.
+   still token-exact. No new arch yet. Chat-template descriptor becomes a registry field. *(current)*
 5. **Minimal unified chat app** — collapse the 5 REPLs → 1 engine + per-arch descriptors.
 6. **Kernel-backend registry** — formalize so x64 can mirror the NEON self-registration.
 7. **Tune macro + loop-attribute reification** — depends on 6.
