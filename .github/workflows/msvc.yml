@@ -46,10 +46,12 @@ jobs:
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
 
     - name: Configure CMake
-      # Generator pinned to the VS major on the windows-latest image. GitHub
-      # migrated it from VS2022 (v17) to VS2026 (v18); bump in lockstep (see
-      # build.yml's build_windows_clangcl). On a mismatch, configure dies at
-      # project() with "could not find any instance of Visual Studio".
+      # Generator pinned to the VS major on the windows-latest image (the VS generator
+      # is required by microsoft/msvc-code-analysis-action below). GitHub migrated the
+      # image from VS2022 (v17) to VS2026 (v18); bump this in lockstep with the image.
+      # On a mismatch, configure dies at project() with "could not find any instance of
+      # Visual Studio". (build.yml's clang-cl lane is on Ninja now, so this is the only
+      # VS-generator-pinned lane left.)
       run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 18 2026"
 
     - name: Build CMake
