@@ -1832,6 +1832,16 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     max-height: min(62vh, 560px);
     background: #070605;
 }
+/* Fullscreen: drop the in-page aspect box and max-height cap so the viewport
+   (and the iframe inside it) fill the screen. The game canvas is grown to fit
+   letterboxed by examples.js (object-fit into the same-origin frame). */
+.forge-ex-player__viewport:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    aspect-ratio: auto;
+    background: #0d0c0a;
+}
 .forge-ex-player__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
 .forge-ex-player__fallback {
     position: absolute; inset: 0;
