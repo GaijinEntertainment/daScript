@@ -19,6 +19,15 @@ namespace das {
     DAS_MOD_API bool DAS_glfwToggleNativeFullscreen ( GLFWwindow* window );
     DAS_MOD_API int DAS_glfwIsNativeFullscreen ( GLFWwindow* window );
     DAS_MOD_API void DAS_glfwInitVulkanLoader ( void * loader );
+    // Web-only externs (EM_JS on emscripten, no-op stubs on desktop). Declared for AOT only:
+    // AOT-generated C++ is native and needs these prototypes to call them, while on web the EM_JS
+    // macro emits its own declaration and a plain prototype here would clash with it.
+#ifndef __EMSCRIPTEN__
+    DAS_MOD_API int DAS_glfwCanvasCssWidth();
+    DAS_MOD_API int DAS_glfwCanvasCssHeight();
+    DAS_MOD_API double DAS_glfwDevicePixelRatio();
+    DAS_MOD_API void DAS_glfwToggleFullscreen();
+#endif
     // chain + synthetic event API
     DAS_MOD_API void DasGlfw_ChainAddCursorPos ( GLFWwindow * window, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx );
     DAS_MOD_API void DasGlfw_ChainAddMouseButton ( GLFWwindow * window, TLambda<void,const GLFWwindow*,int,int,int> func, Context * ctx );

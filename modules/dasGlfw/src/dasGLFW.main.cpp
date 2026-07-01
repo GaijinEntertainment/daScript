@@ -114,12 +114,30 @@ namespace das {
     EM_JS(double, DAS_glfwDevicePixelRatio, (), {
         return (typeof devicePixelRatio == 'number' && devicePixelRatio) || 1.0;
     });
+    // Toggle real fullscreen for a web imgui card (mirrors desktop glfwToggleNativeFullscreen). Enter via
+    // the internal Browser.requestFullscreen — GLFW overrides it (GLFW.requestFullscreen) to drive
+    // onCanvasResize → GLFW.active grows to screen → windowSize cb → ImGui DisplaySize + backing =
+    // screen×DPR (crisp). resizeCanvas=false so the transition uses updateCanvasDimensions (verified NOT to
+    // trap the wasm). Exit via document.exitFullscreen — GLFW's own fullscreenchange listener shrinks
+    // GLFW.active back (also verified trap-free), giving an in-app exit that doesn't rely on browser Escape.
+    // Module.requestFullscreen is NOT in the daspkg card's EXPORTED_RUNTIME_METHODS and merely ACCESSING
+    // that unexported stub aborts — so it must not be touched. Browser/GLFW are in EM_JS scope.
+    EM_JS(void, DAS_glfwToggleFullscreen, (), {
+        if (typeof document !== 'undefined' && document.fullscreenElement) {
+            document.exitFullscreen();
+        } else if (typeof Browser !== 'undefined' && typeof Browser.requestFullscreen === 'function') {
+            Browser.requestFullscreen(false, false);
+        } else if (typeof GLFW !== 'undefined' && typeof GLFW.requestFullscreen === 'function') {
+            GLFW.requestFullscreen(false, false);
+        }
+    });
 }
 #else
 namespace das {
     int DAS_glfwCanvasCssWidth() { return 0; }
     int DAS_glfwCanvasCssHeight() { return 0; }
     double DAS_glfwDevicePixelRatio() { return 1.0; }
+    void DAS_glfwToggleFullscreen() {}
 }
 #endif
 
@@ -523,6 +541,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(DAS_glfwCanvasCssWidth)>(*this, lib, "glfw_canvas_css_width",SideEffects::accessExternal, "DAS_glfwCanvasCssWidth");
         addExtern<DAS_BIND_FUN(DAS_glfwCanvasCssHeight)>(*this, lib, "glfw_canvas_css_height",SideEffects::accessExternal, "DAS_glfwCanvasCssHeight");
         addExtern<DAS_BIND_FUN(DAS_glfwDevicePixelRatio)>(*this, lib, "glfw_device_pixel_ratio",SideEffects::accessExternal, "DAS_glfwDevicePixelRatio");
+        addExtern<DAS_BIND_FUN(DAS_glfwToggleFullscreen)>(*this, lib, "glfw_toggle_fullscreen",SideEffects::worstDefault, "DAS_glfwToggleFullscreen");
 #ifndef __EMSCRIPTEN__
         addExtern<DAS_BIND_FUN(DAS_glfwInitVulkanLoader)>(*this, lib, "glfwInitVulkanLoader",SideEffects::worstDefault, "DAS_glfwInitVulkanLoader")
             ->args({"loader"});
