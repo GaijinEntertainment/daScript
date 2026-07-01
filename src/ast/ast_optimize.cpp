@@ -62,7 +62,6 @@ namespace das {
             if ( logPass ) logs << *program;
             optimizationRound++;
         } while ( any );
-        program->markNoBoundCheck();
     }
 
 }

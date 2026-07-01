@@ -1707,7 +1707,7 @@ namespace das
         void inferLint(TextWriter & logs);
         void checkSideEffects();
         void foldUnsafe();
-        void markNoBoundCheck();
+        void markNoBoundCheck ( const struct ProgramCfg * pcfg );
         bool optimizationRefFolding(int32_t round);
         bool optimizationConstFolding(int32_t round);
         bool optimizationBlockFolding(int32_t round);

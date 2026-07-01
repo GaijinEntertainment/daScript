@@ -2,6 +2,21 @@ options gen2
 options bound_check_elision
 require dastest/testing_boost public
 
+// guard forms exercised via the CFG range analysis (index is a uint parameter, so it is not
+// constant-folded and the branch guard is the only thing proving it in range).
+def guard_early_exit(var a : array<int>; x : uint) {
+    if (x >= uint(length(a))) {
+        return
+    }
+    a[x] = int(x) * 10
+}
+
+def guard_then(var a : array<int>; x : uint) {
+    if (x < uint(length(a))) {
+        a[x] = int(x) * 10
+    }
+}
+
 // when bound_check_elision is on, the optimizer marks provably-in-range
 // array/vector accesses as noBoundCheck. behavior must stay identical.
 
@@ -64,6 +79,22 @@ def test_bound_check_elision(t : T?) {
             }
         }
         t |> equal(x[0], 0)
+    }
+    t |> run("guard: early-exit dominates the access") @(t : T?) {
+        var a : array<int>
+        a |> resize(4)
+        guard_early_exit(a, 2u)
+        t |> equal(a[2], 20)
+        guard_early_exit(a, 100u)   // out of range: guarded return, no write, no crash
+        t |> equal(a[3], 0)
+    }
+    t |> run("guard: then-branch dominates the access") @(t : T?) {
+        var a : array<int>
+        a |> resize(4)
+        guard_then(a, 3u)
+        t |> equal(a[3], 30)
+        guard_then(a, 100u)
+        t |> equal(a[0], 0)
     }
     t |> run("aliasing: mutating another array stays correct") @(t : T?) {
         // b and a may alias; erasing b must not enable unchecked a[i]

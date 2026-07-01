@@ -4,6 +4,8 @@
 
 namespace das {
 
+    struct ExprFor;
+
     // ===== Control-flow graph over a function body =====
     // A statement-level CFG: each block holds a straight-line run of expressions; control transfers
     // (if / while / for / return / break / continue) become edges. Built for one Function.
@@ -29,6 +31,11 @@ namespace das {
         ExprBlock *             astHead = nullptr;
         ExprBlock *             contOwner = nullptr;   // owner AST block for a continuation
         Expression *            contBefore = nullptr;  // first continuation statement (insert before it)
+        // ===== loop induction anchor =====
+        // set on a for-loop BODY block: the ExprFor whose iteration variables are live in this block.
+        // lets a range analysis gen the induction facts (i in [0,bound)) at the loop body's entry -
+        // information the flattened cond-less loop header would otherwise lose.
+        ExprFor *               loopSource = nullptr;
     };
 
     struct Cfg {
