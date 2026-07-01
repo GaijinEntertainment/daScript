@@ -258,7 +258,12 @@ namespace das {
                 propagateWrite(rr->subexpr);
             } else if ( expr->rtti_isCallFunc() ) {
                 auto call = (ExprCallFunc *) expr;
-                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty) ) {
+                // firstArgReturnType (pointer arithmetic: i_das_ptr_add/sub/etc) returns a
+                // pointer aliasing arguments[0]'s pointee, so a write through the result is a
+                // write through arguments[0]. Without this the write is lost across an
+                // offset-pointer helper call and the caller is wrongly judged pure (issue #3321)
+                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty
+                                    || call->func->firstArgReturnType) ) {
                     propagateWrite(call->arguments[0]);
                 }
             }
@@ -312,7 +317,8 @@ namespace das {
             } else if ( expr->rtti_isCallFunc() ) {
                 auto call = (ExprCallFunc *) expr;
                 call->write = true;
-                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty) ) {
+                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty
+                                    || call->func->firstArgReturnType) ) {
                     propagateWriteViaCopyOrMove(call->arguments[0]);
                 }
             }
@@ -351,7 +357,8 @@ namespace das {
                 propagatePassMutable(((ExprRef2Value *) expr)->subexpr);
             } else if ( expr->rtti_isCallFunc() ) {
                 auto call = (ExprCallFunc *) expr;
-                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty) ) {
+                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty
+                                    || call->func->firstArgReturnType) ) {
                     propagatePassMutable(call->arguments[0]);
                 }
             }
