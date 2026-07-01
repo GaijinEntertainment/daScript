@@ -762,14 +762,22 @@ jobs:
 
   build_windows_clangcl:
   ###########################################################
-  # Catches clang-cl (Visual Studio "ClangCL" toolset) build regressions. clang-cl
-  # sets CMake's MSVC=TRUE but uses clang's resource headers, and the toolset puts
-  # that resource include dir on INCLUDE. dasHV builds OpenSSL from source with plain
-  # cl, which rejects clang's #include_next <stdint.h> (C1021) — modules/dasHV/
-  # scrub_clang_include.cmake strips the clang dir from INCLUDE so cl falls back to
-  # MSVC's stdint.h. Without this job that fix — and clang-cl buildability generally —
-  # could silently rot. Same runner pool as the MSVC matrix; separate top-level job.
-  # Runs NIGHTLY (off per-PR CI — ~26min long pole, alt-toolchain, lowest per-PR signal).
+  # Catches clang-cl build regressions. Builds with Ninja driving clang-cl directly
+  # (msvc-dev-cmd's vcvars puts clang-cl + INCLUDE/LIB on PATH) — NOT the VS "ClangCL"
+  # toolset. clang-cl sets CMake's MSVC=TRUE but uses clang's resource headers; dasHV
+  # builds OpenSSL from source with plain cl, which rejects clang's #include_next
+  # <stdint.h> (C1021) — modules/dasHV/scrub_clang_include.cmake strips the clang dir
+  # from INCLUDE so cl falls back to MSVC's stdint.h. Without this job that fix — and
+  # clang-cl buildability generally — could silently rot.
+  #
+  # Ninja (not the VS generator) is deliberate: under the VS generator the test-sweep
+  # custom targets run through MSBuild's CustomBuild wrapper, which reports the command
+  # as "exited with code -1" (MSB8066) for the heavy threaded sweep even though daslang
+  # itself exits 0 and every test passes — a false red unique to the VS generator (its
+  # ToolTask/pipe handling of a threaded child), reproduced and root-caused locally.
+  # Ninja runs daslang.exe directly (like every other Windows lane), so the sweep's real
+  # exit code is honored. Same runner pool as the MSVC matrix; separate top-level job.
+  # Runs NIGHTLY (off per-PR CI — alt-toolchain, lowest per-PR signal).
   ###########################################################
     needs: pre_job
     # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Does NOT gate on
@@ -805,12 +813,21 @@ jobs:
     - name: "Install nasm (OpenSSL asm)"
       uses: ilammy/setup-nasm@v1
 
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Set up MSVC + clang-cl environment"
+      # vcvars puts cl.exe AND clang-cl.exe (VC\Tools\Llvm\x64\bin) on PATH plus
+      # INCLUDE/LIB, so Ninja can drive clang-cl directly without the VS generator.
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     # dasHV builds OpenSSL from source here (the path the scrub fix targets), and
     # nmake is serial — ~7 min. Cache the install so only the first run (or a dasHV
     # CMakeLists change) pays it; on a hit find_package(OpenSSL) finds it and the
-    # from-source ExternalProject is skipped. (sccache — the matrix's compiler cache
-    # — is not usable here: the VS generator, required for the ClangCL toolset, does
-    # not support CMAKE_CXX_COMPILER_LAUNCHER.)
+    # from-source ExternalProject is skipped. (On Ninja CMAKE_<LANG>_COMPILER_LAUNCHER
+    # now works, so sccache could be added here later; OpenSSL from-source is unchanged.)
     - name: "Cache OpenSSL (clang-cl from-source build)"
       uses: actions/cache@v4
       with:
@@ -820,35 +837,33 @@ jobs:
           build-clangcl/openssl/bin
         key: openssl-clangcl-${{ runner.os }}-${{ hashFiles('modules/dasHV/CMakeLists.txt') }}
 
-    - name: "Build: Daslang (clang-cl / VS ClangCL toolset)"
+    - name: "Build: Daslang (Ninja + clang-cl)"
       shell: pwsh
-      # Generator is pinned to the VS major on the runner image. GitHub migrated
-      # the windows-2025 / "latest" image from VS2022 (v17) to VS2026 (v18); on a
-      # VS2026 image "Visual Studio 17 2022" finds no instance and configure dies
-      # at project(). Bump this in lockstep with the image's VS major.
+      # Ninja + clang-cl (from vcvars PATH). No VS-generator, so no VS-major pinning
+      # to the runner image and no MSBuild CustomBuild sweep wrapper (see job header).
       run: |
-        cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
+        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
         if ($LASTEXITCODE -ne 0) { exit 1 }
-        cmake --build build-clangcl --config Release --parallel
+        cmake --build build-clangcl --parallel
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Test: interpreter sweep"
       shell: pwsh
       run: |
-        cmake --build build-clangcl --config Release --target run_tests_interpreter
+        cmake --build build-clangcl --target run_tests_interpreter
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Test: AOT sweep"
       shell: pwsh
       run: |
-        cmake --build build-clangcl --config Release --target run_tests_aot
+        cmake --build build-clangcl --target run_tests_aot
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Small C++ tests"
       shell: pwsh
       run: |
         cd build-clangcl
-        ctest --build-config Release -L small --output-on-failure
+        ctest -L small --output-on-failure
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
   build_linux_gcc:
