@@ -117,12 +117,29 @@ Llama-2/TinyLlama, which use different chat formats — so per-model disambiguat
 `tokenizer.chat_template`, or detecting special tokens) is a Phase-5 concern. The registry's `"llama"`
 template carries the Llama-3 instruct format (the flagship).
 
-### Kernel/ISA seam
-The scaffolding half-exists: `dasllama_math.das` holds the portable/default kernels;
-`dasllama_math_aarch64_neon.das` registers NEON kernels at `[init]` via function-pointer
-swap, gated on `jit_enabled() && get_architecture_name() == "arm64"`. Finishing the seam =
-moving the last shared branches behind the registry so `dasllama_math_x64_avx.das` can
-mirror it (SDOT → VNNI `vpdpbusd`). This is what the x64 handoff consumes.
+### Kernel/ISA seam  *(built — Phase 6b)*
+A **named `KernelBackend` registry**, symmetric with the arch registry. `dasllama_math.das` owns the
+abstraction (the `MatmulQ8Q8*Fn` typedefs, the `g_mm_q8q8*` active pointers, the `matmul_q8q8*` wrappers,
+`repack_q8q8_weight`, and `register_kernel_backend` / `select_kernel_backend` / `pin_kernel_backend` /
+`select_matmul_backend_for_load`). Each ISA module self-registers its backend(s) at `[init]`:
+```
+struct KernelBackend { name; mm; batch; group3; repack; needs_repack; priority }   // copyable
+register_kernel_backend(KernelBackend("arm64-laneq", …, needs_repack = true, priority = 20))
+```
+- `dasllama_math_default.das` — the **portable** backend (`dot_q8q8` + the three portable kernels + the
+  parallel_for profiler), registered at priority 0. The fallback everywhere; **required by any q8·q8
+  consumer** (the `g_mm_q8q8*` pointers panic-stub until a backend registers).
+- `dasllama_math_aarch64_neon.das` — `arm64-sdot` (row-major, priority 10) + `arm64-laneq` (interleaved
+  repack, priority 20), gated on `jit_enabled() && get_architecture_name() == "arm64"`.
+- `dasllama_math_x64_avx.das` — the SESSION-2 mirror: register `x64-vnni` (SDOT → VNNI `vpdpbusd`) exactly
+  the same way. **No edit to `dasllama_math` or the wrappers** — it just adds a file + a `[init]`.
+
+**Two selection tiers** (mirroring the hardware): `register_kernel_backend` auto-activates the
+highest-priority **no-repack** backend so direct callers (tests/benches, row-major weights) get the best
+kernel with no load step; `select_matmul_backend_for_load()` (called by the loader on the Q8 path) picks
+the best **overall** backend — including a repack one — and returns whether the loader must repack.
+`pin_kernel_backend` forces a named backend for A/B benchmarking. Validated token-identical (100/100 JIT +
+AOT) + `test_kernel_backend.das`.
 
 ## Tune macro — for-loop-attribute reification
 
@@ -197,7 +214,7 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    streaming `generate()`. Examples collapsed: `chat.das` (one REPL, any model) + `run.das` (one
    completion + stats); the 4 other chat REPLs + 2 runners deleted, their oracles migrated into
    `test_parity.das` (TinyLlama-v0.3, Llama-3.2-1B). Full suite 100/100 JIT + AOT.
-6. **Arch files + kernel-backend registry** *(current)* —
+6. **Arch files + kernel-backend registry** *(done)* —
    - **Arch files (done):** split the `dasllama_transformer.das` monolith so each architecture lives
      in its own `dasllama_arch_*.das` (config setter + `[init]` registration + chat template). The
      shared engine is `dasllama_common.das`; `dasllama_transformer.das` is now a thin umbrella
@@ -207,8 +224,10 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
      loops, and config are byte-for-byte unchanged, so the suite stays **token-identical** (100/100 JIT
      + AOT). Adding an arch = a new file, never touching the core; MoE brings its own blocks in its own
      file. See [What split into files](#what-split-into-files-done--phase-6).
-   - **Kernel-backend registry (next):** formalize the ISA seam so `dasllama_math_x64_avx.das` can mirror
-     the NEON self-registration (SDOT → VNNI `vpdpbusd`).
+   - **Kernel-backend registry (done):** the `KernelBackend` registry + `dasllama_math_default.das` split
+     — each ISA module self-registers at `[init]`, `select_matmul_backend_for_load()` drives the load-time
+     repack handshake, `dasllama_math_x64_avx.das` mirrors NEON with no core edit. See
+     [Kernel/ISA seam](#kernelisa-seam--built--phase-6b) + [What split into files](#what-split-into-files-done--phase-6).
 7. **Tune macro + loop-attribute reification** — depends on 6.
 
 **AOT note (phase 5):** the `Model`↔`ArchBlocks` cycle (Model holds ArchBlocks by value; ArchBlocks's

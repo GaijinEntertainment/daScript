@@ -3,6 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_quant
 require daslib/jobque_boost
@@ -116,8 +117,8 @@ def bench_gemm_iso(b : B?) {
         bench_one("w2  5632x2048 ", 5632l, 2048l, 20, false)
         bench_one("cls 2048x32000", 2048l, 32000l, 6, false)
 
-        // enable laneq for the rest of the run; each shape repacks its own weight
-        enable_q8q8_laneq()
+        // switch to laneq for the rest of the run; each shape repacks its own weight
+        select_kernel_backend("arm64-laneq")
         to_log(LOG_INFO, "=== laneq backend (4x4 tile, interleaved repack) ===\n")
         bench_one("qo  2048x2048 ", 2048l, 2048l, 30, true)
         bench_one("w13 2048x5632 ", 2048l, 5632l, 20, true)

@@ -262,39 +262,22 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
     }
 }
 
-//! Q8·Q8 dot: BOTH the weight (wq/ws) and the activation (xq/xs) are Q8 — int8 quants + one fp32
-//! scale per 32-block. The inner block loop is a pure int8·int8 multiply-accumulate, which the LLVM
-//! JIT lowers to ARM SDOT (vdotq_s32: 16 int8 MACs/instr, exact int32 accumulate). The two block
-//! scales multiply in once per 32-wide block. ~3.8x the dequant-in-dot dot_q8 on the kernel bench.
-//! n must be a multiple of 32.
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    var acc = 0.0
-    let nb = n / 32l
-    for (bi in range64(nb)) {
-        let base = bi * 32l
-        var iacc = 0
-        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
-            iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
-        }
-        acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
-    }
-    return acc
-}
-
-// ===== Q8·Q8 matmul: platform backend dispatched via function pointers =====
-// The three public matmuls extract raw pointers ONCE in the main context and call through a function
-// pointer. dasllama_math owns the pointers + the portable kernels (the default, set at the var-init
-// below); dasllama_math_aarch64_neon overrides them at [init] on arm64 with SDOT kernels (via
-// use_q8q8_kernels). Dispatch is at the MATMUL level — a platform owns its whole matmul, threading
-// and tiling included — so the wrapper itself is backend-agnostic and the pointer is read in the main
-// context, never inside a worker. Kernels take raw pointers (a function pointer can't carry the
-// `array<T> | #` owning-or-view union), so the array->pointer extraction lives in the wrappers.
+// ===== Q8·Q8 matmul: pluggable kernel-backend registry =====
+// The three public matmuls (matmul_q8q8 / _batch / _group3) extract raw pointers ONCE in the main
+// context and call through a function pointer (g_mm_q8q8 / _batch / _group3). A *backend* is a named set
+// of those three kernels + a weight repack (KernelBackend); each ISA module registers its backend(s) at
+// [init] — dasllama_math_default = the portable fallback, dasllama_math_aarch64_neon = arm64 SDOT,
+// dasllama_math_x64_avx = x64 VNNI (later). Dispatch is at the MATMUL level — a backend owns its whole
+// matmul, threading and tiling included — so the pointer is read in the main context, never inside a
+// worker. Kernels take raw pointers (a function pointer can't carry the `array<T> | #` owning-or-view
+// union), so the array->pointer extraction lives in the wrappers.
 //
-// TODO (deferred — NOT before the prefill profiler results + more refactoring): move the portable
-// kernels below out into their own dasllama_math_default module, symmetric with
-// dasllama_math_aarch64_neon, so dasllama_math holds only the typedefs + dispatch pointers + wrappers
-// + setter. Holding off until we know where prefill time actually goes and the surrounding code settles.
+// Two selection tiers, mirroring the hardware:
+//   - a ROW-MAJOR default (needs_repack = false), auto-activated on registration (highest priority
+//     wins), so direct callers (tests, benches) get the best un-repacked kernel with no load step;
+//   - a REPACK backend (needs_repack = true, e.g. arm64 laneq) that only load_gguf activates, via
+//     select_matmul_backend_for_load(), since its kernels read the interleaved layout the load-time
+//     repack produces. pin_kernel_backend forces a named backend for A/B benchmarking on one binary.
 typedef MatmulQ8Q8Fn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64) : void>
 typedef MatmulQ8Q8BatchFn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64; ntok : int64) : void>
 typedef MatmulQ8Q8Group3Fn = function<(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?; woff0 : int64; woff1 : int64; woff2 : int64; xqp : int8 const?; xsp : float const?; n : int64; d0 : int64; d1 : int64; d2 : int64) : void>
@@ -302,67 +285,113 @@ typedef MatmulQ8Q8Group3Fn = function<(var y0p : float?; var y1p : float?; var y
 // the active backend's preferred layout. Default = no-op (row-major). n % 32 == 0.
 typedef RepackQ8Q8Fn = function<(var wp : int8?; var sp : float?; n : int64; d : int64) : void>
 
-var g_mm_q8q8 = @@q8q8_kernel
-var g_mm_q8q8_batch = @@q8q8_batch_kernel
-var g_mm_q8q8_group3 = @@q8q8_group3_kernel
-var g_repack_q8q8 = @@repack_q8q8_identity
+//! One kernel backend: the three Q8·Q8 matmul kernels + the weight repack, plus selection metadata.
+//! needs_repack = the kernels read an interleaved weight layout, so the loader must repack first.
+//! priority = higher wins the auto-select (portable 0; arm64 sdot 10 / laneq 20; x64 vnni 20 later).
+struct KernelBackend {
+    name : string
+    mm : MatmulQ8Q8Fn
+    batch : MatmulQ8Q8BatchFn
+    group3 : MatmulQ8Q8Group3Fn
+    repack : RepackQ8Q8Fn
+    needs_repack : bool
+    priority : int
+}
 
-// Registered alternate backend (the arm64 laneq + interleaved-repack pair). Registered at [init] but
-// NOT active by default — direct matmul callers (tests, benches) keep the row-major sdot4x4/portable
-// backend, since the laneq kernels read an interleaved layout that only exists after the model's blob
-// is repacked at load. enable_q8q8_laneq swaps it in; load_gguf calls that on the Q8 path, then repacks.
-var g_q8q8_laneq_available = false
-var g_q8q8_laneq_enabled = true   // user/bench toggle: set false before load_gguf to force the sdot4x4 baseline
-var g_lq_mm = @@q8q8_kernel
-var g_lq_batch = @@q8q8_batch_kernel
-var g_lq_group3 = @@q8q8_group3_kernel
-var g_lq_repack = @@repack_q8q8_identity
+// Active kernels — the hot path reads these directly. A backend must register before any Q8·Q8 matmul
+// runs (require dasllama/dasllama_math_default for the portable fallback); until then the stubs panic.
+var g_mm_q8q8 = @@q8q8_unset_kernel
+var g_mm_q8q8_batch = @@q8q8_unset_batch
+var g_mm_q8q8_group3 = @@q8q8_unset_group3
+var g_repack_q8q8 = @@repack_q8q8_identity   // no-op until a repack backend is selected
+
+var g_kernel_backends : table<string; KernelBackend>
+var g_active_backend = ""           // name of the active backend ("" = the unset stub)
+var g_active_priority = -1          // priority of the active row-major default (auto-activate compare)
+var g_active_needs_repack = false   // does the active backend need repacked weights?
+var g_backend_pin = ""              // A/B: force this backend by name; "" = auto-select
 
 //! Default repack: no-op — weights stay row-major for the portable / sdot4x4 kernels.
 [unused_argument(wp, sp, n, d)]
 def repack_q8q8_identity(var wp : int8?; var sp : float?; n, d : int64) {}
 
-//! Override the active Q8·Q8 matmul kernels + repack. Called by dasllama_math_aarch64_neon at [init] on
-//! arm64 to set the default (sdot4x4 + no-op repack); the portable kernels are the default elsewhere.
-def use_q8q8_kernels(mm : MatmulQ8Q8Fn; batch : MatmulQ8Q8BatchFn; group3 : MatmulQ8Q8Group3Fn; repack : RepackQ8Q8Fn) {
-    g_mm_q8q8 = mm
-    g_mm_q8q8_batch = batch
-    g_mm_q8q8_group3 = group3
-    g_repack_q8q8 = repack
+def private no_backend() {
+    panic("dasLLAMA: no Q8·Q8 kernel backend registered — require dasllama/dasllama_math_default")
+}
+[unused_argument(yp, wp, sp, xqp, xsp, n, d)]
+def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
+[unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]
+def private q8q8_unset_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) { no_backend() }
+[unused_argument(y0p, y1p, y2p, wp, sp, woff0, woff1, woff2, xqp, xsp, n, d0, d1, d2)]
+def private q8q8_unset_group3(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?; woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) { no_backend() }
+
+def private activate(be : KernelBackend) {
+    g_mm_q8q8 = be.mm
+    g_mm_q8q8_batch = be.batch
+    g_mm_q8q8_group3 = be.group3
+    g_repack_q8q8 = be.repack
+    g_active_backend = be.name
+    g_active_needs_repack = be.needs_repack
 }
 
-//! Restore the portable kernels (+ no-op repack) as the active backend. For benchmarks that A/B the
-//! default against a platform backend on the same binary.
-def use_q8q8_default_kernels() {
-    use_q8q8_kernels(@@q8q8_kernel, @@q8q8_batch_kernel, @@q8q8_group3_kernel, @@repack_q8q8_identity)
-}
-
-//! Register the alternate laneq backend (arm64 SDOT lane-indexed kernels + interleaved repack). Called
-//! by dasllama_math_aarch64_neon at [init] on arm64. Does NOT activate it — enable_q8q8_laneq does, at
-//! model load, because the laneq kernels require the interleaved weight layout the repack produces.
-def register_q8q8_laneq(mm : MatmulQ8Q8Fn; batch : MatmulQ8Q8BatchFn; group3 : MatmulQ8Q8Group3Fn; repack : RepackQ8Q8Fn) {
-    g_lq_mm = mm
-    g_lq_batch = batch
-    g_lq_group3 = group3
-    g_lq_repack = repack
-    g_q8q8_laneq_available = true
-}
-
-//! Activate the registered laneq backend if one exists (arm64). Returns true when activated — the
-//! caller (load_gguf, Q8 path) MUST then repack every weight tensor via repack_q8q8_weight before any
-//! matmul runs. Returns false where there is no laneq backend (portable stays active, weights row-major).
-def enable_q8q8_laneq() : bool {
-    if (!g_q8q8_laneq_available || !g_q8q8_laneq_enabled) {
-        return false
+//! Register a kernel backend under its name. Auto-activates it as the row-major default when it is the
+//! highest-priority backend that needs no repack — so direct callers get the best un-repacked kernel with
+//! no load step. Repack backends are activated only by select_matmul_backend_for_load (at model load).
+def register_kernel_backend(be : KernelBackend) {
+    g_kernel_backends[be.name] = be
+    if (g_backend_pin == "" && !be.needs_repack && be.priority > g_active_priority) {
+        g_active_priority = be.priority
+        activate(be)
     }
-    use_q8q8_kernels(g_lq_mm, g_lq_batch, g_lq_group3, g_lq_repack)
-    return true
 }
 
-//! Toggle the laneq backend on/off (default on). Set false BEFORE load_gguf to load a Q8 model on the
-//! row-major sdot4x4 backend (the pre-laneq baseline) — for A/B benchmarking on one binary.
-def set_q8q8_laneq_enabled(on : bool) {
-    g_q8q8_laneq_enabled = on
+//! Activate a registered backend by name (explicit control / A/B benchmarking). No-op if unknown.
+def select_kernel_backend(name : string) {
+    if (key_exists(g_kernel_backends, name)) {
+        activate(g_kernel_backends[name])
+    }
+}
+
+//! Pin the active backend to `name` (forces it; suppresses auto-select on later registrations). For A/B
+//! benchmarking on one binary — e.g. pin "arm64-sdot" to measure the row-major baseline against laneq.
+def pin_kernel_backend(name : string) {
+    g_backend_pin = name
+    select_kernel_backend(name)
+}
+def clear_kernel_backend_pin() {
+    g_backend_pin = ""
+}
+
+//! Select the best backend for a model load — INCLUDING repack backends (arm64 laneq). Honors a pin.
+//! Returns true if the selected backend needs the loader to repack every weight tensor (via
+//! repack_q8q8_weight) into its interleaved layout before any matmul runs.
+def select_matmul_backend_for_load() : bool {
+    if (g_backend_pin != "") {
+        select_kernel_backend(g_backend_pin)
+        return g_active_needs_repack
+    }
+    var best = ""
+    var bestpri = -1
+    for (be in values(g_kernel_backends)) {
+        if (be.priority > bestpri) {
+            bestpri = be.priority
+            best = be.name
+        }
+    }
+    if (best != "") {
+        select_kernel_backend(best)
+    }
+    return g_active_needs_repack
+}
+
+//! The active backend's name (diagnostics / tests). "" until a backend registers.
+def active_kernel_backend() : string {
+    return g_active_backend
+}
+
+//! Registered backend names (diagnostics / tests).
+def kernel_backend_names() : array<string> {
+    return <- [for (k in keys(g_kernel_backends)); k]
 }
 
 //! Repack one Q8 weight tensor (region at element offset woff in qblob, shape [d rows x n cols]) into
@@ -370,138 +399,6 @@ def set_q8q8_laneq_enabled(on : bool) {
 def repack_q8q8_weight(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
     unsafe {
         invoke(g_repack_q8q8, addr(qblob[woff]), addr(qscales[woff / 32l]), n, d)
-    }
-}
-
-// ----- parallel_for dispatch profiler (off by default) -----
-// When on, the batch kernel records each worker's start time (relative to the parallel_for start) into
-// g_pf_ws[rb], then aggregates the first/last worker start and the wall time per call. A large gap
-// between pf-start and last-worker-start = workers trickling in (the job pool waking from sleep), which
-// is the suspected prefill stall. The recorder lives here (not the neon module) so the A/B harness can
-// force the portable kernels and measure the same parallel_for behavior in one module.
-var g_pf_prof = false
-var g_pf_ws : array<int64>   // per-call worker start (ns, relative to pf-start), indexed by chunk start row
-var g_pf_first_sum = 0l      // Σ first-worker start (us) over calls
-var g_pf_last_sum = 0l       // Σ last-worker start (us) over calls
-var g_pf_wall_sum = 0l       // Σ parallel_for wall (us) over calls
-var g_pf_n = 0l
-
-//! Enable/disable the parallel_for dispatch profiler. max_rows must be >= the largest matmul output d.
-def pf_prof_enable(on : bool; max_rows : int64) {
-    g_pf_prof = on
-    g_pf_ws |> resize(max_rows)
-    g_pf_first_sum = 0l
-    g_pf_last_sum = 0l
-    g_pf_wall_sum = 0l
-    g_pf_n = 0l
-}
-
-def pf_prof_report() {
-    if (g_pf_n == 0l) {
-        return
-    }
-    to_log(LOG_INFO, "=== parallel_for dispatch ({g_pf_n} batch-matmul calls) ===\n")
-    to_log(LOG_INFO, "  avg first-worker start = {g_pf_first_sum / g_pf_n} us\n")
-    to_log(LOG_INFO, "  avg last-worker start  = {g_pf_last_sum / g_pf_n} us  (time to full parallelism)\n")
-    to_log(LOG_INFO, "  avg parallel_for wall  = {g_pf_wall_sum / g_pf_n} us\n")
-    to_log(LOG_INFO, "  last-start as % of wall = {100l * g_pf_last_sum / max(g_pf_wall_sum, 1l)}% (high = workers trickle in / pool wake-up stall)\n")
-}
-
-// Portable kernels (auto-vectorized dot_q8q8) — the default backend. 1N threading (one chunk per hw
-// job) measured fastest for this compute-light kernel (~52 vs ~51 tok/s at 2N end-to-end).
-def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-            }
-        }
-    }
-}
-
-def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    let nb = n / 32l
-    var myp = yp
-    if (g_pf_prof) {
-        // instrumented path: raw parallel_for + per-worker start capture (see pf_prof_report)
-        unsafe {
-            var wsp0 = reinterpret<int64?>(addr(g_pf_ws[0]))
-            for (k in range(int(d))) {
-                wsp0[k] = 0l
-            }
-        }
-        let pf0 = ref_time_ticks()
-        unsafe {
-            let wsbase = addr(g_pf_ws[0])
-            parallel_for(0, int(d), get_total_hw_jobs()) $(rb, re, wg) {
-                unsafe {
-                    var wsw = reinterpret<int64?>(wsbase)
-                    wsw[rb] = ref_time_ticks() - pf0
-                    for (i in range(rb, re)) {
-                        let wrow = wp + int64(i) * n
-                        let srow = sp + int64(i) * nb
-                        for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                        }
-                    }
-                }
-                wg |> notify_and_release
-            }
-        }
-        let wall = (ref_time_ticks() - pf0) / 1000l
-        var fs = 1l << 62l
-        var ls = 0l
-        for (k in range(int(d))) {
-            let v = g_pf_ws[k]
-            if (v != 0l) {
-                fs = min(fs, v)
-                ls = max(ls, v)
-            }
-        }
-        g_pf_first_sum += fs / 1000l
-        g_pf_last_sum += ls / 1000l
-        g_pf_wall_sum += wall
-        g_pf_n ++
-        return
-    }
-    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let wrow = wp + int64(i) * n
-                let srow = sp + int64(i) * nb
-                for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                }
-            }
-        }
-    }
-}
-
-def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
-                               woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let dtot = d0 + d1 + d2
-    var w0 = y0p
-    var w1 = y1p
-    var w2 = y2p
-    parallel_for(0, int(dtot), get_total_hw_jobs()) $(rb, re, wg) {
-        unsafe {
-            for (gi in range(rb, re)) {
-                let g = int64(gi)
-                if (g < d0) {
-                    w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
-                } elif (g < d0 + d1) {
-                    let r = g - d0
-                    w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
-                } else {
-                    let r = g - d0 - d1
-                    w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
-                }
-            }
-        }
-        wg |> notify_and_release
     }
 }
 

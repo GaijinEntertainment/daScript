@@ -5,7 +5,8 @@ module dasllama_common shared public
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
-require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
+require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
+require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backends at [init]; no-op off-ARM
 require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
 require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
@@ -396,7 +397,8 @@ def private resolve_arch(var t : Model; arch : string) {
 //! Load a llama-architecture GGUF into the split layout at the requested precision. The big weights
 // Repack every Q8 2D weight tensor in qblob/qscales into the active backend's interleaved layout, IN
 // PLACE, once at load. Mirrors forward()'s per-tensor offsets/shapes exactly; the embedding + norms
-// live in fblob and are never touched. Called only after enable_q8q8_laneq() succeeds (arm64); the
+// live in fblob and are never touched. Called only after select_matmul_backend_for_load() picks a
+// repack backend (arm64 laneq); the
 // repack pointer is otherwise identity, so this would be a no-op regardless.
 def private repack_q8_weights(var t : Model) {
     let c = t.config
@@ -549,8 +551,8 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         }
         delete scratch
         // arm64: switch to the laneq backend and repack the just-loaded Q8 weights into its interleaved
-        // layout. enable returns false off-ARM (portable stays, weights stay row-major).
-        if (mode == QuantMode.q8 && enable_q8q8_laneq()) {
+        // layout. Returns false off-ARM (portable stays, weights stay row-major).
+        if (mode == QuantMode.q8 && select_matmul_backend_for_load()) {
             repack_q8_weights(t)
         }
     }
@@ -567,8 +569,8 @@ def quantize_weights(var t : Model) {
     t.qblob <- qt.q
     t.qscales <- qt.scales
     t.quant = QuantMode.q8
-    // same laneq enable + in-place repack as the load_gguf Q8 path (no-op off-ARM)
-    if (enable_q8q8_laneq()) {
+    // same backend-for-load select + in-place repack as the load_gguf Q8 path (no-op off-ARM)
+    if (select_matmul_backend_for_load()) {
         repack_q8_weights(t)
     }
 }

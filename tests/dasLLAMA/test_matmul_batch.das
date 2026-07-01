@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend (the matmul_q8q8 wrappers dispatch to it)
 require dasllama/dasllama_quant
 require daslib/jobque_boost
 

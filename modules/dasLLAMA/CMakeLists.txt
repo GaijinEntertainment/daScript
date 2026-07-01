@@ -3,6 +3,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     MESSAGE(STATUS "dasLLAMA module included.")
 
     ADD_MODULE_DAS(dasllama dasllama dasllama_math)
+    ADD_MODULE_DAS(dasllama dasllama dasllama_math_default)
     ADD_MODULE_DAS(dasllama dasllama dasllama_math_aarch64_neon)
     ADD_MODULE_DAS(dasllama dasllama dasllama_quant)
     ADD_MODULE_DAS(dasllama dasllama dasllama_gguf)

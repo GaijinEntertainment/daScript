@@ -106,6 +106,7 @@ FILE(GLOB AOT_DASLLAMA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "t
 SET(AOT_DASLLAMA_MODULE_FILES
     modules/dasLLVM/daslib/aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_math.das
+    modules/dasLLAMA/dasllama/dasllama_math_default.das
     modules/dasLLAMA/dasllama/dasllama_math_aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_quant.das
     modules/dasLLAMA/dasllama/dasllama_gguf.das
