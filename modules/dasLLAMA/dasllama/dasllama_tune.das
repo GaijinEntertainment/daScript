@@ -146,3 +146,48 @@ class private TuneMacro : AstStructureAnnotation {
         return true
     }
 }
+
+// ===== final assembly: [tuned] =====
+
+let private DEFAULT_PERM = "vec8_u2"
+
+def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentList) : string {
+    let v = find_arg(args, "template")
+    if (v is tString) return v as tString
+    return "{func.name}_template"     // convention: dot -> dot_template
+}
+
+def private tuned_perm_suffix(args : AnnotationArgumentList) : string {
+    let v = find_arg(args, "perm")
+    if (v is tString) return v as tString
+    return DEFAULT_PERM
+}
+
+//! `[tuned(perm="vec8_u2")]` on an empty-body function clones the body of its source
+//! template (`<name>_template`, or `template="..."`) and stamps the selected permutation's
+//! hints onto the `[tune=N]` loops. The annotated function IS the real symbol — callers are
+//! untouched. The perm comes from the annotation today (default DEFAULT_PERM); reading it
+//! from the profiler's box config is the next hook.
+[function_macro(name="tuned")]
+class private TunedMacro : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                       args : AnnotationArgumentList; var errors : das_string) : bool {
+        let tmpl_name = tuned_template_name(func, args)
+        var tmpl = compiling_module() |> find_unique_function(tmpl_name, true)
+        if (tmpl == null) {
+            errors := "tuned: template function not found: {tmpl_name}"
+            return false
+        }
+        func.body = clone_expression(tmpl.body)
+        let suffix = tuned_perm_suffix(args)
+        let grid <- build_grid()
+        for (perm in grid) {
+            if (perm.suffix == suffix) {
+                apply_perm(func, perm)
+                return true
+            }
+        }
+        errors := "tuned: unknown perm '{suffix}' (not in grid)"
+        return false
+    }
+}
