@@ -30,7 +30,9 @@ def private build_grid() : array<TunePerm> {
         TunePerm(suffix = "plain"),
         TunePerm(suffix = "u2", hints <- [TuneHint(tune = 1, unroll = 2)]),
         TunePerm(suffix = "vec8", hints <- [TuneHint(tune = 1, vectorize = true, width = 8)]),
-        TunePerm(suffix = "vec8_u2", hints <- [TuneHint(tune = 1, vectorize = true, width = 8, unroll = 2)])
+        TunePerm(suffix = "vec8_u2", hints <- [TuneHint(tune = 1, vectorize = true, width = 8, unroll = 2)]),
+        TunePerm(suffix = "vec16", hints <- [TuneHint(tune = 1, vectorize = true, width = 16)]),
+        TunePerm(suffix = "vec16_u2", hints <- [TuneHint(tune = 1, vectorize = true, width = 16, unroll = 2)])
     ]
 }
 

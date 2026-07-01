@@ -24,6 +24,10 @@ def dot_u2(a, b : float const?; n : int64) : float {}
 def dot_vec8(a, b : float const?; n : int64) : float {}
 [hint(unsafe_range_check, noalias = a, noalias = b), tuned(src = "dot_template", perm = "vec8_u2")]
 def dot_vec8u2(a, b : float const?; n : int64) : float {}
+[hint(unsafe_range_check, noalias = a, noalias = b), tuned(src = "dot_template", perm = "vec16")]
+def dot_vec16(a, b : float const?; n : int64) : float {}
+[hint(unsafe_range_check, noalias = a, noalias = b), tuned(src = "dot_template", perm = "vec16_u2")]
+def dot_vec16u2(a, b : float const?; n : int64) : float {}
 
 typedef DotFn = function<(a, b : float const?; n : int64) : float>
 
@@ -37,7 +41,9 @@ def variants() : array<Variant> {
         Variant(suffix = "plain", fn = @@dot_plain),
         Variant(suffix = "u2", fn = @@dot_u2),
         Variant(suffix = "vec8", fn = @@dot_vec8),
-        Variant(suffix = "vec8_u2", fn = @@dot_vec8u2)
+        Variant(suffix = "vec8_u2", fn = @@dot_vec8u2),
+        Variant(suffix = "vec16", fn = @@dot_vec16),
+        Variant(suffix = "vec16_u2", fn = @@dot_vec16u2)
     ]
 }
 
