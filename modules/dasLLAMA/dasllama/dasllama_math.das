@@ -58,6 +58,18 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {
     }
 }
 
+//! d[j] *= scale (broadcast scalar), width-8 vectorized — ggml_vec_scale_f32. Flash attention
+//! multiplies the whole Q×KV score tile by 1/sqrt(head_size) in one sweep, replacing the old scalar
+//! per-element multiply buried in the mask branch.
+[hint(unsafe_range_check, noalias = d)]
+def scale_inplace(var d : float?; scale : float; n : int64) {
+    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+        unsafe {
+            d[j] *= scale
+        }
+    }
+}
+
 //! d[j] = s[j], width-8 vectorized contiguous copy (the KV-cache store). Same reason as add_inplace:
 //! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
 //! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
@@ -611,21 +623,17 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! softmax — turns a score vector into a probability distribution (sums to 1).
 //! In place over the first `size` elements. Subtracts the max first so exp() can't
 //! overflow (exp(x-max)/sum(exp(x-max)) is identical math, numerically safe).
-//! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
-//! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
-//! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
-def softmax(var x : float?; size : int64) {
-    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
+//! Horizontal max of the first `n` floats, hand-vectorized (two float4 lane accumulators + a horizontal
+//! max). LLVM won't auto-vectorize a max-reduction without nnan/nsz fast-math, which we don't emit for
+//! bit-exactness (max lowers to fcmp+select, order-dependent only when a NaN is present), so we do the
+//! reassociation by hand — bit-identical to a scalar fold on NaN-free input (attention scores are always
+//! finite). Two accumulators hide the fmax latency (~9x over scalar). Seeds with x[0] (idempotent) and
+//! never reads past the buffer, so it is safe for n < 8. Returns -FLT_MAX for n <= 0.
+def hmax(x : float const?; n : int64) : float {
+    if (n <= 0l) return -3.4028235e38
     unsafe {
-        // Hand-vectorized max reduction (replaces a [vectorize] hint that LLVM ignored): max() lowers to
-        // fcmp+select, which LLVM won't auto-vectorize as a reduction without nnan/nsz fast-math (we don't
-        // emit it — bit-exactness). On NaN-free inputs (softmax scores are always finite) max is
-        // associative+exact, so two float4 lane accumulators (width-8, the original hint's intent — 2 accs
-        // hide the fmax latency, ~9x over scalar) + a horizontal max is bit-identical to the scalar fold
-        // (fcmp+select is order-dependent only when a NaN is present). The broadcast seed folds x[0] in (idempotent) and never reads
-        // past the buffer, so it stays safe for size < 8 (early decode).
         let pf4 = reinterpret<float4 const?>(x)
-        let n8 = size / 8l
+        let n8 = n / 8l
         var acc0 = float4(x[0], x[0], x[0], x[0])
         var acc1 = acc0
         for (k in 0l..n8) {
@@ -634,9 +642,20 @@ def softmax(var x : float?; size : int64) {
         }
         let acc = max(acc0, acc1)
         var maxv = max(max(acc.x, acc.y), max(acc.z, acc.w))
-        for (i in n8 * 8l .. size) {
+        for (i in n8 * 8l .. n) {
             maxv = max(maxv, x[i])
         }
+        return maxv
+    }
+}
+
+//! Pointer core — the threaded prefill attention runs in fork contexts and can only touch raw
+//! addresses; the array overload forwards here, so both are bit-identical. Output `x` is a `var
+//! float?` written in place (a hoisted/captured fork pointer binds directly — no const-strip).
+def softmax(var x : float?; size : int64) {
+    if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
+    unsafe {
+        let maxv = hmax(x, size)   // hand-vectorized max reduction (see hmax)
         var sum = 0.0
         for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
             let e = exp(x[i] - maxv)
@@ -816,6 +835,29 @@ def softcap(var x : float?; size : int64; cap : float) {
 }
 def softcap(var x : array<float> | #; size : int64; cap : float) {
     softcap(unsafe(addr(x[0])), size, cap)
+}
+
+//! Vectorized logit soft-capping: x = cap * tanh(x/cap), float4 with exp4 via the same identity as
+//! geglu4 (tanh(a) = 1 - 2/(1+exp(2a))). ~2 ulp, NOT bit-exact vs the scalar libm-tanh softcap. Flash
+//! attention soft-caps the whole Q×KV score tile in one sweep. Tail runs the scalar form.
+def softcap4(var x : float?; size : int64; cap : float) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let two = float4(2.0, 2.0, 2.0, 2.0)
+    let cap4 = float4(cap)
+    let invcap4 = float4(1.0 / cap)
+    unsafe {
+        var x4 = reinterpret<float4?>(x)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let arg = clamp(two * (x4[k] * invcap4), EXP4_LO, EXP4_HI)   // 2 * (x/cap)
+            let th = one - two / (one + exp4(arg))                       // tanh(x/cap)
+            x4[k] = cap4 * th
+        }
+        let inv = 1.0 / cap
+        for (i in range64(n4 * 4l, size)) {
+            x[i] = cap * tanh(x[i] * inv)
+        }
+    }
 }
 
 //! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1)

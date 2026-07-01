@@ -1155,32 +1155,33 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
                     kqp[i] = 0.0
                 }
                 gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
-                // scale + softcap + causal/sliding mask, then online-softmax fold per query row
+                // ggml-style decomposition (ops.cpp:8771): scale — then soft-cap — the whole score tile
+                // in one vectorized sweep each, replacing the scalar per-element multiply in the mask branch.
+                scale_inplace(kqp, scale, tile_rows * KV)
+                if (attn_softcap > 0.0) {   // Gemma2: soft-cap scores before softmax
+                    softcap4(kqp, tile_rows * KV, attn_softcap)
+                }
+                // online-softmax fold per query row. The causal + sliding mask is a CONTIGUOUS column
+                // span [lo, hi] (cached keys kstart_p..ap), so masking is two boundary fills (no
+                // per-element branch) and the row max is hand-vectorized (hmax).
                 for (qt in range64(tile_rows)) {
                     let ap = ap0 + qt
                     let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
                     let row = qt * KV
-                    var tmax = -1.0e30
-                    for (kt in range64(KV)) {
-                        let kabs = kt0 + kt
-                        if (kt < kvalid && kabs <= ap && kabs >= kstart_p) {
-                            var sc = kqp[row + kt] * scale
-                            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                                sc = attn_softcap * tanh(sc / attn_softcap)
-                            }
-                            kqp[row + kt] = sc
-                            tmax = max(tmax, sc)
-                        } else {
-                            kqp[row + kt] = -1.0e30   // masked → exp() to 0 below
-                        }
+                    let lo = max(0l, kstart_p - kt0)              // first valid tile-local column
+                    let hi = min(kvalid - 1l, ap - kt0)           // last valid tile-local column (causal)
+                    if (hi < lo) {                                // no valid keys here → contributes nothing
+                        for (kt in range64(KV)) { kqp[row + kt] = 0.0 }
+                        continue
                     }
+                    for (kt in range64(0l, lo))      { kqp[row + kt] = -1.0e30 }   // below the sliding window
+                    for (kt in range64(hi + 1l, KV)) { kqp[row + kt] = -1.0e30 }   // above causal / zero-padded
+                    let tmax = hmax(kqp + row, KV)
                     let mold = mrun[int(qt)]
                     let mnew = max(mold, tmax)
                     if (mnew > mold) {                 // new running max → rescale this row's accumulator
                         let ms = exp(mold - mnew)
-                        for (d in range64(head_size)) {
-                            vkqp[qt * head_size + d] *= ms
-                        }
+                        scale_inplace(vkqp + qt * head_size, ms, head_size)
                         srun[int(qt)] *= ms
                     }
                     mrun[int(qt)] = mnew
