@@ -852,11 +852,12 @@ namespace das {
         return s.found;
     }
 
-    static bool partialEscapeFree ( Function * fn, TextWriter * logs ) {
+    static bool partialEscapeFree ( Function * fn, const Cfg * cfgIn, TextWriter * logs ) {
         if ( !fn || !fn->body || !fn->body->rtti_isBlock() ) return false;
         if ( fn->generated || fn->generator || fn->lambda || fn->hasUnsafe ) return false;
         if ( cfgMayBeIncomplete(fn) ) return false;   // finally / try-recover -> CFG can't be trusted
-        Cfg cfg = buildCfg(fn);
+        if ( !cfgIn ) return false;
+        const Cfg & cfg = *cfgIn;
         auto fs = FunctionScanner::scanFunction(fn);              // tracked fresh-alloc pointer locals
         if ( fs.objects.empty() ) return false;
         auto facts = analyzeFlow(cfg, fs.tracked, fs.objects);
@@ -911,7 +912,7 @@ namespace das {
 
     // OPTIMIZATION: consume the analysis result, emitting scope-exit frees / stack relocation. Returns
     // whether the AST changed, so the caller re-infers the inserted scope_free calls.
-    bool scopeFreeOptimization(Program * program, TextWriter & logs) {
+    bool scopeFreeOptimization(Program * program, const ProgramCfg * pcfg, TextWriter & logs) {
         auto & options = program->options;
         auto & policies = program->policies;
         auto forceStack = options.getBoolOption("force_allocate_on_stack", policies.force_allocate_on_stack);
@@ -920,12 +921,12 @@ namespace das {
         ScopeFreeVisitor sfv(logEscape ? &logs : nullptr, forceStack);
         program->visit(sfv);
         bool anyWork = sfv.anyWork;
-        // flow-sensitive pass (opt-in via force_partial_escape_free): build a CFG and free objects on the
-        // paths where they don't escape (the ones the scope-exit pass left to GC because they escape on
-        // SOME other path). Disabling it skips all CFG building - only the simple EA above runs.
-        if ( options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free) ) {
+        // flow-sensitive pass (opt-in via force_partial_escape_free): free objects on the paths where they
+        // don't escape (the ones the scope-exit pass left to GC because they escape on SOME other path).
+        // reads the shared CFG built by the caller; without it (analysis disabled) only the simple EA runs.
+        if ( pcfg && options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free) ) {
             program->thisModule->functions.foreach([&](auto & fn){
-                if ( partialEscapeFree(fn, logEscape ? &logs : nullptr) ) anyWork = true;
+                if ( partialEscapeFree(fn, pcfg->forFunction(fn), logEscape ? &logs : nullptr) ) anyWork = true;
             });
         }
         return anyWork;

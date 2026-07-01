@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_gc_report.h"
 #include "daScript/ast/ast_escape_analysis.h"
+#include "daScript/ast/ast_cfg.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
@@ -944,7 +945,15 @@ namespace das {
             // re-run the whole macro/pod/relocate infer leg for nothing
             if ( !program->failed() ) {
                 escapeAnalysis(program.get(), logs);
-                if ( scopeFreeOptimization(program.get(), logs) ) {
+                // build the CFG once at this stable point and share it: the unsafe-index (bound-check
+                // elision) pass reads it and only sets flags (no AST change), then the flow-sensitive
+                // escape pass reads the same CFG before it inserts scope_free. one build, two consumers.
+                bool needCfg = program->options.getBoolOption("bound_check_elision", false)
+                            || program->options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free);
+                ProgramCfg pcfg;
+                if ( needCfg ) buildProgramCfg(program.get(), pcfg);
+                program->markNoBoundCheck(needCfg ? &pcfg : nullptr, logs);
+                if ( scopeFreeOptimization(program.get(), needCfg ? &pcfg : nullptr, logs) ) {
                     inferTypesDirty(program.get(), logs, true);
                     if ( program->failed() ) {
                         program->error("internal compiler error: escape free optimization infer to fail", "", "", LineInfo(), CompilationError::internal_pod_analysis_infer);

@@ -1722,6 +1722,7 @@ namespace das {
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
         cexpr->no_promotion = no_promotion;
+        cexpr->noBoundCheck = noBoundCheck;
         return cexpr;
     }
 

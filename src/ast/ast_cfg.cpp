@@ -67,10 +67,11 @@ namespace das {
                 return cur;
             }
 
-            CfgBlock * loop ( CfgBlock * cur, Expression * cond, Expression * body ) {
+            CfgBlock * loop ( CfgBlock * cur, Expression * cond, Expression * body, ExprFor * forSource = nullptr ) {
                 auto header = cfg.newBlock();
                 auto bodyB  = cfg.newBlock();
                 auto exitB  = cfg.newBlock();
+                bodyB->loopSource = forSource;            // for-loop induction anchor (null for while)
                 cfg.addEdge(cur, header);
                 if ( cond ) header->stmts.push_back(cond);
                 cfg.addEdge(header, bodyB);               // enter the body
@@ -111,7 +112,7 @@ namespace das {
                 } else if ( e->rtti_isFor() ) {
                     auto fr = (ExprFor *) e;
                     for ( auto & src : fr->sources ) cur->stmts.push_back(src);
-                    return loop(cur, nullptr, fr->body);  // the iteration check is implicit; model like while
+                    return loop(cur, nullptr, fr->body, fr);  // the iteration check is implicit; model like while
                 } else if ( e->rtti_isWith() ) {
                     auto wi = (ExprWith *) e;
                     cur->stmts.push_back(wi->with);       // the subject, then the body runs unconditionally
@@ -148,6 +149,15 @@ namespace das {
             cfg.addEdge(cfg.entry, cfg.exit);
         }
         return cfg;
+    }
+
+    void buildProgramCfg ( Program * program, ProgramCfg & out ) {
+        if ( !program || !program->thisModule ) return;
+        program->thisModule->functions.foreach([&](auto & fn){
+            if ( fn->body && fn->body->rtti_isBlock() ) {
+                out.perFunction[fn] = buildCfg(fn);
+            }
+        });
     }
 
 }

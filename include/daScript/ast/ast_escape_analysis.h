@@ -39,6 +39,6 @@ namespace das {
     // RUN - consume the analysis result and mutate the AST: emit scope-exit frees + stack relocation, and
     // (when force_partial_escape_free is set) the flow-sensitive partial frees. Returns true if anything
     // changed (the caller must re-infer).
-    bool scopeFreeOptimization ( Program * program, TextWriter & logs );
+    bool scopeFreeOptimization ( Program * program, const struct ProgramCfg * pcfg, TextWriter & logs );
 
 }

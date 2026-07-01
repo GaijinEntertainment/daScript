@@ -881,6 +881,37 @@ namespace das {
 #undef EVAL_NODE
     };
 
+    // AT (INDEX) - unchecked, no bounds check (index proven in range)
+    struct DAS_API SimNode_AtU : SimNode_At {
+        DAS_PTR_NODE;
+        SimNode_AtU ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
+            : SimNode_At(at,rv,idx,strd,o,rng,"") {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            auto pValue = value->evalPtr(context);
+            uint32_t idx = uint32_t(index->evalInt(context));
+            return pValue + idx*stride + offset;
+        }
+    };
+
+    template <typename TT>
+    struct SimNode_AtR2VU : SimNode_AtU {
+        SimNode_AtR2VU ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
+            : SimNode_AtU(at,rv,idx,strd,o,rng) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *) compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     // AT (INDEX)
     template <typename TT>
     struct SimNode_PtrAt : SimNode {
@@ -977,6 +1008,41 @@ SIM_NODE_AT_VECTOR(UInt,  uint32_t)
 SIM_NODE_AT_VECTOR(Int64, int64_t)
 SIM_NODE_AT_VECTOR(UInt64,uint64_t)
 SIM_NODE_AT_VECTOR(Float, float)
+
+    // AT (INDEX) - unchecked vector, no bounds check (index proven in range)
+    template <typename TT>
+    struct SimNode_AtVectorU;
+
+#define SIM_NODE_AT_VECTOR_U(TYPE,CTYPE)                                                        \
+    template <>                                                                                 \
+    struct SimNode_AtVectorU<CTYPE> : SimNode {                                                 \
+        SimNode_AtVectorU ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t rng )    \
+            : SimNode(at), value(rv), index(idx), range(rng) {}                                 \
+        virtual SimNode * visit ( SimVisitor & vis ) override {                                 \
+            V_BEGIN();                                                                          \
+            V_OP(AtVectorU "_" #TYPE);                                                          \
+            V_SUB(value);                                                                       \
+            V_SUB(index);                                                                       \
+            V_ARG(range);                                                                       \
+            V_END();                                                                            \
+        }                                                                                       \
+        __forceinline CTYPE compute ( Context & context ) {                                     \
+            DAS_PROFILE_NODE \
+            auto vec = value->eval(context);                                                    \
+            uint32_t idx = uint32_t(index->evalInt(context));                                   \
+            CTYPE * pv = (CTYPE *) &vec;                                                         \
+            return pv[idx];                                                                      \
+        }                                                                                       \
+        DAS_NODE(TYPE, CTYPE)                                                                   \
+        SimNode * value, * index;                                                               \
+        uint32_t  range;                                                                        \
+    };
+
+SIM_NODE_AT_VECTOR_U(Int,   int32_t)
+SIM_NODE_AT_VECTOR_U(UInt,  uint32_t)
+SIM_NODE_AT_VECTOR_U(Int64, int64_t)
+SIM_NODE_AT_VECTOR_U(UInt64,uint64_t)
+SIM_NODE_AT_VECTOR_U(Float, float)
 
     template <int nElem>
     struct EvalBlock { static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {

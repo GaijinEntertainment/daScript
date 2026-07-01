@@ -4,6 +4,8 @@
 
 namespace das {
 
+    struct ExprFor;
+
     // ===== Control-flow graph over a function body =====
     // A statement-level CFG: each block holds a straight-line run of expressions; control transfers
     // (if / while / for / return / break / continue) become edges. Built for one Function.
@@ -29,6 +31,11 @@ namespace das {
         ExprBlock *             astHead = nullptr;
         ExprBlock *             contOwner = nullptr;   // owner AST block for a continuation
         Expression *            contBefore = nullptr;  // first continuation statement (insert before it)
+        // ===== loop induction anchor =====
+        // set on a for-loop BODY block: the ExprFor whose iteration variables are live in this block.
+        // lets a range analysis gen the induction facts (i in [0,bound)) at the loop body's entry -
+        // information the flattened cond-less loop header would otherwise lose.
+        ExprFor *               loopSource = nullptr;
     };
 
     struct Cfg {
@@ -52,5 +59,20 @@ namespace das {
     // Build the CFG for a function's body. Returns an empty CFG (entry==exit, no stmts) for a function
     // with no body (builtin / stub / abstract).
     Cfg buildCfg ( Function * fn );
+
+    // ===== Shared per-function CFG cache =====
+    // Built once, as a distinct pass, when any CFG consumer is enabled (escape analysis /
+    // bound-check elimination). Each consumer then reads its function's CFG through a const
+    // pointer; nobody rebuilds. A function with no CFG entry gets a null from forFunction.
+    struct ProgramCfg {
+        das_hash_map<Function *, Cfg>   perFunction;
+        const Cfg * forFunction ( Function * fn ) const {
+            auto it = perFunction.find(fn);
+            return it!=perFunction.end() ? &it->second : nullptr;
+        }
+    };
+
+    // Build CFGs for every block-bodied function in the program's module into `out`.
+    void buildProgramCfg ( Program * program, ProgramCfg & out );
 
 }

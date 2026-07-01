@@ -35,6 +35,12 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
+    // the bounds check, toggled per node family: the checked op-name (At/AtR2V) instantiates with it
+    // ON, the unchecked op-name (AtU/AtR2VU, emitted only where the index is proven in range by the
+    // bound-check elision pass) with it OFF - so both families share one node-body macro.
+#define DAS_AT_CHECK_ON(rr,rng)  if ( rr<0 || uint32_t(rr) >= rng ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, rng, errorMessage)
+#define DAS_AT_CHECK_OFF(rr,rng)
+
 /* AtR2V SCALAR */
 
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
@@ -43,7 +49,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = r.subexpr->evalInt(context); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -55,7 +61,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -75,7 +81,12 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
+#define DAS_AT_CHECK DAS_AT_CHECK_ON
     IMPLEMENT_SETOP_SCALAR(AtR2V);
+#undef DAS_AT_CHECK
+#define DAS_AT_CHECK DAS_AT_CHECK_OFF
+    IMPLEMENT_SETOP_SCALAR(AtR2VU);
+#undef DAS_AT_CHECK
 
 /* AtR2V VECTOR */
 
@@ -86,7 +97,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = r.subexpr->evalInt(context); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl + rr*stride + offset, CTYPE); \
             return __r; \
@@ -100,7 +111,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             vec4f __r; \
             DAS_LDU_WORKHORSE(__r, pl + rr*stride + offset, CTYPE); \
             return __r; \
@@ -110,7 +121,12 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
+#define DAS_AT_CHECK DAS_AT_CHECK_ON
     IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V);
+#undef DAS_AT_CHECK
+#define DAS_AT_CHECK DAS_AT_CHECK_OFF
+    IMPLEMENT_SETOP_NUMERIC_VEC(AtR2VU);
+#undef DAS_AT_CHECK
 
 /* At */
 
@@ -121,7 +137,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = r.subexpr->evalInt(context); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
@@ -134,7 +150,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             int32_t rr = *((int32_t *)r.compute##COMPUTER(context)); \
-            if ( rr<0 || uint32_t(rr) >= range ) context.throw_error_at(debugInfo,"index out of range, %d of %u%s", rr, range, errorMessage); \
+            DAS_AT_CHECK(rr, range); \
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
@@ -153,14 +169,24 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
+#define DAS_AT_CHECK DAS_AT_CHECK_ON
     IMPLEMENT_ANY_SETOP(__forceinline, At, Ptr, StringPtr, StringPtr);
     IMPLEMENT_ANY_SETOP(__forceinline, At, Ptr, VoidPtr, StringPtr);
+#undef DAS_AT_CHECK
+#define DAS_AT_CHECK DAS_AT_CHECK_OFF
+    IMPLEMENT_ANY_SETOP(__forceinline, AtU, Ptr, StringPtr, StringPtr);
+    IMPLEMENT_ANY_SETOP(__forceinline, AtU, Ptr, VoidPtr, StringPtr);
+#undef DAS_AT_CHECK
 
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);
         REGISTER_SETOP_NUMERIC_VEC(AtR2V);
         (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_StringPtr());
         (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_VoidPtr());
+        REGISTER_SETOP_SCALAR(AtR2VU);
+        REGISTER_SETOP_NUMERIC_VEC(AtR2VU);
+        (*getFusionEngine())["AtU"].emplace_back(new FusionPoint_Set_AtU_StringPtr());
+        (*getFusionEngine())["AtU"].emplace_back(new FusionPoint_Set_AtU_VoidPtr());
     }
 }
 
