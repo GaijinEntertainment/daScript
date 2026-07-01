@@ -188,7 +188,14 @@ def handle(child: DaslangChild, msg: dict) -> str | None:
 def _default_launcher() -> list[str]:
     if IS_WINDOWS:
         return ["cmd", "/c", os.path.join(SCRIPT_DIR, "daslang-mcp-msvc.cmd")]
-    return [os.path.join(REPO_ROOT, "bin", "daslang"), os.path.join(SCRIPT_DIR, "main.das")]
+    # POSIX: run the built binary directly. Mirror setup.das locate_binary's
+    # candidate order — single/multi-config generators land it in bin/ or build/.
+    main_das = os.path.join(SCRIPT_DIR, "main.das")
+    for rel in ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang"):
+        cand = os.path.join(REPO_ROOT, rel)
+        if os.path.exists(cand):
+            return [cand, main_das]
+    return [os.path.join(REPO_ROOT, "bin", "daslang"), main_das]  # best-guess fallback
 
 
 def write_mcp_json(repo_root: str) -> str:
@@ -202,6 +209,9 @@ def write_mcp_json(repo_root: str) -> str:
                 data = json.load(f)
         except Exception as e:
             print(f"  WARNING: {path} did not parse ({e}); leaving it untouched", flush=True)
+            return path
+        if not isinstance(data, dict):
+            print(f"  WARNING: {path} is not a JSON object; leaving it untouched", flush=True)
             return path
     servers = data.setdefault("mcpServers", {})
     prev = servers.get("daslang", {})
