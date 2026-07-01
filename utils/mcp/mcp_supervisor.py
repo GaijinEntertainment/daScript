@@ -194,8 +194,11 @@ class DaslangChild:
 
 def handle(child: DaslangChild, msg: dict) -> str | None:
     """Return a response line for a request, or None for a notification.
-    initialize/ping are answered locally; tools/* are forwarded (spawning the
-    child on first use)."""
+    initialize/ping/notifications are answered locally; only tools/* is
+    forwarded (spawning the child on first use). Any other id-bearing method
+    gets a local method-not-found — the daslang server answers those the same
+    way, so we avoid spawning the child (and re-locking DLLs mid-build) for
+    stray resources/*/prompts/* probes."""
     method = msg.get("method")
     has_id = "id" in msg
     mid = msg.get("id")
@@ -212,7 +215,10 @@ def handle(child: DaslangChild, msg: dict) -> str | None:
     if not has_id:
         child.notify(msg)
         return None
-    return child.request(msg)   # tools/list, tools/call, anything else
+    if method is not None and method.startswith("tools/"):
+        return child.request(msg)   # the only methods that need the compiler
+    return json.dumps({"jsonrpc": "2.0", "id": mid,
+                       "error": {"code": -32601, "message": f"method not found: {method}"}})
 
 
 def _default_launcher() -> list[str]:
