@@ -74,16 +74,22 @@ def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
 class private LoopHintHashVisitor : AstVisitor {
     h : uint64
     def fold_args(args : AnnotationArgumentList) {
-        // Fold every value field, not just int/bool: the loop-hint vocabulary is int/bool today
-        // (vectorize/unroll/*_count), but a string- or float-valued annotation must still re-key the
-        // DLL, and this is the cache key — an incomplete fold would silently reuse a stale DLL.
+        // Fold the ONE value field the arg's type says is live. bValue/iValue/fValue share a C++
+        // union — reading a non-live member is UB (a bool load of vectorize_width=8 aborts ubsan
+        // and lets clang -O2 miscompile: chunk workers died with SIGSEGV on linux Release CI).
+        // Type coverage stays total: any basicType re-keys the DLL via its own live field.
         for (a in args) {
             h = (h ^ hash(a.name)) * JIT_FNV_PRIME
             h = (h ^ uint64(int(a.basicType))) * JIT_FNV_PRIME
-            h = (h ^ uint64(a.iValue)) * JIT_FNV_PRIME
-            h = (h ^ (a.bValue ? 1ul : 0ul)) * JIT_FNV_PRIME
-            h = (h ^ hash(a.fValue)) * JIT_FNV_PRIME
-            h = (h ^ hash(a.sValue)) * JIT_FNV_PRIME
+            if (a.basicType == Type.tBool) {
+                h = (h ^ (a.bValue ? 1ul : 0ul)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tInt) {
+                h = (h ^ uint64(a.iValue)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tFloat) {
+                h = (h ^ hash(a.fValue)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tString) {
+                h = (h ^ hash(a.sValue)) * JIT_FNV_PRIME
+            }
         }
     }
     def override preVisitExprFor(expr : ExprFor?) : void {
