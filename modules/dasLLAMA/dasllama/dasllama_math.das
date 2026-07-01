@@ -5,6 +5,7 @@ module dasllama_math shared public
 require math
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
+require dasllama/dasllama_tune  // [tuned]: reconstitute dot from dot_template with per-box loop hints
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -15,14 +16,20 @@ require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel 
 
 //! Dot product of two n-length float buffers, auto-vectorized by the LLVM JIT
 //! (width-8, no bounds checks, a/b asserted non-aliasing). Beats hand-rolled float4 ~1.8x.
+//! `dot_template` is the single source of truth (hot loop marked `[tune=1]`); the emitted
+//! `dot` below reconstitutes it via `[tuned]` with the per-box permutation — default `vec8_u2`
+//! is the original `[vectorize, vectorize_width=8, unroll_count=2]`, so this is bit-identical.
 [hint(unsafe_range_check, noalias = a, noalias = b)]
-def dot(a, b : float const?; n : int64) : float {
+def template dot_template(a, b : float const?; n : int64) : float {
     var acc = 0.0
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+    for [tune = 1] (j in range64(n)) {
         acc = mad(unsafe(a[j]), unsafe(b[j]), acc)   // fused multiply-add (vectorizes to fmla)
     }
     return acc
 }
+
+[hint(unsafe_range_check, noalias = a, noalias = b), tuned(perm = "vec8_u2")]
+def dot(a, b : float const?; n : int64) : float {}
 
 //! AXPY: d[j] += scale * s[j] over n elements, auto-vectorized. Used single-threaded AND as the
 //! V-accumulate in threaded prefill attention — `d` (output) and `s` (value-cache) never overlap, so
