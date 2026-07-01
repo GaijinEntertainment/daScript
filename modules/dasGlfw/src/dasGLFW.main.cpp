@@ -90,6 +90,39 @@ namespace das {
 }
 #endif
 
+// Canvas CSS (on-page displayed) size + devicePixelRatio. Web only; desktop returns 0 / 1.0.
+// Lets the imgui harness size the GLFW window to the real canvas box so the UI fills it at
+// native scale + DPR, instead of a fixed backing store the page magnifies via CSS.
+// Scalar returns (no out-pointers) so there's no MEMORY64 BigInt-pointer marshalling in EM_JS.
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+namespace das {
+    // The CSS box the canvas can occupy = the document viewport (the iframe inner size on the
+    // examples page, the screen when that iframe is fullscreen). NOT canvas.clientWidth: under
+    // GLFW_SCALE_TO_MONITOR emscripten forces the canvas's own CSS size to the GLFW logical size,
+    // so reading it back would lock the harness to the initial size and never track the box.
+    EM_JS(int, DAS_glfwCanvasCssWidth, (), {
+        var w = ((typeof document !== 'undefined') && document.documentElement && document.documentElement.clientWidth)
+             || ((typeof window !== 'undefined') && window.innerWidth) || 0;
+        return Math.round(w);
+    });
+    EM_JS(int, DAS_glfwCanvasCssHeight, (), {
+        var h = ((typeof document !== 'undefined') && document.documentElement && document.documentElement.clientHeight)
+             || ((typeof window !== 'undefined') && window.innerHeight) || 0;
+        return Math.round(h);
+    });
+    EM_JS(double, DAS_glfwDevicePixelRatio, (), {
+        return (typeof devicePixelRatio == 'number' && devicePixelRatio) || 1.0;
+    });
+}
+#else
+namespace das {
+    int DAS_glfwCanvasCssWidth() { return 0; }
+    int DAS_glfwCanvasCssHeight() { return 0; }
+    double DAS_glfwDevicePixelRatio() { return 1.0; }
+}
+#endif
+
 // Native (Cocoa) fullscreen via NSWindow toggleFullScreen:, reached through the objc runtime so this
 // stays a plain .cpp (no ObjC++). A borderless window can't get a real macOS fullscreen Space — this is
 // the proper green-button / Ctrl-Cmd-F fullscreen. Toggle returns whether it handled it; the query
@@ -487,6 +520,9 @@ namespace das {
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwIsNativeFullscreen)>(*this, lib, "glfwIsNativeFullscreen",SideEffects::worstDefault, "DAS_glfwIsNativeFullscreen")
             ->args({"window"});
+        addExtern<DAS_BIND_FUN(DAS_glfwCanvasCssWidth)>(*this, lib, "glfw_canvas_css_width",SideEffects::accessExternal, "DAS_glfwCanvasCssWidth");
+        addExtern<DAS_BIND_FUN(DAS_glfwCanvasCssHeight)>(*this, lib, "glfw_canvas_css_height",SideEffects::accessExternal, "DAS_glfwCanvasCssHeight");
+        addExtern<DAS_BIND_FUN(DAS_glfwDevicePixelRatio)>(*this, lib, "glfw_device_pixel_ratio",SideEffects::accessExternal, "DAS_glfwDevicePixelRatio");
 #ifndef __EMSCRIPTEN__
         addExtern<DAS_BIND_FUN(DAS_glfwInitVulkanLoader)>(*this, lib, "glfwInitVulkanLoader",SideEffects::worstDefault, "DAS_glfwInitVulkanLoader")
             ->args({"loader"});
