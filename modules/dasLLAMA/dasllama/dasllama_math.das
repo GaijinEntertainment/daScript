@@ -28,7 +28,7 @@ def template dot_template(a, b : float const?; n : int64) : float {
     return acc
 }
 
-[hint(unsafe_range_check, noalias = a, noalias = b), tuned(perm = "vec8_u2")]
+[hint(unsafe_range_check, noalias = a, noalias = b), tuned]
 def dot(a, b : float const?; n : int64) : float {}
 
 //! AXPY: d[j] += scale * s[j] over n elements, auto-vectorized. Used single-threaded AND as the

@@ -7,6 +7,8 @@ require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/fio         // [tuned] reads the per-box profile at compile time
+require daslib/json_boost  // read_json / read_json_field (re-exports daslib/json)
 
 // ===== Tune spec =====
 
@@ -159,9 +161,31 @@ def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentLis
     return "{func.name}_template"     // convention: dot -> dot_template
 }
 
-def private tuned_perm_suffix(args : AnnotationArgumentList) : string {
-    let v = find_arg(args, "perm")
-    if (v is tString) return v as tString
+let private BOX_PROFILE_PATH = "box_profile.json"
+
+// Compile-time read of the per-box profile written by the tuner harness:
+// function name -> winning perm suffix. Returns "" if the file is absent or lacks
+// the key (macros can do fio; fread returns "" on a missing file).
+def private config_perm_for(fname : string) : string {
+    let text = fread(BOX_PROFILE_PATH)
+    if (empty(text)) return ""
+    var err = ""
+    let jv = read_json(text, err)
+    if (jv == null) return ""
+    return read_json_field(jv, fname, "")
+}
+
+// Perm precedence: explicit `perm=` pin (the profiler's per-variant stubs) >
+// per-box `box_profile.json` (keyed by the emitted function name) > DEFAULT_PERM
+// (the bit-identical fallback when no profile exists).
+def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
+    let av = find_arg(args, "perm")
+    if (av is tString) return av as tString
+    let cfg = config_perm_for("{func.name}")
+    if (!empty(cfg)) {
+        print("dasllama_tune: {func.name} <- {cfg} (box_profile.json)\n")
+        return cfg
+    }
     return DEFAULT_PERM
 }
 
@@ -196,7 +220,7 @@ class private TunedMacro : AstFunctionAnnotation {
             return false
         }
         func.body = clone_expression(tmpl.body)
-        let suffix = tuned_perm_suffix(args)
+        let suffix = resolve_perm(func, args)
         let grid <- build_grid()
         for (perm in grid) {
             if (perm.suffix == suffix) {
