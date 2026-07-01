@@ -1802,13 +1802,21 @@ namespace das
                 switch ( expr->index->type->baseType ) {
                 case Type::tInt64:  return context.code->makeValueNode<SimNode_ArrayAtR2V_I64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
                 case Type::tUInt64: return context.code->makeValueNode<SimNode_ArrayAtR2V_U64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
-                default:            return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                default:
+                    if ( expr->noBoundCheck ) {
+                        return context.code->makeValueNode<SimNode_ArrayAtR2VU>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
+                    }
+                    return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
                 }
             } else {
                 switch ( expr->index->type->baseType ) {
                 case Type::tInt64:  return context.code->makeNode<SimNode_ArrayAt_I64>(at, prv, pidx, stride, extraOffset);
                 case Type::tUInt64: return context.code->makeNode<SimNode_ArrayAt_U64>(at, prv, pidx, stride, extraOffset);
-                default:            return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
+                default:
+                    if ( expr->noBoundCheck ) {
+                        return context.code->makeNode<SimNode_ArrayAtU>(at, prv, pidx, stride, extraOffset);
+                    }
+                    return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
                 }
             }
         } else if ( expr->subexpr->type->isPointer() ) {
@@ -1882,8 +1890,14 @@ namespace das
             auto pidx = simulateExpression(expr->index);
             auto errorMessage = context.code->allocateName(", "+expr->describe());
             if ( r2vType->baseType!=Type::none ) {
+                if ( expr->noBoundCheck ) {
+                    return context.code->makeValueNode<SimNode_AtR2VU>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range);
+                }
                 return context.code->makeValueNode<SimNode_AtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
             } else {
+                if ( expr->noBoundCheck ) {
+                    return context.code->makeNode<SimNode_AtU>(at, prv, pidx, stride, extraOffset, range);
+                }
                 return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range, errorMessage);
             }
         }
@@ -1898,11 +1912,32 @@ namespace das
             uint32_t stride = expr->type->getSizeOf();
             auto errorMessage = context.code->allocateName(", "+expr->describe());
             if ( expr->subexpr->type->ref ) {
-                auto res = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range, errorMessage);
+                SimNode * res;
+                if ( expr->noBoundCheck ) {
+                    res = context.code->makeNode<SimNode_AtU>(at, prv, pidx, stride, 0, range);
+                } else {
+                    res = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range, errorMessage);
+                }
                 if ( expr->r2v ) {
                     setE(expr, GetR2V(context, at, expr->type, res));
                 } else {
                     setE(expr, res);
+                }
+            } else if ( expr->noBoundCheck ) {
+                switch ( expr->type->baseType ) {
+                    case tInt:      setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVectorU<int32_t>>(at, prv, pidx, range)); break;
+                    case tInt64:    setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVectorU<int64_t>>(at, prv, pidx, range)); break;
+                    case tUInt:
+                    case tBitfield:
+                                    setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVectorU<uint32_t>>(at, prv, pidx, range)); break;
+                    case tUInt64:
+                    case tBitfield64:
+                                    setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVectorU<uint64_t>>(at, prv, pidx, range)); break;
+                    case tFloat:    setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVectorU<float>>(at, prv, pidx, range)); break;
+                    default:
+                        DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
+                        context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", "", "", at, CompilationError::internal_expression);
+                        setE(expr, nullptr);
                 }
             } else {
                 switch ( expr->type->baseType ) {

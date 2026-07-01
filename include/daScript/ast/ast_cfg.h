@@ -53,4 +53,19 @@ namespace das {
     // with no body (builtin / stub / abstract).
     Cfg buildCfg ( Function * fn );
 
+    // ===== Shared per-function CFG cache =====
+    // Built once, as a distinct pass, when any CFG consumer is enabled (escape analysis /
+    // bound-check elimination). Each consumer then reads its function's CFG through a const
+    // pointer; nobody rebuilds. A function with no CFG entry gets a null from forFunction.
+    struct ProgramCfg {
+        das_hash_map<Function *, Cfg>   perFunction;
+        const Cfg * forFunction ( Function * fn ) const {
+            auto it = perFunction.find(fn);
+            return it!=perFunction.end() ? &it->second : nullptr;
+        }
+    };
+
+    // Build CFGs for every block-bodied function in the program's module into `out`.
+    void buildProgramCfg ( Program * program, ProgramCfg & out );
+
 }

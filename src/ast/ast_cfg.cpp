@@ -150,4 +150,13 @@ namespace das {
         return cfg;
     }
 
+    void buildProgramCfg ( Program * program, ProgramCfg & out ) {
+        if ( !program || !program->thisModule ) return;
+        program->thisModule->functions.foreach([&](auto & fn){
+            if ( fn->body && fn->body->rtti_isBlock() ) {
+                out.perFunction[fn] = buildCfg(fn);
+            }
+        });
+    }
+
 }

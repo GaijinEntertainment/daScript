@@ -368,6 +368,17 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_AtU::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(AtU);
+        V_SUB(value);
+        V_SUB(index);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_ARG(range);
+        V_END();
+    }
+
     SimNode * SimNode_StringBuilder::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(StringBuilder);
@@ -1094,6 +1105,16 @@ namespace das {
     SimNode * SimNode_SafeArrayAt_U64::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(SafeArrayAt_U64);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_ArrayAtU::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ArrayAtU);
         V_SUB(l);
         V_SUB(r);
         V_ARG(stride);

@@ -852,11 +852,12 @@ namespace das {
         return s.found;
     }
 
-    static bool partialEscapeFree ( Function * fn, TextWriter * logs ) {
+    static bool partialEscapeFree ( Function * fn, const Cfg * cfgIn, TextWriter * logs ) {
         if ( !fn || !fn->body || !fn->body->rtti_isBlock() ) return false;
         if ( fn->generated || fn->generator || fn->lambda || fn->hasUnsafe ) return false;
         if ( cfgMayBeIncomplete(fn) ) return false;   // finally / try-recover -> CFG can't be trusted
-        Cfg cfg = buildCfg(fn);
+        if ( !cfgIn ) return false;
+        const Cfg & cfg = *cfgIn;
         auto fs = FunctionScanner::scanFunction(fn);              // tracked fresh-alloc pointer locals
         if ( fs.objects.empty() ) return false;
         auto facts = analyzeFlow(cfg, fs.tracked, fs.objects);
@@ -924,8 +925,10 @@ namespace das {
         // paths where they don't escape (the ones the scope-exit pass left to GC because they escape on
         // SOME other path). Disabling it skips all CFG building - only the simple EA above runs.
         if ( options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free) ) {
+            ProgramCfg pcfg;                    // shared CFG pass: build once, share across all functions
+            buildProgramCfg(program, pcfg);
             program->thisModule->functions.foreach([&](auto & fn){
-                if ( partialEscapeFree(fn, logEscape ? &logs : nullptr) ) anyWork = true;
+                if ( partialEscapeFree(fn, pcfg.forFunction(fn), logEscape ? &logs : nullptr) ) anyWork = true;
             });
         }
         return anyWork;
