@@ -284,6 +284,13 @@ MACRO(DAS_APPLY_STRICT_WARNINGS _target)
     IF(MSVC AND NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         target_compile_options(${_target} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/wd4100;/wd4244;/wd4267;/wd4273;/wd4310;/wd4456;/wd4457;/wd4458;/wd4459>)
+        # MSVC <= 19.2x (VS2019) does not honour the if ((x = expr))
+        # idiom that silences C4706 on newer MSVC, so /WX fails there;
+        # scope the suppression to that toolchain.
+        IF(MSVC_VERSION LESS 1930)
+            target_compile_options(${_target} PRIVATE
+                $<$<COMPILE_LANGUAGE:CXX>:/wd4706>)
+        ENDIF()
     ELSEIF(NOT MSVC)
         target_compile_options(${_target} PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor;-Werror>)
