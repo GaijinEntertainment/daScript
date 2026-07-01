@@ -76,6 +76,24 @@ struct Config {
     pre_post_norm : bool = false       // Gemma2: extra post-attention / post-FFN norms
 }
 
+// Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
+// single-token path (forward); prefill is the batched path (forward_prefill). A new block (MoE,
+// QK-norm attention, …) registers a different function here without editing the forward loops.
+// Declared before Model (which holds an ArchBlocks by value) so the AOT C++ emitter sees the
+// complete type first; the fn-ptr signatures forward-reference Model/Session, which is fine.
+typedef AttnDecodeFn  = function<(t : Model; var s : Session; l : int64; pos : int64) : void>
+typedef FfnDecodeFn   = function<(t : Model; var s : Session; l : int64) : void>
+typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) : void>
+typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
+
+//! The copyable hot-path block pointers, resolved onto the Model at load and called per layer.
+struct ArchBlocks {
+    attn_decode : AttnDecodeFn
+    ffn_decode : FfnDecodeFn
+    attn_prefill : AttnPrefillFn
+    ffn_prefill : FfnPrefillFn
+}
+
 //! The whole model. `fblob` holds the fp32 embedding + norm weights at the *_off offsets below;
 //! the big 2D weights live in exactly one of wblob (fp32) / qblob+qscales (Q8) / q4blob+q4scales
 //! (Q4) per `quant`, at the w*_off offsets (parallel layout: the same weight-element offset indexes
@@ -83,6 +101,7 @@ struct Config {
 //! fp32 embedding from fblob, so wcls_off is unused.
 struct Model {
     config : Config = Config()
+    arch : string = ""              // GGUF general.architecture, resolved at load — drives the chat template
     tok : Tokenizer = Tokenizer()   // tokenizer loaded alongside the weights (unset unless loaded via load_model)
     blocks : ArchBlocks = ArchBlocks()   // per-arch attention/ffn kernels, resolved from the registry at load
     // fp32 aux: embedding + norms
@@ -148,22 +167,6 @@ struct ChatTemplate {
     user : ChatTurn = ChatTurn()
     assistant_open : ChatTurn = ChatTurn()
     stop : array<string>
-}
-
-// Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
-// single-token path (forward); prefill is the batched path (forward_prefill). A new block (MoE,
-// QK-norm attention, …) registers a different function here without editing the forward loops.
-typedef AttnDecodeFn  = function<(t : Model; var s : Session; l : int64; pos : int64) : void>
-typedef FfnDecodeFn   = function<(t : Model; var s : Session; l : int64) : void>
-typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) : void>
-typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
-
-//! The copyable hot-path block pointers, resolved onto the Model at load and called per layer.
-struct ArchBlocks {
-    attn_decode : AttnDecodeFn
-    ffn_decode : FfnDecodeFn
-    attn_prefill : AttnPrefillFn
-    ffn_prefill : FfnPrefillFn
 }
 
 // Sets the Config flags for one architecture. Runs before dim/vocab are known, so the loader
@@ -413,6 +416,7 @@ def private resolve_arch(var t : Model; arch : string) {
         let registered = join(arch_names(), ", ")
         panic("dasLLAMA: unsupported architecture '{arch}' (registered: {registered})")
     }
+    t.arch = arch
     g_arch_registry[arch].configure(t.config)
     t.blocks = g_arch_registry[arch].blocks
 }
@@ -637,6 +641,12 @@ struct Session {
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for top-k selection
+    // last-generation timing, filled by the streaming generate() and read by stats()
+    stat_n_prefill : int64    // prompt tokens prefilled
+    stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)
+    stat_n_gen : int64        // tokens generated
+    stat_gen_us : int64       // wall time of the generation loop (microseconds)
+    stat_ttft_us : int64      // time-to-first-token: prefill + first forward (microseconds)
     x : array<float>          // residual stream (dim)
     xb : array<float>         // scratch (dim): rmsnorm out, attention out
     xb2 : array<float>        // scratch (dim): attention output projection
@@ -742,6 +752,16 @@ def decode(m : Model; ids : array<int64>) : string {
 //! Decode a single token to text (streaming) using the model's tokenizer.
 def piece(m : Model; id : int64) : string {
     return piece(m.tok, id)
+}
+
+//! Resolve a special-token id by its surface form (chat templates reference these by spelling).
+def special_id(m : Model; name : string) : int64 {
+    return special_id(m.tok, name)
+}
+
+//! The model's BOS token id (per the tokenizer metadata).
+def bos_id(m : Model) : int64 {
+    return bos_id(m.tok)
 }
 
 // fp32 matmul with the weight as a zero-copy view into the big-weight blob at `woff` (len n*d).
@@ -1873,12 +1893,21 @@ def sample(var s : Session; params : SamplingParams) : int64 {
 def generate(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams;
              max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
     s.recent |> clear()
+    let t_pre = ref_time_ticks()
     eval(t, s, prompt)
+    s.stat_prefill_us = int64(get_time_usec(t_pre))
+    s.stat_n_prefill = int64(length(prompt))
     var one : array<int64>
     one |> resize(1)
     var nout = 0l
+    var got_first = false
+    let t_gen = ref_time_ticks()
     for (_step in range64(max_tokens)) {
         let tok = sample(s, params)
+        if (!got_first) {   // time-to-first-token spans the prefill + the first forward
+            s.stat_ttft_us = int64(get_time_usec(t_pre))
+            got_first = true
+        }
         if (!invoke(blk, tok, piece(t, tok))) {
             break
         }
@@ -1887,7 +1916,33 @@ def generate(t : Model; var s : Session; prompt : array<int64>; params : Samplin
         one[0] = tok
         eval(t, s, one)
     }
+    s.stat_gen_us = int64(get_time_usec(t_gen))
+    s.stat_n_gen = nout
     return nout
+}
+
+// ===== Generation stats =====
+
+//! A summary of the most recent generate()/respond() call's timing. Times are seconds; rates tok/s.
+struct Stats {
+    n_prompt : int64 = 0l        // prompt tokens prefilled
+    n_gen : int64 = 0l           // tokens generated
+    ttft_s : double = 0.0lf      // time to first token (prefill + first forward)
+    prefill_tps : double = 0.0lf // prompt tokens / prefill seconds
+    gen_tps : double = 0.0lf     // generated tokens / generation seconds
+}
+
+//! Summarize the last generate()/respond() call from the session's timing counters.
+def stats(s : Session) : Stats {
+    var r = Stats(n_prompt = s.stat_n_prefill, n_gen = s.stat_n_gen,
+                  ttft_s = double(s.stat_ttft_us) / 1.0e6lf)
+    if (s.stat_prefill_us > 0l) {
+        r.prefill_tps = double(s.stat_n_prefill) * 1.0e6lf / double(s.stat_prefill_us)
+    }
+    if (s.stat_gen_us > 0l) {
+        r.gen_tps = double(s.stat_n_gen) * 1.0e6lf / double(s.stat_gen_us)
+    }
+    return r
 }
 
 // ===== Architecture registration =====
@@ -1901,13 +1956,16 @@ def generate(t : Model; var s : Session; prompt : array<int64>; params : Samplin
 // GGUF tokenizer.chat_template, or detecting special tokens) is a phase-5 concern. "llama" here
 // carries the Llama-3 instruct format (the flagship).
 
-def private ctext(s : string) : ChatPart {
+//! Chat-template part builders (for arch registration + the chat engine). `chat_text` is literal
+//! text; `chat_special` is a special-token spelling the renderer resolves to an id; `chat_content`
+//! is the slot the message text fills.
+def chat_text(s : string) : ChatPart {
     return ChatPart(kind = ChatPartKind.text, s = s)
 }
-def private cspec(s : string) : ChatPart {
+def chat_special(s : string) : ChatPart {
     return ChatPart(kind = ChatPartKind.special, s = s)
 }
-def private ccontent() : ChatPart {
+def chat_content() : ChatPart {
     return ChatPart(kind = ChatPartKind.content, s = "")
 }
 
@@ -1922,12 +1980,12 @@ def register_arch_llama() {
     var d = ArchDesc(name = "llama", configure = @@configure_llama)
     d.blocks = std_blocks()
     d.chat.add_bos = true   // BOS = <|begin_of_text|>
-    d.chat.system.parts <- [cspec("<|start_header_id|>"), ctext("system"), cspec("<|end_header_id|>"),
-                            ctext("\n\n"), ccontent(), cspec("<|eot_id|>")]
-    d.chat.user.parts <- [cspec("<|start_header_id|>"), ctext("user"), cspec("<|end_header_id|>"),
-                          ctext("\n\n"), ccontent(), cspec("<|eot_id|>")]
-    d.chat.assistant_open.parts <- [cspec("<|start_header_id|>"), ctext("assistant"),
-                                    cspec("<|end_header_id|>"), ctext("\n\n")]
+    d.chat.system.parts <- [chat_special("<|start_header_id|>"), chat_text("system"), chat_special("<|end_header_id|>"),
+                            chat_text("\n\n"), chat_content(), chat_special("<|eot_id|>")]
+    d.chat.user.parts <- [chat_special("<|start_header_id|>"), chat_text("user"), chat_special("<|end_header_id|>"),
+                          chat_text("\n\n"), chat_content(), chat_special("<|eot_id|>")]
+    d.chat.assistant_open.parts <- [chat_special("<|start_header_id|>"), chat_text("assistant"),
+                                    chat_special("<|end_header_id|>"), chat_text("\n\n")]
     d.chat.stop <- ["<|eot_id|>", "<|end_of_text|>"]
     register_arch("llama", d)
 }
@@ -1936,9 +1994,9 @@ def register_arch_llama() {
 def register_arch_qwen2() {
     var d = ArchDesc(name = "qwen2", configure = @@configure_qwen2)
     d.blocks = std_blocks()
-    d.chat.system.parts <- [cspec("<|im_start|>"), ctext("system\n"), ccontent(), cspec("<|im_end|>"), ctext("\n")]
-    d.chat.user.parts <- [cspec("<|im_start|>"), ctext("user\n"), ccontent(), cspec("<|im_end|>"), ctext("\n")]
-    d.chat.assistant_open.parts <- [cspec("<|im_start|>"), ctext("assistant\n")]
+    d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
     d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
     register_arch("qwen2", d)
 }
@@ -1947,9 +2005,9 @@ def register_arch_qwen2() {
 def register_arch_phi3() {
     var d = ArchDesc(name = "phi3", configure = @@configure_phi3)
     d.blocks = std_blocks()
-    d.chat.system.parts <- [cspec("<|system|>"), ctext("\n"), ccontent(), cspec("<|end|>"), ctext("\n")]
-    d.chat.user.parts <- [cspec("<|user|>"), ctext("\n"), ccontent(), cspec("<|end|>"), ctext("\n")]
-    d.chat.assistant_open.parts <- [cspec("<|assistant|>"), ctext("\n")]
+    d.chat.system.parts <- [chat_special("<|system|>"), chat_text("\n"), chat_content(), chat_special("<|end|>"), chat_text("\n")]
+    d.chat.user.parts <- [chat_special("<|user|>"), chat_text("\n"), chat_content(), chat_special("<|end|>"), chat_text("\n")]
+    d.chat.assistant_open.parts <- [chat_special("<|assistant|>"), chat_text("\n")]
     d.chat.stop <- ["<|end|>", "<|endoftext|>"]
     register_arch("phi3", d)
 }
@@ -1959,8 +2017,8 @@ def register_arch_gemma2() {
     var d = ArchDesc(name = "gemma2", configure = @@configure_gemma2)
     d.blocks = std_blocks()
     d.chat.add_bos = true   // BOS = <bos>; Gemma has no system role — fold it into the first user turn
-    d.chat.user.parts <- [cspec("<start_of_turn>"), ctext("user\n"), ccontent(), cspec("<end_of_turn>"), ctext("\n")]
-    d.chat.assistant_open.parts <- [cspec("<start_of_turn>"), ctext("model\n")]
+    d.chat.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
+    d.chat.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
     d.chat.stop <- ["<end_of_turn>", "<eos>"]
     register_arch("gemma2", d)
 }

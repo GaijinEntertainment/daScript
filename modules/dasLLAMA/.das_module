@@ -5,7 +5,7 @@ require daslib/fio
 def initialize(project_path : string) {
     let dasllama_paths = [
         "dasllama_par", "dasllama_math", "dasllama_math_aarch64_neon", "dasllama_quant", "dasllama_gguf",
-        "dasllama_unicode", "dasllama_tokenizer", "dasllama_bpe", "dasllama_transformer"
+        "dasllama_unicode", "dasllama_tokenizer", "dasllama_bpe", "dasllama_transformer", "dasllama_chat"
     ]
     for (path in dasllama_paths) {
         register_native_path("dasllama", "{path}", "{project_path}/dasllama/{path}.das")

@@ -18,6 +18,8 @@ struct SpmTokenizer {
     lookup : table<string; int64>  // piece text -> id, for encode
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
+    bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
+    eos_id : int64 = 2l            // EOS token id from GGUF metadata (Llama-2/TinyLlama 2, Gemma 1)
 }
 
 //! Load tokenizer.bin. vocab_size comes from the model Config (it isn't stored in the file).
@@ -74,6 +76,12 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
         tk.max_token_length = 0
         if (gguf_has(m, "tokenizer.ggml.add_space_prefix")) {
             tk.add_space_prefix = gguf_int(m, bytes, "tokenizer.ggml.add_space_prefix") != 0l
+        }
+        if (gguf_has(m, "tokenizer.ggml.bos_token_id")) {
+            tk.bos_id = gguf_int(m, bytes, "tokenizer.ggml.bos_token_id")
+        }
+        if (gguf_has(m, "tokenizer.ggml.eos_token_id")) {
+            tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
         }
     }
     fclose(f)
@@ -258,4 +266,26 @@ def piece(tk : Tokenizer; id : int64) : string {
         return bpe_decode(tk.bpe, id)
     }
     return decode(tk.spm, 0l, id)
+}
+
+//! Resolve a special/control token id by its surface form (e.g. "<end_of_turn>"); -1 if absent.
+//! SPM special tokens live in the vocab, so this is a plain lookup — same contract as the BPE overload.
+def special_id(tk : SpmTokenizer; name : string) : int64 {
+    return tk.lookup?[name] ?? -1l
+}
+
+//! Resolve a special-token id through the facade (SPM vocab lookup / BPE added-token lookup).
+def special_id(tk : Tokenizer; name : string) : int64 {
+    if (tk.kind == TokKind.bpe) {
+        return special_id(tk.bpe, name)
+    }
+    return special_id(tk.spm, name)
+}
+
+//! The tokenizer's BOS id (SPM per-model metadata / BPE bos_token_id) — for the chat-template add_bos.
+def bos_id(tk : Tokenizer) : int64 {
+    if (tk.kind == TokKind.bpe) {
+        return tk.bpe.bos_id
+    }
+    return tk.spm.bos_id
 }

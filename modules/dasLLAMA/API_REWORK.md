@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** in progress — Phase 4 done, Phase 5 next. Design locked 2026-07-01.
+**Status:** in progress — Phases 1-5 done, Phase 6 (kernel-backend registry) next. Design locked 2026-07-01.
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -67,13 +67,21 @@ def generate(model; var session; prompt : array<int64>; params : SamplingParams;
 Streaming is a **trailing callback block** — `respond(...) $(piece : string) : bool { ... }`,
 return `false` to stop. Absorbs the ~60-line `sample()` copy-pasted into every demo today.
 
-### Layer 2 — chat (minimal, above the line)
+### Layer 2 — chat (minimal, above the line)  *(built — Phase 5)*
 ```
 struct Message { role : Role; content : string }                 // Role = system | user | assistant | tool
-def create_chat(model; system = "") : ChatSession
+def create_chat(model; system = ""; max_new = 256) : ChatSession
 def add_user(var chat; text : string)
-def respond(var chat; params : SamplingParams) ...               // template → encode → eval → sample → stop; appends turn
+def render_turn(model; chat) : array<int64>                      // the turn's prefill ids, no model run — inspect/test
+def respond(model; var chat; params : SamplingParams) $(piece : string) : bool { ... } : string
 ```
+The model is threaded through `respond` (like `eval`/`generate`) rather than held by the ChatSession, so
+there is no model-pointer lifetime to manage. `respond` renders the turn, prefills it, streams the reply
+through the callback block (return `false` to stop), terminates the turn in the KV cache, appends both
+turns to `chat.history`, and returns the full reply text; `stats(chat.session)` reports its timing.
+**Context cap:** the session's KV cache is sized to `model.config.seq_len`, so a caller loading a
+large-context model (Llama-3/Phi = 131072) must cap `model.config.seq_len` first (as every REPL does) —
+the full cache would exceed the 4 GB per-array limit.
 
 ## The two backend seams
 
@@ -176,22 +184,39 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    descriptor is a registry field (data only — renderer is Phase 5). Blocks resolved onto the Model at
    load (also for the llama2.c `load_checkpoint` path). No new arch; dense path bit-identical, proven
    token-for-token (oracle suite + A/B source diff on all 5 GGUF arches). *(test_arch_registry.das)*
-5. **Minimal unified chat app** *(current)* — collapse the 5 REPLs → 1 engine + per-arch
-   descriptors. Consumes the Phase-4 `ChatTemplate` (build the renderer + special-token resolution;
-   handle the `"llama"` = Llama-3-vs-TinyLlama template split, e.g. via GGUF `tokenizer.chat_template`).
-6. **Kernel-backend registry** — formalize so x64 can mirror the NEON self-registration.
+5. **Minimal unified chat app** ✅ — new `dasllama_chat.das` (layer 2): `Role`/`Message`/`ChatSession`
+   + `create_chat`/`add_user`/`respond` (streaming callback block) + `render_turn`. The **renderer**
+   turns a `ChatTemplate` part list into token ids by *segment accumulation* — each maximal run of
+   text/content between special tokens is encoded as ONE segment, which reproduces every old per-model
+   REPL's prefill token-for-token (proven in `test_chat.das` for all 5 families). Special tokens
+   resolve by spelling: BPE via `special_id`, SPM via the vocab lookup (added `special_id(SpmTokenizer)`
+   + the `Tokenizer`/`Model` facades, plus `bos_id` for `add_bos`; SPM `bos_id`/`eos_id` now loaded from
+   GGUF). The `"llama"` collision is resolved by **tokenizer backend** — BPE ⇒ Llama-3 instruct
+   (registry default), SPM ⇒ Zephyr/TinyLlama (a local `zephyr_chat_template()`); `Model.arch` carries
+   the GGUF architecture for this. `stats()` (ttft + prefill/gen tok/s) added, filled by the instrumented
+   streaming `generate()`. Examples collapsed: `chat.das` (one REPL, any model) + `run.das` (one
+   completion + stats); the 4 other chat REPLs + 2 runners deleted, their oracles migrated into
+   `test_parity.das` (TinyLlama-v0.3, Llama-3.2-1B). Full suite 100/100 JIT + AOT.
+6. **Kernel-backend registry** *(current)* — formalize so x64 can mirror the NEON self-registration.
 7. **Tune macro + loop-attribute reification** — depends on 6.
+
+**AOT note (phase 5):** the `Model`↔`ArchBlocks` cycle (Model holds ArchBlocks by value; ArchBlocks's
+fn-ptr fields reference Model) tripped the AOT C++ emitter — it emitted `Model` before `ArchBlocks`
+(incomplete-type + `sizeof(Model)` mismatch). That emitter bug is **already fixed upstream** (an AOT PR
+pending merge). We also declare `ArchBlocks` + its typedefs *before* `Model` in the source — a harmless
+defensive ordering (legitimate on its own; emission is source-order for non-recursed structs) that keeps
+the AOT green on this branch before that PR lands, and can stay after.
 
 **Below the line (demonstrations):** MoE block (proves Phase 4), collapse the 3 run-demos
 → 1 + `stats()`, an OpenAI-compatible server `/example` (the acceptance test — if it builds
 with no reach into internals, the API is right), tool use.
 
-## What collapses (current state)
+## What collapsed (done — Phase 5)
 
-- `examples/dasLLAMA/` has 8 programs. The **5 chat REPLs** (`chat`, `gemma_chat`,
-  `llama3_chat`, `phi_chat`, `qwen_chat`) are the *same program* — identical `sample()` +
-  `prefill()` + REPL loop; the only per-model variation is (a) tokenizer, (b) a
-  chat-template descriptor, (c) a stop-token set. The **3 runners** (`run`, `gguf_run`,
-  `llama3_run`) are one parameterized completion + oracle check.
-- The chat demos hand-roll a token-by-token `prefill()` that never calls the fast
-  `forward_prefill` — collapsing to one engine speeds them all up for free.
+- `examples/dasLLAMA/` went from **8 programs to 2**. The 5 chat REPLs (`chat`, `gemma_chat`,
+  `llama3_chat`, `phi_chat`, `qwen_chat`) collapsed into one `chat.das` driving the `dasllama_chat`
+  engine; the 3 runners (`run`, `gguf_run`, `llama3_run`) collapsed into one `run.das` (completion +
+  `stats()`). The deleted runners' token-exact oracles moved into `test_parity.das`.
+- The old chat demos hand-rolled a token-by-token `prefill()` that never called the fast
+  `forward_prefill`; `respond` prefills the whole rendered turn in one `eval()`, so the collapse also
+  sped them up.

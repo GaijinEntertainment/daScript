@@ -113,6 +113,7 @@ SET(AOT_DASLLAMA_MODULE_FILES
     modules/dasLLAMA/dasllama/dasllama_tokenizer.das
     modules/dasLLAMA/dasllama/dasllama_bpe.das
     modules/dasLLAMA/dasllama/dasllama_transformer.das
+    modules/dasLLAMA/dasllama/dasllama_chat.das
 )
 
 # AOT for decs test files
