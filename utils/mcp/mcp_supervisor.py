@@ -164,6 +164,12 @@ class DaslangChild:
                 except Exception:
                     pass
             self.proc = None
+            if self._stderr_fh is not None:
+                try:
+                    self._stderr_fh.close()
+                except Exception:
+                    pass
+                self._stderr_fh = None   # reopened on the next spawn
 
 
 def handle(child: DaslangChild, msg: dict) -> str | None:
@@ -260,10 +266,12 @@ def serve(repo_root: str, stderr_log: str):
                 resp = handle(child, msg)
             except Exception as e:
                 _log(f"handle error: {e}")
-                mid = msg.get("id")
-                resp = (json.dumps({"jsonrpc": "2.0", "id": mid,
+                # Respond whenever the request carried an `id` field (same test
+                # handle() uses to tell requests from notifications) — including
+                # an explicit null id — so the client isn't left hanging.
+                resp = (json.dumps({"jsonrpc": "2.0", "id": msg.get("id"),
                         "error": {"code": -32000, "message": f"supervisor error: {e}"}})
-                        if mid is not None else None)
+                        if "id" in msg else None)
             if resp is not None:
                 out.write(resp.encode("utf-8") + b"\n")
                 out.flush()
