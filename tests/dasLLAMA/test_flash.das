@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio

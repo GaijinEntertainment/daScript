@@ -1,6 +1,6 @@
 options gen2
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 
 // Memory detector for the memory-honest refactor. Replays the chat path (load a GGUF, then
 // quantize to Q8) and reports both the logical footprint (array bytes we hold) and the real

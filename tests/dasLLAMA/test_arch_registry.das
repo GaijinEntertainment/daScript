@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 
 // The arch registry must self-populate at [init]: every supported architecture registered with its
 // block kernels + a well-formed chat template — a user turn carrying a content slot, a generation

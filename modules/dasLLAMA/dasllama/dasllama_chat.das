@@ -2,7 +2,7 @@ options gen2
 
 module dasllama_chat shared public
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 
