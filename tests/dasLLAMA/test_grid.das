@@ -33,7 +33,7 @@ def test_grid_registry(t : T?) {
     let want = reference(a, b)
 
     let vs <- grid_dot_template_variants()
-    t |> equal(length(vs), 6, "grid emits all 6 permutations")
+    t |> equal(length(vs), 20, "grid emits all 20 permutations")
 
     // Every emitted variant is callable and numerically correct (vectorize reassociates FP,
     // so compare within tolerance rather than bit-exact).

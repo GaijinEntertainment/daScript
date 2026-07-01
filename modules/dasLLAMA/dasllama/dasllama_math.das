@@ -20,7 +20,7 @@ require dasllama/dasllama_tune  // [tuned]: reconstitute dot from dot_template w
 //! `dot` below reconstitutes it via `[tuned]` with the per-box permutation — default `vec8_u2`
 //! is the original `[vectorize, vectorize_width=8, unroll_count=2]`, so this is bit-identical.
 [hint(unsafe_range_check, noalias = a, noalias = b)]
-def template dot_template(a, b : float const?; n : int64) : float {
+def template dot_template(a, b : float const ?; n : int64) : float {
     var acc = 0.0
     for [tune = 1] (j in range64(n)) {
         acc = mad(unsafe(a[j]), unsafe(b[j]), acc)   // fused multiply-add (vectorizes to fmla)
@@ -31,63 +31,78 @@ def template dot_template(a, b : float const?; n : int64) : float {
 [hint(unsafe_range_check, noalias = a, noalias = b), tuned]
 def dot(a, b : float const?; n : int64) : float {}
 
+// The elementwise kernels below share dot's tuning rig: each `<name>_template` holds the `[tune=1]`
+// hot loop (single source of truth) and `[tuned]` reconstitutes `<name>` with the per-box permutation
+// from box_profile.json — default `vec8_u2` = the original `[vectorize_width=8, unroll_count=2]`, so
+// each migrated kernel is bit-identical until the profiler picks a different perm for this box.
+
 //! AXPY: d[j] += scale * s[j] over n elements, auto-vectorized. Used single-threaded AND as the
 //! V-accumulate in threaded prefill attention — `d` (output) and `s` (value-cache) never overlap, so
 //! the noalias holds inside fork workers too (a hoisted/captured `var d : float?` writes straight
 //! through: capture freezes the binding, not the pointee, and `d + off` stays a mutable `float?`).
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def axpy(var d : float?; s : float const?; scale : float; n : int64) {
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+def template axpy_template(var d : float ?; s : float const ?; scale : float; n : int64) {
+    for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] = mad(scale, s[j], d[j])
         }
     }
 }
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 
 //! d[j] += s[j], width-8 vectorized (the residual-stream update). The plain `for k; a[k]+=b[k]`
 //! over bounds-checked arrays does NOT vectorize under the JIT — this pointer form is ~5x faster.
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def add_inplace(var d : float?; s : float const?; n : int64) {
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+def template add_inplace_template(var d : float ?; s : float const ?; n : int64) {
+    for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] += s[j]
         }
     }
 }
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def add_inplace(var d : float?; s : float const?; n : int64) {}
 
 //! d[j] *= s[j], width-8 vectorized — the SwiGLU/GeGLU gate multiply (act(W1·x) * (W3·x)).
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def mul_inplace(var d : float?; s : float const?; n : int64) {
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+def template mul_inplace_template(var d : float ?; s : float const ?; n : int64) {
+    for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] *= s[j]
         }
     }
 }
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def mul_inplace(var d : float?; s : float const?; n : int64) {}
 
 //! d[j] *= scale (broadcast scalar), width-8 vectorized — ggml_vec_scale_f32. Flash attention
 //! multiplies the whole Q×KV score tile by 1/sqrt(head_size) in one sweep, replacing the old scalar
 //! per-element multiply buried in the mask branch.
 [hint(unsafe_range_check, noalias = d)]
-def scale_inplace(var d : float?; scale : float; n : int64) {
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+def template scale_inplace_template(var d : float ?; scale : float; n : int64) {
+    for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] *= scale
         }
     }
 }
+[hint(unsafe_range_check, noalias = d), tuned]
+def scale_inplace(var d : float?; scale : float; n : int64) {}
 
 //! d[j] = s[j], width-8 vectorized contiguous copy (the KV-cache store). Same reason as add_inplace:
 //! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
 //! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def copy_floats(var d : float?; s : float const?; n : int64) {
-    for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) {
+def template copy_floats_template(var d : float ?; s : float const ?; n : int64) {
+    for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] = s[j]
         }
     }
 }
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def copy_floats(var d : float?; s : float const?; n : int64) {}
 
 // n*d above this -> split the output rows across worker threads. Below it, the per-call
 // job-dispatch overhead (~90us) dwarfs the gain, so stay single-thread. (Measured on M1 Max:

@@ -27,15 +27,27 @@ struct TunePerm {
 }
 
 def private build_grid() : array<TunePerm> {
-    // First-increment default grid over a single [tune=1] loop.
-    return <- [
-        TunePerm(suffix = "plain"),
-        TunePerm(suffix = "u2", hints <- [TuneHint(tune = 1, unroll = 2)]),
-        TunePerm(suffix = "vec8", hints <- [TuneHint(tune = 1, vectorize = true, width = 8)]),
-        TunePerm(suffix = "vec8_u2", hints <- [TuneHint(tune = 1, vectorize = true, width = 8, unroll = 2)]),
-        TunePerm(suffix = "vec16", hints <- [TuneHint(tune = 1, vectorize = true, width = 16)]),
-        TunePerm(suffix = "vec16_u2", hints <- [TuneHint(tune = 1, vectorize = true, width = 16, unroll = 2)])
-    ]
+    // Full sweep over a single [tune=1] loop: {plain, unroll-only u2/u4/u8} ∪
+    // (width {4,8,16,32} × unroll {1,2,4,8}). The unroll=1 column OMITS unroll_count (TuneHint.unroll=0)
+    // so each `vecW` row is byte-identical to the original hand-written `[vectorize, vectorize_width=W]`
+    // loop — and the DEFAULT_PERM `vec8_u2` is in the grid, so migrated kernels stay bit-identical.
+    // width 4/32 rarely win on M1 (1 NEON reg / reg pressure) but must be present: x64 AVX-512 picks them.
+    let WIDTHS = fixed_array(4, 8, 16, 32)
+    let UNROLLS = fixed_array(2, 4, 8)   // unroll-only rows; u1 == plain
+    var grid : array<TunePerm>
+    grid |> reserve(1 + length(UNROLLS) + length(WIDTHS) * (1 + length(UNROLLS)))
+    grid |> emplace(TunePerm(suffix = "plain"))
+    for (u in UNROLLS) {
+        grid |> emplace(TunePerm(suffix = "u{u}", hints <- [TuneHint(tune = 1, unroll = u)]))
+    }
+    for (w in WIDTHS) {
+        grid |> emplace(TunePerm(suffix = "vec{w}", hints <- [TuneHint(tune = 1, vectorize = true, width = w)]))
+        for (u in UNROLLS) {
+            grid |> emplace(TunePerm(suffix = "vec{w}_u{u}",
+                hints <- [TuneHint(tune = 1, vectorize = true, width = w, unroll = u)]))
+        }
+    }
+    return <- grid
 }
 
 // ===== [tune=N] marker helpers =====
