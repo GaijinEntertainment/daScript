@@ -511,6 +511,7 @@ namespace das {
 
     mutex              g_jobQueMutex;
     shared_ptr<JobQue> g_jobQue;
+    shared_ptr<JobQue> g_persistentJobQue;  // extra ref held by create_job_que so a nested with_job_que's use_count==1 teardown can't reset a persistent queue
 
     LockBox * lockBoxCreate( Context *, LineInfoArg * at ) {
         LockBox * ch = new LockBox();
@@ -625,7 +626,7 @@ namespace das {
     }
 
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
-        if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
+        if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in a 'with_job_que' block, or call create_job_que() first");
         if ( context->keepForkContexts ) {
             // pooled path: borrow a reusable fork, return it to the pool when the job finishes
             Context * forkContext = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
@@ -733,9 +734,9 @@ namespace das {
     }
 
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
-        if ( !g_jobQue ) {
+        {
             lock_guard<mutex> guard(g_jobQueMutex);
-            g_jobQue = make_shared<JobQue>();
+            if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();  // check under the lock: create_job_que can also init g_jobQue concurrently
         }
         {
             shared_ptr<JobQue> jq = g_jobQue;
@@ -745,6 +746,21 @@ namespace das {
             lock_guard<mutex> guard(g_jobQueMutex);
             if ( g_jobQue.use_count()==1 ) g_jobQue.reset();
         }
+    }
+
+    // Persistent job-que lifecycle. Unlike with_job_que (block-scoped), the pool created here lives
+    // until destroy_job_que — needed when the frame loop is driven externally (e.g. emscripten's
+    // async set_main_loop), where a with_job_que block cannot span the per-frame new_job dispatches.
+    void createJobQue ( Context *, LineInfoArg * ) {
+        lock_guard<mutex> guard(g_jobQueMutex);
+        if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();
+        g_persistentJobQue = g_jobQue;  // pin: keeps use_count >= 2 so with_job_que won't reset it
+    }
+
+    void destroyJobQue ( Context *, LineInfoArg * ) {
+        lock_guard<mutex> guard(g_jobQueMutex);
+        g_persistentJobQue.reset();
+        if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // ~JobQue drains/joins the pool
     }
 
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
@@ -798,7 +814,7 @@ namespace das {
     }
 
     int getTotalHwJobs( Context * context, LineInfoArg * at ) {
-        if ( !g_jobQue ) context->throw_error_at(at, "need to be in 'with_job_que' block");
+        if ( !g_jobQue ) context->throw_error_at(at, "need to be in a 'with_job_que' block, or call create_job_que() first");
         return g_jobQue->getTotalHwJobs();
     }
 
@@ -1017,6 +1033,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue")
                     ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(createJobQue)>(*this, lib,  "create_job_que",
+                SideEffects::modifyExternal, "createJobQue")
+                    ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(destroyJobQue)>(*this, lib,  "destroy_job_que",
+                SideEffects::modifyExternal, "destroyJobQue")
+                    ->args({"context","line"});
             addExtern<DAS_BIND_FUN(getTotalHwJobs)>(*this, lib,  "get_total_hw_jobs",
                 SideEffects::accessExternal, "getTotalHwJobs")
                     ->args({"context","line"});
@@ -1044,6 +1066,7 @@ namespace das {
                     builtin_sleep(0);
                 }
                 lock_guard<mutex> guard(g_jobQueMutex);
+                g_persistentJobQue.reset();  // module unload: drop the create_job_que pin so the pool is torn down even if destroy_job_que was never called
                 g_jobQue.reset();
             }
         }

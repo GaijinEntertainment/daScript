@@ -55,4 +55,41 @@ int posix_memalign(void **out, size_t al, size_t n) {
 
 }  // extern "C"
 
+// --- AudioWorklet-safe futex wait (via -Wl,--wrap=emscripten_futex_wait) -------
+// The AudioWorklet runs as a Wasm Worker: it cannot Atomics.wait and is not the
+// main browser thread, so emscripten's futex path (futex_wait_main_browser_thread)
+// asserts main-thread-only and ABORTS whenever the worklet contends ANY
+// pthread_mutex (dlmalloc's arena lock, the dasAudio mixer's context/jobque
+// mutexes, ...). We intercept emscripten_futex_wait and busy-poll on the worklet
+// (spin until the futex word changes; the lock holder is a real OS thread and
+// will release), delegating every other thread to the real implementation.
+#include <errno.h>
+#include <math.h>
+#include <stdint.h>
+
+extern "C" {
+    int    _emscripten_thread_supports_atomics_wait(void);
+    bool   emscripten_is_main_browser_thread(void);
+    double emscripten_get_now(void);
+    int    __real_emscripten_futex_wait(volatile void *addr, uint32_t val, double max_wait_ms);
+
+    int __wrap_emscripten_futex_wait(volatile void *addr, uint32_t val, double max_wait_ms) {
+        if (!_emscripten_thread_supports_atomics_wait() && !emscripten_is_main_browser_thread()) {
+            // pthread_mutex_lock is an infinite wait (max_wait_ms == INFINITY): spin on the futex word
+            // with no deadline check — emscripten_get_now() is a wasm->JS call, wasted every iteration
+            // when there is no timeout. Finite (timedlock) waits still honor the deadline, throttled.
+            if (max_wait_ms == INFINITY) {
+                while (__atomic_load_n((volatile uint32_t *)addr, __ATOMIC_SEQ_CST) == val) { }
+                return -EWOULDBLOCK;
+            }
+            double end = emscripten_get_now() + max_wait_ms;
+            for (uint32_t spins = 0u; __atomic_load_n((volatile uint32_t *)addr, __ATOMIC_SEQ_CST) == val; ++spins) {
+                if ((spins & 0x3ffu) == 0u && emscripten_get_now() > end) return -ETIMEDOUT;
+            }
+            return -EWOULDBLOCK;
+        }
+        return __real_emscripten_futex_wait(addr, val, max_wait_ms);
+    }
+}  // extern "C"
+
 #endif
