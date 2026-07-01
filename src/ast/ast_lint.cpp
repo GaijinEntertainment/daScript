@@ -1248,6 +1248,7 @@ namespace das {
         "no_heap_array_literals",       Type::tBool,
     // optimization
         "bound_check_elision",          Type::tBool,
+        "log_bound_check_elision",      Type::tBool,
     // logging
         "log",                          Type::tBool,
         "log_optimization_passes",      Type::tBool,

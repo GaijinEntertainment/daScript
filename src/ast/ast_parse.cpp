@@ -952,7 +952,7 @@ namespace das {
                             || program->options.getBoolOption("force_partial_escape_free", policies.force_partial_escape_free);
                 ProgramCfg pcfg;
                 if ( needCfg ) buildProgramCfg(program.get(), pcfg);
-                program->markNoBoundCheck(needCfg ? &pcfg : nullptr);
+                program->markNoBoundCheck(needCfg ? &pcfg : nullptr, logs);
                 if ( scopeFreeOptimization(program.get(), needCfg ? &pcfg : nullptr, logs) ) {
                     inferTypesDirty(program.get(), logs, true);
                     if ( program->failed() ) {

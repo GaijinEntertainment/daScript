@@ -629,7 +629,13 @@ namespace das {
         // does not descend into deferred bodies (lambdas/blocks) - their facts are not this scope's.
         struct MarkScan : Visitor {
             const FactSet * f = nullptr;
+            TextWriter *    logs = nullptr;   // when set, report each elided access
+            const char *    fnName = "";
             int lam = 0;
+            void report ( ExprAt * e, const char * why ) {
+                if ( logs ) *logs << "[bound-check-elision] " << fnName << ": " << e->at.describe()
+                                  << " " << e->describe() << " (" << why << ")\n";
+            }
             virtual void preVisit ( ExprMakeBlock * e ) override { Visitor::preVisit(e); lam++; }
             virtual ExpressionPtr visit ( ExprMakeBlock * e ) override { lam--; return Visitor::visit(e); }
             virtual void preVisit ( ExprAt * e ) override {
@@ -638,20 +644,21 @@ namespace das {
                 int64_t dim;
                 if ( fixedDim(e->subexpr->type, dim) ) {
                     int64_t c;
-                    if ( constIntValue(e->index, c) ) { if ( c>=0 && c<dim ) e->noBoundCheck = true; return; }
+                    if ( constIntValue(e->index, c) ) { if ( c>=0 && c<dim ) { e->noBoundCheck = true; report(e,"const index"); } return; }
                     auto v = asVar(e->index);
                     if ( v && (isUnsignedVar(v) || f->nn.count(v)) )
-                        for ( const auto & u : f->ub ) if ( u.idx==v && !u.lenOf && u.hi<=dim ) { e->noBoundCheck = true; break; }
+                        for ( const auto & u : f->ub ) if ( u.idx==v && !u.lenOf && u.hi<=dim ) { e->noBoundCheck = true; report(e,"induction/guard in fixed dim"); break; }
                 } else if ( e->subexpr->type && e->subexpr->type->isGoodArrayType() ) {
                     auto v = asVar(e->index); auto a = asVar(e->subexpr);
                     if ( v && a && (isUnsignedVar(v) || f->nn.count(v)) )
-                        for ( const auto & u : f->ub ) if ( u.idx==v && u.lenOf==a ) { e->noBoundCheck = true; break; }
+                        for ( const auto & u : f->ub ) if ( u.idx==v && u.lenOf==a ) { e->noBoundCheck = true; report(e,"index bounded by length"); break; }
                 }
             }
         };
 
         struct AbcAnalysis {
             const Cfg & cfg;
+            TextWriter * logs = nullptr;   // when set, report each elided access
             explicit AbcAnalysis ( const Cfg & c ) : cfg(c) {}
 
             static bool isBranch ( CfgBlock * b ) { return b->succ.size()==2 && !b->stmts.empty(); }
@@ -705,7 +712,8 @@ namespace das {
                     loopGen(b->loopSource, cur);
                     for ( auto s : b->stmts ) {
                         applyKill(s, cur);          // kill first, then mark: an access in a mutating stmt is not elided
-                        MarkScan ms; ms.f = &cur; s->visit(ms);
+                        MarkScan ms; ms.f = &cur; ms.logs = logs; ms.fnName = cfg.func ? cfg.func->name.c_str() : "?";
+                        s->visit(ms);
                     }
                 }
             }
@@ -714,10 +722,15 @@ namespace das {
 
     // program
 
-    void Program::markNoBoundCheck ( const ProgramCfg * pcfg ) {
+    void Program::markNoBoundCheck ( const ProgramCfg * pcfg, TextWriter & logs ) {
         if ( !options.getBoolOption("bound_check_elision", false) || !pcfg ) return;
+        bool doLog = options.getBoolOption("log_bound_check_elision", false);
         thisModule->functions.foreach([&](auto & fn){
-            if ( auto c = pcfg->forFunction(fn) ) AbcAnalysis(*c).run();
+            if ( auto c = pcfg->forFunction(fn) ) {
+                AbcAnalysis a(*c);
+                a.logs = doLog ? &logs : nullptr;
+                a.run();
+            }
         });
     }
 
