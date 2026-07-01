@@ -152,3 +152,6 @@ sfxr_renders/
 drum_refs/
 # Dear ImGui auto-saved window layout (written to CWD by imgui apps)
 imgui.ini
+
+# per-box kernel tuning output (dasLLAMA tune_dot harness)
+box_profile.json

@@ -152,7 +152,7 @@ class private TuneMacro : AstStructureAnnotation {
 let private DEFAULT_PERM = "vec8_u2"
 
 def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentList) : string {
-    let v = find_arg(args, "template")
+    let v = find_arg(args, "src")     // `src="foo_template"`; else convention below
     if (v is tString) return v as tString
     return "{func.name}_template"     // convention: dot -> dot_template
 }
@@ -163,8 +163,23 @@ def private tuned_perm_suffix(args : AnnotationArgumentList) : string {
     return DEFAULT_PERM
 }
 
+// Template lives in the compiling module for production `[tuned]`; the profiler harness
+// is a separate module, so fall back to a program-wide scan.
+def private find_template_function(name : string) : FunctionPtr {
+    var fn = compiling_module() |> find_unique_function(name, true)
+    if (fn != null) return fn
+    var found : FunctionPtr
+    program_for_each_module(compiling_program()) $(mod) {
+        if (found == null) {
+            var f = find_unique_function(mod, name, true)
+            if (f != null) { found = f }
+        }
+    }
+    return found
+}
+
 //! `[tuned(perm="vec8_u2")]` on an empty-body function clones the body of its source
-//! template (`<name>_template`, or `template="..."`) and stamps the selected permutation's
+//! template (`<name>_template`, or `src="..."`) and stamps the selected permutation's
 //! hints onto the `[tune=N]` loops. The annotated function IS the real symbol — callers are
 //! untouched. The perm comes from the annotation today (default DEFAULT_PERM); reading it
 //! from the profiler's box config is the next hook.
@@ -173,7 +188,7 @@ class private TunedMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         let tmpl_name = tuned_template_name(func, args)
-        var tmpl = compiling_module() |> find_unique_function(tmpl_name, true)
+        var tmpl = find_template_function(tmpl_name)
         if (tmpl == null) {
             errors := "tuned: template function not found: {tmpl_name}"
             return false
