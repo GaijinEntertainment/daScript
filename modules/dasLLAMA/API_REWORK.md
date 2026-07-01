@@ -133,6 +133,8 @@ register_kernel_backend(KernelBackend("arm64-laneq", …, needs_repack = true, p
   repack, priority 20), gated on `jit_enabled() && get_architecture_name() == "arm64"`.
 - `dasllama_math_x64_avx.das` — the SESSION-2 mirror: register `x64-vnni` (SDOT → VNNI `vpdpbusd`) exactly
   the same way. **No edit to `dasllama_math` or the wrappers** — it just adds a file + a `[init]`.
+  The x64 bring-up is fully documented in `x64_arch.md` (the seam map), `get_x64_going.md`
+  (the runbook), and `tune_for_this_box.md` (per-box tuning + measurement discipline).
 
 **Two selection tiers** (mirroring the hardware): `register_kernel_backend` auto-activates the
 highest-priority **no-repack** backend so direct callers (tests/benches, row-major weights) get the best
