@@ -180,17 +180,49 @@
     // ─── Overlay player ─────────────────────────────────────────────────
     var activeOverlay = null;
 
+    // Keys whose browser default is to scroll — a game reading them through the
+    // wasm canvas should not also scroll the embedding page.
+    var SCROLL_KEYS = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, ' ': 1, Spacebar: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
+
     function closePlayer() {
         if (!activeOverlay) return;
         // Removing the iframe tears down the wasm instance + its rAF loop.
         activeOverlay.parentNode && activeOverlay.parentNode.removeChild(activeOverlay);
         activeOverlay = null;
         document.removeEventListener('keydown', onKeydown);
+        document.removeEventListener('fullscreenchange', onFsChange);
         if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
     }
 
     function onKeydown(e) {
         if (e.key === 'Escape') closePlayer();
+    }
+
+    // The "⤢ fullscreen" button fullscreens the parent viewport element, which
+    // (a) leaves keyboard focus on the parent so the game — whose input listener
+    // lives inside the iframe — goes deaf, and (b) doesn't resize the iframe's
+    // fixed-backing-store canvas (max-width/height can only shrink it, so in a
+    // big fullscreen box it stays tiny). Reaching into the same-origin game frame
+    // fixes both: refocus it, and let the canvas fill the box letterboxed.
+    function onFsChange() {
+        var frame = document.getElementById('ex-frame');
+        var vp = document.getElementById('ex-viewport');
+        if (!frame) return;
+        var entering = !!document.fullscreenElement && document.fullscreenElement === vp;
+        try {
+            var idoc = frame.contentDocument;
+            var canvas = idoc && idoc.getElementById('canvas');
+            if (canvas) {
+                // object-fit:contain scales the fixed backing store up to fill while
+                // preserving the game aspect (no squish); reverted to the letterbox
+                // default on exit.
+                canvas.style.width = entering ? '100%' : '';
+                canvas.style.height = entering ? '100%' : '';
+                canvas.style.objectFit = entering ? 'contain' : '';
+                if (entering && canvas.focus) canvas.focus();
+            }
+        } catch (e) {}
+        if (entering && frame.contentWindow) { try { frame.contentWindow.focus(); } catch (e) {} }
     }
 
     // wasm64 present → the compiled standalone build; else → the interpreted
@@ -261,6 +293,7 @@
         document.body.appendChild(overlay);
         activeOverlay = overlay;
         document.addEventListener('keydown', onKeydown);
+        document.addEventListener('fullscreenchange', onFsChange);
 
         var player = overlay.querySelector('.forge-ex-player');
         player.addEventListener('click', function (e) {
@@ -283,8 +316,21 @@
         if (frame) {
             frame.addEventListener('load', function () {
                 setStatus(USE_WASM64 ? 'running' : 'running · interpreted', 'is-running');
-                // Focus the game canvas inside the iframe so keyboard input flows.
-                try { frame.contentWindow && frame.contentWindow.focus(); } catch (e) {}
+                // Focus the game canvas inside the iframe so keyboard input flows, and
+                // guard scroll-keys at runtime (belt-and-suspenders with the shell's own
+                // guard — covers any already-deployed card built before that shell). The
+                // game frame is same-origin, so both are reachable.
+                try {
+                    frame.contentWindow && frame.contentWindow.focus();
+                    var idoc = frame.contentDocument;
+                    var canvas = idoc && idoc.getElementById('canvas');
+                    if (canvas && canvas.focus) canvas.focus();
+                    if (frame.contentWindow) {
+                        frame.contentWindow.addEventListener('keydown', function (e) {
+                            if (SCROLL_KEYS[e.key]) e.preventDefault();
+                        }, { passive: false });
+                    }
+                } catch (e) {}
             });
         }
     }

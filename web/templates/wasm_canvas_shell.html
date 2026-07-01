@@ -21,6 +21,14 @@
      custom frame. -->
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 <script>
+  // The app owns the keyboard: stop arrow/space/page keys from scrolling the
+  // embedding page. emscripten GLFW reads them for input but does not
+  // preventDefault, so their default scroll otherwise chains out of this
+  // (unscrollable) iframe to the host document.
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
+  window.addEventListener('keydown', function (e) {
+    if (SCROLL_KEYS[e.key]) e.preventDefault();
+  }, { passive: false });
   var Module = {
     canvas: (function () {
       var c = document.getElementById('canvas');
