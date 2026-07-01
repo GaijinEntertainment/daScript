@@ -41,7 +41,7 @@ def dot(a, b : float const?; n : int64) : float {}
 //! the noalias holds inside fork workers too (a hoisted/captured `var d : float?` writes straight
 //! through: capture freezes the binding, not the pointee, and `d + off` stays a mutable `float?`).
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def template axpy_template(var d : float ?; s : float const ?; scale : float; n : int64) {
+def template axpy_template(var d : float ?; s : float const ?; scale : float; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] = mad(scale, s[j], d[j])
@@ -54,7 +54,7 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 //! d[j] += s[j], width-8 vectorized (the residual-stream update). The plain `for k; a[k]+=b[k]`
 //! over bounds-checked arrays does NOT vectorize under the JIT — this pointer form is ~5x faster.
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def template add_inplace_template(var d : float ?; s : float const ?; n : int64) {
+def template add_inplace_template(var d : float ?; s : float const ?; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] += s[j]
@@ -66,7 +66,7 @@ def add_inplace(var d : float?; s : float const?; n : int64) {}
 
 //! d[j] *= s[j], width-8 vectorized — the SwiGLU/GeGLU gate multiply (act(W1·x) * (W3·x)).
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def template mul_inplace_template(var d : float ?; s : float const ?; n : int64) {
+def template mul_inplace_template(var d : float ?; s : float const ?; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] *= s[j]
@@ -80,7 +80,7 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {}
 //! multiplies the whole Q×KV score tile by 1/sqrt(head_size) in one sweep, replacing the old scalar
 //! per-element multiply buried in the mask branch.
 [hint(unsafe_range_check, noalias = d)]
-def template scale_inplace_template(var d : float ?; scale : float; n : int64) {
+def template scale_inplace_template(var d : float ?; scale : float; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] *= scale
@@ -94,7 +94,7 @@ def scale_inplace(var d : float?; scale : float; n : int64) {}
 //! a bounds-checked array copy does NOT vectorize under the JIT; this pointer form does. d (cache) and
 //! s (the k_b/v_b scratch) are always distinct arrays, so noalias is correct and free.
 [hint(unsafe_range_check, noalias = d, noalias = s)]
-def template copy_floats_template(var d : float ?; s : float const ?; n : int64) {
+def template copy_floats_template(var d : float ?; s : float const ?; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
         unsafe {
             d[j] = s[j]
