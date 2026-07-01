@@ -757,22 +757,25 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
     }
 }
 
-// Threaded per-position FFN activation: act(hb[p*hidden..]) in place for every position. Each element's
-// silu/gelu is independent (no cross-position reduce), so threading is bit-exact — the reorder risk is only
-// in VECTORIZING the transcendental, never in splitting positions across workers. Fork workers touch the
-// raw base pointer; self-gates on ACT_PAR_THRESHOLD so small prompts run inline.
-def private act_batch(var hb : array<float>; act : FfnAct; hidden, npos : int64) {
+// Fused activation + gate multiply: hb[p] = act(W1·x[p]) * (W3·x[p]) in place, threaded per position.
+// One memory pass (vs silu-then-mul), and the transcendental is vectorized via exp4 unless g_act_vec is
+// off. Each element is independent (no cross-position reduce), so threading never changes the result;
+// the only non-bit-exactness is exp4's ~2 ulp. Fork workers touch raw base pointers; self-gates on
+// ACT_PAR_THRESHOLD so small prompts (and decode, npos=1) run inline.
+def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
     let is_gelu = act == FfnAct.gelu
+    let vec = g_act_vec
     unsafe {
-        var hp = addr(hb[0])
+        var gp = addr(g[0])
+        var up = reinterpret<float const?>(addr(u[0]))
         maybe_parallel_for(hidden * npos >= ACT_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
                     let off = int64(p) * hidden
-                    if (is_gelu) {
-                        gelu(hp + off, hidden)
+                    if (vec) {
+                        if (is_gelu) { geglu4(gp + off, up + off, hidden) } else { swiglu4(gp + off, up + off, hidden) }
                     } else {
-                        silu(hp + off, hidden)
+                        if (is_gelu) { geglu(gp + off, up + off, hidden) } else { swiglu(gp + off, up + off, hidden) }
                     }
                 }
             }
@@ -969,12 +972,7 @@ def forward(t : Transformer; var s : RunState; token, pos : int64) {
         // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
         mm(s.hb, t, t.w1_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
         mm(s.hb2, t, t.w3_off + l * dim * hidden, s.xb, s.xq, s.xs, dim, hidden)
-        if (c.ffn_act == FfnAct.gelu) {
-            gelu(s.hb, hidden)
-        } else {
-            silu(s.hb, hidden)
-        }
-        mul_inplace(unsafe(addr(s.hb[0])), unsafe(addr(s.hb2[0])), hidden)
+        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
         // down projection, optional post-FFN norm, residual
         mm(s.xb, t, t.w2_off + l * hidden * dim, s.hb, s.xq, s.xs, hidden, dim)
         if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
@@ -1046,6 +1044,22 @@ def set_rope_table_mode(on : bool) {
 //! Whether prefill RoPE uses the precomputed cos/sin table.
 def get_rope_table_mode() : bool {
     return g_use_rope_table
+}
+
+// FFN gate activation: when true (default) use the vectorized exp4 fused kernels (swiglu4/geglu4,
+// ~2 ulp, non-bit-exact); when false the scalar libm swiglu/geglu (bit-exact reference). The oracle
+// tests flip this off for their token-for-token gate; production leaves it on. Same fusion either way.
+var g_act_vec = true
+
+//! Select the FFN gate transcendental: vectorized exp4 (default true, fast, ~2 ulp) vs scalar libm
+//! (bit-exact). Off is the reference path the token-for-token oracle tests pin.
+def set_act_vec(on : bool) {
+    g_act_vec = on
+}
+
+//! Whether the FFN gate uses the vectorized exp4 kernels.
+def get_act_vec() : bool {
+    return g_act_vec
 }
 
 var g_prefill_prof_acc : table<string; int64>
@@ -1472,11 +1486,8 @@ def forward_prefill(t : Transformer; var s : RunState; tokens : array<int64>; np
         mm_b(s.hb2_b, t, t.w3_off + l * dim * hidden, s.xb_b, s.xqb, s.xsb, dim, hidden, npos)
         prof_add("mm_ffn", ts_ffn)
         let ts_act = ref_time_ticks()
-        act_batch(s.hb_b, c.ffn_act, hidden, npos)
+        gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
         prof_add("act", ts_act)
-        let ts_gate = ref_time_ticks()
-        mul_inplace(unsafe(addr(s.hb_b[0])), unsafe(addr(s.hb2_b[0])), npos * hidden)
-        prof_add("gate", ts_gate)   // SwiGLU/GeGLU gate multiply — own bucket (act_resid is residual-adds)
         // down projection (batched) + optional post-FFN norm + residual
         let ts_ffn2 = ref_time_ticks()
         mm_b(s.xb_b, t, t.w2_off + l * hidden * dim, s.hb_b, s.xqb, s.xsb, hidden, dim, npos)

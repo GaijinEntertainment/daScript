@@ -715,6 +715,93 @@ def gelu(var x : array<float> | #; size : int64) {
     gelu(unsafe(addr(x[0])), size)
 }
 
+//! Fused SwiGLU gate: g[i] = silu(g[i]) * u[i] in place (g = W1·x gate, u = W3·x up). One pass
+//! instead of silu-then-mul_inplace — the intermediate silu result never round-trips through memory,
+//! halving the gate/act traffic. Bit-exact: same `silu(v) * u[i]` value and order as the split path.
+//! Pointer core (see silu) — the threaded prefill FFN runs gate_batch in fork contexts on raw addresses.
+def swiglu(var g : float?; u : float const?; size : int64) {
+    unsafe {
+        for (i in range64(size)) {
+            let v = g[i]
+            g[i] = (v / (1.0 + exp(-v))) * u[i]
+        }
+    }
+}
+def swiglu(var g : array<float> | #; u : array<float> | #; size : int64) {
+    if (size <= 0) return
+    swiglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
+}
+
+//! Fused GeGLU gate (Gemma2): g[i] = gelu(g[i]) * u[i] in place, tanh-approx gelu. Same fusion
+//! rationale and bit-exactness as swiglu.
+def geglu(var g : float?; u : float const?; size : int64) {
+    let k = 0.7978845608028654  // sqrt(2/pi)
+    unsafe {
+        for (i in range64(size)) {
+            let v = g[i]
+            g[i] = (0.5 * v * (1.0 + tanh(k * (v + 0.044715 * v * v * v)))) * u[i]
+        }
+    }
+}
+def geglu(var g : array<float> | #; u : array<float> | #; size : int64) {
+    if (size <= 0) return
+    geglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
+}
+
+// exp4 valid range (fast-path, no overflow guard) — clamp the exp argument here so an outlier
+// gate value can never feed exp4 out of range (silu saturates to 0/v, gelu to ±1 there anyway).
+let EXP4_LO = float4(-80.0, -80.0, -80.0, -80.0)
+let EXP4_HI = float4(80.0, 80.0, 80.0, 80.0)
+
+//! Vectorized fused SwiGLU gate (default): g[i] = silu(g[i]) * u[i], float4 with exp4. sigmoid =
+//! 1/(1+exp4(-v)); ~4.5x the scalar swiglu (which pays a libm expf per element). ~2 ulp, NOT bit-exact
+//! (that's the scalar swiglu, kept as the opt-in reference). Tail (<4 elems) runs the scalar form.
+def swiglu4(var g : float?; u : float const?; size : int64) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    unsafe {
+        var g4 = reinterpret<float4?>(g)
+        var u4 = reinterpret<float4 const?>(u)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let v = g4[k]
+            let arg = clamp(-v, EXP4_LO, EXP4_HI)
+            g4[k] = (v / (one + exp4(arg))) * u4[k]
+        }
+        for (i in range64(n4 * 4l, size)) {
+            let v = g[i]
+            g[i] = (v / (1.0 + exp(-v))) * u[i]
+        }
+    }
+}
+
+//! Vectorized fused GeGLU gate (default, Gemma2): g[i] = gelu(g[i]) * u[i], float4 with exp4 via the
+//! identity tanh(a) = 1 - 2/(1+exp(2a)); ~4.8x the scalar geglu (which pays a libm tanhf per element —
+//! the slowest transcendental, no vector path). ~2 ulp, NOT bit-exact. Tail runs the scalar form.
+def geglu4(var g : float?; u : float const?; size : int64) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let two = float4(2.0, 2.0, 2.0, 2.0)
+    let half = float4(0.5, 0.5, 0.5, 0.5)
+    let gk = float4(0.7978845608028654)   // sqrt(2/pi)
+    let cc = float4(0.044715)
+    unsafe {
+        var g4 = reinterpret<float4?>(g)
+        var u4 = reinterpret<float4 const?>(u)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let v = g4[k]
+            let a = gk * (v + cc * v * v * v)
+            let arg = clamp(two * a, EXP4_LO, EXP4_HI)
+            let th = one - two / (one + exp4(arg))   // tanh(a)
+            g4[k] = (half * v * (one + th)) * u4[k]
+        }
+        let kk = 0.7978845608028654
+        for (i in range64(n4 * 4l, size)) {
+            let v = g[i]
+            g[i] = (0.5 * v * (1.0 + tanh(kk * (v + 0.044715 * v * v * v)))) * u[i]
+        }
+    }
+}
+
 //! Logit soft-capping (Gemma2): x = cap * tanh(x / cap), elementwise over the first `size`.
 //! Smoothly bounds values to (-cap, cap). Applied to attention scores (cap 50) after the
 //! 1/sqrt(head_size) scale and before softmax, and to the final classifier logits (cap 30).
