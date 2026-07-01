@@ -446,7 +446,8 @@ namespace das {
                 }
             }
             size = (size + al) & ~al;
-            size += fd.type->getSizeOf64();
+            // an empty struct field is 0 bytes in daScript but occupies >=1 byte in C++.
+            size += das::max(uint64_t(1), fd.type->getSizeOf64());
         }
         circularGuard = false;
         int al = getAlignOf() - 1;
@@ -472,7 +473,7 @@ namespace das {
                 }
             }
             size = (size + al) & ~al;
-            size += fd.type->getSizeOf64(failed);
+            size += das::max(uint64_t(1), fd.type->getSizeOf64(failed));
         }
         circularGuard = false;
         int al = getAlignOfFailed(failed) - 1;

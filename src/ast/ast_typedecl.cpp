@@ -3035,7 +3035,8 @@ namespace das
 
     uint64_t TypeDecl::getVariantSize64() const {
         DAS_ASSERT(baseType==Type::tVariant);
-        uint64_t maxSize = 0;
+        // a variant always carries its index tag, even with no alternatives (empty variant)
+        uint64_t maxSize = getTypeBaseSize(Type::tInt);
         int al = getVariantAlign() - 1;
         for ( const auto & argT : argTypes ) {
             uint64_t size = (getTypeBaseSize(Type::tInt) + al) & ~al;
@@ -3048,7 +3049,7 @@ namespace das
 
     uint64_t TypeDecl::getVariantSize64(bool & failed) const {
         DAS_ASSERT(baseType==Type::tVariant);
-        uint64_t maxSize = 0;
+        uint64_t maxSize = getTypeBaseSize(Type::tInt);
         int al = getVariantAlignFailed(failed) - 1;
         for ( const auto & argT : argTypes ) {
             uint64_t size = (getTypeBaseSize(Type::tInt) + al) & ~al;

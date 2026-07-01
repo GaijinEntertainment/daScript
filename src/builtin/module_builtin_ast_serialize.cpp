@@ -1242,8 +1242,7 @@ namespace das {
             case tTuple:
             case tVariant:
                 ser << alias << argTypes << argNames;
-                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
-                                !argTypes.empty());
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType);
                 break;
             default:
                 SERIALIZER_VERIFYF(false,  "not expected to be here");
