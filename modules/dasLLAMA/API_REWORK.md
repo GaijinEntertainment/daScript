@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01.
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. **Next: the T1/T2 model-support waves** (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)).
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -38,8 +38,8 @@ What varies across transformer architectures, and how deep we cut:
 | Tier | What varies | Status |
 |---|---|---|
 | **1 — scalar knobs** | RoPE variant/scaling, RMS vs LayerNorm, pre/post-norm, SiLU vs GeLU, QKV bias, softcaps, sliding window, embed scale, head_dim≠dim/heads | **Handled today** — `Config` flags. A new dense llama-like = a few flags. |
-| **2 — block swaps** | **MoE** (FFN → router + experts), QK-norm, partial RoPE, parallel attn+FFN, attention sinks | **This rework.** Not flags — they change block dataflow. |
-| **3 — deep forks** | MLA / compressed KV (DeepSeek-V3), Mamba/hybrid, multimodal, bespoke sparse attention (e.g. GLM-5.2 "IndexShare") | **Deferred.** Needs a pluggable KV-cache + attention core, not just blocks. |
+| **2 — block swaps** | **MoE** (FFN → router + experts), QK-norm, partial/pruned RoPE, per-layer attention patterns (SWA ratios, per-layer θ, NoPE layers), shared KV cache (Gemma-4: last-N layers reuse earlier KV), per-layer embeddings (PLE), attention sinks, parallel attn+FFN | **This rework.** Not flags — they change block dataflow. See the model-support wave plan below. |
+| **3 — deep forks** | MLA / compressed KV (DeepSeek-V3), **hybrid linear attention** (Qwen3.5/3.6 Gated DeltaNet, Mamba), multimodal, bespoke sparse attention (e.g. GLM-5.2 "IndexShare") | **Deferred.** Needs a pluggable KV-cache + attention core, not just blocks. |
 
 ## Target surface (3 layers)
 
@@ -239,9 +239,37 @@ pending merge). We also declare `ArchBlocks` + its typedefs *before* `Model` in 
 defensive ordering (legitimate on its own; emission is source-order for non-recursed structs) that keeps
 the AOT green on this branch before that PR lands, and can stay after.
 
-**Below the line (demonstrations):** MoE block (proves Phase 4), collapse the 3 run-demos
-→ 1 + `stats()`, an OpenAI-compatible server `/example` (the acceptance test — if it builds
-with no reach into internals, the API is right), tool use.
+**Below the line (demonstrations):** an OpenAI-compatible server `/example` (the acceptance
+test — if it builds with no reach into internals, the API is right), tool use.
+
+## Model-support plan — the T1/T2 waves *(agreed 2026-07-01)*
+
+Each wave = one engine capability + the smallest popular model that proves it, shipped as a
+mergeable PR with a frozen `simple_ids` oracle fixture (`test_parity.das`) + README row. The
+local llama.cpp checkout (2026-06-27) implements every target arch — port each one from its
+`llm_build_*` in `src/llama-model.cpp` (the definitive spec), never from blog posts. Models
+are Q8_0 GGUFs into `~/Work/llama.cpp/models/` unless noted.
+
+| Wave | Engine delta | Oracle model(s) | ~GB |
+|---|---|---|---|
+| **0** | none — verify + fixtures (incl. backfilling Qwen2.5-1.5B + Phi-3.5), README rows; chat-template *detection* (sniff GGUF `tokenizer.chat_template` → named registry template) | Mistral-7B-Instruct-v0.3 (GGUF arch is `"llama"`), SmolLM2-1.7B-Instruct | 7.7 + 1.8 |
+| **1** | QK-norm — Config flag + per-layer `attn_q_norm`/`attn_k_norm` weights, per-head RMSNorm pre-RoPE in the shared attn blocks (a flag like `ffn_act`, not a block swap); `<think>`-stripping in chat history | Qwen3-0.6B (fast iteration), Qwen3-4B-Instruct-2507 (fixture) | 0.7 + 4.3 |
+| **2** | per-layer attention patterns — generalize the hardcoded `l % 2` SWA alternation to `sliding_window_pattern` (gemma2 = 2, gemma3 = 6), per-layer RoPE θ (dual rope tables); SmolLM3's NoPE layers = same machinery | gemma-3-1b-it, gemma-3-4b-it (opt: SmolLM3-3B) | 1.1 + 4.5 |
+| **3** | **Gemma 4** — pruned p-RoPE on global layers (the partial-RoPE item), shared KV cache (per-layer KV source map; last-N layers drop their K/V projections), per-layer embeddings | gemma-4-12b-it | 12.7 |
+| **4** | **MoE FFN block** via the ArchBlocks seam (proves Phase 4) — router → top-k, pluggable gating (softmax now, sigmoid slot, `norm_topk_prob`), routed experts + **shared expert(+gate)**; loader handles 3D stacked `ffn_*_exps`, expert-major Q8 so the existing kernels apply per expert. Decode first; prefill naive per-token, expert-bucketed grouped GEMM as a separate perf PR | Qwen1.5-MoE-A2.7B-Chat; stretch: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B | 15 (+14) |
+| **5** | attention sinks (per-head sink logit in the softmax — classic + flash cores) + MXFP4 GGUF decode (dequant → self-Q8 at load) | gpt-oss-20b | 12.1 |
+
+Out of scope, and why: Qwen3.5/3.6 (Gated-DeltaNet hybrid linear attention → Tier 3),
+Llama-4 (109B+), DeepSeek V3+/GLM-5 (MLA / bespoke sparse → Tier 3), Mixtral (superseded,
+too big, plain-routed anyway).
+
+**Chat, long-term (agreed):** stage 1 = the wave-0 template *detection* (string-sniff the
+embedded `tokenizer.chat_template` for `[INST]` / `<|im_start|>` / `<start_of_turn>` /
+`<|start_header_id|>` … → pick a named registry template — fixes Mistral and the `"llama"`
+collision with no template execution). Stage 2 — a Jinja-subset interpreter in daslang (the
+llama.cpp "minja" route, executes the embedded template directly) — is deliberately deferred
+until the named registry stops scaling; the realistic forcing function is gpt-oss's
+channel-based Harmony format at wave 5. Chat remains layer 2 throughout.
 
 ## What collapsed (done — Phase 5)
 
