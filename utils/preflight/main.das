@@ -23,6 +23,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require ../common/parallel_workers.das
+require ../common/git_signature.das
 
 
 [CommandLineArgs]
@@ -167,17 +168,40 @@ def find_daslang(cli_path : string) : string {
     if (!empty(cli_path)) {
         return fexist(cli_path) ? cli_path : ""
     }
-    if (has_env_variable("DASLANG")) {
-        let env = get_env_variable("DASLANG")
-        if (fexist(env)) return env
-    }
+    // Repo-local binaries FIRST. daslang derives its module root from the executable's location,
+    // so a DASLANG env var pointing at ANOTHER checkout silently resolves in-tree modules
+    // (spirv/, ...) against THAT tree — any PR changing them then fails child gates with
+    // phantom errors (the worktree trap). The env var is only a fallback for treeless setups.
+    // Among the local candidates the NEWEST wins: a tree often carries several flavors (the MSVC
+    // bin/Release binary next to an MCP-setup bin/daslang stub), and a stale stub paired with
+    // newer-relinked runtime DLLs fails the try/recover-heavy suites with phantom errors.
     let candidates = [
         "bin/daslang", "bin/daslang.exe",
         "bin/Release/daslang.exe", "bin/RelWithDebInfo/daslang.exe", "bin/Debug/daslang.exe",
         "build/daslang", "build/bin/daslang"
     ]
+    var best = ""
+    var best_mtime = 0l
     for (c in candidates) {
-        if (fexist(c)) return c
+        if (fexist(c)) {
+            let mt = stat_mtime_or_zero(c)
+            if (mt > best_mtime) {
+                best_mtime = mt
+                best = c
+            }
+        }
+    }
+    if (!empty(best)) {
+        // absolutize: child gates spawn this via popen_argv, whose CreateProcess does not
+        // resolve a bare relative exe path the way a shell does
+        return get_full_file_name(best)
+    }
+    if (has_env_variable("DASLANG")) {
+        let env = get_env_variable("DASLANG")
+        if (fexist(env)) {
+            to_log(LOG_WARNING, "preflight: no repo-local daslang found; falling back to DASLANG={env} — a binary from another checkout resolves in-tree modules against THAT tree\n")
+            return env
+        }
     }
     return ""
 }
