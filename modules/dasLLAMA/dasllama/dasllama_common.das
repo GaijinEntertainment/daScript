@@ -1291,7 +1291,7 @@ def apply_box_profile_runtime(path : string = "") {
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
         pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
-        to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend pin = {be}\n")
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend = {active_kernel_backend()} (profile pin '{be}')\n")
     }
     // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
     // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
@@ -2813,7 +2813,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
         }
-        prof_add("moe_gather", ts_park)
+        prof_add("moe_park", ts_park)
     }
 
     // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
