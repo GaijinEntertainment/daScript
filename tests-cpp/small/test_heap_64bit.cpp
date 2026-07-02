@@ -13,6 +13,7 @@
 
 #include "daScript/daScript.h"
 #include "daScript/daScriptC.h"
+#include "daScript/misc/memory_model.h"      // LinearChunkAllocator
 #include "daScript/simulate/aot_builtin.h"   // heap_bytes_allocated
 
 #include <cstdlib>
@@ -141,11 +142,9 @@ TEST_CASE("alignMask uint32 truncation guard: 4 GB allocation reports correct by
         return;
     }
 
-    // persistent_heap routes through PersistentHeapAllocator (MemoryModel/bigStuff).
-    // The default LinearHeapAllocator is uint32-bounded per the policy at
-    // memory_model.h:415-422 — >4GB allocations through it should panic with a
-    // clear message rather than silently truncate. PR-A's widening of
-    // LinearChunkAllocator::alignMask also enables that policy check to fire.
+    // persistent_heap routes through PersistentHeapAllocator (MemoryModel/bigStuff) —
+    // the path this alignMask probe targets. (The default LinearHeapAllocator serves
+    // >4GB too since HeapChunk went 64-bit; that path has its own test below.)
     static const char * SRC =
         "options gen2\n"
         "options persistent_heap = true\n"
@@ -178,9 +177,8 @@ TEST_CASE("uint64 size accepts values larger than UINT32_MAX (gated)") {
         return;
     }
 
-    // persistent_heap required: default LinearHeapAllocator is uint32-bounded
-    // (per memory_model.h:415-422). >4GB allocations need PersistentHeapAllocator
-    // / MemoryModel::bigStuff path.
+    // persistent_heap: exercises the PersistentHeapAllocator / MemoryModel::bigStuff
+    // path specifically (the default linear heap's >4GB path is tested below).
     static const char * SRC =
         "options gen2\n"
         "options persistent_heap = true\n"
@@ -199,6 +197,85 @@ TEST_CASE("uint64 size accepts values larger than UINT32_MAX (gated)") {
     ((unsigned char*)p)[HUGE_BYTES - 1] = 0xDE;
     CHECK(((unsigned char*)p)[0] == 0xC0);
     CHECK(((unsigned char*)p)[HUGE_BYTES - 1] == 0xDE);
+    das_context_free_i64(ic.ctx, p, HUGE_BYTES);
+
+    cleanup_inline_ctx(ic);
+}
+
+TEST_CASE("LinearChunkAllocator accepts a >4GB initial size") {
+    // No allocation happens until the first allocate(), so this probe is cheap
+    // enough to run ungated everywhere. Before HeapChunk went 64-bit,
+    // setInitialSize rejected anything over UINT32_MAX with a DAS_VERIFYF.
+    if constexpr ( sizeof(void*) < 8 ) {
+        WARN("32-bit build, skipping >4GB initial-size probe");
+        return;
+    }
+    LinearChunkAllocator alloc;
+    const uint64_t HUGE_BYTES = uint64_t(6) * 1024 * 1024 * 1024;
+    alloc.setInitialSize(HUGE_BYTES);
+    CHECK_EQ(alloc.initialSize, HUGE_BYTES);
+}
+
+TEST_CASE("LinearChunkAllocator serves a >4GB single chunk (gated)") {
+    // The wave-6 lift: HeapChunk size/offset are uint64, so one linear chunk can
+    // exceed 4GB. Only the first and last bytes are touched — lazy commit keeps
+    // resident memory tiny — but the address-space/commit charge is still ~4GB,
+    // hence the gate.
+    if constexpr ( sizeof(void*) < 8 ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS: 32-bit build, skipping");
+        return;
+    }
+    const char * env = getenv("DASLANG_HUGE_HEAP_TESTS");
+    if ( !env || env[0] != '1' ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS=1 not set, skipping >4GB linear-chunk test");
+        return;
+    }
+
+    LinearChunkAllocator alloc;
+    const uint64_t HUGE_BYTES = (uint64_t(1) << 32) + 64;   // 4GB + 64
+    char * p = alloc.allocate(HUGE_BYTES);
+    REQUIRE(p != nullptr);
+    p[0] = char(0xC0);
+    p[HUGE_BYTES - 1] = char(0xDE);
+    CHECK_EQ(p[0], char(0xC0));
+    CHECK_EQ(p[HUGE_BYTES - 1], char(0xDE));
+    CHECK(alloc.isOwnPtr(p));
+    CHECK(alloc.isOwnPtr(p + HUGE_BYTES - 1));
+    CHECK_GE(alloc.bytesAllocated(), HUGE_BYTES);
+    // Tail free rolls the linear offset back — the whole chunk reads as empty again.
+    alloc.free(p, HUGE_BYTES);
+    CHECK_EQ(alloc.bytesAllocated(), uint64_t(0));
+    alloc.reset();
+}
+
+TEST_CASE("default (linear) context heap serves >4GB allocations (gated)") {
+    // The das-visible half of the lift: no `options persistent_heap` — the default
+    // LinearHeapAllocator path itself serves >4GB (this is what forced persistent_heap
+    // onto every dasLLAMA model-loading test before wave 6).
+    if constexpr ( sizeof(void*) < 8 ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS: 32-bit build, skipping");
+        return;
+    }
+    const char * env = getenv("DASLANG_HUGE_HEAP_TESTS");
+    if ( !env || env[0] != '1' ) {
+        WARN("DASLANG_HUGE_HEAP_TESTS=1 not set, skipping >4GB linear-heap test");
+        return;
+    }
+
+    static const char * SRC = "options gen2\n[export] def main {}\n";
+    InlineCtx ic = compile_inline(SRC);
+    REQUIRE(ic.ctx != nullptr);
+
+    const uint64_t HUGE_BYTES = uint64_t(5) * 1024 * 1024 * 1024;
+    const uint64_t before = heap_bytes_allocated(reinterpret_cast<Context*>(ic.ctx));
+    void * p = das_context_allocate_i64(ic.ctx, HUGE_BYTES);
+    REQUIRE(p != nullptr);
+    ((unsigned char*)p)[0] = 0xC0;
+    ((unsigned char*)p)[HUGE_BYTES - 1] = 0xDE;
+    CHECK(((unsigned char*)p)[0] == 0xC0);
+    CHECK(((unsigned char*)p)[HUGE_BYTES - 1] == 0xDE);
+    const uint64_t after = heap_bytes_allocated(reinterpret_cast<Context*>(ic.ctx));
+    CHECK(after - before >= HUGE_BYTES);
     das_context_free_i64(ic.ctx, p, HUGE_BYTES);
 
     cleanup_inline_ctx(ic);

@@ -1,5 +1,4 @@
 options gen2
-options persistent_heap   // >4GB single-array weight blobs (Mistral-7B Q8 7.1GB, gpt-oss-20b Q8 ~21GB) exceed LinearChunkAllocator's per-chunk uint32 cap
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
@@ -57,8 +56,7 @@ def main {
 
     var t <- load_gguf(model, quant)
     // Cap the KV context: only ~(prompt + n_gen) positions are used, and native seq_len (Llama-3 /
-    // Phi / gemma4: 131072) would put the KV arrays over the 4GB uint32 chunk cap (see the wave-6
-    // allocator item). Same cap test_parity.das applies.
+    // Phi / gemma4: 131072) would waste multi-GB KV allocations. Same cap test_parity.das applies.
     if (t.config.seq_len > 2048l) {
         t.config.seq_len = 2048l
     }

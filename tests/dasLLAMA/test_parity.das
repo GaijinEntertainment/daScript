@@ -1,5 +1,5 @@
 options gen2
-options persistent_heap   // Mistral-7B's Q8 blob is a single >4GB array — over LinearChunkAllocator's per-chunk uint32 cap
+options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
@@ -66,7 +66,7 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
 def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int64>) : bool {
     var tr <- load_gguf(path, quant)
     // Cap the KV context: only ~(prompt + want) positions are used, and the KV stride doesn't change
-    // the computed tokens — but Llama-3's native 131072 makes the KV array exceed the 4GB uint32 cap.
+    // the computed tokens — Llama-3's native 131072 would just burn ~8GB of KV RAM for nothing.
     if (tr.config.seq_len > 2048l) {
         tr.config.seq_len = 2048l
     }
