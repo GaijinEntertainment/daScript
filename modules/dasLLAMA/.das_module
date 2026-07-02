@@ -6,7 +6,7 @@ def initialize(project_path : string) {
     let dasllama_paths = [
         "dasllama_par", "dasllama_tune", "dasllama_math", "dasllama_math_default", "dasllama_math_aarch64_neon", "dasllama_quant", "dasllama_gguf",
         "dasllama_unicode", "dasllama_tokenizer", "dasllama_bpe", "dasllama_common",
-        "dasllama_arch_llama", "dasllama_arch_qwen2", "dasllama_arch_qwen3", "dasllama_arch_phi3", "dasllama_arch_gemma2", "dasllama_arch_gemma3",
+        "dasllama_arch_llama", "dasllama_arch_qwen2", "dasllama_arch_qwen3", "dasllama_arch_phi3", "dasllama_arch_gemma2", "dasllama_arch_gemma3", "dasllama_arch_gemma4",
         "dasllama_transformer", "dasllama_chat"
     ]
     for (path in dasllama_paths) {

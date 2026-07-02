@@ -88,39 +88,12 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
     return <- tk
 }
 
-def private hex_val(c : int) : int {
-    if (is_number(c)) {
-        return c - '0'
-    }
-    if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10
-    }
-    if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10
-    }
-    return -1
-}
-
-// A raw-byte token looks like "<0x0A>"; returns its byte value, or -1 if not that shape.
-def private parse_byte_token(s : string) : int {
-    var result = -1
-    peek_data(s) $(d : array<uint8> const#) {
-        if (length(d) == 6 && int(d[0]) == '<' && int(d[1]) == '0' && int(d[2]) == 'x' && int(d[5]) == '>') {
-            let hi = hex_val(int(d[3]))
-            let lo = hex_val(int(d[4]))
-            if (hi >= 0 && lo >= 0) {
-                result = hi * 16 + lo
-            }
-        }
-    }
-    return result
-}
-
 //! Decode one token to its display text (llama2.c decode): strip a single leading space
-//! right after BOS, and turn raw-byte tokens "<0xXX>" into the actual byte.
+//! right after BOS, and turn raw-byte tokens "<0xXX>" into the actual byte (byte_token_val
+//! is shared with the BPE backend — same SentencePiece byte-fallback vocabulary).
 def decode(tk : SpmTokenizer; prev_token, token : int64) : string {
     let piece = tk.vocab[token]
-    let bv = parse_byte_token(piece)
+    let bv = byte_token_val(piece)
     if (bv >= 0) {
         return string([uint8(bv)])
     }
@@ -205,7 +178,8 @@ struct Tokenizer {
 }
 
 //! Load the tokenizer from a GGUF, auto-selecting the backend: "gpt2" -> byte-level BPE (Llama-3,
-//! Qwen2), anything else -> SentencePiece (Llama-2, Phi-3, Gemma).
+//! Qwen2), "gemma4" -> SPM-style BPE (raw-UTF-8 ranked merges over '▁'-escaped text), anything
+//! else -> SentencePiece (Llama-2, Phi-3, Gemma).
 def load_tokenizer_auto(path : string) : Tokenizer {
     var tk = Tokenizer()
     let f = fopen(path, "rb")
@@ -220,7 +194,7 @@ def load_tokenizer_auto(path : string) : Tokenizer {
         }
     }
     fclose(f)
-    if (model_kind == "gpt2") {
+    if (model_kind == "gpt2" || model_kind == "gemma4") {
         tk.kind = TokKind.bpe
         tk.bpe <- load_bpe_tokenizer_gguf(path)
     } else {

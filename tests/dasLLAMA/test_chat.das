@@ -233,6 +233,7 @@ def test_chat_template_detection(t : T?) {
         // fragments carry each family's distinctive marker (no braces — das strings interpolate {})
         t |> equal(detected_special("xx <|start_header_id|> role <|end_header_id|> xx"), "<|start_header_id|>")
         t |> equal(detected_special("xx <|im_start|> role xx <|im_end|>"), "<|im_start|>")
+        t |> equal(detected_special("xx <|turn>model xx <turn|> xx <|channel>thought"), "<|turn>")   // Gemma-4 channel format
         t |> equal(detected_special("xx <start_of_turn> role xx <end_of_turn>"), "<start_of_turn>")
         t |> equal(detected_special("xx <|user|> xx <|end|> xx"), "<|user|>")      // Phi-3: both markers
         t |> equal(detected_special("bos_token xx [INST] xx [/INST] eos_token"), "[INST]")

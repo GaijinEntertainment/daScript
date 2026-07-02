@@ -77,6 +77,8 @@ def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
         out <- arch_chat("llama")
     } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
         out <- arch_chat("qwen2")
+    } elif (contains(src, "<|turn>")) {           // Gemma-4 channel-based turn format
+        out <- arch_chat("gemma4")
     } elif (contains(src, "<start_of_turn>")) {   // Gemma (2 and 3 share the turn shape)
         out <- arch_chat("gemma2")
     } elif (contains(src, "<|end|>")) {           // Phi-3

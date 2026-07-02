@@ -19,6 +19,11 @@ struct BpeTokenizer {
     pre : string                      // pre-tokenizer name, e.g. "llama-bpe"
     bos_id : int64
     eos_id : int64
+    // SPM-style BPE (Gemma-4): spaces escape to '▁', ranked merges run over RAW UTF-8 pieces (no
+    // GPT-2 byte alphabet), the pre-split is newline-runs only, unresolved symbols fall back to
+    // <0xXX> byte tokens, and decode unescapes '▁' back to spaces. (No field default — the loader's
+    // zero-init `var tk : BpeTokenizer` must stay legal.)
+    spm_space : bool
 }
 
 //! Load the BPE vocab / merges / token-types from a llama-arch GGUF's tokenizer metadata.
@@ -42,7 +47,10 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         for (i in range(length(merges))) {
             tk.merge_rank |> insert(merges[i], int64(i))
         }
-        tk.pre = gguf_str(m, bytes, "tokenizer.ggml.pre")
+        // gemma4 GGUFs carry no tokenizer.ggml.pre — the model name IS the pre (llama.cpp does the same)
+        let tok_model = gguf_has(m, "tokenizer.ggml.model") ? gguf_str(m, bytes, "tokenizer.ggml.model") : ""
+        tk.pre = gguf_has(m, "tokenizer.ggml.pre") ? gguf_str(m, bytes, "tokenizer.ggml.pre") : tok_model
+        tk.spm_space = tok_model == "gemma4"
         tk.bos_id = gguf_int(m, bytes, "tokenizer.ggml.bos_token_id")
         tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
     }
@@ -229,8 +237,82 @@ def private emit_chars(tk : BpeTokenizer; s : string; var ids : array<int64>) {
     }
 }
 
+// ===== SPM-style BPE (Gemma-4) =====
+
+var private BYTE_TOKEN_NAME : array<string>   // byte -> its "<0xXX>" fallback-token spelling
+
+[init]
+def init_byte_token_names() {
+    BYTE_TOKEN_NAME |> resize(256)
+    peek_data("0123456789ABCDEF") $(hx : array<uint8> const#) {
+        for (b in range(256)) {
+            BYTE_TOKEN_NAME[b] = string([uint8('<'), uint8('0'), uint8('x'), hx[b >> 4], hx[b & 15], uint8('>')])
+        }
+    }
+}
+
+// An unresolved symbol falls back to per-byte <0xXX> tokens — raw-UTF-8 BPE has no GPT-2
+// byte alphabet to land on (llama.cpp llm_tokenizer_bpe_session, non-byte_encode branch).
+def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<int64>) {
+    peek_data(s) $(d : array<uint8> const#) {
+        for (k in range(length(d))) {
+            let id = tk.lookup?[BYTE_TOKEN_NAME[int(d[k])]] ?? -1l
+            ids |> push(id) if (id >= 0l)
+        }
+    }
+}
+
+// Gemma-4 encode: escape spaces to '▁', split into newline-runs vs rest (llama.cpp's gemma4
+// pre-tokenizer "[^\n]+|[\n]+"), then the same ranked merges — but over raw UTF-8 codepoint
+// pieces. An all-newline run that is itself a vocab token short-circuits the merge loop
+// (llama.cpp's gemma-4 newline fix, PR #21343).
+def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
+    var ids : array<int64>
+    let cpts <- utf8_to_cpts(replace(text, " ", "▁"))
+    let n = length(cpts)
+    var pos = 0
+    while (pos < n) {
+        let is_nl = cpts[pos] == '\n'
+        var e = pos
+        while (e < n && (cpts[e] == '\n') == is_nl) {
+            e++
+        }
+        var symbols <- [for (i in range(pos, e)); cpt_to_utf8(cpts[i])]
+        pos = e
+        var done = false
+        if (is_nl) {
+            let run = build_string() $(var wr) {
+                for (s in symbols) {
+                    write(wr, s)
+                }
+            }
+            let rid = tk.lookup?[run] ?? -1l
+            if (rid >= 0l) {
+                ids |> push(rid)
+                done = true
+            }
+        }
+        if (!done) {
+            bpe_merge(tk, symbols)
+            for (s in symbols) {
+                let id = tk.lookup?[s] ?? -1l
+                if (id >= 0l) {
+                    ids |> push(id)
+                } else {
+                    emit_byte_fallback(tk, s, ids)
+                }
+            }
+        }
+        delete symbols
+    }
+    return <- ids
+}
+
 //! Encode text to BPE token IDs (no special tokens / BOS — matches test-tokenizer-0).
 def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
+    if (tk.spm_space) {
+        return <- bpe_encode_spm_space(tk, text)
+    }
     var ids : array<int64>
     let cpts <- utf8_to_cpts(text)
     // qwen2 splits digits one-at-a-time (\p{N}); llama3 / default groups up to three (\p{N}{1,3})
@@ -273,12 +355,50 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
 
 // ===== decode + special tokens =====
 
+def private hex_val(c : int) : int {
+    if (is_number(c)) {
+        return c - '0'
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10
+    }
+    return -1
+}
+
+//! The byte value of a raw-byte token spelling like "<0x0A>", or -1 if not that shape.
+//! (Shared with the SPM tokenizer — both backends use the SentencePiece byte-fallback vocabulary.)
+def byte_token_val(piece : string) : int {
+    var result = -1
+    peek_data(piece) $(d : array<uint8> const#) {
+        if (length(d) == 6 && int(d[0]) == '<' && int(d[1]) == '0' && int(d[2]) == 'x' && int(d[5]) == '>') {
+            let hi = hex_val(int(d[3]))
+            let lo = hex_val(int(d[4]))
+            if (hi >= 0 && lo >= 0) {
+                result = hi * 16 + lo
+            }
+        }
+    }
+    return result
+}
+
 //! Decode one token id back to its raw UTF-8 text. Control/special tokens (BOS, EOS,
 //! <|eot_id|>, header markers) render as empty — callers detect them by id, not text.
 def bpe_decode(tk : BpeTokenizer; id : int64) : string {
     // out of range, or a control token (BOS/EOS/<|eot_id|>/headers, GGUF type 3) — render nothing
     if (id < 0l || id >= int64(length(tk.vocab)) || tk.token_type[id] == 3l) {
         return ""
+    }
+    if (tk.spm_space) {
+        // SPM-style pieces: byte tokens (type 6) -> the raw byte; user-defined markers (type 4)
+        // verbatim; normal pieces unescape '▁' -> space (mirrors llama.cpp token_to_piece)
+        if (tk.token_type[id] == 6l) {
+            let bv = byte_token_val(tk.vocab[id])
+            return bv >= 0 ? string([uint8(bv)]) : ""
+        }
+        return tk.token_type[id] == 4l ? tk.vocab[id] : replace(tk.vocab[id], "▁", " ")
     }
     let cpts <- utf8_to_cpts(tk.vocab[id])
     return build_string() $(var wr) {

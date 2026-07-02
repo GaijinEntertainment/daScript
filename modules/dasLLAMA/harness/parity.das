@@ -1,6 +1,6 @@
 options gen2
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 require strings
 require daslib/strings_boost
@@ -54,7 +54,13 @@ def main {
         return
     }
 
-    let t <- load_gguf(model, quant)
+    var t <- load_gguf(model, quant)
+    // Cap the KV context: only ~(prompt + n_gen) positions are used, and native seq_len (Llama-3 /
+    // Phi / gemma4: 131072) would put the KV arrays over the 4GB uint32 chunk cap (see the wave-6
+    // allocator item). Same cap test_parity.das applies.
+    if (t.config.seq_len > 2048l) {
+        t.config.seq_len = 2048l
+    }
     let c = t.config
     var s = make_run_state(c)
     with_job_que() {

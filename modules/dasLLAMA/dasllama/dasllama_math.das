@@ -957,8 +957,10 @@ def rope_apply(var vec : float?; pos, head_size, n : int64; theta, fscale : floa
         rope_scaled(vec, pos, head_size, n, theta, fscale, has_ff, ff)
     }
 }
-def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta, fscale : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0) {
-    let has_ff = !empty(freq_factors)
+//! `use_ff = false` drops the freq-factors for this call even when they're loaded — p-RoPE arches
+//! (gemma4) apply them to global layers only.
+def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta, fscale : float; freq_factors : array<float> | #; neox : bool; mscale : float = 1.0; use_ff : bool = true) {
+    let has_ff = use_ff && !empty(freq_factors)
     unsafe {
         let ff = has_ff ? reinterpret<float const?>(addr(freq_factors[0])) : null
         rope_apply(reinterpret<float?>(addr(vec[0])), pos, head_size, n, theta, fscale, has_ff, ff, neox, mscale)

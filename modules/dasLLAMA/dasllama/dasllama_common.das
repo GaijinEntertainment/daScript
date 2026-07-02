@@ -81,6 +81,17 @@ struct Config {
     pre_post_norm : bool = false       // Gemma2: extra post-attention / post-FFN norms
     qk_norm : bool = false             // Qwen3: per-head RMSNorm on Q/K before RoPE
     embed_scale_sqrt_dim : bool = false // Gemma: scale token embeddings by sqrt(dim) — resolved by the loader (dim unknown at configure time)
+    // Gemma-4 (heterogeneous per-layer attention geometry — sliding vs global layers differ in
+    // head size AND kv-head count, so head_size/kv_dim above describe the GLOBAL class and the
+    // layer_* accessors below pick per layer)
+    swa_mask : uint64 = 0ul            // explicit per-layer sliding mask (bit l = layer l slides); 0 = derive from swa_pattern
+    head_size_swa : int64 = 0          // sliding layers' head size; 0 = same as head_size (gemma4-12B: 256 vs 512)
+    n_kv_heads_swa : int64 = 0         // sliding layers' KV-head count; 0 = same as n_kv_heads (gemma4-12B: 8 vs 1)
+    attn_scale : float = 0.0           // attention-score scale; 0 = the default 1/sqrt(head_size) (gemma4: 1.0 — QK-norm replaces it)
+    v_norm : bool = false              // weightless per-head RMSNorm on V after projection (gemma4)
+    rope_ff_global_only : bool = false // rope_freqs factors apply only to GLOBAL layers (gemma4 p-RoPE)
+    layer_out_scale : bool = false     // per-layer scalar on the layer output (gemma4 layer_output_scale; loader-detected)
+    v_from_k_mask : uint64 = 0ul       // bit l: layer l has no attn_v tensor — V reuses the pre-norm K projection (gemma4 global layers)
 }
 
 // Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
@@ -122,19 +133,29 @@ struct Model {
     // when config.pre_post_norm, otherwise unused
     rms_post_att_off : int64
     rms_post_ffn_off : int64
-    // Qwen3 QK-norm weights (one head_size vector per layer); offsets valid only when config.qk_norm
-    rms_q_off : int64
-    rms_k_off : int64
+    // Qwen3 QK-norm weights (one head_size(l) vector per layer); per-layer offsets valid only when
+    // config.qk_norm (sizes differ per layer class on gemma4, so these are arrays not strides)
+    rms_q_offs : array<int64>
+    rms_k_offs : array<int64>
+    // gemma4: a max-head-size vector of 1.0s (the weightless V-norm reuses rms_batch), and the
+    // per-layer layer_output_scale scalars — both in fblob, valid per the config flags
+    rms_ones_off : int64
+    out_scale_off : int64
+    // token ids whose logits pin to -inf after the classifier (gemma4 suppress_tokens); empty = none
+    suppress : array<int64>
     // big 2D weights — exactly one representation populated per `quant`
     wblob : array<float>
     qblob : array<int8>
     qscales : array<float>
     q4blob : array<uint8>
     q4scales : array<float>
-    wq_off : int64
-    wk_off : int64
-    wv_off : int64
-    wo_off : int64
+    // Attention projections use PER-LAYER offsets — tensor shapes differ per layer class on gemma4
+    // (SWA 16Q/8KV heads of 256 vs global 16Q/1KV of 512); uniform arches fill the flat strides.
+    // wv_offs[l] = -1 marks a layer with no attn_v tensor (V reuses the pre-norm K projection).
+    wq_offs : array<int64>
+    wk_offs : array<int64>
+    wv_offs : array<int64>
+    wo_offs : array<int64>
     w1_off : int64
     w2_off : int64
     w3_off : int64
@@ -200,14 +221,13 @@ struct private LayoutSizes {
 
 // Fill both offset tables from the config; return the element counts of each region. The big-weight
 // offsets are 32-aligned (every dim/kv/hidden is a multiple of 32), so Q8/Q4 scale and byte indices
-// divide cleanly. qd = n_heads * head_size (== dim for the llama family).
+// divide cleanly. Attention tensors get PER-LAYER offsets (shapes differ per layer class on gemma4);
+// each kind's layers stay contiguous, so uniform arches reproduce the old flat strides exactly.
 def private layout_offsets(var t : Model) : LayoutSizes {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
     let layers = c.n_layers
-    let kv = c.kv_dim
-    let qd = c.n_heads * c.head_size
     var fo = 0l
     t.tok_emb_off = fo
     fo += c.vocab_size * dim
@@ -221,23 +241,59 @@ def private layout_offsets(var t : Model) : LayoutSizes {
         t.rms_post_ffn_off = fo
         fo += layers * dim
     }
-    if (c.qk_norm) {  // Qwen3: per-head Q/K RMSNorm weights, one head_size vector per layer
-        t.rms_q_off = fo
-        fo += layers * c.head_size
-        t.rms_k_off = fo
-        fo += layers * c.head_size
+    if (c.qk_norm) {  // Qwen3/gemma4: per-head Q/K RMSNorm weights, one head_size(l) vector per layer
+        t.rms_q_offs |> clear()
+        t.rms_q_offs |> reserve(layers)
+        for (l in range64(layers)) {
+            t.rms_q_offs |> push(fo)
+            fo += layer_head_size(c, l)
+        }
+        t.rms_k_offs |> clear()
+        t.rms_k_offs |> reserve(layers)
+        for (l in range64(layers)) {
+            t.rms_k_offs |> push(fo)
+            fo += layer_head_size(c, l)
+        }
+    }
+    if (c.v_norm) {  // gemma4: a max-head-size vector of 1.0s so the weightless V-norm reuses rms_batch
+        t.rms_ones_off = fo
+        fo += max_head_size(c)
+    }
+    if (c.layer_out_scale) {  // gemma4: one output scalar per layer
+        t.out_scale_off = fo
+        fo += layers
     }
     t.rms_final_off = fo
     fo += dim
     var wo = 0l
-    t.wq_off = wo
-    wo += layers * dim * qd
-    t.wk_off = wo
-    wo += layers * dim * kv
-    t.wv_off = wo
-    wo += layers * dim * kv
-    t.wo_off = wo
-    wo += layers * qd * dim
+    t.wq_offs |> clear()
+    t.wq_offs |> reserve(layers)
+    for (l in range64(layers)) {
+        t.wq_offs |> push(wo)
+        wo += dim * layer_qd(c, l)
+    }
+    t.wk_offs |> clear()
+    t.wk_offs |> reserve(layers)
+    for (l in range64(layers)) {
+        t.wk_offs |> push(wo)
+        wo += dim * layer_kv_dim(c, l)
+    }
+    t.wv_offs |> clear()
+    t.wv_offs |> reserve(layers)
+    for (l in range64(layers)) {
+        if (((c.v_from_k_mask >> uint64(l)) & 1ul) != 0ul) {
+            t.wv_offs |> push(-1l)   // no attn_v tensor: V reuses the pre-norm K projection
+        } else {
+            t.wv_offs |> push(wo)
+            wo += dim * layer_kv_dim(c, l)
+        }
+    }
+    t.wo_offs |> clear()
+    t.wo_offs |> reserve(layers)
+    for (l in range64(layers)) {
+        t.wo_offs |> push(wo)
+        wo += layer_qd(c, l) * dim
+    }
     t.w1_off = wo
     wo += layers * dim * hidden
     t.w2_off = wo
@@ -312,18 +368,19 @@ def load_checkpoint(path : string) : Model {
             let n_floats = (length(bytes) - HEADER_BYTES) / 4
             let src = temp_array(reinterpret<float?>(addr(bytes[HEADER_BYTES])), n_floats, type<float>)
             // file order: emb, rms_att, wq, wk, wv, wo, rms_ffn, w1, w2, w3, rms_final, freq_cis, [wcls]
+            // (uniform llama geometry: each kind's region base is its layer-0 offset)
             var fc = 0l
             copy_floats(src, fc, t.fblob, t.tok_emb_off, c.vocab_size * dim)
             fc += c.vocab_size * dim
             copy_floats(src, fc, t.fblob, t.rms_att_off, layers * dim)
             fc += layers * dim
-            copy_floats(src, fc, t.wblob, t.wq_off, layers * dim * qd)
+            copy_floats(src, fc, t.wblob, t.wq_offs[0], layers * dim * qd)
             fc += layers * dim * qd
-            copy_floats(src, fc, t.wblob, t.wk_off, layers * dim * kv)
+            copy_floats(src, fc, t.wblob, t.wk_offs[0], layers * dim * kv)
             fc += layers * dim * kv
-            copy_floats(src, fc, t.wblob, t.wv_off, layers * dim * kv)
+            copy_floats(src, fc, t.wblob, t.wv_offs[0], layers * dim * kv)
             fc += layers * dim * kv
-            copy_floats(src, fc, t.wblob, t.wo_off, layers * qd * dim)
+            copy_floats(src, fc, t.wblob, t.wo_offs[0], layers * qd * dim)
             fc += layers * qd * dim
             copy_floats(src, fc, t.fblob, t.rms_ffn_off, layers * dim)
             fc += layers * dim
@@ -423,13 +480,15 @@ def private repack_q8_weights(var t : Model) {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
-    let kv = c.kv_dim
-    let qd = c.n_heads * c.head_size
     for (l in range64(c.n_layers)) {
-        repack_q8q8_weight(t.qblob, t.qscales, t.wq_off + l * dim * qd, dim, qd)
-        repack_q8q8_weight(t.qblob, t.qscales, t.wk_off + l * dim * kv, dim, kv)
-        repack_q8q8_weight(t.qblob, t.qscales, t.wv_off + l * dim * kv, dim, kv)
-        repack_q8q8_weight(t.qblob, t.qscales, t.wo_off + l * qd * dim, qd, dim)
+        let kv = layer_kv_dim(c, l)
+        let qd = layer_qd(c, l)
+        repack_q8q8_weight(t.qblob, t.qscales, t.wq_offs[l], dim, qd)
+        repack_q8q8_weight(t.qblob, t.qscales, t.wk_offs[l], dim, kv)
+        if (t.wv_offs[l] >= 0l) {
+            repack_q8q8_weight(t.qblob, t.qscales, t.wv_offs[l], dim, kv)
+        }
+        repack_q8q8_weight(t.qblob, t.qscales, t.wo_offs[l], qd, dim)
         repack_q8q8_weight(t.qblob, t.qscales, t.w1_off + l * dim * hidden, dim, hidden)
         repack_q8q8_weight(t.qblob, t.qscales, t.w2_off + l * hidden * dim, hidden, dim)
         repack_q8q8_weight(t.qblob, t.qscales, t.w3_off + l * dim * hidden, dim, hidden)
@@ -462,7 +521,6 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         let hidden = gguf_int(m, bytes, "{arch}.feed_forward_length")
         let layers = gguf_int(m, bytes, "{arch}.block_count")
         let n_heads = gguf_int(m, bytes, "{arch}.attention.head_count")
-        let n_kv_heads = gguf_int(m, bytes, "{arch}.attention.head_count_kv")
         let seq_len = gguf_int(m, bytes, "{arch}.context_length")
         // vocab from the token-embedding tensor: rows = vocab, cols = dim
         let temb = gguf_find_tensor(m, "token_embd.weight")
@@ -474,7 +532,6 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         t.config.hidden_dim = hidden
         t.config.n_layers = layers
         t.config.n_heads = n_heads
-        t.config.n_kv_heads = n_kv_heads
         t.config.vocab_size = vocab
         t.config.seq_len = seq_len
         // head_size from metadata key_length when present (Gemma2: 256, != dim/n_heads=288);
@@ -482,21 +539,93 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         t.config.head_size = (gguf_has(m, "{arch}.attention.key_length")
             ? gguf_int(m, bytes, "{arch}.attention.key_length")
             : dim / n_heads)
-        t.config.kv_dim = n_kv_heads * t.config.head_size
         // Gemma scales the embedding by sqrt(dim); configure can't (dim unknown there)
         if (t.config.embed_scale_sqrt_dim) {
             t.config.embed_scale = sqrt(float(dim))
         }
         // sliding-window span + per-layer pattern from metadata, for arches that opted in via
-        // configure (Gemma2: 4096 / alternating; Gemma3: 512 or 1024 / 5-local-1-global).
-        // configure()'s values stay as the fallback for files without the keys.
+        // configure (Gemma2: 4096 / alternating; Gemma3: 512 or 1024 / 5-local-1-global; gemma4
+        // stores the pattern as an explicit per-layer bool array -> swa_mask). Resolved BEFORE the
+        // kv-head classes below, which key off layer_is_sliding. configure()'s values stay as the
+        // fallback for files without the keys.
         if (t.config.sliding_window > 0l) {
             if (gguf_has(m, "{arch}.attention.sliding_window")) {
                 t.config.sliding_window = gguf_int(m, bytes, "{arch}.attention.sliding_window")
             }
-            if (gguf_has(m, "{arch}.attention.sliding_window_pattern")) {
+            if (gguf_is_array(m, "{arch}.attention.sliding_window_pattern")) {
+                if (layers > 64l) {
+                    panic("dasLLAMA: per-layer sliding_window_pattern needs n_layers <= 64 (got {layers})")
+                }
+                let pat <- gguf_int_array(m, bytes, "{arch}.attention.sliding_window_pattern")
+                for (l in range64(layers)) {
+                    if (pat[l] != 0l) {
+                        t.config.swa_mask |= 1ul << uint64(l)
+                    }
+                }
+            } elif (gguf_has(m, "{arch}.attention.sliding_window_pattern")) {
                 t.config.swa_pattern = gguf_int(m, bytes, "{arch}.attention.sliding_window_pattern")
             }
+        }
+        // KV-head count: scalar (uniform), or gemma4's per-layer array — which must collapse to the
+        // TWO layer classes (one value on sliding layers, one on global) the engine models
+        if (gguf_is_array(m, "{arch}.attention.head_count_kv")) {
+            let kvh <- gguf_int_array(m, bytes, "{arch}.attention.head_count_kv")
+            var full_v = -1l
+            var swa_v = -1l
+            for (l in range64(layers)) {
+                if (layer_is_sliding(t.config, l)) {
+                    if (swa_v < 0l) {
+                        swa_v = kvh[l]
+                    } elif (swa_v != kvh[l]) {
+                        panic("dasLLAMA: per-layer head_count_kv beyond two sliding/global classes is not supported")
+                    }
+                } elif (full_v < 0l) {
+                    full_v = kvh[l]
+                } elif (full_v != kvh[l]) {
+                    panic("dasLLAMA: per-layer head_count_kv beyond two sliding/global classes is not supported")
+                }
+            }
+            t.config.n_kv_heads = full_v >= 0l ? full_v : swa_v
+            if (swa_v >= 0l && swa_v != t.config.n_kv_heads) {
+                t.config.n_kv_heads_swa = swa_v
+            }
+        } else {
+            t.config.n_kv_heads = gguf_int(m, bytes, "{arch}.attention.head_count_kv")
+        }
+        // sliding layers' head size (gemma4: 256 vs the global 512); K and V widths must agree
+        if (gguf_has(m, "{arch}.attention.key_length_swa")) {
+            let hs_swa = gguf_int(m, bytes, "{arch}.attention.key_length_swa")
+            if (gguf_has(m, "{arch}.attention.value_length_swa")
+                    && gguf_int(m, bytes, "{arch}.attention.value_length_swa") != hs_swa) {
+                panic("dasLLAMA: key_length_swa != value_length_swa is not supported")
+            }
+            if (hs_swa != t.config.head_size) {
+                t.config.head_size_swa = hs_swa
+            }
+        }
+        t.config.kv_dim = t.config.n_kv_heads * t.config.head_size
+        // the engine ropes over the full head — refuse partial-rotary GGUFs instead of mis-running them
+        if (gguf_has(m, "{arch}.rope.dimension_count")
+                && gguf_int(m, bytes, "{arch}.rope.dimension_count") != t.config.head_size) {
+            panic("dasLLAMA: partial rotary (rope.dimension_count != head_size) is not supported")
+        }
+        if (gguf_has(m, "{arch}.rope.dimension_count_swa")) {
+            let swa_hs = t.config.head_size_swa > 0l ? t.config.head_size_swa : t.config.head_size
+            if (gguf_int(m, bytes, "{arch}.rope.dimension_count_swa") != swa_hs) {
+                panic("dasLLAMA: partial rotary (rope.dimension_count_swa != the sliding head size) is not supported")
+            }
+        }
+        // honest gates for gemma4 features beyond this wave (E-series shared KV / PLE, the MoE 26B)
+        if (gguf_has(m, "{arch}.attention.shared_kv_layers")
+                && gguf_int(m, bytes, "{arch}.attention.shared_kv_layers") > 0l) {
+            panic("dasLLAMA: shared KV layers (Gemma-4 E-series) are not yet supported")
+        }
+        if (gguf_has(m, "{arch}.embedding_length_per_layer_input")
+                && gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input") > 0l) {
+            panic("dasLLAMA: per-layer embeddings (Gemma-4 E-series PLE) are not yet supported")
+        }
+        if (gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
+            panic("dasLLAMA: MoE expert blocks are not yet supported")
         }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
@@ -533,6 +662,33 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
+        // logit soft-caps from metadata when present (gemma2: 50/30, gemma4: final 30 only);
+        // configure()'s values stay as the fallback for files without the keys
+        if (gguf_has(m, "{arch}.attn_logit_softcapping")) {
+            t.config.attn_logit_softcap = gguf_f32(m, bytes, "{arch}.attn_logit_softcapping")
+        }
+        if (gguf_has(m, "{arch}.final_logit_softcapping")) {
+            t.config.final_logit_softcap = gguf_f32(m, bytes, "{arch}.final_logit_softcapping")
+        }
+        // suppressed token ids (gemma4: the checkpoint's known-bad <image|>/<audio|>) — llama.cpp
+        // pins their logits to -inf in the graph, so parity requires the same
+        if (gguf_has(m, "tokenizer.ggml.suppress_tokens")) {
+            t.suppress <- gguf_i32_array(m, bytes, "tokenizer.ggml.suppress_tokens")
+        }
+        // layers with no attn_v tensor reuse the pre-norm K projection as V (gemma4 global layers);
+        // detected from the tensor table so layout_offsets can skip their V slot
+        if (!t.config.fused_qkv) {
+            for (l in range64(layers)) {
+                if (gguf_find_tensor(m, "blk.{l}.attn_v.weight") < 0) {
+                    if (l >= 64l) {
+                        panic("dasLLAMA: V-from-K layers need n_layers <= 64 (got layer {l})")
+                    }
+                    t.config.v_from_k_mask |= 1ul << uint64(l)
+                }
+            }
+        }
+        // per-layer output scalars (gemma4 layer_output_scale) — presence detected from the tensors
+        t.config.layer_out_scale = gguf_find_tensor(m, "blk.0.layer_output_scale.weight") >= 0
         let kv = t.config.kv_dim
         let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
         let sz = layout_offsets(t)
@@ -560,32 +716,44 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
             }
-            if (t.config.qk_norm) {  // Qwen3: per-head Q/K norms (head_size each)
-                let hs = t.config.head_size
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q_norm.weight", t.fblob, t.rms_q_off + l * hs, hs)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k_norm.weight", t.fblob, t.rms_k_off + l * hs, hs)
+            if (t.config.qk_norm) {  // Qwen3/gemma4: per-head Q/K norms (head_size(l) each)
+                let hs = layer_head_size(t.config, l)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q_norm.weight", t.fblob, t.rms_q_offs[l], hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k_norm.weight", t.fblob, t.rms_k_offs[l], hs)
+            }
+            if (t.config.layer_out_scale) {  // gemma4: one output scalar per layer
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.layer_output_scale.weight", t.fblob, t.out_scale_off + l, 1l)
+            }
+        }
+        if (t.config.v_norm) {  // the weightless V-norm's synthetic all-ones weight vector
+            for (i in range64(max_head_size(t.config))) {
+                t.fblob[t.rms_ones_off + i] = 1.0
             }
         }
         gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
         // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
         var scratch : array<float>
         for (l in range64(layers)) {
+            let kv_l = layer_kv_dim(t.config, l)
+            let qd_l = layer_qd(t.config, l)
             if (t.config.fused_qkv) {
                 // Phi3: attn_qkv rows are [q (qd) ; k (kv) ; v (kv)], ffn_up rows are [gate ; up] (hidden each).
                 // src_off slices the fused tensor, preserving its Q8 blocks (no fp32 requantize).
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_off + l * dim * qd, dim * qd, scratch, 0l)
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch, dim * qd)
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch, dim * qd + dim * kv)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_offs[l], dim * qd_l, scratch, 0l)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_offs[l], dim * kv_l, scratch, dim * qd_l)
+                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_offs[l], dim * kv_l, scratch, dim * qd_l + dim * kv_l)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch, 0l)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch, dim * hidden)
             } else {
-                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_off + l * dim * qd, dim * qd, scratch)
-                load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_off + l * dim * kv, dim * kv, scratch)
-                load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_off + l * dim * kv, dim * kv, scratch)
+                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_offs[l], dim * qd_l, scratch)
+                load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_offs[l], dim * kv_l, scratch)
+                if (t.wv_offs[l] >= 0l) {   // absent on gemma4 global layers (V reuses the K projection)
+                    load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_offs[l], dim * kv_l, scratch)
+                }
                 load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
             }
-            load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_off + l * qd * dim, qd * dim, scratch)
+            load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_offs[l], qd_l * dim, scratch)
             load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
         }
         if (!t.config.shared_weights) {
@@ -725,7 +893,10 @@ def make_run_state(c : Config) : Session {
     var s : Session
     // qd = n_heads * head_size, the query / attention-output width. == dim for the llama family,
     // but Gemma2 has qd (2048) != dim (2304), so q and the attention scratch xb size to max(dim, qd).
-    let qd = c.n_heads * c.head_size
+    // Heterogeneous arches (gemma4) size to the larger layer class; the KV cache packs each layer's
+    // own kv_dim (see kv_cache_off).
+    let qd = max_qd(c)
+    let kvd = max_kv_dim(c)
     let xdim = max(c.dim, qd)
     s.x |> resize(c.dim)
     s.xb |> resize(xdim)
@@ -733,15 +904,15 @@ def make_run_state(c : Config) : Session {
     s.hb |> resize(c.hidden_dim)
     s.hb2 |> resize(c.hidden_dim)
     s.q |> resize(qd)
-    s.k |> resize(c.kv_dim)
-    s.v |> resize(c.kv_dim)
+    s.k |> resize(kvd)
+    s.v |> resize(kvd)
     s.att |> resize(c.seq_len)
     s.logits |> resize(c.vocab_size)
     let maxn = max(xdim, c.hidden_dim)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
     s.xq |> resize(maxn)
     s.xs |> resize(maxn / 32l)
-    s.key_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
-    s.value_cache |> resize(c.n_layers * c.seq_len * c.kv_dim)
+    s.key_cache |> resize(c.seq_len * kv_row_total(c))
+    s.value_cache |> resize(c.seq_len * kv_row_total(c))
     s.sample_scratch |> resize(c.vocab_size)
     s.rng = random_seed(1234)
     return <- s
@@ -845,11 +1016,11 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Model; wof
 //   param readonly and eliminate the leaf's reinterpret-back write — the rope silently no-ops. A
 //   call-site reinterpret launders it, but that can't be lint-suppressed inside maybe_parallel_for, so
 //   calling the leaf directly is the clean fix.
-def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size, qd, kv_dim : int64) {
+def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size, qd, kv_dim : int64; use_ff : bool = true) {
     let c = t.config
     let neox = c.rope_neox
     let mscale = c.rope_mscale
-    let has_ff = !empty(t.rope_freqs)
+    let has_ff = use_ff && !empty(t.rope_freqs)
     unsafe {
         var qp = addr(q_b[0])
         var kp = addr(k_b[0])
@@ -879,11 +1050,11 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
 // NEOX; the NEOX mscale magnitude factor is folded in here so the tab leaves just look up. Built once
 // before the layer loop, then reused by rope_batch_tab across all heads and layers (the redundancy the
 // table removes). Bit-identical to the classic leaves — the same float expressions, just deduplicated.
-def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64) {
+def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
     let c = t.config
     let half = head_size / 2l
     let scale = c.rope_neox ? c.rope_mscale : 1.0   // NEOX scales cos/sin by mscale; NORM leaves it 1.0
-    let has_ff = !empty(t.rope_freqs)
+    let has_ff = use_ff && !empty(t.rope_freqs)
     cos_tab |> resize(npos * half)
     sin_tab |> resize(npos * half)
     unsafe {
@@ -1026,12 +1197,17 @@ def private mm_at_q4(var y : array<float>; t : Model; woff : int64; x : array<fl
 def private mm_qkv(var s : Session; t : Model; l : int64) {
     let c = t.config
     let dim = c.dim
-    let kv = c.kv_dim
-    let qd = c.n_heads * c.head_size   // query width; == dim except Gemma2 (qd != dim)
-    let qoff = t.wq_off + l * dim * qd
-    let koff = t.wk_off + l * dim * kv
-    let voff = t.wv_off + l * dim * kv
-    if (t.quant == QuantMode.q8 && dim * (qd + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
+    let kv = layer_kv_dim(c, l)
+    let qd = layer_qd(c, l)            // query width; == dim except Gemma2/gemma4
+    let qoff = t.wq_offs[l]
+    let koff = t.wk_offs[l]
+    let voff = t.wv_offs[l]
+    if (voff < 0l) {
+        // no attn_v tensor (gemma4 global layers): V = the pre-norm K projection
+        mm(s.q, t, qoff, s.xb, s.xq, s.xs, dim, qd)
+        mm(s.k, t, koff, s.xb, s.xq, s.xs, dim, kv)
+        copy_floats(s.k, 0l, s.v, 0l, kv)
+    } elif (t.quant == QuantMode.q8 && dim * (qd + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
         matmul_q8q8_group3(s.q, s.k, s.v, t.qblob, t.qscales, qoff, koff, voff, s.xq, s.xs, dim, qd, kv, kv)
     } else {
@@ -1093,15 +1269,66 @@ def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>
     }
 }
 
-//! Per-layer attention pattern: with SWA on, every swa_pattern-th layer (l % p == p-1) is global and
-//! the rest slide — Gemma2 alternates (p=2, even layers slide), Gemma3 runs 5 local : 1 global (p=6).
-def layer_is_sliding(c : Config; l : int64) : bool => c.sliding_window > 0l && (l % c.swa_pattern != c.swa_pattern - 1l)
+//! Per-layer attention pattern: with SWA on, an explicit per-layer mask (gemma4's GGUF bool array)
+//! wins; otherwise every swa_pattern-th layer (l % p == p-1) is global and the rest slide — Gemma2
+//! alternates (p=2, even layers slide), Gemma3 runs 5 local : 1 global (p=6).
+def layer_is_sliding(c : Config; l : int64) : bool => (c.sliding_window > 0l
+    && (c.swa_mask != 0ul ? ((c.swa_mask >> uint64(l)) & 1ul) != 0ul : l % c.swa_pattern != c.swa_pattern - 1l))
 
-//! True when sliding layers rope with a different θ / position scale than global layers (Gemma3:
-//! 10k/unscaled local vs 1M/linear-8 global). The loader resolves the swa fields to the global values
-//! when the arch doesn't set them, so this is false for uniform-rope SWA models (Gemma2).
+// ===== Per-layer attention geometry (gemma4: sliding vs global layer classes differ) =====
+// head_size/n_kv_heads/kv_dim in Config describe the GLOBAL class; the *_swa fields (0 = same)
+// override for sliding layers. Everything downstream sizes scratch to the class maxima.
+
+//! Layer `l`'s attention head size.
+def layer_head_size(c : Config; l : int64) : int64 => (layer_is_sliding(c, l) && c.head_size_swa > 0l
+    ? c.head_size_swa : c.head_size)
+
+//! Layer `l`'s KV-head count.
+def layer_n_kv_heads(c : Config; l : int64) : int64 => (layer_is_sliding(c, l) && c.n_kv_heads_swa > 0l
+    ? c.n_kv_heads_swa : c.n_kv_heads)
+
+//! Layer `l`'s KV width (kv heads × head size).
+def layer_kv_dim(c : Config; l : int64) : int64 => layer_n_kv_heads(c, l) * layer_head_size(c, l)
+
+//! Layer `l`'s query / attention-output width (n_heads × head size).
+def layer_qd(c : Config; l : int64) : int64 => c.n_heads * layer_head_size(c, l)
+
+//! The larger head size across the two layer classes (scratch sizing).
+def max_head_size(c : Config) : int64 => max(c.head_size, c.head_size_swa)
+
+//! The larger query width across the two layer classes (scratch sizing).
+def max_qd(c : Config) : int64 => c.n_heads * max_head_size(c)
+
+//! The larger KV width across the two layer classes (scratch sizing).
+def max_kv_dim(c : Config) : int64 => (max(c.n_kv_heads * c.head_size,
+    (c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads) * (c.head_size_swa > 0l ? c.head_size_swa : c.head_size)))
+
+//! Total KV width of one position across all layers (the KV cache holds seq_len of these).
+def kv_row_total(c : Config) : int64 {
+    var total = 0l
+    for (l in range64(c.n_layers)) {
+        total += layer_kv_dim(c, l)
+    }
+    return total
+}
+
+//! Layer `l`'s base offset into the KV cache. Reads seq_len LIVE (tests cap it after load), so this
+//! is a function of Config, never baked into the Model at load.
+def kv_cache_off(c : Config; l : int64) : int64 {
+    var row = 0l
+    for (i in range64(l)) {
+        row += layer_kv_dim(c, i)
+    }
+    return row * c.seq_len
+}
+
+//! True when sliding layers rope differently than global layers — different θ / position scale
+//! (Gemma3: 10k/unscaled local vs 1M/linear-8 global) or a different head size (gemma4: 256 vs 512).
+//! The loader resolves the swa fields to the global values when the arch doesn't set them, so this
+//! is false for uniform-rope SWA models (Gemma2).
 def has_dual_rope(c : Config) : bool => (c.sliding_window > 0l
-    && (c.rope_freq_base_swa != c.rope_freq_base || c.rope_freq_scale_swa != c.rope_freq_scale))
+    && (c.rope_freq_base_swa != c.rope_freq_base || c.rope_freq_scale_swa != c.rope_freq_scale
+        || (c.head_size_swa > 0l && c.head_size_swa != c.head_size)))
 
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
@@ -1114,14 +1341,14 @@ def has_dual_rope(c : Config) : bool => (c.sliding_window > 0l
 def private attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) {
     let c = t.config
     let dim = c.dim
-    let kv_dim = c.kv_dim
-    let head_size = c.head_size
+    let kv_dim = layer_kv_dim(c, l)
+    let head_size = layer_head_size(c, l)
     let n_heads = c.n_heads
-    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2)
-    let kv_mul = n_heads / c.n_kv_heads
-    let seq_len = c.seq_len
-    let scale = 1.0 / sqrt(float(head_size))
-    let loff = l * seq_len * kv_dim
+    let n_kv_heads = layer_n_kv_heads(c, l)
+    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2/gemma4)
+    let kv_mul = n_heads / n_kv_heads
+    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
+    let loff = kv_cache_off(c, l)
     // Sliding-window (local) vs global attention per the arch's layer pattern (Gemma2 alternates,
     // Gemma3 5:1). The window covers all positions when pos < window, so it's a no-op for short contexts.
     let is_sliding = layer_is_sliding(c, l)
@@ -1136,15 +1363,20 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
         add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
         add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
     }
-    if (c.qk_norm) {  // Qwen3: per-head RMSNorm on q/k before RoPE — q/k are n_heads/n_kv_heads rows of head_size
-        rms_batch(s.q, s.q, t, t.rms_q_off + l * head_size, head_size, n_heads)
-        rms_batch(s.k, s.k, t, t.rms_k_off + l * head_size, head_size, c.n_kv_heads)
+    if (c.qk_norm) {  // Qwen3/gemma4: per-head RMSNorm on q/k before RoPE — q/k are n_heads/n_kv_heads rows of head_size
+        rms_batch(s.q, s.q, t, t.rms_q_offs[l], head_size, n_heads)
+        rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, n_kv_heads)
     }
-    // RoPE on q (qd) and k (kv_dim) — sliding layers may use their own θ / position scale (Gemma3)
+    if (c.v_norm) {  // gemma4: weightless per-head RMSNorm on V (all-ones weight; V is never roped)
+        rms_batch(s.v, s.v, t, t.rms_ones_off, head_size, n_kv_heads)
+    }
+    // RoPE on q (qd) and k (kv_dim) — sliding layers may use their own θ / position scale (Gemma3),
+    // and p-RoPE arches (gemma4) apply the rope_freqs factors to GLOBAL layers only
     let theta = is_sliding ? c.rope_freq_base_swa : c.rope_freq_base
     let fscale = is_sliding ? c.rope_freq_scale_swa : c.rope_freq_scale
-    rope_apply(s.q, pos, head_size, qd, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale)
-    rope_apply(s.k, pos, head_size, kv_dim, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale)
+    let use_ff = !(c.rope_ff_global_only && is_sliding)
+    rope_apply(s.q, pos, head_size, qd, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale, use_ff)
+    rope_apply(s.k, pos, head_size, kv_dim, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale, use_ff)
     // store k, v for this position into the KV cache
     let kvoff = loff + pos * kv_dim
     copy_floats(unsafe(addr(s.key_cache[kvoff])), unsafe(addr(s.k[0])), kv_dim)
@@ -1172,7 +1404,7 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
         }
     }
     // output projection (qd -> dim), optional post-attention norm, residual
-    mm(s.xb2, t, t.wo_off + l * qd * dim, s.xb, s.xq, s.xs, qd, dim)
+    mm(s.xb2, t, t.wo_offs[l], s.xb, s.xq, s.xs, qd, dim)
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
         rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
     }
@@ -1196,6 +1428,12 @@ def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
         rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
     }
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
+    if (c.layer_out_scale) {  // gemma4: scale the whole layer output (after the residual)
+        let os = t.fblob[t.out_scale_off + l]
+        for (i in range64(dim)) {
+            s.x[i] *= os
+        }
+    }
 }
 
 def forward(t : Model; var s : Session; token, pos : int64) {
@@ -1230,6 +1468,9 @@ def forward(t : Model; var s : Session; token, pos : int64) {
     }
     if (c.final_logit_softcap > 0.0) {  // Gemma2: soft-cap the output logits
         softcap(s.logits, c.vocab_size, c.final_logit_softcap)
+    }
+    for (id in t.suppress) {  // gemma4: pin the checkpoint's suppressed token ids to -inf
+        s.logits[id] = -1.0e30
     }
 }
 
@@ -1604,15 +1845,15 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
 def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     let c = t.config
     let dim = c.dim
-    let kv_dim = c.kv_dim
-    let head_size = c.head_size
+    let kv_dim = layer_kv_dim(c, l)
+    let head_size = layer_head_size(c, l)
     let n_heads = c.n_heads
+    let n_kv_heads = layer_n_kv_heads(c, l)
     let qd = n_heads * head_size
-    let kv_mul = n_heads / c.n_kv_heads
-    let seq_len = c.seq_len
-    let scale = 1.0 / sqrt(float(head_size))
+    let kv_mul = n_heads / n_kv_heads
+    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
     let use_rope_tab = g_use_rope_table
-    let loff = l * seq_len * kv_dim
+    let loff = kv_cache_off(c, l)
     // sliding vs global attention per the arch's layer pattern (see attention_std_decode)
     let is_sliding = layer_is_sliding(c, l)
     // attention rmsnorm, per position
@@ -1621,9 +1862,14 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     prof_add("norm", ts_norm0)
     // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
     let ts_qkv = ref_time_ticks()
-    mm_b(s.q_b, t, t.wq_off + l * dim * qd, s.xb_b, s.xqb, s.xsb, dim, qd, npos)
-    mm_b(s.k_b, t, t.wk_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
-    mm_b(s.v_b, t, t.wv_off + l * dim * kv_dim, s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+    mm_b(s.q_b, t, t.wq_offs[l], s.xb_b, s.xqb, s.xsb, dim, qd, npos)
+    mm_b(s.k_b, t, t.wk_offs[l], s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+    if (t.wv_offs[l] >= 0l) {
+        mm_b(s.v_b, t, t.wv_offs[l], s.xb_b, s.xqb, s.xsb, dim, kv_dim, npos)
+    } else {
+        // no attn_v tensor (gemma4 global layers): V = the pre-norm K projection
+        copy_floats(s.k_b, 0l, s.v_b, 0l, npos * kv_dim)
+    }
     if (c.attn_qkv_bias) {  // Qwen2: + bias per position before RoPE
         for (p in range64(npos)) {
             add_bias(s.q_b, p * qd, t.bq, l * qd, qd)
@@ -1632,15 +1878,21 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
         }
     }
     prof_add("mm_qkv", ts_qkv)
-    if (c.qk_norm) {  // Qwen3: per-head RMSNorm on q/k before RoPE — q_b/k_b are npos*n_heads/n_kv_heads contiguous head_size rows
+    if (c.qk_norm) {  // Qwen3/gemma4: per-head RMSNorm on q/k before RoPE — q_b/k_b are npos*n_heads/n_kv_heads contiguous head_size rows
         let ts_qknorm = ref_time_ticks()
-        rms_batch(s.q_b, s.q_b, t, t.rms_q_off + l * head_size, head_size, npos * n_heads)
-        rms_batch(s.k_b, s.k_b, t, t.rms_k_off + l * head_size, head_size, npos * c.n_kv_heads)
+        rms_batch(s.q_b, s.q_b, t, t.rms_q_offs[l], head_size, npos * n_heads)
+        rms_batch(s.k_b, s.k_b, t, t.rms_k_offs[l], head_size, npos * n_kv_heads)
         prof_add("norm", ts_qknorm)
+    }
+    if (c.v_norm) {  // gemma4: weightless per-head RMSNorm on V (all-ones weight; V is never roped)
+        let ts_vnorm = ref_time_ticks()
+        rms_batch(s.v_b, s.v_b, t, t.rms_ones_off, head_size, npos * n_kv_heads)
+        prof_add("norm", ts_vnorm)
     }
     // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
     // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
-    // Sliding layers read the swa table / θ when the arch ropes them differently (Gemma3).
+    // Sliding layers read the swa table / θ when the arch ropes them differently (Gemma3/gemma4);
+    // p-RoPE arches (gemma4) apply the rope_freqs factors to GLOBAL layers only.
     let ts_rope = ref_time_ticks()
     let swa_rope = is_sliding && has_dual_rope(c)
     if (use_rope_tab) {
@@ -1652,7 +1904,8 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     } else {
         let theta = swa_rope ? c.rope_freq_base_swa : c.rope_freq_base
         let fscale = swa_rope ? c.rope_freq_scale_swa : c.rope_freq_scale
-        rope_batch(s.q_b, s.k_b, t, theta, fscale, start_pos, npos, head_size, qd, kv_dim)
+        let use_ff = !(c.rope_ff_global_only && is_sliding)
+        rope_batch(s.q_b, s.k_b, t, theta, fscale, start_pos, npos, head_size, qd, kv_dim, use_ff)
     }
     prof_add("rope", ts_rope)
     // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
@@ -1669,7 +1922,7 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     prof_add("attn", ts_attn)
     // output projection (batched, qd -> dim) + optional post-attn norm + residual
     let ts_wo = ref_time_ticks()
-    mm_b(s.xb2_b, t, t.wo_off + l * qd * dim, s.xb_b, s.xqb, s.xsb, qd, dim, npos)
+    mm_b(s.xb2_b, t, t.wo_offs[l], s.xb_b, s.xqb, s.xsb, qd, dim, npos)
     prof_add("mm_wo", ts_wo)
     let ts_resid0 = ref_time_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
@@ -1705,6 +1958,10 @@ def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int6
         rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
+    if (c.layer_out_scale) {  // gemma4: scale the whole layer output (after the residual)
+        let os = t.fblob[t.out_scale_off + l]
+        scale_inplace(unsafe(addr(s.x_b[0])), os, npos * dim)
+    }
     prof_add("act_resid", ts_resid1)
 }
 
@@ -1718,10 +1975,10 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     let dim = c.dim
     let hidden = c.hidden_dim
-    let kv_dim = c.kv_dim
-    let head_size = c.head_size
+    let kv_dim = max_kv_dim(c)         // scratch sizes to the larger layer class (gemma4: swa vs global)
+    let head_size = max_head_size(c)
     let n_heads = c.n_heads
-    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2)
+    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2/gemma4)
     let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
     let maxn = max(xdim, hidden)
     // size the batched scratch to this prompt
@@ -1771,9 +2028,13 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     let use_rope_tab = g_use_rope_table
     let ts_rope_build = ref_time_ticks()
     if (use_rope_tab) {
-        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, start_pos, npos, head_size)
+        // global-class table (c.head_size, factors on); the swa table gets the sliding class's head
+        // size and drops the factors on p-RoPE arches (gemma4: factors are global-layers-only)
+        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, start_pos, npos, c.head_size, true)
         if (has_dual_rope(c)) {
-            build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa, start_pos, npos, head_size)
+            let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
+            build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa,
+                             start_pos, npos, swa_hs, !c.rope_ff_global_only)
         }
     }
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
@@ -1797,6 +2058,9 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     if (c.final_logit_softcap > 0.0) {  // Gemma2: soft-cap the output logits
         softcap(s.logits, c.vocab_size, c.final_logit_softcap)
+    }
+    for (id in t.suppress) {  // gemma4: pin the checkpoint's suppressed token ids to -inf
+        s.logits[id] = -1.0e30
     }
     prof_add("final", ts_final)
 }

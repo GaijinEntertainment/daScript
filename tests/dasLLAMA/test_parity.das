@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 require daslib/fio
+require strings
 
 // Frozen token-for-token parity fixtures for the GGUF arches that stories15M (test_forward.das)
 // doesn't cover. Each fixture is a prompt-ID list + the reference greedy continuation that
@@ -29,15 +30,10 @@ def private same(a, b : array<int64>) : bool {
     return true
 }
 
-// Load `path` at `quant`, greedily continue `prompt`, and return whether the continuation matches
-// `want` token-for-token. Kept free of T? so the [test]'s run()-lambda captures no array by move.
-def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int64>) : bool {
-    var tr <- load_gguf(path, quant)
-    // Cap the KV context: only ~(prompt + want) positions are used, and the KV stride doesn't change
-    // the computed tokens — but Llama-3's native 131072 makes the KV array exceed the 4GB uint32 cap.
-    if (tr.config.seq_len > 2048l) {
-        tr.config.seq_len = 2048l
-    }
+// The pinned-kernel generate-and-compare core: greedily continue `prompt` on a loaded model and
+// return whether the continuation matches `want` token-for-token. Kept free of T? so the [test]'s
+// run()-lambda captures no array by move.
+def private parity_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
     let n_gen = length(want)
     var ok = false
     // Token-exact oracle gate => run the BIT-EXACT classic prefill attention, not the (default) flash:
@@ -63,6 +59,17 @@ def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int
     set_prefill_attn_mode(prev_attn)
     set_act_vec(prev_act)
     return ok
+}
+
+// Load `path` at `quant` and gate the pre-tokenized `prompt` fixture against `want`.
+def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int64>) : bool {
+    var tr <- load_gguf(path, quant)
+    // Cap the KV context: only ~(prompt + want) positions are used, and the KV stride doesn't change
+    // the computed tokens — but Llama-3's native 131072 makes the KV array exceed the 4GB uint32 cap.
+    if (tr.config.seq_len > 2048l) {
+        tr.config.seq_len = 2048l
+    }
+    return parity_gen_ok(tr, prompt, want)
 }
 
 // gemma-2-2b-it Q8_0, prompt "Once upon a time" (BOS=2). Confident — clean 40/40 vs oracle.
@@ -320,5 +327,56 @@ def test_parity_gemma3_4b(t : T?) {
             return
         }
         t |> success(parity_ok(path, QuantMode.q8, GEMMA3_PROMPT, GEMMA3_4B_GEN), "gemma3-4b token-for-token")
+    }
+}
+
+// gemma-4-12B-it Q8 — the heterogeneous-geometry arch: sliding layers 16Q/8KV heads of 256 vs
+// global 16Q/1KV of 512 (per-layer bool SWA pattern), p-RoPE factors on global layers only,
+// weightless V-norm, V-from-K on global layers, unit attention scale, per-layer output scale,
+// final softcap 30, suppressed <image|>/<audio|> logits. The prompt is "1, 2, …, 320," (~1490
+// tokens) ENCODED IN-TEST through the model's gemma4 tokenizer (verified id-for-id against the
+// oracle's tokenization), so this gates the tokenizer AND the forward, and the 1024-token sliding
+// window is genuinely engaged (kstart > 0). The short 21-token counting prompt was rejected as a
+// fixture: its oracle continuation drifts into the channel format on a near-tie that flips under
+// the pinned classic+libm kernels — the long prompt's list momentum is kernel-robust.
+let GEMMA4_12B_GEN <- [236743l, 236800l, 236778l, 236770l, 236764l, 236743l, 236800l, 236778l, 236778l, 236764l,
+                       236743l, 236800l, 236778l, 236800l, 236764l, 236743l, 236800l, 236778l, 236812l, 236764l,
+                       236743l, 236800l, 236778l, 236810l, 236764l, 236743l, 236800l, 236778l, 236825l, 236764l,
+                       236743l, 236800l, 236778l, 236832l, 236764l, 236743l, 236800l, 236778l, 236828l, 236764l]
+
+// The gemma4 fixture prompt: "1, 2, …, 320," — byte-identical to the oracle run's input.
+def private gemma4_counting_prompt() : string {
+    return build_string() $(var w) {
+        for (i in range(1, 321)) {
+            w |> write(i)
+            w |> write(i < 320 ? ", " : ",")
+        }
+    }
+}
+
+// Text-prompt variant of parity_ok for fixtures that encode in-test (needs the tokenizer, so
+// load_model instead of load_gguf); same seq cap + pinned bit-exact kernels via parity_gen_ok.
+def private parity_text_ok(path : string; quant : QuantMode; text : string; want : array<int64>) : bool {
+    var tr <- load_model(path, quant)
+    if (tr.config.seq_len > 2048l) {
+        tr.config.seq_len = 2048l
+    }
+    let prompt <- encode(tr, text, true, false)
+    return parity_gen_ok(tr, prompt, want)
+}
+
+[test]
+def test_parity_gemma4_12b(t : T?) {
+    t |> run("gemma4 forward (gemma-4-12B-it Q8, heterogeneous SWA/global geometry, window engaged)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}gemma-4-12B-it-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_text_ok(path, QuantMode.q8, gemma4_counting_prompt(), GEMMA4_12B_GEN), "gemma4-12b token-for-token")
     }
 }
