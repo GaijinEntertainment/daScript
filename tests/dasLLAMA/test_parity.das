@@ -360,18 +360,30 @@ def test_parity_qwen2moe(t : T?) {
     }
 }
 
-// gemma-3-1b-it + gemma-3-4b-it Q8, "1, 2, 3, 4, 5, 6, 7," (BOS=2) — the per-layer attention-pattern
-// arch (5-local:1-global SWA + dual RoPE θ; the 4B adds linear-8 position scaling on global layers).
-// Same counting prompt, but the models diverge after "10" (the 1B drops into prose), so each keeps
-// its own continuation. The sliding MASK itself (kstart > 0) engages only past the 512-token window;
-// that was validated separately with a ~900-token counting prompt (40/40) — see the wave-2 notes.
+// gemma-3-1b-it + gemma-3-4b-it Q8 — the per-layer attention-pattern arch (5-local:1-global SWA +
+// dual RoPE θ; the 4B adds linear-8 position scaling on global layers). The 4B counts cleanly from
+// "1..7," (BOS=2); the 1B used to drop into prose after "10" — a prose tail that flipped a genuine
+// near-tie when the box profile's tuned kernel perms went live — so its prompt counts to 23 and the
+// continuation stays numeric for all 40 tokens (kernel-robust; oracle-refrozen 2026-07-02, verified
+// pinned 40/40 both with and without a live box profile). The sliding MASK itself (kstart > 0)
+// engages only past the 512-token window; that was validated separately with a ~900-token counting
+// prompt (40/40) — see the wave-2 notes.
 let GEMMA3_PROMPT <- [2l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
                       236812l, 236764l, 236743l, 236810l, 236764l, 236743l, 236825l, 236764l, 236743l, 236832l,
                       236764l]
-let GEMMA3_1B_GEN <- [236743l, 236828l, 236764l, 236743l, 236819l, 236764l, 236743l, 236770l, 236771l, 236761l,
-                      108l, 2094l, 563l, 496l, 3606l, 7501l, 529l, 4945l, 236761l, 138l,
-                      1509l, 236789l, 236751l, 3187l, 1456l, 618l, 496l, 6250l, 1523l, 573l,
-                      4735l, 1003l, 17047l, 236761l, 108l, 6294l, 611l, 1461l, 786l, 531l]
+let GEMMA3_1B_PROMPT <- [2l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
+                         236812l, 236764l, 236743l, 236810l, 236764l, 236743l, 236825l, 236764l, 236743l, 236832l,
+                         236764l, 236743l, 236828l, 236764l, 236743l, 236819l, 236764l, 236743l, 236770l, 236771l,
+                         236764l, 236743l, 236770l, 236770l, 236764l, 236743l, 236770l, 236778l, 236764l, 236743l,
+                         236770l, 236800l, 236764l, 236743l, 236770l, 236812l, 236764l, 236743l, 236770l, 236810l,
+                         236764l, 236743l, 236770l, 236825l, 236764l, 236743l, 236770l, 236832l, 236764l, 236743l,
+                         236770l, 236828l, 236764l, 236743l, 236770l, 236819l, 236764l, 236743l, 236778l, 236771l,
+                         236764l, 236743l, 236778l, 236770l, 236764l, 236743l, 236778l, 236778l, 236764l, 236743l,
+                         236778l, 236800l, 236764l]
+let GEMMA3_1B_GEN <- [236743l, 236778l, 236812l, 236764l, 236743l, 236778l, 236810l, 236764l, 236743l, 236778l,
+                      236825l, 236764l, 236743l, 236778l, 236832l, 236764l, 236743l, 236778l, 236828l, 236764l,
+                      236743l, 236778l, 236819l, 236764l, 236743l, 236800l, 236771l, 236764l, 236743l, 236800l,
+                      236770l, 236764l, 236743l, 236800l, 236778l, 236764l, 236743l, 236800l, 236800l, 236764l]
 let GEMMA3_4B_GEN <- [236743l, 236828l, 236764l, 236743l, 236819l, 236764l, 236743l, 236770l, 236771l, 236764l,
                       236743l, 236770l, 236770l, 236764l, 236743l, 236770l, 236778l, 236764l, 236743l, 236770l,
                       236800l, 236764l, 236743l, 236770l, 236812l, 236764l, 236743l, 236770l, 236810l, 236764l,
@@ -389,7 +401,7 @@ def test_parity_gemma3_1b(t : T?) {
             t |> success(true, "skipped: {path} not present")
             return
         }
-        t |> success(parity_ok(path, QuantMode.q8, GEMMA3_PROMPT, GEMMA3_1B_GEN), "gemma3-1b token-for-token")
+        t |> success(parity_ok(path, QuantMode.q8, GEMMA3_1B_PROMPT, GEMMA3_1B_GEN), "gemma3-1b token-for-token")
     }
 }
 

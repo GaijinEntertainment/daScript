@@ -101,11 +101,16 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         print("  {kernel}: no passing variant\n")
         return ""
     }
-    let wname = names[winner]
-    if (wname == baseline) {
+    var wname = names[winner]
+    // a tie or sub-noise "win" HOLDS the shipped baseline: flipping the perm re-keys the JIT and
+    // reorders the kernel's float math, which is only worth paying for a real, repeatable margin
+    let margin = base > 0.0lf ? (base - best[winner]) / base * 100.0lf : 0.0lf
+    if (wname != baseline && base > 0.0lf && margin < 0.5lf) {
+        wname = baseline
+        print("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor, {margin}%)\n")
+    } elif (wname == baseline) {
         print("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
     } else {
-        let margin = base > 0.0lf ? (base - best[winner]) / base * 100.0lf : 0.0lf
         print("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
     }
     return wname
