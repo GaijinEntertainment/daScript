@@ -11,7 +11,7 @@ require strings
 //! Distinct from the SentencePiece path in dasllama_tokenizer: merges are *ranked*
 //! (lowest rank merges first, not score-based), pieces live in the GPT-2
 //! byte->unicode alphabet, and a unicode-aware pre-tokenizer splits text before BPE.
-struct BPETokenizer {
+struct BpeTokenizer {
     vocab : array<string>             // id -> piece (byte-unicode alphabet)
     lookup : table<string; int64>     // piece -> id
     merge_rank : table<string; int64> // "left right" -> rank (lower merges first)
@@ -22,8 +22,8 @@ struct BPETokenizer {
 }
 
 //! Load the BPE vocab / merges / token-types from a llama-arch GGUF's tokenizer metadata.
-def load_bpe_tokenizer_gguf(path : string) : BPETokenizer {
-    var tk : BPETokenizer
+def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
+    var tk : BpeTokenizer
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open gguf '{path}'")
@@ -198,7 +198,7 @@ def private pretok_split(cpts : array<int>; group_digits : bool) : array<int> {
 // ===== merge-rank BPE =====
 
 // Greedily merge the lowest-rank adjacent pair (leftmost on ties), in byte-unicode space.
-def private bpe_merge(tk : BPETokenizer; var symbols : array<string>) {
+def private bpe_merge(tk : BpeTokenizer; var symbols : array<string>) {
     while (length(symbols) > 1) {
         var best_rank = -1l
         var best_i = -1
@@ -219,7 +219,7 @@ def private bpe_merge(tk : BPETokenizer; var symbols : array<string>) {
 
 // Defensive fallback: a symbol that didn't resolve as a token is split back into its
 // base byte-unicode chars (each is always in the vocab). Rarely fires for valid merges.
-def private emit_chars(tk : BPETokenizer; s : string; var ids : array<int64>) {
+def private emit_chars(tk : BpeTokenizer; s : string; var ids : array<int64>) {
     let scpts <- utf8_to_cpts(s)
     for (c in scpts) {
         let id = tk.lookup?[cpt_to_utf8(c)] ?? -1l
@@ -230,7 +230,7 @@ def private emit_chars(tk : BPETokenizer; s : string; var ids : array<int64>) {
 }
 
 //! Encode text to BPE token IDs (no special tokens / BOS — matches test-tokenizer-0).
-def bpe_encode(tk : BPETokenizer; text : string) : array<int64> {
+def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
     let cpts <- utf8_to_cpts(text)
     // qwen2 splits digits one-at-a-time (\p{N}); llama3 / default groups up to three (\p{N}{1,3})
@@ -275,7 +275,7 @@ def bpe_encode(tk : BPETokenizer; text : string) : array<int64> {
 
 //! Decode one token id back to its raw UTF-8 text. Control/special tokens (BOS, EOS,
 //! <|eot_id|>, header markers) render as empty — callers detect them by id, not text.
-def bpe_decode(tk : BPETokenizer; id : int64) : string {
+def bpe_decode(tk : BpeTokenizer; id : int64) : string {
     // out of range, or a control token (BOS/EOS/<|eot_id|>/headers, GGUF type 3) — render nothing
     if (id < 0l || id >= int64(length(tk.vocab)) || tk.token_type[id] == 3l) {
         return ""
@@ -290,7 +290,7 @@ def bpe_decode(tk : BPETokenizer; id : int64) : string {
 }
 
 //! Decode a token id sequence to text (concatenated bpe_decode).
-def bpe_decode_ids(tk : BPETokenizer; ids : array<int64>) : string {
+def bpe_decode_ids(tk : BpeTokenizer; ids : array<int64>) : string {
     return build_string() $(var wr) {
         for (id in ids) {
             write(wr, bpe_decode(tk, id))
@@ -299,6 +299,6 @@ def bpe_decode_ids(tk : BPETokenizer; ids : array<int64>) : string {
 }
 
 //! Look up a special/added token id by its surface form (e.g. "<|eot_id|>"); -1 if absent.
-def special_id(tk : BPETokenizer; name : string) : int64 {
+def special_id(tk : BpeTokenizer; name : string) : int64 {
     return tk.lookup?[name] ?? -1l
 }

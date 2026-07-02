@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio
@@ -45,7 +45,7 @@ def private argmax(a : array<float>) : int {
 
 // flash prefill must land within REL_TOL of the classic prefill it replaces, and (for a confident
 // prompt) predict the same next token. start_pos>0 exercises the continuation path.
-def check_flash(t : T?; tr : Transformer; prompt : array<int64>; start_pos : int64; confident : bool) {
+def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; confident : bool) {
     let c = tr.config
     let n = int64(length(prompt))
     let REL_TOL = 0.05
@@ -74,7 +74,7 @@ def check_flash(t : T?; tr : Transformer; prompt : array<int64>; start_pos : int
     }
 }
 
-def run_all(t : T?; tr : Transformer; tk : Tokenizer) {
+def run_all(t : T?; tr : Model; tk : SpmTokenizer) {
     let short <- encode(tk, "Once upon a time, there was a little girl", true, false)
     check_flash(t, tr, short, 0l, true)
     check_flash(t, tr, short, 4l, true)                            // continuation

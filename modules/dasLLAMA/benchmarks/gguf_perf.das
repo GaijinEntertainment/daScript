@@ -1,7 +1,7 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require strings
@@ -24,7 +24,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def run_capture(t : Transformer; c : Config; tag : string; var out_tps : double&) : array<int64> {
+def run_capture(t : Model; c : Config; tag : string; var out_tps : double&) : array<int64> {
     var s <- make_run_state(c)
     let prompt = [1l, 9038l, 2501l, 263l, 931l]  // "Once upon a time"
     let t0 = ref_time_ticks()
@@ -48,7 +48,7 @@ def match_len(a, b : array<int64>) : int {
     return i
 }
 
-def decode_ids(tok : Tokenizer; ids : array<int64>; limit : int) : string {
+def decode_ids(tok : SpmTokenizer; ids : array<int64>; limit : int) : string {
     return build_string() $(var w) {
         var prev = 1l
         var n = 0

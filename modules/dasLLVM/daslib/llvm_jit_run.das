@@ -64,12 +64,64 @@ def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     }
 }
 
+// Loop tune hints (vectorize / vectorize_width / unroll / unroll_count / interleave_count)
+// live on ExprFor / ExprWhile annotations and reach ONLY the JIT — attach_loop_metadata
+// turns them into LLVM !llvm.loop metadata. They never enter the interpreter SimNode tree
+// that get_function_aot_hash walks, so the semantic hash is blind to them: a re-tuned
+// kernel ([tuned] restamping a different perm from a changed box_profile.json) has an
+// IDENTICAL aot hash and would silently reuse a stale DLL. Fold them into the JIT-only
+// cache key here, alongside LLVM_JIT_CODEGEN_VERSION / g_jit_fast_math.
+class private LoopHintHashVisitor : AstVisitor {
+    h : uint64
+    def fold_args(args : AnnotationArgumentList) {
+        // Fold the ONE value field the arg's type says is live. bValue/iValue/fValue share a C++
+        // union — reading a non-live member is UB (a bool load of vectorize_width=8 aborts ubsan
+        // and lets clang -O2 miscompile: chunk workers died with SIGSEGV on linux Release CI).
+        // Type coverage stays total: any basicType re-keys the DLL via its own live field.
+        for (a in args) {
+            h = (h ^ hash(a.name)) * JIT_FNV_PRIME
+            h = (h ^ uint64(int(a.basicType))) * JIT_FNV_PRIME
+            if (a.basicType == Type.tBool) {
+                h = (h ^ (a.bValue ? 1ul : 0ul)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tInt) {
+                h = (h ^ uint64(a.iValue)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tFloat) {
+                h = (h ^ hash(a.fValue)) * JIT_FNV_PRIME
+            } elif (a.basicType == Type.tString) {
+                h = (h ^ hash(a.sValue)) * JIT_FNV_PRIME
+            }
+        }
+    }
+    def override preVisitExprFor(expr : ExprFor?) : void {
+        fold_args(expr.annotations)
+    }
+    def override preVisitExprWhile(expr : ExprWhile?) : void {
+        fold_args(expr.annotations)
+    }
+}
+
+// Complete under jit_all_functions (the default): every used function is a top-level entry
+// in `funcs`, so folding each function's own body covers the whole compiled program.
+def private fold_loop_hints(funcs : array<FunctionPtr>; seed : uint64) : uint64 {
+    var vis = new LoopHintHashVisitor()
+    vis.h = seed
+    make_visitor(*vis) $(adapter) {
+        for (fn in funcs) {
+            visit(fn.body, adapter)
+        }
+    }
+    let r = vis.h
+    unsafe { delete vis }
+    return r
+}
+
 def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
                      emit_prologue : bool; debug_info : bool) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
         h = (h ^ get_function_aot_hash(fn)) * JIT_FNV_PRIME
     }
+    h = fold_loop_hints(funcs, h)   // JIT-only loop tune hints (see LoopHintHashVisitor)
     h = (h ^ uint64(opt_level)) * JIT_FNV_PRIME
     h = (h ^ uint64(size_level)) * JIT_FNV_PRIME
     h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME

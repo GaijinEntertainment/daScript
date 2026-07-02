@@ -21,13 +21,19 @@ modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace (dynamic binary)
   CMakeLists.txt              # ADD_MODULE_DAS registration (static binary + install)
   dasllama/                   # the module — require dasllama/<name>
-    dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q8·Q8, Q4)
+    dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q4) + Q8·Q8 kernel-backend registry
+    dasllama_math_default.das #   the portable Q8·Q8 kernel backend (the fallback; platform backends out-rank it)
     dasllama_quant.das        #   Q8_0 / Q4_0 (de)quantization
     dasllama_gguf.das         #   GGUF container parser + tensor transcode
     dasllama_unicode.das      #   Unicode classification + UTF-8 codec
     dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family)
     dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3)
-    dasllama_transformer.das  #   Config / Transformer / RunState, load + forward + generate
+    dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample
+    dasllama_arch_llama.das   #   Llama / Llama-2 / Llama-3 / TinyLlama arch (config + chat template)
+    dasllama_arch_qwen2.das   #   Qwen2 arch  (per-arch: config setter + [init] registration)
+    dasllama_arch_phi3.das    #   Phi-3 arch
+    dasllama_arch_gemma2.das  #   Gemma-2 arch
+    dasllama_transformer.das  #   umbrella — re-exports dasllama_common + registers every arch (require this)
   benchmarks/                 # perf harnesses (gen tok/s, prefill TTFT)
     matmul/                   #   matmul kernel micro-bench ledger
   harness/                    # verification / eval test beds + GGUF inspection tools

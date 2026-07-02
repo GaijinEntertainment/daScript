@@ -106,13 +106,20 @@ FILE(GLOB AOT_DASLLAMA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "t
 SET(AOT_DASLLAMA_MODULE_FILES
     modules/dasLLVM/daslib/aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_math.das
+    modules/dasLLAMA/dasllama/dasllama_math_default.das
     modules/dasLLAMA/dasllama/dasllama_math_aarch64_neon.das
     modules/dasLLAMA/dasllama/dasllama_quant.das
     modules/dasLLAMA/dasllama/dasllama_gguf.das
     modules/dasLLAMA/dasllama/dasllama_unicode.das
     modules/dasLLAMA/dasllama/dasllama_tokenizer.das
     modules/dasLLAMA/dasllama/dasllama_bpe.das
+    modules/dasLLAMA/dasllama/dasllama_common.das
+    modules/dasLLAMA/dasllama/dasllama_arch_llama.das
+    modules/dasLLAMA/dasllama/dasllama_arch_qwen2.das
+    modules/dasLLAMA/dasllama/dasllama_arch_phi3.das
+    modules/dasLLAMA/dasllama/dasllama_arch_gemma2.das
     modules/dasLLAMA/dasllama/dasllama_transformer.das
+    modules/dasLLAMA/dasllama/dasllama_chat.das
 )
 
 # AOT for decs test files

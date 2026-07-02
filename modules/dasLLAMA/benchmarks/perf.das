@@ -1,7 +1,7 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 
 // End-to-end throughput harness — the real metric for "reasonable performance".
@@ -15,7 +15,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def run_once(t : Transformer; c : Config; tag : string) : double {
+def run_once(t : Model; c : Config; tag : string) : double {
     var s <- make_run_state(c)
     let t0 = ref_time_ticks()
     let ids <- generate(t, s, [1l], N_TOKENS)

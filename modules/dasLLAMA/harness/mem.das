@@ -1,6 +1,6 @@
 options gen2
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 
 // Memory detector for the memory-honest refactor. Replays the chat path (load a GGUF, then
 // quantize to Q8) and reports both the logical footprint (array bytes we hold) and the real
@@ -19,7 +19,7 @@ def heap_mb() : double {
     return double(int64(heap_bytes_allocated())) / 1048576.0lf
 }
 
-def report(tag : string; t : Transformer) {
+def report(tag : string; t : Model) {
     let f = footprint(t)
     print("  {tag}: heap {heap_mb()} MB | footprint {mb(f.total)} MB"
         + " (aux-fp32 {mb(f.aux_fp32_bytes)} | weight-fp32 {mb(f.weight_fp32_bytes)}"

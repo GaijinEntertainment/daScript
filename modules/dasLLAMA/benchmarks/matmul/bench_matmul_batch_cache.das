@@ -3,6 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default
 require dasllama/dasllama_quant
 require daslib/jobque_boost
 require math

@@ -1,0 +1,1 @@
+Adds a name-only per-loop hint flag such as vectorize, unroll, or unroll_full to a for-loop expression. The entry is byte-identical to what the parser emits for a bare for [name] (...) loop, so a stamped hint reads the same as a hand-written one.

@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default
 require matmul_variants
 require dasllama/dasllama_quant
 require daslib/jobque_boost

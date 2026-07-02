@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 require daslib/fio
 
@@ -31,7 +31,12 @@ def private same(a, b : array<int64>) : bool {
 // Load `path` at `quant`, greedily continue `prompt`, and return whether the continuation matches
 // `want` token-for-token. Kept free of T? so the [test]'s run()-lambda captures no array by move.
 def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int64>) : bool {
-    let tr <- load_gguf(path, quant)
+    var tr <- load_gguf(path, quant)
+    // Cap the KV context: only ~(prompt + want) positions are used, and the KV stride doesn't change
+    // the computed tokens — but Llama-3's native 131072 makes the KV array exceed the 4GB uint32 cap.
+    if (tr.config.seq_len > 2048l) {
+        tr.config.seq_len = 2048l
+    }
     let n_gen = length(want)
     var ok = false
     // Token-exact oracle gate => run the BIT-EXACT classic prefill attention, not the (default) flash:
@@ -78,5 +83,53 @@ def test_parity_gemma2(t : T?) {
             return
         }
         t |> success(parity_ok(path, QuantMode.q8, GEMMA2_PROMPT, GEMMA2_GEN), "gemma2 token-for-token")
+    }
+}
+
+// TinyLlama-1.1B-v0.3 F16, "Once upon a time" (BOS=1) — the old gguf_run.das oracle (llama.cpp greedy
+// on the same F16 file). Loaded fp32 (F16 -> fp32) to match how that oracle was produced.
+let TINYLLAMA_V03_PROMPT <- [1l, 9038l, 2501l, 263l, 931l]
+let TINYLLAMA_V03_GEN <- [29892l, 727l, 471l, 263l, 4123l, 7826l, 4257l, 365l, 2354l, 29889l,
+                          2296l, 471l, 263l, 1407l, 15040l, 322l, 12758l, 7826l, 29892l, 2337l,
+                          3063l, 363l, 716l, 322l, 5566l, 11407l, 2712l, 304l, 5110l, 29889l,
+                          3118l, 2462l, 29892l, 1183l, 380l, 25443l, 2501l, 263l, 3143l, 393l]
+
+[test]
+def test_parity_tinyllama_v03(t : T?) {
+    t |> run("llama forward (TinyLlama-1.1B-v0.3 F16 -> fp32)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}tinyllama-1.1b-v0.3-f16.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.fp32, TINYLLAMA_V03_PROMPT, TINYLLAMA_V03_GEN), "tinyllama v0.3 token-for-token")
+    }
+}
+
+// Llama-3.2-1B-Instruct Q8, [BOS]+"Once upon a time" (θ=500000 + llama3 freq-scaling) — the old
+// llama3_run.das oracle (instrumented llama-simple / simple_ids CPU greedy).
+let LLAMA32_1B_PROMPT <- [128000l, 12805l, 5304l, 264l, 892l]
+let LLAMA32_1B_GEN <- [11l, 304l, 264l, 2678l, 14458l, 89777l, 304l, 279l, 20700l, 35231l,
+                       315l, 350l, 26089l, 3852l, 11l, 1070l, 12439l, 264l, 3995l, 3828l,
+                       7086l, 71471l, 13l, 71471l, 574l, 264l, 22999l, 323l, 68188l, 13836l,
+                       11l, 449l, 264l, 4851l, 2539l, 315l, 5895l, 323l, 264l, 4059l]
+
+[test]
+def test_parity_llama3_2_1b(t : T?) {
+    t |> run("llama forward (Llama-3.2-1B-Instruct Q8, θ=500000)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Llama-3.2-1B-Instruct-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, LLAMA32_1B_PROMPT, LLAMA32_1B_GEN), "llama-3.2-1b token-for-token")
     }
 }

@@ -9,12 +9,12 @@ require dasllama/dasllama_par  // maybe_parallel_for
 require math  // min/max in the token-block bounds
 
 // arm64 SDOT backend for the Q8·Q8 matmuls. dasllama_math owns the public matmul wrappers + the
-// portable kernels (the default); this module supplies the NEON kernels and, on an arm64 JIT host,
-// registers them as the active backend at [init] (use_q8q8_kernels). The registration is gated on
-// `jit_enabled()`: only under JIT does each sdot4 lower to one @llvm.aarch64.neon.sdot (see
-// llvm/daslib/aarch64_neon + g_aarch64_intrin_lookup in llvm_jit_intrin). Off-JIT (interpreter or
-// AOT) sdot4 hits its scalar fallback — slower than the portable dot_q8q8 — so the portable kernels
-// stay selected there, as they do on every non-arm64 host (get_architecture_name() != "arm64").
+// kernel-backend registry; dasllama_math_default supplies the portable fallback; this module supplies
+// the NEON kernels and, on an arm64 JIT host, registers them at [init] (register_kernel_backend). The
+// registration is gated on `jit_enabled()`: only under JIT does each sdot4 lower to one
+// @llvm.aarch64.neon.sdot (see llvm/daslib/aarch64_neon + g_aarch64_intrin_lookup in llvm_jit_intrin).
+// Off-JIT (interpreter or AOT) sdot4 hits its scalar fallback — slower than the portable dot_q8q8 — so
+// the portable backend stays selected there, as it does on every non-arm64 host.
 //
 // The kernels mirror the portable ones in dasllama_math (same raw-pointer signatures = the
 // MatmulQ8Q8*Fn typedefs, same 1N threading) and differ only in the inner dot. They are free to
@@ -133,8 +133,8 @@ def private q8q8_group3_kernel_neon_sdot4x4(var y0p : float?; var y1p : float?; 
 
 // ===== laneq backend (lane-indexed SDOT over interleaved 4-row groups) — Q8 model load only =====
 // Weights are repacked at load (repack_q8q8_neon) so each accumulator lane is a distinct output row:
-// no per-block horizontal reduce. Activated by enable_q8q8_laneq, never by default (the row-major
-// direct callers would read the interleaved layout as garbage). Group base + block stride match the
+// no per-block horizontal reduce. Activated by select_matmul_backend_for_load at Q8 model load, never
+// by default (the row-major direct callers would read the interleaved layout as garbage). Group base + block stride match the
 // repack: a 4-row group is 4*n int8, block bi at +bi*128 (32 k's × 4 rows). Tail rows (d % 4) are kept
 // row-major after the groups and run the sdot4x4 fallback.
 
@@ -310,7 +310,9 @@ def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp :
     // Token-blocked: TB tokens outer, groups inner — the TB×n activation slice stays L2-resident and is
     // reused across this thread's groups, instead of re-streaming the whole activation once per group
     // (which goes DRAM-bound at large ntok, e.g. the FFN-down n=8192, ntok=2048 = 16MB restreamed d/4×).
-    let TB = g_q8_token_block
+    // Clamp to keep TB×n within the per-box L2 budget (inert at the default TB=128): above ~L2/n the
+    // slice spills and prefill cliffs (measured n=8192 ~TB 1024, n=14336 ~512 on M1 Max).
+    let TB = effective_token_block(g_q8_token_block, n)
     maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             var tb = 0l
@@ -404,13 +406,19 @@ def private q8q8_group3_kernel_neon_laneq(var y0p : float?; var y1p : float?; va
 
 [init]
 def dasllama_math_aarch64_neon_register() {
-    // Only register the SDOT backend under JIT on arm64. Off-JIT (interpreter or AOT) sdot4/sdot4_laneq
+    // Only register the SDOT backends under JIT on arm64. Off-JIT (interpreter or AOT) sdot4/sdot4_laneq
     // run their SCALAR fallback body — slower than the portable dot_q8q8, which the vectorizer handles —
-    // so leaving the portable kernels active is faster everywhere the hardware SDOT isn't emitted.
+    // so the portable backend stays selected everywhere the hardware SDOT isn't emitted.
     if (get_architecture_name() == "arm64" && jit_enabled()) {
-        // default active backend: sdot4x4 on row-major weights (direct callers — tests, benchmarks)
-        use_q8q8_kernels(@@q8q8_kernel_neon_sdot4x4, @@q8q8_batch_kernel_neon_sdot4x4, @@q8q8_group3_kernel_neon_sdot4x4, @@repack_q8q8_identity)
-        // alternate backend: laneq + interleaved repack, activated by enable_q8q8_laneq at Q8 model load
-        register_q8q8_laneq(@@q8q8_kernel_neon_laneq, @@q8q8_batch_kernel_neon_laneq, @@q8q8_group3_kernel_neon_laneq, @@repack_q8q8_neon)
+        // arm64-sdot: sdot4x4 on row-major weights — the auto-selected default for direct callers
+        // (tests, benchmarks). priority 10 out-ranks portable (0).
+        register_kernel_backend(KernelBackend(name = "arm64-sdot", mm = @@q8q8_kernel_neon_sdot4x4,
+            batch = @@q8q8_batch_kernel_neon_sdot4x4, group3 = @@q8q8_group3_kernel_neon_sdot4x4,
+            repack = @@repack_q8q8_identity, needs_repack = false, priority = 10))
+        // arm64-laneq: laneq + interleaved repack — the highest priority (20), but needs_repack, so only
+        // select_matmul_backend_for_load (at Q8 model load, which then repacks) activates it.
+        register_kernel_backend(KernelBackend(name = "arm64-laneq", mm = @@q8q8_kernel_neon_laneq,
+            batch = @@q8q8_batch_kernel_neon_laneq, group3 = @@q8q8_group3_kernel_neon_laneq,
+            repack = @@repack_q8q8_neon, needs_repack = true, priority = 20))
     }
 }

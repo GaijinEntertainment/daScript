@@ -1063,6 +1063,29 @@ def add_annotation_argument(var arguments : AnnotationArgumentList; ann : rtti::
     return argIdx
 }
 
+def append_loop_flag(var loop : ExprFor?; name : string) : int {
+    //! Adds a name-only per-loop hint flag (e.g. "vectorize", "unroll", "unroll_full"),
+    //! byte-identical to what the parser emits for a bare `for [name] (...)`.
+    return loop.annotations |> add_annotation_argument(name, true)
+}
+
+def append_loop_hint(var loop : ExprFor?; name : string; value : int) : int {
+    //! Adds an int-valued per-loop hint ("unroll_count" / "vectorize_width" / "interleave_count").
+    return loop.annotations |> add_annotation_argument(name, value)
+}
+
+def append_vectorize(var loop : ExprFor?; width : int = 0) {
+    //! Marks the loop [vectorize]; a positive width also emits [vectorize_width = width].
+    loop |> append_loop_flag("vectorize")
+    if (width > 0) loop |> append_loop_hint("vectorize_width", width)
+}
+
+def append_unroll(var loop : ExprFor?; count : int = 0) {
+    //! [unroll] when count <= 0, else [unroll_count = count].
+    if (count > 0) loop |> append_loop_hint("unroll_count", count)
+    else loop |> append_loop_flag("unroll")
+}
+
 def get_for_source_index(expr : ExprFor?; svar : VariablePtr) {
     //! Returns the index of an iterator variable in a for-loop expression, or -1 if not found.
     for (v, t in expr.iteratorVariables, count()) {

@@ -1,68 +1,49 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama_transformer
-require dasllama/dasllama_tokenizer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
+require daslib/fio
+require strings
+require math
 
-// Local model + tokenizer (60MB / 433KB, gitignored).
-let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
-let TOKENIZER_PATH = "/Users/borisbatkin/Work/llama2.c/tokenizer.bin"
+// Greedy text completion over any GGUF model, with throughput stats. Collapses the old
+// run/gguf_run/llama3_run trio into one path: load_model auto-selects the arch + tokenizer, encode
+// the prompt, stream the greedy continuation, and print prefill / generation tok/s. Token-for-token
+// oracle validation lives in the test suite (tests/dasLLAMA/test_forward.das + test_parity.das).
+//
+//   bin/daslang -jit examples/dasLLAMA/run.das -- <model.gguf>
 
-// llama2.c stories15M greedy (-t 0.0): empty-prompt token IDs after BOS.
-let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
-// llama2.c encode("Once upon a time", bos): the prompt token IDs.
-let PROMPT_ORACLE <- [1l, 9038l, 2501l, 263l, 931l]
-
-def matches(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
-            return false
-        }
-    }
-    return true
-}
-
-def show(prefix : string; ids : array<int64>) {
-    print("{prefix}")
-    for (id in ids) {
-        print("{id} ")
-    }
-    print("\n")
-}
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-v0.3-f16.gguf"
+let PROMPT = "Once upon a time"
+let N_GEN = 64l
+let CTX = 4096l
 
 [export]
 def main {
-    let t <- load_checkpoint(MODEL_PATH)
-    let c = t.config
-    let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
-    print("=== dasLLAMA loaded (dim={c.dim}, {c.n_layers} layers, vocab={c.vocab_size}) ===\n")
+    var model = DEFAULT_MODEL
+    let cmd <- get_command_line_arguments()
+    if (!empty(cmd) && ends_with(cmd[length(cmd) - 1], ".gguf")) {
+        model = cmd[length(cmd) - 1]
+    }
+    print("loading {model}\n")
+    var m <- load_model(model, QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, CTX)
+    let c = m.config
+    print("config: dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size} arch={m.arch}\n")
 
-    // 1. encoder check: tokenize a real prompt, compare to llama2.c's tokenization
-    let pt <- encode(tk, "Once upon a time", true, false)
-    show("encode 'Once upon a time' -> ", pt)
-    print("  encode {matches(pt, PROMPT_ORACLE) ? "MATCH" : "MISMATCH"}\n")
-
-    // forward (via generate) threads its big matmuls, so it must run inside a job queue
+    let prompt <- encode(m, PROMPT, true, false)
+    print("{PROMPT}")
     with_job_que() {
-        // 2. empty-prompt regression: greedy decode token-for-token vs the oracle
-        var s <- make_run_state(c)
-        let bos_only <- encode(tk, "", true, false)
-        let ids <- generate(t, s, bos_only, length(ORACLE))
-        print("  empty-prompt greedy {matches(ids, ORACLE) ? "MATCH" : "MISMATCH"}\n")
-
-        // 3. prompt-driven generation: continue the prompt, decode to text
-        var s2 <- make_run_state(c)
-        let story <- generate(t, s2, pt, 64)
-        print("story: \"")
-        var prev = 1l
-        for (id in story) {
-            print(decode(tk, prev, id))
-            prev = id
+        set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
+        var s = create_session(m)
+        generate(m, s, prompt, SamplingParams(), N_GEN) $(_id, piece) {
+            fprint(fstdout(), piece)
+            fflush(fstdout())
+            return true
         }
-        print("\"\n")
+        let st = stats(s)
+        print("\n\n[prompt {st.n_prompt} tok | gen {st.n_gen} tok | ttft {int(st.ttft_s * 1000.0lf)}ms | ")
+        print("prefill {int(st.prefill_tps)} t/s | gen {int(st.gen_tps)} t/s]\n")
     }
 }

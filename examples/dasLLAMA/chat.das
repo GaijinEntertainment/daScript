@@ -1,182 +1,63 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama_transformer
-require dasllama/dasllama_tokenizer
-require dasllama/dasllama_math
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_chat
 require daslib/jobque_boost
-require daslib/random
 require daslib/fio
 require strings
+require math
 
-// Interactive ChatML chat REPL over a real GGUF model (TinyLlama-1.1B-Chat). Loads the model
-// + tokenizer once, quantizes to Q8 (1.63x faster, lossless at greedy), then loops: read a
-// line, append a ChatML turn, sample-generate the reply (streaming), keep the whole
-// conversation in the KV cache across turns. Type /quit (or Ctrl-D) to exit.
+// One chat REPL for every supported model. load_model auto-selects the architecture, tokenizer, and
+// chat template from the GGUF; the chat engine (dasllama_chat) renders each turn per the arch's
+// registered template and keeps the whole conversation in the KV cache. Works for Llama-2/3,
+// Qwen2.5, Phi-3.5, and Gemma-2 — the only per-model difference is data in the arch registry.
 //
-//   bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
-// Non-interactive demo: pipe lines in --
-//   printf 'hi\nwrite a haiku\n/quit\n' | bin/daslang -jit modules/dasLLAMA/dasllama_chat.das
+//   bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
+//   printf 'hi\n/quit\n' | bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 
-let MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
+let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
 let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
-let EOS = 2l   // </s> — the Zephyr turn separator and stop token
-let TEMP = 0.7
-let TOP_K = 40l         // sample only from the K most-likely tokens (kills long-tail drift)
-let PENALTY = 1.3       // repetition penalty on tokens already emitted this turn (kills loops)
-let MAX_NEW = 220l      // max tokens per reply
-
-// Sample the next token from s.logits with repetition penalty + temperature + top-k.
-// `recent` are tokens already emitted this turn; `scratch` is a reusable vocab-sized buffer.
-def sample(var s : RunState; vocab : int64; temp, penalty : float; top_k : int64;
-           recent : array<int64>; var scratch : array<float>; var seed : int4&) : int64 {
-    // repetition penalty over only the last `pwin` tokens (bounded window, like llama.cpp's
-    // penalty_last_n) — an unbounded window eventually suppresses frequent structural tokens
-    // (newlines, spaces) and the reply collapses into a wall of text on long answers.
-    let pwin = 64
-    let pstart = length(recent) > pwin ? length(recent) - pwin : 0
-    for (k in range(pstart, length(recent))) {
-        let id = recent[k]
-        let v = s.logits[id]
-        s.logits[id] = v > 0.0 ? v / penalty : v * penalty
-    }
-    if (temp <= 0.0) {
-        var best = 0l
-        var bv = s.logits[0]
-        for (i in range64(vocab)) {
-            if (s.logits[i] > bv) {
-                bv = s.logits[i]
-                best = i
-            }
-        }
-        return best
-    }
-    let inv = 1.0 / temp
-    for (i in range64(vocab)) {
-        s.logits[i] *= inv
-    }
-    // top-k: find the k-th largest logit, then mask everything below it
-    for (i in range64(vocab)) {
-        scratch[i] = s.logits[i]
-    }
-    var kth = -1.0e30
-    for (_j in range64(top_k)) {
-        var mx = -1.0e30
-        var mi = 0l
-        for (i in range64(vocab)) {
-            if (scratch[i] > mx) {
-                mx = scratch[i]
-                mi = i
-            }
-        }
-        kth = mx
-        scratch[mi] = -1.0e30
-    }
-    for (i in range64(vocab)) {
-        if (s.logits[i] < kth) {
-            s.logits[i] = -1.0e30
-        }
-    }
-    softmax(s.logits, vocab)
-    let r = random_float(seed)
-    var cdf = 0.0
-    for (i in range64(vocab)) {
-        cdf += s.logits[i]
-        if (r < cdf) {
-            return i
-        }
-    }
-    return vocab - 1l
-}
-
-// Forward each token into the KV cache, advancing pos. Returns the new pos.
-def prefill(t : Transformer; var s : RunState; toks : array<int64>; pos, seq_len : int64) : int64 {
-    var p = pos
-    for (tk in toks) {
-        break if (p >= seq_len)
-        forward(t, s, tk, p)
-        p++
-    }
-    return p
-}
+let CTX = 4096l   // cap the KV-cache context (the session's KV cache is sized to config.seq_len)
 
 [export]
 def main {
-    print("loading {MODEL} ...\n")
-    let t <- load_gguf(MODEL, QuantMode.q8)  // load straight into Q8: Q8_0 weights transcode, norms+embedding stay fp32
-    let tok <- load_tokenizer_gguf(MODEL)
-    let c = t.config
-    print("TinyLlama-1.1B-Chat-v1.0 ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). ")
-    print("Type your message; /quit to exit.\n\n")
+    var model = DEFAULT_MODEL
+    let cmd <- get_command_line_arguments()
+    if (!empty(cmd) && ends_with(cmd[length(cmd) - 1], ".gguf")) {
+        model = cmd[length(cmd) - 1]
+    }
+    print("loading {model} ...\n")
+    var m <- load_model(model, QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, CTX)
+    let c = m.config
+    print("{m.arch} ready (Q8, {c.n_layers} layers, ctx {c.seq_len}). Type your message; /quit to exit.\n\n")
 
-    var s = make_run_state(c)
-    var seed = random_seed(1234)
-    var scratch : array<float>
-    scratch |> resize(c.vocab_size)
-    var pos = 0l
-    var first = true
+    let params = SamplingParams(temp = 0.7, top_k = 40l, penalty = 1.1)
 
     with_job_que() {
-    set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
-    while (true) {
-        fprint(fstdout(), "You: ")
-        fflush(fstdout())
-        var line = fgets(fstdin())
-        break if (empty(line))  // EOF / Ctrl-D
-        line = strip(line)
-        continue if (empty(line))
-        if (line == "/quit" || line == "/exit") {
-            break
-        }
-
-        // Build this turn's Zephyr prefill: role markers are plain text, </s>=EOS by id.
-        // <|system|>\n{sys}</s>  <|user|>\n{msg}</s>  <|assistant|>\n
-        var pre : array<int64>
-        if (first) {
-            pre |> push(1l)  // BOS, once
-            pre |> push_from(encode(tok, "<|system|>\n{SYSTEM}", false, false))
-            pre |> push(EOS)
-            pre |> push_from(encode(tok, "\n<|user|>\n{line}", false, false))
-            first = false
-        } else {
-            pre |> push_from(encode(tok, "\n<|user|>\n{line}", false, false))
-        }
-        pre |> push(EOS)
-        pre |> push_from(encode(tok, "\n<|assistant|>\n", false, false))
-
-        if (pos + int64(length(pre)) >= c.seq_len) {
-            print("\n[context full — restart to continue]\n")
-            break
-        }
-        pos = prefill(t, s, pre, pos, c.seq_len)
-
-        // Stream the reply, sampling until <|im_end|> / EOS / budget.
-        fprint(fstdout(), "Bot: ")
-        var prev = EOS  // not BOS, so decode won't strip leading space spuriously
-        var recent : array<int64>  // tokens emitted this turn, for repetition penalty
-        var nout = 0l
-        while (nout < MAX_NEW && pos < c.seq_len) {
-            let next = sample(s, c.vocab_size, TEMP, PENALTY, TOP_K, recent, scratch, seed)
-            if (next == EOS) {
+        set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
+        var chat = create_chat(m, SYSTEM)
+        while (true) {
+            fprint(fstdout(), "You: ")
+            fflush(fstdout())
+            var line = fgets(fstdin())
+            break if (empty(line))  // EOF / Ctrl-D
+            line = strip(line)
+            continue if (empty(line))
+            if (line == "/quit" || line == "/exit") {
                 break
             }
-            var piece = decode(tok, prev, next)
-            if (nout == 0l && !empty(piece) && first_character(piece) == ' ') {
-                piece = slice(piece, 1)  // drop the leading space of the first reply token
+            add_user(chat, line)
+            fprint(fstdout(), "Bot: ")
+            respond(m, chat, params) $(piece) {
+                fprint(fstdout(), piece)
+                fflush(fstdout())
+                return true
             }
-            fprint(fstdout(), piece)
-            fflush(fstdout())
-            recent |> push(next)
-            prev = next
-            forward(t, s, next, pos)
-            pos++
-            nout++
+            let st = stats(chat.session)
+            print("\n\n[{st.n_gen} tok | ttft {int(st.ttft_s * 1000.0lf)}ms | prefill {int(st.prefill_tps)} t/s | gen {int(st.gen_tps)} t/s]\n")
         }
-        print("\n\n")
-
-        // Close the assistant turn in the KV context (</s>) so the next turn continues cleanly.
-        pos = prefill(t, s, [EOS], pos, c.seq_len)
-    }
     }
     print("bye\n")
 }

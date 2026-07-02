@@ -1,7 +1,7 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 require strings
 
@@ -19,7 +19,7 @@ def flops_per_token(c : Config) : int64 {
     return c.n_layers * per_layer + 2l * c.vocab_size * c.dim
 }
 
-def argmax_logits(s : RunState; vocab : int64) : int64 {
+def argmax_logits(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
     for (i in range64(vocab)) {
