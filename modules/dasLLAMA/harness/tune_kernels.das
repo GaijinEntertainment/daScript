@@ -1021,25 +1021,28 @@ def main {
     let gemmw = bench_gemm_tile()
     let laneqw = bench_laneq4x4()   // last: it pins the repack backend (sticks until process exit)
 
-    // Summary: which kernels the tuner would re-tune away from each one's shipped fallback. The
-    // fallback differs per kernel ([tuned(fallback=...)]); BASELINE below is the vec8_u2 majority.
+    // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the
+    // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).
     print("\n===== summary (winner per kernel) =====\n")
     let knames = fixed_array("dot", "axpy", "add_inplace", "mul_inplace", "scale_inplace", "copy_floats",
         "softmax", "rmsnorm", "dot_q4", "dot_q8q8", "quantize_q8_0_into_ptr",
         "rope_scaled_neox_tab", "gemm_f32_uk_4x16", "dot_q8q8_laneq4x4")
     let kwin = fixed_array(dotw, axpyw, addw, mulw, scalew, copyw,
         softmaxw, rmsw, dq4w, dq8w, quantw, ropew, gemmw, laneqw)
+    let kfall = fixed_array(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE,
+        BASELINE, "plain", "vec4_u4", "vec16", "plain",
+        BASELINE, "u2", "u2")
     var changed = 0
-    for (k, w in knames, kwin) {
-        let note = (w == "" || w == BASELINE) ? "" : "  (vs {BASELINE})"
+    for (k, w, f in knames, kwin, kfall) {
+        let note = (w == "" || w == f) ? "" : "  (shipped fallback {f})"
         print("  {k}: {w}{note}\n")
-        if (w != "" && w != BASELINE) {
+        if (w != "" && w != f) {
             changed++
         }
     }
     print(changed == 0
-        ? "\nall kernels keep {BASELINE} — the hand default holds; the tuner found nothing new.\n"
-        : "\n{changed} kernel(s) prefer a non-{BASELINE} perm on this box (some ship a non-{BASELINE} fallback by hand — compare per kernel).\n")
+        ? "\nevery kernel keeps its shipped fallback — the tuner found nothing new on this box.\n"
+        : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
     // mirrors softmax's winner instead of paying its own sweep.
