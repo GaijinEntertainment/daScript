@@ -378,7 +378,24 @@ what it costs today and what the fix would change.
   batch GEMM, no NEON arm, no repack backend), so a q4 prefill runs at generation speed:
   measured on SmolLM2-135M, q8 prefill 1391 t/s vs q4 prefill 70 t/s ≈ its own 69 t/s decode.
   A q4 batch kernel (or the load-time q4→q8 transcode as the cheap fix) closes it.
-  (Spotted tutorials wave.)
+  (Spotted tutorials wave.) **LOW PRIORITY (2026-07-02):** the path is cold — every model we
+  test/ship parity for is Q8_0 on disk (plus gpt-oss MXFP4→Q8); no Q4_0 GGUF anywhere in the
+  fixture set. q4 only fires when a user opts into `QuantMode q4` for footprint. Priority rises
+  only if the MXFP4→Q4_0 halfway house above lands (q4 becomes the resident format of a real
+  20B model).
+- **LOW PRIORITY: f32 projection GEMM is untiled — dot-per-token, no token block.**
+  `matmul_batch` (dasllama_math.das) is the exact pre-#3315 shape the Q8 path had: weight-
+  stationary nest with one horizontal-reduce `dot()` per (row, token), zero register reuse
+  across rows/tokens, and no L2 token-blocking (long-prefill X re-streams from DRAM per weight
+  row). The SDOT-era fix transfers verbatim since it's dtype-agnostic: a 4-row × 4-token
+  register tile with float4 `mad` chains and per-tile reduces (the fp32 twin of
+  `dot_q8q8_sdot4x4` — keeps W row-major, no repack, decode GEMV untouched; do NOT reuse the
+  broadcast-A `gemm_f32` form, it needs a transposed W copy) plus an `effective_token_block`
+  at ~¼ the Q8 block (fp32 activations are 4× fatter). Expected kernel win ~2-3.5× (what the
+  attention tile measured), ceiling below Q8 (fmla = 4 MACs/instr vs SDOT 16; 4B/weight vs
+  ~1.06B). LOW because the f32 arm only fires for f32 GGUF tensors — in practice the tiny
+  teaching models; attention's fp32 GEMMs already have the register tile (`gemm_f32_uk_4x16`).
+  (Spotted post-#3354, 2026-07-02.)
 - **`kv_cache_off` prefix-sums per call — O(n_layers²) int adds per forward.** Each call walks
   all prior layers (dasllama_common.das kv_cache_off); with per-layer heterogeneous kv geometry
   that's ~n_layers² ≈ 2-3k integer ops per token on the 12B — noise next to the matmuls, which
