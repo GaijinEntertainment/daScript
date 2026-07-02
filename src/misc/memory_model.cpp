@@ -348,12 +348,23 @@ namespace das {
                 initialSize = default_initial_size;
             }
             chunk = new HeapChunk ( capChunk(das::max(initialSize, s)), nullptr );
+            if ( !chunk->data ) {   // backing malloc failed: fail as OOM, don't install a dead chunk
+                delete chunk;
+                chunk = nullptr;
+                return nullptr;
+            }
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
                 return res;
             }
-            chunk = new HeapChunk ( capChunk(das::max(grow(chunk->size), s)), chunk);
+            auto nc = new HeapChunk ( capChunk(das::max(grow(chunk->size), s)), chunk);
+            if ( !nc->data ) {      // backing malloc failed: OOM, not an excuse to spin the grow loop
+                nc->next = nullptr; // detach — ~HeapChunk would otherwise free the whole live chain
+                delete nc;
+                return nullptr;
+            }
+            chunk = nc;
         }
     }
 
