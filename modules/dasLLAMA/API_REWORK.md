@@ -272,6 +272,28 @@ llama.cpp "minja" route, executes the embedded template directly) — is deliber
 until the named registry stops scaling; the realistic forcing function is gpt-oss's
 channel-based Harmony format at wave 5. Chat remains layer 2 throughout.
 
+### Performance ledger (living — address after the model waves)
+
+Standing rule (Boris, 2026-07-01): any performance possibility spotted while doing wave work
+gets a note HERE instead of being acted on mid-wave — the model waves optimize for correctness
+and coverage; this ledger is the backlog for the perf pass that follows them. Every entry says
+what it costs today and what the fix would change.
+
+- **Tied classifier reads the fp32 embedding — the single biggest decode lever on big-vocab
+  models.** `shared_weights` models (Gemma family, Qwen small) route the classifier matmul
+  through the fp32 `token_embd` in fblob: vocab × dim × 4B of traffic per token — on
+  gemma-4-12B (262144 × 3840) that is ~4GB/token, roughly a quarter of its ~5 tok/s decode
+  roofline; llama.cpp matmuls the Q8 embedding directly. Same fix also cuts RESIDENT memory
+  (the fp32 table costs 4GB vs ~1GB at Q8; today only the per-token embedding-row read needs
+  fp32, and that could dequant one row on demand). Changes numerics vs today's fp32 classifier
+  → every tied-model parity fixture needs refreezing in the same PR. (Spotted wave 3.)
+- **V-from-K layers: fuse the K→V copy with the weightless V-norm.** gemma4 global layers copy
+  the K projection into V, then rms_batch it — two passes over npos × kv_dim where one fused
+  pass would do. Small (kv_dim = 512 on those layers) but free. (Spotted wave 3.)
+- **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
+  gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
+  A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
+
 ## What collapsed (done — Phase 5)
 
 - `examples/dasLLAMA/` went from **8 programs to 2**. The 5 chat REPLs (`chat`, `gemma_chat`,
