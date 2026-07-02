@@ -193,8 +193,16 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
         list(APPEND all_outputs ${out_src})
         list(APPEND ${genList} ${out_src})
 
+        # The compile-time file path reaches generated code (quote-lowered
+        # functions embed it in hashed constants), so the input must be
+        # spelled EXACTLY as the dastest suite spells it when running from
+        # the source root — source-root-relative. An absolute input here
+        # desyncs the AOT hash against `test_aot -use-aot --test tests`
+        # (error[50101]) and bakes machine-specific paths into the stubs.
+        file(RELATIVE_PATH input_rel ${PROJECT_SOURCE_DIR} ${input_src})
+
         # Build command arguments for the current batch
-        list(APPEND _current_batch ${dasAotToolArg} ${input_src} ${out_arg})
+        list(APPEND _current_batch ${dasAotToolArg} ${input_rel} ${out_arg})
 
         file(MAKE_DIRECTORY ${out_dir})
         set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
@@ -221,6 +229,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     ADD_CUSTOM_COMMAND(
         OUTPUT  ${all_outputs}
         DEPENDS ${all_depends}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "AOT compiling files..."
         ${_commands}
     )

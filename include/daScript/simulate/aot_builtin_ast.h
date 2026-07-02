@@ -556,6 +556,11 @@ namespace das {
     DAS_CC_API void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_typemacro ( Module * mod, const TBlock<void,TypeMacroPtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_pass_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_capture_macro ( Module * mod, const TBlock<void,CaptureMacroPtr> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_simulate_macro ( Module * mod, const TBlock<void,SimulateMacroPtr> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_function_annotation ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API bool module_has_comment_reader ( Module * mod );
     DAS_CC_API Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at );
     DAS_CC_API Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
     DAS_CC_API Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at );
