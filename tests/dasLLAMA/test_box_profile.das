@@ -15,6 +15,7 @@ def private restore_defaults() {
     set_q8_l2_budget(4l * 1024l * 1024l)
     set_matmul_par_threshold(2_000_000l)
     set_attn_par_threshold(100_000l)
+    set_decode_attn_par_threshold(4_000_000l)
     set_requant_par_threshold(256_000l)
     set_norm_par_threshold(256_000l)
     set_rope_par_threshold(100_000l)
@@ -31,7 +32,8 @@ def test_runtime_section_applies(t : T?) {
     t |> success(terr == "", "temp_directory resolves")
     let path = path_join(dir, "dasllama_test_box_profile.json")
     let js = ("\{\"dot\":\"vec8_u2\",\"runtime\":\{\"q8_token_block\":256,\"q8_l2_budget\":8388608,"
-        + "\"matmul_par_threshold\":1000000,\"attn_par_threshold\":50000,\"requant_par_threshold\":128000,"
+        + "\"matmul_par_threshold\":1000000,\"attn_par_threshold\":50000,\"decode_attn_par_threshold\":2000000,"
+        + "\"requant_par_threshold\":128000,"
         + "\"norm_par_threshold\":128000,\"rope_par_threshold\":50000,\"kv_store_par_threshold\":128000,"
         + "\"act_par_threshold\":50000,\"q8_chunks_per_job\":3,\"q4_chunks_per_job\":5\}\}")
     t |> success(fwrite(path, js), "profile written")
@@ -40,6 +42,7 @@ def test_runtime_section_applies(t : T?) {
     t |> equal(get_q8_l2_budget(), 8388608l, "q8_l2_budget applied")
     t |> equal(get_matmul_par_threshold(), 1000000l, "matmul_par_threshold applied")
     t |> equal(get_attn_par_threshold(), 50000l, "attn_par_threshold applied")
+    t |> equal(get_decode_attn_par_threshold(), 2000000l, "decode_attn_par_threshold applied")
     t |> equal(get_requant_par_threshold(), 128000l, "requant_par_threshold applied")
     t |> equal(get_norm_par_threshold(), 128000l, "norm_par_threshold applied")
     t |> equal(get_rope_par_threshold(), 50000l, "rope_par_threshold applied")

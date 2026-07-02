@@ -1044,6 +1044,7 @@ def main {
     // cliff; edit the file under the knee); "threads" is advisory — set DAS_JOBQUE_THREADS to change it.
     let runtime = JV((q8_token_block = get_q8_token_block(), q8_l2_budget = get_q8_l2_budget(),
         matmul_par_threshold = get_matmul_par_threshold(), attn_par_threshold = get_attn_par_threshold(),
+        decode_attn_par_threshold = get_decode_attn_par_threshold(),
         requant_par_threshold = get_requant_par_threshold(), norm_par_threshold = get_norm_par_threshold(),
         rope_par_threshold = get_rope_par_threshold(), kv_store_par_threshold = get_kv_store_par_threshold(),
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),

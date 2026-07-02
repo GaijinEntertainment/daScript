@@ -347,9 +347,9 @@ what it costs today and what the fix would change.
   (the fp32 table costs 4GB vs ~1GB at Q8; today only the per-token embedding-row read needs
   fp32, and that could dequant one row on demand). Changes numerics vs today's fp32 classifier
   → every tied-model parity fixture needs refreezing in the same PR. (Spotted wave 3.)
-- **V-from-K layers: fuse the K→V copy with the weightless V-norm.** gemma4 global layers copy
-  the K projection into V, then rms_batch it — two passes over npos × kv_dim where one fused
-  pass would do. Small (kv_dim = 512 on those layers) but free. (Spotted wave 3.)
+- **DONE (perf pass, 2026-07-02): V-from-K layers fuse the K→V copy with the weightless V-norm.**
+  Decode (mm_qkv) and prefill both rmsnorm k→v out-of-place when v_norm is on (bit-identical to
+  copy + in-place norm; the block's v_norm step skips those layers). (Spotted wave 3.)
 - **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
   gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
   A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
@@ -362,11 +362,11 @@ what it costs today and what the fix would change.
   GEMM (`mul_mat_id`). Bucket positions by selected expert, run one batched GEMM per touched
   expert, scatter back by weight. Decode is unaffected (one token = no bucketing win).
   (Spotted wave 4.)
-- **MoE decode re-quantizes the same activation per expert.** `moe_ffn_core` calls `mm` 2×
-  per routed expert + 2× for the shared expert on the SAME `s.xb`, and each Q8 call re-runs
-  `quantize_q8_0_into` on it — 5 redundant requants of a dim-wide vector per layer per token
-  (only the down-projection inputs differ). Hoist the xb quant once per layer like `mm_qkv`
-  does for the fused QKV path. Small per call, ×24 layers ×(2k+2) matmuls. (Spotted wave 4.)
+- **DONE (perf pass, 2026-07-02): MoE decode re-quantized the same activation per expert.**
+  `moe_ffn_core` now quantizes xb once per layer into dedicated `moe_xq/moe_xs` (the
+  down-projections quantize s.hb into the shared xq/xs, which would clobber a hoisted image
+  there) and routes every gate/up matmul through `mm_at_q8_pre`. Bit-identical (same quants).
+  (Spotted wave 4.)
 - **MXFP4 experts transcode to Q8 — doubling their bytes.** gpt-oss-20b's expert stacks are
   4.25 bit/weight on disk (~10GB) but run as Q8 (~19GB + 2.4GB scales): 2× the resident memory
   AND 2× the decode weight traffic vs a native MXFP4 kernel (per-block E8M0 scale + 16-entry
@@ -396,20 +396,18 @@ what it costs today and what the fix would change.
   ~1.06B). LOW because the f32 arm only fires for f32 GGUF tensors — in practice the tiny
   teaching models; attention's fp32 GEMMs already have the register tile (`gemm_f32_uk_4x16`).
   (Spotted post-#3354, 2026-07-02.)
-- **`kv_cache_off` prefix-sums per call — O(n_layers²) int adds per forward.** Each call walks
-  all prior layers (dasllama_common.das kv_cache_off); with per-layer heterogeneous kv geometry
-  that's ~n_layers² ≈ 2-3k integer ops per token on the 12B — noise next to the matmuls, which
-  is why it wasn't chased. The clean fix (per Copilot on #3346): precompute a per-layer KV-ROW
-  prefix array (kv_dim sums, seq_len-independent) once at load and multiply by the LIVE seq_len
-  at call time, so the tests' post-load seq_len cap keeps working. (Spotted post-wave-3 review.)
-- **Decode attention runs the head loop single-threaded.** `attention_std_decode` walks all
-  n_heads inline (dasllama_common.das, the `for (h in range64(n_heads))` loop) while prefill
-  threads the same loop over heads. Per-token KV traffic is cnt × kv_dim × 2 × 4B × n_layers —
-  on the 12B at 2048 ctx that's ~1.6GB/token vs ~12GB of Q8 weights (~12%), and it grows
-  linearly with context, so it dominates decode at 32k-class contexts. llama.cpp threads decode
-  attention. Fix = maybe_parallel_for over heads gated on a cnt threshold (per-layer per-token
-  job dispatch is ~90µs on M1, so short contexts must stay inline). (Spotted tune audit,
-  2026-07-02.)
+- **DONE (perf pass, 2026-07-02): `kv_cache_off` prefix-summed per call.** `Model.kv_row_prefix`
+  (filled by layout_offsets, seq_len-independent) × the LIVE seq_len at call time — the O(1)
+  Model overload serves both hot call sites; the Config walking form stays as the definitional
+  reference. (Spotted post-wave-3 review, per Copilot on #3346.)
+- **IMPLEMENTED (perf pass, 2026-07-02), default UNMEASURED: decode attention threads over
+  heads.** `attention_std_decode` now maybe_parallel_fors the head loop (per-head att rows at
+  h×seq_len; disjoint writes ⇒ bit-exact vs inline, gated by test_forward's threaded-vs-inline
+  logit equality), behind `g_decode_attn_par_threshold` (profile `runtime.
+  decode_attn_par_threshold`). The default 4M is DERIVED from the ~90µs M1 dispatch cost, not
+  swept — the remaining work is a quiet-box measurement of the crossover (and the win itself:
+  per-token KV traffic is ~12% at 2048 ctx on the 12B, growing linearly with context). (Spotted
+  tune audit, 2026-07-02.)
 - **LOW PRIORITY: `sample_` top-k is O(top_k × vocab) scalar selection.** Each of the top_k
   rounds rescans the whole vocab (dasllama_common.das sample_) — top_k=40 on gemma-4's 262144
   vocab is ~10M compares per sampled token. Cold today (SamplingParams defaults are greedy /

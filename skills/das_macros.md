@@ -104,6 +104,7 @@ Note adapters can still *emit* code referencing the contributor's symbols by nam
   ```
 - **`ExprFieldFieldFlags.no_promotion`** / **`ExprAtFlags.no_promotion`** — prevent the compiler from promoting field access or index access to a different type; needed in generated AST to preserve exact types
 - **`[tag_function(tag_name)]`** on a function + **`[tag_function_macro(tag="tag_name")]`** on a class — intercepts calls to the tagged function and rewrites them in the `transform` method. Used for compile-time call rewriting (e.g., SOA `operator .` rewrites `soa[i].field` → `soa.field[i]`).
+- **Annotation argument names can't be grammar keywords.** `[myanno(default = "x")]` is `error[30151] syntax error, unexpected default` — the arg-list parser takes a `name`, and keywords (`default`, `type`, `in`, …) don't reduce to one. Pick a synonym (`fallback`, `kind`); verified 2026-07-02 on `[tuned]`.
 - **`[for_loop_macro(name=foo)]`** on a class inheriting `AstForLoopMacro` — intercepts `for` loops whose source is a matching type. Override `visitExprFor` to rewrite the loop AST (e.g., SOA for-loop expands `for (it in soa)` into per-field array iteration).
 
 ## AST type introspection
