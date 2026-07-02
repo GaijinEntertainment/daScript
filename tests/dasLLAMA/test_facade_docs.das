@@ -25,7 +25,8 @@ def private read_lines(path : string) : array<string> {
     if (empty(text)) {
         panic("test_facade_docs: can't read {path}")
     }
-    return <- split(text, "\n")
+    // Windows checkouts are CRLF (no *.das eol rule in .gitattributes); the parsing here is line-exact
+    return <- split(replace(text, "\r\n", "\n"), "\n")
 }
 
 // "def name(" / "def name_(" at column 0 => "name"/"name_"; "" for anything else (incl. private)
