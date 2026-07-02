@@ -42,7 +42,7 @@ def fixture_path() : string {
 def check_issue(t : T?; issue : LintIssue; code : string; line : int; needle : string) {
     t |> equal(issue.code, code)
     t |> equal(issue.line, line)
-    t |> success(issue.column > 0)
+    t |> success(issue.column >= 0)  // 0-based byte column — 0 is a legal start
     t |> success(issue.file |> ends_with("_collect_issues_fixture.das"))
     t |> success(find(issue.message, needle) >= 0)
 }
