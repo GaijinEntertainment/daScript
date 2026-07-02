@@ -224,6 +224,18 @@ def public type_sampler(var m : SpirvModule) : uint {
     return id
 }
 
+// OpTypeAccelerationStructureKHR — the opaque top-level acceleration structure descriptor type
+// (SPV_KHR_ray_tracing). Deduped (no operands).
+def public type_acceleration_structure(var m : SpirvModule) : uint {
+    let key = "accel"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeAccelerationStructureKHR, id)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 // OpTypeSampledImage wrapping an image type — the type of a combined image+sampler descriptor.
 def public type_sampled_image(var m : SpirvModule; image_type : uint) : uint {
     let key = "simg{image_type}"

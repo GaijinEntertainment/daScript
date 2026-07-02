@@ -195,3 +195,23 @@ class SpirvMeshShader : SpirvShader {
 class SpirvTaskShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.Task
 }
+
+// [raygen_shader] / [miss_shader] / [closest_hit_shader] (VK_KHR_ray_tracing_pipeline). Execution
+// model + RayTracingKHR capability + SPV_KHR_ray_tracing extension (SPIR-V 1.4); no execution modes.
+// Payloads / hit attributes are @ray_payload / @incoming_ray_payload / @hit_attribute globals; the
+// acceleration structure is an accelerationStructureEXT descriptor; rays are traced via traceRayEXT.
+// AnyHit / Intersection / Callable stages land with their first consumer.
+[function_macro(name="raygen_shader")]
+class SpirvRayGenShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.RayGen
+}
+
+[function_macro(name="miss_shader")]
+class SpirvMissShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.Miss
+}
+
+[function_macro(name="closest_hit_shader")]
+class SpirvClosestHitShader : SpirvShader {
+    def override shader_stage() : ShaderStage => ShaderStage.ClosestHit
+}

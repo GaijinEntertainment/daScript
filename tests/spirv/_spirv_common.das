@@ -1682,3 +1682,74 @@ def public mesh_stage_emitter_opcodes : table<uint> {
     }
     return <- s
 }
+
+// ===== ray-tracing stage fixtures (VK_KHR_ray_tracing_pipeline) =====
+// The RT-pipeline minimum: raygen traces a ray into the TLAS carrying a @ray_payload; miss writes the
+// @incoming_ray_payload from the world-ray direction; closest-hit reads the triangle @hit_attribute +
+// the hit-state builtins, traces a second (shadow-style) ray with its OWN @ray_payload at @location=1
+// -- the multi-payload case that forces the payload-by-argument traceRayEXT surface -- and writes the
+// incoming payload. All three share the rt_tlas descriptor (classified independently per blob).
+
+var @set = 0 @binding = 0 rt_tlas : accelerationStructureEXT
+var @ray_payload rt_payload : float3
+
+[raygen_shader(name="rt_raygen_spv"), marker(no_coverage)]
+def rt_raygen {
+    let px = float(gl_LaunchIDEXT.x)
+    let sx = float(gl_LaunchSizeEXT.x)
+    rt_payload = float3(0.0, 0.0, 0.0)
+    traceRayEXT(rt_tlas, 0x01u, 0xFFu, 0u, 0u, 0u,
+        float3(px / sx, 0.0, -1.0), 0.001, float3(0.0, 0.0, 1.0), 100.0, rt_payload)
+}
+
+var @incoming_ray_payload rt_miss_prd : float3
+
+[miss_shader(name="rt_miss_spv"), marker(no_coverage)]
+def rt_miss {
+    rt_miss_prd = float3(0.2, 0.3, 0.7) * (0.5 + 0.5 * gl_WorldRayDirectionEXT.y)
+}
+
+var @incoming_ray_payload rt_chit_prd : float3
+var @hit_attribute rt_bary : float2
+var @ray_payload @location = 1 rt_shadow : float3
+
+[closest_hit_shader(name="rt_chit_spv"), marker(no_coverage)]
+def rt_chit {
+    let w = 1.0 - rt_bary.x - rt_bary.y
+    // shadow-style secondary ray from the hit point: terminate-on-first-hit + skip-closest-hit
+    // (0x04 | 0x08 + opaque 0x01), miss index 1; the miss shader flips the "lit" payload
+    rt_shadow = float3(0.0, 0.0, 0.0)
+    traceRayEXT(rt_tlas, 0x0Du, 0xFFu, 0u, 0u, 1u,
+        gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT, 0.001,
+        float3(0.0, 1.0, 0.0), 100.0, rt_shadow)
+    let ids = float(gl_PrimitiveID + gl_InstanceCustomIndexEXT)
+    rt_chit_prd = float3(w, rt_bary.x, rt_bary.y) * (rt_shadow.x + ids * 0.0)
+}
+
+def public rt_raygen_words : array<uint> {
+    return clone_to_move(rt_raygen_spv)
+}
+
+def public rt_miss_words : array<uint> {
+    return clone_to_move(rt_miss_spv)
+}
+
+def public rt_chit_words : array<uint> {
+    return clone_to_move(rt_chit_spv)
+}
+
+def public rt_raygen_reflect_words : array<uint> {
+    return clone_to_move(rt_raygen_spv_reflect)
+}
+
+// The RT stages add two opcodes: OpTypeAccelerationStructureKHR (the TLAS descriptor type) and
+// OpTraceRayKHR. The RayTracingKHR capability + the SPV_KHR_ray_tracing extension ride on the
+// already-declared OpCapability / OpExtension; the RT storage classes ride on OpTypePointer /
+// OpVariable operands.
+def public rt_stage_emitter_opcodes : table<uint> {
+    var s <- mesh_stage_emitter_opcodes()
+    for (op in [SpvOp.TypeAccelerationStructureKHR, SpvOp.TraceRayKHR]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}

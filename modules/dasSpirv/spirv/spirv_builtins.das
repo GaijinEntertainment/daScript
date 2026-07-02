@@ -175,3 +175,33 @@ struct gl_MeshPerPrimitiveEXT {
     gl_PrimitiveID : int
 }
 var gl_MeshPrimitivesEXT : array<gl_MeshPerPrimitiveEXT>
+
+// ===== ray tracing (VK_KHR_ray_tracing_pipeline) =====
+// The RT-pipeline minimum surface: the launch grid + world-ray + hit-state builtins, the opaque
+// top-level acceleration structure descriptor, and traceRayEXT. Stage legality (which builtin is
+// visible in raygen / miss / closest-hit) is enforced at classification in spirv_emit; a payload is
+// declared as a `@ray_payload` (traced FROM this stage) or `@incoming_ray_payload` (what THIS stage
+// was invoked with) global, a triangle hit attribute as `@hit_attribute barycentrics : float2`.
+// AnyHit / Intersection / Callable stages (and their builtins) land with their first consumer.
+var gl_LaunchIDEXT             : uint3      // BuiltIn LaunchIdKHR (Input) — this invocation's cell in the vkCmdTraceRaysKHR launch grid
+var gl_LaunchSizeEXT           : uint3      // BuiltIn LaunchSizeKHR (Input) — the launch grid dimensions
+var gl_WorldRayOriginEXT       : float3     // BuiltIn WorldRayOriginKHR (Input, miss / closest-hit) — the current ray's world-space origin
+var gl_WorldRayDirectionEXT    : float3     // BuiltIn WorldRayDirectionKHR (Input, miss / closest-hit) — the current ray's world-space direction
+var gl_HitTEXT                 : float      // BuiltIn RayTmaxKHR (Input, closest-hit) — the hit distance t along the ray
+var gl_InstanceCustomIndexEXT  : int        // BuiltIn InstanceCustomIndexKHR (Input, closest-hit) — the TLAS instance's 24-bit custom index
+
+// The opaque top-level acceleration structure descriptor (VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR
+// on the host side). Declared with the usual `@set` / `@binding` slots:
+//     var @set = 0 @binding = 0 tlas : accelerationStructureEXT
+struct accelerationStructureEXT {}
+
+// traceRayEXT: OpTraceRayKHR. Traces one ray against `accel`; the closest-hit / miss shader selected
+// through the SBT (sbt_offset / sbt_stride / miss_index) writes its result into `payload`, which MUST
+// be a @ray_payload / @incoming_ray_payload global (the SPIR-V operand names the payload variable).
+// ray_flags: SPIR-V RayFlags bits (0x01 opaque, 0x04 terminate-on-first-hit, 0x08 skip-closest-hit, ...).
+// The stub body never runs -- only the call AST is read.
+[unused_argument(accel, ray_flags, cull_mask, sbt_offset, sbt_stride, miss_index, origin, tmin, direction, tmax, payload), sideeffects]
+def public traceRayEXT(accel : accelerationStructureEXT; ray_flags : uint; cull_mask : uint;
+                       sbt_offset : uint; sbt_stride : uint; miss_index : uint;
+                       origin : float3; tmin : float; direction : float3; tmax : float;
+                       var payload : auto(TT)&) : void {}

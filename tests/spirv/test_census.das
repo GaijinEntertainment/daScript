@@ -90,7 +90,10 @@ def test_opcode_census(t : T?) {
         add_set(present, pp_frag_words())
         add_set(present, task_payload_words())
         add_set(present, mesh_payload_words())
-        var declared <- mesh_stage_emitter_opcodes()
+        add_set(present, rt_raygen_words())
+        add_set(present, rt_miss_words())
+        add_set(present, rt_chit_words())
+        var declared <- rt_stage_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }

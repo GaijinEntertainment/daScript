@@ -21,6 +21,7 @@ enum SpirvDescriptorKind {
     sampler                 //!< a standalone `sampler` (separate-sampler model)
     comparison_sampler      //!< a `sampler2DShadow` (depth-compare combined sampler, sampled via textureCompare)
     input_attachment        //!< a `subpassInput` (Vulkan subpass-input attachment, sampled via subpassLoad)
+    acceleration_structure  //!< an `accelerationStructureEXT` (VK_KHR_ray_tracing top-level AS, traced via traceRayEXT)
 }
 
 //! Stages a binding / push range is used in (the host maps to e.g. VkShaderStageFlags). A single
@@ -31,6 +32,9 @@ bitfield SpirvStageFlags {
     compute     //!< used in the compute stage
     mesh        //!< used in the mesh stage (VK_EXT_mesh_shader)
     task        //!< used in the task / amplification stage (VK_EXT_mesh_shader)
+    raygen      //!< used in the ray-generation stage (VK_KHR_ray_tracing_pipeline)
+    miss        //!< used in the miss stage (VK_KHR_ray_tracing_pipeline)
+    closest_hit //!< used in the closest-hit stage (VK_KHR_ray_tracing_pipeline)
 }
 
 //! One descriptor binding (a UBO / SSBO / combined image sampler) at a (set, binding) slot.
@@ -58,12 +62,13 @@ struct SpirvReflection {
     push_constants : array<SpirvPushConstantRange>  //!< push-constant ranges
 }
 
-// 'RFL5' — wire-format magic + version. Bump on any layout OR descriptor-kind change to encode/
+// 'RFL6' — wire-format magic + version. Bump on any layout OR descriptor-kind change to encode/
 // decode_reflection, so an older consumer rejects a newer stream loudly instead of mis-mapping an
 // unknown SpirvDescriptorKind (kind_from_int falls back to uniform_buffer). RFL2 = Phase 7
 // (storage_image / sampled_image / sampler); RFL3 = Phase 10.4 (comparison_sampler);
-// RFL4 = input_attachment (subpassInput); RFL5 = mesh / task stage bits (this commit).
-let REFLECTION_MAGIC = 0x52464C35u
+// RFL4 = input_attachment (subpassInput); RFL5 = mesh / task stage bits;
+// RFL6 = ray-tracing stage bits + acceleration_structure kind (this commit).
+let REFLECTION_MAGIC = 0x52464C36u
 
 def finalize(var r : SpirvReflection) {
     delete r.bindings
@@ -102,6 +107,7 @@ def private kind_from_int(k : int) : SpirvDescriptorKind {
     if (k == int(SpirvDescriptorKind.sampler)) return SpirvDescriptorKind.sampler
     if (k == int(SpirvDescriptorKind.comparison_sampler)) return SpirvDescriptorKind.comparison_sampler
     if (k == int(SpirvDescriptorKind.input_attachment)) return SpirvDescriptorKind.input_attachment
+    if (k == int(SpirvDescriptorKind.acceleration_structure)) return SpirvDescriptorKind.acceleration_structure
     return SpirvDescriptorKind.uniform_buffer
 }
 

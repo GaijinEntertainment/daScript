@@ -68,12 +68,21 @@ def test_fail_closed_rejections(t : T?) {
         // index array under a non-triangle output topology
         check_rejects(t, "_fc_mesh_vertices_stage", "is only available in a mesh shader")
         check_rejects(t, "_fc_mesh_indices_topology", "requires output_topology")
-        // gl_PrimitiveID is a fragment-only Input builtin (reading it in a vertex shader is rejected)
-        check_rejects(t, "_fc_primid_stage", "is only available in the fragment stage")
+        // gl_PrimitiveID is a fragment Input builtin (+ closest-hit); reading it in a vertex shader is rejected
+        check_rejects(t, "_fc_primid_stage", "is not available in the vertex stage")
         // a mesh @out array<T> with an unsupported element type (double) fails closed, not crash emit_type
         check_rejects(t, "_fc_mesh_out_badtype", "not a supported varying type")
         // @task_payload outside a task/mesh stage, and a payload with a nested-struct field
         check_rejects(t, "_fc_payload_stage", "is only valid in a task or mesh shader")
         check_rejects(t, "_fc_payload_nested", "nested-struct payload fields are not yet supported")
+        // ray tracing: builtins / the traceRayEXT intrinsic / the TLAS descriptor / the RT storage
+        // classes are all RT-pipeline-stage-gated, and the trace payload must be a payload GLOBAL
+        check_rejects(t, "_fc_rt_builtin_stage", "is not available in the compute stage")
+        check_rejects(t, "_fc_rt_trace_stage", "traceRayEXT is only valid in a raygen / miss / closest-hit shader")
+        check_rejects(t, "_fc_rt_accel_stage", "accelerationStructureEXT 'fc_rta_tlas' is only valid in a raygen / miss / closest-hit shader")
+        check_rejects(t, "_fc_rt_payload_stage", "@ray_payload 'fc_rtp_payload' is only valid in a raygen / miss / closest-hit shader")
+        check_rejects(t, "_fc_rt_incoming_stage", "@incoming_ray_payload 'fc_rti_prd' is only valid in a miss or closest-hit shader")
+        check_rejects(t, "_fc_rt_hitattr_stage", "@hit_attribute 'fc_rth_bary' is only valid in a closest-hit shader")
+        check_rejects(t, "_fc_rt_trace_payload", "the payload argument must be a @ray_payload / @incoming_ray_payload global")
     }
 }
