@@ -256,7 +256,7 @@ are Q8_0 GGUFs into `~/Work/llama.cpp/models/` unless noted.
 | **1** | QK-norm — Config flag + per-layer `attn_q_norm`/`attn_k_norm` weights, per-head RMSNorm pre-RoPE in the shared attn blocks (a flag like `ffn_act`, not a block swap); `<think>`-stripping in chat history | Qwen3-0.6B (fast iteration), Qwen3-4B-Instruct-2507 (fixture) | 0.7 + 4.3 |
 | **2** | per-layer attention patterns — generalize the hardcoded `l % 2` SWA alternation to `sliding_window_pattern` (gemma2 = 2, gemma3 = 6), per-layer RoPE θ (dual rope tables); SmolLM3's NoPE layers = same machinery | gemma-3-1b-it, gemma-3-4b-it (opt: SmolLM3-3B) | 1.1 + 4.5 |
 | **3** ✅ | **Gemma 4** — GGUF ground truth revised the plan: the 12B has NO shared KV and NO PLE (`shared_kv_layers = 0`, `embedding_length_per_layer_input = 0` — both are E-series features; the loader now panics honestly on either). What it DOES need, all shipped: heterogeneous per-layer geometry (sliding 16Q/8KV×256 vs global 16Q/1KV×512 — per-layer weight-offset arrays, class-max scratch, per-layer KV-cache packing), explicit bool-array SWA pattern (`swa_mask`), p-RoPE freq factors on global layers only (full rotation, `dimension_count` == head size per class — pruning is a loader panic), weightless V-norm, V-from-K on the no-`attn_v` global layers, unit attention scale, per-layer `layer_output_scale`, final softcap, `suppress_tokens` logit bias, and the new `gemma4` SPM-style-BPE tokenizer (metaspace + newline-only pre-split + byte fallback; 46/46 on the official corpus). Shared-KV + PLE move to a follow-up E-series wave (E2B ~2GB oracle) | gemma-4-12b-it — 40/40 counting + 40/40 window-engaged ~1490-token prompt | 12.7 |
-| **4** | **MoE FFN block** via the ArchBlocks seam (proves Phase 4) — router → top-k, pluggable gating (softmax now, sigmoid slot, `norm_topk_prob`), routed experts + **shared expert(+gate)**; loader handles 3D stacked `ffn_*_exps`, expert-major Q8 so the existing kernels apply per expert. Decode first; prefill naive per-token, expert-bucketed grouped GEMM as a separate perf PR | Qwen1.5-MoE-A2.7B-Chat; stretch: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B | 15 (+14) |
+| **4** ✅ | **MoE FFN block** via the ArchBlocks seam (proves Phase 4 — the forward loops were untouched; qwen2moe registers `moe_blocks()`). Shipped: router → top-k over probs-before-selection, pluggable gating (`MoeGate.softmax\|sigmoid` from `{arch}.expert_gating_func`), `norm_topk_prob` + `expert_weights_scale` slots, routed experts + sigmoid-gated **shared expert**; expert-major layout (expert e of layer l = a plain 2D matrix at `we*_off + (l·n_expert+e)·dim·n_ff_exp`) so every existing kernel incl. the arm64 repack applies per expert; 3D `ffn_*_exps` transcode in one contiguous read; honest panics for grouped routing / gating-func 3 / `exp_probs_b` / expert biases. Decode fused; prefill naive per-token (grouped GEMM → ledger). Stretch models not pursued this wave: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B (qwen3moe = QK-norm + `norm_topk_prob`, no shared expert — a thin arch file when wanted) | Qwen1.5-MoE-A2.7B-Chat — 40/40 counting AND 40/40 prose, both prompts token-for-token | 15 |
 | **5** | attention sinks (per-head sink logit in the softmax — classic + flash cores) + MXFP4 GGUF decode (dequant → self-Q8 at load) | gpt-oss-20b | 12.1 |
 | **6** | *(infra, last)* lift the linear-allocator 4GB limit — `LinearChunkAllocator`'s per-chunk `uint32` cap breaks any context holding a >4GB single array, which today forces `options persistent_heap` on model-loading tests (Mistral-7B's Q8 blob is 7.1GB) and the `seq_len` cap before `create_session` (Llama-3/Phi native 131072 ⇒ >4GB KV arrays). Fix the allocator (64-bit chunk sizing), then remove both workarounds | none — regression = existing suite minus the workarounds | — |
 
@@ -293,6 +293,17 @@ what it costs today and what the fix would change.
 - **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
   gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
   A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
+- **MoE prefill is naive per-token — expert-bucketed grouped GEMM is the batched fix.** Each
+  prefill position routes independently and runs its top-k experts through the single-token
+  matmuls (`ffn_moe_prefill`); llama.cpp batches all positions hitting the same expert into one
+  GEMM (`mul_mat_id`). Bucket positions by selected expert, run one batched GEMM per touched
+  expert, scatter back by weight. Decode is unaffected (one token = no bucketing win).
+  (Spotted wave 4.)
+- **MoE decode re-quantizes the same activation per expert.** `moe_ffn_core` calls `mm` 2×
+  per routed expert + 2× for the shared expert on the SAME `s.xb`, and each Q8 call re-runs
+  `quantize_q8_0_into` on it — 5 redundant requants of a dim-wide vector per layer per token
+  (only the down-projection inputs differ). Hoist the xb quant once per layer like `mm_qkv`
+  does for the fused QKV path. Small per call, ×24 layers ×(2k+2) matmuls. (Spotted wave 4.)
 
 ## What collapsed (done — Phase 5)
 
