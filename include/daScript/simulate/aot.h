@@ -972,6 +972,22 @@ namespace das {
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %d", idx, size);
             return data[idx];
         }
+        __forceinline TT & operator () ( int64_t index, Context * __context__ ) {
+            if ( index<0 || uint64_t(index)>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %lld of %d", (long long)index, size);
+            return data[index];
+        }
+        __forceinline const TT & operator () ( int64_t index, Context * __context__ ) const {
+            if ( index<0 || uint64_t(index)>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %lld of %d", (long long)index, size);
+            return data[index];
+        }
+        __forceinline TT & operator () ( uint64_t idx, Context * __context__ ) {
+            if ( idx>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %llu of %d", (unsigned long long)idx, size);
+            return data[idx];
+        }
+        __forceinline const TT & operator () ( uint64_t idx, Context * __context__ ) const {
+            if ( idx>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %llu of %d", (unsigned long long)idx, size);
+            return data[idx];
+        }
     // safe index
         static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {
             if (!that) return nullptr;
@@ -991,6 +1007,26 @@ namespace das {
         static __forceinline const TT * safe_index ( const THIS_TYPE * that, uint32_t idx, Context * ) {
             if (!that) return nullptr;
             if ( idx>=uint32_t(size) ) return nullptr;
+            return that->data + idx;
+        }
+        static __forceinline TT * safe_index ( THIS_TYPE * that, int64_t index, Context * ) {
+            if (!that) return nullptr;
+            if ( index<0 || uint64_t(index)>=uint64_t(size) ) return nullptr;
+            return that->data + index;
+        }
+        static __forceinline const TT * safe_index ( const THIS_TYPE * that, int64_t index, Context * ) {
+            if (!that) return nullptr;
+            if ( index<0 || uint64_t(index)>=uint64_t(size) ) return nullptr;
+            return that->data + index;
+        }
+        static __forceinline TT * safe_index ( THIS_TYPE * that, uint64_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=uint64_t(size) ) return nullptr;
+            return that->data + idx;
+        }
+        static __forceinline const TT * safe_index ( const THIS_TYPE * that, uint64_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=uint64_t(size) ) return nullptr;
             return that->data + idx;
         }
     };

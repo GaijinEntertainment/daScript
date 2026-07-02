@@ -1882,9 +1882,17 @@ namespace das
             auto pidx = simulateExpression(expr->index);
             auto errorMessage = context.code->allocateName(", "+expr->describe());
             if ( r2vType->baseType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_AtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  return context.code->makeValueNode<SimNode_AtR2V_I64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
+                case Type::tUInt64: return context.code->makeValueNode<SimNode_AtR2V_U64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
+                default:            return context.code->makeValueNode<SimNode_AtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
+                }
             } else {
-                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range, errorMessage);
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  return context.code->makeNode<SimNode_At_I64>(at, prv, pidx, stride, extraOffset, range, errorMessage);
+                case Type::tUInt64: return context.code->makeNode<SimNode_At_U64>(at, prv, pidx, stride, extraOffset, range, errorMessage);
+                default:            return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range, errorMessage);
+                }
             }
         }
     }
@@ -1993,7 +2001,11 @@ namespace das
                 uint32_t stride = seT->getStride();
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
-                setE(expr, context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range));
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  setE(expr, context.code->makeNode<SimNode_SafeAt_I64>(at, prv, pidx, stride, 0, range)); break;
+                case Type::tUInt64: setE(expr, context.code->makeNode<SimNode_SafeAt_U64>(at, prv, pidx, stride, 0, range)); break;
+                default:            setE(expr, context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range)); break;
+                }
             } else if ( seT->isVectorType() ) {
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
@@ -2049,7 +2061,11 @@ namespace das
                 uint32_t stride = seT->getStride();
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
-                setE(expr, context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range));
+                switch ( expr->index->type->baseType ) {
+                case Type::tInt64:  setE(expr, context.code->makeNode<SimNode_SafeAt_I64>(at, prv, pidx, stride, 0, range)); break;
+                case Type::tUInt64: setE(expr, context.code->makeNode<SimNode_SafeAt_U64>(at, prv, pidx, stride, 0, range)); break;
+                default:            setE(expr, context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range)); break;
+                }
             } else if ( seT->isVectorType() && seT->ref ) {
                 auto prv = getE(expr->subexpr);
                 auto pidx = getE(expr->index);
