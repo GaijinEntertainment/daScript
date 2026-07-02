@@ -574,7 +574,7 @@ def rmsnorm(var o : array<float> | #; x : array<float> | #; weight : array<float
 //! finite). Two accumulators hide the fmax latency (~9x over scalar). Seeds with x[0] (idempotent) and
 //! never reads past the buffer, so it is safe for n < 8. Returns -FLT_MAX for n <= 0.
 def hmax(x : float const?; n : int64) : float {
-    if (n <= 0l) return -3.4028235e38
+    if (n <= 0l) return -FLT_MAX
     unsafe {
         let pf4 = reinterpret<float4 const?>(x)
         let n8 = n / 8l

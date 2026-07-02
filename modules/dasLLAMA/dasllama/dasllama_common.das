@@ -844,7 +844,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (2.0 * PI)) / denom))
             t.rope_freqs |> resize(hs / 2l)
             for (j in range64(hs / 2l)) {
-                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // rope_yarn_ramp(lo, hi, 2j)
+                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // = rope_yarn_ramp(lo, hi, i0 = 2j): ggml halves i0, and lo/hi are already pair-unit
                 t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
             }
             t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
@@ -1748,7 +1748,7 @@ def private moe_ffn_core(t : Model; var s : Session; l : int64) {
         }
         s.moe_idx[j] = best
         s.moe_w[j] = s.moe_logits[best]
-        s.moe_logits[best] = -3.402823e38
+        s.moe_logits[best] = -FLT_MAX
     }
     if (c.moe_gate == MoeGate.softmax_weight) {  // gpt-oss: softmax over just the selected k logits
         softmax(s.moe_w, k)
