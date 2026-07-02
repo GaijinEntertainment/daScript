@@ -3,6 +3,7 @@ options gen2
 module dasllama_math_aarch64_neon shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_tune  // [tuned]: reconstitute the laneq4x4 tile from its template with per-box loop hints
 require llvm/daslib/aarch64_neon  // sdot4: JIT-emitted ARM SDOT, scalar fallback elsewhere
 require daslib/jobque_boost public  // kernels expand parallel_for; consumers need its symbols
 require dasllama/dasllama_par  // maybe_parallel_for
@@ -80,7 +81,7 @@ def dot_q8q8_sdot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs :
 def private q8q8_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
-    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d >= g_matmul_par_threshold, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
                 myp[i] = dot_q8q8_sdot4x4(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
@@ -92,7 +93,7 @@ def private q8q8_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : flo
 def private q8q8_batch_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     var myp = yp
-    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d * ntok >= g_matmul_par_threshold, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
                 let wrow = wp + int64(i) * n
@@ -167,14 +168,8 @@ def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : 
     return f
 }
 
-//! 4-row × 4-token tile (the llama.cpp ggml_gemm_q8_0_4x4 structure): one 4-row interleaved group
-//! against 4 tokens at once, 4 independent int4 accumulators (one per token). Per chunk-lane the same
-//! weight v16i8 feeds all 4 tokens — LLVM CSEs it to one load (4× fewer weight loads than 4× laneq4) —
-//! and the 4 independent accumulator chains give the SDOT pipeline the ILP a single chain can't, so it
-//! approaches throughput instead of being latency-bound. Writes 16 outputs token-major into yp. Not
-//! `private`: called from inside the lifted parallel_for worker lambda. t0 % 1, ntok-t0 >= 4 assumed.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp)]
-def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; n, d, g, t0 : int64) {
+def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg : float const ?; xqp : int8 const ?; xsp : float const ?; n, d, g, t0 : int64) : void {
     let nb = n / 32l
     var f0 = float4(0.0, 0.0, 0.0, 0.0)
     var f1 = float4(0.0, 0.0, 0.0, 0.0)
@@ -189,7 +184,7 @@ def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp 
         let xs1 = xsp + (t0 + 1l) * nb
         let xs2 = xsp + (t0 + 2l) * nb
         let xs3 = xsp + (t0 + 3l) * nb
-        for [unroll_count = 2] (bi in range64(nb)) {
+        for [tune = 1] (bi in range64(nb)) {   // fallback u2
             let wb = bi * 128l
             let xb = bi * 32l
             var a0 = int4(0, 0, 0, 0)
@@ -235,6 +230,17 @@ def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp 
         yp[(t0 + 3l) * d + r + 3l] = f3.w
     }
 }
+
+//! 4-row × 4-token tile (the llama.cpp ggml_gemm_q8_0_4x4 structure): one 4-row interleaved group
+//! against 4 tokens at once, 4 independent int4 accumulators (one per token). Per chunk-lane the same
+//! weight v16i8 feeds all 4 tokens — LLVM CSEs it to one load (4× fewer weight loads than 4× laneq4) —
+//! and the 4 independent accumulator chains give the SDOT pipeline the ILP a single chain can't, so it
+//! approaches throughput instead of being latency-bound. Writes 16 outputs token-major into yp. Not
+//! `private`: called from inside the lifted parallel_for worker lambda. t0 % 1, ntok-t0 >= 4 assumed.
+//! Only the unroll perms genuinely apply (the body is straight-line sdot4_laneq intrinsics — a
+//! vectorize perm's hint is simply ignored by LLVM); fallback u2 = the shipped hand hint.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp), tuned(fallback = "u2")]
+def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; n, d, g, t0 : int64) {}
 
 // In-place repack of one Q8 weight region [d x n] into 4-row-interleaved groups (+ float4-per-block
 // scales). Copies the region to a scratch, then writes the interleaved layout back; tail rows (d % 4)
@@ -284,7 +290,7 @@ def private q8q8_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp : float
     let nb = n / 32l
     let ng = d / 4l
     var myp = yp
-    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d >= g_matmul_par_threshold, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             for (gi in range(rb, re)) {
                 let g = int64(gi)
@@ -313,7 +319,7 @@ def private q8q8_batch_kernel_neon_laneq(var yp : float?; wp : int8 const?; sp :
     // Clamp to keep TB×n within the per-box L2 budget (inert at the default TB=128): above ~L2/n the
     // slice spills and prefill cliffs (measured n=8192 ~TB 1024, n=14336 ~512 on M1 Max).
     let TB = effective_token_block(g_q8_token_block, n)
-    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d * ntok >= g_matmul_par_threshold, 0, int(ng), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             var tb = 0l
             while (tb < ntok) {

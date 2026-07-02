@@ -3,6 +3,7 @@ options gen2
 module dasllama_quant shared public
 
 require math
+require dasllama/dasllama_tune  // [tuned]: reconstitute the activation-requant kernel with per-box loop hints
 
 // dasLLAMA quantization — curriculum step 6. Batch-1 inference is bandwidth-bound
 // (time ~= bytes_read / bandwidth), so the lever is reading FEWER bytes per weight.
@@ -55,29 +56,43 @@ def quantize_q8_0_into(src : array<float> | #; n : int64; var qdst : array<int8>
     quantize_q8_0_into_ptr(unsafe(addr(src[0])), n, unsafe(addr(qdst[0])), unsafe(addr(sdst[0])), qoff, soff)
 }
 
-//! Pointer core of quantize_q8_0_into — the batched prefill requant threads over positions in fork
-//! contexts, which can only touch raw addresses. The destinations are `var int8?` / `var float?`,
-//! written directly (a hoisted/captured fork pointer binds straight through). Bit-identical to the
-//! array overload, which forwards here.
 [hint(noalias = src, noalias = qdst, noalias = sdst)]
-def quantize_q8_0_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; qoff, soff : int64) {
+def template quantize_q8_0_into_ptr_template(src : float const ?; n : int64; var qdst : int8 ?; var sdst : float ?; qoff, soff : int64) : void {
     let nblocks = n / QK8
     unsafe {
+        let p4 = reinterpret<float4 const?>(src)
         for (b in range64(nblocks)) {
             let base = b * QK8
-            var amax = 0.0
-            for (i in range64(QK8)) {
-                amax = max(amax, abs(src[base + i]))
+            // hand-vectorized |x| max over the 32-block: LLVM won't auto-vectorize an fmax reduction
+            // without nnan/nsz fast-math we don't emit (the gate hmax documents), so reassociate by
+            // hand — two float4 lanes hide the fmax latency. Bit-exact on finite input (max is
+            // order-free); weights/activations are always finite.
+            let f4 = base / 4l
+            var m0 = abs(p4[f4])
+            var m1 = abs(p4[f4 + 1l])
+            for (k in range64(1l, 4l)) {
+                m0 = max(m0, abs(p4[f4 + 2l * k]))
+                m1 = max(m1, abs(p4[f4 + 2l * k + 1l]))
             }
+            let m = max(m0, m1)
+            let amax = max(max(m.x, m.y), max(m.z, m.w))
             let d = amax / 127.0
             let id = d != 0.0 ? 1.0 / d : 0.0
             sdst[soff + b] = d
-            for (i in range64(QK8)) {
+            for [tune = 1] (i in range64(QK8)) {
                 qdst[qoff + base + i] = int8(round(src[base + i] * id))
             }
         }
     }
 }
+
+//! Pointer core of quantize_q8_0_into — the batched prefill requant threads over positions in fork
+//! contexts, which can only touch raw addresses. The destinations are `var int8?` / `var float?`,
+//! written directly (a hoisted/captured fork pointer binds straight through). Bit-identical to the
+//! array overload, which forwards here. fallback "plain" keeps the round/store loop unhinted, as
+//! shipped; a box profile can vectorize it (elementwise round+narrow — no reduction, exact).
+[hint(noalias = src, noalias = qdst, noalias = sdst), tuned(fallback = "plain")]
+def quantize_q8_0_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; qoff, soff : int64) {}
 
 //! Dequantize Q8_0 back to fp32 in place: dst[i] = q[i] * scales[i / 32]. The exact
 //! reference the dequant-in-dot kernel must reproduce, and the input to the fp32 forward

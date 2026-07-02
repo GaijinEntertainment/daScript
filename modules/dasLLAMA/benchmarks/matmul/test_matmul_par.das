@@ -17,7 +17,7 @@ def fill(var a : array<float>; count : int) {
 
 [test]
 def test_matmul_threaded(t : T?) {
-    // Shape past MATMUL_PAR_THRESHOLD (n*d = 2.36M) so production matmul takes the THREADED
+    // Shape past g_matmul_par_threshold (n*d = 2.36M) so production matmul takes the THREADED
     // path. Compared against the scalar matmul_naive ground truth: a threading bug (wrong row
     // partition, race, pointer error) yields large errors; fp reorder stays well under 1e-2.
     // (The matmul call MUST be inside with_job_que, which itself proves it threads.)

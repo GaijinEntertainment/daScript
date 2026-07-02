@@ -1238,7 +1238,7 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Model; wof
         var op = addr(out[0])
         let ip = reinterpret<float const?>(addr(src[0]))
         let wp = reinterpret<float const?>(addr(t.fblob[woff]))
-        maybe_parallel_for(dim * npos >= NORM_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+        maybe_parallel_for(dim * npos >= g_norm_par_threshold, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
                     let off = int64(p) * dim
@@ -1268,7 +1268,7 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
         var qp = addr(q_b[0])
         var kp = addr(k_b[0])
         let ffp = has_ff ? reinterpret<float const?>(addr(t.rope_freqs[0])) : null
-        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        let rope_par = (qd + kv_dim) * npos >= g_rope_par_threshold
         maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
@@ -1330,7 +1330,7 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
         var kp = addr(k_b[0])
         let cp = reinterpret<float const?>(addr(cos_tab[0]))
         let sp = reinterpret<float const?>(addr(sin_tab[0]))
-        let rope_par = (qd + kv_dim) * npos >= ROPE_PAR_THRESHOLD
+        let rope_par = (qd + kv_dim) * npos >= g_rope_par_threshold
         maybe_parallel_for(rope_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
@@ -1354,7 +1354,7 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
 // loff + (start_pos+p)*kv_dim and the source offset p*kv_dim both advance by kv_dim per position, so
 // the whole k_b -> key_cache store is ONE contiguous block of npos*kv_dim floats (v likewise) — copied
 // with the vectorized copy_floats (bounds-checked array copy doesn't vectorize), threaded over the
-// positions (each worker owns a disjoint cache slice). Self-gates on KV_STORE_PAR_THRESHOLD.
+// positions (each worker owns a disjoint cache slice). Self-gates on g_kv_store_par_threshold.
 def private kv_store_batch(var key_cache : array<float>; var value_cache : array<float>;
                            k_b : array<float>; v_b : array<float>; loff, start_pos, npos, kv_dim : int64) {
     let dstbase = loff + start_pos * kv_dim
@@ -1363,7 +1363,7 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
         var vcp = addr(value_cache[0])
         let kbp = reinterpret<float const?>(addr(k_b[0]))
         let vbp = reinterpret<float const?>(addr(v_b[0]))
-        maybe_parallel_for(kv_dim * npos >= KV_STORE_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+        maybe_parallel_for(kv_dim * npos >= g_kv_store_par_threshold, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             let m0 = int64(rb) * kv_dim
             let cnt = (int64(re) - int64(rb)) * kv_dim
             unsafe {
@@ -1378,7 +1378,7 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
 // One memory pass (vs silu-then-mul), and the transcendental is vectorized via exp4 unless g_act_vec is
 // off. Each element is independent (no cross-position reduce), so threading never changes the result;
 // the only non-bit-exactness is exp4's ~2 ulp. Fork workers touch raw base pointers; self-gates on
-// ACT_PAR_THRESHOLD so small prompts (and decode, npos=1) run inline.
+// g_act_par_threshold so small prompts (and decode, npos=1) run inline.
 def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
     let is_gelu = act == FfnAct.gelu
     let is_oai = act == FfnAct.swiglu_oai
@@ -1386,7 +1386,7 @@ def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hid
     unsafe {
         var gp = addr(g[0])
         var up = reinterpret<float const?>(addr(u[0]))
-        maybe_parallel_for(hidden * npos >= ACT_PAR_THRESHOLD, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
+        maybe_parallel_for(hidden * npos >= g_act_par_threshold, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
                     let off = int64(p) * hidden
@@ -1463,7 +1463,7 @@ def private mm_qkv(var s : Session; t : Model; l : int64) {
         mm(s.q, t, qoff, s.xb, s.xq, s.xs, dim, qd)
         mm(s.k, t, koff, s.xb, s.xq, s.xs, dim, kv)
         copy_floats(s.k, 0l, s.v, 0l, kv)
-    } elif (t.quant == QuantMode.q8 && dim * (qd + 2l * kv) >= MATMUL_PAR_THRESHOLD) {
+    } elif (t.quant == QuantMode.q8 && dim * (qd + 2l * kv) >= g_matmul_par_threshold) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
         matmul_q8q8_group3(s.q, s.k, s.v, t.qblob, t.qscales, qoff, koff, voff, s.xq, s.xs, dim, qd, kv, kv)
     } else {
@@ -1500,7 +1500,7 @@ def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>
             let xp = reinterpret<float const?>(addr(x[0]))
             var qp = addr(xqb[0])
             var sp = addr(xsb[0])
-            let rq_par = n * npos >= REQUANT_PAR_THRESHOLD
+            let rq_par = n * npos >= g_requant_par_threshold
             maybe_parallel_for(rq_par, 0, int(npos), get_total_hw_jobs()) $(rb, re) {
                 unsafe {
                     for (p in range(rb, re)) {
@@ -1875,20 +1875,36 @@ def forward(t : Model; var s : Session; token, pos : int64) {
 // Measurement is UNCONDITIONAL: a handful of ref_time_ticks() + table adds per prefill, negligible
 // against the matmuls, so it always accumulates. Output is on-demand — reset() to start a window,
 // report() to dump it. (We measure a lot; never gate the measurement, only the printing.)
+// Prefill pass-threading thresholds. Every value was measured on M1 Max against its ~90us job
+// dispatch; they are runtime knobs because the crossover tracks the box's dispatch latency and
+// core count, not the model. Setters clamp to >= 0 (0 = always thread).
 // Thread the prefill attention over heads once the work proxy (npos × max-cnt × n_heads) clears this;
 // below it the per-job dispatch overhead isn't worth it and we run the head loop inline.
-let ATTN_PAR_THRESHOLD = 100_000l
+var g_attn_par_threshold = 100_000l
 // Thread the per-position activation requant (mm_b) once n × npos clears this.
-let REQUANT_PAR_THRESHOLD = 256_000l
+var g_requant_par_threshold = 256_000l
 // Thread the per-position rmsnorm once dim × npos clears this.
-let NORM_PAR_THRESHOLD = 256_000l
+var g_norm_par_threshold = 256_000l
 // Thread the per-position rope (q_b + k_b) once (qd + kv_dim) × npos clears this.
-let ROPE_PAR_THRESHOLD = 100_000l
+var g_rope_par_threshold = 100_000l
 // Thread the KV-cache store once kv_dim × npos clears this (it's a memory-bound contiguous copy).
-let KV_STORE_PAR_THRESHOLD = 256_000l
+var g_kv_store_par_threshold = 256_000l
 // Thread the per-position FFN activation (silu/gelu) once hidden × npos clears this. Lower than the
 // memory-bound passes — each element pays a transcendental (exp/tanh), so the compute justifies threading sooner.
-let ACT_PAR_THRESHOLD = 100_000l
+var g_act_par_threshold = 100_000l
+
+def set_attn_par_threshold(v : int64) { g_attn_par_threshold = max(v, 0l) }
+def get_attn_par_threshold() : int64 => g_attn_par_threshold
+def set_requant_par_threshold(v : int64) { g_requant_par_threshold = max(v, 0l) }
+def get_requant_par_threshold() : int64 => g_requant_par_threshold
+def set_norm_par_threshold(v : int64) { g_norm_par_threshold = max(v, 0l) }
+def get_norm_par_threshold() : int64 => g_norm_par_threshold
+def set_rope_par_threshold(v : int64) { g_rope_par_threshold = max(v, 0l) }
+def get_rope_par_threshold() : int64 => g_rope_par_threshold
+def set_kv_store_par_threshold(v : int64) { g_kv_store_par_threshold = max(v, 0l) }
+def get_kv_store_par_threshold() : int64 => g_kv_store_par_threshold
+def set_act_par_threshold(v : int64) { g_act_par_threshold = max(v, 0l) }
+def get_act_par_threshold() : int64 => g_act_par_threshold
 // Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).
 let ATTN_BLOCK_Q = 8l
 // Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
@@ -2102,7 +2118,7 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
                               is_sliding : bool; sliding_window : int64; attn_softcap : float;
                               sinksp : float const?) {   // this layer's per-head sink logits; null = no sinks
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-    let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
+    let attn_par = npos * maxctx * n_heads >= g_attn_par_threshold
     unsafe {
         let qp = reinterpret<float const?>(addr(s.q_b[0]))
         let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
@@ -2301,7 +2317,7 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
         prof_add("norm", ts_vnorm)
     }
     // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
-    // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
+    // rope_batch* self-gates threading on g_rope_par_threshold, so small prompts run it inline.
     // Sliding layers read the swa table / θ when the arch ropes them differently (Gemma3/gemma4);
     // p-RoPE arches (gemma4) apply the rope_freqs factors to GLOBAL layers only.
     let ts_rope = ref_time_ticks()

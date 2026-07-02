@@ -9,7 +9,7 @@ require math
 
 // Re-measure the parallel-vs-single threshold and the job-splitting granularity on the REAL
 // TinyLlama-1.1B matmul shapes, with the current FAST job manager (cond-var waiter + fork pool).
-// The original MATMUL_PAR_THRESHOLD (2M) and num_jobs (2N) were tuned against the old, slower
+// The original g_matmul_par_threshold (2M) and num_jobs (2N) were tuned against the old, slower
 // dispatcher and the stories15M toy shapes — both may have moved. Kernels are already
 // correctness-gated in bench_matmul.das (same code, different shapes), so this is perf-only.
 //

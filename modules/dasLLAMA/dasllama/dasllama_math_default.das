@@ -2,7 +2,8 @@ options gen2
 
 module dasllama_math_default shared public
 
-require dasllama/dasllama_math       // KernelBackend + register_kernel_backend + MATMUL_PAR_THRESHOLD + repack_q8q8_identity
+require dasllama/dasllama_math       // KernelBackend + register_kernel_backend + g_matmul_par_threshold + repack_q8q8_identity
+require dasllama/dasllama_tune       // [tuned]: reconstitute dot_q8q8 from its template with per-box loop hints
 require daslib/jobque_boost public   // parallel_for / notify_and_release (the kernels expand parallel_for)
 require dasllama/dasllama_par        // maybe_parallel_for / get_total_hw_jobs
 require math
@@ -13,25 +14,28 @@ require math
 // wins the auto-select where its ISA kernels are available. dasllama_math owns the registry + the public
 // matmul wrappers; this module supplies the portable kernels and registers them.
 
-//! Q8·Q8 dot: BOTH the weight (wq/ws) and the activation (xq/xs) are Q8 — int8 quants + one fp32
-//! scale per 32-block. The inner block loop is a pure int8·int8 multiply-accumulate, which the LLVM
-//! JIT lowers to ARM SDOT (vdotq_s32: 16 int8 MACs/instr, exact int32 accumulate). The two block
-//! scales multiply in once per 32-wide block. ~3.8x the dequant-in-dot dot_q8 on the kernel bench.
-//! n must be a multiple of 32.
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+def template dot_q8q8_template(wq : int8 const ?; ws : float const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
     var acc = 0.0
     let nb = n / 32l
     for (bi in range64(nb)) {
         let base = bi * 32l
         var iacc = 0
-        for [vectorize, vectorize_width = 16] (k in range64(32l)) {
+        for [tune = 1] (k in range64(32l)) {
             iacc += int(unsafe(wq[base + k])) * int(unsafe(xq[base + k]))
         }
         acc += float(iacc) * unsafe(ws[bi]) * unsafe(xs[bi])
     }
     return acc
 }
+
+//! Q8·Q8 dot: BOTH the weight (wq/ws) and the activation (xq/xs) are Q8 — int8 quants + one fp32
+//! scale per 32-block. The inner block loop is a pure int8·int8 multiply-accumulate, which the LLVM
+//! JIT lowers to ARM SDOT (vdotq_s32: 16 int8 MACs/instr, exact int32 accumulate) under the
+//! fallback vec16. The two block scales multiply in once per 32-wide block. ~3.8x the
+//! dequant-in-dot dot_q8 on the kernel bench. n must be a multiple of 32.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), tuned(fallback = "vec16")]
+def dot_q8q8(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
 // ----- parallel_for dispatch profiler (off by default) -----
 // When on, the batch kernel records each worker's start time (relative to the parallel_for start) into
@@ -72,7 +76,7 @@ def pf_prof_report() {
 def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
-    maybe_parallel_for(n * d >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d >= g_matmul_par_threshold, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
                 myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
@@ -126,7 +130,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
         g_pf_n ++
         return
     }
-    maybe_parallel_for(n * d * ntok >= MATMUL_PAR_THRESHOLD, 0, int(d), get_total_hw_jobs()) $(rb, re) {
+    maybe_parallel_for(n * d * ntok >= g_matmul_par_threshold, 0, int(d), get_total_hw_jobs()) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
                 let wrow = wp + int64(i) * n

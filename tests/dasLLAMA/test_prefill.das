@@ -97,7 +97,7 @@ def test_prefill_fp32(t : T?) {
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
             check_prefill(t, tr, prompt, mode)
             check_continuation(t, tr, prompt, 4l, mode)
-            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips ATTN_PAR_THRESHOLD (threaded arm)
+            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips g_attn_par_threshold (threaded arm)
         }
         delete tk
         delete tr
@@ -123,7 +123,7 @@ def test_prefill_q8(t : T?) {
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
             check_prefill(t, tr, prompt, mode)
             check_continuation(t, tr, prompt, 4l, mode)
-            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips ATTN_PAR_THRESHOLD (threaded arm)
+            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips g_attn_par_threshold (threaded arm)
         }
         delete tk
         delete tr
