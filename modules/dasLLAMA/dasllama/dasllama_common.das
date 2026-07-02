@@ -2686,20 +2686,32 @@ def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int6
     prof_add("act_resid", ts_resid1)
 }
 
+// Raw byte move as int64 lanes — the Q8 gather's copy. Integer loads/stores are bit-exact by
+// construction with no FP semantics (a float-lane copy of quant bytes could in principle quiet
+// sNaN bit patterns on some targets). n8 = byte count / 8.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def private copy_int64s(var d : int64?; s : int64 const?; n8 : int64) {
+    unsafe {
+        for (j in range64(n8)) {
+            d[j] = s[j]
+        }
+    }
+}
+
 // Gather one expert bucket's Q8-quantized activation rows (quants + scales) out of the whole-batch
-// image: gather row r comes from position moe_bkt[b0+r]/k. The int8 quant rows move as float lanes
-// (raw byte copy; dim % 4 == 0 always — dim % 32 == 0 for Q8).
+// image: gather row r comes from position moe_bkt[b0+r]/k. The int8 quant rows move as int64 lanes
+// (dim % 32 == 0 so dim % 8 == 0); the scales are genuine floats and ride the tuned copy_floats.
 def private moe_gather_rows(var s : Session; b0, cnt, dim, k : int64) {
     let nb = dim / 32l
-    let df = dim / 4l
+    let d8 = dim / 8l
     unsafe {
-        let xqp = reinterpret<float const?>(addr(s.xqb[0]))
-        var gqp = reinterpret<float?>(addr(s.moe_gxq[0]))
+        let xqp = reinterpret<int64 const?>(addr(s.xqb[0]))
+        var gqp = reinterpret<int64?>(addr(s.moe_gxq[0]))
         let xsp = reinterpret<float const?>(addr(s.xsb[0]))
         var gsp = addr(s.moe_gxs[0])
         for (r in range64(cnt)) {
             let p = s.moe_bkt[b0 + r] / k
-            copy_floats(gqp + r * df, xqp + p * df, df)
+            copy_int64s(gqp + r * d8, xqp + p * d8, d8)
             copy_floats(gsp + r * nb, xsp + p * nb, nb)
         }
     }

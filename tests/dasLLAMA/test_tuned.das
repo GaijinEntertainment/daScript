@@ -18,9 +18,10 @@ def template sample_dot_template(a, b : array<float>) : float {
 def sample_dot(a, b : array<float>) : float {}
 
 // `fallback=` supplies a kernel's own hand hints when they aren't the global vec8_u2; the box
-// profile still overrides it (precedence: perm > profile > fallback > vec8_u2). Resolution proof:
-// an unknown fallback fails the compile with "tuned: unknown perm" (negative-probed), so this
-// compiling at all means the fallback was consulted and found in the grid.
+// profile still overrides it (precedence: perm > profile > fallback > vec8_u2). Validation proof:
+// an unknown fallback name fails the compile with "tuned: unknown perm" (negative-probed), so this
+// compiling proves the fallback names a valid grid perm — the one consulted whenever no profile
+// entry / perm pin applies (and no profile carries this test-local kernel's key).
 [tuned(fallback = "u4", src = "sample_dot_template")]
 def sample_dot_u4(a, b : array<float>) : float {}
 
