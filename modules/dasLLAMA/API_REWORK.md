@@ -379,6 +379,12 @@ what it costs today and what the fix would change.
   measured on SmolLM2-135M, q8 prefill 1391 t/s vs q4 prefill 70 t/s ≈ its own 69 t/s decode.
   A q4 batch kernel (or the load-time q4→q8 transcode as the cheap fix) closes it.
   (Spotted tutorials wave.)
+- **`kv_cache_off` prefix-sums per call — O(n_layers²) int adds per forward.** Each call walks
+  all prior layers (dasllama_common.das kv_cache_off); with per-layer heterogeneous kv geometry
+  that's ~n_layers² ≈ 2-3k integer ops per token on the 12B — noise next to the matmuls, which
+  is why it wasn't chased. The clean fix (per Copilot on #3346): precompute a per-layer KV-ROW
+  prefix array (kv_dim sums, seq_len-independent) once at load and multiply by the LIVE seq_len
+  at call time, so the tests' post-load seq_len cap keeps working. (Spotted post-wave-3 review.)
 
 ## What collapsed (done — Phase 5)
 
