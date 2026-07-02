@@ -227,6 +227,37 @@ and CC converts to 0-based LSP before they reach the server.
   (`${CLAUDE_PLUGIN_ROOT}`-relative args; only the `python3` spelling can
   need a local edit on Windows).
 
+### Wave 4 — dogfooding: session adoption + call hierarchy / implementation
+
+Use the LSP to build the LSP: adopt it in this repo's Claude Code
+sessions first, then develop the new ops with live diagnostics on.
+
+1. **Session adoption** — make repo sessions load the plugin without
+   `--plugin-dir`. Wave-0 finding: CC has no plugin-less LSP path; the
+   checked-in vehicle is a `.claude/`-side plugin manifest (probe
+   suggested `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`,
+   loads on workspace trust). Verify empirically: commit the manifest,
+   restart a session, confirm diagnostics fire on an Edit with no CLI
+   flag. Watch for: python3-on-PATH, compiler discovery (already
+   repo-layout-aware), duplicate registration when `--plugin-dir` is
+   also passed.
+2. **Call hierarchy** — `textDocument/prepareCallHierarchy` →
+   `callHierarchy/incomingCalls` / `outgoingCalls` (CC consumes all
+   three per the wave-0 probe). das side in nav.das: prepare =
+   identify-function-at-cursor → CallHierarchyItem; incoming = walk all
+   program functions for calls to the target (RefVisitor precedent);
+   outgoing = walk the target body's ExprCall/ExprCallFunc/ExprInvoke.
+   The item must round-trip client→server between prepare and
+   incoming/outgoing — carry file/line/name in `item.data`.
+3. **goToImplementation** — `textDocument/implementation`: for a class
+   method, its overrides in derived classes; for an abstract method,
+   the implementations; consider generic → instances. Scope the exact
+   semantics in-session.
+4. Extend `tests/lsp/test_lsp_protocol.das` + live-verify in a headless
+   CC session, as before.
+
+PR for the whole branch AFTER wave 4 (single preflight + CI round).
+
 ## Non-goals
 
 - Completion (CC doesn't consume it), formatting-over-LSP (CC has the MCP/CLI
