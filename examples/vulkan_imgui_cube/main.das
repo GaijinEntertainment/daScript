@@ -2,25 +2,23 @@ options gen2
 options indenting = 4
 
 // Spinning cube rendered with dasVulkan, with a Dear ImGui control panel whose slider drives the
-// rotation speed -- and the ImGui UI is rasterized by a renderer backend written entirely in
-// daslang (vulkan/vulkan_imgui_driver). Cube and UI share one swapchain render pass: the cube draws first
-// (back-face culled, so no depth buffer is needed for a convex mesh), then the UI blends on top.
+// rotation speed -- UI built with the imgui_boost_v2 widget DSL and rasterized by a renderer backend
+// written entirely in daslang (vulkan/vulkan_imgui_driver). The vulkan_imgui_app harness owns the
+// window/device/swapchain and wires the live stack, so the app is fully drivable under daslang-live:
+// `imgui_snapshot` dumps the widget state, `imgui_force_set {"target":"CUBE_WIN/SPEED","value":4.0}`
+// spins the cube faster, `screenshot {"file":"..."}` captures the frame. Cube and UI share one
+// swapchain render pass (the cube draws in the harness_end_frame scene block).
 //
 // Run (from the repo root):
 //   daslang -project_root examples/vulkan_imgui_cube examples/vulkan_imgui_cube/main.das
-// Close the window to exit.
+// Live:
+//   daslang-live -project_root examples/vulkan_imgui_cube examples/vulkan_imgui_cube/main.das
+// Close the window to exit; P saves screenshot.png.
 
-require glfw/glfw_boost
-require vulkan
-require vulkan/vulkan_boost
-require vulkan/vulkan_window
-require vulkan/vulkan_live
+require vulkan/vulkan_imgui_app
 require vulkan/vulkan_reflect
 require cube_shaders
-require vulkan/vulkan_imgui_driver
-require imgui
-require imgui/imgui_theme_daslang
-require daslib/defer
+require daslib/safe_addr
 require math
 
 let WIN_W = 1100
@@ -187,178 +185,96 @@ def build_cube_pipeline(device : Device; render_pass : RenderPass; layout : Pipe
     return <- b
 }
 
+// ===== app state (globals so daslang-live reloads keep them) =====
+
+var g_speed = 1.0f
+var g_angle = 0.0f
+var g_cube_vb : HostBuffer
+var g_cube_ib : HostBuffer
+var g_cube_set_layouts : array<DescriptorSetLayout>
+var g_cube_pipe_layout : PipelineLayout
+var g_cube_pipeline : Pipeline
+
 [export]
-def main {
-    if (volkInitialize() != 0) {
-        panic("no vulkan loader")
-    }
-    glfwInitVulkanLoader(vk_get_instance_proc_addr())
-    if (glfwInit() == 0) {
-        panic("can't init glfw")
-    }
-    defer() { glfwTerminate() }
-    if (glfwVulkanSupported() == 0) {
-        panic("glfw reports no vulkan support")
-    }
-    glfwWindowHint(int(GLFW_CLIENT_API), GLFW_NO_API)
-    glfwWindowHint(int(GLFW_RESIZABLE), GLFW_TRUE)
-    var window = glfwCreateWindow(WIN_W, WIN_H, "dasVulkan cube + daslang ImGui backend", null, null)
-    if (window == null) {
-        panic("can't create window")
-    }
-    defer() { glfwDestroyWindow(window) }
+def init() {
+    harness_init("dasVulkan cube + daslang ImGui backend", WIN_W, WIN_H)
+    let device = harness_device()
+    let phys = harness_phys()
 
-    // ----- instance / surface / device / queue / pool -----
-    var ext_count = 0u
-    let glfw_exts = glfwGetRequiredInstanceExtensions(unsafe(addr(ext_count)))
-    var inst_exts : array<string>
-    for (i in range(int(ext_count))) {
-        unsafe {
-            inst_exts |> push(glfw_exts[i])
-        }
-    }
-    var inscope instance <- create_instance("vulkan_imgui_cube", make_api_version(1u, 3u, 0u), inst_exts)
-    volkLoadInstance(boost_value_to_vk(instance))
-    var inscope surface <- create_surface(instance, glfwGetNativeWindow(window), glfwGetNativeDisplay())
-    let phys = select_physical_device(instance)
-    let gfx = select_graphics_queue_family(phys)
-    if (!queue_family_supports_present(phys, gfx, surface)) {
-        panic("graphics queue family does not support presentation")
-    }
-    var inscope device <- create_device(phys, gfx, ["VK_KHR_swapchain"])
-    volkLoadDevice(boost_value_to_vk(device))
-    let queue = get_device_queue(device, gfx, 0u)
-    var poolci : CommandPoolCreateInfo
-    poolci.queueFamilyIndex = gfx
-    var inscope pool <- create_command_pool(device, poolci)
-
-    // ----- swapchain + color-only render pass (present) + framebuffers -----
-    // UNORM (pass-through) swapchain: the cube + ImGui both output already-sRGB colors, so we must NOT
-    // let the GPU sRGB-encode them again. Matches how the GL tools render (GL_FRAMEBUFFER_SRGB off).
-    var inscope swap <- create_swapchain(device, phys, surface, WIN_W, WIN_H, VkFormat.B8G8R8A8_UNORM)
-    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
-    build_swapchain_framebuffers(device, swap, render_pass)
-    var inscope sync <- create_frame_sync(device)
-
-    // hand vulkan_live the objects its screenshot / recording commands read (it owns none of them)
-    vk_live_set_target(device, phys, queue, pool, swap)
-
-    // ----- cube resources -----
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
     var verts_copy := cube_vertices
-    var inscope cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
+    g_cube_vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy)
     delete verts_copy
     var ib_usage : VkBufferUsageFlags
     ib_usage.index_buffer = true
     var indices_copy := cube_indices
-    var inscope cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
+    g_cube_ib <- create_host_buffer_from_bytes(device, phys, ib_usage, indices_copy)
     delete indices_copy
 
     var cube_refl <- [decode_reflection(cube_vert_spv_reflect), decode_reflection(cube_frag_spv_reflect)]
-    var inscope cube_set_layouts <- build_descriptor_set_layouts(device, cube_refl)
-    var inscope cube_pipe_layout <- build_pipeline_layout(device, cube_set_layouts, cube_refl)
+    g_cube_set_layouts <- build_descriptor_set_layouts(device, cube_refl)
+    g_cube_pipe_layout <- build_pipeline_layout(device, g_cube_set_layouts, cube_refl)
     delete cube_refl
     var inscope cube_vert <- create_shader_module(device, cube_vert_spv)
     var inscope cube_frag <- create_shader_module(device, cube_frag_spv)
-    var inscope cube_pipeline <- build_cube_pipeline(device, render_pass, cube_pipe_layout, cube_vert, cube_frag)
+    g_cube_pipeline <- build_cube_pipeline(device, harness_render_pass(), g_cube_pipe_layout, cube_vert, cube_frag)
+}
 
-    // ----- ImGui context + the 100%-daslang Vulkan renderer backend -----
-    let ctx = CreateContext(null)
-    load_daslang_font()       // daslang.io look (JetBrains Mono + amber theme), like the other tools
-    apply_daslang_theme()
-    var io & = unsafe(GetIO())
-    io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures      // we drain the texture queue ourselves
-    io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset
-    var inscope igvk <- imgui_vk_create(device, render_pass)
-
-    var speed = 1.0f
-    var angle = 0.0f
-    var last_t = float(glfwGetTime())
-    var shot_key_was_down = false   // edge-detect the screenshot key (P)
-
-    while (glfwWindowShouldClose(window) == 0) {
-        glfwPollEvents()
-        var fbw = 0
-        var fbh = 0
-        glfwGetFramebufferSize(window, fbw, fbh)
-        if (fbw == 0 || fbh == 0) {
-            glfwWaitEvents()
-            continue
-        }
-        if (fbw != swap.width || fbh != swap.height) {
-            vkDeviceWaitIdle(boost_value_to_vk(device))
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
-        }
-
-        let t = float(glfwGetTime())
-        let dt = max(t - last_t, 0.0001f)
-        last_t = t
-        angle += speed * dt
-
-        // ----- feed ImGui input (mouse + display) and build the UI -----
-        io.DisplaySize = float2(float(fbw), float(fbh))
-        io.DeltaTime = dt
-        // cursor pos is in window points but DisplaySize is framebuffer pixels -- scale to match on HiDPI
-        var winw = 0
-        var winh = 0
-        glfwGetWindowSize(window, unsafe(addr(winw)), unsafe(addr(winh)))
-        let csx = winw > 0 ? float(fbw) / float(winw) : 1.0f
-        let csy = winh > 0 ? float(fbh) / float(winh) : 1.0f
-        let mpos = glfwGetCursorPos(window)
-        io |> AddMousePosEvent(mpos.x * csx, mpos.y * csy)
-        io |> AddMouseButtonEvent(0, glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS)   // ImGui button 0 = left
-
-        var win_flags : ImGuiWindowFlags
-        var slider_flags : ImGuiSliderFlags
-        NewFrame()
-        if (Begin("Controls", null, win_flags)) {
-            Text("Cube: dasVulkan. UI: a 100% daslang ImGui->Vulkan backend.")
-            Text("Drag the slider to change the spin speed.")
-            SliderFloat("Rotation speed", unsafe(addr(speed)), 0.0f, 6.0f, "%.2f", slider_flags)
-        }
-        End()
-        Render()
-
-        // upload any textures ImGui requested (the font atlas on the first frame)
-        imgui_vk_update_textures(igvk, device, phys, queue, pool)
-
-        // ----- per-frame matrices -----
-        let aspect = float(swap.width) / float(swap.height)
-        let proj = perspective_vk(45.0f * PI / 180.0f, aspect, 0.1f, 100.0f)
-        let view = look_at_rh(float3(0.0f, 1.1f, 3.2f), float3(0.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f))
-        let model = rotate_y(angle)
-        let mvp = proj * view * model
-
-        let ok = vk_live_draw_frame(render_pass, sync,
-                            clear_color(0.10f, 0.11f, 0.14f, 1.0f), true) $(cmd) {
-            // cube
-            cmd_bind_pipeline(cmd, cube_pipeline)
-            cpc.mvp = mvp
-            cpc.model = model
-            cube_vs_push_constants(cmd, cube_pipe_layout)
-            let vbufs <- [weak_copy(cube_vb.buffer)]
-            var voffs : array<uint64>
-            voffs |> push(0ul)
-            cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
-            cmd_bind_index_buffer(cmd, weak_copy(cube_ib.buffer), 0ul, VkIndexType.UINT16)
-            cmd_draw_indexed(cmd, 36u, 1u, 0u, 0, 0u)
-            // UI on top, via the daslang backend
-            imgui_vk_render(igvk, device, phys, cmd)
-        }
-        if (!ok) {
-            vkDeviceWaitIdle(boost_value_to_vk(device))
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
-        }
-        // press P to capture the current frame via vulkan_live (swapchain readback -> PNG)
-        let shot_key_down = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS
-        if (shot_key_down && !shot_key_was_down) {
-            if (vk_live_save_screenshot("vulkan_imgui_cube.png")) {
-                print("saved vulkan_imgui_cube.png\n")
-            }
-        }
-        shot_key_was_down = shot_key_down
+[export]
+def update() {
+    if (!harness_begin_frame()) {
+        return
     }
-    vkDeviceWaitIdle(boost_value_to_vk(device))
-    DestroyContext(ctx)
+    harness_new_frame()
+
+    var io & = unsafe(GetIO())
+    g_angle += g_speed * io.DeltaTime
+
+    window(CUBE_WIN, (text = "Controls", closable = false,
+                      flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+        text("Cube: dasVulkan. UI: a 100% daslang ImGui->Vulkan backend.")
+        text("Drag the slider to change the spin speed.")
+        edit_slider_float(safe_addr(g_speed), (id = "SPEED", text = "Rotation speed",
+                                               v_min = 0.0f, v_max = 6.0f))
+    }
+
+    let sz = harness_size()
+    let aspect = float(sz.x) / float(max(sz.y, 1))
+    let proj = perspective_vk(45.0f * PI / 180.0f, aspect, 0.1f, 100.0f)
+    let view = look_at_rh(float3(0.0f, 1.1f, 3.2f), float3(0.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f))
+    let model = rotate_y(g_angle)
+    let mvp = proj * view * model
+
+    harness_end_frame() $(cmd : CommandBuffer) {
+        cmd_bind_pipeline(cmd, g_cube_pipeline)
+        cpc.mvp = mvp
+        cpc.model = model
+        cube_vs_push_constants(cmd, g_cube_pipe_layout)
+        let vbufs <- [weak_copy(g_cube_vb.buffer)]
+        var voffs : array<uint64>
+        voffs |> push(0ul)
+        cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
+        cmd_bind_index_buffer(cmd, weak_copy(g_cube_ib.buffer), 0ul, VkIndexType.UINT16)
+        cmd_draw_indexed(cmd, 36u, 1u, 0u, 0, 0u)
+    }
+}
+
+[export]
+def shutdown() {
+    delete g_cube_pipeline
+    delete g_cube_pipe_layout
+    delete g_cube_set_layouts
+    delete g_cube_ib
+    delete g_cube_vb
+    harness_shutdown()
+}
+
+[export]
+def main() {
+    init()
+    while (!exit_requested()) {
+        update()
+    }
+    shutdown()
 }

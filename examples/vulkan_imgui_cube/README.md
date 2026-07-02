@@ -24,9 +24,9 @@ Two opt-in modules ship with [dasVulkan](https://github.com/borisbat/dasVulkan):
 
 ## Files
 
-- `main.das` — the app: GLFW (no-API) window + Vulkan swapchain, the cube, and the ImGui panel; cube
-  and UI share one swapchain render pass (the cube is back-face culled, so a convex mesh needs no
-  depth buffer). It registers the swapchain with `vulkan_live` and draws through `vk_live_draw_frame`.
+- `main.das` — the app: the `vulkan/vulkan_imgui_app` harness owns the window/device/swapchain and
+  wires the live stack; the cube draws in the `harness_end_frame` scene block (back-face culled, so a
+  convex mesh needs no depth buffer), and the panel is imgui_boost_v2 (`CUBE_WIN/SPEED`).
 - `cube_shaders.das` — the cube's lit shaders (dasSpirv), push-constant-only.
 
 ## Running
@@ -41,8 +41,19 @@ daslang ../../utils/daspkg/main.das -- install
 ```
 
 Then run it — drag the slider to change the spin speed, press **P** to save a screenshot
-(`vulkan_imgui_cube.png`, captured by `vulkan_live`), close the window to exit:
+(`screenshot.png`, captured by `vulkan_live`), close the window to exit:
 
 ```
 daslang -project_root . main.das
+```
+
+## Live control
+
+The UI is imgui_boost_v2, so under daslang-live every widget is drivable:
+
+```
+daslang-live -project_root . main.das
+curl -X POST -d '{"name":"imgui_force_set","args":{"target":"CUBE_WIN/SPEED","value":4.0}}' localhost:9090/command
+curl -X POST -d '{"name":"imgui_snapshot"}' localhost:9090/command
+curl -X POST -d '{"name":"screenshot","args":{"file":"shot.png"}}' localhost:9090/command
 ```

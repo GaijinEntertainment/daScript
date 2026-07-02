@@ -140,9 +140,10 @@ struct LoopTargets {
 // ===== per-control-flow-node label ids (visitor side-maps; allocated to match the hand-walker's
 // linear id order so the emitted blob stays byte-identical) =====
 struct IteIds {
-    merge   : uint
-    then_l  : uint
-    else_l  : uint   // == merge when there is no else branch (no separate else label emitted)
+    merge     : uint
+    then_l    : uint
+    else_l    : uint   // == merge when there is no else branch (no separate else label emitted)
+    then_term : bool   // then-branch ended terminated (recorded when the else block opens)
 }
 
 struct LoopIds {
@@ -1163,6 +1164,16 @@ def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> 
         if (cls == 0) return (ok = true, code = SpvOp.SRem)
         if (cls == 1) return (ok = true, code = SpvOp.UMod)
     }
+    // bitwise family: int/uint only; `>>` splits arithmetic/logical by signedness (daslang C semantics)
+    let is_int = cls == 0 || cls == 1
+    if (op == "&" && is_int) return (ok = true, code = SpvOp.BitwiseAnd)
+    if (op == "|" && is_int) return (ok = true, code = SpvOp.BitwiseOr)
+    if (op == "^" && is_int) return (ok = true, code = SpvOp.BitwiseXor)
+    if (op == "<<" && is_int) return (ok = true, code = SpvOp.ShiftLeftLogical)
+    if (op == ">>") {
+        if (cls == 0) return (ok = true, code = SpvOp.ShiftRightArithmetic)
+        if (cls == 1) return (ok = true, code = SpvOp.ShiftRightLogical)
+    }
     return (ok = false, code = SpvOp.Nop)
 }
 
@@ -2119,8 +2130,14 @@ class SpirvEmit : AstVisitor {
                         errs |> push("unsupported compound assignment '{expr.op}'")
                         return expr
                     }
+                    // vector <op>= scalar: splat the scalar rhs (SPIR-V arithmetic operands must match)
+                    var rhs2 = rhs
+                    let dn = component_count(expr.left._type.baseType)
+                    if (dn > 1 && component_count(expr.right._type.baseType) == 1) {
+                        rhs2 = splat_to_vec(bm, p.pty, rhs, dn)
+                    }
                     res = alloc_id(bm)
-                    emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs)
+                    emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs2)
                 }
                 emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
             }
@@ -2160,8 +2177,21 @@ class SpirvEmit : AstVisitor {
             return expr
         }
         let rt = emit_type(bm, expr._type)
+        // SPIR-V arithmetic operands must match the result type: splat a scalar operand against a
+        // vector one (daslang broadcasts vec <op> scalar; `*` already went through emit_mul above)
+        var lid = l
+        var rid = r
+        let rn = component_count(expr._type.baseType)
+        if (rn > 1) {
+            if (component_count(expr.left._type.baseType) == 1) {
+                lid = splat_to_vec(bm, rt, l, rn)
+            }
+            if (component_count(expr.right._type.baseType) == 1) {
+                rid = splat_to_vec(bm, rt, r, rn)
+            }
+        }
         let res = alloc_id(bm)
-        emit(bm, SEC_FUNCS, bo.code, rt, res, l, r)
+        emit(bm, SEC_FUNCS, bo.code, rt, res, lid, rid)
         e2id[intptr(expr)] = res
         return expr
     }
@@ -3030,6 +3060,20 @@ class SpirvEmit : AstVisitor {
                 let a0 = expr.arguments[0]
                 let cc = component_count(a0._type.baseType)
                 if (scalar_class(a0._type.baseType) != vc.cls) {
+                    // same-width component-kind conversion: float2(uint2) -> OpConvertUToF,
+                    // int2(uint2) -> OpBitcast, ... (OpConvert*/OpBitcast are vector-valid)
+                    let src_cls = scalar_class(a0._type.baseType)
+                    if (cc == vc.n && src_cls >= 0) {
+                        let cv = convert_op(src_cls, vc.cls)
+                        if (cv.ok) {
+                            let aid = value_of(a0)
+                            if (aid == 0u) return expr
+                            let res = alloc_id(bm)
+                            emit(bm, SEC_FUNCS, cv.code, rt, res, aid)
+                            e2id[k] = res
+                            return expr
+                        }
+                    }
                     errs |> push("{name}: component-kind conversion from {a0._type.baseType} is not supported yet")
                     return expr
                 }
@@ -3210,6 +3254,9 @@ class SpirvEmit : AstVisitor {
     def override preVisitExprIfThenElseElseBlock(var expr : ExprIfThenElse?; elseBlock : ExpressionPtr) : void {
         let ids = ite_ids?[intptr(expr)] ?? IteIds()
         var bm & = unsafe(*m)
+        if (key_exists(ite_ids, intptr(expr))) {
+            ite_ids[intptr(expr)].then_term = ctx.terminated
+        }
         if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
         emit(bm, SEC_FUNCS, SpvOp.Label, ids.else_l)
         ctx.terminated = false
@@ -3218,9 +3265,18 @@ class SpirvEmit : AstVisitor {
     def override visitExprIfThenElse(var expr : ExprIfThenElse?) : ExpressionPtr {
         let ids = ite_ids?[intptr(expr)] ?? IteIds()
         var bm & = unsafe(*m)
+        let last_term = ctx.terminated      // else-branch termination (or then's, when there is no else)
         if (!ctx.terminated) emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
         emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
-        ctx.terminated = false
+        if (expr.if_false != null && ids.then_term && last_term) {
+            // both branches terminate (the optimizer folds trailing code into `else`, so a body can
+            // END on such an if) — the merge block is unreachable: close it and stay terminated so
+            // the function-end check doesn't misread this as a missing return
+            emit(bm, SEC_FUNCS, SpvOp.Unreachable)
+            ctx.terminated = true
+        } else {
+            ctx.terminated = false
+        }
         return expr
     }
 
