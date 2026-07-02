@@ -1,0 +1,72 @@
+# The fat man: clones every external module into modules/ and builds ONE daslang host
+# with all of them statically linked (the superbuild half of the externals' both-worlds
+# CMakeLists — the half no other CI exercises; each module's own CI covers the
+# standalone .shared_module half). Runs examples/fatman/main.das, which requires every
+# external module: registration + boost-path resolution + the static link, no window,
+# no GPU. Also the compile-time ABI canary for daslang-vs-externals drift.
+name: fatman
+
+on:
+  pull_request:
+    paths:
+      - 'CMakeLists.txt'
+      - 'web/CMakeLists.txt'
+      - 'examples/fatman/**'
+      - '.github/workflows/fatman.yml'
+      - 'include/**'
+      - 'src/**'
+  workflow_dispatch:
+
+concurrency:
+  group: fatman-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fatman:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Install: Required Dev Packages"
+        run: |
+          set -eux
+          sudo apt-get update -y
+          sudo apt-get install --no-install-recommends -y \
+            libatomic-ops-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxinerama-dev \
+            libxi-dev
+
+      - name: "Clone external modules into modules/ (master; no .daspkg_standalone marker => the modules glob includes their both-worlds CMakeLists)"
+        run: |
+          set -eux
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImgui.git          modules/dasImgui
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasVulkan.git         modules/dasVulkan
+
+      - name: "Configure (externals absorbed by the modules glob)"
+        run: |
+          set -eux
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DDAS_GLFW_DISABLED=OFF
+
+      - name: "Build the fat host (daslang_static — the flavor that links the static module halves; the DLL-flavor daslang gets externals via .shared_module at runtime instead)"
+        run: |
+          set -eux
+          cmake --build build --target daslang_static -j $(nproc)
+
+      - name: "Run the fat man"
+        run: |
+          set -eux
+          ./bin/daslang_static examples/fatman/main.das

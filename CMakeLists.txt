@@ -612,9 +612,12 @@ IF(EMSCRIPTEN AND DAS_WEB_IMGUI_DIR)
             ADD_MODULE_DAS(imgui imgui ${_n})
         ENDIF()
     ENDFOREACH()
-    # imgui_boost_v2: module name differs from its file (widgets/imgui_boost.das). The
-    # web embed mounts that file as imgui_boost_v2.das so this resolves.
-    ADD_MODULE_DAS(imgui imgui imgui_boost_v2)
+    # Pre-rename dasImgui kept module imgui_boost_v2 in widgets/imgui_boost.das (the web
+    # embed mounts it under the module name); post-rename (dasImgui #218) the glob above
+    # already registered it. Tolerate both layouts.
+    IF(NOT EXISTS "${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost_v2.das")
+        ADD_MODULE_DAS(imgui imgui imgui_boost_v2)
+    ENDIF()
     UNSET(_module)
     # C++ binding modules: register_Module_dasIMGUI / _imgui_app / _imgui_app_headless,
     # pulled from the prebuilt wasm32 archives linked in web/CMakeLists.txt.
