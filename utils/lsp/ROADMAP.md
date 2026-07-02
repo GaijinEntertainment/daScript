@@ -85,6 +85,35 @@ empirically:
 
 Deliverable: probe notes in this file; wave 1 scope locked by answers, not docs.
 
+#### Probe results (2026-07-01, CC v2.1.198, probe-plugin/ + headless `claude -p --plugin-dir`)
+
+1. **Handshake**: `initialize` carries `rootUri`+`workspaceFolders` (project dir),
+   `clientInfo{Claude Code, 2.1.198}`, `initializationOptions={}` (empty unless the
+   manifest sets them). Advertising `textDocumentSync{change:1}` + provider flags is
+   accepted; the LSP tool exposes ops: goToDefinition, findReferences, hover,
+   documentSymbol, workspaceSymbol, goToImplementation, prepareCallHierarchy,
+   incomingCalls, outgoingCalls. Marker payloads came back to the model verbatim.
+2. **Diagnostics inject**: yes — after an Edit the model sees
+   `hello.das: ✘ [Line 1:1] <message> (<source>)` (1-based display). First-edit
+   injection confirmed end-to-end.
+3. **Doc sync**: lazy — first Edit of a file sends `didOpen` with the **post-edit**
+   text; each subsequent Edit sends `didChange` (FULL text, `version` increments —
+   honors `change:1`) followed by `didSave`. No open at session start, no
+   watched-files. So: validate on didOpen + debounced didChange; didSave can be a
+   no-op (didChange already fired).
+4. **Nav requests**: arrive as plain LSP `textDocument/hover`, `documentSymbol`, etc.
+   when the model invokes the LSP tool.
+5. **Paths/env**: `${CLAUDE_PLUGIN_ROOT}` expands in `args`; `python3` resolves on
+   macOS (Windows spelling TBD on the first Windows pass); manifest `env` merges in;
+   the server also gets `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`;
+   cwd = project dir. Headless `-p` sessions load the plugin — no interactive session
+   needed for development.
+6. **maxRestarts semantics**: still untested — exercise in wave 1 by killing the
+   supervisor mid-session.
+
+Open question for wave 1: whether repeat diagnostics on the same file re-inject on
+every didChange or only on content change — observe with real compiler output.
+
 ### Wave 1 — diagnostics MVP
 
 - Supervisor: lifecycle, doc sync per wave-0 findings, ~300 ms debounce,
