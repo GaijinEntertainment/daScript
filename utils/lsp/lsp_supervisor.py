@@ -380,6 +380,14 @@ class Server:
         elif method == "textDocument/didClose":
             uri = params["textDocument"]["uri"]
             self.docs.pop(uri, None)
+            with self.lock:
+                t = self.timers.pop(uri, None)
+                if t:
+                    t.cancel()
+                self.gen[uri] = self.gen.get(uri, 0) + 1  # a late in-flight publish is stale now
+                prev = self.inflight.pop(uri, None)
+                if prev and prev.poll() is None:
+                    prev.kill()
             self.publish(uri, [])
         elif method in ("textDocument/definition", "textDocument/hover",
                         "textDocument/implementation"):

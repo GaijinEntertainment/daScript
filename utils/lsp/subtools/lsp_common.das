@@ -48,7 +48,9 @@ def public utf16_units_in(line_text : string; byte_count : int) : int {
 }
 
 // LSP `character` (UTF-16 code units) -> 0-based byte offset; a character
-// landing inside a surrogate pair snaps to the code point start
+// landing inside a surrogate pair resolves past that code point (to its
+// end — the check fires at the next lead byte); past-end-of-line clamps
+// to the line end, matching the LSP out-of-range rule
 def public utf16_to_byte_offset(line_text : string; character : int) : int {
     if (character <= 0) {
         return 0

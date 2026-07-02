@@ -157,9 +157,9 @@ struct public LintIssue {
     message : string        //!< message text without the position suffix; may be multi-line (instanced-from chains)
     file : string           //!< source file as spelled by the compiler; "" when the location has no file info
     line : int              //!< 1-based start line
-    column : int            //!< 1-based start column (bytes)
+    column : int            //!< 0-based start column (byte offset — the LineInfo convention)
     last_line : int         //!< 1-based end line; 0 when unknown
-    last_column : int       //!< 1-based end column
+    last_column : int       //!< 0-based end column (byte offset, end-exclusive)
 }
 
 //! Builds a ``LintIssue`` from a lint message and its source location.
