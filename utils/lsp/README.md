@@ -20,7 +20,9 @@ MCP server.
 **In this repo: automatic.** A checked-in skills-directory plugin manifest
 (`.claude/skills/daslang-lsp/.claude-plugin/plugin.json`) loads on workspace
 trust whenever a session starts at the repo root — no CLI flag. (Skills-dir
-plugins don't walk up: a session started in a subdirectory won't load it.)
+plugins don't walk up: a session started in a subdirectory won't load it.
+Plugin discovery happens only at CLI launch — `/clear`, `/resume`, and even
+`/reload-plugins` don't load a new LSP server; exit and relaunch `claude`.)
 
 For development, or from another checkout, the standalone plugin still works
 and takes precedence over the checked-in one (same plugin name, local dir
