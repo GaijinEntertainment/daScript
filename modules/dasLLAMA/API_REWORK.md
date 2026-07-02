@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. **In progress: the T1/T2 model-support waves** (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)) — waves 0 (Mistral/SmolLM2 + chat-template detection), 1 (Qwen3 QK-norm), and 2 (Gemma-3 per-layer SWA pattern + dual RoPE θ) landed.
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. All seven T1/T2 model-support waves landed (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)), and the [facade + docs wave](#the-facade--dasllamadasllamadas-landed-2026-07-02) landed 2026-07-02, followed by the [tutorials wave](#the-tutorials-wave--tutorialsdasllama-landed-2026-07-02) the same day. **Next: the performance-ledger pass.**
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -256,9 +256,9 @@ are Q8_0 GGUFs into `~/Work/llama.cpp/models/` unless noted.
 | **1** | QK-norm — Config flag + per-layer `attn_q_norm`/`attn_k_norm` weights, per-head RMSNorm pre-RoPE in the shared attn blocks (a flag like `ffn_act`, not a block swap); `<think>`-stripping in chat history | Qwen3-0.6B (fast iteration), Qwen3-4B-Instruct-2507 (fixture) | 0.7 + 4.3 |
 | **2** | per-layer attention patterns — generalize the hardcoded `l % 2` SWA alternation to `sliding_window_pattern` (gemma2 = 2, gemma3 = 6), per-layer RoPE θ (dual rope tables); SmolLM3's NoPE layers = same machinery | gemma-3-1b-it, gemma-3-4b-it (opt: SmolLM3-3B) | 1.1 + 4.5 |
 | **3** ✅ | **Gemma 4** — GGUF ground truth revised the plan: the 12B has NO shared KV and NO PLE (`shared_kv_layers = 0`, `embedding_length_per_layer_input = 0` — both are E-series features; the loader now panics honestly on either). What it DOES need, all shipped: heterogeneous per-layer geometry (sliding 16Q/8KV×256 vs global 16Q/1KV×512 — per-layer weight-offset arrays, class-max scratch, per-layer KV-cache packing), explicit bool-array SWA pattern (`swa_mask`), p-RoPE freq factors on global layers only (full rotation, `dimension_count` == head size per class — pruning is a loader panic), weightless V-norm, V-from-K on the no-`attn_v` global layers, unit attention scale, per-layer `layer_output_scale`, final softcap, `suppress_tokens` logit bias, and the new `gemma4` SPM-style-BPE tokenizer (metaspace + newline-only pre-split + byte fallback; 46/46 on the official corpus). Shared-KV + PLE move to a follow-up E-series wave (E2B ~2GB oracle) | gemma-4-12b-it — 40/40 counting + 40/40 window-engaged ~1490-token prompt | 12.7 |
-| **4** | **MoE FFN block** via the ArchBlocks seam (proves Phase 4) — router → top-k, pluggable gating (softmax now, sigmoid slot, `norm_topk_prob`), routed experts + **shared expert(+gate)**; loader handles 3D stacked `ffn_*_exps`, expert-major Q8 so the existing kernels apply per expert. Decode first; prefill naive per-token, expert-bucketed grouped GEMM as a separate perf PR | Qwen1.5-MoE-A2.7B-Chat; stretch: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B | 15 (+14) |
-| **5** | attention sinks (per-head sink logit in the softmax — classic + flash cores) + MXFP4 GGUF decode (dequant → self-Q8 at load) | gpt-oss-20b | 12.1 |
-| **6** | *(infra, last)* lift the linear-allocator 4GB limit — `LinearChunkAllocator`'s per-chunk `uint32` cap breaks any context holding a >4GB single array, which today forces `options persistent_heap` on model-loading tests (Mistral-7B's Q8 blob is 7.1GB) and the `seq_len` cap before `create_session` (Llama-3/Phi native 131072 ⇒ >4GB KV arrays). Fix the allocator (64-bit chunk sizing), then remove both workarounds | none — regression = existing suite minus the workarounds | — |
+| **4** ✅ | **MoE FFN block** via the ArchBlocks seam (proves Phase 4 — the forward loops were untouched; qwen2moe registers `moe_blocks()`). Shipped: router → top-k over probs-before-selection, pluggable gating (`MoeGate.softmax\|sigmoid` from `{arch}.expert_gating_func`), `norm_topk_prob` + `expert_weights_scale` slots, routed experts + sigmoid-gated **shared expert**; expert-major layout (expert e of layer l = a plain 2D matrix at `we*_off + (l·n_expert+e)·dim·n_ff_exp`) so every existing kernel incl. the arm64 repack applies per expert; 3D `ffn_*_exps` transcode in one contiguous read; honest panics for grouped routing / gating-func 3 / `exp_probs_b` / expert biases. Decode fused; prefill naive per-token (grouped GEMM → ledger). Stretch models not pursued this wave: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B (qwen3moe = QK-norm + `norm_topk_prob`, no shared expert — a thin arch file when wanted) | Qwen1.5-MoE-A2.7B-Chat — 40/40 counting AND 40/40 prose, both prompts token-for-token | 15 |
+| **5** ✅ | **gpt-oss** — everything the plan row named plus what the GGUF ground truth added. Shipped: attention sinks (per-head sink logit joins the softmax max + denominator, no V contribution — decode `softmax_sink` + all three prefill cores; flash seeds its online softmax with max = sink, sum = 1); MXFP4 decode (E8M0 half-scale + doubled-e2m1 nibble LUT, one new `gguf_read_tensor_f32` arm → the existing dequant→self-Q8 path covers it); YaRN rope with ZERO engine change — the NTK-by-parts ramp is a per-pair effective position scale, so the loader synthesizes `rope_freqs[j] = 1/(fscale + ramp_j·(1−fscale))` and folds the 1 + 0.1·ln(factor) magnitude into `rope_mscale`; `MoeGate.softmax_weight` (top-k on raw biased logits, softmax over the selected k; knockout sentinel → −FLT_MAX); router + per-expert biases (fblob stacks, expert-major) + attention output-projection bias; `FfnAct.swiglu_oai` (clamped, +1 up branch, scalar + exp4 float4); pre-FFN norm under the `post_attention_norm` name; gpt-4o/o200k pre-tokenizer (llama.cpp's exact case-class approximation: contraction suffixes, upper*/lower+ letter runs, `/` in punct tails, no-BOS default) + Harmony-lite chat template with `<|channel|>` detection sniff | gpt-oss-20b — 40/40 counting + 40/40 window-engaged 449-token prompt (encoded in-test), both FIRST TRY; tokenizer id-for-id vs llama.cpp on counting/contraction/whitespace probes | 12.1 |
+| **6** ✅ | *(infra, last)* lifted the linear-allocator 4GB limit — `HeapChunk` `size`/`offset` went `uint64` and `LinearChunkAllocator` dropped every `UINT32_MAX` cap (`allocate`/`free`/`setInitialSize`, the `reset` clamp; virtual `grow` is 64-bit — one override, `DebugInfoAllocator`). Regression tests in `tests-cpp/small/test_heap_64bit.cpp`: an ungated >4GB `setInitialSize` probe plus gated (`DASLANG_HUGE_HEAP_TESTS=1`) >4GB single-chunk and default-context-heap tests. End-to-end on the default heap: Mistral-7B's 7.1GB Q8 blob loads and matches its fixture token-for-token (`harness/parity.das` dropped its `options persistent_heap`), and Llama-3.2-1B at native `seq_len` 131072 allocates two exactly-4GiB single KV arrays and generates. Workaround disposition, re-justified honestly: the tests **keep** `options persistent_heap` — since the explicit-delete discipline landed, it's what makes `delete` really free between fixtures (linear free is a mid-context no-op, so multi-GB weights would accumulate) — and the `seq_len` caps **stay as RAM savers** (native 131072 KV is 8–64GB of fp32); both kinds of comment now state the real reason instead of the vanished cap | none — regression = existing suite + the new tests-cpp cases | — |
 
 Out of scope, and why: Qwen3.5/3.6 (Gated-DeltaNet hybrid linear attention → Tier 3),
 Llama-4 (109B+), DeepSeek V3+/GLM-5 (MLA / bespoke sparse → Tier 3), Mixtral (superseded,
@@ -271,6 +271,66 @@ collision with no template execution). Stage 2 — a Jinja-subset interpreter in
 llama.cpp "minja" route, executes the embedded template directly) — is deliberately deferred
 until the named registry stops scaling; the realistic forcing function is gpt-oss's
 channel-based Harmony format at wave 5. Chat remains layer 2 throughout.
+
+## The facade — `dasllama/dasllama.das` *(landed 2026-07-02)*
+
+One require is the public API: `require dasllama/dasllama` re-exports the engine
+(`dasllama_transformer public` — which also fires every arch `[init]`) and the chat layer
+(`dasllama_chat public`), and defines the **documented, curated surface** — the three layers above
+as 14 `//!`-documented stubs (`load_model` / `create_session` / `encode` / `decode` / `piece` /
+`eval` / `sample` / `set_seed` / `stats` / `generate` / `create_chat` / `add_user` / `render_turn`
+/ `respond`). Everything else stays reachable through the re-export, deliberately undocumented.
+
+- **Naming:** wherever the facade takes the good name, the engine spelling carries a trailing
+  underscore (`load_model_`, `eval_`, …) — a same-name stub plus a public re-export would be an
+  ambiguous overload at every call site. The raw greedy `generate(t, s, prompt, steps)` keeps its
+  name (different arity, no ambiguity — the token-exact oracle path). Public-path consumers
+  (examples, `test_parity`/`test_facade`/`test_chat`/`test_sampling`/…) require the facade and use
+  the good names; internal/kernel tests and the chat engine's internals use the `_` spellings.
+- **Examples are the completeness gate:** `run.das` / `chat.das` require ONLY `dasllama/dasllama`
+  from the module — if a demo needs something the facade lacks, the facade grows, not the require
+  list. Both verified end-to-end after the switch (TinyLlama completion + chat smoke).
+- **Docs:** das2rst registers ONLY the facade module (new stdlib section `sec_ai.rst`,
+  `generated/dasllama.rst`; `doc.yml` path filters now include `modules/dasLLAMA/dasllama/**`).
+  Engine modules stay undocumented by design — Model's ~40 offset fields are not API. The types the
+  facade signatures mention (`Model`, `Session`, `QuantMode`, `SamplingParams`, `Stats`,
+  `ChatSession`) get hand-written opaque stanzas emitted by `document_module_dasllama`'s
+  `DocsHook.afterEnums` under the exact `:ref:` labels the signature renderer produces, so
+  cross-references resolve without documenting internals. The module header
+  (`handmade/module-dasllama.rst`) carries the supported-model-family list (and, later, tutorial
+  links).
+- **🔑 `//!` placement:** the doc extractor (`daslib/rst_comment`) attaches a docstring only when
+  the `//!` block is the FIRST thing *inside* the function body — an above-def `//!` is silently
+  discarded (this is why no engine docstring ever extracted; the engine's above-def `//!` remain as
+  source comments only).
+- **Drift detector** (`tests/dasLLAMA/test_facade_docs.das`): every facade def has a body-leading
+  `//!` (and no inert above-def `//!` exists); facade stubs ↔ engine `_` spellings stay 1:1 in both
+  directions; the examples stay facade-only. Negative-probed: an undocumented extra stub fails it.
+
+## The tutorials wave — `tutorials/dasLLAMA/` *(landed 2026-07-02)*
+
+Six tutorials written strictly against the facade, each a runnable single-file
+`main()` (project convention: `tutorials/<area>/`, never `modules/<X>/tutorial/`), with paired
+RST pages under `doc/source/reference/tutorials/` and a toctree section, plus tutorial links on
+the stdlib module page. The teaching model is SmolLM2-135M-Instruct Q8_0 (~145MB llama-arch
+GGUF; models aren't shipped — path via CLI arg or `DASLLAMA_MODEL`):
+
+1. **hello_generate** — load_model / encode / decode / piece / generate / stats.
+2. **chat** — create_chat / add_user / respond, multi-turn KV memory, history, render_turn
+   (specials are atomic ids, invisible to decode).
+3. **sampling** — greedy determinism + the 135M repetition loop, penalty breaking it,
+   temp / top-k / set_seed reproducibility.
+4. **sessions_and_memory** — KV sizing + the cap-seq_len-BEFORE-create_session rule, session
+   independence, manual eval/sample loop, persistent_heap + delete discipline.
+5. **performance** — jit_enabled, job-queue requirement + `DAS_JOBQUE_THREADS`, prefill-vs-gen
+   physics, fp32/q8/q4 measured table, `_jit_fast_math`.
+6. **add_an_arch** — registry walkthrough (arch_names / ArchDesc / std_blocks / chat parts /
+   register_arch), no model needed.
+
+Tutorials joined the CMake install + `dry_run_tutorials` compile gate. One durable lesson baked
+into 04's structure: a fat `main()` frame plus the forward-pass call chain overflows the default
+16KB context stack (das frames are statically sized for all locals) — model-driving mains stay
+lean, one function per section.
 
 ### Performance ledger (living — address after the model waves)
 
@@ -293,6 +353,38 @@ what it costs today and what the fix would change.
 - **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
   gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
   A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
+  Same for gpt-oss-20b (wave 5): the chat smoke saw prefill 3 t/s / gen 2 t/s — expected to be
+  dominated by the naive per-token MoE prefill + the doubled Q8 expert traffic (both already on
+  this ledger), but A/B before touching anything.
+- **MoE prefill is naive per-token — expert-bucketed grouped GEMM is the batched fix.** Each
+  prefill position routes independently and runs its top-k experts through the single-token
+  matmuls (`ffn_moe_prefill`); llama.cpp batches all positions hitting the same expert into one
+  GEMM (`mul_mat_id`). Bucket positions by selected expert, run one batched GEMM per touched
+  expert, scatter back by weight. Decode is unaffected (one token = no bucketing win).
+  (Spotted wave 4.)
+- **MoE decode re-quantizes the same activation per expert.** `moe_ffn_core` calls `mm` 2×
+  per routed expert + 2× for the shared expert on the SAME `s.xb`, and each Q8 call re-runs
+  `quantize_q8_0_into` on it — 5 redundant requants of a dim-wide vector per layer per token
+  (only the down-projection inputs differ). Hoist the xb quant once per layer like `mm_qkv`
+  does for the fused QKV path. Small per call, ×24 layers ×(2k+2) matmuls. (Spotted wave 4.)
+- **MXFP4 experts transcode to Q8 — doubling their bytes.** gpt-oss-20b's expert stacks are
+  4.25 bit/weight on disk (~10GB) but run as Q8 (~19GB + 2.4GB scales): 2× the resident memory
+  AND 2× the decode weight traffic vs a native MXFP4 kernel (per-block E8M0 scale + 16-entry
+  nibble LUT — the int8 side of the SDOT pipeline could eat un-LUTed nibbles with a lane
+  table). Q4_0 storage is the existing halfway house (same 4-bit traffic, one lossy requant,
+  no new kernel) — worth an A/B before writing MXFP4-native matmuls. (Spotted wave 5.)
+- **q4 has no batched prefill kernel — prefill collapses to decode rate.** The q4 path serves
+  everything through the scalar fp32-activation `dot_q4`/`matmul_q4` (no q8-style token-blocked
+  batch GEMM, no NEON arm, no repack backend), so a q4 prefill runs at generation speed:
+  measured on SmolLM2-135M, q8 prefill 1391 t/s vs q4 prefill 70 t/s ≈ its own 69 t/s decode.
+  A q4 batch kernel (or the load-time q4→q8 transcode as the cheap fix) closes it.
+  (Spotted tutorials wave.)
+- **`kv_cache_off` prefix-sums per call — O(n_layers²) int adds per forward.** Each call walks
+  all prior layers (dasllama_common.das kv_cache_off); with per-layer heterogeneous kv geometry
+  that's ~n_layers² ≈ 2-3k integer ops per token on the 12B — noise next to the matmuls, which
+  is why it wasn't chased. The clean fix (per Copilot on #3346): precompute a per-layer KV-ROW
+  prefix array (kv_dim sums, seq_len-independent) once at load and multiply by the LIVE seq_len
+  at call time, so the tests' post-load seq_len cap keeps working. (Spotted post-wave-3 review.)
 
 ## What collapsed (done — Phase 5)
 

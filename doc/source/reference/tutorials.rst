@@ -10,7 +10,7 @@ This section provides hands-on tutorials organized by topic:
 * **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
 * **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
 * **Macro Tutorials** — write compile-time code transformations using the daslang macro system
-* **Module Tutorials** — dasHV (HTTP), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasMinfft (FFT / DCT), dasPEG (parser generator)
+* **Module Tutorials** — dasHV (HTTP), dasLLAMA (local LLM inference), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasMinfft (FFT / DCT), dasPEG (parser generator)
 
 .. _tutorials_language:
 
@@ -234,6 +234,34 @@ Run any tutorial from the project root::
    tutorials/dasHV_06_websockets.rst
    tutorials/dasHV_07_sse_and_streaming.rst
    tutorials/dasHV_08_https_wss.rst
+
+.. _tutorials_dasllama:
+
+dasLLAMA (CPU LLM Inference) Tutorials
+======================================
+
+These tutorials cover the ``dasllama`` module — CPU large-language-model
+inference in pure daslang: loading GGUF models, tokenization, streaming
+generation, chat with templates, sampling, sessions and memory, performance,
+and the architecture registry. Everything is written against the public
+``dasllama/dasllama`` facade.
+
+You'll need a GGUF model file on disk (models are not shipped with the repo) —
+a good tiny one is `SmolLM2-135M-Instruct Q8_0
+<https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF>`_ (~145 MB).
+Run from the project root, always with ``-jit``::
+
+   daslang.exe -jit tutorials/dasLLAMA/01_hello_generate.das -- path/to/model.gguf
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasLLAMA_01_hello_generate.rst
+   tutorials/dasLLAMA_02_chat.rst
+   tutorials/dasLLAMA_03_sampling.rst
+   tutorials/dasLLAMA_04_sessions_and_memory.rst
+   tutorials/dasLLAMA_05_performance.rst
+   tutorials/dasLLAMA_06_add_an_arch.rst
 
 .. _tutorials_dasopenai:
 

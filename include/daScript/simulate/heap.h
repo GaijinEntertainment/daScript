@@ -703,7 +703,7 @@ namespace das {
             prefixWithHeader = false;
             initialSize = 1024;
         }
-        virtual uint32_t grow ( uint32_t size ) override {
+        virtual uint64_t grow ( uint64_t size ) override {
             return size;
         }
         char * allocateCachedName ( const string & name );

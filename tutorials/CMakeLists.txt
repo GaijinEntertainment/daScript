@@ -99,6 +99,14 @@ install(FILES ${OPENAI_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasOPENAI
 )
 
+# Install dasLLAMA tutorial .das files
+file(GLOB DASLLAMA_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasLLAMA/*.das
+)
+install(FILES ${DASLLAMA_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasLLAMA
+)
+
 # Install OpenGL tutorial .das files (nested one-dir-per-rung, so preserve structure)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/opengl/
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/opengl
@@ -146,6 +154,8 @@ ENDIF()
 IF ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_DISABLED))
     list(APPEND ALL_TUTORIAL_SOURCES ${OPENAI_TUTORIAL_SOURCES})
 ENDIF()
+# dasLLAMA tutorials compile without a model file, so the dry run always applies.
+list(APPEND ALL_TUTORIAL_SOURCES ${DASLLAMA_TUTORIAL_SOURCES})
 
 add_custom_target(dry_run_tutorials)
 

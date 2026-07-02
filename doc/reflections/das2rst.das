@@ -132,6 +132,7 @@ require strudel/strudel_sf2
 require strudel/strudel_sf2_voice
 require strudel/strudel_pattern
 require spirv/spirv_reflect
+require dasllama/dasllama
 
 def document_module_math(_root : string) {
     var mod = get_module("math")
@@ -278,6 +279,45 @@ def document_module_openai(_root : string) {
         group_by_regex("Vision", mod, %regex~(chat_vision|vision_request_body)$%%)
     )
     documents("OpenAI-compatible API client (chat, embeddings, audio, vision, ...)", mod, "openai.rst", groups)
+}
+
+// One hand-written stanza per engine type the facade signatures mention. The facade re-exports
+// these from dasllama_common / dasllama_chat, which are deliberately NOT documented (their
+// internals are engine detail) — the stanzas define the :ref: labels the signatures link to.
+def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; text : string) {
+    fwrite(f, ".. _{lab}:\n\n")
+    fwrite(f, ".. das:attribute:: {tname}\n\n")
+    fwrite(f, "{text}\n\n")
+}
+
+def document_module_dasllama(_root : string) {
+    var mod = find_module("dasllama")
+    var groups <- array<DocGroup>(
+        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session)$%%),
+        group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
+        group_by_regex("Evaluation and sampling", mod, %regex~(eval|sample|set_seed|stats)$%%),
+        group_by_regex("Generation", mod, %regex~(generate)$%%),
+        group_by_regex("Chat", mod, %regex~(create_chat|add_user|render_turn|respond)$%%)
+    )
+    var hook = DocsHook()
+    hook.afterEnums <- @(var f : FILE const?; _was_enums : bool) {
+        fwrite(f, make_group("Types"))
+        fwrite(f, "The engine types the API below works with. They are created and consumed by the\n")
+        fwrite(f, "functions of this module; their remaining fields are engine implementation detail.\n\n")
+        dasllama_type_stanza(f, "struct-dasllama_common-Model", "Model",
+            "A loaded model: weights, ``config``, tokenizer, and the architecture's blocks and chat template, as produced by ``load_model``. User code touches ``config`` (e.g. cap ``config.seq_len`` before ``create_session`` on large-context models) and ``arch`` (the GGUF architecture name).")
+        dasllama_type_stanza(f, "struct-dasllama_common-Session", "Session",
+            "One generation stream over a model: the KV cache, scratch buffers, sampling RNG, and the current position ``n_past``. ``logits`` holds the distribution produced by the last ``eval``. A model serves many independent sessions.")
+        dasllama_type_stanza(f, "enum-dasllama_common-QuantMode", "QuantMode",
+            "Weight representation picked at load: ``fp32`` — the token-exact reference; ``q8`` — int8 quantization, the fast CPU path; ``q4`` — 4-bit, smallest footprint.")
+        dasllama_type_stanza(f, "struct-dasllama_common-SamplingParams", "SamplingParams",
+            "Sampling knobs: ``temp`` (<= 0 selects greedy argmax), ``top_k`` (0 = no cutoff), and repetition ``penalty`` (1.0 = none) applied over the last ``penalty_last_n`` generated tokens. The defaults are greedy — ``SamplingParams()`` reproduces argmax exactly.")
+        dasllama_type_stanza(f, "struct-dasllama_common-Stats", "Stats",
+            "Timing of the last ``generate``/``respond`` call: ``n_prompt``/``n_gen`` token counts, ``ttft_s`` (seconds to first token), and ``prefill_tps``/``gen_tps`` throughput in tokens per second.")
+        dasllama_type_stanza(f, "struct-dasllama_chat-ChatSession", "ChatSession",
+            "A conversation over a model: its ``session``, the resolved chat template, and the running transcript in ``history``. Create with ``create_chat``, then drive with ``add_user`` + ``respond``.")
+    }
+    document("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
 }
 
 def document_module_debugapi(_root : string) {
@@ -1704,6 +1744,8 @@ def main {
     document_module_peg(root)
     // document dasSpirv reflection module
     document_module_spirv(root)
+    // document the dasLLAMA facade module (the engine modules behind it stay undocumented by design)
+    document_module_dasllama(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)

@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
@@ -37,9 +38,9 @@ def test_forward_end_to_end(t : T?) {
             t |> success(true, "skipped: stories15M.bin / tokenizer.bin not present")
             return
         }
-        let tr <- load_checkpoint(MODEL_PATH)
+        var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
-        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         // BPE encoder vs llama2.c tokenization
         let pt <- encode(tk, "Once upon a time", true, false)
         t |> success(same(pt, PROMPT_ORACLE), "encode prompt tokens")
@@ -51,7 +52,10 @@ def test_forward_end_to_end(t : T?) {
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
             t |> success(same(ids, ORACLE), "empty-prompt greedy token-for-token")
+            delete s
         }
+        delete tk
+        delete tr
         set_act_vec(prev_act)
     }
 }
@@ -69,7 +73,7 @@ def test_forward_q8(t : T?) {
         }
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
-        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         quantize_weights(tr)  // all 2D weights -> Q8_0, tr.quant = q8
         // Q8 is effectively lossless at greedy decode on stories15M: still token-for-token.
         let prev_act = get_act_vec()
@@ -79,7 +83,10 @@ def test_forward_q8(t : T?) {
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
             t |> success(same(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
+            delete s
         }
+        delete tk
+        delete tr
         set_act_vec(prev_act)
     }
 }
@@ -97,7 +104,7 @@ def test_forward_q8_pooled(t : T?) {
         }
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
-        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         quantize_weights(tr)
         // pool + skip-init the per-job fork contexts: same result, exercised across many tokens'
         // classifier parallel_for so a stale/misreset pooled fork would corrupt the stream.
@@ -109,7 +116,10 @@ def test_forward_q8_pooled(t : T?) {
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
             t |> success(same(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
+            delete s
         }
+        delete tk
+        delete tr
         set_act_vec(prev_act)
     }
 }
@@ -127,7 +137,7 @@ def test_forward_q4(t : T?) {
         }
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
-        let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4
         // Q4 is lossier than Q8 — greedy diverges from fp32 around token ~19 — but the per-step
         // loss hasn't flipped an argmax yet over the 12-token ORACLE prefix, so it still matches.
@@ -138,7 +148,10 @@ def test_forward_q4(t : T?) {
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
             t |> success(same(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
+            delete s
         }
+        delete tk
+        delete tr
         set_act_vec(prev_act)
     }
 }

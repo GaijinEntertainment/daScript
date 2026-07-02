@@ -12,7 +12,11 @@ require daslib/strings_boost
 // gemma4 is the SPM-style BPE backend (metaspace escape + newline-only pre-split + raw-UTF-8 ranked
 // merges + <0xXX> byte fallback) added in wave 3; llama-bpe guards the byte-alphabet path.
 
-let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
+// override the machine-local fixture root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
+def private models_dir() : string {
+    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
 
 def private parse_out_ids(line : string) : array<int64> {
     return <- [for (tok in split(line, " ")); int64(to_int(tok)); where !empty(tok)]
@@ -64,7 +68,7 @@ def private corpus_gate(t : T?; vocab_path : string) {
 [test]
 def test_tokenizer_gemma4(t : T?) {
     t |> run("gemma4 SPM-style BPE vs the llama.cpp corpus") @(t : T?) {
-        let path = "{MODELS_DIR}ggml-vocab-gemma-4.gguf"
+        let path = path_join(models_dir(), "ggml-vocab-gemma-4.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -76,7 +80,7 @@ def test_tokenizer_gemma4(t : T?) {
 [test]
 def test_tokenizer_llama_bpe(t : T?) {
     t |> run("llama3 byte-level BPE vs the llama.cpp corpus") @(t : T?) {
-        let path = "{MODELS_DIR}ggml-vocab-llama-bpe.gguf"
+        let path = path_join(models_dir(), "ggml-vocab-llama-bpe.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return

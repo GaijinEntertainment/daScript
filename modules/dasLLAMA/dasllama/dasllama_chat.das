@@ -75,6 +75,8 @@ def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
     }
     if (contains(src, "<|start_header_id|>")) {   // Llama-3 instruct
         out <- arch_chat("llama")
+    } elif (contains(src, "<|channel|>")) {       // gpt-oss Harmony channel format
+        out <- arch_chat("gpt-oss")
     } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
         out <- arch_chat("qwen2")
     } elif (contains(src, "<|turn>")) {           // Gemma-4 channel-based turn format
@@ -118,7 +120,7 @@ def private render_parts(m : Model; parts : array<ChatPart>; content : string; v
     for (p in parts) {
         if (p.kind == ChatPartKind.special) {
             if (!empty(seg)) {
-                out |> push_from(encode(m, join(seg, ""), false, false))
+                out |> push_from(encode_(m, join(seg, ""), false, false))
                 seg |> clear()
             }
             let id = special_id(m, p.s)
@@ -133,7 +135,7 @@ def private render_parts(m : Model; parts : array<ChatPart>; content : string; v
         }
     }
     if (!empty(seg)) {
-        out |> push_from(encode(m, join(seg, ""), false, false))
+        out |> push_from(encode_(m, join(seg, ""), false, false))
     }
 }
 
@@ -158,8 +160,8 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
 
 //! Start a conversation over `model`. `system` is the system prompt (empty = none); `max_new` caps
 //! each reply. A model can drive many independent ChatSessions.
-def create_chat(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
-    var c = ChatSession(session <- create_session(model), tmpl <- chat_template(model),
+def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
+    var c = ChatSession(session <- create_session_(model), tmpl <- chat_template(model),
                         system = system, max_new = max_new)
     for (sp in c.tmpl.stop) {
         let id = special_id(model, sp)
@@ -181,14 +183,14 @@ def create_chat(model : Model; system : string = ""; max_new : int64 = 256l) : C
 
 //! Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn and
 //! the generation prompt — WITHOUT running the model. For inspection, token counting, and tests.
-def render_turn(m : Model; c : ChatSession) : array<int64> {
+def render_turn_(m : Model; c : ChatSession) : array<int64> {
     var out : array<int64>
     render_prompt(m, c, out)
     return <- out
 }
 
 //! Queue a user message for the next respond().
-def add_user(var c : ChatSession; text : string) {
+def add_user_(var c : ChatSession; text : string) {
     c.pending = text
     c.has_pending = true
     c.history |> push(Message(role = Role.user, content = text))
@@ -212,8 +214,8 @@ def strip_think(reply : string) : string {
 //! Terminates the turn in the KV cache and appends it to the transcript (with any `<think>` block
 //! stripped — see strip_think). Returns the full reply text, thinking included.
 //! Timing is available afterwards via stats(c.session).
-def respond(m : Model; var c : ChatSession; params : SamplingParams;
-            blk : block<(piece : string) : bool>) : string {
+def respond_(m : Model; var c : ChatSession; params : SamplingParams;
+             blk : block<(piece : string) : bool>) : string {
     if (!c.has_pending) {
         return ""
     }
@@ -224,7 +226,7 @@ def respond(m : Model; var c : ChatSession; params : SamplingParams;
     // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
     var stops := c.stop_ids
     var reply_parts : array<string>
-    generate(m, c.session, pre, params, c.max_new) $(id, piece) {
+    generate_(m, c.session, pre, params, c.max_new) $(id, piece) {
         for (sid in stops) {
             return false if (id == sid)
         }
@@ -234,7 +236,7 @@ def respond(m : Model; var c : ChatSession; params : SamplingParams;
     // close the assistant turn so the next turn continues cleanly
     var close : array<int64>
     render_parts(m, c.close_parts, "", close)
-    eval(m, c.session, close)
+    eval_(m, c.session, close)
     let reply = join(reply_parts, "")
     c.history |> push(Message(role = Role.assistant, content = strip_think(reply)))
     return reply

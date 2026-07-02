@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
@@ -43,6 +44,8 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
         t |> success(feq(sr.logits, sp.logits), "{mode} last-position logits bit-exact")
         t |> success(feq(sr.key_cache, sp.key_cache), "{mode} key cache bit-exact")
         t |> success(feq(sr.value_cache, sp.value_cache), "{mode} value cache bit-exact")
+        delete sr
+        delete sp
     }
 }
 
@@ -67,6 +70,8 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
         t |> success(feq(sr.logits, sp.logits), "{mode} continuation last-position logits bit-exact")
         t |> success(feq(sr.key_cache, sp.key_cache), "{mode} continuation key cache bit-exact")
         t |> success(feq(sr.value_cache, sp.value_cache), "{mode} continuation value cache bit-exact")
+        delete sr
+        delete sp
     }
 }
 
@@ -81,8 +86,8 @@ def test_prefill_fp32(t : T?) {
             t |> success(true, "skipped: stories15M.bin not present")
             return
         }
-        let tr <- load_checkpoint(MODEL_PATH)
-        let tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        var tr <- load_checkpoint(MODEL_PATH)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
@@ -90,6 +95,8 @@ def test_prefill_fp32(t : T?) {
             check_continuation(t, tr, prompt, 4l, mode)
             check_prefill(t, tr, long_prompt, mode)   // 200 tok trips ATTN_PAR_THRESHOLD (threaded arm)
         }
+        delete tk
+        delete tr
     }
 }
 
@@ -106,7 +113,7 @@ def test_prefill_q8(t : T?) {
         }
         var tr <- load_checkpoint(MODEL_PATH)
         quantize_weights(tr)
-        let tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
@@ -114,5 +121,7 @@ def test_prefill_q8(t : T?) {
             check_continuation(t, tr, prompt, 4l, mode)
             check_prefill(t, tr, long_prompt, mode)   // 200 tok trips ATTN_PAR_THRESHOLD (threaded arm)
         }
+        delete tk
+        delete tr
     }
 }
