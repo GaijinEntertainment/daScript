@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
@@ -71,6 +72,8 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
         if (confident) {
             t |> success(argmax(sf.logits) == argmax(sc.logits), "flash predicts the same next token as classic")
         }
+        delete sc
+        delete sf
     }
 }
 
@@ -94,9 +97,11 @@ def test_flash_fp32(t : T?) {
             t |> success(true, "skipped: stories15M.bin not present")
             return
         }
-        let tr <- load_checkpoint(MODEL_PATH)
-        let tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        var tr <- load_checkpoint(MODEL_PATH)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         run_all(t, tr, tk)
+        delete tk
+        delete tr
     }
 }
 
@@ -113,7 +118,7 @@ def test_flash_q8(t : T?) {
         }
         var tr <- load_checkpoint(MODEL_PATH)
         quantize_weights(tr)
-        let tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         run_all(t, tr, tk)
         // exercise the flash sliding-window key-range bounds (Gemma2-style SWA)
         var trs <- load_checkpoint(MODEL_PATH)
@@ -121,5 +126,8 @@ def test_flash_q8(t : T?) {
         trs.config.sliding_window = 8l
         let lng <- [for (i in range64(200l)); i % 200l + 1l]
         check_flash(t, trs, lng, 0l, false)
+        delete tk
+        delete tr
+        delete trs
     }
 }

@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
@@ -41,7 +42,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
             t |> success(true, "skipped: {path} not present")
             return
         }
-        let m <- load_model(path, QuantMode.q8)
+        var m <- load_model(path, QuantMode.q8)
         // Token-exact oracle gate: pin bit-exact classic attention + scalar activations (same reason
         // as test_parity — the flash / exp4 defaults are within tolerance but not bit-exact).
         let pa = get_prefill_attn_mode()
@@ -56,7 +57,9 @@ def test_sampling_greedy_matches_oracle(t : T?) {
                 got |> push(id)
                 return true
             }
+            delete s
         }
+        delete m
         set_prefill_attn_mode(pa)
         set_act_vec(pv)
         t |> success(same(got, GEMMA2_GEN), "greedy generate token-for-token vs oracle")
@@ -75,7 +78,7 @@ def test_sampling_deterministic(t : T?) {
             t |> success(true, "skipped: {path} not present")
             return
         }
-        let m <- load_model(path, QuantMode.q8)
+        var m <- load_model(path, QuantMode.q8)
         let params = SamplingParams(temp = 0.8, top_k = 40l)
         let n = 16l
         var a : array<int64>
@@ -94,7 +97,10 @@ def test_sampling_deterministic(t : T?) {
                 b |> push(id)
                 return true
             }
+            delete s1
+            delete s2
         }
+        delete m
         t |> success(same(a, b) && int64(length(a)) == n, "reproducible under a fixed seed")
     }
 }

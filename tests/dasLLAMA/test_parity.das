@@ -55,6 +55,7 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
         let echo = length(prompt) - 1
         let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
         ok = same(got, want)
+        delete s
     }
     set_prefill_attn_mode(prev_attn)
     set_act_vec(prev_act)
@@ -69,7 +70,9 @@ def private parity_ok(path : string; quant : QuantMode; prompt, want : array<int
     if (tr.config.seq_len > 2048l) {
         tr.config.seq_len = 2048l
     }
-    return parity_gen_ok(tr, prompt, want)
+    let ok = parity_gen_ok(tr, prompt, want)
+    delete tr   // free the multi-GB weights NOW (persistent heap) — the next test loads its own model
+    return ok
 }
 
 // gemma-2-2b-it Q8_0, prompt "Once upon a time" (BOS=2). Confident — clean 40/40 vs oracle.
@@ -381,7 +384,9 @@ def private parity_text_ok(path : string; quant : QuantMode; text : string; want
         tr.config.seq_len = 2048l
     }
     let prompt <- encode(tr, text, true, false)
-    return parity_gen_ok(tr, prompt, want)
+    let ok = parity_gen_ok(tr, prompt, want)
+    delete tr
+    return ok
 }
 
 [test]
@@ -451,5 +456,6 @@ def test_parity_gptoss_20b(t : T?) {
         t |> success(parity_gen_ok(tr, GPTOSS_PROMPT, GPTOSS_GEN), "gpt-oss-20b token-for-token")
         let long_prompt <- encode(tr, gptoss_counting_prompt(), true, false)
         t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN), "gpt-oss-20b window-engaged token-for-token")
+        delete tr
     }
 }
