@@ -198,3 +198,8 @@ Audio
 * :doc:`audio_wav <generated/audio_wav>` — WAV file reading and writing
 * :doc:`strudel_midi <generated/strudel_midi>` — MIDI file parsing and playback
 * :doc:`strudel_sf2 <generated/strudel_sf2>` — SoundFont 2 file parser for sample-based synthesis
+
+AI and language models
+----------------------
+
+* :doc:`dasllama <generated/dasllama>` — CPU LLM inference over GGUF models: loading, tokenization, generation, chat

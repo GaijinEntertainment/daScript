@@ -1163,13 +1163,13 @@ def make_run_state(c : Config) : Session {
 
 //! Create a fresh session (KV cache + scratch) sized to `model`. A model serves many sessions,
 //! each with its own position and cache — so one model drives many independent conversations.
-def create_session(model : Model) : Session {
+def create_session_(model : Model) : Session {
     return <- make_run_state(model.config)
 }
 
 //! THE eval primitive: run `tokens` at the session's current position and advance it. Prefill =
 //! eval(prompt); each step = eval([token]) — same call, different batch size. Logits → `s.logits`.
-def eval(t : Model; var s : Session; tokens : array<int64>) {
+def eval_(t : Model; var s : Session; tokens : array<int64>) {
     let npos = int64(length(tokens))
     if (npos <= 0l) return
     forward_batch(t, s, tokens, npos, s.n_past)
@@ -1178,24 +1178,24 @@ def eval(t : Model; var s : Session; tokens : array<int64>) {
 
 //! Load a model AND its tokenizer from a GGUF — the full user-facing entry point. Arch and
 //! tokenizer backend are both auto-selected from GGUF metadata; `mode` picks the weight quant.
-def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     var m <- load_gguf(path, mode)
     m.tok <- load_tokenizer_auto(path)
     return <- m
 }
 
 //! Encode text to token ids using the model's tokenizer.
-def encode(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
+def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
     return <- encode(m.tok, text, add_special, parse_special)
 }
 
 //! Decode a full id sequence to text using the model's tokenizer.
-def decode(m : Model; ids : array<int64>) : string {
+def decode_(m : Model; ids : array<int64>) : string {
     return decode(m.tok, ids)
 }
 
 //! Decode a single token to text (streaming) using the model's tokenizer.
-def piece(m : Model; id : int64) : string {
+def piece_(m : Model; id : int64) : string {
     return piece(m.tok, id)
 }
 
@@ -2598,14 +2598,14 @@ struct SamplingParams {
 }
 
 //! Seed the session's sampling RNG for reproducible generation.
-def set_seed(var s : Session; seed : int) {
+def set_seed_(var s : Session; seed : int) {
     s.rng = random_seed(seed)
 }
 
 //! Sample the next token from `s.logits` per `params`: repetition penalty over the last
 //! `penalty_last_n` of `s.recent`, then temperature + top-k + softmax + CDF (or greedy argmax when
 //! temp <= 0). Consumes `s.logits` in place and advances `s.rng`.
-def sample(var s : Session; params : SamplingParams) : int64 {
+def sample_(var s : Session; params : SamplingParams) : int64 {
     let vocab = int64(length(s.logits))
     if (params.penalty != 1.0) {
         let n = length(s.recent)
@@ -2663,11 +2663,11 @@ def sample(var s : Session; params : SamplingParams) : int64 {
 //! false from the block to stop early (e.g. on a stop token). Prefills `prompt`, then samples one
 //! token at a time, advancing the session. Returns the number of tokens emitted. (The greedy
 //! `generate(t, s, prompt, steps)` above stays for the token-exact oracle path.)
-def generate(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams;
-             max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
+def generate_(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams;
+              max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
     s.recent |> clear()
     let t_pre = ref_time_ticks()
-    eval(t, s, prompt)
+    eval_(t, s, prompt)
     s.stat_prefill_us = int64(get_time_usec(t_pre))
     s.stat_n_prefill = int64(length(prompt))
     var one : array<int64>
@@ -2676,18 +2676,18 @@ def generate(t : Model; var s : Session; prompt : array<int64>; params : Samplin
     var got_first = false
     let t_gen = ref_time_ticks()
     for (_step in range64(max_tokens)) {
-        let tok = sample(s, params)
+        let tok = sample_(s, params)
         if (!got_first) {   // time-to-first-token spans the prefill + the first forward
             s.stat_ttft_us = int64(get_time_usec(t_pre))
             got_first = true
         }
-        if (!invoke(blk, tok, piece(t, tok))) {
+        if (!invoke(blk, tok, piece_(t, tok))) {
             break
         }
         nout++
         s.recent |> push(tok)
         one[0] = tok
-        eval(t, s, one)
+        eval_(t, s, one)
     }
     s.stat_gen_us = int64(get_time_usec(t_gen))
     s.stat_n_gen = nout
@@ -2706,7 +2706,7 @@ struct Stats {
 }
 
 //! Summarize the last generate()/respond() call from the session's timing counters.
-def stats(s : Session) : Stats {
+def stats_(s : Session) : Stats {
     var r = Stats(n_prompt = s.stat_n_prefill, n_gen = s.stat_n_gen,
                   ttft_s = double(s.stat_ttft_us) / 1.0e6lf)
     if (s.stat_prefill_us > 0l) {

@@ -9,11 +9,13 @@ on:
       - 'doc/**'
       - 'daslib/**'
       - 'src/builtin/**'
+      - 'modules/dasLLAMA/dasllama/**'
   pull_request:
     paths:
       - 'doc/**'
       - 'daslib/**'
       - 'src/builtin/**'
+      - 'modules/dasLLAMA/dasllama/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

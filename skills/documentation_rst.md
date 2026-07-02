@@ -84,6 +84,17 @@ in the `.das` source.
 fix is to add a `//!` comment in the `.das` source** — not to fill the
 handmade stub. Then regenerate; the stub disappears.
 
+**`//!` placement is INSIDE the body, not above the `def`.** The comment
+reader (`daslib/rst_comment.das`) attaches a `//!` to a function only when
+it appears *inside* the function body (first lines after `{`); `beforeFunction`
+unconditionally discards any pending comment block sitting above the `def`
+(verified against the parser, 2026-07-02). An above-def `//!` silently
+extracts NOTHING — the generated page shows the bare signature and no detail
+file is written. Same for structs: `//!` goes inside the struct body, with
+`//!<` per field. Module-level `//!` above the `module` decl does not reach
+the generated page either — the module header text comes from the handmade
+`module-<name>.rst`.
+
 ### Suppressing the STYLE014 lint on a `//!` block
 
 When a long-form `//!` block on a public symbol is intentional and you

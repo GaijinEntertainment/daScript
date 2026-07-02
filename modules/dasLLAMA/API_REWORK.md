@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. **In progress: the T1/T2 model-support waves** (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)) — waves 0 (Mistral/SmolLM2 + chat-template detection), 1 (Qwen3 QK-norm), and 2 (Gemma-3 per-layer SWA pattern + dual RoPE θ) landed.
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. All seven T1/T2 model-support waves landed (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)), and the [facade + docs wave](#the-facade--dasllamadasllamadas-landed-2026-07-02) landed 2026-07-02. **Next: the tutorials wave** (`tutorials/dasLLAMA/`, written against the facade), then the performance-ledger pass.
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -271,6 +271,41 @@ collision with no template execution). Stage 2 — a Jinja-subset interpreter in
 llama.cpp "minja" route, executes the embedded template directly) — is deliberately deferred
 until the named registry stops scaling; the realistic forcing function is gpt-oss's
 channel-based Harmony format at wave 5. Chat remains layer 2 throughout.
+
+## The facade — `dasllama/dasllama.das` *(landed 2026-07-02)*
+
+One require is the public API: `require dasllama/dasllama` re-exports the engine
+(`dasllama_transformer public` — which also fires every arch `[init]`) and the chat layer
+(`dasllama_chat public`), and defines the **documented, curated surface** — the three layers above
+as 14 `//!`-documented stubs (`load_model` / `create_session` / `encode` / `decode` / `piece` /
+`eval` / `sample` / `set_seed` / `stats` / `generate` / `create_chat` / `add_user` / `render_turn`
+/ `respond`). Everything else stays reachable through the re-export, deliberately undocumented.
+
+- **Naming:** wherever the facade takes the good name, the engine spelling carries a trailing
+  underscore (`load_model_`, `eval_`, …) — a same-name stub plus a public re-export would be an
+  ambiguous overload at every call site. The raw greedy `generate(t, s, prompt, steps)` keeps its
+  name (different arity, no ambiguity — the token-exact oracle path). Public-path consumers
+  (examples, `test_parity`/`test_facade`/`test_chat`/`test_sampling`/…) require the facade and use
+  the good names; internal/kernel tests and the chat engine's internals use the `_` spellings.
+- **Examples are the completeness gate:** `run.das` / `chat.das` require ONLY `dasllama/dasllama`
+  from the module — if a demo needs something the facade lacks, the facade grows, not the require
+  list. Both verified end-to-end after the switch (TinyLlama completion + chat smoke).
+- **Docs:** das2rst registers ONLY the facade module (new stdlib section `sec_ai.rst`,
+  `generated/dasllama.rst`; `doc.yml` path filters now include `modules/dasLLAMA/dasllama/**`).
+  Engine modules stay undocumented by design — Model's ~40 offset fields are not API. The types the
+  facade signatures mention (`Model`, `Session`, `QuantMode`, `SamplingParams`, `Stats`,
+  `ChatSession`) get hand-written opaque stanzas emitted by `document_module_dasllama`'s
+  `DocsHook.afterEnums` under the exact `:ref:` labels the signature renderer produces, so
+  cross-references resolve without documenting internals. The module header
+  (`handmade/module-dasllama.rst`) carries the supported-model-family list (and, later, tutorial
+  links).
+- **🔑 `//!` placement:** the doc extractor (`daslib/rst_comment`) attaches a docstring only when
+  the `//!` block is the FIRST thing *inside* the function body — an above-def `//!` is silently
+  discarded (this is why no engine docstring ever extracted; the engine's above-def `//!` remain as
+  source comments only).
+- **Drift detector** (`tests/dasLLAMA/test_facade_docs.das`): every facade def has a body-leading
+  `//!` (and no inert above-def `//!` exists); facade stubs ↔ engine `_` spellings stay 1:1 in both
+  directions; the examples stay facade-only. Negative-probed: an undocumented extra stub fails it.
 
 ### Performance ledger (living — address after the model waves)
 

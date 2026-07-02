@@ -125,6 +125,7 @@ SET(AOT_DASLLAMA_MODULE_FILES
     modules/dasLLAMA/dasllama/dasllama_arch_gptoss.das
     modules/dasLLAMA/dasllama/dasllama_transformer.das
     modules/dasLLAMA/dasllama/dasllama_chat.das
+    modules/dasLLAMA/dasllama/dasllama.das
 )
 
 # AOT for decs test files

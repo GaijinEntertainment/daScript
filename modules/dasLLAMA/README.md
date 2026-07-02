@@ -45,8 +45,9 @@ modules/dasLLAMA/
     dasllama_arch_gemma4.das  #   Gemma-4 arch (heterogeneous sliding/global geometry + p-RoPE)
     dasllama_arch_qwen2moe.das #  Qwen-MoE arch (routed top-k + shared expert)
     dasllama_arch_gptoss.das  #   gpt-oss arch (MoE + sinks + YaRN + swiglu_oai + biases)
-    dasllama_transformer.das  #   umbrella — re-exports dasllama_common + registers every arch (require this)
+    dasllama_transformer.das  #   umbrella — re-exports dasllama_common + registers every arch
     dasllama_chat.das         #   layer-2 chat engine — Role/Message/ChatSession, template renderer, respond()
+    dasllama.das              #   THE public facade — documented API over engine + chat (require this)
   benchmarks/                 # perf harnesses (gen tok/s, prefill TTFT)
     matmul/                   #   matmul kernel micro-bench ledger
   harness/                    # verification / eval test beds, per-box tuners, GGUF inspection tools
@@ -54,11 +55,18 @@ tests/dasLLAMA/               # dastest [test] suites (model-gated ones self-ski
 examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL)
 ```
 
-Pull the pieces you need:
+One require is the whole public API (docs: the `dasllama` page in the stdlib reference):
 
 ```das
-require dasllama/dasllama_transformer    // load_model / create_session / eval / generate / sample (+ raw load_gguf / forward)
-require dasllama/dasllama_chat           // layer 2: create_chat / add_user / respond (streaming)
+require dasllama/dasllama                // load_model / create_session / encode / eval / sample /
+                                         // generate (streaming) / decode / piece + chat: create_chat /
+                                         // add_user / respond — and it re-exports the engine below
+```
+
+Engine internals remain reachable for tools and kernel work:
+
+```das
+require dasllama/dasllama_transformer    // engine spellings (load_model_, eval_, ...) + raw load_gguf / forward
 require dasllama/dasllama_tokenizer      // SentencePiece
 require dasllama/dasllama_bpe            // byte-level BPE (Llama-3 / Qwen2)
 require dasllama/dasllama_math           // matmul / rmsnorm / softmax / silu / rope / dot
