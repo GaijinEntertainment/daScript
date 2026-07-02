@@ -332,17 +332,28 @@ namespace das {
     char * LinearChunkAllocator::allocate ( uint64_t s ) {
         if ( !s ) return nullptr;
         s = (s + alignMask) & ~alignMask;
+#if SIZE_MAX < UINT64_MAX
+        // 32-bit: no size_t allocation can back a >SIZE_MAX request. Fail it as OOM here and cap
+        // chunk sizes below — otherwise HeapChunk's das_aligned_alloc16(size_t) truncates the malloc
+        // while HeapChunk::size records the full uint64, handing out unbacked memory. The cap is
+        // 16-aligned so HeapChunk's own round-up can't push it past SIZE_MAX.
+        const uint64_t chunkCap = uint64_t(SIZE_MAX) & ~uint64_t(15);
+        if ( s > chunkCap ) return nullptr;
+        auto capChunk = [&]( uint64_t sz ) { return das::min(chunkCap, sz); };
+#else
+        auto capChunk = []( uint64_t sz ) { return sz; };
+#endif
         if ( !chunk ) {
             if ( !initialSize ) {
                 initialSize = default_initial_size;
             }
-            chunk = new HeapChunk ( das::max(initialSize, s), nullptr );
+            chunk = new HeapChunk ( capChunk(das::max(initialSize, s)), nullptr );
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
                 return res;
             }
-            chunk = new HeapChunk ( das::max(grow(chunk->size), s), chunk);
+            chunk = new HeapChunk ( capChunk(das::max(grow(chunk->size), s)), chunk);
         }
     }
 
