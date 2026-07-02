@@ -165,9 +165,12 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasA
 IF(DAS_WEB_IMGUI_DIR)
     MESSAGE(STATUS "web: embedding dasImgui (${DAS_WEB_IMGUI_DIR}) into daslang_static")
     add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/widgets@modules/dasImgui/imgui")
-    # module imgui_boost_v2 lives in the file widgets/imgui_boost.das; the NATIVE_MODULE
-    # resolver maps require imgui/imgui_boost_v2 -> imgui_boost_v2.das, so mount it there too.
-    add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost.das@modules/dasImgui/imgui/imgui_boost_v2.das")
+    # Pre-rename dasImgui kept module imgui_boost_v2 in the file widgets/imgui_boost.das;
+    # post-rename (dasImgui #218) the file carries the module's own name and the widgets/
+    # embed above already covers it. Tolerate both layouts.
+    IF(NOT EXISTS "${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost_v2.das")
+        add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost.das@modules/dasImgui/imgui/imgui_boost_v2.das")
+    ENDIF()
     add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/font/JetBrainsMono-Regular.ttf@modules/dasImgui/font/JetBrainsMono-Regular.ttf")
     add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasLiveHost/live@modules/dasLiveHost/live")
 ENDIF()

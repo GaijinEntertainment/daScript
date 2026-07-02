@@ -3079,7 +3079,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push ( TT & vec, const QQ & value, int32_t at, Context * context ) {
-        if ( uint32_t(at)>vec.size() ) {
+        if ( uint32_t(at)>uint32_t(vec.size()) ) {   // both sides cast: ImVector::size() is int, std::vector's is size_t
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         (void)value;
@@ -3089,7 +3089,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_value ( TT & vec, QQ value, int32_t at, Context * context ) {
-        if ( uint32_t(at)>vec.size() ) {
+        if ( uint32_t(at)>uint32_t(vec.size()) ) {   // both sides cast: ImVector::size() is int, std::vector's is size_t
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         (void)value;
@@ -3099,7 +3099,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_empty ( TT & vec, int32_t at, Context * context ) {
-        if ( uint32_t(at)>vec.size() ) {
+        if ( uint32_t(at)>uint32_t(vec.size()) ) {   // both sides cast: ImVector::size() is int, std::vector's is size_t
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
@@ -3159,7 +3159,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_erase ( TT & vec, int32_t index, Context * context ) {
-        if ( uint32_t(index)>vec.size() ) {
+        if ( uint32_t(index)>uint32_t(vec.size()) ) {   // both sides cast: ImVector::size() is int, std::vector's is size_t
             context->throw_error_ex("erasing vector index out of range %i of %i", index, int32_t(vec.size()));
         }
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
