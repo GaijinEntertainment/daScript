@@ -345,7 +345,7 @@ Commands:
 - `check` — verify installed packages match lockfile
 - `doctor` — check environment (git, cmake, gh)
 - `search <query>` — search the package index
-- `build <name>` — build a native package
+- `build [--global]` — build all native packages under the root (no per-package name argument)
 
 Flags: `--root <dir>` (project root, default `.`), `--force` (reinstall), `--color`/`--no-color`.
 

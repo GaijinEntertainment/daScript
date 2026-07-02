@@ -24,10 +24,14 @@ tutorials/integration/cpp/ — C++ integration tutorials
 tutorials/sql/             — dasSQLITE (NN-name.das, hyphenated)
 tutorials/dasAudio/        — dasAudio
 tutorials/dasHV/           — dasHV (HTTP/WebSocket)
+tutorials/dasMinfft/       — dasMinfft (FFT/DCT)
+tutorials/dasOPENAI/       — dasOPENAI (LLM API)
 tutorials/dasPEG/          — dasPEG (parser)
 tutorials/dasPUGIXML/      — dasPUGIXML (XML)
 tutorials/dasStbImage/     — dasStbImage
 tutorials/daStrudel/       — daStrudel (live-coding)
+tutorials/jsonrpc/         — JSON-RPC
+tutorials/opengl/          — OpenGL (installed as a directory)
 ```
 
 When adding tutorials for a **new** module, create a new `tutorials/<module>/` directory rather than dumping into an existing one.
@@ -103,9 +107,9 @@ Every shipped tutorial has a paired RST page under `doc/source/reference/tutoria
 
 ## CMake install hook
 
-Tutorials are installed to `${DAS_INSTALL_TUTORIALSDIR}/<area>/` via per-area `file(GLOB ...) + install(FILES ...)` blocks in the root `CMakeLists.txt` (search for `_TUTORIAL_SOURCES`). When adding a tutorial to an **existing** registered area (`language`, `macros`, `dasHV`, `dasPUGIXML`, `dasStbImage`, `dasAudio`), the glob picks it up automatically — no CMake edit needed.
+Tutorials are installed to `${DAS_INSTALL_TUTORIALSDIR}/<area>/` via per-area `file(GLOB ...) + install(FILES ...)` blocks in `tutorials/CMakeLists.txt` (search for `_TUTORIAL_SOURCES`). When adding a tutorial to an **existing** registered area, the glob picks it up automatically — no CMake edit needed. All current areas are registered.
 
-When adding a tutorial to an **unregistered** area, add the install rule. Currently missing as of writing: `tutorials/dasPEG/`, `tutorials/daStrudel/`. Pattern:
+When adding a tutorial for a **new** area, add the install rule to `tutorials/CMakeLists.txt`. Pattern:
 
 ```cmake
 file(GLOB SQL_TUTORIAL_SOURCES

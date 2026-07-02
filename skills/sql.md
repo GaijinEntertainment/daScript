@@ -2,12 +2,12 @@
 
 Read this skill before writing or editing any `.das` code that talks to a SQL database. The companion tutorials live under [tutorials/sql/](../tutorials/sql/) (45 files, numbered by teaching order — `01-version.das` through `44-in_not_in_collections.das`, plus `12b-set_ops.das`); read the relevant ones for runnable examples of every pattern below. Implementation is in [modules/dasSQLITE/daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das) (runtime + `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]` macros), [modules/dasSQLITE/daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das) (the `_sql(...)` family of call macros), and [modules/dasSQLITE/daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das) (`[sql_migration]` + `migrate_to_latest` runner). Design notes, decision logs, and the deferred-feature list live next to the implementation in [modules/dasSQLITE/API_REWORK.md](../modules/dasSQLITE/API_REWORK.md), [TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md), and [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md).
 
-The shipped backend is **SQLite only**. The split between `daslib/sql` (provider-neutral types — `SqlRunner`, `SqlError`, `SqlType`, `ColumnInfo`, `Option`/`Result`) and `sqlite/sqlite_boost` (provider-specific runtime + macros) keeps user code portable for the day a second backend lands. Until then the names "SQL" and "SQLite" are interchangeable in this skill.
+The shipped backend is **SQLite only**. The split between `daslib/sql` (provider-neutral types — `SqlType`, `ColumnInfo`, re-exported `Option`/`Result`) and `sqlite/sqlite_boost` (provider-specific runtime + macros — `SqlRunner`, `SqlError`, `[sql_table]`, …; these migrate up to `daslib/sql` when a second provider lands) keeps user code portable for the day a second backend lands. Until then the names "SQL" and "SQLite" are interchangeable in this skill.
 
 ## `require`
 
 ```das
-require daslib/sql                  // abstract layer — SqlRunner, SqlType, ColumnInfo
+require daslib/sql                  // abstract layer — SqlType, ColumnInfo (SqlRunner/SqlError live in sqlite_boost)
 require sqlite/sqlite_boost         // runtime, [sql_table], [sql_view], [sql_fts5], [sql_function]
 require sqlite/sqlite_linq          // _sql / _try_sql / _each_sql / _sql_update / _sql_delete / _sql_upsert / _create_view / _sql_text
 require sqlite/sqlite_migrate          // OPTIONAL — [sql_migration], migrate_to_latest, with_latest_sqlite, baseline

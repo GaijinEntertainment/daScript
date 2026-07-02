@@ -42,7 +42,7 @@ The post-migration rules above are correct as of daslang 0.6.x.
 
 ### Pre-set `_type` on emitted `ExprVar` (and similar nodes) that flow into typed positions
 
-`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1094](src/ast/ast.cpp#L1094): `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
+`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1138](src/ast/ast.cpp#L1138): `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
 
 Don't rely on the typer's later local-variable-resolution pass to fix this — its generic-instantiation pass runs **first** and commits to `auto`, cascading errors up through every downstream consumer.
 
@@ -57,7 +57,7 @@ pvar._type.flags.ref = true
 
 Same family of trap as the [ExprRef2Value blocker](#peel-exprref2value-before-qmatch) — the typer doesn't repair what macro substitution introduces, when the substitution lands in an already-typed AST fragment.
 
-Canonical example: `try_make_inline_cmp` and the `_where`-arm projection-bind rewrite in `daslib/linq_fold.das` (PR #2714).
+Canonical example: `try_make_inline_cmp` and the `_where`-arm projection-bind rewrite in `daslib/linq_fold_common.das` (PR #2714).
 
 ## The few residual smart_ptr types — `Program`, `Context`, `FileAccess`
 
@@ -233,7 +233,7 @@ Canonical conversions: `is_key_ref` / `join_keyb_is_bare_key` (daslib/linq_fold_
 
 ### Splice inputs are cloned for you — don't pre-clone with `clone_expression`
 
-`qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` all go through [`apply_template`](../daslib/templates_boost.das#L249), which calls `clone_expression` on every `$e(...)` substitution input. So this is wasted work:
+`qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` all go through [`apply_template`](../daslib/templates_boost.das#L418), whose substitution visitor calls `clone_expression` on every `$e(...)` substitution input (templates_boost.das:252). So this is wasted work:
 
 ```das
 // WRONG — clones twice (once explicitly, once inside apply_template)

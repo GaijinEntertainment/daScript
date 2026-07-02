@@ -30,14 +30,14 @@ var private RE_S <- %regex~start.*end%%s   // dot-all (`.` matches `\n`)
 var private RE_IS <- %regex~Foo%%is        // both flags
 ```
 
-The macro compiles the pattern at parse time and embeds the resulting `Regex` directly into the AST. Three benefits: (1) no escape-doubling — write `\s+` not `"\\s+"`; (2) parse-time validation — bad patterns surface as compile errors; (3) no per-call compilation cost. Module-scope `var` (mutable, since matching mutates internal state) is the standard pattern — see `daslib/cpp_gen.das:810` and `daslib/faker.das:70` for production use.
+The macro compiles the pattern at parse time and embeds the resulting `Regex` directly into the AST. Three benefits: (1) no escape-doubling — write `\s+` not `"\\s+"`; (2) parse-time validation — bad patterns surface as compile errors; (3) no per-call compilation cost. Module-scope `var` (mutable, since matching mutates internal state) is the standard pattern — see `daslib/cpp_gen.das:757` and `daslib/faker.das:70` for production use.
 
 ### Matching
 
 ```daslang
 def regex_match(var regex : Regex; str : string; offset : int = 0) : int
 ```
-Anchored at `offset` — checks "does the regex match starting here?". Returns the **length** of the match in bytes consumed, or `-1` if no match. Pattern starting with `^` and `regex_match(re, line)` is the common idiom for "does this line begin with...".
+Anchored at `offset` — checks "does the regex match starting here?". Returns the **end position** of the match — the offset-from-string-start of the first byte after it, i.e. `offset + match length` (equals the match length only when `offset == 0`) — or `-1` if no match. Pattern starting with `^` and `regex_match(re, line)` is the common idiom for "does this line begin with...".
 
 ```daslang
 def regex_search(var regex : Regex; str : string; offset : int = 0) : int2

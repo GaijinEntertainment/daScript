@@ -18,7 +18,7 @@ daslang supports three execution tiers: interpreter → AOT (to C++) → JIT (LL
 
 ### AOT C++ emitter location
 
-The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (a visitor written in daslang). The old `src/ast/ast_aot_cpp.cpp` was emptied by commit `581363ebc` — do not edit it. When codegen output changes shape, edit `daslib/aot_cpp.das` and rebuild `libDaScriptAot`.
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (a visitor written in daslang). The old `src/ast/ast_aot_cpp.cpp` was deleted by commit `581363ebc`. When codegen output changes shape, edit `daslib/aot_cpp.das` and rebuild `libDaScriptAot`.
 
 Key helpers used by the emitter:
 
@@ -55,8 +55,8 @@ tests/aot/
 |---|---|---|
 | `DAS_AOT(files, genList, target, tool)` | AOT for scripts (regular `.das` files) | `-aot` |
 | `DAS_AOT_LIB(files, genList, target, tool)` | AOT for library modules (daslib, dastest) | `-aotlib` |
-| `DAS_AOT_EXT(files, genList, target, tool, extra)` | Core macro — others call this | `-aot` + `extra` |
-| `DAS_AOT_CTX(files, genList, target, tool)` | AOT with custom context | `-aot -ctx` |
+| `DAS_AOT_EXT(files, genList, target, tool, extra)` | Core macro — others call this | `extra` alone (no implicit `-aot`; `DAS_AOT` passes `-aot` as the extra) |
+| `DAS_AOT_CTX(files, genList, target, tool)` | AOT with custom context | `-ctx` |
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
@@ -297,13 +297,12 @@ daslang.exe utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
 
 ```
 daslib/_aot_generated/
-    ds_ast_boost.das.cpp
-    ds_templates_boost.das.cpp
-    ds_functional.das.cpp
-    ds_math_boost.das.cpp
-    ds_utf8_utils.das.cpp
-    ds_printer_flags_visitor.das.cpp
-    ... (11 modules total)
+    dasAotStub_ast_boost.das.cpp
+    dasAotStub_templates_boost.das.cpp
+    dasAotStub_functional.das.cpp
+    dasAotStub_math_boost.das.cpp
+    dasAotStub_utf8_utils.das.cpp
+    ... (13 modules total — the AotDaslibList in the root CMakeLists.txt)
 ```
 
 When adding a new AOT test binary, link `libDaScriptAot` to get these stubs:
@@ -333,13 +332,7 @@ Common causes of AOT link failures:
 
 ## CI Integration
 
-The AOT test step runs in `.github/workflows/build.yml` after the regular test step, Release builds only:
-
-```yaml
-- name: AOT Test
-  if: matrix.preset != 'windows32' && matrix.config == 'Release'
-  run: bin/${{ matrix.preset == 'windows' && 'Release/' || '' }}test_aot dastest/dastest.das -- --test tests/aot
-```
+The AOT tests run in `.github/workflows/build.yml` after the regular test step, Release builds only, driven through the `run_tests_aot` CMake target (`tests/CMakeLists.txt`) rather than a direct test_aot invocation — look for the "Slow Release Tests (AOT)" / "Test: AOT sweep" steps (`cmake --build ... --target run_tests_aot`). `windows32` is skipped (the matrix variable is `matrix.cmake_preset`).
 
 ## _aot_generated Directories
 
@@ -379,4 +372,4 @@ SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
 
 **Why this matters**: CI builds `test_aot` on Linux/macOS/Windows-64 and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. `test_aot` builds and runs fine on Windows (only 32-bit Windows is excluded — `NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)` gate in root CMakeLists.txt); it requires tests and AOT examples enabled in the CMake configure.
 
-Also ensure that wrapper functions in builtin `.das` files (like `src/builtin/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.
+Also ensure that wrapper functions in daslib `.das` files (like `daslib/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.

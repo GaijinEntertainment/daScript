@@ -64,7 +64,7 @@ options log_nodes
 options log_nodes_aot_hash
 ```
 
-`log_nodes` triggers `printSimFunction` in [`src/ast/ast_simulate.cpp`](../src/ast/ast_simulate.cpp) line ~3814. `log_nodes_aot_hash` adds per-node hash annotations.
+`log_nodes` triggers `printSimFunction` in [`src/ast/ast_simulate.cpp`](../src/ast/ast_simulate.cpp) (gate at ~3849, call at ~3862). `log_nodes_aot_hash` adds per-node hash annotations.
 
 Then capture from both directions:
 
@@ -126,7 +126,7 @@ Diff shows entire SimNode subtrees that exist in one path but not the other. The
 grep -rln "is_in_aot\|set_aot\|aot_module" daslib/ <required modules>
 ```
 
-The AOT tool sets `g_isInAot = true` via `set_aot()` in [`daslib/aot_cpp.das:3988`](../daslib/aot_cpp.das). Code that branches on it is fundamentally non-portable across AOT-gen ↔ runtime — fix by removing the branch (produce the same AST in both contexts) or by ensuring the branch only affects details that don't reach the SimNode tree.
+The AOT tool sets `g_isInAot = true` via `set_aot()` in [`daslib/aot_cpp.das:4249`](../daslib/aot_cpp.das). Code that branches on it is fundamentally non-portable across AOT-gen ↔ runtime — fix by removing the branch (produce the same AST in both contexts) or by ensuring the branch only affects details that don't reach the SimNode tree.
 
 ## Step 5 — Verify the fix
 

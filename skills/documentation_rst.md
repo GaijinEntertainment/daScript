@@ -10,17 +10,15 @@ The stdlib docs live in `doc/source/stdlib/` and are generated from `//!` doc-co
    - `daslib/*.das` — standard library modules
    - `modules/<ModuleName>/<subdir>/*.das` — external module daScript code (e.g. `modules/dasStbImage/stbimage/stbimage_boost.das`)
    - C++ modules get their docs from handmade files only (no `//!` comments)
-2. `doc/reflections/rst_comment.das` extracts `//!` comments into `doc/source/stdlib/detail/*.rst`
-3. `doc/reflections/das2rst.das` + `doc/reflections/rst.das` combine detail RST with handmade content
+2. `daslib/rst_comment.das` extracts `//!` comments into `doc/source/stdlib/generated/detail/*.rst`
+3. `doc/reflections/das2rst.das` + `daslib/rst.das` combine detail RST with handmade content
 4. **`doc/source/stdlib/handmade/`** — manually written descriptions (fallback/supplement for functions, types, enums)
-5. **`doc/source/stdlib/detail/`** — auto-generated from `//!` comments (do NOT edit manually)
+5. **`doc/source/stdlib/generated/detail/`** — auto-generated from `//!` comments (do NOT edit manually)
 6. Final RST output goes to **`doc/source/stdlib/generated/`** (NOT `doc/source/stdlib/` root)
 
 ### Key documentation tools
 
 - `doc/reflections/gen_module_examples.py` — generates/updates all 86 module-*.rst files with descriptions and compilable examples (31 modules have examples)
-- `doc/reflections/test_new_examples.py` — tests all example snippets by running them through `daslang.exe`
-- `doc/reflections/fix_short_docs.py` — fixes terse function documentation
 - Validate: `bin/Release/daslang.exe doc/reflections/das2rst.das` (exit code 0 = success)
 
 ### Function grouping in generated docs
@@ -53,7 +51,7 @@ group_by_regex("Type conversion operators", mod, r_type_conv)
 ### Adding a module example
 
 1. Add `example="""..."""` to the `reg()` call in `gen_module_examples.py`
-2. Test it: add to `test_new_examples.py` and run `python doc/reflections/test_new_examples.py`
+2. Test it: run the snippet through `bin/Release/daslang` to confirm it compiles and runs
 3. Regenerate: `python doc/reflections/gen_module_examples.py`
 4. Validate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
 
@@ -196,7 +194,7 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
 
 Tutorial source-file conventions (location, naming, header shape, install hooks) live in `skills/tutorials.md`. **Read that first** when adding or moving tutorials — overwriting the inherited examples under `modules/<X>/tutorial/` is a recurring mistake the source-side skill exists to prevent.
 
-Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/<area>/`. Active areas: `language`, `macros`, `integration/c`, `integration/cpp`, `sql`, `dasAudio`, `dasHV`, `dasPEG`, `dasPUGIXML`, `dasStbImage`, `daStrudel`.
+Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/<area>/`. Active areas: `language`, `macros`, `integration/c`, `integration/cpp`, `sql`, `dasAudio`, `dasHV`, `dasMinfft`, `dasOPENAI`, `dasPEG`, `dasPUGIXML`, `dasStbImage`, `daStrudel`.
 
 - Each RST starts with a label: `.. _tutorial_name:` (e.g., `.. _tutorial_linq:`)
 - Include `.. index::` directive with relevant `single: Tutorial; Topic` entries

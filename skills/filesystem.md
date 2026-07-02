@@ -133,7 +133,7 @@ fopen(path, "rb") $(f) {
 }
 ```
 
-POD struct / array I/O via the generic `fread(f, var buf)` / `fwrite(f, buf)` overloads — see [daslib/fio.das:109-139](daslib/fio.das#L109-L139). They wrap `_builtin_read`/`_builtin_write` with a `concept_assert` that the type is raw POD.
+POD struct / array I/O via the generic `fread(f, var buf)` / `fwrite(f, buf)` overloads — see [daslib/fio.das:101-131](daslib/fio.das#L101-L131). They wrap `_builtin_read`/`_builtin_write` with a `concept_assert` that the type is raw POD.
 
 ## Mutating filesystem operations
 
@@ -156,7 +156,7 @@ Pick the form by what the caller does with failures:
 - **`error` out-param** — `mkdir(p, error)`. C++-`error_code` style. Use when you want to log or surface the message but stay imperative.
 - **`_result` variant** — returns `variant fs_result_bool { value : bool; error : string }` (or `_int64`/`_string`). Functional style; pairs with `is _value` / `as _value` checks. Use when chaining or returning to a caller that wants exhaustive matching.
 
-Full `_result` set in [daslib/fio.das:234-371](daslib/fio.das#L234-L371): `file_size_result`, `equivalent_result`, `is_symlink_result`, `copy_file_result`, `set_mtime_result`, `temp_directory_result`, `create_temp_file_result`, `create_temp_directory_result`, `relative_result`, `remove_result`, `rename_result`, `mkdir_result`, `rmdir_result`, `rmdir_rec_result`.
+Full `_result` set in [daslib/fio.das:523-627](daslib/fio.das#L523-L627): `file_size_result`, `equivalent_result`, `is_symlink_result`, `copy_file_result`, `set_mtime_result`, `temp_directory_result`, `create_temp_file_result`, `create_temp_directory_result`, `relative_result`, `remove_result`, `rename_result`, `mkdir_result`, `rmdir_result`, `rmdir_rec_result`.
 
 ```das
 let r = mkdir_result("output/cache")

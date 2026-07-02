@@ -197,7 +197,7 @@ For a **dep package** (e.g. `dasCards`), only the asset-glob calls matter — it
 
 ### Auto-detection — shared modules + transitive dep traversal
 
-`daslang -exe -list-shared-modules <path>` writes a JSON file describing the program's deps. `cmd_release` then:
+`daslang -exe --list-shared-modules <path>` writes a JSON file describing the program's deps. `cmd_release` then:
 
 1. **Ships dylibs**: every `.shared_module` registered for a daslang module that the compiled program references. Detection is by program-module membership (not used-function set) — a `require`d module whose .das functions aren't called still gets shipped, because its native data may be loaded at runtime.
 2. **Walks transitive deps**: for every program module whose .das source file lives under a `<root>/modules/<DepName>/` package (i.e. has a `.das_package` ancestor distinct from the project's own root), runs that dep's `release()` and copies its `release_include` files to `<bundle>/modules/<DepName>/<rel>`.
