@@ -36,6 +36,13 @@ enum FfnAct {
     gelu
 }
 
+//! MoE router probability function: softmax over all experts (Qwen-MoE) vs per-expert sigmoid
+//! (the DeepSeek/GLM shape). GGUF `{arch}.expert_gating_func` overrides the arch default.
+enum MoeGate {
+    softmax
+    sigmoid
+}
+
 //! Prefill attention algorithm (A/B selectable; all variants kept). `classic` streams the full causal
 //! K/V range from the cache per query — threaded over heads, O(npos²) with K/V re-read every query.
 //! `blocked` query-blocks so each K/V tile is loaded once and reused across the whole block, cutting
@@ -92,6 +99,16 @@ struct Config {
     rope_ff_global_only : bool = false // rope_freqs factors apply only to GLOBAL layers (gemma4 p-RoPE)
     layer_out_scale : bool = false     // per-layer scalar on the layer output (gemma4 layer_output_scale; loader-detected)
     v_from_k_mask : uint64 = 0ul       // bit l: layer l has no attn_v tensor — V reuses the pre-norm K projection (gemma4 global layers)
+    // MoE FFN (qwen2moe shape: routed top-k + shared expert). `moe` is the arch opt-in that lets the
+    // loader read the {arch}.expert_* keys; the geometry comes from metadata, 0 = dense FFN
+    moe : bool = false                 // arch opt-in: this arch's FFN is router + experts
+    n_expert : int64 = 0               // routed expert count (qwen2moe A2.7B: 60)
+    n_expert_used : int64 = 0          // experts routed per token, the top-k (qwen2moe: 4)
+    n_ff_exp : int64 = 0               // per-expert FFN width (qwen2moe: 1408)
+    n_ff_shexp : int64 = 0             // shared-expert FFN width; 0 = no shared expert (qwen2moe: 5632)
+    moe_gate : MoeGate = MoeGate.softmax  // router probability function
+    norm_topk_prob : bool = false      // renormalize the selected top-k weights to sum 1 ({arch}.expert_weights_norm)
+    expert_weights_scale : float = 0.0 // scale on the routed weights; 0/1 = off (DeepSeek {arch}.expert_weights_scale)
 }
 
 // Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
@@ -159,6 +176,17 @@ struct Model {
     w1_off : int64
     w2_off : int64
     w3_off : int64
+    // MoE (valid when config.n_expert > 0; the dense w1/w2/w3 regions are not allocated then).
+    // Router matrices + shared-expert gate vectors are small fp32 -> fblob; the routed expert
+    // stacks (expert-major within each layer) and the shared-expert 2D weights -> big-weight blob
+    router_off : int64      // fblob: layers x n_expert x dim
+    shexp_gate_off : int64  // fblob: layers x dim (one sigmoid-gate vector per layer)
+    we1_off : int64         // ffn_gate_exps: layers x n_expert x (dim x n_ff_exp)
+    we2_off : int64         // ffn_down_exps: layers x n_expert x (n_ff_exp x dim)
+    we3_off : int64         // ffn_up_exps:   layers x n_expert x (dim x n_ff_exp)
+    wsh1_off : int64        // ffn_gate_shexp: layers x (dim x n_ff_shexp)
+    wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
+    wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
     wcls_off : int64
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
@@ -263,6 +291,14 @@ def private layout_offsets(var t : Model) : LayoutSizes {
         t.out_scale_off = fo
         fo += layers
     }
+    if (c.n_expert > 0l) {  // MoE: per-layer router matrices + shared-expert gate vectors, fp32
+        t.router_off = fo
+        fo += layers * c.n_expert * dim
+        if (c.n_ff_shexp > 0l) {
+            t.shexp_gate_off = fo
+            fo += layers * dim
+        }
+    }
     t.rms_final_off = fo
     fo += dim
     var wo = 0l
@@ -294,12 +330,33 @@ def private layout_offsets(var t : Model) : LayoutSizes {
         t.wo_offs |> push(wo)
         wo += layer_qd(c, l) * dim
     }
-    t.w1_off = wo
-    wo += layers * dim * hidden
-    t.w2_off = wo
-    wo += layers * hidden * dim
-    t.w3_off = wo
-    wo += layers * dim * hidden
+    if (c.n_expert > 0l) {
+        // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at
+        // we*_off + (l*n_expert + e) * (dim*n_ff_exp), so the existing kernels apply per expert
+        let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
+        t.we1_off = wo
+        wo += layers * c.n_expert * ege
+        t.we2_off = wo
+        wo += layers * c.n_expert * ege
+        t.we3_off = wo
+        wo += layers * c.n_expert * ege
+        if (c.n_ff_shexp > 0l) {
+            let she = dim * c.n_ff_shexp
+            t.wsh1_off = wo
+            wo += layers * she
+            t.wsh2_off = wo
+            wo += layers * she
+            t.wsh3_off = wo
+            wo += layers * she
+        }
+    } else {
+        t.w1_off = wo
+        wo += layers * dim * hidden
+        t.w2_off = wo
+        wo += layers * hidden * dim
+        t.w3_off = wo
+        wo += layers * dim * hidden
+    }
     if (c.shared_weights) {
         t.wcls_off = 0l
     } else {
@@ -489,9 +546,25 @@ def private repack_q8_weights(var t : Model) {
             repack_q8q8_weight(t.qblob, t.qscales, t.wv_offs[l], dim, kv)
         }
         repack_q8q8_weight(t.qblob, t.qscales, t.wo_offs[l], qd, dim)
-        repack_q8q8_weight(t.qblob, t.qscales, t.w1_off + l * dim * hidden, dim, hidden)
-        repack_q8q8_weight(t.qblob, t.qscales, t.w2_off + l * hidden * dim, hidden, dim)
-        repack_q8q8_weight(t.qblob, t.qscales, t.w3_off + l * dim * hidden, dim, hidden)
+        if (c.n_expert > 0l) {   // MoE: each expert slice is its own 2D tensor, repacked per its shape
+            let ege = dim * c.n_ff_exp
+            for (e in range64(c.n_expert)) {
+                let base = (l * c.n_expert + e) * ege
+                repack_q8q8_weight(t.qblob, t.qscales, t.we1_off + base, dim, c.n_ff_exp)
+                repack_q8q8_weight(t.qblob, t.qscales, t.we2_off + base, c.n_ff_exp, dim)
+                repack_q8q8_weight(t.qblob, t.qscales, t.we3_off + base, dim, c.n_ff_exp)
+            }
+            if (c.n_ff_shexp > 0l) {
+                let she = dim * c.n_ff_shexp
+                repack_q8q8_weight(t.qblob, t.qscales, t.wsh1_off + l * she, dim, c.n_ff_shexp)
+                repack_q8q8_weight(t.qblob, t.qscales, t.wsh2_off + l * she, c.n_ff_shexp, dim)
+                repack_q8q8_weight(t.qblob, t.qscales, t.wsh3_off + l * she, dim, c.n_ff_shexp)
+            }
+        } else {
+            repack_q8q8_weight(t.qblob, t.qscales, t.w1_off + l * dim * hidden, dim, hidden)
+            repack_q8q8_weight(t.qblob, t.qscales, t.w2_off + l * hidden * dim, hidden, dim)
+            repack_q8q8_weight(t.qblob, t.qscales, t.w3_off + l * dim * hidden, dim, hidden)
+        }
     }
     if (!c.shared_weights) {
         repack_q8q8_weight(t.qblob, t.qscales, t.wcls_off, dim, c.vocab_size)
@@ -624,8 +697,55 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 && gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input") > 0l) {
             panic("dasLLAMA: per-layer embeddings (Gemma-4 E-series PLE) are not yet supported")
         }
-        if (gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
-            panic("dasLLAMA: MoE expert blocks are not yet supported")
+        if (t.config.moe) {
+            // MoE geometry from metadata (qwen2moe A2.7B: 60 experts, top-4, 1408-wide experts
+            // + a 5632-wide shared expert)
+            if (!gguf_has(m, "{arch}.expert_count") || gguf_int(m, bytes, "{arch}.expert_count") <= 0l) {
+                panic("dasLLAMA: '{arch}' is a MoE arch but the GGUF has no {arch}.expert_count")
+            }
+            t.config.n_expert = gguf_int(m, bytes, "{arch}.expert_count")
+            t.config.n_expert_used = gguf_has(m, "{arch}.expert_used_count") ? gguf_int(m, bytes, "{arch}.expert_used_count") : 0l
+            if (t.config.n_expert_used <= 0l || t.config.n_expert_used > t.config.n_expert) {
+                panic("dasLLAMA: bad expert_used_count {t.config.n_expert_used} (expert_count {t.config.n_expert})")
+            }
+            t.config.n_ff_exp = (gguf_has(m, "{arch}.expert_feed_forward_length")
+                ? gguf_int(m, bytes, "{arch}.expert_feed_forward_length")
+                : hidden / t.config.n_expert_used)   // llama.cpp's fallback for files without the key
+            // shared expert: present iff its tensors are (qwen2moe always ships one)
+            if (gguf_find_tensor(m, "blk.0.ffn_up_shexp.weight") >= 0) {
+                t.config.n_ff_shexp = (gguf_has(m, "{arch}.expert_shared_feed_forward_length")
+                    ? gguf_int(m, bytes, "{arch}.expert_shared_feed_forward_length")
+                    : hidden)
+            }
+            if (gguf_has(m, "{arch}.expert_weights_norm")) {
+                t.config.norm_topk_prob = gguf_int(m, bytes, "{arch}.expert_weights_norm") != 0l
+            }
+            if (gguf_has(m, "{arch}.expert_weights_scale")) {
+                t.config.expert_weights_scale = gguf_f32(m, bytes, "{arch}.expert_weights_scale")
+            }
+            if (gguf_has(m, "{arch}.expert_gating_func")) {
+                // llama.cpp enum: 1 = softmax over the logits, 2 = sigmoid; 3 (softmax over the
+                // selected weights, e.g. bailingmoe2) is a different pipeline order — refuse
+                let gf = gguf_int(m, bytes, "{arch}.expert_gating_func")
+                if (gf == 2l) {
+                    t.config.moe_gate = MoeGate.sigmoid
+                } elif (gf != 1l) {
+                    panic("dasLLAMA: unsupported expert_gating_func {gf}")
+                }
+            }
+            // DeepSeek-V3 grouped expert routing is not modeled — refuse instead of mis-routing
+            if (gguf_has(m, "{arch}.expert_group_count") && gguf_int(m, bytes, "{arch}.expert_group_count") > 1l) {
+                panic("dasLLAMA: grouped expert routing (expert_group_count > 1) is not yet supported")
+            }
+            // expert biases the core doesn't apply — refuse instead of silently dropping them
+            if (gguf_find_tensor(m, "blk.0.exp_probs_b.bias") >= 0) {
+                panic("dasLLAMA: expert selection bias (exp_probs_b, DeepSeek-V3) is not yet supported")
+            }
+            if (gguf_find_tensor(m, "blk.0.ffn_up_exps.bias") >= 0 || gguf_find_tensor(m, "blk.0.ffn_gate_inp.bias") >= 0) {
+                panic("dasLLAMA: per-expert / router biases are not yet supported")
+            }
+        } elif (gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
+            panic("dasLLAMA: MoE expert blocks are not supported for arch '{arch}'")
         }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
@@ -742,19 +862,40 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_offs[l], dim * qd_l, scratch, 0l)
                 load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_offs[l], dim * kv_l, scratch, dim * qd_l)
                 load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_offs[l], dim * kv_l, scratch, dim * qd_l + dim * kv_l)
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch, 0l)
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch, dim * hidden)
             } else {
                 load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_offs[l], dim * qd_l, scratch)
                 load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_offs[l], dim * kv_l, scratch)
                 if (t.wv_offs[l] >= 0l) {   // absent on gemma4 global layers (V reuses the K projection)
                     load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_offs[l], dim * kv_l, scratch)
                 }
-                load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
             }
             load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_offs[l], qd_l * dim, scratch)
-            load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
+            if (t.config.n_expert > 0l) {
+                // MoE: fp32 router (+ shared-expert gate vector) -> fblob; the 3D expert stacks are
+                // expert-major on disk, so ONE contiguous load lands every expert's 2D matrix at its
+                // we*_off + (l*n_expert + e) * (dim*n_ff_exp) slot
+                let ne = t.config.n_expert
+                let ege = dim * t.config.n_ff_exp
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.weight", t.fblob, t.router_off + l * ne * dim, ne * dim)
+                load_big(m, bytes, "blk.{l}.ffn_gate_exps.weight", t, t.we1_off + l * ne * ege, ne * ege, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_down_exps.weight", t, t.we2_off + l * ne * ege, ne * ege, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_up_exps.weight", t, t.we3_off + l * ne * ege, ne * ege, scratch)
+                if (t.config.n_ff_shexp > 0l) {
+                    let she = dim * t.config.n_ff_shexp
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
+                    load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
+                    load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
+                    load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                }
+            } elif (t.config.fused_qkv) {
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch, 0l)
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch, dim * hidden)
+                load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
+            } else {
+                load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_off + l * dim * hidden, dim * hidden, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_off + l * dim * hidden, dim * hidden, scratch)
+                load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_off + l * hidden * dim, hidden * dim, scratch)
+            }
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch)
@@ -886,6 +1027,11 @@ struct Session {
     // θ=10k unscaled local vs θ=1M linear-scaled global); empty otherwise
     rope_cos_swa : array<float>
     rope_sin_swa : array<float>
+    // MoE scratch (sized in make_run_state when n_expert > 0; empty for dense arches)
+    moe_logits : array<float>   // router logits, then probs (n_expert)
+    moe_w : array<float>        // the selected top-k weights (n_expert_used)
+    moe_idx : array<int64>      // the selected top-k expert ids (n_expert_used)
+    moe_acc : array<float>      // weighted expert-output accumulator (dim)
 }
 
 //! Allocate the run state sized to a model.
@@ -898,17 +1044,24 @@ def make_run_state(c : Config) : Session {
     let qd = max_qd(c)
     let kvd = max_kv_dim(c)
     let xdim = max(c.dim, qd)
+    let ffw = max_ffn_width(c)   // dense hidden, or the widest expert / shared-expert (MoE)
     s.x |> resize(c.dim)
     s.xb |> resize(xdim)
     s.xb2 |> resize(c.dim)
-    s.hb |> resize(c.hidden_dim)
-    s.hb2 |> resize(c.hidden_dim)
+    s.hb |> resize(ffw)
+    s.hb2 |> resize(ffw)
     s.q |> resize(qd)
     s.k |> resize(kvd)
     s.v |> resize(kvd)
     s.att |> resize(c.seq_len)
     s.logits |> resize(c.vocab_size)
-    let maxn = max(xdim, c.hidden_dim)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
+    if (c.n_expert > 0l) {   // MoE routing scratch
+        s.moe_logits |> resize(c.n_expert)
+        s.moe_w |> resize(c.n_expert_used)
+        s.moe_idx |> resize(c.n_expert_used)
+        s.moe_acc |> resize(c.dim)
+    }
+    let maxn = max(xdim, ffw)   // the Q8·Q8 path quantizes whichever activation feeds a matmul
     s.xq |> resize(maxn)
     s.xs |> resize(maxn / 32l)
     s.key_cache |> resize(c.seq_len * kv_row_total(c))
@@ -1299,6 +1452,9 @@ def max_head_size(c : Config) : int64 => max(c.head_size, c.head_size_swa)
 //! The larger query width across the two layer classes (scratch sizing).
 def max_qd(c : Config) : int64 => c.n_heads * max_head_size(c)
 
+//! The widest FFN intermediate — dense hidden, per-expert, or shared-expert (scratch sizing).
+def max_ffn_width(c : Config) : int64 => max(c.hidden_dim, max(c.n_ff_exp, c.n_ff_shexp))
+
 //! The larger KV width across the two layer classes (scratch sizing).
 def max_kv_dim(c : Config) : int64 => (max(c.n_kv_heads * c.head_size,
     (c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads) * (c.head_size_swa > 0l ? c.head_size_swa : c.head_size)))
@@ -1429,6 +1585,121 @@ def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
     }
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
     if (c.layer_out_scale) {  // gemma4: scale the whole layer output (after the residual)
+        let os = t.fblob[t.out_scale_off + l]
+        for (i in range64(dim)) {
+            s.x[i] *= os
+        }
+    }
+}
+
+// The MoE FFN core shared by decode and (naive per-token) prefill: reads the rmsnormed activation
+// in s.xb, leaves the combined routed + shared-expert output in s.moe_acc. Router probs are taken
+// over ALL experts BEFORE top-k selection (llama.cpp build_moe_ffn order); qwen2moe keeps the
+// selected probs un-renormalized (norm_topk_prob renormalizes them for the DeepSeek/Qwen3-MoE shape).
+def private moe_ffn_core(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    // router logits (fp32 weights), then probs
+    mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb, dim, ne)
+    if (c.moe_gate == MoeGate.sigmoid) {
+        for (i in range64(ne)) {
+            s.moe_logits[i] = 1.0 / (1.0 + exp(-s.moe_logits[i]))
+        }
+    } else {
+        var mx = s.moe_logits[0]
+        for (i in range64(ne)) {
+            mx = max(mx, s.moe_logits[i])
+        }
+        var sum = 0.0
+        for (i in range64(ne)) {
+            let e = exp(s.moe_logits[i] - mx)
+            s.moe_logits[i] = e
+            sum += e
+        }
+        for (i in range64(ne)) {
+            s.moe_logits[i] /= sum
+        }
+    }
+    // top-k by prob — probs are >= 0, so knocking the winner out with -1 excludes it from later
+    // rounds; first-index-wins on ties matches argsort's stable descending order
+    for (j in range64(k)) {
+        var best = 0l
+        for (i in range64(ne)) {
+            if (s.moe_logits[i] > s.moe_logits[best]) {
+                best = i
+            }
+        }
+        s.moe_idx[j] = best
+        s.moe_w[j] = s.moe_logits[best]
+        s.moe_logits[best] = -1.0
+    }
+    if (c.norm_topk_prob) {   // renormalize the selected weights to sum 1 (llama.cpp clamps at f16-min)
+        var ws = 0.0
+        for (j in range64(k)) {
+            ws += s.moe_w[j]
+        }
+        ws = max(ws, 6.103515625e-5)
+        for (j in range64(k)) {
+            s.moe_w[j] /= ws
+        }
+    }
+    if (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0) {
+        for (j in range64(k)) {
+            s.moe_w[j] *= c.expert_weights_scale
+        }
+    }
+    // routed experts: acc = Σ w_j · FFN_e(xb), each expert the standard gated-FFN shape
+    for (i in range64(dim)) {
+        s.moe_acc[i] = 0.0
+    }
+    let nfe = c.n_ff_exp
+    let ege = dim * nfe
+    for (j in range64(k)) {
+        let base = (l * ne + s.moe_idx[j]) * ege
+        mm(s.hb, t, t.we1_off + base, s.xb, s.xq, s.xs, dim, nfe)
+        mm(s.hb2, t, t.we3_off + base, s.xb, s.xq, s.xs, dim, nfe)
+        gate_batch(s.hb, s.hb2, c.ffn_act, nfe, 1l)
+        mm(s.xb2, t, t.we2_off + base, s.hb, s.xq, s.xs, nfe, dim)
+        let w = s.moe_w[j]
+        for (i in range64(dim)) {
+            s.moe_acc[i] += w * s.xb2[i]
+        }
+    }
+    // shared expert, gated by a sigmoid scalar from its per-layer gate vector
+    if (c.n_ff_shexp > 0l) {
+        var gl = 0.0
+        array_view(t.fblob, t.shexp_gate_off + l * dim, dim) $(gv : array<float>#) {
+            for (i in range64(dim)) {
+                gl += gv[i] * s.xb[i]
+            }
+        }
+        let g = 1.0 / (1.0 + exp(-gl))
+        let nsh = c.n_ff_shexp
+        let she = dim * nsh
+        mm(s.hb, t, t.wsh1_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
+        mm(s.hb2, t, t.wsh3_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
+        gate_batch(s.hb, s.hb2, c.ffn_act, nsh, 1l)
+        mm(s.xb2, t, t.wsh2_off + l * she, s.hb, s.xq, s.xs, nsh, dim)
+        for (i in range64(dim)) {
+            s.moe_acc[i] += g * s.xb2[i]
+        }
+    }
+}
+
+// MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's
+// optional post-norm / layer-output-scale steps so future MoE arches compose with them.
+def private ffn_moe_decode(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
+    moe_ffn_core(t, s, l)
+    if (c.pre_post_norm) {
+        rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
+    }
+    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
+    if (c.layer_out_scale) {
         let os = t.fblob[t.out_scale_off + l]
         for (i in range64(dim)) {
             s.x[i] *= os
@@ -1965,6 +2236,33 @@ def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int6
     prof_add("act_resid", ts_resid1)
 }
 
+// MoE FFN, prefill — naive per-token routing: each position routes to its own expert set, so there
+// is no batched GEMM here; positions run serially through the decode scratch with the per-expert
+// matmuls threading internally. The expert-bucketed grouped GEMM is a perf-ledger item.
+def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ts_norm = ref_time_ticks()
+    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
+    prof_add("norm", ts_norm)
+    let ts_moe = ref_time_ticks()
+    for (p in range64(npos)) {
+        copy_floats(s.xb_b, p * dim, s.xb, 0l, dim)
+        moe_ffn_core(t, s, l)
+        if (c.pre_post_norm) {
+            rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
+        }
+        for (i in range64(dim)) {   // residual add into this position's x_b row
+            s.x_b[p * dim + i] += s.moe_acc[i]
+        }
+    }
+    prof_add("mm_ffn", ts_moe)
+    if (c.layer_out_scale) {
+        let os = t.fblob[t.out_scale_off + l]
+        scale_inplace(unsafe(addr(s.x_b[0])), os, npos * dim)
+    }
+}
+
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let c = t.config
     if (t.quant == QuantMode.q4 || npos <= 0l) {
@@ -2297,4 +2595,11 @@ def chat_content() : ChatPart {
 def std_blocks() : ArchBlocks {
     return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
                       attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_dense_prefill)
+}
+
+//! The MoE block set: standard attention + the routed-experts FFN (decode and naive-per-token
+//! prefill). Arches whose configure sets `moe` register these instead of std_blocks.
+def moe_blocks() : ArchBlocks {
+    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_moe_decode,
+                      attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_moe_prefill)
 }

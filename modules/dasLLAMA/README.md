@@ -83,6 +83,7 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **Mistral-7B-Instruct-v0.3** | Q8_0 GGUF | Llama (arch `llama`, no SWA) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids`, 40/40 token-for-token; frozen fixture; chat via the detected `[INST]` template |
 | **Qwen2.5-0.5B / 1.5B-Instruct** | Q8_0 GGUF | Qwen2 (QKV bias, NEOX rope, eps 1e-6) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 1.5B 40/40 (frozen fixture); 0.5B matches to ~0.02 logits, flips only genuine near-ties (tiny model) |
 | **Qwen3-0.6B / 4B-Instruct-2507** | Q8_0 GGUF | Qwen3 (QK-norm: per-head Q/K RMSNorm pre-RoPE; NEOX rope, no QKV bias) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: both 40/40 token-for-token (frozen fixtures in `test_parity.das`) |
+| **Qwen1.5-MoE-A2.7B-Chat** | Q8_0 GGUF | Qwen2-MoE (routed experts: softmax router → top-4 of 60, un-renormalized weights; sigmoid-gated shared expert; QKV bias, NEOX rope) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 40/40 token-for-token on the counting AND prose prompts (frozen fixture in `test_parity.das`) |
 | **Phi-3.5-mini-instruct** | Q8_0 GGUF | Phi3 (fused QKV + gate_up, NEOX rope, LongRoPE) | SPM | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 40/40 (frozen fixture); prose matches to ~0.06 logits, flips only genuine near-ties |
 | **Gemma-2-2B-it** | Q8_0 GGUF | Gemma2 (GeGLU, dual softcap, sliding window, sandwich norms, embed ×√dim) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids`, token-for-token; frozen fixture in `tests/dasLLAMA/test_parity.das`; SWA exercised on a 4k+ context |
 | **Gemma-3-1B / 4B-it** | Q8_0 GGUF | Gemma3 (Gemma-2 shape minus softcaps + QK-norm; 5:1 sliding:global layer pattern, dual RoPE θ 10k/1M, linear-8 position scale on the 4B's global layers) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: both 40/40 token-for-token (frozen fixtures); sliding mask exercised on a ~900-token prompt (40/40) |
@@ -123,11 +124,11 @@ What a model needs to "just work" today:
 |---|---|
 | GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0** |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
-| Architecture | `llama`, `qwen2`, `qwen3`, `phi3`, `gemma2`, `gemma3`, `gemma4` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
+| Architecture | `llama`, `qwen2`, `qwen3`, `phi3`, `gemma2`, `gemma3`, `gemma4`, `qwen2moe` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
 | Attention | MHA **and** GQA (grouped-query); sliding-window with a per-layer pattern (Gemma-2 alternating, Gemma-3 5 local : 1 global, Gemma-4 explicit per-layer bool array); heterogeneous per-layer geometry (Gemma-4: sliding vs global layers differ in head size AND kv-head count, incl. V-from-K layers with no attn_v tensor); configurable attention-score scale (Gemma-4: 1.0); attention + final-logit soft-capping; suppressed-token logit bias |
 | Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2/Qwen3/Gemma); Gemma's pre+post sandwich norms; per-head Q/K norms pre-RoPE (QK-norm — Qwen3, Gemma-3/4); weightless per-head V-norm (Gemma-4) |
 | Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) and **NEOX** (Qwen2 / Phi3 / Gemma, pairs offset by head_size/2); per-pair freq scaling + θ from metadata (llama3 NTK-by-parts; Phi3 LongRoPE short factors + attn_factor mscale); θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5; per-layer dual θ + linear position scaling (Gemma-3: sliding layers 10k unscaled, global layers 1M ÷8 on the 4B); p-RoPE — proportional freq factors on global layers only, with per-class head sizes (Gemma-4) |
-| FFN | SwiGLU **and** GeGLU (incl. Phi3's fused gate_up, split at load) |
+| FFN | SwiGLU **and** GeGLU (incl. Phi3's fused gate_up, split at load); **MoE** — routed top-k experts over a softmax/sigmoid router (un-renormalized or renormalized weights, optional weight scale) + optional sigmoid-gated shared expert, expert-major Q8 so the dense kernels apply per expert (`moe_blocks()`; decode fused, prefill naive per-token — grouped GEMM is a ledger item) |
 | Tokenizer | **SentencePiece** (Llama-2 family, Phi-3, Gemma), **byte-level BPE / tiktoken** (Llama-3 + Qwen2 pre-tokenizers, exact llama.cpp split), **and SPM-style BPE** (Gemma-4: metaspace escape, newline-only pre-split, raw-UTF-8 ranked merges, `<0xXX>` byte fallback — validated against the `ggml-vocab-gemma-4` corpus) |
 | Model size | files >4GB load (needed the fmap >4GB engine fix) |
 | QKV bias | **Qwen2** — learned bias on the Q/K/V projections |
@@ -139,9 +140,10 @@ What a model needs to "just work" today:
 
 So there's no ambiguity about what will fail:
 
-- **MoE architectures** (Mixtral / Qwen-MoE / GLM family) — the arch registry's block seam is
-  built for them, but no MoE FFN block exists yet (`API_REWORK.md` carries the plan; Tier-3
-  archs — MLA, Mamba/hybrid, multimodal — are explicitly deferred there).
+- **MoE beyond the qwen2moe shape** — grouped expert routing (DeepSeek-V3 `expert_group_count`),
+  post-top-k softmax gating (`expert_gating_func` 3), and expert biases all panic honestly at
+  load (Tier-3 archs — MLA, Mamba/hybrid, multimodal — remain explicitly deferred in
+  `API_REWORK.md`).
 - **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0** — no K-quants / IQ / BF16.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects
   special-token *ids* directly (so templates work); parsing special tokens out of free text

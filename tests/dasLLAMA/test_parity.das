@@ -281,6 +281,25 @@ def test_parity_qwen3_4b(t : T?) {
     }
 }
 
+// Qwen1.5-MoE-A2.7B-Chat Q8 — the routed-experts arch (softmax router -> top-4 of 60 with
+// un-renormalized weights + a sigmoid-gated shared expert; QKV bias, NEOX rope). Same Qwen BPE
+// vocab and counting continuation as the dense Qwen fixtures, so the id arrays are shared.
+[test]
+def test_parity_qwen2moe(t : T?) {
+    t |> run("qwen2moe forward (Qwen1.5-MoE-A2.7B-Chat Q8, routed experts + shared expert)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, QWEN3_PROMPT, QWEN3_GEN), "qwen2moe token-for-token")
+    }
+}
+
 // gemma-3-1b-it + gemma-3-4b-it Q8, "1, 2, 3, 4, 5, 6, 7," (BOS=2) — the per-layer attention-pattern
 // arch (5-local:1-global SWA + dual RoPE θ; the 4B adds linear-8 position scaling on global layers).
 // Same counting prompt, but the models diverge after "10" (the 1B drops into prose), so each keeps
