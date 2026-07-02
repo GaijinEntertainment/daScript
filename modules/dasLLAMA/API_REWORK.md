@@ -370,7 +370,8 @@ what it costs today and what the fix would change.
   forms per row. Proven on both MoE models (all logits identical after a 300-token prefill,
   grouped vs reference) and pinned by the qwen2moe fixture running through BOTH paths
   (`set_moe_grouped_prefill` A/B). Decode unchanged (one token = no bucketing win).
-  (Spotted wave 4.)
+  Measured (M1 Max, interleaved in-process A/B): Qwen1.5-MoE 512-tok prefill 31 → ~270 t/s
+  (~8.7×); gpt-oss-20b 256-tok prefill 27 → ~186 t/s (~6.8×). (Spotted wave 4.)
 - **DONE (perf pass, 2026-07-02): MoE decode re-quantized the same activation per expert.**
   `moe_ffn_core` now quantizes xb once per layer into dedicated `moe_xq/moe_xs` (the
   down-projections quantize s.hb into the shared xq/xs, which would clobber a hoisted image
