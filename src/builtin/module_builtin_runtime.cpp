@@ -1669,6 +1669,14 @@ namespace das
         #endif
     }
 
+    bool das_is_exceptions_enabled() {
+        #if DAS_ENABLE_EXCEPTIONS
+        return true;
+        #else
+        return false;
+        #endif
+    }
+
     bool is_in_aot ( ) {
         return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_isInAot : false;
     }
@@ -2406,6 +2414,8 @@ namespace das
         // migrate data
         addExtern<DAS_BIND_FUN(das_is_dll_build)>(*this, lib, "das_is_dll_build",
             SideEffects::worstDefault, "das_is_dll_build");
+        addExtern<DAS_BIND_FUN(das_is_exceptions_enabled)>(*this, lib, "das_is_exceptions_enabled",
+            SideEffects::worstDefault, "das_is_exceptions_enabled");
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
         addExtern<DAS_BIND_FUN(set_aot)>(*this, lib, "set_aot",

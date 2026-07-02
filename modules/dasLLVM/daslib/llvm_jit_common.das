@@ -412,6 +412,14 @@ def private wasm_target_features() : string {
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
     var rv = LLVMAddFunction(mod, name, typ)
     g_fn_types[name] = typ
+    // uwtable(async): -O3 function-attrs infers `nounwind` through the runtime-helper
+    // attributes, and Win64 codegen then omits .pdata for provably-nounwind functions —
+    // a C++-EH panic (DAS_ENABLE_EXCEPTIONS=1 host) crossing such a frame kills the
+    // process. uwtable forces the tables regardless; ignored on declarations. Skipped
+    // on longjmp hosts (tables dead weight there); folded into the DLL cache key.
+    if (das_is_exceptions_enabled()) {
+        rv |> LLVMAddAttributeToFunction(LLVMCreateEnumAttribute(g_ctx, LLVMGetEnumAttributeKindForName("uwtable"), 2ul))
+    }
     return rv
 }
 
