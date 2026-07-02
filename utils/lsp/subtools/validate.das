@@ -1,7 +1,11 @@
 // LSP validate subtool — compile one file, print LSP-shaped diagnostics JSON.
 //
 // Invocation (CLI flags like -project_root go BEFORE the script path):
-//   daslang utils/lsp/subtools/validate.das -- <file> [project.das_project]
+//   daslang utils/lsp/subtools/validate.das -- <file> [project.das_project] [--overlay <path>]
+//
+// --overlay <path> holds the client's unsaved buffer text for <file>; it is
+// compiled (via set_file_source) and position-mapped in place of the disk
+// content, so diagnostics track the editor buffer, not the last save.
 //
 // Prints one JSON object to stdout: {"ok": bool, "diagnostics": [...]} with
 // LSP positions (0-based lines, UTF-16 columns). Compile errors are Error
@@ -94,7 +98,8 @@ def private push_lint_issues(var result : ValidateResult; issues : array<LintIss
 [export]
 def main() : int {
     let raw <- get_command_line_arguments()
-    let user <- lsp_user_args(raw)
+    var user <- lsp_user_args(raw)
+    let overlay_path = lsp_extract_overlay(user)
     if (empty(user)) {
         print(sprint_json(ValidateResult(ok = false), false))
         return 1
@@ -103,7 +108,9 @@ def main() : int {
     let project = length(user) > 1 ? user[1] : ""
 
     let target = to_generic_path(file)
-    var lines <- split(fread(file), "\n")
+    let has_overlay = !empty(overlay_path)
+    let source = has_overlay ? fread(overlay_path) : fread(file)
+    var lines <- split(source, "\n")
 
     var result = ValidateResult(ok = true)
     if (has_expect_directive(lines)) {
@@ -124,6 +131,9 @@ def main() : int {
     load_lint_config(disabled_codes)
 
     var inscope access <- make_file_access(project)
+    if (has_overlay) {
+        set_file_source(access, file, source)
+    }
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true

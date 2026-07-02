@@ -198,13 +198,34 @@ and CC converts to 0-based LSP before they reach the server.
 
 ### Wave 3 — hardening
 
-- `set_file_source` overlay for unsaved-buffer clients (CC edits disk; this is
-  generality for other LSP clients, not a CC need).
-- Protocol tests in `tests/lsp/` driving the supervisor over a pipe
-  (precedent: `tests/mcp/test_popen_argv_pipe.das`): initialize → didOpen broken
-  file → expect publishDiagnostics.
-- `skills/` entry + README; `setup.das`-style bootstrap if wave 0 shows the manifest
-  can't be committed portably as-is.
+**Status: COMPLETE.**
+
+- `set_file_source` overlay: the supervisor writes the `{uri → text}` shadow
+  to a temp file and passes `--overlay <path>` to BOTH subtools (validate and
+  nav — the overlay is the buffer of the op's file argument); the das side
+  calls `set_file_source(access, file, text)` and position-maps against the
+  overlay text. Unsaved-buffer clients now compile the buffer, not the disk;
+  a didOpen of a file that doesn't exist on disk works too. For CC (which
+  saves before notifying) the overlay is identical to disk — the mechanism
+  still runs every request, so it stays tested.
+- Protocol tests: `tests/lsp/test_lsp_protocol.das` drives
+  `python3 lsp_supervisor.py` over `popen_argv_pipe` — initialize handshake →
+  didOpen with BROKEN buffer text while the committed fixture stays clean
+  (publishDiagnostics must carry the buffer's 30341 at the exact range —
+  overlay proven through the wire) → didChange back to clean (empty publish)
+  → definition at the call site (exact def location) → shutdown/exit rc 0.
+  Frame bodies read byte-exact via `fread(f, array<uint8>)`; headers via
+  `fgets`. Probes `python3` then `python` (output must start with "Python" —
+  dodges the Windows Store alias) and skips with a log notice when neither
+  exists. AOT-registered in `tests/aot/CMakeLists.txt`.
+  The test immediately caught a real bug: `find_compiler` accepted a relative
+  binary path that broke under the subtools' per-request cwd — compiler
+  discovery now absolutizes.
+- Docs: `utils/lsp/README.md` (registration, config, Windows `python3`
+  spelling note), `skills/daslang_lsp.md`, CLAUDE.md skill-table row. No
+  bootstrap script needed — the committed manifest is portable as-is
+  (`${CLAUDE_PLUGIN_ROOT}`-relative args; only the `python3` spelling can
+  need a local edit on Windows).
 
 ## Non-goals
 

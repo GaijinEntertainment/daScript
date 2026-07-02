@@ -61,6 +61,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
 | `skills/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
+| `skills/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server for Claude Code / stdio clients) — locked architecture, coordinate conventions, CC wire facts, headless dev rig, protocol tests |
 | `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — diagnosing/fixing ANY dasImgui UI or interaction bug. The discipline: reproduce + screenshot → make it observable in `imgui_snapshot` (fix the inspection if it isn't) → fix → prove via snapshot + test → 'after' screenshot. UI is hard; **never claim a UI fix works from logic or a screenshot — only from structured snapshot state.** |
 | `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` |
 | `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |

@@ -5,7 +5,9 @@ Owns ALL session state: Content-Length framing, the initialize handshake, a
 {uri -> text} document shadow, per-uri debounce, and request dispatch. It has
 zero language knowledge — every language operation spawns a fresh daslang
 running a batch subtool (utils/lsp/subtools/*.das) that prints LSP-shaped JSON
-and exits. No resident daslang, by design: no macro-state leaks across
+and exits. The document shadow rides along as a --overlay temp file, so
+compiles see the client's buffer even when it is unsaved (Claude Code saves
+before notifying; other LSP clients don't). No resident daslang, by design: no macro-state leaks across
 compiles, no binary/DLL locks while builds run, per-request crash isolation.
 Rationale + wave plan: utils/lsp/ROADMAP.md.
 
@@ -61,9 +63,11 @@ def path_to_uri(path: str) -> str:
 
 
 def find_compiler(init_options: dict) -> str | None:
+    # absolute paths only: subtools spawn with per-request cwd, so a relative
+    # path that resolves here would break there
     cand = init_options.get("compiler") or os.environ.get("DASLANG_LSP_COMPILER")
     if cand and os.path.exists(cand):
-        return cand
+        return os.path.abspath(cand)
     # repo layouts, tried against the workspace and the plugin's own repo
     roots = [os.environ.get("CLAUDE_PROJECT_DIR", ""),
              os.path.dirname(os.path.dirname(SCRIPT_DIR))]  # utils/lsp -> utils -> repo
@@ -75,7 +79,7 @@ def find_compiler(init_options: dict) -> str | None:
         for rel in rels:
             p = os.path.join(root, rel)
             if os.path.exists(p):
-                return p
+                return os.path.abspath(p)
     return shutil.which("daslang")
 
 
@@ -153,6 +157,9 @@ class Server:
                 "daslang binary not found — set initializationOptions.compiler, "
                 "$DASLANG_LSP_COMPILER, or put daslang on PATH")])
             return
+        overlay = self.write_overlay(uri)
+        if overlay:
+            argv += ["--overlay", overlay]
         try:
             proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     cwd=os.path.dirname(path) or None)
@@ -168,6 +175,11 @@ class Server:
             self.publish_if_current(uri, my_gen, [self.tool_diagnostic(f"validate failed to run: {e}")])
             return
         finally:
+            if overlay:
+                try:
+                    os.unlink(overlay)  # child has exited (or never started) by now
+                except OSError:
+                    pass
             with self.lock:
                 if self.inflight.get(uri) is not None and self.inflight[uri].poll() is not None:
                     self.inflight.pop(uri, None)
@@ -196,8 +208,27 @@ class Server:
                           "end": {"line": 0, "character": 1}},
                 "severity": 1, "source": "daslang-lsp", "message": message}
 
+    def write_overlay(self, uri: str | None) -> str | None:
+        """Document-shadow text -> temp file for the subtool's --overlay flag.
+
+        CC saves before it notifies, so for CC the overlay matches disk; for
+        clients that send unsaved didChange text this is what makes the
+        compile see the buffer. Caller unlinks the returned path."""
+        text = self.docs.get(uri) if uri else None
+        if text is None:
+            return None
+        try:
+            fd, path = tempfile.mkstemp(prefix="daslang_lsp_overlay_", suffix=".das")
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
+            return path
+        except Exception as e:
+            log("overlay-error", {"uri": uri, "error": str(e)})
+            return None
+
     # ---- navigation requests ---------------------------------------------
-    def nav_request(self, mid, op: str, args: list[str], cwd: str | None) -> None:
+    def nav_request(self, mid, op: str, args: list[str], cwd: str | None,
+                    overlay_uri: str | None = None) -> None:
         """Spawns nav.das on a worker thread so the read loop keeps consuming
         didChange while a request compiles."""
         if self.init_options.get("project"):
@@ -208,21 +239,32 @@ class Server:
                              "initializationOptions.compiler, $DASLANG_LSP_COMPILER, "
                              "or put daslang on PATH")
             return
-        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd), daemon=True)
+        overlay = self.write_overlay(overlay_uri)
+        if overlay:
+            argv += ["--overlay", overlay]
+        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd, overlay), daemon=True)
         t.start()
 
-    def run_nav(self, mid, op: str, argv: list[str], cwd: str | None) -> None:
+    def run_nav(self, mid, op: str, argv: list[str], cwd: str | None,
+                overlay: str | None = None) -> None:
         try:
-            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    cwd=cwd)
-            out, err = proc.communicate(timeout=NAV_TIMEOUT_SEC)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            self.reply_error(mid, -32000, f"daslang {op} timed out after {NAV_TIMEOUT_SEC}s")
-            return
-        except Exception as e:
-            self.reply_error(mid, -32000, f"daslang {op} failed to run: {e}")
-            return
+            try:
+                proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        cwd=cwd)
+                out, err = proc.communicate(timeout=NAV_TIMEOUT_SEC)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                self.reply_error(mid, -32000, f"daslang {op} timed out after {NAV_TIMEOUT_SEC}s")
+                return
+            except Exception as e:
+                self.reply_error(mid, -32000, f"daslang {op} failed to run: {e}")
+                return
+        finally:
+            if overlay:
+                try:
+                    os.unlink(overlay)
+                except OSError:
+                    pass
         text = out.decode("utf-8", "replace").strip()
         try:
             payload = json.loads(text[text.index("{"):])
@@ -287,7 +329,7 @@ class Server:
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
                 },
-                "serverInfo": {"name": "daslang-lsp", "version": "0.2.0"},
+                "serverInfo": {"name": "daslang-lsp", "version": "0.3.0"},
             })
         elif method == "shutdown":
             self.reply(mid, None)
@@ -317,14 +359,17 @@ class Server:
             self.publish(uri, [])
         elif method in ("textDocument/definition", "textDocument/hover"):
             args, cwd = self.cursor_args(params)
-            self.nav_request(mid, method.rsplit("/", 1)[1], args, cwd)
+            self.nav_request(mid, method.rsplit("/", 1)[1], args, cwd,
+                             overlay_uri=params["textDocument"]["uri"])
         elif method == "textDocument/references":
             args, cwd = self.cursor_args(params)
             include_decl = bool((params.get("context") or {}).get("includeDeclaration"))
-            self.nav_request(mid, "references", args + ["true" if include_decl else "false"], cwd)
+            self.nav_request(mid, "references", args + ["true" if include_decl else "false"], cwd,
+                             overlay_uri=params["textDocument"]["uri"])
         elif method == "textDocument/documentSymbol":
             path = uri_to_path(params["textDocument"]["uri"])
-            self.nav_request(mid, "documentSymbol", [path], os.path.dirname(path) or None)
+            self.nav_request(mid, "documentSymbol", [path], os.path.dirname(path) or None,
+                             overlay_uri=params["textDocument"]["uri"])
         elif method == "workspace/symbol":
             context = self.active_doc_path()
             if context is None:
@@ -332,7 +377,8 @@ class Server:
             else:
                 self.nav_request(mid, "workspaceSymbol",
                                  [params.get("query", ""), context],
-                                 os.path.dirname(context) or None)
+                                 os.path.dirname(context) or None,
+                                 overlay_uri=self.active_uri)
         elif mid is not None:
             self.reply_error(mid, -32601, f"daslang-lsp: method not implemented: {method}")
         return True

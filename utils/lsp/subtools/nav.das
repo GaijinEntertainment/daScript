@@ -7,6 +7,10 @@
 //   daslang utils/lsp/subtools/nav.das -- documentSymbol <file> [project]
 //   daslang utils/lsp/subtools/nav.das -- workspaceSymbol <query> <context_file> [project]
 //
+// Every op also accepts `--overlay <path>` (any position): the client's
+// unsaved buffer text for the op's file argument, compiled and
+// position-mapped in place of the disk content.
+//
 // <line>/<character> are LSP positions (0-based line, UTF-16 units); this tool
 // converts to/from daslang's 1-based byte positions — it has the file text.
 // Locations carry a "path" field; the supervisor converts paths to file:// URIs.
@@ -101,6 +105,23 @@ struct WsSymbolsResult {
 
 var FILE_LINES : table<string; array<string>>
 
+// unsaved-buffer overlay for the op's file (set once in main; the process is
+// one request, so batch-tool globals carry no cross-request state)
+var OVERLAY_FILE = ""
+var OVERLAY_TEXT = ""
+
+def private apply_overlay(file, text : string) {
+    OVERLAY_FILE = file
+    OVERLAY_TEXT = text
+    // seed both spellings the position mappers look up: the raw op argument
+    // (request_cursor) and the compiler's fileInfo name (lineinfo_file)
+    FILE_LINES[file] <- split(text, "\n")
+    let generic = to_generic_path(file)
+    if (generic != file) {
+        FILE_LINES[generic] <- split(text, "\n")
+    }
+}
+
 def private with_file_lines(path : string; blk : block<(lines : array<string>) : void>) {
     if (!key_exists(FILE_LINES, path)) {
         FILE_LINES[path] <- load_file_lines(path)
@@ -147,6 +168,9 @@ def private push_word_location(var out : array<NavLocation>; at : LineInfo; word
 def private compile_nav(file, project : string; blk : block<(program : smart_ptr<Program>) : void>) : bool {
     var compiled_ok = false
     var inscope access <- make_file_access(project)
+    if (file == OVERLAY_FILE && !empty(OVERLAY_FILE)) {
+        set_file_source(access, file, OVERLAY_TEXT)
+    }
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
@@ -916,12 +940,20 @@ def private run_workspace_symbol(query, context_file, project : string) : WsSymb
 [export]
 def main() : int {
     let raw <- get_command_line_arguments()
-    let user <- lsp_user_args(raw)
+    var user <- lsp_user_args(raw)
+    let overlay_path = lsp_extract_overlay(user)
     if (empty(user)) {
         print(sprint_json(LocationsResult(message = "missing op"), false))
         return 1
     }
     let op = user[0]
+    if (!empty(overlay_path)) {
+        // the overlay is the buffer text of the op's file argument
+        let target_ix = op == "workspaceSymbol" ? 2 : 1
+        if (length(user) > target_ix) {
+            apply_overlay(user[target_ix], fread(overlay_path))
+        }
+    }
     if (op == "definition" || op == "hover") {
         if (length(user) < 4) {
             print(sprint_json(LocationsResult(message = "{op}: expected <file> <line> <character> [project]"), false))

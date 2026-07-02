@@ -115,3 +115,17 @@ def public lsp_user_args(raw : array<string>) : array<string> {
     }
     return <- user
 }
+
+// removes a `--overlay <path>` pair from args (any position, so it composes
+// with the positional contract); returns the path, or "" when absent
+def public lsp_extract_overlay(var args : array<string>) : string {
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--overlay") {
+            let path = args[i + 1]
+            args |> erase(i + 1)
+            args |> erase(i)
+            return path
+        }
+    }
+    return ""
+}
