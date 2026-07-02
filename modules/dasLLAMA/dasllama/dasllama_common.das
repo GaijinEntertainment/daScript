@@ -11,6 +11,8 @@ require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
 require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
 require dasllama/dasllama_par  // maybe_parallel_for (+ get_total_hw_jobs): thread the prefill attention over heads
+require dasllama/dasllama_tune  // box_profile_path: the runtime half of the per-box profile applies at load_model
+require daslib/json_boost  // read_json / read_json_field for the box profile's "runtime" section
 require math
 require daslib/random  // int4 RNG state + random_float for token sampling
 require daslib/strings_boost  // join() for the arch-registry diagnostic
@@ -1176,9 +1178,64 @@ def eval_(t : Model; var s : Session; tokens : array<int64>) {
     s.n_past += npos
 }
 
+// ===== Per-box runtime profile (box_profile.json "runtime" section) =====
+
+def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v : int64) : void>) {
+    let v = read_json_field(rt, key, -1l)
+    if (v >= 0l) {
+        invoke(blk, v)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: {key} = {v}\n")
+    }
+}
+
+//! Apply the per-box runtime knobs from box_profile.json's optional "runtime" section (written by
+//! the tuner harness; see tune_for_this_box.md): token block, L2 budget, threading thresholds,
+//! chunk multipliers, and an optional kernel-backend pin. The kernel-perm keys in the same file
+//! are consumed at COMPILE time by `[tuned]`; this is the runtime half. Missing file or section =
+//! no-op; every applied entry logs. load_model calls this before loading (a backend pin must land
+//! before the backend-for-load select); direct load_gguf users opt in by calling it themselves.
+//! `path` "" = the resolved default (DASLLAMA_BOX_PROFILE env, else <das_root>/box_profile.json).
+def apply_box_profile_runtime(path : string = "") {
+    let ppath = path != "" ? path : box_profile_path()
+    let text = fread(ppath)
+    if (empty(text)) return
+    var err = ""
+    let jv = read_json(text, err)
+    if (jv == null) {
+        to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) — runtime knobs not applied\n")
+        return
+    }
+    let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
+    apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
+    apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
+    apply_i64_knob(rt, "matmul_par_threshold") $(v) { set_matmul_par_threshold(v) }
+    apply_i64_knob(rt, "attn_par_threshold") $(v) { set_attn_par_threshold(v) }
+    apply_i64_knob(rt, "requant_par_threshold") $(v) { set_requant_par_threshold(v) }
+    apply_i64_knob(rt, "norm_par_threshold") $(v) { set_norm_par_threshold(v) }
+    apply_i64_knob(rt, "rope_par_threshold") $(v) { set_rope_par_threshold(v) }
+    apply_i64_knob(rt, "kv_store_par_threshold") $(v) { set_kv_store_par_threshold(v) }
+    apply_i64_knob(rt, "act_par_threshold") $(v) { set_act_par_threshold(v) }
+    apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(v)) }
+    apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(v)) }
+    let be = read_json_field(rt, "backend", "")
+    if (be != "") {
+        pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend pin = {be}\n")
+    }
+    // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
+    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it.
+    let adv = read_json_field(rt, "threads", -1l)
+    if (adv > 0l && adv != int64(get_total_hw_jobs())) {
+        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} (current {get_total_hw_jobs()}) — set DAS_JOBQUE_THREADS={adv}\n")
+    }
+}
+
 //! Load a model AND its tokenizer from a GGUF — the full user-facing entry point. Arch and
 //! tokenizer backend are both auto-selected from GGUF metadata; `mode` picks the weight quant.
+//! Applies box_profile.json's "runtime" knobs first (see apply_box_profile_runtime) — the runtime
+//! half of per-box tuning; the compile-time half ([tuned] kernel perms) is already in the code.
 def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+    apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
     var m <- load_gguf(path, mode)
     m.tok <- load_tokenizer_auto(path)
     return <- m
