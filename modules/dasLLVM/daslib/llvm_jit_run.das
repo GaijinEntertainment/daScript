@@ -424,7 +424,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                 mkdir_rec(dir_name(output_path))
                 // path_to_linker is reused as the optional emcc override
                 // for the wasm link (mirrors how it's used for the host
-                // linker, lld-link/c++, on the host path).
+                // linker, lld-link/clang/c++, on the host path).
                 write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override, emit_object)
             } elif (gen_exe) {
                 mkdir_rec(dir_name(output_path))
