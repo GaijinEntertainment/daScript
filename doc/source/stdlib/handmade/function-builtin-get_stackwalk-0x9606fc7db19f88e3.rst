@@ -1,0 +1,1 @@
+Returns the current call stack as a string — the same report `stackwalk` prints, captured instead of logged. `args` and `vars` include function arguments and local variable values, `out_of_scope` includes out-of-scope locals, and `top_only` limits the walk to the topmost frame.

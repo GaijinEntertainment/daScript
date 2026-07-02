@@ -177,7 +177,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
-        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
+        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
@@ -288,7 +288,7 @@ def document_module_debugapi(_root : string) {
         group_by_regex("Agent construction", mod, %regex~(make_debug_agent|make_data_walker|make_stack_walker)$%%),
         group_by_regex("Agent tick and state collection", mod, %regex~(tick_debug_agent|collect_debug_agent_state|on_breakpoints_reset|report_context_state|debug_agent_command|debugger_stop_requested)$%%),
         group_by_regex("Instrumentation", mod, %regex~(instrument_node|instrument_function|instrument_all_functions|instrument_all_functions_thread_local|instrument_context_allocations|clear_instruments|set_single_step)$%%),
-        group_by_regex("Data and stack walking", mod, %regex~(walk_data|walk_stack|stackwalk|stack_depth)$%%),
+        group_by_regex("Data and stack walking", mod, %regex~(walk_data|walk_stack|stackwalk|get_stackwalk|stack_depth)$%%),
         group_by_regex("Context inspection", mod, %regex~(get_context_global_variable|has_function|get_heap_stats)$%%),
         group_by_regex("Breakpoints", mod, %regex~(set_hw_breakpoint|clear_hw_breakpoint)$%%),
         group_by_regex("Memory", mod, %regex~(free_temp_string|temp_string_size|break_on_free|track_insane_pointer)$%%)
