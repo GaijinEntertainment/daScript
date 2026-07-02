@@ -3314,6 +3314,21 @@ namespace das {
                 TypeDecl::clone(expr->type, seT->firstType);
                 expr->type->ref = true;
                 expr->type->constant |= seT->constant;
+            } else if (seT->baseType == Type::tFixedArray) {
+                if (!ixT->isIndexExt()) {
+                    expr->type = nullptr;
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64', not '" + describeType(ixT) + "'", "", "",
+                          expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                } else if (!seT->isAutoArrayResolved()) {
+                    error("type dimensions are not resolved yet: '" + describeType(seT) + "'", "", "",
+                          expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
+                    return Visitor::visit(expr);
+                }
+                // peel one level - same element-access pattern as tArray
+                TypeDecl::clone(expr->type, seT->firstType);
+                expr->type->ref = true;
+                expr->type->constant |= seT->constant;
             } else if (!ixT->isIndex()) {
                 expr->type = nullptr;
                 error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
@@ -3323,19 +3338,10 @@ namespace das {
                 expr->type = new TypeDecl(seT->getVectorBaseType());
                 expr->type->ref = seT->ref;
                 expr->type->constant = seT->constant;
-            } else if (seT->baseType != Type::tFixedArray) {
+            } else {
                 error("type can't be indexed: '" + describeType(seT) + "'", "", "",
                       expr->subexpr->at, CompilationError::cant_index);
                 return Visitor::visit(expr);
-            } else if (!seT->isAutoArrayResolved()) {
-                error("type dimensions are not resolved yet: '" + describeType(seT) + "'", "", "",
-                      expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
-                return Visitor::visit(expr);
-            } else {
-                // peel one level - same element-access pattern as tArray
-                TypeDecl::clone(expr->type, seT->firstType);
-                expr->type->ref = true;
-                expr->type->constant |= seT->constant;
             }
         }
         propagateTempType(expr->subexpr->type, expr->type); // foo#[a] = a#
@@ -3390,10 +3396,11 @@ namespace das {
                 // expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 // expr->type->constant |= seT->constant;
             } else if (seT->isVectorType() || seT->isGoodArrayType() || seT->baseType==Type::tFixedArray) {
-                // arrays accept int/int64/uint/uint64; vector and fixed_array — int/uint only
-                if (seT->isGoodArrayType() ? !ixT->isIndexExt() : !ixT->isIndex()) {
+                // arrays and fixed arrays accept int/int64/uint/uint64; vector — int/uint only
+                bool indexExt = seT->isGoodArrayType() || seT->baseType==Type::tFixedArray;
+                if (indexExt ? !ixT->isIndexExt() : !ixT->isIndex()) {
                     expr->type = nullptr;
-                    error(seT->isGoodArrayType()
+                    error(indexExt
                           ? "index type must be 'int', 'int64', 'uint', or 'uint64', not '" + describeType(ixT) + "'"
                           : "index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                           expr->index->at, CompilationError::invalid_index_type);
@@ -3475,8 +3482,8 @@ namespace das {
                 error("safe-index of fixed_array<> must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe_fixed_array_safe_index);
             }
-            if (!ixT->isIndex()) {
-                error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
+            if (!ixT->isIndexExt()) {
+                error("index type must be 'int', 'int64', 'uint', or 'uint64', not '" + describeType(ixT) + "'", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             }

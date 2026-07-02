@@ -156,11 +156,274 @@ namespace das {
     IMPLEMENT_ANY_SETOP(__forceinline, At, Ptr, StringPtr, StringPtr);
     IMPLEMENT_ANY_SETOP(__forceinline, At, Ptr, VoidPtr, StringPtr);
 
+    struct SimNode_Op2At_I64 : SimNode_Op2At {};
+    struct SimNode_Op2At_U64 : SimNode_Op2At {};
+
+/* AtR2V_I64 SCALAR */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_I64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = r.subexpr->evalInt64(context); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            return *((CTYPE *)(pl + uint32_t(rr)*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_I64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = *((int64_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            return *((CTYPE *)(pl + uint32_t(rr)*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    };
+
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At_I64 *)result; \
+    auto sn = (SimNode_At_I64 *)node; \
+    rn->errorMessage = sn->errorMessage; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range;
+
+#undef FUSION_OP2_SUBEXPR_LEFT
+#undef FUSION_OP2_SUBEXPR_RIGHT
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_At_I64 *>(node))->value)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_At_I64 *>(node))->index)
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_SETOP_SCALAR(AtR2V_I64);
+
+/* AtR2V_I64 VECTOR */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_I64 { \
+         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = r.subexpr->evalInt64(context); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl + uint32_t(rr)*stride + offset, CTYPE); \
+            return __r; \
+        } \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_I64 { \
+         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = *((int64_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl + uint32_t(rr)*stride + offset, CTYPE); \
+            return __r; \
+        } \
+    };
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V_I64);
+
+/* At_I64 */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_I64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = r.subexpr->evalInt64(context); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            return pl + uint32_t(rr)*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_I64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            int64_t rr = *((int64_t *)r.compute##COMPUTER(context)); \
+            if ( rr<0 || uint64_t(rr) >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %lld of %u%s", (long long)rr, range, errorMessage); \
+            return pl + uint32_t(rr)*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    };
+
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At_I64 *)result; \
+    auto sn = (SimNode_At_I64 *)node; \
+    rn->errorMessage = sn->errorMessage; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range; \
+    rn->baseType = Type::none;
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_ANY_SETOP(__forceinline, At_I64, Ptr, StringPtr, StringPtr);
+    IMPLEMENT_ANY_SETOP(__forceinline, At_I64, Ptr, VoidPtr, StringPtr);
+
+/* AtR2V_U64 SCALAR */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_U64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = r.subexpr->evalUInt64(context); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            return *((CTYPE *)(pl + uint32_t(rr)*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_U64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = *((uint64_t *)r.compute##COMPUTER(context)); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            return *((CTYPE *)(pl + uint32_t(rr)*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    };
+
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At_U64 *)result; \
+    auto sn = (SimNode_At_U64 *)node; \
+    rn->errorMessage = sn->errorMessage; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range;
+
+#undef FUSION_OP2_SUBEXPR_LEFT
+#undef FUSION_OP2_SUBEXPR_RIGHT
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_At_U64 *>(node))->value)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_At_U64 *>(node))->index)
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_SETOP_SCALAR(AtR2V_U64);
+
+/* AtR2V_U64 VECTOR */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_U64 { \
+         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = r.subexpr->evalUInt64(context); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl + uint32_t(rr)*stride + offset, CTYPE); \
+            return __r; \
+        } \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_U64 { \
+         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = *((uint64_t *)r.compute##COMPUTER(context)); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl + uint32_t(rr)*stride + offset, CTYPE); \
+            return __r; \
+        } \
+    };
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V_U64);
+
+/* At_U64 */
+
+#undef IMPLEMENT_OP2_SET_NODE_ANY
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At_U64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = r.subexpr->evalUInt64(context); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            return pl + uint32_t(rr)*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    };
+
+#undef IMPLEMENT_OP2_SET_NODE
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At_U64 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            auto pl = l.compute##COMPUTEL(context); \
+            uint64_t rr = *((uint64_t *)r.compute##COMPUTER(context)); \
+            if ( rr >= uint64_t(range) ) context.throw_error_at(debugInfo,"index out of range, %llu of %u%s", (unsigned long long)rr, range, errorMessage); \
+            return pl + uint32_t(rr)*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    };
+
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At_U64 *)result; \
+    auto sn = (SimNode_At_U64 *)node; \
+    rn->errorMessage = sn->errorMessage; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range; \
+    rn->baseType = Type::none;
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_ANY_SETOP(__forceinline, At_U64, Ptr, StringPtr, StringPtr);
+    IMPLEMENT_ANY_SETOP(__forceinline, At_U64, Ptr, VoidPtr, StringPtr);
+
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);
         REGISTER_SETOP_NUMERIC_VEC(AtR2V);
         (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_StringPtr());
         (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_VoidPtr());
+        REGISTER_SETOP_SCALAR(AtR2V_I64);
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V_I64);
+        (*getFusionEngine())["At_I64"].emplace_back(new FusionPoint_Set_At_I64_StringPtr());
+        (*getFusionEngine())["At_I64"].emplace_back(new FusionPoint_Set_At_I64_VoidPtr());
+        REGISTER_SETOP_SCALAR(AtR2V_U64);
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V_U64);
+        (*getFusionEngine())["At_U64"].emplace_back(new FusionPoint_Set_At_U64_StringPtr());
+        (*getFusionEngine())["At_U64"].emplace_back(new FusionPoint_Set_At_U64_VoidPtr());
     }
 }
 
