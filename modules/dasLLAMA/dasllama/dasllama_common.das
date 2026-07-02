@@ -2157,11 +2157,12 @@ def get_act_par_threshold() : int64 => g_act_par_threshold
 
 // Thread the DECODE attention over heads once cnt × head_size × n_heads clears this. Decode
 // attention is the one per-token cost that grows linearly with context (the KV read), so it
-// eventually rivals the weight traffic — but the per-layer-per-token dispatch (~90µs on M1) must
-// amortize first, hence a much higher bar than the prefill thresholds. Default is DERIVED (engages
-// when single-thread attention costs a small multiple of the dispatch), not swept — PROVISIONAL
-// pending a quiet-box measurement; set huge to disable, 0 to always thread (the A/B).
-var g_decode_attn_par_threshold = 4_000_000l
+// eventually rivals the weight traffic — the per-layer-per-token dispatch (~90µs on M1) must
+// amortize first. Default MEASURED (M1 Max, quiet box, 2026-07-02): the inline-vs-threaded
+// crossover sits at ~200-260K work on both Llama-3.2-1B (hs 64 × 32 heads) and gemma-4-12B
+// (hs 512 × 16 heads); below it threading costs ≤2%, above it wins grow to +74%/+89% at 2048 ctx.
+// Set huge to disable, 0 to always thread (the A/B).
+var g_decode_attn_par_threshold = 262_144l
 def set_decode_attn_par_threshold(v : int64) { g_decode_attn_par_threshold = max(v, 0l) }
 def get_decode_attn_par_threshold() : int64 => g_decode_attn_par_threshold
 // Query-block width for the blocked prefill attention (each K/V tile is reused across this many queries).

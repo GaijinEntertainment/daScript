@@ -355,12 +355,13 @@ what it costs today and what the fix would change.
 - **DONE (perf pass, 2026-07-02): V-from-K layers fuse the K→V copy with the weightless V-norm.**
   Decode (mm_qkv) and prefill both rmsnorm k→v out-of-place when v_norm is on (bit-identical to
   copy + in-place norm; the block's v_norm step skips those layers). (Spotted wave 3.)
-- **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
-  gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
-  A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
-  Same for gpt-oss-20b (wave 5): the chat smoke saw prefill 3 t/s / gen 2 t/s — expected to be
-  dominated by the naive per-token MoE prefill + the doubled Q8 expert traffic (both already on
-  this ledger), but A/B before touching anything.
+- **DONE (perf pass, 2026-07-02): llama.cpp A/Bs run (quiet box, CPU `-ngl 0`, llama-bench
+  pp512/tg64 vs our matched driver, ggml-parity fast-math).** gemma-4-12B: prefill us 75-80 t/s
+  vs llama.cpp 74.4±0.5 (parity to +5%); decode us ~7.3 vs 8.74 (~84% — the remaining decode gap
+  is the next lever). gpt-oss-20b: prefill us ~219 vs 117 (~1.9× FASTER — the grouped MoE GEMM);
+  decode us ~19 vs ~39-42 (~0.47× — exactly the MXFP4→Q8 doubled expert-weight-traffic asymmetry
+  quantified: the native-MXFP4/Q4_0 entry below is now the headline gpt-oss decode lever).
+  (Spotted waves 3/5.)
 - **DONE (perf pass, 2026-07-02): MoE prefill runs expert-bucketed grouped GEMMs — bit-exact.**
   `ffn_moe_prefill_grouped` routes every position (one batched router GEMM + the shared
   `moe_select`), CSR-buckets the (position, slot) pairs by expert, runs one batched GEMM chain
@@ -410,14 +411,14 @@ what it costs today and what the fix would change.
   (filled by layout_offsets, seq_len-independent) × the LIVE seq_len at call time — the O(1)
   Model overload serves both hot call sites; the Config walking form stays as the definitional
   reference. (Spotted post-wave-3 review, per Copilot on #3346.)
-- **IMPLEMENTED (perf pass, 2026-07-02), default UNMEASURED: decode attention threads over
-  heads.** `attention_std_decode` now maybe_parallel_fors the head loop (per-head att rows at
-  h×seq_len; disjoint writes ⇒ bit-exact vs inline, gated by test_forward's threaded-vs-inline
-  logit equality), behind `g_decode_attn_par_threshold` (profile `runtime.
-  decode_attn_par_threshold`). The default 4M is DERIVED from the ~90µs M1 dispatch cost, not
-  swept — the remaining work is a quiet-box measurement of the crossover (and the win itself:
-  per-token KV traffic is ~12% at 2048 ctx on the 12B, growing linearly with context). (Spotted
-  tune audit, 2026-07-02.)
+- **DONE (perf pass, 2026-07-02): decode attention threads over heads — crossover measured,
+  default re-set.** `attention_std_decode` maybe_parallel_fors the head loop (disjoint per-head
+  rows ⇒ bit-exact vs inline, gated by test_forward), behind `g_decode_attn_par_threshold`
+  (profile `runtime.decode_attn_par_threshold`). Quiet-box sweep (M1 Max, inline-vs-threaded
+  interleaved at 32..2048 ctx on Llama-3.2-1B and gemma-4-12B): crossover at ~200-260K work on
+  BOTH; below it threading costs ≤2%, above it wins reach +74% (1B) / +89% (12B) at 2048 ctx —
+  the derived 4M default was ~15× too conservative (the 12B ran inline below ctx 512). Default
+  is now the measured 262144. (Spotted tune audit, 2026-07-02.)
 - **LOW PRIORITY: `sample_` top-k is O(top_k × vocab) scalar selection.** Each of the top_k
   rounds rescans the whole vocab (dasllama_common.das sample_) — top_k=40 on gemma-4's 262144
   vocab is ~10M compares per sampled token. Cold today (SamplingParams defaults are greedy /

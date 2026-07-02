@@ -15,7 +15,7 @@ def private restore_defaults() {
     set_q8_l2_budget(4l * 1024l * 1024l)
     set_matmul_par_threshold(2_000_000l)
     set_attn_par_threshold(100_000l)
-    set_decode_attn_par_threshold(4_000_000l)
+    set_decode_attn_par_threshold(262_144l)
     set_requant_par_threshold(256_000l)
     set_norm_par_threshold(256_000l)
     set_rope_par_threshold(100_000l)

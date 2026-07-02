@@ -173,6 +173,7 @@ def test_forward_threaded_decode_attention(t : T?) {
         let c = tr.config
         var s_thr <- make_run_state(c)
         var s_inl <- make_run_state(c)
+        let prev_thr = get_decode_attn_par_threshold()
         with_job_que() {
             // same token sequence through both sessions; heads write disjoint att/xb slices, so the
             // threaded head loop must be BIT-exact vs inline — any diff is a race, not a tolerance
@@ -185,7 +186,7 @@ def test_forward_threaded_decode_attention(t : T?) {
                 forward(tr, s_inl, tok, int64(p))
             }
         }
-        set_decode_attn_par_threshold(4_000_000l)   // restore the default
+        set_decode_attn_par_threshold(prev_thr)
         var exact = true
         for (i in range64(c.vocab_size)) {
             if (s_thr.logits[i] != s_inl.logits[i]) {
