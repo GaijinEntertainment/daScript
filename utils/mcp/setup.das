@@ -209,6 +209,8 @@ def main() : int {
 
     print("\nDone. Restart the Claude Code session in {root} to pick up the daslang MCP server.\n")
     print("Claude Code spawns the stdio supervisor (utils/mcp/mcp_supervisor.py); no persistent process to keep running.\n")
+    print("The daslang LSP plugin (.claude/skills/daslang-lsp, checked in) also loads automatically\n")
+    print("when the session starts at the worktree root — it uses the binary built above (needs python3 on PATH).\n")
     print("NOTE: the parse-aware tools (grep_usage/outline/cpp_*) also need the ast-grep `sg` CLI on PATH.\n")
     return 0
 }

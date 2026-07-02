@@ -112,8 +112,11 @@ utils/**/modules/
 !utils/mcp/tests/_pretend_root/modules/
 !utils/mcp/tests/_pretend_root/modules/**
 
-# Claude Code (local settings + runtime state)
-.claude/
+# Claude Code (local settings + runtime state). Exception: .claude/skills/
+# carries the checked-in daslang LSP plugin manifest — it must travel with the
+# repo so sessions load the LSP on workspace trust (utils/lsp/README.md).
+.claude/*
+!.claude/skills/
 examples/games/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h

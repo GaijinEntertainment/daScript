@@ -258,6 +258,25 @@ sessions first, then develop the new ops with live diagnostics on.
 
 PR for the whole branch AFTER wave 4 (single preflight + CI round).
 
+#### Session adoption — PROVEN (2026-07-02, CC v2.1.198)
+
+- Vehicle: `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, committed —
+  the documented "skills-directory plugin" path (loads as `daslang-lsp@skills-dir`
+  on workspace trust). Headless probe from the repo root with NO `--plugin-dir`
+  got the exact 30341 diagnostic end-to-end; supervisor log shows one startup
+  spawned via the checked-in manifest.
+- `args` hop back to the tree relatively:
+  `${CLAUDE_PLUGIN_ROOT}/../../../utils/lsp/lsp_supervisor.py` — portable to
+  worktrees/clones as-is.
+- Loads only when the session STARTS at the repo root — skills-dir plugins do
+  not walk up from subdirectories (documented limitation of this vehicle).
+- Duplicate registration probed: `--plugin-dir utils/lsp/plugin` alongside the
+  checked-in manifest yields ONE supervisor, spawned from the `--plugin-dir`
+  copy (name-keyed dedup, local dir wins) — dev workflow unaffected.
+- Worktree bootstrap: the manifest travels with git, so `utils/mcp/setup.das`
+  needs no LSP wiring — its build already produces the binary `find_compiler`
+  discovers (`build/daslang` et al.); setup's done-message now says so.
+
 ## Non-goals
 
 - Completion (CC doesn't consume it), formatting-over-LSP (CC has the MCP/CLI

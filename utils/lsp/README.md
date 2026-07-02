@@ -16,12 +16,23 @@ no sgconfig, no tree-sitter, no MCP server.
 
 ## Registering with Claude Code
 
-Claude Code loads LSP servers from plugins. The manifest lives at
-`utils/lsp/plugin/.claude-plugin/plugin.json`; wire it in with:
+**In this repo: automatic.** A checked-in skills-directory plugin manifest
+(`.claude/skills/daslang-lsp/.claude-plugin/plugin.json`) loads on workspace
+trust whenever a session starts at the repo root — no CLI flag. (Skills-dir
+plugins don't walk up: a session started in a subdirectory won't load it.)
+
+For development, or from another checkout, the standalone plugin still works
+and takes precedence over the checked-in one (same plugin name, local dir
+wins):
 
 ```
 claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 ```
+
+Other repos adopt the same way: copy the manifest into their
+`.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, point `args` at this
+repo's `lsp_supervisor.py`, and set `initializationOptions` (below) for module
+resolution.
 
 Diagnostics then attach automatically to the next tool result after any edit
 of a `.das` file, and the LSP tool exposes definition / references / hover /
