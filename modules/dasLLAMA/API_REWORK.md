@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. All seven T1/T2 model-support waves landed (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)), and the [facade + docs wave](#the-facade--dasllamadasllamadas-landed-2026-07-02) landed 2026-07-02. **Next: the tutorials wave** (`tutorials/dasLLAMA/`, written against the facade), then the performance-ledger pass.
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. All seven T1/T2 model-support waves landed (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)), and the [facade + docs wave](#the-facade--dasllamadasllamadas-landed-2026-07-02) landed 2026-07-02, followed by the [tutorials wave](#the-tutorials-wave--tutorialsdasllama-landed-2026-07-02) the same day. **Next: the performance-ledger pass.**
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current
@@ -307,6 +307,31 @@ as 14 `//!`-documented stubs (`load_model` / `create_session` / `encode` / `deco
   `//!` (and no inert above-def `//!` exists); facade stubs ↔ engine `_` spellings stay 1:1 in both
   directions; the examples stay facade-only. Negative-probed: an undocumented extra stub fails it.
 
+## The tutorials wave — `tutorials/dasLLAMA/` *(landed 2026-07-02)*
+
+Six tutorials written strictly against the facade, each a runnable single-file
+`main()` (project convention: `tutorials/<area>/`, never `modules/<X>/tutorial/`), with paired
+RST pages under `doc/source/reference/tutorials/` and a toctree section, plus tutorial links on
+the stdlib module page. The teaching model is SmolLM2-135M-Instruct Q8_0 (~145MB llama-arch
+GGUF; models aren't shipped — path via CLI arg or `DASLLAMA_MODEL`):
+
+1. **hello_generate** — load_model / encode / decode / piece / generate / stats.
+2. **chat** — create_chat / add_user / respond, multi-turn KV memory, history, render_turn
+   (specials are atomic ids, invisible to decode).
+3. **sampling** — greedy determinism + the 135M repetition loop, penalty breaking it,
+   temp / top-k / set_seed reproducibility.
+4. **sessions_and_memory** — KV sizing + the cap-seq_len-BEFORE-create_session rule, session
+   independence, manual eval/sample loop, persistent_heap + delete discipline.
+5. **performance** — jit_enabled, job-queue requirement + `DAS_JOBQUE_THREADS`, prefill-vs-gen
+   physics, fp32/q8/q4 measured table, `_jit_fast_math`.
+6. **add_an_arch** — registry walkthrough (arch_names / ArchDesc / std_blocks / chat parts /
+   register_arch), no model needed.
+
+Tutorials joined the CMake install + `dry_run_tutorials` compile gate. One durable lesson baked
+into 04's structure: a fat `main()` frame plus the forward-pass call chain overflows the default
+16KB context stack (das frames are statically sized for all locals) — model-driving mains stay
+lean, one function per section.
+
 ### Performance ledger (living — address after the model waves)
 
 Standing rule (Boris, 2026-07-01): any performance possibility spotted while doing wave work
@@ -348,6 +373,12 @@ what it costs today and what the fix would change.
   nibble LUT — the int8 side of the SDOT pipeline could eat un-LUTed nibbles with a lane
   table). Q4_0 storage is the existing halfway house (same 4-bit traffic, one lossy requant,
   no new kernel) — worth an A/B before writing MXFP4-native matmuls. (Spotted wave 5.)
+- **q4 has no batched prefill kernel — prefill collapses to decode rate.** The q4 path serves
+  everything through the scalar fp32-activation `dot_q4`/`matmul_q4` (no q8-style token-blocked
+  batch GEMM, no NEON arm, no repack backend), so a q4 prefill runs at generation speed:
+  measured on SmolLM2-135M, q8 prefill 1391 t/s vs q4 prefill 70 t/s ≈ its own 69 t/s decode.
+  A q4 batch kernel (or the load-time q4→q8 transcode as the cheap fix) closes it.
+  (Spotted tutorials wave.)
 
 ## What collapsed (done — Phase 5)
 

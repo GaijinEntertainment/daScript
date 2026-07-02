@@ -12,3 +12,11 @@ Supported model families (GGUF, fp32 / q8 / q4 weights):
 * **gpt-oss** — gpt-oss-20b (attention sinks, MXFP4 weights, YaRN long context, Harmony chat format)
 
 The architecture is picked from GGUF metadata at load — the same program runs any of these.
+
+Hands-on tutorials (:ref:`overview <tutorials_dasllama>`):
+:ref:`hello, generation <tutorial_dasLLAMA_hello_generate>`,
+:ref:`chat and templates <tutorial_dasLLAMA_chat>`,
+:ref:`sampling <tutorial_dasLLAMA_sampling>`,
+:ref:`sessions and memory <tutorial_dasLLAMA_sessions_and_memory>`,
+:ref:`performance <tutorial_dasLLAMA_performance>`,
+:ref:`the architecture registry <tutorial_dasLLAMA_add_an_arch>`.
