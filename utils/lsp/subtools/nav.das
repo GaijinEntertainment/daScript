@@ -6,6 +6,16 @@
 //   daslang utils/lsp/subtools/nav.das -- references <file> <line> <character> <include_decl> [project]
 //   daslang utils/lsp/subtools/nav.das -- documentSymbol <file> [project]
 //   daslang utils/lsp/subtools/nav.das -- workspaceSymbol <query> <context_file> [project]
+//   daslang utils/lsp/subtools/nav.das -- prepareCallHierarchy <file> <line> <character> [project]
+//   daslang utils/lsp/subtools/nav.das -- incomingCalls <file> <decl_file> <decl_line> <name> [project]
+//   daslang utils/lsp/subtools/nav.das -- outgoingCalls <file> <decl_file> <decl_line> <name> [project]
+//   daslang utils/lsp/subtools/nav.das -- implementation <file> <line> <character> [project]
+//
+// incomingCalls/outgoingCalls re-identify the prepared item after a fresh
+// compile: <file> is the ANCHOR (the file prepareCallHierarchy was asked in —
+// its program is the search scope), <decl_file>:<decl_line> + <name> pin the
+// target function (daslang 1-based line; the supervisor round-trips them
+// through the LSP item's `data` field).
 //
 // Every op also accepts `--overlay <path>` (any position): the client's
 // unsaved buffer text for the op's file argument, compiled and
@@ -491,7 +501,10 @@ struct RefTarget {
     decl_column : int
 }
 
-def private to_void(p) : void? {
+// const? param: both pointer flavors (T? / T const?) converge on one
+// instantiation — same-name instances differing only in pointee const trip the
+// mangler ICE 50609 (see CLAUDE.md "Generic-mangling pitfall")
+def private to_void(p : auto(TT) const?) : void? {
     return unsafe(reinterpret<void?> p)
 }
 
@@ -935,6 +948,399 @@ def private run_workspace_symbol(query, context_file, project : string) : WsSymb
     return <- res
 }
 
+// ===== call hierarchy =====
+
+struct HierItem {
+    name : string    // bare name (class methods drop the "Class`" prefix) — display + range sizing
+    detail : string
+    kind : int
+    path : string
+    @rename = "range" _range : LspRange
+    selectionRange : LspRange
+    // re-identification keys for the LSP item round-trip (supervisor packs
+    // them into item.data; incomingCalls/outgoingCalls pass them back).
+    // symbol is the FULL function name — the program-side match key.
+    file : string
+    line : int
+    symbol : string
+}
+
+struct HierPrepareResult {
+    ok : bool
+    message : string
+    items : array<HierItem>
+}
+
+struct HierCall {
+    item : HierItem
+    fromRanges : array<LspRange>
+}
+
+struct HierCallsResult {
+    ok : bool
+    message : string
+    calls : array<HierCall>
+}
+
+// generic instances point back at their generic — hierarchy items always
+// represent the origin (bare name, source location)
+def private origin_function(func : Function const?) : Function const? {
+    if (func != null && func.fromGeneric != null) {
+        return func.fromGeneric
+    }
+    return func
+}
+
+def private has_source(func : Function const?) : bool {
+    return func != null && int(func.at.line) > 0 && !empty(lineinfo_file(func.at))
+}
+
+// "Animal`speak" -> "speak" — the source token at the declaration/call site
+def private bare_function_name(name : string) : string {
+    let ix = rfind(name, "`")
+    return ix < 0 ? name : slice(name, ix + 1)
+}
+
+// compiler-synthesized members (Foo'__finalize etc.) sit on the `class` line
+// but aren't all flagged `generated`; user identifiers can't contain ' —
+// skip both or a cursor on a class name resolves to the finalizer
+def private is_synthesized(func : Function const?) : bool {
+    return true if (func.flags.generated && func.fromGeneric == null)
+    var has_tick = false
+    peek(func.name) $(n) {
+        has_tick = find(n, "'") >= 0
+    }
+    return has_tick
+}
+
+def private make_hier_item(func : Function const?) : HierItem {
+    let f = lineinfo_file(func.at)
+    let bare = bare_function_name(string(func.name))
+    var it = HierItem(
+        name = bare,
+        detail = build_string() $(var w) {
+            write_signature(w, *func)
+        },
+        kind = func.flags.isClassMethod ? SK_METHOD : SK_FUNCTION,
+        path = to_generic_path(f),
+        file = f,
+        line = int(func.at.line),
+        symbol = string(func.name))
+    decl_ranges(f, func.at, bare, it._range, it.selectionRange)
+    return it
+}
+
+// function at cursor: a call/address expression's callee, else the function
+// (or class method) declared on the cursor line
+def private function_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : Function const? {
+    var result : Function const?
+    var hits <- find_at_cursor(program, file, line, col)
+    for (hit in hits) {
+        let expr = hit.expr
+        // synthesized guard: generated finalizer-chain calls carry the class
+        // line as their position — without it a cursor on a class name
+        // resolves to Foo'__finalize instead of falling through to the type
+        if (expr is ExprCall) {
+            let c = expr as ExprCall
+            if (c.func != null && !c.func.flags.builtIn && !is_synthesized(c.func)) {
+                result = c.func
+                break
+            }
+        } elif (expr is ExprAddr) {
+            let a = expr as ExprAddr
+            if (a.func != null && !a.func.flags.builtIn && !is_synthesized(a.func)) {
+                result = a.func
+                break
+            }
+        }
+    }
+    if (result == null) {
+        let thisMod = get_this_module(program)
+        let target = to_generic_path(file)
+        ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
+            return if (result != null)
+            let f = func
+            return if (is_synthesized(f))
+            if (int(f.at.line) == line && to_generic_path(lineinfo_file(f.at)) == target) {
+                result = f
+            }
+        }
+        if (result == null) {
+            ast::for_each_generic(thisMod) $(var func : FunctionPtr) {
+                return if (result != null)
+                let f = func
+                return if (is_synthesized(f))
+                if (int(f.at.line) == line && to_generic_path(lineinfo_file(f.at)) == target) {
+                    result = f
+                }
+            }
+        }
+    }
+    return origin_function(result)
+}
+
+def private matches_decl(func : Function const?; decl_path : string; decl_line : int; name : string) : bool {
+    return (func != null && int(func.at.line) == decl_line && func.name == name &&
+        to_generic_path(lineinfo_file(func.at)) == decl_path)
+}
+
+// every Function in the program that IS the pinned declaration: the function
+// (or generic) itself plus all instances cloned from it
+def private collect_target_functions(program : smart_ptr<Program>; decl_file : string; decl_line : int; name : string) : array<void?> {
+    var targets : array<void?>
+    let decl_path = to_generic_path(decl_file)
+    program_for_each_module(program) $(mod) {
+        ast::for_each_function(mod, "") $(var func : FunctionPtr) {
+            let f = func
+            if (matches_decl(f, decl_path, decl_line, name) || matches_decl(origin_function(f), decl_path, decl_line, name)) {
+                targets |> push(to_void(f))
+            }
+        }
+        ast::for_each_generic(mod) $(var func : FunctionPtr) {
+            let f = func
+            if (matches_decl(f, decl_path, decl_line, name)) {
+                targets |> push(to_void(f))
+            }
+        }
+    }
+    return <- targets
+}
+
+struct CallSite {
+    fn : Function const?  // the OTHER side: caller for incoming, callee for outgoing
+    word : string         // bare callee name — sizes the call-site range
+    file : string
+    line : int
+    column : int
+}
+
+// collects call sites touching the target set: calls TO a target (incoming,
+// grouped by caller) or calls FROM a target's body (outgoing, grouped by callee)
+class CallGraphVisitor : AstVisitor {
+    targets : array<void?>
+    want_incoming : bool
+    cur : Function const?
+    sites : array<CallSite>
+
+    def CallGraphVisitor(t : array<void?>; incoming : bool) {
+        targets := t
+        want_incoming = incoming
+    }
+
+    def is_target(func : Function const?) : bool {
+        return false if (func == null)
+        let p = to_void(func)
+        for (t in targets) {
+            if (t == p) return true
+        }
+        return false
+    }
+
+    def add_site(func : Function const?; word : string; at : LineInfo) : void {
+        if (int(at.line) == 0 || at.fileInfo == null) return
+        sites |> push(CallSite(fn = func, word = word,
+            file = string(at.fileInfo.name), line = int(at.line), column = int(at.column)))
+    }
+
+    def override preVisitFunction(fun : FunctionPtr) : void {
+        cur = fun
+    }
+
+    def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
+        cur = null
+        return fun
+    }
+
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        return if (expr.func == null)
+        let word = bare_function_name(string(origin_function(expr.func).name))
+        if (want_incoming) {
+            if (cur != null && is_target(expr.func)) {
+                add_site(cur, word, expr.at)
+            }
+        } elif (is_target(cur)) {
+            return if (expr.func.flags.builtIn)  // no das source to hierarchy into
+            add_site(expr.func, word, expr.at)
+        }
+    }
+}
+
+// sites -> one HierCall per origin function, call-site ranges deduped
+// (generic instances repeat the same source position)
+def private group_calls(sites : array<CallSite>) : array<HierCall> {
+    var res : array<HierCall>
+    var index : table<string; int>
+    var seen_ranges : table<string>
+    for (s in sites) {
+        let f = origin_function(s.fn)
+        continue if (!has_source(f))
+        let fkey = "{lineinfo_file(f.at)}:{int(f.at.line)}:{f.name}"
+        if (!key_exists(index, fkey)) {
+            index[fkey] = length(res)
+            res |> emplace(HierCall(item = make_hier_item(f)))
+        }
+        let rkey = "{fkey}|{s.file}:{s.line}:{s.column}"
+        continue if (key_exists(seen_ranges, rkey))
+        seen_ranges |> insert(rkey)
+        let idx = index[fkey]
+        res[idx].fromRanges |> push(word_range(s.file, s.line, s.column, s.word))
+    }
+    return <- res
+}
+
+def private run_prepare_call_hierarchy(file : string; line0, char16 : int; project : string) : HierPrepareResult {
+    var res = HierPrepareResult(ok = true)
+    var line, col : int
+    request_cursor(file, line0, char16, line, col)
+    let compiled = compile_nav(file, project) $(program) {
+        let fn = function_at_cursor(program, file, line, col)
+        if (fn == null) {
+            res.message = "no function at cursor"
+            return
+        }
+        if (!has_source(fn)) {
+            res.message = "function '{fn.name}' has no das source"
+            return
+        }
+        res.items |> push(make_hier_item(fn))
+    }
+    if (!compiled) {
+        res.ok = false
+        res.message = "file does not compile — fix diagnostics first"
+    }
+    return <- res
+}
+
+def private run_hierarchy_calls(anchor, decl_file : string; decl_line : int; fname : string; incoming : bool; project : string) : HierCallsResult {
+    var res = HierCallsResult(ok = true)
+    let compiled = compile_nav(anchor, project) $(program) {
+        var targets <- collect_target_functions(program, decl_file, decl_line, fname)
+        if (empty(targets)) {
+            res.message = "function '{fname}' not found at {decl_file}:{decl_line} — re-run prepareCallHierarchy"
+            return
+        }
+        var visitor = new CallGraphVisitor(targets, incoming)
+        make_visitor(*visitor) $(adapter) {
+            visit_modules(program, adapter)
+        }
+        res.calls <- group_calls(visitor.sites)
+        unsafe {
+            delete visitor
+        }
+    }
+    if (!compiled) {
+        res.ok = false
+        res.message = "file does not compile — fix diagnostics first"
+    }
+    return <- res
+}
+
+// ===== implementation =====
+
+def private is_derived_from(st : Structure const?; base : void?) : bool {
+    var p = st != null ? st.parent : null
+    while (p != null) {
+        return true if (to_void(p) == base)
+        p = p.parent
+    }
+    return false
+}
+
+def private push_impl_location(var out : array<NavLocation>; var seen : table<string>; at : LineInfo; word : string) {
+    let key = "{lineinfo_file(at)}:{int(at.line)}"
+    return if (key_exists(seen, key))
+    seen |> insert(key)
+    push_word_location(out, at, word)
+}
+
+// class method -> its overrides in derived classes; class/struct -> derived types
+def private run_implementation(file : string; line0, char16 : int; project : string) : LocationsResult {
+    var res = LocationsResult(ok = true)
+    var line, col : int
+    request_cursor(file, line0, char16, line, col)
+    let compiled = compile_nav(file, project) $(program) {
+        var seen : table<string>
+        let fn = function_at_cursor(program, file, line, col)
+        if (fn != null && fn.flags.isClassMethod && !empty(fn.arguments)) {
+            let owner = fn.arguments[0]._type != null ? fn.arguments[0]._type.structType : null
+            if (owner != null) {
+                // method Function names are class-prefixed ("Animal`speak") —
+                // overrides match on the bare name + a derived self type
+                let mname = bare_function_name(string(fn.name))
+                var derived : array<void?>
+                program_for_each_module(program) $(mod) {
+                    ast::for_each_structure(mod) $(var stp : StructurePtr) {
+                        let s = stp
+                        if (is_derived_from(s, to_void(owner))) {
+                            derived |> push(to_void(s))
+                        }
+                    }
+                }
+                program_for_each_module(program) $(mod) {
+                    ast::for_each_function(mod, "") $(var fp : FunctionPtr) {
+                        let f = fp
+                        return if (!f.flags.isClassMethod || empty(f.arguments) ||
+                            bare_function_name(string(f.name)) != mname || int(f.at.line) <= 0)
+                        let st0 = f.arguments[0]._type != null ? f.arguments[0]._type.structType : null
+                        return if (st0 == null)
+                        let p = to_void(st0)
+                        for (d in derived) {
+                            if (d == p) {
+                                push_impl_location(res.locations, seen, f.at, mname)
+                                break
+                            }
+                        }
+                    }
+                }
+                if (empty(res.locations)) {
+                    res.message = "no overrides of '{mname}' in this program"
+                }
+                return
+            }
+        }
+        // no method at cursor — try a class/struct: implementations = derived types
+        var st_ptr : void?
+        var st_name = ""
+        var hits <- find_at_cursor(program, file, line, col)
+        for (hit in hits) {
+            let t = identify_target(hit)
+            if (t.kind == RefTargetKind.structure) {
+                st_ptr = t.target_ptr
+                st_name = t.name
+                break
+            }
+        }
+        if (st_ptr == null) {
+            let t = identify_declaration_target(program, file, line)
+            if (t.kind == RefTargetKind.structure) {
+                st_ptr = t.target_ptr
+                st_name = t.name
+            }
+        }
+        if (st_ptr == null) {
+            res.message = "no class, struct, or class method at cursor"
+            return
+        }
+        program_for_each_module(program) $(mod) {
+            ast::for_each_structure(mod) $(var stp : StructurePtr) {
+                let s = stp
+                return if (int(s.at.line) <= 0)
+                if (is_derived_from(s, st_ptr)) {
+                    push_impl_location(res.locations, seen, s.at, string(s.name))
+                }
+            }
+        }
+        if (empty(res.locations)) {
+            res.message = "no types derive from '{st_name}' in this program"
+        }
+    }
+    if (!compiled) {
+        res.ok = false
+        res.message = "file does not compile — fix diagnostics first"
+    }
+    return <- res
+}
+
 // ===== dispatch =====
 
 [export]
@@ -954,7 +1360,7 @@ def main() : int {
             apply_overlay(user[target_ix], fread(overlay_path))
         }
     }
-    if (op == "definition" || op == "hover") {
+    if (op == "definition" || op == "hover" || op == "prepareCallHierarchy" || op == "implementation") {
         if (length(user) < 4) {
             print(sprint_json(LocationsResult(message = "{op}: expected <file> <line> <character> [project]"), false))
             return 1
@@ -965,9 +1371,21 @@ def main() : int {
         let project = length(user) > 4 ? user[4] : ""
         if (op == "definition") {
             print(sprint_json(run_definition(file, line0, char16, project), false))
-        } else {
+        } elif (op == "hover") {
             print(sprint_json(run_hover(file, line0, char16, project), false))
+        } elif (op == "prepareCallHierarchy") {
+            print(sprint_json(run_prepare_call_hierarchy(file, line0, char16, project), false))
+        } else {
+            print(sprint_json(run_implementation(file, line0, char16, project), false))
         }
+    } elif (op == "incomingCalls" || op == "outgoingCalls") {
+        if (length(user) < 5) {
+            print(sprint_json(HierCallsResult(message = "{op}: expected <file> <decl_file> <decl_line> <name> [project]"), false))
+            return 1
+        }
+        let project = length(user) > 5 ? user[5] : ""
+        print(sprint_json(run_hierarchy_calls(user[1], user[2], to_int(user[3]), user[4],
+            op == "incomingCalls", project), false))
     } elif (op == "references") {
         if (length(user) < 5) {
             print(sprint_json(LocationsResult(message = "references: expected <file> <line> <character> <include_decl> [project]"), false))

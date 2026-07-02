@@ -228,9 +228,11 @@ class Server:
 
     # ---- navigation requests ---------------------------------------------
     def nav_request(self, mid, op: str, args: list[str], cwd: str | None,
-                    overlay_uri: str | None = None) -> None:
+                    overlay_uri: str | None = None, data_uri: str | None = None) -> None:
         """Spawns nav.das on a worker thread so the read loop keeps consuming
-        didChange while a request compiles."""
+        didChange while a request compiles. data_uri is the call-hierarchy
+        anchor packed into each returned item's `data` (round-trips
+        client->server between prepare and incoming/outgoing)."""
         if self.init_options.get("project"):
             args = args + [self.init_options["project"]]
         argv = self.subtool_argv("nav", [op] + args)
@@ -242,11 +244,12 @@ class Server:
         overlay = self.write_overlay(overlay_uri)
         if overlay:
             argv += ["--overlay", overlay]
-        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd, overlay), daemon=True)
+        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd, overlay, data_uri),
+                             daemon=True)
         t.start()
 
     def run_nav(self, mid, op: str, argv: list[str], cwd: str | None,
-                overlay: str | None = None) -> None:
+                overlay: str | None = None, data_uri: str | None = None) -> None:
         try:
             try:
                 proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -273,18 +276,36 @@ class Server:
             self.reply_error(mid, -32000, f"daslang {op} crashed: {tail}")
             return
         log("nav", {"op": op, "ok": payload.get("ok"), "message": payload.get("message")})
-        self.reply(mid, self.shape_nav_result(op, payload))
+        self.reply(mid, self.shape_nav_result(op, payload, data_uri))
 
     @staticmethod
-    def shape_nav_result(op: str, payload: dict):
+    def hier_item(it: dict, data_uri: str | None) -> dict:
+        item = {"name": it["name"], "kind": it["kind"], "uri": path_to_uri(it["path"]),
+                "range": it["range"], "selectionRange": it["selectionRange"],
+                "data": {"uri": data_uri, "file": it["file"], "line": it["line"],
+                         "name": it.get("symbol") or it["name"]}}
+        if it.get("detail"):
+            item["detail"] = it["detail"]
+        return item
+
+    @staticmethod
+    def shape_nav_result(op: str, payload: dict, data_uri: str | None = None):
         def locations():
             return [{"uri": path_to_uri(l["path"]), "range": l["range"]}
                     for l in payload.get("locations") or []]
         if op == "definition":
             locs = locations()
             return locs if locs else None
-        if op == "references":
+        if op in ("references", "implementation"):
             return locations()
+        if op == "prepareCallHierarchy":
+            items = [Server.hier_item(it, data_uri) for it in payload.get("items") or []]
+            return items if items else None
+        if op in ("incomingCalls", "outgoingCalls"):
+            key = "from" if op == "incomingCalls" else "to"
+            return [{key: Server.hier_item(c["item"], data_uri),
+                     "fromRanges": c.get("fromRanges") or []}
+                    for c in payload.get("calls") or []]
         if op == "hover":
             if not payload.get("contents"):
                 return None
@@ -328,8 +349,10 @@ class Server:
                     "referencesProvider": True,
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
+                    "implementationProvider": True,
+                    "callHierarchyProvider": True,
                 },
-                "serverInfo": {"name": "daslang-lsp", "version": "0.3.0"},
+                "serverInfo": {"name": "daslang-lsp", "version": "0.4.0"},
             })
         elif method == "shutdown":
             self.reply(mid, None)
@@ -357,10 +380,28 @@ class Server:
             uri = params["textDocument"]["uri"]
             self.docs.pop(uri, None)
             self.publish(uri, [])
-        elif method in ("textDocument/definition", "textDocument/hover"):
+        elif method in ("textDocument/definition", "textDocument/hover",
+                        "textDocument/implementation"):
             args, cwd = self.cursor_args(params)
             self.nav_request(mid, method.rsplit("/", 1)[1], args, cwd,
                              overlay_uri=params["textDocument"]["uri"])
+        elif method == "textDocument/prepareCallHierarchy":
+            args, cwd = self.cursor_args(params)
+            self.nav_request(mid, "prepareCallHierarchy", args, cwd,
+                             overlay_uri=params["textDocument"]["uri"],
+                             data_uri=params["textDocument"]["uri"])
+        elif method in ("callHierarchy/incomingCalls", "callHierarchy/outgoingCalls"):
+            data = (params.get("item") or {}).get("data") or {}
+            if not data.get("uri") or not data.get("name"):
+                self.reply(mid, [])  # item didn't round-trip — nothing to resolve
+            else:
+                anchor = uri_to_path(data["uri"])
+                op = "incomingCalls" if method.endswith("incomingCalls") else "outgoingCalls"
+                self.nav_request(mid, op,
+                                 [anchor, data.get("file", ""), str(data.get("line", 0)),
+                                  data["name"]],
+                                 os.path.dirname(anchor) or None,
+                                 overlay_uri=data["uri"], data_uri=data["uri"])
         elif method == "textDocument/references":
             args, cwd = self.cursor_args(params)
             include_decl = bool((params.get("context") or {}).get("includeDeclaration"))
