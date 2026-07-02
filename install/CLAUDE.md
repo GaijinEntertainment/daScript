@@ -39,7 +39,7 @@ The compiler sets `DAS_PAK_ROOT` to the project directory before evaluating call
 
 ### Tutorials
 
-`tutorials/language/01_hello_world.das` through `tutorials/language/53_clargs.das` are an ordered tour of the language — start there when learning a new feature. Each tutorial is a runnable `.das` file with comments explaining the construct. Module-specific tutorials live alongside (`tutorials/dasPUGIXML/`, `tutorials/dasHV/`, `tutorials/dasAudio/`, `tutorials/sql/`, `tutorials/macros/`, `tutorials/integration/`).
+`tutorials/language/01_hello_world.das` through `tutorials/language/58_logger.das` are an ordered tour of the language — start there when learning a new feature. Each tutorial is a runnable `.das` file with comments explaining the construct. Area- and module-specific tutorials live alongside (`tutorials/macros/`, `tutorials/integration/`, `tutorials/sql/`, `tutorials/dasHV/`, `tutorials/dasAudio/`, `tutorials/dasPUGIXML/`, `tutorials/dasPEG/`, `tutorials/dasStbImage/`, `tutorials/dasMinfft/`, `tutorials/dasOPENAI/`, `tutorials/daStrudel/`, `tutorials/jsonrpc/`, `tutorials/opengl/`).
 
 ### Debugging
 
@@ -66,7 +66,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |
 | `skills/clargs_usage.md` | Writing daslang CLI tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
-| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImgui, dasPUGIXML, dasSQLITE, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
+| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImgui, dasCards, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
 | `skills/imgui_ui_debugging.md` | Diagnosing or fixing any dasImgui UI / interaction bug — the discipline: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix works from logic or a screenshot alone |
 | `skills/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
@@ -108,13 +108,23 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **`typeinfo`:** `typeinfo trait_name(type<T>)` — trait name outside parens
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required
 - **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`
-- **Newlines inside `(...)`, `[...]`, `{...}` are free** — long pipe chains, multi-arg calls, array/table literals can wrap freely. Statement-level (no surrounding bracket) still requires one statement per line, so wrap the RHS in `(...)` if a `let x = a |> b |> c` needs to break across lines
+- **Newlines inside `(...)`, `[...]`, `{...}` are free** — long pipe chains, multi-arg calls, array/table literals can wrap freely. Statement-level (no surrounding bracket) still requires one statement per line, so wrap the RHS in `(...)` if a `let x = a |> b |> c` needs to break across lines. **DANGER — silent, no error:** without the parens, a continuation line starting with a *unary-capable* operator (`+`, `-`) parses as a separate statement — `+ b` is unary plus, pure, so the optimizer **silently deletes it**. `let x = a` ⏎ `+ b` ⏎ `+ c` becomes just `let x = a` (the `+ b`/`+ c` lines vanish) — wrong result, no diagnostic. A non-unary operator like `|> f()` can't begin a statement, so it errors loudly instead — it's `+`/`-` that bite silently. Always wrap a multi-line arithmetic RHS in `(...)`
 - **Inline literals over temp-var-and-push** — for short arrays consumed in one expression, write `stack([a, b, c])` rather than `var xs : array<T>; xs |> emplace(a); xs |> emplace(b); stack(xs)`. Faster in interpreted mode and easier to read; same applies to table literals and other bracketed constructors. Threshold: while it stays readable
+
+### The const model — `let`/`var`, dereference, and why const-stripping miscompiles
+
+`const` in das is **purely a type qualifier** — mutability lives entirely in the type, fixed at declaration. There is no separate "const variable" concept, and there is one declaration node (`let`); the `let`/`var` keyword only flags whether `const` is appended to the type.
+
+- **`let` (and a parameter with no `var`) appends `const` to the declared type — whatever you spelled or left to inference.** So `let a = x` ≡ `let a : auto const = x`; `var a = x` ≡ `var a = x` (nothing appended). `def f(a : T)` ≡ `def f(a : T const)`; `def f(var a : T)` ≡ `def f(a : T)`. `var` means *only* "do not append the trailing `const`." Uniform for every type — `int`, structs, pointers alike. So `let`/`var` on a local and the presence/absence of `var` on a parameter are the **same one mechanism**.
+- **Dereference / index / field access appends the handle's const to the result.** Unlike C++ (where `*p` / `p[i]` yields the pointee type as-is, so a `T* const` still derefs to a mutable `T&`), das flows the const of *the thing you dereference* onto the result. `a : float? const` ⟹ `a[2]` is `float const` (not `float`), `*a` is `float const`, `a.field` is `<field> const`. A `let`/non-`var` handle therefore gives **const access to everything reachable through it**; only a `var` handle yields mutable access. (This is the same rule as "take the param `var` for mutable field access.")
+- **A pointer type has two independent `const` positions:** `float const?` = the **pointee** is const; `float? const` = the **pointer** is const (this is the trailing one that `let`/no-`var` adds). To write *through* a pointer parameter you need **both** non-const → `var x : float?`. Anything less makes `x[i]` a `float const&` and the write fails `error[30952] can't write to a constant value`.
+- **The optimizer trusts the type, so stripping const to write is a lie that miscompiles — not a style nit.** A `const` pointee is a promise to the compiler that *that memory is never written*; the JIT/AOT may then mark the parameter `readonly`, treat a `noalias` write as dead, or DCE the whole call. `var p = reinterpret<float?>(somethingConst); p[i] = …` retypes the `const` away, but the **original** const type already licensed those optimizations — the write silently vanishes, in interp / JIT / AOT alike, with no diagnostic. **Never take a writable pointer as `T const?` and `reinterpret`-strip it — declare the parameter `var T?`.**
+- **Idiom for a writable pointer kernel (including fork-callable pointer cores):** the output parameter is `var T?` (write `o[i]` directly, no strip); genuinely read-only inputs are `T const?`. Callers pass `addr(arr[0])` straight in — it binds to `var T?` (output) and to `T const?` (input, add-const is implicit), with **no laundering `reinterpret`**. At a local, `let p = addr(x)` is a const handle (`p[i]` is const — can't write); `var p = addr(x)` is writable. A hoisted `var p` captured into a `parallel_for`/`maybe_parallel_for` worker stays writable — capture freezes the *binding*, not the pointee, and `p + off` is still a mutable `T?`.
 
 ### Type modifiers
 
 - **`==const`** on a parameter type — propagates the caller's constness (NOT "always non-const"): `def foo(self : MyStruct ==const)` accepts either `MyStruct` or `MyStruct const`, and inside the body `self`'s constness matches what the caller passed. Use plain `Foo?` for non-const-only, `Foo const?` for const-only, `Foo? ==const` when you want the callee to accept either and inherit the caller's view
-- **`-const`** strips constness in type expressions — used with `reinterpret` for interior mutability: `unsafe(reinterpret<MyStruct? -const>(addr(self)))`
+- **`-const`** removes a `const` from a type expression (with `reinterpret`): `unsafe(reinterpret<MyStruct? -const>(addr(self)))`. **Caveat (see The const model above):** this is the genuine-interior-mutability escape hatch for a const handle you *cannot* re-declare `var` (e.g. a `==const`-propagated `self`), and it carries the same readonly/`noalias`-elision risk the optimizer is licensed to take. For a parameter you control that you simply need to write through, the fix is **`var T?`, not a `-const`/reinterpret strip** — don't reach for `-const` to paper over a missing `var`
 - **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
 - **OR types in params** (`T1 | T2 | …`) — a parameter may list alternative accepted types: `int | float | double`, or heterogeneous forms like `array<int> | table<auto> | auto(NT)`. This is a **generic "OR" type, NOT a runtime tagged variant** — the function is monomorphized per the concrete argument type that matches one alternative, so each instantiation sees that concrete type with no per-call dispatch or unpacking cost. Don't "hoist the union cast out of the loop" — there is no union value; a cast like `float(n)` inside the body is just a trivial concrete cast in each instantiation. Use it to widen an overload set in one signature (e.g. `def fast(n : int | float | double)` accepting bare ints, floats, and doubles at the same call site)
 
@@ -284,7 +294,7 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 | `unsafe { ...; unsafe { ... }; ... }` (nested `unsafe { }` block) | drop the inner wrap | STYLE026: outer `unsafe` already covers the whole inner scope, so the inner block is pure noise. Closure / lambda / generator bodies are NOT nested for this rule — they execute in a separate context where the outer wrap does not propagate |
 | `for (s in A) { B \|> push(s) }` / `push_clone(s)` (iter-var only) | `B \|> push_from(A)` / `push_clone_from(A)` | PERF022: the bulk overload in builtin.das reserves combined capacity up front. Single name `push`/`push_clone` is overloaded between single-element and bulk (ambiguous when destination is `array<T[]>`); the `_from` suffix names the bulk intent. Source must be `array<T>` or C-array — range/iterator sources are not flagged. `emplace` is out of scope (const iter-var can't be moved) |
 | `var a : array<T>; for (x in SRC) { if (COND) { a \|> push(EXPR) } }` (or `table<K;V>` + `insert`/`a[k]=v`) | `var a <- [for (x in SRC); EXPR; where COND]` (or `\{for (...); k => v; where ...\}`) | STYLE027: var with empty default-init followed by a for-loop that only push/insert into it. Accepts depth ≤ 2 nested fors and if-filters at any depth. `emplace` excluded — move-source-zeroing differs from comprehension element-construction. Iterator-comprehension form (`[$f ...]`) NOT suggested |
-| `var X = clone_expression(E); ... $e(X) ...` (only-uses-are-qmacro-splice) | drop the pre-clone, inline `$e(E)` at each splice site | PERF023: `qmacro`/`qmacro_block`/`qmacro_expr`/`qmacro_block_to_array` go through `apply_template` (templates_boost.das:251), which calls `clone_expression` on every substitution input. Pre-cloning is wasted work. Detection: post-expansion `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; visitor tracks splice-wrapper depth via preVisitExprCall/visitExprCall counter on `add_ptr_ref`, classifies each candidate `ExprVar` reference as "safe" when depth>0. Fires only when ALL uses are safe AND ≥1 is observed. Multi-clone-of-same-source flagged too — apply_template clones each substitution independently |
+| `var X = clone_expression(E); ... $e(X) ...` (only-uses-are-qmacro-splice) | drop the pre-clone, inline `$e(E)` at each splice site | PERF023: `qmacro`/`qmacro_block`/`qmacro_expr`/`qmacro_block_to_array` go through `apply_template` (templates_boost.das:418), whose substitution visitor calls `clone_expression` on every substitution input (templates_boost.das:252). Pre-cloning is wasted work. Detection: post-expansion `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; visitor tracks splice-wrapper depth via preVisitExprCall/visitExprCall counter on `add_ptr_ref`, classifies each candidate `ExprVar` reference as "safe" when depth>0. Fires only when ALL uses are safe AND ≥1 is observed. Multi-clone-of-same-source flagged too — apply_template clones each substitution independently |
 | `var t : table<K;V>; t \|> insert(k1, v1); t \|> insert(k2, v2)` (or `t[k] = v` runs, or 2-arg set inserts) | `var t <- { k1 => v1, k2 => v2 }` (set: `var s <- { k1, k2 }`) | STYLE031: ≥ 2 contiguous inserts/`[]=` after an empty table decl collapse to a literal move-assign. Computed keys fine; runs with a duplicate CONST key stay silent (literal duplicates are `error[30706]`, inserts overwrite). `table<string; JsonValue?>` const-key runs get STYLE021's `JV((k1=...))` form instead |
 | `var w : array<T>; w \|> push_from(SRC)` (empty decl + single bulk copy from an `array<T>`) | `var w := SRC` (clone-assign); if then `return <- w`, `return clone_to_move(SRC)` | STYLE032 (the init half) + PERF009-clone (the return half) — they compose. A bulk `push_from`/`push_clone_from` into a fresh-empty array IS a clone-init. Array source only; a C-array source stays silent (`var w := cArray` ≠ `array<T>`). Only the statement immediately after the decl is inspected — a `reserve`/guard between keeps it quiet. PERF009 clone variant: `var x := src; return <- x` → `return clone_to_move(src)`, NOT `return <- src` (would move/destroy the source) |
 | hand-rolled `is X` / `as X` / null-guard / `ExprRef2Value`-peel ladders in macro code | `qmatch(e, $e(a) + $e(b))` for source-syntax shapes; `match (e) { if (ExprField(name = "key", value = ExprVar(...))) { ... } }` for node-class shapes | both matchers peel `ExprRef2Value` automatically; `\|\|` alternation, `&&` guards, and `match_expr(local)` cover most ladders. Limits + the qmatch↔match division of labor: `skills/das_macros.md` "`match` (daslib/match)" |
@@ -303,19 +313,23 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 
 ## SDK Directory Layout
 
-- `bin/` — Compiler binaries (`daslang`, `daslang-live`, `das-fmt`, `clang-cl`, `sqlite_shell`)
+- `bin/` — Compiler and tool binaries: `daslang`, `daslang-live`, `das-fmt` (plus shared-module and tree-sitter libraries on Windows). **Name trap:** `bin/das-fmt` is the gen1→gen2 syntax *converter*, NOT the code formatter — format with the MCP `format_file` tool or `bin/daslang utils/das-fmt/dasfmt.das`
 - `lib/` — Static and shared libraries for C++ embedding
 - `include/daScript/` — C++ headers for embedding
 - `daslib/` — Standard library modules (.das files)
-- `modules/` — Optional plugin modules (dasHV, dasGlfw, dasImgui, dasPUGIXML, etc.)
+- `modules/` — Optional plugin modules (dasHV, dasGlfw, dasPUGIXML, dasSQLITE, dasAudio, dasLLVM, etc.)
 - `examples/` — Example scripts
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/lint/` — Lint runner: `bin/daslang utils/lint/main.das -- <files> --quiet`
+- `utils/das-fmt/` — The code formatter script (`dasfmt.das`, wraps `daslib/das_source_formatter`)
 - `utils/detect-dupe/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `detect_duplicates` MCP tools)
+- `utils/find-dupe/` — Claude-based judge for detect-dupe reports (needs `ANTHROPIC_API_KEY`; also the `judge_duplicates`/`find_dupe` MCP tools)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
-- `tree-sitter-daslang/` — Tree-sitter grammar, shared library, and highlighting queries
+- `utils/aot/`, `utils/jit/` — AOT-generation and JIT helper scripts
+- `tree-sitter-daslang/` — Tree-sitter grammar, shared library, and highlighting queries (`sgconfig.yml` at the SDK root wires ast-grep to it)
 
 ## Package Manager (daspkg)
 
@@ -325,7 +339,7 @@ daspkg manages daslang packages — install from GitHub or local paths, resolve 
 bin/daslang utils/daspkg/main.das -- <command> [args]
 ```
 
-Commands: `install <source>`, `update [name]`, `remove <name>`, `list`, `search <query>`, `check`, `doctor`, `build <name>`.
+Commands: `install <source>`, `update [name]`, `upgrade`, `remove <name>`, `list`, `search <query>`, `check`, `cleanup`, `doctor`, `build [--global]` (builds all native packages under the root), `release`. Full list and flags: `skills/daspkg.md`.
 
 Packages install to `modules/<RepoName>/`. Lock file: `daspkg.lock`.
 

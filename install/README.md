@@ -30,14 +30,16 @@
 
 | Directory    | Contents                                              |
 |--------------|-------------------------------------------------------|
-| `bin/`       | Compiler binary (`daslang`)                           |
+| `bin/`       | Compiler and tool binaries (`daslang`, `daslang-live`, `das-fmt`) |
 | `lib/`       | Static and shared libraries for embedding             |
 | `include/`   | C++ headers for integration                           |
 | `daslib/`    | Standard library modules (`.das` files)               |
 | `modules/`   | Optional plugin modules                               |
 | `examples/`  | Example scripts                                       |
-| `tutorials/` | Language and integration tutorials                    |
-| `utils/mcp/` | MCP server for AI coding assistants (stdio transport) |
+| `tutorials/` | Language, integration, and module tutorials           |
+| `dastest/`   | Test framework (usable for testing your own code)     |
+| `utils/`     | Tooling: MCP server for AI assistants (`mcp/`), package manager (`daspkg/`), lint (`lint/`), code formatter (`das-fmt/`), duplicate detector (`detect-dupe/`), coverage (`dascov/`), AOT/JIT helpers |
+| `skills/`    | AI-assistant task instructions (paired with the root `CLAUDE.md`) |
 | `tree-sitter-daslang/` | Tree-sitter grammar, shared library, and highlighting queries |
 
 ## Quick Start
@@ -76,7 +78,7 @@ A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Us
 
 ## MCP Server (AI Tool Integration)
 
-`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 30 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep, package management, and more. Uses stdio transport — no extra build dependencies.
+`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 40+ compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep for both `.das` and C++, duplicate detection, live-reload control, and more. Uses stdio transport — no extra build dependencies.
 
 Configure in `.mcp.json`:
 ```json
