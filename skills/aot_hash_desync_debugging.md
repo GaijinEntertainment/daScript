@@ -20,7 +20,7 @@ Background on the hash machinery is in [`skills/aot_testing.md`](aot_testing.md)
 
 3. **The function's module was never AOT'd at all.** A missing stub and a mismatched stub produce the same 50101. New test dir not registered in `tests/aot/CMakeLists.txt`, or the module is in the daslib AOT *exclusion* regex there (modules whose builtins lack AOT header decls get excluded — if you gave such a module runtime-callable functions, add the missing decls to `include/daScript/simulate/aot_builtin_ast.h` and un-exclude it; precedent: `style_lint` and its five `for_each_*_macro` decls).
 
-4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it — source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every `quote`lowered`N` in it.
+4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it — source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every ``quote`lowered`N`` in it.
 
 If none apply, you have a real desync. Continue.
 

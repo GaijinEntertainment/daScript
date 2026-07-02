@@ -90,7 +90,7 @@ binary/DLL locks while builds run, per-request crash isolation.
   invocations through `obj->method()` and lambda / function-pointer invokes
   are not statically resolvable — they don't appear. Generic instances
   collapse onto their generic; class-method items display the bare method
-  name (`speak`, not `Animal`speak`).
+  name (`speak`, not ``Animal`speak``).
 - **Go to implementation**: on a class method — its overrides in derived
   classes; on a class or struct — the types deriving from it.
 - Search scope for callers/overrides is the program of the file at the

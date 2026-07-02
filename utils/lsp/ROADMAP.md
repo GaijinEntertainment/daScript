@@ -238,7 +238,7 @@ exact positions). Protocol test extended with the call-hierarchy loop
 the returned caller item) and implementation.
 
 Implementation findings: class-method Function names are class-prefixed
-(`Animal`speak`) — items display bare names, `data.name`/`symbol` round-trips
+(``Animal`speak``) — items display bare names, `data.name`/`symbol` round-trips
 the full one; generated members (apostrophe names, `Foo'__finalize`) sit ON
 the `class` line and finalizer-chain calls do too, so both cursor paths skip
 synthesized functions; `to_void` takes `auto(TT) const?` so both pointer

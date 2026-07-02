@@ -27,7 +27,7 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   decl file/line + FULL function name; incoming/outgoing re-identify the
   target after a fresh compile from those keys (the client echoes `data`
   verbatim). Class-method Function names are class-prefixed
-  (`Animal`speak`) — items display the bare name, `data.name` keeps the full
+  (``Animal`speak``) — items display the bare name, `data.name` keeps the full
   one. Generated members (`Foo'__finalize`, apostrophe names) sit ON the
   `class` source line — both cursor paths skip synthesized functions.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
