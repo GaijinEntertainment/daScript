@@ -19,6 +19,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     ADD_MODULE_DAS(dasllama dasllama dasllama_arch_gemma3)
     ADD_MODULE_DAS(dasllama dasllama dasllama_arch_gemma4)
     ADD_MODULE_DAS(dasllama dasllama dasllama_arch_qwen2moe)
+    ADD_MODULE_DAS(dasllama dasllama dasllama_arch_gptoss)
     ADD_MODULE_DAS(dasllama dasllama dasllama_transformer)
     ADD_MODULE_DAS(dasllama dasllama dasllama_chat)
 

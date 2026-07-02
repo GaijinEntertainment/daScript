@@ -75,6 +75,8 @@ def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
     }
     if (contains(src, "<|start_header_id|>")) {   // Llama-3 instruct
         out <- arch_chat("llama")
+    } elif (contains(src, "<|channel|>")) {       // gpt-oss Harmony channel format
+        out <- arch_chat("gpt-oss")
     } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
         out <- arch_chat("qwen2")
     } elif (contains(src, "<|turn>")) {           // Gemma-4 channel-based turn format

@@ -24,6 +24,9 @@ struct BpeTokenizer {
     // <0xXX> byte tokens, and decode unescapes '▁' back to spaces. (No field default — the loader's
     // zero-init `var tk : BpeTokenizer` must stay legal.)
     spm_space : bool
+    // whether encode(add_special) prepends BOS — the GGUF add_bos_token key, else a per-pre default
+    // mirroring llama.cpp (gpt-4o adds none). Same no-field-default rule as spm_space.
+    add_bos : bool
 }
 
 //! Load the BPE vocab / merges / token-types from a llama-arch GGUF's tokenizer metadata.
@@ -53,6 +56,21 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         tk.spm_space = tok_model == "gemma4"
         tk.bos_id = gguf_int(m, bytes, "tokenizer.ggml.bos_token_id")
         tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
+        // the metadata key wins; absent, mirror llama.cpp's per-pre defaults (gpt-4o adds no BOS,
+        // the llama-bpe family keeps it)
+        tk.add_bos = (gguf_has(m, "tokenizer.ggml.add_bos_token")
+            ? gguf_int(m, bytes, "tokenizer.ggml.add_bos_token") != 0l
+            : tk.pre != "gpt-4o")
+        if (tk.pre == "gpt-4o") {
+            // llama.cpp force-renders these gpt-oss control tokens (attr -> USER_DEFINED) so channel
+            // markers stay visible in decoded text — mirror it (type 4 escapes the type-3 mute rule)
+            for (name in ["<|channel|>", "<|message|>", "<|start|>", "<|constrain|>"]) {
+                let id = tk.lookup?[name] ?? -1l
+                if (id >= 0l) {
+                    tk.token_type[id] = 4l
+                }
+            }
+        }
     }
     fclose(f)
     return <- tk
@@ -203,6 +221,121 @@ def private pretok_split(cpts : array<int>; group_digits : bool) : array<int> {
     return <- offs
 }
 
+// llama.cpp GPT4O letter-case classes: "uppercase" = \p{L} minus ASCII a-z, "lowercase" = \p{L}
+// minus ASCII A-Z (its regex spells (?=[\p{L}])[^a-z] / (?=[\p{L}])[^A-Z]), so non-cased scripts
+// (CJK, ...) land in BOTH classes. We match llama.cpp — the oracle — not tiktoken's true \p{Lu}/\p{Ll}.
+def private uUp(cpts : array<int>; pos : int) : bool {
+    if (pos < 0 || pos >= length(cpts)) {
+        return false
+    }
+    let c = cpts[pos]
+    return cpt_is_letter(c) && !(c >= 'a' && c <= 'z')
+}
+def private uLo(cpts : array<int>; pos : int) : bool {
+    if (pos < 0 || pos >= length(cpts)) {
+        return false
+    }
+    let c = cpts[pos]
+    return cpt_is_letter(c) && !(c >= 'A' && c <= 'Z')
+}
+
+// gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3
+// in three rules: contractions attach as SUFFIXES to letter runs (no standalone arm), letter runs
+// are case-structured (optional non-letter prefix + upper* lower+ | upper+ lower*), and punctuation
+// runs may trail '/' along with newlines. Digit chunks ({1,3}) and the whitespace rules match llama3.
+def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
+    var offs : array<int>
+    let n = length(cpts)
+    var prev_end = 0
+    var pos = 0
+    while (pos < n) {
+        let cpt = cpts[pos]
+
+        // [^\r\n\p{L}\p{N}]?(upper* lower+ | upper+ lower*)(?i:'s|'t|'re|'ve|'m|'ll|'d)? — both
+        // letter alternatives reduce to "an upper-ish run then a lower-ish run, >= 1 letter total"
+        if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
+            if (cpt_is_letter(cpt) || uL(cpts, pos + 1)) {
+                if (!cpt_is_letter(cpt)) {
+                    pos++   // the optional one-char non-letter prefix
+                }
+                while (uUp(cpts, pos)) {
+                    pos++
+                }
+                while (uLo(cpts, pos)) {
+                    pos++
+                }
+                if (uC(cpts, pos) == 39 && pos + 1 < n) {   // contraction suffix, case-insensitive
+                    let c1 = tolower_ascii(cpts[pos + 1])
+                    if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
+                        pos += 2
+                    } elif (pos + 2 < n) {
+                        let c2 = tolower_ascii(cpts[pos + 2])
+                        if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
+                            pos += 3
+                        }
+                    }
+                }
+                offs |> push(pos - prev_end); prev_end = pos
+                continue
+            }
+        }
+
+        // \p{N}{1,3} (chunks of up to three, same as llama3)
+        if (cpt_is_number(cpt)) {
+            var ini = pos
+            while (uN(cpts, pos)) {
+                pos++
+                if (pos - ini >= 3) {
+                    offs |> push(pos - prev_end); prev_end = pos
+                    ini = pos
+                }
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // <space>?[^\s\p{L}\p{N}]+[\r\n/]*  (the '/' in the trailing run is gpt-4o's addition)
+        let probe = (cpt == 32) ? pos + 1 : pos
+        if (!(uW(cpts, probe) || uL(cpts, probe) || uN(cpts, probe))) {
+            if (cpt == 32) {
+                pos++
+            }
+            while (!(uW(cpts, pos) || uL(cpts, pos) || uN(cpts, pos)) && pos < n) {
+                pos++
+            }
+            var c2 = uC(cpts, pos)
+            while (c2 == 13 || c2 == 10 || c2 == 47) {
+                pos++
+                c2 = uC(cpts, pos)
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // remaining whitespace rules: \s*[\r\n]+ | \s+(?!\S) | \s+ (same as llama3)
+        var num_ws = 0
+        var last_rn = 0
+        while (uW(cpts, pos + num_ws)) {
+            let c2 = uC(cpts, pos + num_ws)
+            if (c2 == 13 || c2 == 10) {
+                last_rn = pos + num_ws + 1
+            }
+            num_ws++
+        }
+        if (last_rn > 0) {
+            pos = last_rn
+        } elif (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
+            pos += num_ws - 1
+        } elif (num_ws > 0) {
+            pos += num_ws
+        } else {
+            pos++  // no match — consume one codepoint
+        }
+        offs |> push(pos - prev_end); prev_end = pos
+    }
+    return <- offs
+}
+
 // ===== merge-rank BPE =====
 
 // Greedily merge the lowest-rank adjacent pair (leftmost on ties), in byte-unicode space.
@@ -315,8 +448,14 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     }
     var ids : array<int64>
     let cpts <- utf8_to_cpts(text)
-    // qwen2 splits digits one-at-a-time (\p{N}); llama3 / default groups up to three (\p{N}{1,3})
-    let offs <- pretok_split(cpts, tk.pre != "qwen2")
+    // gpt-4o has its own case-structured split; qwen2 splits digits one-at-a-time (\p{N});
+    // llama3 / default groups up to three (\p{N}{1,3})
+    var offs : array<int>
+    if (tk.pre == "gpt-4o") {
+        offs <- pretok_split_gpt4o(cpts)
+    } else {
+        offs <- pretok_split(cpts, tk.pre != "qwen2")
+    }
     var pos = 0
     for (off in offs) {
         var symbols : array<string>

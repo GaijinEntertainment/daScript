@@ -399,3 +399,57 @@ def test_parity_gemma4_12b(t : T?) {
         t |> success(parity_text_ok(path, QuantMode.q8, gemma4_counting_prompt(), GEMMA4_12B_GEN), "gemma4-12b token-for-token")
     }
 }
+
+// gpt-oss-20b (arch "gpt-oss", MXFP4 experts transcoded to Q8 at load) — the wave-5 stack: per-head
+// attention sinks, YaRN rope (factor 32 / 4096), alternating 128-token SWA, softmax-after-top-k
+// routing with router + per-expert + QKV + output-projection biases, clamped SwiGLU. Counting
+// prompt "1, 2, 3, 4, 5, 6, 7," (no BOS — gpt-4o pre adds none). The o200k ids for the prompt
+// happen to coincide with the Qwen fixtures' (shared low-ASCII BPE layout); the continuation
+// diverges at "10" (one token here, digit-split there), so the arrays are kept separate.
+let GPTOSS_PROMPT <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l,
+                      11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
+let GPTOSS_GEN <- [220l, 23l, 11l, 220l, 24l, 11l, 220l, 702l, 11l, 220l,
+                   994l, 11l, 220l, 899l, 11l, 220l, 1311l, 11l, 220l, 1265l,
+                   11l, 220l, 1055l, 11l, 220l, 1125l, 11l, 220l, 1422l, 11l,
+                   220l, 1157l, 11l, 220l, 858l, 11l, 220l, 455l, 11l, 220l]
+
+// The second gpt-oss fixture, window-engaged: "1, 2, …, 150," (449 tokens ≫ the 128-token window,
+// so sliding layers genuinely clip — kstart > 0) ENCODED IN-TEST through the gpt-4o pre-tokenizer
+// (verified id-for-id against the oracle's tokenization), gating the tokenizer AND the forward,
+// same pattern as the gemma4 fixture. Both fixtures share ONE model load (the ~26GB Q8 transcode
+// is the suite's biggest resident — loading it twice back-to-back OOMs a 64GB box).
+let GPTOSS_LONG_GEN <- [220l, 17395l, 11l, 220l, 17336l, 11l, 220l, 17773l, 11l, 220l,
+                        19145l, 11l, 220l, 17385l, 11l, 220l, 18369l, 11l, 220l, 19676l,
+                        11l, 220l, 19548l, 11l, 220l, 19218l, 11l, 220l, 9444l, 11l,
+                        220l, 18881l, 11l, 220l, 18694l, 11l, 220l, 17666l, 11l, 220l]
+
+def private gptoss_counting_prompt() : string {
+    return build_string() $(var w) {
+        for (i in range(1, 151)) {
+            w |> write(i)
+            w |> write(i < 150 ? ", " : ",")
+        }
+    }
+}
+
+[test]
+def test_parity_gptoss_20b(t : T?) {
+    t |> run("gpt-oss forward (gpt-oss-20b MXFP4->Q8, sinks + YaRN + MoE biases; short + window-engaged)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}gpt-oss-20b-mxfp4.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        var tr <- load_model(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        t |> success(parity_gen_ok(tr, GPTOSS_PROMPT, GPTOSS_GEN), "gpt-oss-20b token-for-token")
+        let long_prompt <- encode(tr, gptoss_counting_prompt(), true, false)
+        t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN), "gpt-oss-20b window-engaged token-for-token")
+    }
+}

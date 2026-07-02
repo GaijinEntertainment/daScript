@@ -69,9 +69,10 @@ def test_facade_bpe(t : T?) {
         let v <- load_tokenizer_auto(path)
         let raw <- load_bpe_tokenizer_gguf(path)
         let text = "Once upon a time"
-        // add_special=false is exactly bpe_encode; add_special=true prepends bos_id (when present)
+        // add_special=false is exactly bpe_encode; add_special=true prepends bos_id only when the
+        // model wants one (tokenizer.ggml.add_bos_token / per-pre default — Qwen ships false)
         var want : array<int64>
-        if (raw.bos_id >= 0l) {
+        if (raw.bos_id >= 0l && raw.add_bos) {
             want |> push(raw.bos_id)
         }
         want |> push_from(bpe_encode(raw, text))

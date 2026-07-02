@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // >4GB single-array weight blobs (Mistral-7B Q8 7.1GB, gpt-oss-20b Q8 ~21GB) exceed LinearChunkAllocator's per-chunk uint32 cap
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost

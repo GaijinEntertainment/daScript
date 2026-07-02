@@ -209,7 +209,7 @@ def load_tokenizer_auto(path : string) : Tokenizer {
 //! layer and not yet honored.
 def encode(tk : Tokenizer; text : string; add_special = true; parse_special = false) : array<int64> {
     if (tk.kind == TokKind.bpe) {
-        if (!add_special || tk.bpe.bos_id < 0l) {
+        if (!add_special || !tk.bpe.add_bos || tk.bpe.bos_id < 0l) {
             return <- bpe_encode(tk.bpe, text)
         }
         var ids : array<int64>

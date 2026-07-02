@@ -617,6 +617,31 @@ def softmax(var x : array<float> | #; size : int64) {
     softmax(unsafe(addr(x[0])), size)
 }
 
+//! Softmax with an attention-sink logit (gpt-oss): `sink` joins the max and the denominator as one
+//! extra virtual score with NO value contribution — x sums to sum/(sum+e^(sink-max)) < 1 by design
+//! (ggml soft_max sinks correction). Pointer core + array overload, same contract as softmax.
+def softmax_sink(var x : float?; size : int64; sink : float) {
+    if (size <= 0) return
+    unsafe {
+        let maxv = max(hmax(x, size), sink)
+        var sum = 0.0
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+            let e = exp(x[i] - maxv)
+            x[i] = e
+            sum += e
+        }
+        sum += exp(sink - maxv)
+        let inv_sum = 1.0 / sum
+        for [vectorize, vectorize_width = 8, unroll_count = 2] (i in range64(size)) {
+            x[i] *= inv_sum
+        }
+    }
+}
+def softmax_sink(var x : array<float> | #; size : int64; sink : float) {
+    if (size <= 0) return
+    softmax_sink(unsafe(addr(x[0])), size, sink)
+}
+
 //! Vectorized expf, 4 lanes — ggml_v_expf (ARM optimized-routines): a degree-4 poly on the
 //! ln2-reduced argument times the 2^n exponent rebuilt by the round-to-int magic-number trick.
 //! Max rel err ~2 ulp vs libm, ~7x faster than scalar exp() (which the JIT lowers to libm expf —
@@ -711,6 +736,27 @@ def geglu(var g : array<float> | #; u : array<float> | #; size : int64) {
     geglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
 }
 
+// gpt-oss clamped-SwiGLU constants (llama.cpp hardcodes both in build_moe_ffn's SWIGLU_OAI arm)
+let SWIGLU_OAI_ALPHA = 1.702
+let SWIGLU_OAI_LIMIT = 7.0
+
+//! Fused clamped SwiGLU (gpt-oss, ggml_swiglu_oai): x = min(g, 7), y = clamp(u, -7, 7),
+//! g = (x · sigmoid(1.702·x)) · (y + 1). The clamps and the +1 on the up branch are part of the
+//! trained activation, not an optimization. Same fusion contract as swiglu.
+def swiglu_oai(var g : float?; u : float const?; size : int64) {
+    unsafe {
+        for (i in range64(size)) {
+            let x = min(g[i], SWIGLU_OAI_LIMIT)
+            let y = clamp(u[i], -SWIGLU_OAI_LIMIT, SWIGLU_OAI_LIMIT)
+            g[i] = (x / (1.0 + exp(-SWIGLU_OAI_ALPHA * x))) * (y + 1.0)
+        }
+    }
+}
+def swiglu_oai(var g : array<float> | #; u : array<float> | #; size : int64) {
+    if (size <= 0) return
+    swiglu_oai(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
+}
+
 // exp4 valid range (fast-path, no overflow guard) — clamp the exp argument here so an outlier
 // gate value can never feed exp4 out of range (silu saturates to 0/v, gelu to ±1 there anyway).
 let EXP4_LO = float4(-80.0, -80.0, -80.0, -80.0)
@@ -761,6 +807,32 @@ def geglu4(var g : float?; u : float const?; size : int64) {
         for (i in range64(n4 * 4l, size)) {
             let v = g[i]
             g[i] = (0.5 * v * (1.0 + tanh(kk * (v + 0.044715 * v * v * v)))) * u[i]
+        }
+    }
+}
+
+//! Vectorized fused clamped SwiGLU (gpt-oss), float4 with exp4. A very negative gate makes
+//! -alpha·x large-positive; the EXP4_HI clamp keeps exp4 in range (exp4(80) ≈ 5.5e34 is finite in
+//! fp32 and drives the sigmoid to ~0, matching the true limit). ~2 ulp, NOT bit-exact (scalar
+//! swiglu_oai is the opt-in reference). Tail (<4 elems) runs the scalar form.
+def swiglu_oai4(var g : float?; u : float const?; size : int64) {
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let lim = float4(SWIGLU_OAI_LIMIT)
+    let nalpha = float4(-SWIGLU_OAI_ALPHA)
+    unsafe {
+        var g4 = reinterpret<float4?>(g)
+        var u4 = reinterpret<float4 const?>(u)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            let x = min(g4[k], lim)
+            let y = clamp(u4[k], -lim, lim)
+            let arg = clamp(nalpha * x, EXP4_LO, EXP4_HI)
+            g4[k] = (x / (one + exp4(arg))) * (y + one)
+        }
+        for (i in range64(n4 * 4l, size)) {
+            let x = min(g[i], SWIGLU_OAI_LIMIT)
+            let y = clamp(u[i], -SWIGLU_OAI_LIMIT, SWIGLU_OAI_LIMIT)
+            g[i] = (x / (1.0 + exp(-SWIGLU_OAI_ALPHA * x))) * (y + 1.0)
         }
     }
 }

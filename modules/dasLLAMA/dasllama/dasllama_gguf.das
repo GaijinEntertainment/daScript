@@ -35,6 +35,12 @@ let GGML_TYPE_F32 = 0
 let GGML_TYPE_F16 = 1
 let GGML_TYPE_Q4_0 = 2
 let GGML_TYPE_Q8_0 = 8
+let GGML_TYPE_MXFP4 = 39
+
+// MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2, OCP MX spec via ggml
+// kvalues_mxfp4); the E8M0 block scale below is halved to compensate.
+let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
+                                        0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
 // ===== little-endian byte readers =====
 
@@ -90,6 +96,13 @@ def f16_to_f32(h : uint) : float {
     } else {  // normal: rebias exponent 15 -> 127 (+112), widen mantissa 10 -> 23 bits
         bits = sign | ((exp + 112u) << 23u) | (mant << 13u)
     }
+    return unsafe(reinterpret<float>(bits))
+}
+
+// E8M0 block scale -> fp32 * 0.5 = 2^(e-128) (the half matches the doubled MXFP4_KVALUES).
+// e < 2 lands in fp32 denormal territory -> precomputed bit patterns (ggml_e8m0_to_fp32_half).
+def private e8m0_to_f32_half(e : uint) : float {
+    let bits = e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u)
     return unsafe(reinterpret<float>(bits))
 }
 
@@ -461,8 +474,23 @@ def gguf_read_tensor_f32(m : GGUFMeta; bytes : array<uint8> | #; name : string; 
             }
             bo += 16l
         }
+    } elif (gtype == GGML_TYPE_MXFP4) {
+        // block of 32: 1 E8M0 scale byte + 16 nibble bytes (low nibbles = elems 0..15, high = 16..31);
+        // x = e2m1[nibble] * scale — both sides carry the ×2/÷2 ggml convention (see MXFP4_KVALUES)
+        let nb = expect_n / 32l
+        var bo = base + (src_off / 32l) * 17l
+        for (blk in range64(nb)) {
+            let d = e8m0_to_f32_half(uint(bytes[bo]))
+            bo++
+            for (k in range64(16l)) {
+                let b = int(bytes[bo + k])
+                dst[dst_off + blk * 32l + k] = MXFP4_KVALUES[b & 15] * d
+                dst[dst_off + blk * 32l + k + 16l] = MXFP4_KVALUES[b >> 4] * d
+            }
+            bo += 16l
+        }
     } else {
-        panic("gguf: tensor '{name}' type {gtype} not supported (have F32/F16/Q8_0/Q4_0)")
+        panic("gguf: tensor '{name}' type {gtype} not supported (have F32/F16/Q8_0/Q4_0/MXFP4)")
     }
 }
 

@@ -30,17 +30,21 @@ enum QuantMode {
     q4
 }
 
-//! FFN gate activation: silu = SwiGLU (Llama family), gelu = GeGLU (Gemma).
+//! FFN gate activation: silu = SwiGLU (Llama family), gelu = GeGLU (Gemma), swiglu_oai = the
+//! clamped SwiGLU with +1 on the up branch (gpt-oss).
 enum FfnAct {
     silu
     gelu
+    swiglu_oai
 }
 
-//! MoE router probability function: softmax over all experts (Qwen-MoE) vs per-expert sigmoid
-//! (the DeepSeek/GLM shape). GGUF `{arch}.expert_gating_func` overrides the arch default.
+//! MoE router probability function: softmax over all experts (Qwen-MoE), per-expert sigmoid
+//! (the DeepSeek/GLM shape), or softmax over just the selected top-k weights AFTER selection on
+//! raw logits (gpt-oss / bailingmoe2). GGUF `{arch}.expert_gating_func` overrides the arch default.
 enum MoeGate {
     softmax
     sigmoid
+    softmax_weight
 }
 
 //! Prefill attention algorithm (A/B selectable; all variants kept). `classic` streams the full causal
@@ -109,6 +113,12 @@ struct Config {
     moe_gate : MoeGate = MoeGate.softmax  // router probability function
     norm_topk_prob : bool = false      // renormalize the selected top-k weights to sum 1 ({arch}.expert_weights_norm)
     expert_weights_scale : float = 0.0 // scale on the routed weights; 0/1 = off (DeepSeek {arch}.expert_weights_scale)
+    // gpt-oss (all loader-detected from tensor presence, except the norm-name flag which the arch sets)
+    attn_sinks : bool = false          // per-head sink logit joins the attention softmax denominator
+    attn_out_bias : bool = false       // additive bias on the attention output projection
+    moe_router_bias : bool = false     // ffn_gate_inp.bias on the router logits
+    moe_exps_bias : bool = false       // per-expert ffn_{gate,up,down}_exps.bias
+    post_attn_is_ffn_norm : bool = false // the pre-FFN norm tensor is named post_attention_norm (NOT Gemma2's extra post-norm)
 }
 
 // Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
@@ -181,6 +191,14 @@ struct Model {
     // stacks (expert-major within each layer) and the shared-expert 2D weights -> big-weight blob
     router_off : int64      // fblob: layers x n_expert x dim
     shexp_gate_off : int64  // fblob: layers x dim (one sigmoid-gate vector per layer)
+    // gpt-oss MoE biases (fblob, valid per the config.moe_*_bias flags): router logits bias +
+    // per-expert gate/down/up biases (expert-major within each layer, like the we* stacks)
+    router_b_off : int64    // fblob: layers x n_expert
+    web1_off : int64        // ffn_gate_exps.bias: layers x n_expert x n_ff_exp
+    web2_off : int64        // ffn_down_exps.bias: layers x n_expert x dim
+    web3_off : int64        // ffn_up_exps.bias:   layers x n_expert x n_ff_exp
+    // gpt-oss per-head attention-sink logits (fblob, valid when config.attn_sinks)
+    sinks_off : int64       // fblob: layers x n_heads
     we1_off : int64         // ffn_gate_exps: layers x n_expert x (dim x n_ff_exp)
     we2_off : int64         // ffn_down_exps: layers x n_expert x (n_ff_exp x dim)
     we3_off : int64         // ffn_up_exps:   layers x n_expert x (dim x n_ff_exp)
@@ -195,6 +213,8 @@ struct Model {
     bq : array<float>
     bk : array<float>
     bv : array<float>
+    // attention output-projection bias (gpt-oss) — fp32, layers×dim; empty unless config.attn_out_bias
+    bo : array<float>
 }
 
 // ===== Arch registry: per-architecture blocks + chat template =====
@@ -291,12 +311,28 @@ def private layout_offsets(var t : Model) : LayoutSizes {
         t.out_scale_off = fo
         fo += layers
     }
+    if (c.attn_sinks) {  // gpt-oss: one sink logit per head per layer
+        t.sinks_off = fo
+        fo += layers * c.n_heads
+    }
     if (c.n_expert > 0l) {  // MoE: per-layer router matrices + shared-expert gate vectors, fp32
         t.router_off = fo
         fo += layers * c.n_expert * dim
         if (c.n_ff_shexp > 0l) {
             t.shexp_gate_off = fo
             fo += layers * dim
+        }
+        if (c.moe_router_bias) {  // gpt-oss: router logits bias
+            t.router_b_off = fo
+            fo += layers * c.n_expert
+        }
+        if (c.moe_exps_bias) {  // gpt-oss: per-expert gate/down/up biases (expert-major per layer)
+            t.web1_off = fo
+            fo += layers * c.n_expert * c.n_ff_exp
+            t.web2_off = fo
+            fo += layers * c.n_expert * dim
+            t.web3_off = fo
+            fo += layers * c.n_expert * c.n_ff_exp
         }
     }
     t.rms_final_off = fo
@@ -724,11 +760,14 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 t.config.expert_weights_scale = gguf_f32(m, bytes, "{arch}.expert_weights_scale")
             }
             if (gguf_has(m, "{arch}.expert_gating_func")) {
-                // llama.cpp enum: 1 = softmax over the logits, 2 = sigmoid; 3 (softmax over the
-                // selected weights, e.g. bailingmoe2) is a different pipeline order — refuse
+                // llama.cpp enum: 1 = softmax over the logits, 2 = sigmoid, 3 = softmax over the
+                // selected top-k weights (gpt-oss hardcodes 3 in its graph — no GGUF key there,
+                // so its arch configure sets the default; bailingmoe2 files carry the key)
                 let gf = gguf_int(m, bytes, "{arch}.expert_gating_func")
                 if (gf == 2l) {
                     t.config.moe_gate = MoeGate.sigmoid
+                } elif (gf == 3l) {
+                    t.config.moe_gate = MoeGate.softmax_weight
                 } elif (gf != 1l) {
                     panic("dasLLAMA: unsupported expert_gating_func {gf}")
                 }
@@ -737,16 +776,20 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             if (gguf_has(m, "{arch}.expert_group_count") && gguf_int(m, bytes, "{arch}.expert_group_count") > 1l) {
                 panic("dasLLAMA: grouped expert routing (expert_group_count > 1) is not yet supported")
             }
-            // expert biases the core doesn't apply — refuse instead of silently dropping them
+            // expert-selection bias the core doesn't apply — refuse instead of silently dropping it
             if (gguf_find_tensor(m, "blk.0.exp_probs_b.bias") >= 0) {
                 panic("dasLLAMA: expert selection bias (exp_probs_b, DeepSeek-V3) is not yet supported")
             }
-            if (gguf_find_tensor(m, "blk.0.ffn_up_exps.bias") >= 0 || gguf_find_tensor(m, "blk.0.ffn_gate_inp.bias") >= 0) {
-                panic("dasLLAMA: per-expert / router biases are not yet supported")
-            }
+            // router / per-expert biases (gpt-oss) — detected from the tensor table; the gate/up
+            // pair always ships together, so probing ffn_up_exps.bias covers all three stacks
+            t.config.moe_router_bias = gguf_find_tensor(m, "blk.0.ffn_gate_inp.bias") >= 0
+            t.config.moe_exps_bias = gguf_find_tensor(m, "blk.0.ffn_up_exps.bias") >= 0
         } elif (gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
             panic("dasLLAMA: MoE expert blocks are not supported for arch '{arch}'")
         }
+        // attention output-projection bias + per-head sink logits (gpt-oss) — tensor-detected
+        t.config.attn_out_bias = gguf_find_tensor(m, "blk.0.attn_output.bias") >= 0
+        t.config.attn_sinks = gguf_find_tensor(m, "blk.0.attn_sinks.weight") >= 0
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
         // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN / LongRoPE
@@ -780,6 +823,32 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         // Phi3 LongRoPE magnitude factor (attn_factor) scales the rope output; absent (=1.0) elsewhere
         let mskey = "{arch}.rope.scaling.attn_factor"
         t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
+        // YaRN (gpt-oss: factor 32 over a 4096 original context). The whole scheme folds into the
+        // existing per-pair machinery: rope_yarn's theta = extrap·(fscale·(1-mix) + mix) is a per-pair
+        // EFFECTIVE position scale, so we synthesize rope_freqs[j] = 1/eff_j (the factors DIVIDE θ),
+        // keep rope_freq_scale = 1, and fold the magnitude correction 1 + 0.1·ln(factor) into
+        // rope_mscale. ext_factor = 1 and attn_factor = 1 (the llama.cpp runtime defaults for YARN).
+        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "yarn") {
+            if (!empty(t.rope_freqs)) {
+                panic("dasLLAMA: YaRN combined with per-pair rope factors is not supported")
+            }
+            let yfactor = gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
+            let yorig = (gguf_has(m, "{arch}.rope.scaling.original_context_length")
+                ? gguf_int(m, bytes, "{arch}.rope.scaling.original_context_length") : seq_len)
+            let fscale = 1.0 / yfactor
+            // NTK-by-parts correction band (ggml_rope_yarn_corr_dims; beta_fast/slow defaults 32/1):
+            // pairs below `lo` rotate at full frequency (extrapolate), above `hi` fully interpolate
+            let hs = t.config.head_size
+            let denom = 2.0 * log(t.config.rope_freq_base)
+            let lo = max(0.0, floor(float(hs) * log(float(yorig) / (32.0 * 2.0 * PI)) / denom))
+            let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (2.0 * PI)) / denom))
+            t.rope_freqs |> resize(hs / 2l)
+            for (j in range64(hs / 2l)) {
+                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // rope_yarn_ramp(lo, hi, 2j)
+                t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
+            }
+            t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
+        }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         // logit soft-caps from metadata when present (gemma2: 50/30, gemma4: final 30 only);
@@ -829,9 +898,11 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         }
         // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is)
         gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
+        // gpt-oss names its pre-FFN norm post_attention_norm (same graph role as ffn_norm)
+        let ffn_norm_name = t.config.post_attn_is_ffn_norm ? "post_attention_norm" : "ffn_norm"
         for (l in range64(layers)) {
             gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_norm.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
             if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
@@ -843,6 +914,9 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             }
             if (t.config.layer_out_scale) {  // gemma4: one output scalar per layer
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.layer_output_scale.weight", t.fblob, t.out_scale_off + l, 1l)
+            }
+            if (t.config.attn_sinks) {  // gpt-oss: one sink logit per head
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_sinks.weight", t.fblob, t.sinks_off + l * n_heads, n_heads)
             }
         }
         if (t.config.v_norm) {  // the weightless V-norm's synthetic all-ones weight vector
@@ -877,9 +951,18 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 let ne = t.config.n_expert
                 let ege = dim * t.config.n_ff_exp
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.weight", t.fblob, t.router_off + l * ne * dim, ne * dim)
+                if (t.config.moe_router_bias) {
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.bias", t.fblob, t.router_b_off + l * ne, ne)
+                }
                 load_big(m, bytes, "blk.{l}.ffn_gate_exps.weight", t, t.we1_off + l * ne * ege, ne * ege, scratch)
                 load_big(m, bytes, "blk.{l}.ffn_down_exps.weight", t, t.we2_off + l * ne * ege, ne * ege, scratch)
                 load_big(m, bytes, "blk.{l}.ffn_up_exps.weight", t, t.we3_off + l * ne * ege, ne * ege, scratch)
+                if (t.config.moe_exps_bias) {  // per-expert bias stacks, expert-major on disk like the weights
+                    let nfe = t.config.n_ff_exp
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_exps.bias", t.fblob, t.web1_off + l * ne * nfe, ne * nfe)
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_down_exps.bias", t.fblob, t.web2_off + l * ne * dim, ne * dim)
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_up_exps.bias", t.fblob, t.web3_off + l * ne * nfe, ne * nfe)
+                }
                 if (t.config.n_ff_shexp > 0l) {
                     let she = dim * t.config.n_ff_shexp
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
@@ -909,6 +992,13 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * qd, qd)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.bias", t.bk, l * kv, kv)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.bias", t.bv, l * kv, kv)
+            }
+        }
+        // gpt-oss attention output-projection bias (dim per layer)
+        if (t.config.attn_out_bias) {
+            t.bo |> resize(layers * dim)
+            for (l in range64(layers)) {
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_output.bias", t.bo, l * dim, dim)
             }
         }
         delete scratch
@@ -1291,6 +1381,7 @@ def private kv_store_batch(var key_cache : array<float>; var value_cache : array
 // ACT_PAR_THRESHOLD so small prompts (and decode, npos=1) run inline.
 def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
     let is_gelu = act == FfnAct.gelu
+    let is_oai = act == FfnAct.swiglu_oai
     let vec = g_act_vec
     unsafe {
         var gp = addr(g[0])
@@ -1300,9 +1391,21 @@ def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hid
                 for (p in range(rb, re)) {
                     let off = int64(p) * hidden
                     if (vec) {
-                        if (is_gelu) { geglu4(gp + off, up + off, hidden) } else { swiglu4(gp + off, up + off, hidden) }
+                        if (is_gelu) {
+                            geglu4(gp + off, up + off, hidden)
+                        } elif (is_oai) {
+                            swiglu_oai4(gp + off, up + off, hidden)
+                        } else {
+                            swiglu4(gp + off, up + off, hidden)
+                        }
                     } else {
-                        if (is_gelu) { geglu(gp + off, up + off, hidden) } else { swiglu(gp + off, up + off, hidden) }
+                        if (is_gelu) {
+                            geglu(gp + off, up + off, hidden)
+                        } elif (is_oai) {
+                            swiglu_oai(gp + off, up + off, hidden)
+                        } else {
+                            swiglu(gp + off, up + off, hidden)
+                        }
                     }
                 }
             }
@@ -1549,7 +1652,11 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
         if (c.attn_logit_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
             softcap(s.att, cnt, c.attn_logit_softcap)
         }
-        softmax(s.att, cnt)
+        if (c.attn_sinks) {  // gpt-oss: this head's sink logit joins the softmax denominator
+            softmax_sink(s.att, cnt, t.fblob[t.sinks_off + l * n_heads + h])
+        } else {
+            softmax(s.att, cnt)
+        }
         // weighted sum of values into xb[qoff..]
         for (i in range64(head_size)) {
             s.xb[qoff + i] = 0.0
@@ -1559,8 +1666,11 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
             axpy(unsafe(addr(s.xb[qoff])), unsafe(addr(s.value_cache[voff])), s.att[j], head_size)
         }
     }
-    // output projection (qd -> dim), optional post-attention norm, residual
+    // output projection (qd -> dim), optional bias + post-attention norm, residual
     mm(s.xb2, t, t.wo_offs[l], s.xb, s.xq, s.xs, qd, dim)
+    if (c.attn_out_bias) {  // gpt-oss: + bias on the projected attention output
+        add_bias(s.xb2, 0l, t.bo, l * dim, dim)
+    }
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
         rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
     }
@@ -1601,13 +1711,17 @@ def private moe_ffn_core(t : Model; var s : Session; l : int64) {
     let dim = c.dim
     let ne = c.n_expert
     let k = c.n_expert_used
-    // router logits (fp32 weights), then probs
+    // router logits (fp32 weights + optional bias), then probs — softmax_weight routes on the RAW
+    // biased logits and softmaxes only the selected top-k afterwards (gpt-oss)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb, dim, ne)
+    if (c.moe_router_bias) {
+        add_bias(s.moe_logits, 0l, t.fblob, t.router_b_off + l * ne, ne)
+    }
     if (c.moe_gate == MoeGate.sigmoid) {
         for (i in range64(ne)) {
             s.moe_logits[i] = 1.0 / (1.0 + exp(-s.moe_logits[i]))
         }
-    } else {
+    } elif (c.moe_gate == MoeGate.softmax) {
         var mx = s.moe_logits[0]
         for (i in range64(ne)) {
             mx = max(mx, s.moe_logits[i])
@@ -1622,8 +1736,9 @@ def private moe_ffn_core(t : Model; var s : Session; l : int64) {
             s.moe_logits[i] /= sum
         }
     }
-    // top-k by prob — probs are >= 0, so knocking the winner out with -1 excludes it from later
-    // rounds; first-index-wins on ties matches argsort's stable descending order
+    // top-k by selection score — the winner is knocked out with -FLT_MAX (softmax_weight selects on
+    // raw logits, which can be arbitrarily negative); first-index-wins on ties matches argsort's
+    // stable descending order
     for (j in range64(k)) {
         var best = 0l
         for (i in range64(ne)) {
@@ -1633,7 +1748,10 @@ def private moe_ffn_core(t : Model; var s : Session; l : int64) {
         }
         s.moe_idx[j] = best
         s.moe_w[j] = s.moe_logits[best]
-        s.moe_logits[best] = -1.0
+        s.moe_logits[best] = -3.402823e38
+    }
+    if (c.moe_gate == MoeGate.softmax_weight) {  // gpt-oss: softmax over just the selected k logits
+        softmax(s.moe_w, k)
     }
     if (c.norm_topk_prob) {   // renormalize the selected weights to sum 1 (llama.cpp clamps at f16-min)
         var ws = 0.0
@@ -1657,11 +1775,19 @@ def private moe_ffn_core(t : Model; var s : Session; l : int64) {
     let nfe = c.n_ff_exp
     let ege = dim * nfe
     for (j in range64(k)) {
-        let base = (l * ne + s.moe_idx[j]) * ege
+        let e = l * ne + s.moe_idx[j]
+        let base = e * ege
         mm(s.hb, t, t.we1_off + base, s.xb, s.xq, s.xs, dim, nfe)
         mm(s.hb2, t, t.we3_off + base, s.xb, s.xq, s.xs, dim, nfe)
+        if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
+            add_bias(s.hb, 0l, t.fblob, t.web1_off + e * nfe, nfe)
+            add_bias(s.hb2, 0l, t.fblob, t.web3_off + e * nfe, nfe)
+        }
         gate_batch(s.hb, s.hb2, c.ffn_act, nfe, 1l)
         mm(s.xb2, t, t.we2_off + base, s.hb, s.xq, s.xs, nfe, dim)
+        if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
+            add_bias(s.xb2, 0l, t.fblob, t.web2_off + e * dim, dim)
+        }
         let w = s.moe_w[j]
         for (i in range64(dim)) {
             s.moe_acc[i] += w * s.xb2[i]
@@ -1857,7 +1983,8 @@ def prefill_profile_report() {
 def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
                             var qpk, kpk, vpk, kqp, vkqp : float?;
                             loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff : int64;
-                            scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+                            scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float;
+                            has_sink : bool; sink : float) {
     let QT = ATTN_FLASH_QT
     let KV = ATTN_FLASH_KV
     unsafe {
@@ -1877,8 +2004,11 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
             var mrun : float[64]   // must equal ATTN_FLASH_QT (fixed-array dim needs an int32 literal)
             var srun : float[64]
             for (qt in range64(tile_rows)) {
-                mrun[int(qt)] = -1.0e30
-                srun[int(qt)] = 0.0
+                // the sink (gpt-oss) is one extra virtual score with no V contribution — seeding the
+                // online softmax with max = sink, sum = e^(sink-sink) = 1 is exactly that column;
+                // later tiles rescale it along with everything else
+                mrun[int(qt)] = has_sink ? sink : -1.0e30
+                srun[int(qt)] = has_sink ? 1.0 : 0.0
                 for (d in range64(head_size)) {
                     vkqp[qt * head_size + d] = 0.0
                 }
@@ -1969,7 +2099,8 @@ def private attn_head_flash(qp, kcp, vcp : float const?; var xbp : float?;
 
 def private prefill_attention(var s : Session; loff, npos, start_pos, head_size, qd, kv_dim,
                               n_heads, kv_mul : int64; scale : float;
-                              is_sliding : bool; sliding_window : int64; attn_softcap : float) {
+                              is_sliding : bool; sliding_window : int64; attn_softcap : float;
+                              sinksp : float const?) {   // this layer's per-head sink logits; null = no sinks
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
     let attn_par = npos * maxctx * n_heads >= ATTN_PAR_THRESHOLD
     unsafe {
@@ -1995,7 +2126,8 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
                             kqp0 + hh * ATTN_FLASH_QT * ATTN_FLASH_KV,
                             vkqp0 + hh * ATTN_FLASH_QT * head_size,
                             loff, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff,
-                            scale, is_sliding, sliding_window, attn_softcap)
+                            scale, is_sliding, sliding_window, attn_softcap,
+                            sinksp != null, sinksp != null ? sinksp[hh] : 0.0)
                     }
                 }
             }
@@ -2039,7 +2171,11 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
                                 if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
                                     softcap(attp + rbase, cnt, attn_softcap)
                                 }
-                                softmax(attp + rbase, cnt)
+                                if (sinksp != null) {  // gpt-oss: sink joins the denominator
+                                    softmax_sink(attp + rbase, cnt, sinksp[hh])
+                                } else {
+                                    softmax(attp + rbase, cnt)
+                                }
                                 let qbase = p * qd + qoff
                                 for (i in range64(head_size)) {
                                     xbp[qbase + i] = 0.0
@@ -2086,7 +2222,11 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
                             if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
                                 softcap(attp + abase, cnt, attn_softcap)
                             }
-                            softmax(attp + abase, cnt)
+                            if (sinksp != null) {  // gpt-oss: sink joins the denominator
+                                softmax_sink(attp + abase, cnt, sinksp[hh])
+                            } else {
+                                softmax(attp + abase, cnt)
+                            }
                             for (i in range64(head_size)) {
                                 xbp[qbase + i] = 0.0
                             }
@@ -2188,12 +2328,20 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     // Gemma2 sliding-window layer past the window). Output for position p lands at xb_b[p*qd..]
     // (qd-strided), feeding the wo projection below. Algorithm (classic vs blocked) is A/B-selectable.
     let ts_attn = ref_time_ticks()
+    let sinksp = (c.attn_sinks
+        ? unsafe(reinterpret<float const?>(unsafe(addr(t.fblob[t.sinks_off + l * n_heads]))))
+        : null)
     prefill_attention(s, loff, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
-                      is_sliding, c.sliding_window, c.attn_logit_softcap)
+                      is_sliding, c.sliding_window, c.attn_logit_softcap, sinksp)
     prof_add("attn", ts_attn)
-    // output projection (batched, qd -> dim) + optional post-attn norm + residual
+    // output projection (batched, qd -> dim) + optional bias + post-attn norm + residual
     let ts_wo = ref_time_ticks()
     mm_b(s.xb2_b, t, t.wo_offs[l], s.xb_b, s.xqb, s.xsb, qd, dim, npos)
+    if (c.attn_out_bias) {  // gpt-oss: + bias per position on the projected attention output
+        for (p in range64(npos)) {
+            add_bias(s.xb2_b, p * dim, t.bo, l * dim, dim)
+        }
+    }
     prof_add("mm_wo", ts_wo)
     let ts_resid0 = ref_time_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
