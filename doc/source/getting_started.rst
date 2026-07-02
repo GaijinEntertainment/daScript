@@ -113,10 +113,14 @@ The :ref:`daslang LSP server <utils_lsp>` complements the MCP tools
 with **push diagnostics**: after every edit of a ``.das`` file the
 compiler (and the lint passes) report errors and warnings into the
 assistant's context automatically --- no explicit tool call --- plus
-native definition / references / hover / symbol navigation.  It needs
-only the daslang binary and Python 3.
+native definition / references / hover / symbols / call hierarchy /
+implementation navigation.  It needs only the daslang binary and
+Python 3.
 
-For Claude Code, the plugin manifest ships in the repository::
+Claude Code sessions started at the repository root (or an installed
+SDK root) load it automatically via the checked-in
+``.claude/skills/daslang-lsp/`` plugin manifest.  From any other
+directory::
 
    claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 

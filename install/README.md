@@ -38,11 +38,14 @@
 | `examples/`  | Example scripts                                       |
 | `tutorials/` | Language, integration, and module tutorials           |
 | `dastest/`   | Test framework (usable for testing your own code)     |
-| `utils/`     | Tooling: MCP server for AI assistants (`mcp/`), package manager (`daspkg/`), lint (`lint/`), code formatter (`das-fmt/`), duplicate detector (`detect-dupe/`), coverage (`dascov/`), AOT/JIT helpers |
+| `utils/`     | Tooling: MCP server for AI assistants (`mcp/`), LSP server for Claude Code (`lsp/`), package manager (`daspkg/`), lint (`lint/`), code formatter (`das-fmt/`), duplicate detector (`detect-dupe/`), coverage (`dascov/`), AOT/JIT helpers |
 | `skills/`    | AI-assistant task instructions (paired with the root `CLAUDE.md`) |
 | `tree-sitter-daslang/` | Tree-sitter grammar, shared library, and highlighting queries |
 
 ## Quick Start
+
+New to daslang? `GETTING_STARTED.md` (next to this file) walks through
+running a first program and wiring up editor + AI-assistant tooling.
 
 Run a script:
 
@@ -93,6 +96,24 @@ Configure in `.mcp.json`:
 ```
 
 See `utils/mcp/README.md` for the full tool list and permissions setup.
+
+## LSP Server (Claude Code)
+
+`utils/lsp/` contains a language server for `.das`: **push diagnostics** — the
+compiler and lint report after every edit with no explicit tool call — plus
+definition / references / hover / document & workspace symbols / call
+hierarchy / go-to-implementation. Requires `python3` on `PATH`.
+
+Claude Code sessions started at the SDK root load it automatically (the
+shipped `.claude/skills/daslang-lsp/` plugin manifest). From anywhere else,
+register it explicitly:
+
+```sh
+claude --plugin-dir <sdk-root>/utils/lsp/plugin
+```
+
+See `utils/lsp/README.md` for configuration (`initializationOptions`:
+compiler override, `project_root` for native modules, `.das_project`).
 
 ## Building from Source
 

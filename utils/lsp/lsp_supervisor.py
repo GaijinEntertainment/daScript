@@ -68,11 +68,12 @@ def find_compiler(init_options: dict) -> str | None:
     cand = init_options.get("compiler") or os.environ.get("DASLANG_LSP_COMPILER")
     if cand and os.path.exists(cand):
         return os.path.abspath(cand)
-    # repo layouts, tried against the workspace and the plugin's own repo
+    # repo + install-tree layouts, tried against the workspace and the
+    # supervisor's own tree (bin/daslang.exe is the installed-SDK Windows spot)
     roots = [os.environ.get("CLAUDE_PROJECT_DIR", ""),
-             os.path.dirname(os.path.dirname(SCRIPT_DIR))]  # utils/lsp -> utils -> repo
+             os.path.dirname(os.path.dirname(SCRIPT_DIR))]  # utils/lsp -> utils -> root
     rels = ["bin/Release/daslang.exe", "bin/Release/daslang", "bin/daslang",
-            "build/daslang", "build/bin/daslang"]
+            "bin/daslang.exe", "build/daslang", "build/bin/daslang"]
     for root in roots:
         if not root:
             continue

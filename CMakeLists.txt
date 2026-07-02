@@ -1761,6 +1761,7 @@ install(FILES
 
 install(FILES ${PROJECT_SOURCE_DIR}/install/README.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
+install(FILES ${PROJECT_SOURCE_DIR}/GETTING_STARTED.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 
 # Skills shipped to the SDK — the manifest install/skills.list names which
@@ -1829,6 +1830,28 @@ install(FILES
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     DESTINATION utils/mcp/tests
     FILES_MATCHING PATTERN "*.das"
+)
+
+# Install LSP server (Claude Code plugin: push diagnostics after every edit +
+# definition/references/hover/symbols/call hierarchy/implementation).
+#   lsp_supervisor.py — the LSP endpoint (python; zero language knowledge)
+#   subtools/*.das    — stateless spawn-per-request batch tools
+# The .claude/skills manifest auto-loads the plugin for Claude Code sessions
+# started at the install root; utils/lsp/plugin serves explicit --plugin-dir
+# registration from anywhere else. Same relative layout as the repo, so both
+# manifests work unchanged.
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/lsp/lsp_supervisor.py
+    ${PROJECT_SOURCE_DIR}/utils/lsp/README.md
+    DESTINATION utils/lsp
+)
+file(GLOB DAS_LSP_SUBTOOLS ${PROJECT_SOURCE_DIR}/utils/lsp/subtools/*.das)
+install(FILES ${DAS_LSP_SUBTOOLS} DESTINATION utils/lsp/subtools)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/lsp/plugin/.claude-plugin/plugin.json
+    DESTINATION utils/lsp/plugin/.claude-plugin
+)
+install(FILES ${PROJECT_SOURCE_DIR}/.claude/skills/daslang-lsp/.claude-plugin/plugin.json
+    DESTINATION ${DAS_INSTALL_DOCDIR}/.claude/skills/daslang-lsp/.claude-plugin
 )
 
 # Install dascov (code coverage)

@@ -77,8 +77,13 @@ Details: `utils/mcp/README.md`.
 
 The daslang LSP server (`utils/lsp/`) adds push diagnostics — after
 every edit the compiler and lint report into the assistant's context
-automatically — plus definition/references/hover/symbols. It needs only
-the daslang binary and Python 3. For Claude Code:
+automatically — plus definition/references/hover/symbols/call
+hierarchy/implementation. It needs only the daslang binary and Python 3.
+
+Claude Code sessions started at the daslang repo root (or at an
+installed SDK root) load it automatically via the checked-in
+`.claude/skills/daslang-lsp/` plugin manifest. From any other
+directory, register it explicitly:
 
 ```sh
 claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin

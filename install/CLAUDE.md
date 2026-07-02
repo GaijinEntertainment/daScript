@@ -322,6 +322,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/lsp/` — LSP server for Claude Code (push diagnostics + navigation; auto-loads for sessions started at the SDK root, needs `python3` on PATH)
 - `utils/lint/` — Lint runner: `bin/daslang utils/lint/main.das -- <files> --quiet`
 - `utils/das-fmt/` — The code formatter script (`dasfmt.das`, wraps `daslib/das_source_formatter`)
 - `utils/detect-dupe/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `detect_duplicates` MCP tools)
@@ -350,3 +351,7 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 `utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants. Stdio transport — no extra build dependencies. **Prefer MCP tools** over manual compilation and grep — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl.
 
 Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
+
+## LSP Server (Push Diagnostics + Navigation)
+
+`utils/lsp/` is a language server for `.das`: the compiler and lint report after **every** edit with no explicit tool call, plus definition / references / hover / document & workspace symbols / call hierarchy / go-to-implementation. Needs `python3` on `PATH`. Claude Code sessions started at the SDK root load it automatically (shipped `.claude/skills/daslang-lsp/` manifest); elsewhere use `claude --plugin-dir <sdk-root>/utils/lsp/plugin`. Configuration (compiler override, `project_root` for native modules, `.das_project`): `utils/lsp/README.md`.
