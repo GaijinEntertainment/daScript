@@ -1,6 +1,6 @@
 # dasLLAMA API Rework — Plan
 
-**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. **Next: the T1/T2 model-support waves** (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)).
+**Status:** Phases 1-7 done — core API, arch registry + physical arch/kernel seams (6a/6b), chat layer, and the P7 kernel auto-tuner (grid emission + `[tuned]` reconstitution + TB cliff-guard). Design locked 2026-07-01. **In progress: the T1/T2 model-support waves** (see [Model-support plan](#model-support-plan--the-t1t2-waves-agreed-2026-07-01)) — waves 0 (Mistral/SmolLM2 + chat-template detection), 1 (Qwen3 QK-norm), and 2 (Gemma-3 per-layer SWA pattern + dual RoPE θ) landed.
 
 This is the design record for unifying the dasLLAMA user-facing API and making the
 backend extensible. It carries the **why**; the code carries the how. Keep it current

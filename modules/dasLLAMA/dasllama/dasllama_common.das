@@ -74,8 +74,13 @@ struct Config {
     attn_logit_softcap : float = 0.0   // attention-score soft cap, 0 = off (Gemma2: 50)
     final_logit_softcap : float = 0.0  // output-logit soft cap, 0 = off (Gemma2: 30)
     sliding_window : int64 = 0         // sliding-window attention span, 0 = off (Gemma2: 4096, alt layers)
+    swa_pattern : int64 = 2            // every swa_pattern-th layer is global, the rest sliding (Gemma2: 2, Gemma3: 6)
+    rope_freq_scale : float = 1.0      // linear RoPE position scale, angle = pos*scale*freq (Gemma3-4B: 1/8)
+    rope_freq_base_swa : float = 0.0   // sliding layers' θ; 0 = same as rope_freq_base (Gemma3: 10000)
+    rope_freq_scale_swa : float = 1.0  // sliding layers' position scale (Gemma3: 1.0 — unscaled)
     pre_post_norm : bool = false       // Gemma2: extra post-attention / post-FFN norms
     qk_norm : bool = false             // Qwen3: per-head RMSNorm on Q/K before RoPE
+    embed_scale_sqrt_dim : bool = false // Gemma: scale token embeddings by sqrt(dim) — resolved by the loader (dim unknown at configure time)
 }
 
 // Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
@@ -291,6 +296,9 @@ def load_checkpoint(path : string) : Model {
         t.config.head_size = t.config.dim / t.config.n_heads
         t.config.kv_dim = (t.config.dim * t.config.n_kv_heads) / t.config.n_heads
         t.config.rope_freq_base = 10000.0  // llama2.c checkpoints predate configurable θ
+        // resolve the swa-θ sentinel like load_gguf does, so code (or a test) that forces
+        // sliding_window on afterwards ropes those layers at the real θ, not 0
+        t.config.rope_freq_base_swa = t.config.rope_freq_base
         let sz = layout_offsets(t)
         reserve_resize(t.fblob, sz.fblob_n)
         reserve_resize(t.wblob, sz.wblob_n)
@@ -475,12 +483,38 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             ? gguf_int(m, bytes, "{arch}.attention.key_length")
             : dim / n_heads)
         t.config.kv_dim = n_kv_heads * t.config.head_size
-        // Gemma2 scales the embedding by sqrt(dim); configure_gemma2 can't (dim unknown there)
-        if (arch == "gemma2") {
+        // Gemma scales the embedding by sqrt(dim); configure can't (dim unknown there)
+        if (t.config.embed_scale_sqrt_dim) {
             t.config.embed_scale = sqrt(float(dim))
+        }
+        // sliding-window span + per-layer pattern from metadata, for arches that opted in via
+        // configure (Gemma2: 4096 / alternating; Gemma3: 512 or 1024 / 5-local-1-global).
+        // configure()'s values stay as the fallback for files without the keys.
+        if (t.config.sliding_window > 0l) {
+            if (gguf_has(m, "{arch}.attention.sliding_window")) {
+                t.config.sliding_window = gguf_int(m, bytes, "{arch}.attention.sliding_window")
+            }
+            if (gguf_has(m, "{arch}.attention.sliding_window_pattern")) {
+                t.config.swa_pattern = gguf_int(m, bytes, "{arch}.attention.sliding_window_pattern")
+            }
         }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
+        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN / LongRoPE
+        // variants keep their own handling (rope_freqs factors + attn_factor below)
+        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "linear"
+                && gguf_has(m, "{arch}.rope.scaling.factor")) {
+            t.config.rope_freq_scale = 1.0 / gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
+        }
+        // sliding layers' θ: metadata override when present, else configure's value; the 0 sentinel
+        // (arch didn't set it) resolves to the global θ so per-layer selection is uniform
+        if (gguf_has(m, "{arch}.rope.freq_base_swa")) {
+            t.config.rope_freq_base_swa = gguf_f32(m, bytes, "{arch}.rope.freq_base_swa")
+        }
+        if (t.config.rope_freq_base_swa == 0.0) {
+            t.config.rope_freq_base_swa = t.config.rope_freq_base
+            t.config.rope_freq_scale_swa = t.config.rope_freq_scale
+        }
         // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
         let epskey = "{arch}.attention.layer_norm_rms_epsilon"
         t.config.norm_eps = gguf_has(m, epskey) ? gguf_f32(m, bytes, epskey) : 1.0e-5
@@ -680,6 +714,10 @@ struct Session {
     // fork-context cloning stays cheap — fork heaps copy module/[init] data, not the run state.
     rope_cos : array<float>
     rope_sin : array<float>
+    // second table for sliding layers when the arch ropes them differently (has_dual_rope — Gemma3:
+    // θ=10k unscaled local vs θ=1M linear-scaled global); empty otherwise
+    rope_cos_swa : array<float>
+    rope_sin_swa : array<float>
 }
 
 //! Allocate the run state sized to a model.
@@ -807,9 +845,8 @@ def private rms_batch(var out : array<float>; src : array<float>; t : Model; wof
 //   param readonly and eliminate the leaf's reinterpret-back write — the rope silently no-ops. A
 //   call-site reinterpret launders it, but that can't be lint-suppressed inside maybe_parallel_for, so
 //   calling the leaf directly is the clean fix.
-def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model; start_pos, npos, head_size, qd, kv_dim : int64) {
+def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size, qd, kv_dim : int64) {
     let c = t.config
-    let theta = c.rope_freq_base
     let neox = c.rope_neox
     let mscale = c.rope_mscale
     let has_ff = !empty(t.rope_freqs)
@@ -824,11 +861,11 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
                     let pp = int64(p)
                     let ap = start_pos + pp
                     if (neox) {
-                        rope_scaled_neox(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp, mscale)
-                        rope_scaled_neox(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp, mscale)
+                        rope_scaled_neox(qp + pp * qd, ap, head_size, qd, theta, fscale, has_ff, ffp, mscale)
+                        rope_scaled_neox(kp + pp * kv_dim, ap, head_size, kv_dim, theta, fscale, has_ff, ffp, mscale)
                     } else {
-                        rope_scaled(qp + pp * qd, ap, head_size, qd, theta, has_ff, ffp)
-                        rope_scaled(kp + pp * kv_dim, ap, head_size, kv_dim, theta, has_ff, ffp)
+                        rope_scaled(qp + pp * qd, ap, head_size, qd, theta, fscale, has_ff, ffp)
+                        rope_scaled(kp + pp * kv_dim, ap, head_size, kv_dim, theta, fscale, has_ff, ffp)
                     }
                 }
             }
@@ -842,9 +879,8 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
 // NEOX; the NEOX mscale magnitude factor is folded in here so the tab leaves just look up. Built once
 // before the layer loop, then reused by rope_batch_tab across all heads and layers (the redundancy the
 // table removes). Bit-identical to the classic leaves — the same float expressions, just deduplicated.
-def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; start_pos, npos, head_size : int64) {
+def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64) {
     let c = t.config
-    let theta = c.rope_freq_base
     let half = head_size / 2l
     let scale = c.rope_neox ? c.rope_mscale : 1.0   // NEOX scales cos/sin by mscale; NORM leaves it 1.0
     let has_ff = !empty(t.rope_freqs)
@@ -860,7 +896,7 @@ def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<flo
                 freq /= ffp[j]
             }
             for (pi in range64(npos)) {
-                let angle = float(start_pos + pi) * freq
+                let angle = float(start_pos + pi) * fscale * freq
                 cp[pi * half + j] = cos(angle) * scale
                 sp[pi * half + j] = sin(angle) * scale
             }
@@ -1057,6 +1093,16 @@ def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>
     }
 }
 
+//! Per-layer attention pattern: with SWA on, every swa_pattern-th layer (l % p == p-1) is global and
+//! the rest slide — Gemma2 alternates (p=2, even layers slide), Gemma3 runs 5 local : 1 global (p=6).
+def layer_is_sliding(c : Config; l : int64) : bool => c.sliding_window > 0l && (l % c.swa_pattern != c.swa_pattern - 1l)
+
+//! True when sliding layers rope with a different θ / position scale than global layers (Gemma3:
+//! 10k/unscaled local vs 1M/linear-8 global). The loader resolves the swa fields to the global values
+//! when the arch doesn't set them, so this is false for uniform-rope SWA models (Gemma2).
+def has_dual_rope(c : Config) : bool => (c.sliding_window > 0l
+    && (c.rope_freq_base_swa != c.rope_freq_base || c.rope_freq_scale_swa != c.rope_freq_scale))
+
 //! One forward pass: token at position `pos` -> s.logits (over the vocabulary).
 //! Faithful port of llama2.c forward(); weights are viewed into the blobs, KV cache grows by pos.
 // ===== std/dense block kernels (decode, single-token) =====
@@ -1076,9 +1122,9 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
     let seq_len = c.seq_len
     let scale = 1.0 / sqrt(float(head_size))
     let loff = l * seq_len * kv_dim
-    // Gemma2: even layers use sliding-window (local) attention; odd layers are global. The window
-    // covers all positions when pos < window, so this is a no-op for short contexts.
-    let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
+    // Sliding-window (local) vs global attention per the arch's layer pattern (Gemma2 alternates,
+    // Gemma3 5:1). The window covers all positions when pos < window, so it's a no-op for short contexts.
+    let is_sliding = layer_is_sliding(c, l)
     let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
     let cnt = pos + 1l - kstart
     // attention rmsnorm
@@ -1094,9 +1140,11 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
         rms_batch(s.q, s.q, t, t.rms_q_off + l * head_size, head_size, n_heads)
         rms_batch(s.k, s.k, t, t.rms_k_off + l * head_size, head_size, c.n_kv_heads)
     }
-    // RoPE on q (qd) and k (kv_dim)
-    rope_apply(s.q, pos, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
-    rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
+    // RoPE on q (qd) and k (kv_dim) — sliding layers may use their own θ / position scale (Gemma3)
+    let theta = is_sliding ? c.rope_freq_base_swa : c.rope_freq_base
+    let fscale = is_sliding ? c.rope_freq_scale_swa : c.rope_freq_scale
+    rope_apply(s.q, pos, head_size, qd, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale)
+    rope_apply(s.k, pos, head_size, kv_dim, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale)
     // store k, v for this position into the KV cache
     let kvoff = loff + pos * kv_dim
     copy_floats(unsafe(addr(s.key_cache[kvoff])), unsafe(addr(s.k[0])), kv_dim)
@@ -1565,8 +1613,8 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     let scale = 1.0 / sqrt(float(head_size))
     let use_rope_tab = g_use_rope_table
     let loff = l * seq_len * kv_dim
-    // Gemma2: even layers use sliding-window (local) attention; odd layers global (see forward())
-    let is_sliding = c.sliding_window > 0l && (l % 2l == 0l)
+    // sliding vs global attention per the arch's layer pattern (see attention_std_decode)
+    let is_sliding = layer_is_sliding(c, l)
     // attention rmsnorm, per position
     let ts_norm0 = ref_time_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
@@ -1592,11 +1640,19 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
     }
     // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
     // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
+    // Sliding layers read the swa table / θ when the arch ropes them differently (Gemma3).
     let ts_rope = ref_time_ticks()
+    let swa_rope = is_sliding && has_dual_rope(c)
     if (use_rope_tab) {
-        rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
+        if (swa_rope) {
+            rope_batch_tab(s.q_b, s.k_b, s.rope_cos_swa, s.rope_sin_swa, c.rope_neox, npos, head_size, qd, kv_dim)
+        } else {
+            rope_batch_tab(s.q_b, s.k_b, s.rope_cos, s.rope_sin, c.rope_neox, npos, head_size, qd, kv_dim)
+        }
     } else {
-        rope_batch(s.q_b, s.k_b, t, start_pos, npos, head_size, qd, kv_dim)
+        let theta = swa_rope ? c.rope_freq_base_swa : c.rope_freq_base
+        let fscale = swa_rope ? c.rope_freq_scale_swa : c.rope_freq_scale
+        rope_batch(s.q_b, s.k_b, t, theta, fscale, start_pos, npos, head_size, qd, kv_dim)
     }
     prof_add("rope", ts_rope)
     // store the roped k / raw v into the KV cache — a SEPARATE pass (provably identical to
@@ -1711,10 +1767,14 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     // Precompute the RoPE cos/sin table ONCE for this prefill (angle = pos*freq is identical across
     // every head and layer, so this replaces the per-head/per-layer pow/cos/sin recomputation with a
     // single npos × head_size/2 table that rope_batch_tab looks up). Built outside the layer loop.
+    // Dual-rope arches (Gemma3) get a second table with the sliding layers' θ / position scale.
     let use_rope_tab = g_use_rope_table
     let ts_rope_build = ref_time_ticks()
     if (use_rope_tab) {
-        build_rope_table(s.rope_cos, s.rope_sin, t, start_pos, npos, head_size)
+        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, start_pos, npos, head_size)
+        if (has_dual_rope(c)) {
+            build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa, start_pos, npos, head_size)
+        }
     }
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 

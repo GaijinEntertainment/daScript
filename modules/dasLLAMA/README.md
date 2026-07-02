@@ -1,6 +1,6 @@
 # dasLLAMA
 
-daslang-native **CPU** LLM inference (Llama / Qwen2 / Phi-3 / Gemma-2 transformers). Loads GGUF
+daslang-native **CPU** LLM inference (Llama / Qwen2/3 / Phi-3 / Gemma-2/3 transformers). Loads GGUF
 (or llama2.c `.bin`), runs the forward pass + KV cache, tokenizes, and decodes —
 all in daslang, JIT tier. Verified token-for-token against `llama.cpp` / `llama2.c`.
 
@@ -38,8 +38,10 @@ modules/dasLLAMA/
     dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample
     dasllama_arch_llama.das   #   Llama / Llama-2 / Llama-3 / TinyLlama arch (config + chat template)
     dasllama_arch_qwen2.das   #   Qwen2 arch  (per-arch: config setter + [init] registration)
+    dasllama_arch_qwen3.das   #   Qwen3 arch (QK-norm)
     dasllama_arch_phi3.das    #   Phi-3 arch
     dasllama_arch_gemma2.das  #   Gemma-2 arch
+    dasllama_arch_gemma3.das  #   Gemma-3 arch (SWA pattern + dual rope θ)
     dasllama_transformer.das  #   umbrella — re-exports dasllama_common + registers every arch (require this)
     dasllama_chat.das         #   layer-2 chat engine — Role/Message/ChatSession, template renderer, respond()
   benchmarks/                 # perf harnesses (gen tok/s, prefill TTFT)
@@ -82,6 +84,7 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **Qwen3-0.6B / 4B-Instruct-2507** | Q8_0 GGUF | Qwen3 (QK-norm: per-head Q/K RMSNorm pre-RoPE; NEOX rope, no QKV bias) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: both 40/40 token-for-token (frozen fixtures in `test_parity.das`) |
 | **Phi-3.5-mini-instruct** | Q8_0 GGUF | Phi3 (fused QKV + gate_up, NEOX rope, LongRoPE) | SPM | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 40/40 (frozen fixture); prose matches to ~0.06 logits, flips only genuine near-ties |
 | **Gemma-2-2B-it** | Q8_0 GGUF | Gemma2 (GeGLU, dual softcap, sliding window, sandwich norms, embed ×√dim) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids`, token-for-token; frozen fixture in `tests/dasLLAMA/test_parity.das`; SWA exercised on a 4k+ context |
+| **Gemma-3-1B / 4B-it** | Q8_0 GGUF | Gemma3 (Gemma-2 shape minus softcaps + QK-norm; 5:1 sliding:global layer pattern, dual RoPE θ 10k/1M, linear-8 position scale on the 4B's global layers) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: both 40/40 token-for-token (frozen fixtures); sliding mask exercised on a ~900-token prompt (40/40) |
 
 Models are **not** checked into the repo — they live in `~/Work/llama.cpp/models/`
 (gitignored). Get them with `hf download <repo> <file> --local-dir ~/Work/llama.cpp/models`.
@@ -118,10 +121,10 @@ What a model needs to "just work" today:
 |---|---|
 | GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0** |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
-| Architecture | `llama`, `qwen2`, `qwen3`, `phi3`, `gemma2` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
-| Attention | MHA **and** GQA (grouped-query); sliding-window (Gemma-2); attention + final-logit soft-capping |
-| Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2/Qwen3); Gemma-2's pre+post sandwich norms; Qwen3's per-head Q/K norms (QK-norm, pre-RoPE) |
-| Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) and **NEOX** (Qwen2 / Phi3 / Gemma-2, pairs offset by head_size/2); per-pair freq scaling + θ from metadata (llama3 NTK-by-parts; Phi3 LongRoPE short factors + attn_factor mscale); θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5 |
+| Architecture | `llama`, `qwen2`, `qwen3`, `phi3`, `gemma2`, `gemma3` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
+| Attention | MHA **and** GQA (grouped-query); sliding-window with a per-layer pattern (Gemma-2 alternating, Gemma-3 5 local : 1 global); attention + final-logit soft-capping |
+| Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2/Qwen3/Gemma); Gemma's pre+post sandwich norms; per-head Q/K norms pre-RoPE (QK-norm — Qwen3, Gemma-3) |
+| Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) and **NEOX** (Qwen2 / Phi3 / Gemma, pairs offset by head_size/2); per-pair freq scaling + θ from metadata (llama3 NTK-by-parts; Phi3 LongRoPE short factors + attn_factor mscale); θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5; per-layer dual θ + linear position scaling (Gemma-3: sliding layers 10k unscaled, global layers 1M ÷8 on the 4B) |
 | FFN | SwiGLU **and** GeGLU (incl. Phi3's fused gate_up, split at load) |
 | Tokenizer | **SentencePiece** (Llama-2 family, Phi-3, Gemma) **and byte-level BPE / tiktoken** (Llama-3 + Qwen2 pre-tokenizers, exact llama.cpp split) |
 | Model size | files >4GB load (needed the fmap >4GB engine fix) |

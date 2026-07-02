@@ -11,3 +11,4 @@ require dasllama/dasllama_arch_qwen2   // nolint:STYLE030 — side-effect requir
 require dasllama/dasllama_arch_qwen3   // nolint:STYLE030 — side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_phi3    // nolint:STYLE030 — side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_gemma2  // nolint:STYLE030 — side-effect require: fires the arch's [init] registration
+require dasllama/dasllama_arch_gemma3  // nolint:STYLE030 — side-effect require: fires the arch's [init] registration
