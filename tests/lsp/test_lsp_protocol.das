@@ -13,7 +13,10 @@ require strings
 //! (precedent: tests/mcp/test_popen_argv_pipe.das). One live session covers:
 //! initialize handshake, didOpen with broken buffer text while the disk file
 //! stays clean (publishDiagnostics must reflect the buffer — the --overlay
-//! path), didChange back to clean (empty publish), a definition request, and
+//! path), didChange back to clean (empty publish), a definition request, the
+//! call-hierarchy loop (prepare -> incomingCalls with the item's data
+//! round-tripped verbatim -> outgoingCalls from the returned caller item),
+//! an implementation request (base method -> derived override), and
 //! shutdown/exit. Skips with a log notice when python is not on PATH.
 
 // ===== outgoing LSP messages (sprint_json envelopes) =====
@@ -91,6 +94,37 @@ struct DefinitionMsg {
     params : CursorParams
 }
 
+struct CursorRequestMsg {
+    jsonrpc : string = "2.0"
+    id : int
+    method : string
+    params : CursorParams
+}
+
+// call-hierarchy item as the client echoes it back: the server only reads
+// `data`, so the round-trip envelope carries just that
+struct HierItemData {
+    uri : string
+    file : string
+    line : int
+    name : string
+}
+
+struct HierItemMin {
+    data : HierItemData
+}
+
+struct HierCallsParams {
+    item : HierItemMin
+}
+
+struct HierCallsMsg {
+    jsonrpc : string = "2.0"
+    id : int
+    method : string
+    params : HierCallsParams
+}
+
 struct PlainMsg {
     jsonrpc : string = "2.0"
     method : string
@@ -151,6 +185,28 @@ def private diagnostics_of(js : JsonValue?) : int {
     return -1
 }
 
+// call-hierarchy response entry whose from/to item carries `name`
+def private find_call_entry(resp : JsonValue?; key, name : string) : JsonValue const? {
+    let arr = resp?["result"]
+    if (arr != null && arr is _array) {
+        for (i in range(length(arr as _array))) {
+            let e = resp?["result"]?[i]
+            if ((e?[key]?["name"] ?? "") == name) {
+                return e
+            }
+        }
+    }
+    return null
+}
+
+def private echo_item_data(item : JsonValue const?) : HierItemData {
+    return HierItemData(
+        uri = item?["data"]?["uri"] ?? "",
+        file = item?["data"]?["file"] ?? "",
+        line = item?["data"]?["line"] ?? -1,
+        name = item?["data"]?["name"] ?? "")
+}
+
 // "python3" everywhere except Windows installs that only ship "python";
 // probe both, verify the output to dodge the Windows Store python3 alias
 def private find_python() : string {
@@ -192,17 +248,28 @@ def test_lsp_protocol(t : T?) {
     // silently break the assertions
     var def_line0 = -1
     var call_line0 = -1
+    var base_speak_line0 = -1
+    var base_speak_char = -1
+    var derived_speak_line0 = -1
+    var derived_speak_char = -1
     var clean_lines <- split(clean, "\n")
     for (i in range(length(clean_lines))) {
         if (clean_lines[i] |> starts_with("def lsp_probe_helper")) {
             def_line0 = i
         } elif (clean_lines[i] |> starts_with("    lsp_probe_helper")) {
             call_line0 = i
+        } elif (clean_lines[i] |> starts_with("    def probe_speak")) {
+            base_speak_line0 = i
+            base_speak_char = find(clean_lines[i], "probe_speak")
+        } elif (clean_lines[i] |> starts_with("    def override probe_speak")) {
+            derived_speak_line0 = i
+            derived_speak_char = find(clean_lines[i], "probe_speak")
         }
     }
     delete clean_lines
     t |> success(def_line0 >= 0 && call_line0 >= 0, "fixture contains helper def and call")
-    return if (def_line0 < 0 || call_line0 < 0)
+    t |> success(base_speak_line0 >= 0 && derived_speak_line0 >= 0, "fixture contains probe_speak base and override")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0)
     let uri = path_to_uri(fixture)
 
     t |> run("supervisor protocol end-to-end") @(t : T?) {
@@ -225,6 +292,10 @@ def test_lsp_protocol(t : T?) {
                 t |> equal(server_name, "daslang-lsp")
                 t |> success(init_resp?["result"]?["capabilities"]?["definitionProvider"] ?? false,
                     "definition capability advertised")
+                t |> success(init_resp?["result"]?["capabilities"]?["callHierarchyProvider"] ?? false,
+                    "callHierarchy capability advertised")
+                t |> success(init_resp?["result"]?["capabilities"]?["implementationProvider"] ?? false,
+                    "implementation capability advertised")
                 write_frame(w, sprint_json(PlainMsg(method = "initialized"), false))
 
                 // didOpen with BROKEN buffer text; disk stays clean — the
@@ -261,6 +332,62 @@ def test_lsp_protocol(t : T?) {
                 t |> equal(loc0?["uri"] ?? "", uri)
                 t |> equal(loc0?["range"]?["start"]?["line"] ?? -1, def_line0)
                 t |> equal(loc0?["range"]?["start"]?["character"] ?? -1, 4)
+
+                // prepareCallHierarchy at the helper call site -> one item at
+                // the def line, data carrying the daslang-side re-id keys
+                write_frame(w, sprint_json(CursorRequestMsg(id = 4,
+                    method = "textDocument/prepareCallHierarchy",
+                    params = CursorParams(
+                        textDocument = DocId(uri = uri),
+                        position = Position0(line = call_line0, character = 4))), false))
+                let prep_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 4
+                t |> success(prep_resp != null, "prepareCallHierarchy response received")
+                let item0 = prep_resp?["result"]?[0]
+                t |> equal(item0?["name"] ?? "", "lsp_probe_helper")
+                t |> equal(item0?["kind"] ?? -1, 12)
+                t |> equal(item0?["selectionRange"]?["start"]?["line"] ?? -1, def_line0)
+                t |> equal(item0?["data"]?["uri"] ?? "", uri)
+                t |> equal(item0?["data"]?["line"] ?? -1, def_line0 + 1)  // daslang lines are 1-based
+                t |> equal(item0?["data"]?["name"] ?? "", "lsp_probe_helper")
+
+                // incomingCalls with the prepared item's data echoed verbatim
+                // (the client round-trips items between prepare and expand)
+                write_frame(w, sprint_json(HierCallsMsg(id = 5,
+                    method = "callHierarchy/incomingCalls",
+                    params = HierCallsParams(item = HierItemMin(
+                        data = echo_item_data(item0)))), false))
+                let inc_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 5
+                t |> success(inc_resp != null, "incomingCalls response received")
+                let inc_main = find_call_entry(inc_resp, "from", "main")
+                t |> success(inc_main != null, "incomingCalls lists main as a caller")
+                t |> equal(inc_main?["fromRanges"]?[0]?["start"]?["line"] ?? -1, call_line0)
+                t |> equal(inc_main?["fromRanges"]?[0]?["start"]?["character"] ?? -1, 4)
+
+                // outgoingCalls from the caller item incoming just returned —
+                // closes the loop back at the helper
+                write_frame(w, sprint_json(HierCallsMsg(id = 6,
+                    method = "callHierarchy/outgoingCalls",
+                    params = HierCallsParams(item = HierItemMin(
+                        data = echo_item_data(inc_main?["from"])))), false))
+                let out_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 6
+                t |> success(out_resp != null, "outgoingCalls response received")
+                let out_helper = find_call_entry(out_resp, "to", "lsp_probe_helper")
+                t |> success(out_helper != null, "outgoingCalls lists the helper as a callee")
+                t |> equal(out_helper?["to"]?["selectionRange"]?["start"]?["line"] ?? -1, def_line0)
+                t |> equal(out_helper?["fromRanges"]?[0]?["start"]?["line"] ?? -1, call_line0)
+
+                // implementation on the base method resolves the derived override
+                write_frame(w, sprint_json(CursorRequestMsg(id = 7,
+                    method = "textDocument/implementation",
+                    params = CursorParams(
+                        textDocument = DocId(uri = uri),
+                        position = Position0(line = base_speak_line0, character = base_speak_char))), false))
+                let impl_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 7
+                t |> success(impl_resp != null, "implementation response received")
+                let impl0 = impl_resp?["result"]?[0]
+                t |> equal(impl0?["uri"] ?? "", uri)
+                t |> equal(impl0?["range"]?["start"]?["line"] ?? -1, derived_speak_line0)
+                t |> equal(impl0?["range"]?["start"]?["character"] ?? -1, derived_speak_char)
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

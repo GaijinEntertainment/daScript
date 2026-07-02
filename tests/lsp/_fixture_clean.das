@@ -5,6 +5,14 @@
 // here don't break it as long as the helper and its call survive.
 options gen2
 
+class LspProbeBase {
+    def probe_speak() : string => "base"
+}
+
+class LspProbeDerived : LspProbeBase {
+    def override probe_speak() : string => "derived"
+}
+
 def lsp_probe_helper() {
     print("probe\n")
 }
@@ -12,4 +20,6 @@ def lsp_probe_helper() {
 [export]
 def main() {
     lsp_probe_helper()
+    var d = new LspProbeDerived()
+    print("{d->probe_speak()}\n")
 }

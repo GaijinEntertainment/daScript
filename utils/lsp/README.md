@@ -3,8 +3,9 @@
 An LSP server for `.das` files. What it buys over the MCP tools: **push
 diagnostics** — the compiler and lint report after *every* edit with no
 explicit tool call — plus native go-to-definition / references / hover /
-document & workspace symbols. Zero setup beyond a daslang binary and python;
-no sgconfig, no tree-sitter, no MCP server.
+document & workspace symbols / call hierarchy / go-to-implementation. Zero
+setup beyond a daslang binary and python; no sgconfig, no tree-sitter, no
+MCP server.
 
 ## Requirements
 
@@ -36,7 +37,8 @@ resolution.
 
 Diagnostics then attach automatically to the next tool result after any edit
 of a `.das` file, and the LSP tool exposes definition / references / hover /
-documentSymbol / workspaceSymbol.
+documentSymbol / workspaceSymbol / implementation / call hierarchy
+(prepare + incoming + outgoing).
 
 Any other stdio LSP client works too — point it at
 `python3 utils/lsp/lsp_supervisor.py`.
@@ -77,6 +79,19 @@ Two processes, hard split — full rationale and wave history in
 No resident daslang, by design: no macro-state leaks across compiles, no
 binary/DLL locks while builds run, per-request crash isolation.
 
+## Navigation notes
+
+- **Call hierarchy** covers direct calls (`foo()`, `obj.method()`). Virtual
+  invocations through `obj->method()` and lambda / function-pointer invokes
+  are not statically resolvable — they don't appear. Generic instances
+  collapse onto their generic; class-method items display the bare method
+  name (`speak`, not `Animal`speak`).
+- **Go to implementation**: on a class method — its overrides in derived
+  classes; on a class or struct — the types deriving from it.
+- Search scope for callers/overrides is the program of the file at the
+  cursor (its `require` closure) — callers in unrelated files that require
+  it from elsewhere are not in that program.
+
 ## Diagnostics
 
 One lint-profile compile serves both: compile errors (severity Error) and, on
@@ -89,7 +104,10 @@ intentional errors.
 
 `tests/lsp/test_lsp_protocol.das` drives the supervisor over a stdio pipe:
 initialize → didOpen with broken buffer text against a clean disk file
-(proves the overlay) → didChange back to clean → definition → shutdown/exit.
+(proves the overlay) → didChange back to clean → definition → the
+call-hierarchy loop (prepare → incomingCalls with the item's `data` echoed
+verbatim → outgoingCalls from the returned caller item) → implementation
+(base method → derived override) → shutdown/exit.
 
 ```
 bin/daslang dastest/dastest.das -- --test tests/lsp

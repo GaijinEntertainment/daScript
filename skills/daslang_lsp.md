@@ -5,6 +5,14 @@ Code (and any stdio LSP client) push diagnostics + navigation for `.das`.
 Consumer docs: `utils/lsp/README.md`. Plan, wave history, and all probe
 findings: `utils/lsp/ROADMAP.md`.
 
+## Session adoption (this repo)
+
+`.claude/skills/daslang-lsp/.claude-plugin/plugin.json` (checked in; the
+`.gitignore` has a `.claude/skills/` carve-out) loads the plugin on workspace
+trust with no CLI flag — skills-dir plugins load only when the session STARTS
+at the repo root and don't walk up. `--plugin-dir utils/lsp/plugin` still
+works for development and wins over the checked-in copy (name-keyed dedup).
+
 ## Architecture (LOCKED — do not revisit without a new decision)
 
 - **`lsp_supervisor.py`** = the LSP endpoint. ALL session state lives here:
@@ -15,6 +23,13 @@ findings: `utils/lsp/ROADMAP.md`.
   `subtools/lsp_common.das` module) = stateless spawn-per-request batch tools:
   argv in, LSP-shaped JSON on stdout, exit. das owns byte↔UTF-16 position
   conversion in both directions.
+- **Call-hierarchy round-trip**: each item's `data` carries the anchor uri +
+  decl file/line + FULL function name; incoming/outgoing re-identify the
+  target after a fresh compile from those keys (the client echoes `data`
+  verbatim). Class-method Function names are class-prefixed
+  (`Animal`speak`) — items display the bare name, `data.name` keeps the full
+  one. Generated members (`Foo'__finalize`, apostrophe names) sit ON the
+  `class` source line — both cursor paths skip synthesized functions.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **`--overlay <path>`**: the supervisor writes the document shadow to a temp

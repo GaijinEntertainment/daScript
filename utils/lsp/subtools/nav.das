@@ -1159,7 +1159,8 @@ class CallGraphVisitor : AstVisitor {
                 add_site(cur, word, expr.at)
             }
         } elif (is_target(cur)) {
-            return if (expr.func.flags.builtIn)  // no das source to hierarchy into
+            // builtins have no das source; synthesized members are noise
+            return if (expr.func.flags.builtIn || is_synthesized(expr.func))
             add_site(expr.func, word, expr.at)
         }
     }

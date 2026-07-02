@@ -229,6 +229,25 @@ and CC converts to 0-based LSP before they reach the server.
 
 ### Wave 4 — dogfooding: session adoption + call hierarchy / implementation
 
+**Status: COMPLETE, proven live** — checked-in plugin manifest (headless
+session with NO `--plugin-dir` gets diagnostics), call hierarchy + implementation
+driven end-to-end through CC's LSP tool (goToImplementation rendered the
+derived override; incoming/outgoing calls consistent in both directions,
+exact positions). Protocol test extended with the call-hierarchy loop
+(prepare → incomingCalls with `data` echoed verbatim → outgoingCalls from
+the returned caller item) and implementation.
+
+Implementation findings: class-method Function names are class-prefixed
+(`Animal`speak`) — items display bare names, `data.name`/`symbol` round-trips
+the full one; generated members (apostrophe names, `Foo'__finalize`) sit ON
+the `class` line and finalizer-chain calls do too, so both cursor paths skip
+synthesized functions; `to_void` takes `auto(TT) const?` so both pointer
+flavors share one instance (mangler ICE 50609); `->` virtual invokes and
+lambda invokes are not statically resolvable — call hierarchy covers direct
+calls only.
+
+Original plan:
+
 Use the LSP to build the LSP: adopt it in this repo's Claude Code
 sessions first, then develop the new ops with live diagnostics on.
 
