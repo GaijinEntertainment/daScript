@@ -192,9 +192,23 @@ def add_user(var c : ChatSession; text : string) {
     c.history |> push(Message(role = Role.user, content = text))
 }
 
+//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format) —
+//! the reasoning of prior turns is excluded from chat history per the Qwen3 protocol. Replies that
+//! don't open with `<think>` pass through unchanged; an unterminated block (the token budget ran out
+//! mid-think) strips to empty, since the reasoning never reached an answer.
+def strip_think(reply : string) : string {
+    let open = find(reply, "<think>")
+    if (open < 0 || !is_null_or_whitespace(slice(reply, 0, open))) {
+        return reply
+    }
+    let close = find(reply, "</think>")
+    return close < 0 ? "" : strip(slice(reply, close + length("</think>"), length(reply)))
+}
+
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
 //! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the budget.
-//! Terminates the turn in the KV cache and appends it to the transcript. Returns the full reply text.
+//! Terminates the turn in the KV cache and appends it to the transcript (with any `<think>` block
+//! stripped — see strip_think). Returns the full reply text, thinking included.
 //! Timing is available afterwards via stats(c.session).
 def respond(m : Model; var c : ChatSession; params : SamplingParams;
             blk : block<(piece : string) : bool>) : string {
@@ -220,6 +234,6 @@ def respond(m : Model; var c : ChatSession; params : SamplingParams;
     render_parts(m, c.close_parts, "", close)
     eval(m, c.session, close)
     let reply = join(reply_parts, "")
-    c.history |> push(Message(role = Role.assistant, content = reply))
+    c.history |> push(Message(role = Role.assistant, content = strip_think(reply)))
     return reply
 }

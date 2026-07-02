@@ -75,6 +75,7 @@ struct Config {
     final_logit_softcap : float = 0.0  // output-logit soft cap, 0 = off (Gemma2: 30)
     sliding_window : int64 = 0         // sliding-window attention span, 0 = off (Gemma2: 4096, alt layers)
     pre_post_norm : bool = false       // Gemma2: extra post-attention / post-FFN norms
+    qk_norm : bool = false             // Qwen3: per-head RMSNorm on Q/K before RoPE
 }
 
 // Swappable block kernels — one per (attention|ffn) × (decode|prefill). Decode is the fused
@@ -116,6 +117,9 @@ struct Model {
     // when config.pre_post_norm, otherwise unused
     rms_post_att_off : int64
     rms_post_ffn_off : int64
+    // Qwen3 QK-norm weights (one head_size vector per layer); offsets valid only when config.qk_norm
+    rms_q_off : int64
+    rms_k_off : int64
     // big 2D weights — exactly one representation populated per `quant`
     wblob : array<float>
     qblob : array<int8>
@@ -211,6 +215,12 @@ def private layout_offsets(var t : Model) : LayoutSizes {
         fo += layers * dim
         t.rms_post_ffn_off = fo
         fo += layers * dim
+    }
+    if (c.qk_norm) {  // Qwen3: per-head Q/K RMSNorm weights, one head_size vector per layer
+        t.rms_q_off = fo
+        fo += layers * c.head_size
+        t.rms_k_off = fo
+        fo += layers * c.head_size
     }
     t.rms_final_off = fo
     fo += dim
@@ -515,6 +525,11 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
             if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
+            }
+            if (t.config.qk_norm) {  // Qwen3: per-head Q/K norms (head_size each)
+                let hs = t.config.head_size
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q_norm.weight", t.fblob, t.rms_q_off + l * hs, hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k_norm.weight", t.fblob, t.rms_k_off + l * hs, hs)
             }
         }
         gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
@@ -1075,6 +1090,10 @@ def private attention_std_decode(t : Model; var s : Session; l : int64; pos : in
         add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
         add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
     }
+    if (c.qk_norm) {  // Qwen3: per-head RMSNorm on q/k before RoPE — q/k are n_heads/n_kv_heads rows of head_size
+        rms_batch(s.q, s.q, t, t.rms_q_off + l * head_size, head_size, n_heads)
+        rms_batch(s.k, s.k, t, t.rms_k_off + l * head_size, head_size, c.n_kv_heads)
+    }
     // RoPE on q (qd) and k (kv_dim)
     rope_apply(s.q, pos, head_size, qd, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
     rope_apply(s.k, pos, head_size, kv_dim, c.rope_freq_base, t.rope_freqs, c.rope_neox, c.rope_mscale)
@@ -1565,6 +1584,12 @@ def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : 
         }
     }
     prof_add("mm_qkv", ts_qkv)
+    if (c.qk_norm) {  // Qwen3: per-head RMSNorm on q/k before RoPE — q_b/k_b are npos*n_heads/n_kv_heads contiguous head_size rows
+        let ts_qknorm = ref_time_ticks()
+        rms_batch(s.q_b, s.q_b, t, t.rms_q_off + l * head_size, head_size, npos * n_heads)
+        rms_batch(s.k_b, s.k_b, t, t.rms_k_off + l * head_size, head_size, npos * c.n_kv_heads)
+        prof_add("norm", ts_qknorm)
+    }
     // RoPE per position (absolute pos = start_pos + p) in place, then the KV-store pass below.
     // rope_batch* self-gates threading on ROPE_PAR_THRESHOLD, so small prompts run it inline.
     let ts_rope = ref_time_ticks()

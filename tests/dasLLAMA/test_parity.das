@@ -231,3 +231,45 @@ def test_parity_mistral7b(t : T?) {
         t |> success(parity_ok(path, QuantMode.q8, MISTRAL7B_PROMPT, MISTRAL7B_GEN), "mistral-7b-v0.3 token-for-token")
     }
 }
+
+// Qwen3-0.6B + Qwen3-4B-Instruct-2507 Q8, "1, 2, 3, 4, 5, 6, 7," (no BOS) — the QK-norm arch
+// (per-head Q/K RMSNorm before RoPE). Same confident counting prompt as the other Qwen fixtures;
+// both models continue it identically, and the ids equal the Qwen2.5 fixture (same BPE vocab).
+let QWEN3_PROMPT <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l,
+                     11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
+let QWEN3_GEN <- [220l, 23l, 11l, 220l, 24l, 11l, 220l, 16l, 15l, 11l,
+                  220l, 16l, 16l, 11l, 220l, 16l, 17l, 11l, 220l, 16l,
+                  18l, 11l, 220l, 16l, 19l, 11l, 220l, 16l, 20l, 11l,
+                  220l, 16l, 21l, 11l, 220l, 16l, 22l, 11l, 220l, 16l]
+
+[test]
+def test_parity_qwen3_06b(t : T?) {
+    t |> run("qwen3 forward (Qwen3-0.6B Q8, QK-norm)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Qwen3-0.6B-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, QWEN3_PROMPT, QWEN3_GEN), "qwen3-0.6b token-for-token")
+    }
+}
+
+[test]
+def test_parity_qwen3_4b(t : T?) {
+    t |> run("qwen3 forward (Qwen3-4B-Instruct-2507 Q8, QK-norm)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = "{MODELS_DIR}Qwen3-4B-Instruct-2507-Q8_0.gguf"
+        if (!stat(path).is_valid) {
+            t |> success(true, "skipped: {path} not present")
+            return
+        }
+        t |> success(parity_ok(path, QuantMode.q8, QWEN3_PROMPT, QWEN3_GEN), "qwen3-4b token-for-token")
+    }
+}

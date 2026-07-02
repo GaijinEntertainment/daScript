@@ -248,5 +248,26 @@ def test_chat_template_detection(t : T?) {
         m2.tok.kind = TokKind.spm
         let ct2 <- chat_template(m2)
         t |> equal(first_user_special(ct2), "</s>")   // llama + SPM => Zephyr
+        var m3 = Model()
+        m3.arch = "qwen3"
+        let ct3 <- chat_template(m3)
+        t |> equal(first_user_special(ct3), "<|im_start|>")   // Qwen3 registry template is ChatML too
+    }
+}
+
+// ===== <think>-stripping (model-free) =====
+
+[test]
+def test_chat_strip_think(t : T?) {
+    t |> run("leading think block is stripped from history content") @(t : T?) {
+        t |> equal(strip_think("<think>\nreasoning here\n</think>\n\nThe answer is 42."), "The answer is 42.")
+        t |> equal(strip_think("  \n<think>r</think>answer"), "answer")   // leading whitespace before the block is fine
+        t |> equal(strip_think("<think>never closed — budget ran out"), "")
+    }
+    t |> run("replies without a leading think block pass through") @(t : T?) {
+        t |> equal(strip_think("The answer is 42."), "The answer is 42.")
+        t |> equal(strip_think(""), "")
+        // a think tag mentioned mid-reply is content, not a reasoning block
+        t |> equal(strip_think("use the <think> tag like this"), "use the <think> tag like this")
     }
 }

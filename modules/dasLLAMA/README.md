@@ -79,6 +79,7 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **SmolLM2-1.7B-Instruct** | Q8_0 GGUF | Llama (arch `llama`) | BPE | ✅ | `llama.cpp` `simple_ids`, 40/40 token-for-token; frozen fixture in `test_parity.das` |
 | **Mistral-7B-Instruct-v0.3** | Q8_0 GGUF | Llama (arch `llama`, no SWA) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids`, 40/40 token-for-token; frozen fixture; chat via the detected `[INST]` template |
 | **Qwen2.5-0.5B / 1.5B-Instruct** | Q8_0 GGUF | Qwen2 (QKV bias, NEOX rope, eps 1e-6) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 1.5B 40/40 (frozen fixture); 0.5B matches to ~0.02 logits, flips only genuine near-ties (tiny model) |
+| **Qwen3-0.6B / 4B-Instruct-2507** | Q8_0 GGUF | Qwen3 (QK-norm: per-head Q/K RMSNorm pre-RoPE; NEOX rope, no QKV bias) | BPE (qwen2 pre) | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: both 40/40 token-for-token (frozen fixtures in `test_parity.das`) |
 | **Phi-3.5-mini-instruct** | Q8_0 GGUF | Phi3 (fused QKV + gate_up, NEOX rope, LongRoPE) | SPM | ✅ | `llama.cpp` `simple_ids` / `harness/parity.sh`: 40/40 (frozen fixture); prose matches to ~0.06 logits, flips only genuine near-ties |
 | **Gemma-2-2B-it** | Q8_0 GGUF | Gemma2 (GeGLU, dual softcap, sliding window, sandwich norms, embed ×√dim) | SPM (GGUF) | ✅ | `llama.cpp` `simple_ids`, token-for-token; frozen fixture in `tests/dasLLAMA/test_parity.das`; SWA exercised on a 4k+ context |
 
@@ -117,16 +118,16 @@ What a model needs to "just work" today:
 |---|---|
 | GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0** |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
-| Architecture | `llama`, `qwen2`, `phi3`, `gemma2` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
+| Architecture | `llama`, `qwen2`, `qwen3`, `phi3`, `gemma2` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
 | Attention | MHA **and** GQA (grouped-query); sliding-window (Gemma-2); attention + final-logit soft-capping |
-| Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2); Gemma-2's pre+post sandwich norms |
+| Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2/Qwen3); Gemma-2's pre+post sandwich norms; Qwen3's per-head Q/K norms (QK-norm, pre-RoPE) |
 | Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) and **NEOX** (Qwen2 / Phi3 / Gemma-2, pairs offset by head_size/2); per-pair freq scaling + θ from metadata (llama3 NTK-by-parts; Phi3 LongRoPE short factors + attn_factor mscale); θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5 |
 | FFN | SwiGLU **and** GeGLU (incl. Phi3's fused gate_up, split at load) |
 | Tokenizer | **SentencePiece** (Llama-2 family, Phi-3, Gemma) **and byte-level BPE / tiktoken** (Llama-3 + Qwen2 pre-tokenizers, exact llama.cpp split) |
 | Model size | files >4GB load (needed the fmap >4GB engine fix) |
 | QKV bias | **Qwen2** — learned bias on the Q/K/V projections |
 | Sampling | greedy, temperature, top-k, repetition penalty (`SamplingParams`; greedy = temp 0, bit-identical to argmax) |
-| Chat | per-arch data-driven templates in the registry + one segment-accumulation renderer (`dasllama_chat`) — reproduces the reference prefills token-for-token (`test_chat.das`); the template is auto-detected by sniffing the GGUF's embedded `tokenizer.chat_template` (never executed), falling back to the arch heuristic |
+| Chat | per-arch data-driven templates in the registry + one segment-accumulation renderer (`dasllama_chat`) — reproduces the reference prefills token-for-token (`test_chat.das`); the template is auto-detected by sniffing the GGUF's embedded `tokenizer.chat_template` (never executed), falling back to the arch heuristic; Qwen3-style `<think>` blocks are stripped from chat history (`strip_think`) |
 | Performance | KV cache, SIMD + JobQue-threaded matmul, activation-quant Q8·Q8 behind a pluggable kernel-backend registry (ARM SDOT/laneq today — `x64_arch.md` for the x64 mirror), flash-attention batched prefill, per-box kernel tuning (`tune_for_this_box.md`) |
 
 ## Known **not** yet supported

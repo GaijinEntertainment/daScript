@@ -19,8 +19,8 @@ def private has_content(turn : ChatTurn) : bool {
 
 [test]
 def test_arch_registry_populated(t : T?) {
-    t |> run("all four arches self-register at [init]") @(t : T?) {
-        let expected <- ["llama", "qwen2", "phi3", "gemma2"]
+    t |> run("all five arches self-register at [init]") @(t : T?) {
+        let expected <- ["llama", "qwen2", "qwen3", "phi3", "gemma2"]
         for (name in expected) {
             t |> success(has_arch(name), "arch '{name}' registered")
         }
@@ -32,7 +32,7 @@ def test_arch_registry_populated(t : T?) {
 [test]
 def test_arch_chat_templates(t : T?) {
     t |> run("each arch has a well-formed chat template") @(t : T?) {
-        for (name in ["llama", "qwen2", "phi3", "gemma2"]) {
+        for (name in ["llama", "qwen2", "qwen3", "phi3", "gemma2"]) {
             let ct <- arch_chat(name)
             t |> success(length(ct.user.parts) > 0, "'{name}' user turn non-empty")
             t |> success(has_content(ct.user), "'{name}' user turn has a content slot")

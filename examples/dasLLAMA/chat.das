@@ -11,7 +11,7 @@ require math
 // One chat REPL for every supported model. load_model auto-selects the architecture, tokenizer, and
 // chat template from the GGUF; the chat engine (dasllama_chat) renders each turn per the arch's
 // registered template and keeps the whole conversation in the KV cache. Works for Llama-2/3,
-// Qwen2.5, Phi-3.5, and Gemma-2 — the only per-model difference is data in the arch registry.
+// Qwen2.5/3, Phi-3.5, and Gemma-2 — the only per-model difference is data in the arch registry.
 //
 //   bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 //   printf 'hi\n/quit\n' | bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>

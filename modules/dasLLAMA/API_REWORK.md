@@ -258,6 +258,7 @@ are Q8_0 GGUFs into `~/Work/llama.cpp/models/` unless noted.
 | **3** | **Gemma 4** — pruned p-RoPE on global layers (the partial-RoPE item), shared KV cache (per-layer KV source map; last-N layers drop their K/V projections), per-layer embeddings | gemma-4-12b-it | 12.7 |
 | **4** | **MoE FFN block** via the ArchBlocks seam (proves Phase 4) — router → top-k, pluggable gating (softmax now, sigmoid slot, `norm_topk_prob`), routed experts + **shared expert(+gate)**; loader handles 3D stacked `ffn_*_exps`, expert-major Q8 so the existing kernels apply per expert. Decode first; prefill naive per-token, expert-bucketed grouped GEMM as a separate perf PR | Qwen1.5-MoE-A2.7B-Chat; stretch: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B | 15 (+14) |
 | **5** | attention sinks (per-head sink logit in the softmax — classic + flash cores) + MXFP4 GGUF decode (dequant → self-Q8 at load) | gpt-oss-20b | 12.1 |
+| **6** | *(infra, last)* lift the linear-allocator 4GB limit — `LinearChunkAllocator`'s per-chunk `uint32` cap breaks any context holding a >4GB single array, which today forces `options persistent_heap` on model-loading tests (Mistral-7B's Q8 blob is 7.1GB) and the `seq_len` cap before `create_session` (Llama-3/Phi native 131072 ⇒ >4GB KV arrays). Fix the allocator (64-bit chunk sizing), then remove both workarounds | none — regression = existing suite minus the workarounds | — |
 
 Out of scope, and why: Qwen3.5/3.6 (Gated-DeltaNet hybrid linear attention → Tier 3),
 Llama-4 (109B+), DeepSeek V3+/GLM-5 (MLA / bespoke sparse → Tier 3), Mixtral (superseded,
