@@ -193,6 +193,7 @@ class PerfLintVisitor : AstVisitor {
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
     warnings : array<string>
+    issues : array<LintIssue>       // structured twin of `warnings`, same entries in the same order
     // dedup: reported (file_hash, line, column) to suppress duplicate warnings from generic instantiations
     reported_locations : table<uint64>
     // PERF019: cache of enum-types we've probed for an `operator |` overload.
@@ -247,6 +248,7 @@ class PerfLintVisitor : AstVisitor {
             compiling_program() |> macro_performance_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("performance warning: {msg} at {describe(at)}")
+            issues |> push(make_lint_issue(msg, at))
         } else {
             to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }
@@ -2033,6 +2035,22 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     }
     let count = astVisitor.warning_count
     warnings |> push_from(astVisitor.warnings)
+    unsafe { delete astVisitor; }
+    return count
+}
+
+def public perf_lint_collect_issues(prog : ProgramPtr; var issues : array<LintIssue>;
+                                    disabled_codes, enabled_codes : table<string>) : int {
+    //! Structured twin of ``perf_lint_collect`` — same filters, but emits
+    //! ``LintIssue`` records (rule code + position) instead of display strings.
+    var astVisitor = new PerfLintVisitor(compile_time_errors = false, collect_warnings = true)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(prog, astVisitorAdapter)
+    }
+    let count = astVisitor.warning_count
+    issues |> push_from(astVisitor.issues)
     unsafe { delete astVisitor; }
     return count
 }

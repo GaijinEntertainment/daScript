@@ -108,32 +108,51 @@ Deliverable: probe notes in this file; wave 1 scope locked by answers, not docs.
    the server also gets `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`;
    cwd = project dir. Headless `-p` sessions load the plugin — no interactive session
    needed for development.
-6. **maxRestarts semantics**: still untested — exercise in wave 1 by killing the
-   supervisor mid-session.
+6. **maxRestarts semantics**: answered in the wave-1 kill probe — CC v2.1.198 does
+   NOT restart a dead LSP server mid-session (killed the supervisor, then edited a
+   compile error in: one `startup` in the log, no respawn, no diagnostics ever again,
+   no signal to the model). Supervisor death is silent until the session restarts —
+   so the supervisor must never die: `handle()` is exception-guarded, and subtool
+   crashes are already isolated in the child process.
 
-Open question for wave 1: whether repeat diagnostics on the same file re-inject on
-every didChange or only on content change — observe with real compiler output.
+Wave-1 injection facts (beyond wave 0): diagnostics attach to whichever tool result
+comes next — any tool (a lint publish landed on a `Bash` result). Injection is
+delta-based: the block is titled "new diagnostic issues", each publish injects once,
+and repeating an identical publish set does not re-inject on later tool calls.
+Severity rendering: 1 → `✘`, 2 → `⚠`, 3 → `ℹ` (Information DOES render); the
+`code` field renders as a `[CODE]` suffix, `source` as `(source)`.
 
 ### Wave 1 — diagnostics MVP
 
-**Status: core SHIPPED and proven live** — `lsp_supervisor.py` + `subtools/validate.das`
+**Status: COMPLETE, proven live** — `lsp_supervisor.py` + `subtools/validate.das`
 + `plugin/.claude-plugin/plugin.json`. A headless CC session with the plugin gets real
 compiler diagnostics after an Edit (verified verbatim: position, error code 30341, full
 message). Injection semantics: diagnostics attach to the **next tool result** after the
 edit — a publish that lands after the model's final message has nowhere to inject, so
 latency matters. Debounce is 0.1 s (CC sends exactly one didChange per Edit call — no
-keystroke bursts exist in this client); small-file validate measures ~70 ms spawn+compile
-on top. Remaining in this wave: lint-as-diagnostics (below), supervisor-kill restart
-probe.
+keystroke bursts exist in this client).
 
-- Supervisor: lifecycle, doc sync per wave-0 findings, ~300 ms debounce,
+- Supervisor: lifecycle, doc sync per wave-0 findings, 0.1 s debounce,
   kill-stale-validate, config via `initializationOptions` (project `.das_project`,
   `project_root`, `load_module` list, exe override) mapped onto subtool argv exactly
   like `build_subtool_argv`.
 - `subtools/validate.das`: compile via `make_file_access` + `compile_file` (reuse
   `utils/mcp` compile machinery), emit LSP `Diagnostic[]`.
-- Lint-as-diagnostics: STYLE/PERF/LINT as `Warning`/`Information` severity in the same
-  validate pass — live lint on every edit.
+- Lint-as-diagnostics: **shipped**. One lint-profile compile (same policies as
+  `utils/lint`: `lint_check`, `export_all`, `no_optimizations`,
+  `no_infer_time_folding`) serves both errors and lint — compile errors surface at
+  infer, before optimization, so error fidelity is unchanged; lint rules need the
+  unoptimized AST anyway. On a clean compile the three passes run via the structured
+  `*_collect_issues` overloads (added to `daslib/lint` / `perf_lint` / `style_lint`;
+  shared `LintIssue` record in `daslib/lint_config`, tested in
+  `tests/lint/test_collect_issues.das`) — no parsing positions back out of display
+  strings, and `last_line`/`last_column` give real LSP ranges. Severity map:
+  LINT/PERF → Warning, STYLE → Information (probe-verified `⚠`/`ℹ` render). Repo
+  policy honored (`seed_default_disabled` + `.lint_config` + per-file
+  `_comment_hygiene` option); `// nolint` works as everywhere else. dastest
+  expect-files get one Information note instead of their intentional errors.
+  Cost: ~0.3 s spawn+compile for a small file (the lint modules' own compile,
+  up from ~70 ms core-only) — still well inside the next-tool-result window.
 
 ### Wave 2 — navigation
 
