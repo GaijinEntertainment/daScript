@@ -136,6 +136,9 @@ jobs:
     - name: "Compile PDF: daslangstdlib.tex"
       uses: xu-cheng/latex-action@v4
       with:
+        # Pinned: the rolling texlive-alpine:latest flipped to TL 2026 (2026-07-01) whose kernel
+        # dies with "TeX capacity exceeded [input stack size]" on the generated stdlib PDF.
+        texlive_version: "2025"
         root_file: daslangstdlib.tex
         working_directory: build/latex
         continue_on_error: true
@@ -143,6 +146,7 @@ jobs:
     - name: "Compile PDF: daslang.tex"
       uses: xu-cheng/latex-action@v4
       with:
+        texlive_version: "2025"
         root_file: daslang.tex
         working_directory: build/latex
         continue_on_error: true
