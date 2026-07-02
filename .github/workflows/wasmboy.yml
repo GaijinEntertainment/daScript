@@ -1,0 +1,64 @@
+# The little wasm boy: the fat man's web-side sibling. Clones the imgui family
+# (dasImgui, dasImguiImplot, dasImguiNodeEditor — the externals the playground
+# interpreter binds; no dasVulkan on wasm) into modules/ and builds the threaded
+# interpreter-in-wasm (daslang_static) with them compiled + statically linked from
+# source — the emscripten arm of the externals' superbuild CMakeLists, which
+# pages.yml deploys but no other CI exercises (each module's own CI covers the
+# standalone .shared_module / standalone-wasm halves). Runs the require-smoke
+# under node: registration + boost-path resolution (the --embed-file mounts) +
+# the static wasm link, no browser, no GPU.
+name: wasmboy
+
+on:
+  pull_request:
+    paths:
+      - 'CMakeLists.txt'
+      - 'web/**'
+      - 'examples/fatman/**'
+      - '.github/workflows/wasmboy.yml'
+      - 'include/**'
+      - 'src/**'
+  workflow_dispatch:
+
+concurrency:
+  group: wasmboy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wasmboy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v11
+        with:
+          # Same pin as pages.yml (the deploy this lane gates) — see the emsdk
+          # version archaeology there before bumping.
+          version: '5.0.7'
+
+      - name: "Clone the imgui family into modules/ (master; no .daspkg_standalone marker => the modules glob includes their both-worlds CMakeLists)"
+        run: |
+          set -eux
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImgui.git          modules/dasImgui
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
+
+      - name: "Configure + build the threaded playground interpreter (daslang_static; the same config pages.yml deploys)"
+        run: |
+          set -eux
+          emcmake cmake -S web -B web/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_WASM_PTHREADS=ON
+          cmake --build web/build --target daslang_static -j $(nproc)
+
+      - name: "Run the little wasm boy under node"
+        run: |
+          set -eux
+          # emsdk-bundled Node: deterministic version that supports the modern wasm
+          # EH proposal flag (try_table/exnref — gated in Node 22, default-on 24+).
+          "$EMSDK_NODE" --experimental-wasm-exnref web/test/wasmboy_node.js . web/output

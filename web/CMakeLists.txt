@@ -156,23 +156,32 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasS
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/audio@modules/dasAudio/audio")
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/strudel@modules/dasAudio/strudel")
 
-# External dasImgui bound into the interpreter (the /examples furier + path_tracer_lab
-# playground cards). DAS_WEB_IMGUI_DIR points at a built dasImgui; CMakeLists.txt (root)
-# registers the imgui/* NATIVE_MODULE names when it is set, here we embed the matching
-# .das sources + font and link the wasm32 archives. The imgui harness also requires the
-# dasLiveHost live/* halves (registered as NATIVE_MODULE but never embedded before, since
-# no interpreter sample required them) and the JetBrainsMono font it loads at init.
-IF(DAS_WEB_IMGUI_DIR)
-    MESSAGE(STATUS "web: embedding dasImgui (${DAS_WEB_IMGUI_DIR}) into daslang_static")
-    add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/widgets@modules/dasImgui/imgui")
-    # Pre-rename dasImgui kept module imgui_boost_v2 in the file widgets/imgui_boost.das;
-    # post-rename (dasImgui #218) the file carries the module's own name and the widgets/
-    # embed above already covers it. Tolerate both layouts.
-    IF(NOT EXISTS "${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost_v2.das")
-        add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost.das@modules/dasImgui/imgui/imgui_boost_v2.das")
-    ENDIF()
-    add_link_options("SHELL:--embed-file ${DAS_WEB_IMGUI_DIR}/font/JetBrainsMono-Regular.ttf@modules/dasImgui/font/JetBrainsMono-Regular.ttf")
-    add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasLiveHost/live@modules/dasLiveHost/live")
+# The imgui family (EXTERNAL modules) bound into the interpreter — the furier +
+# path_tracer_lab playground cards run their .das in the interpreter-in-wasm. Clone
+# dasImgui / dasImguiImplot / dasImguiNodeEditor into modules/ (fresh clone = no
+# .daspkg_standalone marker) and the root modules glob absorbs their both-worlds
+# CMakeLists: the superbuild branch registers the C++ modules + `imgui/<name>` boost
+# paths and builds the static archives from source in-build (linked into
+# daslang_static via DAS_MODULES_LIBS — no prebuilt-archive wiring). Here we embed
+# the matching .das halves at the paths the superbuild registrations resolve
+# (modules/<dir>/<subfolder>/<name>.das), plus the harness font and the dasLiveHost
+# live/* halves the imgui harness requires (in-tree, registered but not embedded
+# otherwise). Each gate mirrors the root glob's marker check so a daspkg-installed
+# (standalone-built) checkout is not half-embedded.
+SET(_ext_modules_dir "${CMAKE_CURRENT_SOURCE_DIR}/../modules")
+IF(EXISTS "${_ext_modules_dir}/dasImgui" AND NOT EXISTS "${_ext_modules_dir}/dasImgui/.daspkg_standalone")
+    MESSAGE(STATUS "web: embedding dasImgui widgets + font into daslang_static")
+    add_link_options("SHELL:--embed-file ${_ext_modules_dir}/dasImgui/widgets@modules/dasImgui/widgets")
+    add_link_options("SHELL:--embed-file ${_ext_modules_dir}/dasImgui/font/JetBrainsMono-Regular.ttf@modules/dasImgui/font/JetBrainsMono-Regular.ttf")
+    add_link_options("SHELL:--embed-file ${_ext_modules_dir}/dasLiveHost/live@modules/dasLiveHost/live")
+ENDIF()
+IF(EXISTS "${_ext_modules_dir}/dasImguiImplot" AND NOT EXISTS "${_ext_modules_dir}/dasImguiImplot/.daspkg_standalone")
+    MESSAGE(STATUS "web: embedding dasImguiImplot daslib into daslang_static")
+    add_link_options("SHELL:--embed-file ${_ext_modules_dir}/dasImguiImplot/daslib@modules/dasImguiImplot/daslib")
+ENDIF()
+IF(EXISTS "${_ext_modules_dir}/dasImguiNodeEditor" AND NOT EXISTS "${_ext_modules_dir}/dasImguiNodeEditor/.daspkg_standalone")
+    MESSAGE(STATUS "web: embedding dasImguiNodeEditor daslib into daslang_static")
+    add_link_options("SHELL:--embed-file ${_ext_modules_dir}/dasImguiNodeEditor/daslib@modules/dasImguiNodeEditor/daslib")
 ENDIF()
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
@@ -189,30 +198,6 @@ add_subdirectory(.. ${CMAKE_BINARY_DIR}/daslang_src EXCLUDE_FROM_ALL)
 set_target_properties(daslang_static PROPERTIES
     EXCLUDE_FROM_ALL FALSE
     RUNTIME_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR})
-
-# Link the prebuilt dasImgui wasm32 archives into daslang_static. The root CMake's
-# ADD_MODULE_CPP(dasIMGUI/imgui_app/imgui_app_headless) put register_Module_* references
-# into the interpreter's main; these archives supply them (+ imgui itself). App/headless
-# reference the imgui core, so list core last (wasm-ld resolves archives iteratively, but
-# keep the natural order). GLFW symbols come from -sUSE_GLFW=3 at this final link.
-IF(DAS_WEB_IMGUI_DIR)
-    # Match the dasImgui archive ABI to this build: threaded daslang_static (-pthread,
-    # DAS_WASM_PTHREADS=ON, so new_thread/JobQue run on real Web Workers in the playground)
-    # links the _wasm32mt archives; a single-thread build links _wasm32.
-    IF(DAS_WASM_PTHREADS)
-        SET(_imgui_archive_dir "${DAS_WEB_IMGUI_DIR}/_wasm32mt")
-    ELSE()
-        SET(_imgui_archive_dir "${DAS_WEB_IMGUI_DIR}/_wasm32")
-    ENDIF()
-    target_link_libraries(daslang_static
-        "${_imgui_archive_dir}/liblibImguiApp.a"
-        "${_imgui_archive_dir}/liblibImguiAppHeadless.a"
-        "${_imgui_archive_dir}/liblibDasModuleImgui.a")
-    # imguiApp's glfw backend re-instantiates daslang's typeFactory<GLFWwindow> (also in
-    # dasGlfw); the instantiations are identical, so let the linker take the first. This is
-    # the same flag the cross-compiled examples-card apps use for the same imgui+glfw stack.
-    target_link_options(daslang_static PRIVATE "-Wl,--allow-multiple-definition")
-ENDIF()
 
 # Pin the wasm32 runtime archive into web/output/lib so it doesn't collide
 # with the host build's lib/ (root CMakeLists.txt:317 resets
@@ -256,7 +241,7 @@ add_custom_target(stage_site_playground ALL
     # The dasImgui showcase samples (furier, path_tracer_lab) are generated from the canonical
     # examples/graphics sources — no committed copies. Must run AFTER the samples copy_directory
     # above (which would otherwise overwrite them). data.json lists them; they only run in the
-    # threaded daslang_static interpreter (DAS_WEB_IMGUI_DIR + DAS_WASM_PTHREADS build).
+    # threaded daslang_static interpreter (imgui family cloned into modules/ + DAS_WASM_PTHREADS).
     COMMAND ${CMAKE_COMMAND}
         -DREPO=${CMAKE_CURRENT_SOURCE_DIR}/..
         -DDEST=${SITE_PLAYGROUND_DIR}/samples/examples

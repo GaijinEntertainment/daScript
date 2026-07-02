@@ -598,43 +598,6 @@ FOREACH(_module ${_modules})
     ENDIF()
 ENDFOREACH()
 
-# ===== External dasImgui -> wasm interpreter (daslang_static) =====
-# The /examples furier + path_tracer_lab playground cards run their .das in the
-# interpreter-in-wasm. dasImgui is an EXTERNAL module (not under modules/), so bind it
-# here when DAS_WEB_IMGUI_DIR points at a built dasImgui (its _wasm32 archives + the
-# widgets/ .das tree). Replicate the module's .das_module register_native_path list as
-# static NATIVE_MODULE entries -- the dynamic register path is gated behind
-# das_is_dll_build(), which is false in the static wasm monolith. The archive link +
-# the .das/font embeds live in web/CMakeLists.txt; this block only registers names so the
-# generated external_*.inc pick them up. Inert for every non-web build (var unset).
-IF(EMSCRIPTEN AND DAS_WEB_IMGUI_DIR)
-    MESSAGE(STATUS "daslang_static: binding external dasImgui (${DAS_WEB_IMGUI_DIR})")
-    # require imgui/<name> -> modules/dasImgui/imgui/<name>.das (the embedded widgets tree).
-    SET(_module dasImgui)
-    FILE(GLOB _imgui_das_files "${DAS_WEB_IMGUI_DIR}/widgets/*.das")
-    FOREACH(_f ${_imgui_das_files})
-        GET_FILENAME_COMPONENT(_n "${_f}" NAME_WE)
-        # imgui_boost is the v1 module name, intentionally non-compileable during the
-        # v2 refactor; the FILE widgets/imgui_boost.das actually holds module
-        # imgui_boost_v2 (registered explicitly below, name != file stem). Skip the stem.
-        IF(NOT "${_n}" STREQUAL "imgui_boost")
-            ADD_MODULE_DAS(imgui imgui ${_n})
-        ENDIF()
-    ENDFOREACH()
-    # Pre-rename dasImgui kept module imgui_boost_v2 in widgets/imgui_boost.das (the web
-    # embed mounts it under the module name); post-rename (dasImgui #218) the glob above
-    # already registered it. Tolerate both layouts.
-    IF(NOT EXISTS "${DAS_WEB_IMGUI_DIR}/widgets/imgui_boost_v2.das")
-        ADD_MODULE_DAS(imgui imgui imgui_boost_v2)
-    ENDIF()
-    UNSET(_module)
-    # C++ binding modules: register_Module_dasIMGUI / _imgui_app / _imgui_app_headless,
-    # pulled from the prebuilt wasm32 archives linked in web/CMakeLists.txt.
-    ADD_MODULE_CPP(dasIMGUI)
-    ADD_MODULE_CPP(imgui_app)
-    ADD_MODULE_CPP(imgui_app_headless)
-ENDIF()
-
 # Clean stale .shared_module files. When a module is disabled, its .shared_module
 # from a previous build may remain and cause crashes at startup (the dynamic module
 # loader tries to load them even though the module code is no longer linked).

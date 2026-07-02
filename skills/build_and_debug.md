@@ -57,7 +57,7 @@ Optional modules are controlled by CMake flags (`DAS_*_DISABLED`). The active co
 Key flags (defaults are MIXED — see CMakeLists.txt:28-43):
 - Default `OFF` (module ENABLED by default): `DAS_HV_DISABLED` (dasHV — HTTP/WebSocket via libhv), `DAS_GLFW_DISABLED` (GLFW/OpenGL windowing), `DAS_PUGIXML_DISABLED` (XML), `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STDDLG_DISABLED`
 - Default `ON` (module DISABLED by default): `DAS_LLVM_DISABLED` (LLVM JIT), `DAS_CLANG_BIND_DISABLED` (Clang bindings), `DAS_SQLITE_DISABLED`
-- dasImgui has no `_DISABLED` toggle — it's wired via `DAS_WEB_IMGUI_DIR`
+- dasImgui has no `_DISABLED` toggle — it's an EXTERNAL module: cloned/junctioned into `modules/` (the modules glob absorbs its both-worlds CMakeLists; a `.daspkg_standalone` marker in the dir makes the glob skip it) or loaded at runtime as a `.shared_module` by the DLL-flavor host. The wasm playground binds it the same clone-into-modules way (see `.github/workflows/wasmboy.yml`)
 
 **To change modules:** edit the active `cmake.configureSettings` in `.vscode/settings.json`, then reconfigure. Or pass `-DFLAG=VALUE` to your `cmake -B build ...` command. VSCode CMake Tools will pick up settings changes automatically.
 

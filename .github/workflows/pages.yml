@@ -178,38 +178,40 @@ jobs:
                 ./bin/daslang utils/daspkg/main.das -- install "$@"
         }
 
-        # 0. dasImgui for the playground showcases (furier, path_tracer_lab). The threaded
-        #    daslang_static interpreter binds it so those samples run in the playground itself —
-        #    not only as the wasm64 examples-card builds. daspkg installs dasImgui from the package
-        #    index into the path_tracer_lab package; build its threaded wasm32 archives (-pthread,
-        #    no memory64 -> _wasm32mt) so the ABI matches the threaded daslang_static. If any of
-        #    this fails (e.g. the dasImgui wasm release isn't in the index yet), fall back to a
-        #    plain single-thread daslang_static so the rest of the playground still deploys; only
-        #    the two imgui samples are unavailable that deploy (same non-fatal stance as the cards).
-        IMGUI_DIR="$REPO/examples/graphics/path_tracer_lab/modules/dasImgui"
-        PLAYGROUND_IMGUI=""
-        if das_install --root examples/graphics/path_tracer_lab \
-           && ( cd "$IMGUI_DIR" \
-                && emcmake cmake -S . -B _wasm_build32mt -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                     -DDASLANG_DIR="$REPO" -DDAS_IMGUI_WASM_MEMORY64=OFF -DDAS_IMGUI_WASM_PTHREADS=ON \
-                && cmake --build _wasm_build32mt --target dasModuleImgui imguiApp imguiAppHeadless ); then
-            PLAYGROUND_IMGUI="-DDAS_WASM_PTHREADS=ON -DDAS_WEB_IMGUI_DIR=$IMGUI_DIR"
-            echo "playground: threaded daslang_static + dasImgui bound (furier + path_tracer_lab enabled)"
-        else
-            echo "WARNING: dasImgui wasm32mt archives unavailable — building plain daslang_static; the furier + path_tracer_lab playground samples will not run this deploy."
-        fi
+        # 0. The imgui family for the playground showcases (furier, path_tracer_lab):
+        #    clone dasImgui + dasImguiImplot + dasImguiNodeEditor into modules/ — the
+        #    root modules glob absorbs their both-worlds CMakeLists (the superbuild-
+        #    emscripten arm), so the playground build below compiles + statically links
+        #    them from source into the threaded daslang_static and embeds their .das
+        #    halves (web/CMakeLists EXISTS gates). No daspkg index or prebuilt archives
+        #    involved; the wasmboy CI lane gates this exact wiring on every PR. The
+        #    clones are REMOVED right after the playground build — the wasm64 daspkg
+        #    release flow (steps 2+) uses the externals' STANDALONE emscripten branches
+        #    via the package index and must not absorb the clones into web/build64.
+        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImgui.git          modules/dasImgui
+        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
+        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
 
         # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the example .das
-        #    sources staged into site/playground. When the dasImgui archives built above, this is
-        #    the THREADED build (-pthread + dasImgui), so new_thread / JobQue map to Web Workers and
-        #    every playground sample runs cross-origin-isolated (coi-serviceworker drops the
-        #    memory64 gate for /playground). stage_site_playground also generates the furier +
-        #    path_tracer_lab samples from the canonical examples/graphics sources.
-        #    (stage_site_playground_wasm is gone — compute samples are wasm64 now, built below;
-        #    it is gated off under non-memory64 in web/CMakeLists.)
-        ( cd web && mkdir -p build && cd build \
-            && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja $PLAYGROUND_IMGUI .. \
-            && ninja daslang_static stage_site_playground )
+        #    sources staged into site/playground. THREADED build (-pthread + the imgui family),
+        #    so new_thread / JobQue map to Web Workers and every playground sample runs
+        #    cross-origin-isolated (coi-serviceworker drops the memory64 gate for /playground).
+        #    stage_site_playground also generates the furier + path_tracer_lab samples from the
+        #    canonical examples/graphics sources. If the imgui-family build breaks (an external's
+        #    master regressed), degrade rather than blocking every deploy: drop the clones and
+        #    rebuild plain — only the imgui playground samples are unavailable that deploy (the
+        #    same non-fatal stance as the example cards).
+        build_playground() {
+            ( cd web && mkdir -p build && cd build \
+                && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja -DDAS_WASM_PTHREADS=ON .. \
+                && ninja daslang_static stage_site_playground )
+        }
+        if ! build_playground; then
+            echo "WARNING: imgui-family playground build failed — rebuilding plain threaded daslang_static; the furier + path_tracer_lab playground samples will not run this deploy."
+            rm -rf modules/dasImgui modules/dasImguiImplot modules/dasImguiNodeEditor web/build
+            build_playground
+        fi
+        rm -rf modules/dasImgui modules/dasImguiImplot modules/dasImguiNodeEditor
 
         # 2. wasm64 archives + compute samples + games. Configure web/build64 with
         #    the prebuilt host (so the compute foreach reuses it instead of
