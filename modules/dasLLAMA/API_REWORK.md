@@ -257,7 +257,7 @@ are Q8_0 GGUFs into `~/Work/llama.cpp/models/` unless noted.
 | **2** | per-layer attention patterns — generalize the hardcoded `l % 2` SWA alternation to `sliding_window_pattern` (gemma2 = 2, gemma3 = 6), per-layer RoPE θ (dual rope tables); SmolLM3's NoPE layers = same machinery | gemma-3-1b-it, gemma-3-4b-it (opt: SmolLM3-3B) | 1.1 + 4.5 |
 | **3** ✅ | **Gemma 4** — GGUF ground truth revised the plan: the 12B has NO shared KV and NO PLE (`shared_kv_layers = 0`, `embedding_length_per_layer_input = 0` — both are E-series features; the loader now panics honestly on either). What it DOES need, all shipped: heterogeneous per-layer geometry (sliding 16Q/8KV×256 vs global 16Q/1KV×512 — per-layer weight-offset arrays, class-max scratch, per-layer KV-cache packing), explicit bool-array SWA pattern (`swa_mask`), p-RoPE freq factors on global layers only (full rotation, `dimension_count` == head size per class — pruning is a loader panic), weightless V-norm, V-from-K on the no-`attn_v` global layers, unit attention scale, per-layer `layer_output_scale`, final softcap, `suppress_tokens` logit bias, and the new `gemma4` SPM-style-BPE tokenizer (metaspace + newline-only pre-split + byte fallback; 46/46 on the official corpus). Shared-KV + PLE move to a follow-up E-series wave (E2B ~2GB oracle) | gemma-4-12b-it — 40/40 counting + 40/40 window-engaged ~1490-token prompt | 12.7 |
 | **4** ✅ | **MoE FFN block** via the ArchBlocks seam (proves Phase 4 — the forward loops were untouched; qwen2moe registers `moe_blocks()`). Shipped: router → top-k over probs-before-selection, pluggable gating (`MoeGate.softmax\|sigmoid` from `{arch}.expert_gating_func`), `norm_topk_prob` + `expert_weights_scale` slots, routed experts + sigmoid-gated **shared expert**; expert-major layout (expert e of layer l = a plain 2D matrix at `we*_off + (l·n_expert+e)·dim·n_ff_exp`) so every existing kernel incl. the arm64 repack applies per expert; 3D `ffn_*_exps` transcode in one contiguous read; honest panics for grouped routing / gating-func 3 / `exp_probs_b` / expert biases. Decode fused; prefill naive per-token (grouped GEMM → ledger). Stretch models not pursued this wave: gemma-4-26B-A4B @ Q4_0, Qwen3-30B-A3B (qwen3moe = QK-norm + `norm_topk_prob`, no shared expert — a thin arch file when wanted) | Qwen1.5-MoE-A2.7B-Chat — 40/40 counting AND 40/40 prose, both prompts token-for-token | 15 |
-| **5** | attention sinks (per-head sink logit in the softmax — classic + flash cores) + MXFP4 GGUF decode (dequant → self-Q8 at load) | gpt-oss-20b | 12.1 |
+| **5** ✅ | **gpt-oss** — everything the plan row named plus what the GGUF ground truth added. Shipped: attention sinks (per-head sink logit joins the softmax max + denominator, no V contribution — decode `softmax_sink` + all three prefill cores; flash seeds its online softmax with max = sink, sum = 1); MXFP4 decode (E8M0 half-scale + doubled-e2m1 nibble LUT, one new `gguf_read_tensor_f32` arm → the existing dequant→self-Q8 path covers it); YaRN rope with ZERO engine change — the NTK-by-parts ramp is a per-pair effective position scale, so the loader synthesizes `rope_freqs[j] = 1/(fscale + ramp_j·(1−fscale))` and folds the 1 + 0.1·ln(factor) magnitude into `rope_mscale`; `MoeGate.softmax_weight` (top-k on raw biased logits, softmax over the selected k; knockout sentinel → −FLT_MAX); router + per-expert biases (fblob stacks, expert-major) + attention output-projection bias; `FfnAct.swiglu_oai` (clamped, +1 up branch, scalar + exp4 float4); pre-FFN norm under the `post_attention_norm` name; gpt-4o/o200k pre-tokenizer (llama.cpp's exact case-class approximation: contraction suffixes, upper*/lower+ letter runs, `/` in punct tails, no-BOS default) + Harmony-lite chat template with `<|channel|>` detection sniff | gpt-oss-20b — 40/40 counting + 40/40 window-engaged 449-token prompt (encoded in-test), both FIRST TRY; tokenizer id-for-id vs llama.cpp on counting/contraction/whitespace probes | 12.1 |
 | **6** | *(infra, last)* lift the linear-allocator 4GB limit — `LinearChunkAllocator`'s per-chunk `uint32` cap breaks any context holding a >4GB single array, which today forces `options persistent_heap` on model-loading tests (Mistral-7B's Q8 blob is 7.1GB) and the `seq_len` cap before `create_session` (Llama-3/Phi native 131072 ⇒ >4GB KV arrays). Fix the allocator (64-bit chunk sizing), then remove both workarounds | none — regression = existing suite minus the workarounds | — |
 
 Out of scope, and why: Qwen3.5/3.6 (Gated-DeltaNet hybrid linear attention → Tier 3),
@@ -293,6 +293,9 @@ what it costs today and what the fix would change.
 - **No llama.cpp A/B on gemma-4-12B yet.** Wave 3 verified tokens, not speed — prefill 62 t/s /
   gen 5 t/s on the M1 are uncalibrated against llama.cpp on the same box. Run the interleaved
   A/B (kernel-opt method) before drawing any conclusions or optimizing. (Spotted wave 3.)
+  Same for gpt-oss-20b (wave 5): the chat smoke saw prefill 3 t/s / gen 2 t/s — expected to be
+  dominated by the naive per-token MoE prefill + the doubled Q8 expert traffic (both already on
+  this ledger), but A/B before touching anything.
 - **MoE prefill is naive per-token — expert-bucketed grouped GEMM is the batched fix.** Each
   prefill position routes independently and runs its top-k experts through the single-token
   matmuls (`ffn_moe_prefill`); llama.cpp batches all positions hitting the same expert into one
@@ -304,6 +307,12 @@ what it costs today and what the fix would change.
   `quantize_q8_0_into` on it — 5 redundant requants of a dim-wide vector per layer per token
   (only the down-projection inputs differ). Hoist the xb quant once per layer like `mm_qkv`
   does for the fused QKV path. Small per call, ×24 layers ×(2k+2) matmuls. (Spotted wave 4.)
+- **MXFP4 experts transcode to Q8 — doubling their bytes.** gpt-oss-20b's expert stacks are
+  4.25 bit/weight on disk (~10GB) but run as Q8 (~19GB + 2.4GB scales): 2× the resident memory
+  AND 2× the decode weight traffic vs a native MXFP4 kernel (per-block E8M0 scale + 16-entry
+  nibble LUT — the int8 side of the SDOT pipeline could eat un-LUTed nibbles with a lane
+  table). Q4_0 storage is the existing halfway house (same 4-bit traffic, one lossy requant,
+  no new kernel) — worth an A/B before writing MXFP4-native matmuls. (Spotted wave 5.)
 
 ## What collapsed (done — Phase 5)
 
