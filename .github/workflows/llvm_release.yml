@@ -115,14 +115,23 @@ jobs:
           cmake -S llvm-project/llvm -B build -G Ninja \
             $LLVM_COMMON_FLAGS \
             -DLLVM_BUILD_LLVM_C_DYLIB=ON \
-            -DLLVM_ENABLE_PROJECTS=clang
-          ninja -C build LLVM-C clang
+            -DLLVM_ENABLE_PROJECTS="clang;lld"
+          ninja -C build LLVM-C clang lld
           cp build/bin/LLVM-C.dll LLVM.dll
-          # clang-cl.exe is a driver alias of clang.exe (dispatch on argv[0])
+          # clang-cl.exe is a driver alias of clang.exe (dispatch on argv[0]).
+          # Kept in the package for utils/preflight's bundled-compiler fallback.
           if [ -f build/bin/clang-cl.exe ]; then
             cp build/bin/clang-cl.exe .
           else
             cp build/bin/clang.exe clang-cl.exe
+          fi
+          # lld-link.exe is a driver alias of lld.exe (dispatch on argv[0]).
+          # daslang's JIT -exe/-dll link invokes it directly (module_jit.cpp
+          # find_linker) — it autodetects MSVC/WinSDK lib paths on its own.
+          if [ -f build/bin/lld-link.exe ]; then
+            cp build/bin/lld-link.exe .
+          else
+            cp build/bin/lld.exe lld-link.exe
           fi
 
       - name: package
@@ -131,6 +140,7 @@ jobs:
           set -euxo pipefail
           EXTRA=""
           if [ -f clang-cl.exe ]; then EXTRA="clang-cl.exe"; fi
+          if [ -f lld-link.exe ]; then EXTRA="$EXTRA lld-link.exe"; fi
           tar czf ${{ matrix.name }}_llvm.tar.gz LLVM.dll $EXTRA
           # macOS has shasum, not sha256sum
           if command -v sha256sum >/dev/null; then SHA=sha256sum; else SHA="shasum -a 256"; fi

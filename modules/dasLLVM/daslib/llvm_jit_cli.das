@@ -51,11 +51,11 @@ struct public JitCliOptions {
     check_abi : Option<bool>
 
     @clarg_name = "jit-linker-string"
-    @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd (e.g. -fsanitize=undefined)"
+    @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd. POSIX/mingw drive a compiler driver (e.g. -fsanitize=undefined works); Windows-MSVC drives lld-link, so pass link.exe-style flags."
     linker_string : Option<string>
 
     @clarg_name = "jit-path-to-linker"
-    @clarg_doc = "JIT: explicit linker binary (overrides default c++/clang-cl). Match the compiler daslang was built with to avoid sanitizer runtime mismatch."
+    @clarg_doc = "JIT: explicit linker binary (overrides default c++/clang/lld-link). Windows-MSVC builds a link.exe-flavored cmd (/DLL /OUT:) — pass a link.exe-compatible linker; elsewhere match the compiler daslang was built with to avoid sanitizer runtime mismatch."
     path_to_linker : Option<string>
 
     @clarg_name = "jit-register-all-modules"

@@ -1023,8 +1023,8 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
 // @mod - module to dump to dll
 // @out_path - folder and name of file, without extension
 // @path_to_dascript_lib - path to library, required on Windows. Has no effect on Linux.
-// @path_to_linker - path to clang-cl on Windows. By default we'll use clang-cl from LLVM package
-// on Windows, default otherwise.
+// @path_to_linker - linker override. Windows-MSVC defaults to lld-link from the LLVM package
+// (link.exe-flavored cmd), c++/clang default elsewhere.
 def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool) {
     // JIT DLL cache: emitted artifact only ever runs on this host.
     with_default_target_machine(3u, true) $(targetMachine : LLVMTargetMachineRef) {

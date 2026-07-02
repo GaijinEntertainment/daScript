@@ -982,7 +982,10 @@ extern "C" {
             #if defined(_WIN32) || defined(_WIN64)
                 // Two distinct Windows toolchains share the _WIN32 macro:
                 //   MSVC (incl. clang-cl) → MSVC-style import libs (libFoo.lib),
-                //     linked via clang-cl.exe with -DLL / -link / -OUT: syntax.
+                //     linked via lld-link.exe with /DLL /OUT: link.exe syntax.
+                //     lld-link (LLVM ≥14) autodetects the MSVC + WinSDK lib
+                //     paths itself (llvm/WindowsDriver, shared with clang), so
+                //     no compiler driver sits in front of the link.
                 //   mingw (clang-mingw / gcc-mingw) → mingw import libs
                 //     (libFoo.dll.a), linked via clang.exe with -shared / -o
                 //     syntax (Unix-like — clang.exe driver is identical to
@@ -990,7 +993,7 @@ extern "C" {
                 //     toolchain talking to a JIT'd DLL built with the same one.
                 #if defined(_MSC_VER)
                     if (result.linker.empty()) {
-                        result.linker = find_linker(nullptr, "clang-cl.exe", "clang-cl");
+                        result.linker = find_linker(nullptr, "lld-link.exe", "lld-link");
                     }
                     if (result.runtimeLibrary.empty()) {
                         const auto path = get_prefix(getExecutableFileName());
@@ -1107,15 +1110,17 @@ extern "C" {
         std::string cmd;
         #if defined(_WIN32) || defined(_WIN64)
             #if defined(_MSC_VER)
-                // MSVC clang-cl: -DLL marks shared, -link separates link-only
-                // flags, -OUT: names the output, msvcrt.lib pulls the import
-                // CRT. Outer doubled quotes wrap the whole command for cmd.exe
-                // because the linker path itself contains spaces on Program
-                // Files installs.
-                const auto linkerParam = isShared ? "-DLL" : "";
+                // MSVC lld-link: link.exe-flavored args — /DLL marks shared,
+                // /OUT: names the output, msvcrt.lib pulls the import CRT
+                // (the JIT object carries no /DEFAULTLIB directive, so the CRT
+                // must be named explicitly). `extra` is raw linker flags here,
+                // not compiler-driver flags. Outer doubled quotes wrap the
+                // whole command for cmd.exe because the linker path itself
+                // contains spaces on Program Files installs.
+                const auto linkerParam = isShared ? "/DLL" : "";
                 cmd = compilerLibrary.empty()
-                    ? fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), extra, linkerParam, libraryName)
-                    : fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} -link {} -OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), compilerLibrary.c_str(), extra, linkerParam, libraryName);
+                    ? fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib {} {} /OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), extra, linkerParam, libraryName)
+                    : fmt::format(FMT_STRING("\"\"{}\" \"{}\" \"{}\" \"{}\" msvcrt.lib {} {} /OUT:\"{}\" 2>&1\""), linker.c_str(), objFilePath, runtimeLibrary.c_str(), compilerLibrary.c_str(), extra, linkerParam, libraryName);
             #else
                 // mingw clang/gcc: Unix-flavored driver, -shared/-o syntax.
                 // No rpath on Windows (DLLs resolve via PATH / LoadLibrary
