@@ -32,6 +32,7 @@ LOG = os.environ.get("DASLANG_LSP_LOG",
                      os.path.join(tempfile.gettempdir(), "daslang_lsp.log"))
 DEBOUNCE_SEC = 0.1  # CC sends one didChange per Edit tool call — no keystroke bursts
 VALIDATE_TIMEOUT_SEC = 60
+NAV_TIMEOUT_SEC = 60
 
 
 def log(tag: str, payload) -> None:
@@ -49,6 +50,14 @@ def uri_to_path(uri: str) -> str:
     if os.name == "nt" and path.startswith("/") and len(path) > 2 and path[2] == ":":
         path = path[1:]  # /C:/x -> C:/x
     return path
+
+
+def path_to_uri(path: str) -> str:
+    from pathlib import Path
+    try:
+        return Path(path).resolve().as_uri()  # resolve(): subtool paths may be relative
+    except Exception:
+        return "file://" + path
 
 
 def find_compiler(init_options: dict) -> str | None:
@@ -73,6 +82,7 @@ def find_compiler(init_options: dict) -> str | None:
 class Server:
     def __init__(self):
         self.docs: dict[str, str] = {}
+        self.active_uri: str | None = None  # most recent didOpen/didChange, anchors workspace/symbol
         self.init_options: dict = {}
         self.compiler: str | None = None
         self.timers: dict[str, threading.Timer] = {}
@@ -186,6 +196,78 @@ class Server:
                           "end": {"line": 0, "character": 1}},
                 "severity": 1, "source": "daslang-lsp", "message": message}
 
+    # ---- navigation requests ---------------------------------------------
+    def nav_request(self, mid, op: str, args: list[str], cwd: str | None) -> None:
+        """Spawns nav.das on a worker thread so the read loop keeps consuming
+        didChange while a request compiles."""
+        if self.init_options.get("project"):
+            args = args + [self.init_options["project"]]
+        argv = self.subtool_argv("nav", [op] + args)
+        if argv is None:
+            self.reply_error(mid, -32000, "daslang binary not found — set "
+                             "initializationOptions.compiler, $DASLANG_LSP_COMPILER, "
+                             "or put daslang on PATH")
+            return
+        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd), daemon=True)
+        t.start()
+
+    def run_nav(self, mid, op: str, argv: list[str], cwd: str | None) -> None:
+        try:
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    cwd=cwd)
+            out, err = proc.communicate(timeout=NAV_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            self.reply_error(mid, -32000, f"daslang {op} timed out after {NAV_TIMEOUT_SEC}s")
+            return
+        except Exception as e:
+            self.reply_error(mid, -32000, f"daslang {op} failed to run: {e}")
+            return
+        text = out.decode("utf-8", "replace").strip()
+        try:
+            payload = json.loads(text[text.index("{"):])
+        except Exception:
+            tail = (err.decode("utf-8", "replace").strip() or text)[-400:]
+            self.reply_error(mid, -32000, f"daslang {op} crashed: {tail}")
+            return
+        log("nav", {"op": op, "ok": payload.get("ok"), "message": payload.get("message")})
+        self.reply(mid, self.shape_nav_result(op, payload))
+
+    @staticmethod
+    def shape_nav_result(op: str, payload: dict):
+        def locations():
+            return [{"uri": path_to_uri(l["path"]), "range": l["range"]}
+                    for l in payload.get("locations") or []]
+        if op == "definition":
+            locs = locations()
+            return locs if locs else None
+        if op == "references":
+            return locations()
+        if op == "hover":
+            if not payload.get("contents"):
+                return None
+            hover = {"contents": {"kind": "markdown", "value": payload["contents"]}}
+            if payload.get("hasRange"):
+                hover["range"] = payload["range"]
+            return hover
+        if op == "documentSymbol":
+            return payload.get("symbols") or []
+        if op == "workspaceSymbol":
+            return [{"name": s["name"], "kind": s["kind"],
+                     "containerName": s.get("containerName", ""),
+                     "location": {"uri": path_to_uri(s["path"]), "range": s["range"]}}
+                    for s in payload.get("symbols") or []]
+        return None
+
+    def cursor_args(self, params: dict) -> tuple[list[str], str | None]:
+        path = uri_to_path(params["textDocument"]["uri"])
+        pos = params.get("position") or {}
+        args = [path, str(pos.get("line", 0)), str(pos.get("character", 0))]
+        return args, os.path.dirname(path) or None
+
+    def active_doc_path(self) -> str | None:
+        return uri_to_path(self.active_uri) if self.active_uri else None
+
     # ---- dispatch -------------------------------------------------------
     def handle(self, msg: dict) -> bool:
         """Returns False when the client asked to exit."""
@@ -199,8 +281,13 @@ class Server:
                 "capabilities": {
                     "textDocumentSync": {"openClose": True, "change": 1,
                                          "save": {"includeText": False}},
+                    "definitionProvider": True,
+                    "hoverProvider": True,
+                    "referencesProvider": True,
+                    "documentSymbolProvider": True,
+                    "workspaceSymbolProvider": True,
                 },
-                "serverInfo": {"name": "daslang-lsp", "version": "0.1.0"},
+                "serverInfo": {"name": "daslang-lsp", "version": "0.2.0"},
             })
         elif method == "shutdown":
             self.reply(mid, None)
@@ -209,9 +296,11 @@ class Server:
         elif method == "textDocument/didOpen":
             doc = params["textDocument"]
             self.docs[doc["uri"]] = doc.get("text", "")
+            self.active_uri = doc["uri"]
             self.schedule_validate(doc["uri"])
         elif method == "textDocument/didChange":
             uri = params["textDocument"]["uri"]
+            self.active_uri = uri
             changes = params.get("contentChanges") or []
             if changes:
                 # full sync (we advertise change:1); a range'd change means a
@@ -226,6 +315,24 @@ class Server:
             uri = params["textDocument"]["uri"]
             self.docs.pop(uri, None)
             self.publish(uri, [])
+        elif method in ("textDocument/definition", "textDocument/hover"):
+            args, cwd = self.cursor_args(params)
+            self.nav_request(mid, method.rsplit("/", 1)[1], args, cwd)
+        elif method == "textDocument/references":
+            args, cwd = self.cursor_args(params)
+            include_decl = bool((params.get("context") or {}).get("includeDeclaration"))
+            self.nav_request(mid, "references", args + ["true" if include_decl else "false"], cwd)
+        elif method == "textDocument/documentSymbol":
+            path = uri_to_path(params["textDocument"]["uri"])
+            self.nav_request(mid, "documentSymbol", [path], os.path.dirname(path) or None)
+        elif method == "workspace/symbol":
+            context = self.active_doc_path()
+            if context is None:
+                self.reply(mid, [])  # no open doc to anchor the compile
+            else:
+                self.nav_request(mid, "workspaceSymbol",
+                                 [params.get("query", ""), context],
+                                 os.path.dirname(context) or None)
         elif mid is not None:
             self.reply_error(mid, -32601, f"daslang-lsp: method not implemented: {method}")
         return True

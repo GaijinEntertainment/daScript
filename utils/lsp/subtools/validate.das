@@ -16,6 +16,7 @@ options gen2
 options rtti
 options indenting = 4
 
+require lsp_common
 require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
@@ -26,17 +27,6 @@ require daslib/perf_lint
 require daslib/style_lint
 require daslib/lint_config
 require strings
-require math
-
-struct LspPosition {
-    line : int
-    character : int
-}
-
-struct LspRange {
-    start : LspPosition
-    end : LspPosition
-}
 
 struct LspDiagnostic {
     @rename = "range" _range : LspRange
@@ -49,42 +39,6 @@ struct LspDiagnostic {
 struct ValidateResult {
     ok : bool
     diagnostics : array<LspDiagnostic>
-}
-
-// byte column (1-based) -> UTF-16 code units before it (LSP `character`)
-def private to_utf16_character(line_text : string; byte_col_1based : int) : int {
-    let target = byte_col_1based - 1
-    if (target <= 0) {
-        return 0
-    }
-    var units = 0
-    peek_data(line_text) $(arr) {
-        var off = 0
-        for (b in arr) {
-            break if (off >= target)
-            let c = int(b)
-            if ((c & int(0xC0)) != int(0x80)) {  // not a continuation byte: one new code point
-                units += ((c & int(0xF8)) == int(0xF0)) ? 2 : 1  // 4-byte UTF-8 = surrogate pair
-            }
-            off++
-        }
-    }
-    return units
-}
-
-def private make_position(lines : array<string>; line_1based, byte_col_1based : int) : LspPosition {
-    let li = max(0, line_1based - 1)
-    let text = li < length(lines) ? lines[li] : ""
-    return LspPosition(line = li, character = to_utf16_character(text, byte_col_1based))
-}
-
-def private make_range(lines : array<string>; line, column, last_line, last_column : int) : LspRange {
-    let start = make_position(lines, line, column)
-    return LspRange(
-        start = start,
-        end = (last_line > 0 ?
-            make_position(lines, last_line, last_column) :
-            LspPosition(line = start.line, character = start.character + 1)))
 }
 
 def private build_message(what, extra, fixme : string) : string {
@@ -140,15 +94,7 @@ def private push_lint_issues(var result : ValidateResult; issues : array<LintIss
 [export]
 def main() : int {
     let raw <- get_command_line_arguments()
-    var user : array<string>
-    var seen_sep = false
-    for (a in raw) {
-        if (seen_sep) {
-            user |> push(a)
-        } elif (a == "--") {
-            seen_sep = true
-        }
-    }
+    let user <- lsp_user_args(raw)
     if (empty(user)) {
         print(sprint_json(ValidateResult(ok = false), false))
         return 1

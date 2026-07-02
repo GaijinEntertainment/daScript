@@ -1,6 +1,6 @@
 {
   "name": "daslang-lsp",
-  "description": "daslang language server — compiler diagnostics after every edit",
+  "description": "daslang language server — compiler diagnostics after every edit, plus definition/hover/references/symbols",
   "lspServers": {
     "daslang": {
       "command": "python3",

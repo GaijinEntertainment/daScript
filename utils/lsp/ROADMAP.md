@@ -156,9 +156,45 @@ keystroke bursts exist in this client).
 
 ### Wave 2 — navigation
 
-`definition`, `hover`, `documentSymbol`, `references`, `workspaceSymbol` — remaps of
-the existing MCP subtool logic (`goto_definition`, `describe_type`, `outline`,
-`find_references`, `find_symbol`) to LSP request/response shapes.
+**Status: COMPLETE, proven live** — `definition`, `hover`, `documentSymbol`,
+`references`, `workspaceSymbol`, all five driven end-to-end through a headless
+CC session (exact positions verified; CC renders each op natively — definition
+as `Defined in file:line:col`, documentSymbol as a kind-annotated tree,
+references grouped by file).
+
+Shape:
+
+- `subtools/nav.das` — ONE stateless subtool, op as first argv token; ports the
+  MCP subtool logic (`goto_definition` resolve, `find_references`
+  identify-target + RefVisitor, `type_of`-style hover) onto one shared
+  nav-profile compile (`export_all` + `no_optimizations` +
+  `no_infer_time_folding` — faithful positions). documentSymbol is a
+  compile-based walk of thisModule (functions + generics deduped by name:line,
+  struct fields / class methods / enum members as children) — NOT the ast-grep
+  outline; the LSP stays tree-sitter-free. workspaceSymbol searches all
+  compiled program modules, source-located symbols only.
+- `subtools/lsp_common.das` — shared module: LSP structs, byte↔UTF-16
+  conversion both directions, argv split; validate.das refactored onto it.
+- Supervisor: advertises the five providers, runs each request's subtool on a
+  daemon worker thread (read loop keeps consuming didChange), maps das `path`
+  fields to `file://` URIs via pathlib (das owns positions, python owns URIs).
+  workspace/symbol is anchored to the most-recent didOpen/didChange document
+  (tracked as `active_uri`) — no open doc → `[]`.
+
+🔑 **Coordinate convention (probed + lexer-verified)**: daslang `LineInfo`
+columns are **0-based byte offsets** (`das_yycolumn = 0` at line start,
+`last_column = column + yyleng`, end-exclusive — ds2_lexer.lpp); lines are
+1-based. Wave 1 assumed 1-based columns, so every published character was one
+LEFT of the token; fixed in `lsp_common::make_position`/`utf16_units_in`, and
+the fix flows to diagnostics too (live-verified: LINT003 ⚠ rendered at the
+exact `var p` column). Note `Function.at` points at the NAME token (not `def`);
+`Structure.at` sits one column left of the name (cosmetic only).
+
+Wave-2 wire facts (CC v2.1.198): CC sends `initialized` (notification — ignore);
+the LSP tool sends `didOpen` for files it navigates (geometry.das got one before
+its documentSymbol), so nav also triggers validate publishes; an Edit's first
+touch is still `didOpen` with post-edit text; the model passes 1-based positions
+and CC converts to 0-based LSP before they reach the server.
 
 ### Wave 3 — hardening
 
