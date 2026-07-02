@@ -48,6 +48,8 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
     set_act_vec(false)
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         var s = make_run_state(tr.config)
         let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
         // generate echoes prompt[1..] then the continuation, so the first generated token is at

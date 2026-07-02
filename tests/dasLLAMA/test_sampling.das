@@ -52,6 +52,8 @@ def test_sampling_greedy_matches_oracle(t : T?) {
         var got : array<int64>
         with_job_que() {
             set_jobque_fork_pool(true, true)
+            set_jobque_batch_dispatch(true)
+            set_jobque_worker_spin(1000)
             var s = create_session(m)
             generate(m, s, GEMMA2_PROMPT, SamplingParams(), int64(length(GEMMA2_GEN))) $(id, piece) {
                 got |> push(id)
@@ -85,6 +87,8 @@ def test_sampling_deterministic(t : T?) {
         var b : array<int64>
         with_job_que() {
             set_jobque_fork_pool(true, true)
+            set_jobque_batch_dispatch(true)
+            set_jobque_worker_spin(1000)
             var s1 = create_session(m)
             set_seed(s1, 12345)
             generate(m, s1, GEMMA2_PROMPT, params, n) $(id, piece) {

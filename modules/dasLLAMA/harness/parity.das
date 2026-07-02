@@ -64,6 +64,8 @@ def main {
     var s = make_run_state(c)
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         let ids <- generate(t, s, prompt, length(prompt) + n_gen)
         // generate echoes prompt[1..] then the continuation, so the first generated token is at
         // index length(prompt)-1 (same indexing the runners use)

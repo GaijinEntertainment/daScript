@@ -30,6 +30,13 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `test01.das` | Runtime heap `heap_collect` cost — mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
 
+## core/jobque/
+
+| File | Description |
+|---|---|
+| `dispatch.das` | Fork/join dispatch tax — empty `parallel_for` round trip (ns/op = one job's share) across the dispatch knobs: baseline, `set_jobque_worker_spin` (spin-before-park), `set_jobque_batch_dispatch` (one-lock publish at join), and both. Pin `DAS_JOBQUE_THREADS` when recording |
+| `dispatch_timeline.das` | Standalone (`daslang -jit <file>`) timeline attribution for the same matrix — reports dispatch-loop duration, last-worker-start (ramp), and round trip medians per mode, empty and 30µs-busy jobs, all in one process (interleaved A/B) |
+
 ## core/math/
 
 | File | Description |

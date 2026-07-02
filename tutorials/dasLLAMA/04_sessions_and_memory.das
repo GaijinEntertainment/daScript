@@ -133,6 +133,8 @@ def main() {
     var m <- load_model(path, QuantMode.q8)
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         section_kv_cache(m)
         section_many_sessions(m)
         section_eval_by_hand(m)

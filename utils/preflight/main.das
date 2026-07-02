@@ -254,10 +254,18 @@ def find_clang(cli_path, build_dir : string) : tuple<exe : string; is_cl : bool>
         if (tool_available("clang-cl")) return (exe = "clang-cl", is_cl = true)
         // the prebuilt LLVM package dasLLVM fetches ships clang-cl next to
         // LLVM.dll — present on any Windows box that built with dasLLVM,
-        // and /Zs needs no linker so the package's missing lld doesn't matter
+        // and /Zs needs no linker so the package's missing lld doesn't matter.
+        // It must still carry clang's RESOURCE HEADERS (lib/clang/<ver>/include):
+        // without them clang-cl falls back to MSVC's intrinsic headers, where
+        // __m128 is not a clang vector type, and every vecmath TU false-fails
+        // on __builtin_shufflevector — a header-less package (r4 ships only the
+        // three exes) is a missing tool, not a code failure.
         if (!empty(build_dir)) {
-            let bundled = path_join(build_dir, "_deps/das_llvm_shared_lib-src/clang-cl.exe")
-            if (fexist(bundled) && tool_available(bundled)) return (exe = bundled, is_cl = true)
+            let bundled_dir = path_join(build_dir, "_deps/das_llvm_shared_lib-src")
+            let bundled = path_join(bundled_dir, "clang-cl.exe")
+            if (fexist(bundled) && tool_available(bundled) && stat(path_join(bundled_dir, "lib/clang")).is_valid) {
+                return (exe = bundled, is_cl = true)
+            }
         }
         if (tool_available("clang")) return (exe = "clang", is_cl = false)
     } else {
@@ -395,7 +403,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     }
     if (empty(ctx.clang)) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "clang not found — install LLVM (clang-cl/clang on PATH) or pass --clang <path>")
+            detail = "clang not found — install the VS ClangCL component (CI-faithful) or LLVM clang-cl on PATH, or pass --clang <path>; the dasLLVM prebuilt's clang-cl has no resource headers and is skipped")
     }
     var in_scope : array<string>
     var skipped : array<string>

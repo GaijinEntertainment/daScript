@@ -52,6 +52,8 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
     let REL_TOL = 0.05
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         set_prefill_attn_mode(AttnPrefillMode.classic)
         var sc <- make_run_state(c)
         for (p in range64(start_pos)) {

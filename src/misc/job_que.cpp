@@ -12,6 +12,29 @@
 #include <emscripten/threading.h>   // emscripten_num_logical_cores
 #endif
 
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#include <emmintrin.h>  // _mm_pause
+#elif defined(_MSC_VER) && defined(_M_ARM64)
+#include <intrin.h>     // __yield
+#endif
+
+namespace das {
+    // One short burst of the CPU's spin-wait hint (worker spin-before-park, see JobQue::job).
+    static inline void jobque_spin_pause() {
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+        for ( int i = 0; i != 64; ++i ) _mm_pause();
+#elif defined(_MSC_VER) && defined(_M_ARM64)
+        for ( int i = 0; i != 64; ++i ) __yield();
+#elif defined(__x86_64__) || defined(__i386__)
+        for ( int i = 0; i != 64; ++i ) __builtin_ia32_pause();
+#elif defined(__aarch64__)
+        for ( int i = 0; i != 64; ++i ) __asm__ __volatile__("yield");
+#else
+        this_thread::yield();
+#endif
+    }
+}
+
 // Feature tracking statics
 das::Feature *  das::Feature::sTrackHead = nullptr;
 das::mutex      das::Feature::sTrackMutex;
@@ -33,8 +56,8 @@ namespace das {
     // Worker count. Generic rule: logical cores - 1, capped at DAS_MAX_HW_JOBS — parallel_for has the
     // CALLING (main) thread run a chunk and then wait, so it occupies a core; cores-1 workers + main ==
     // cores avoids the oversubscription that otherwise makes the surplus worker "trickle in" over the
-    // first ~37% of every matmul. DAS_MAX_HW_JOBS (default 4; raise via -DDAS_MAX_HW_JOBS=N) keeps a
-    // wasm build from spawning one Web Worker per logical core. On heterogeneous Apple Silicon we
+    // first ~37% of every matmul. DAS_MAX_HW_JOBS (4 on wasm so a web build doesn't spawn one Web
+    // Worker per logical core; effectively uncapped elsewhere). On heterogeneous Apple Silicon we
     // instead run one worker per PERFORMANCE core (no -1, no cap): the efficiency cores absorb the main
     // thread + OS, whereas cores-1 (logical) spills a worker onto a slow E-core that stalls every
     // parallel_for on the straggler — measured ~1.6x slower on an M-series 8P+2E prefill. DAS_JOBQUE_THREADS
@@ -173,6 +196,7 @@ namespace das {
         auto  it = lower_bound(mFifo.begin(), mFifo.end(), priority, [](const JobEntry& lhs, JobPriority priority) {
             return lhs.priority >= priority; });
         mFifo.emplace(it, das::move(job), category, priority);
+        mFifoCount.fetch_add(1, std::memory_order_relaxed);
     }
 
     void JobQue::push(Job && job, JobCategory category, JobPriority priority) {
@@ -181,10 +205,63 @@ namespace das {
         mCond.notify_one();
     }
 
+    void JobQue::pushBatch(vector<Job> && jobs, JobCategory category, JobPriority priority) {
+        {
+            lock_guard<mutex> lock(mFifoMutex);
+            for ( auto & j : jobs ) {
+                submit(das::move(j), category, priority);
+            }
+        }
+        // ONE wake, not notify_all: waking N parked threads is ~N serialized OS wakes (~5-8us each)
+        // no matter who calls it. Workers propagate instead — every worker that pops and leaves work
+        // behind wakes the next (see job()), so the wake tree fans out with log depth and the wake
+        // syscalls are paid by the (parallel) workers, not the flushing thread.
+        mCond.notify_one();
+        jobs.clear();
+    }
+
     void JobQue::job(int threadIndex) {
         while (!mShutdown) {
             Job job;
-            {
+            bool gotJob = false;
+            size_t moreWork = 0;    // work left behind by our pop → wake-propagate (see pushBatch)
+            // Spin-before-park (opt-in via setWorkerSpin): poll the fifo for mSpinUs before blocking
+            // on the condvar. notify_one to a PARKED worker costs the DISPATCHING thread an OS
+            // thread-wake (~3-4.5us, serially per job — the dominant term of the fork/join tax); to
+            // a spinning worker it's a ~0.1us no-waiter check. A fork/join burst (LLM decode token =
+            // dozens of back-to-back parallel_for matmuls) keeps workers in the spin window the whole
+            // time, so only the burst's first dispatch pays the wakes.
+            int spinUs = mSpinUs.load(std::memory_order_relaxed);
+            if ( spinUs > 0 && !mShutdown.load(std::memory_order_relaxed) ) {
+                auto deadline = chrono::steady_clock::now() + chrono::microseconds(spinUs);
+                for (;;) {
+                    if ( mShutdown.load(std::memory_order_relaxed) ) break;
+                    // try_lock, NOT lock: every spinner that sees the same count blip races here, and
+                    // blocking losers would queue on the mutex — a convoy the dispatcher's next push
+                    // waits behind (measured 45us push stalls). try_lock losers just keep spinning,
+                    // and a raided worker resumes the SAME spin window rather than parking, so the
+                    // rest of the burst still finds it awake.
+                    if ( mFifoCount.load(std::memory_order_relaxed) != 0 && mFifoMutex.try_lock() ) {
+                        {
+                            lock_guard<mutex> lock(mFifoMutex, std::adopt_lock);
+                            if ( !mFifo.empty() ) {
+                                job = das::move(mFifo.front().function);
+                                mThreads[threadIndex].currentPriority = mFifo.front().priority;
+                                mThreads[threadIndex].currentCategory = mFifo.front().category;
+                                mFifo.pop_front();
+                                mFifoCount.fetch_sub(1, std::memory_order_relaxed);
+                                mJobsRunning++;
+                                gotJob = true;
+                                moreWork = mFifo.size();
+                            }
+                        }
+                        if ( gotJob ) break;
+                    }
+                    jobque_spin_pause();
+                    if ( chrono::steady_clock::now() >= deadline ) break;
+                }
+            }
+            if ( !gotJob ) {
                 unique_lock<mutex> lock(mFifoMutex);
                 // Block until a job is available or we're shutting down. A plain wait (no periodic
                 // timeout) means idle workers stay parked instead of waking every mSleepMs to grab
@@ -199,8 +276,18 @@ namespace das {
                 mThreads[threadIndex].currentPriority = mFifo.front().priority;
                 mThreads[threadIndex].currentCategory = mFifo.front().category;
                 mFifo.pop_front();
+                mFifoCount.fetch_sub(1, std::memory_order_relaxed);
                 mJobsRunning++;
+                moreWork = mFifo.size();
             }
+            // Wake propagation (outside the lock so the wakee doesn't bounce off it): if our pop left
+            // work behind, wake up to TWO more workers before running the job. A batch flush wakes
+            // only one worker; each wakee doubling the wake front fans the backlog out as a binary
+            // tree (log2 depth ≈ 5 wake latencies for 32 jobs, vs 32 serialized wakes for a
+            // notify_all), paid in parallel by the workers instead of serially by the dispatcher.
+            // No-op when no one is parked (spinners pick work up themselves).
+            if ( moreWork >= 1 ) mCond.notify_one();
+            if ( moreWork >= 2 ) mCond.notify_one();
             // Only touch the OS thread priority when it actually changes — every job otherwise pays
             // a pthread_setschedparam syscall, and a parallel_for fires the same priority on every
             // chunk (~thousands of redundant syscalls per LLM token). Only this worker writes its own

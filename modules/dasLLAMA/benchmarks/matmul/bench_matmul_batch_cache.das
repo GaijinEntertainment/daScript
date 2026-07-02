@@ -189,6 +189,8 @@ def bench_matmul_batch_cache(b : B?) {
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         cache_shape(b, "qo    2048x2048 ", 2048l, 2048l)    // 4.2 MB Q8 — fits L2
         cache_shape(b, "big16 2048x16000", 2048l, 16000l)   // 32 MB Q8 — exceeds L2
     }

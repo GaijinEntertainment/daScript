@@ -38,6 +38,8 @@ def main {
     var s <- make_run_state(c)
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         // warmup — JIT both paths
         let warm <- build_prompt(8l)
         for (p in range64(8l)) {

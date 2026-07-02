@@ -105,6 +105,8 @@ def bench_gemm_iso(b : B?) {
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it
         let skip_reset = has_env_variable("DAS_FORK_SKIP_HEAP_RESET")
         if (skip_reset) {

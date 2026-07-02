@@ -168,6 +168,8 @@ def main {
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         let need_repack = select_matmul_backend_for_load()
         print("active backend: {active_kernel_backend()} (needs_repack={need_repack})\n")
         if (active_kernel_backend() != "arm64-laneq") {

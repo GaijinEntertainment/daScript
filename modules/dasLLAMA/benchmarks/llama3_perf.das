@@ -3,6 +3,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%);
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
+require daslib/fio
 require strings
 
 // Generation-speed profile for a Llama-3 GGUF (Q8). Prefills a short prompt (untimed),
@@ -51,6 +52,14 @@ def main {
     let prompt = [128000l, 12805l, 5304l, 264l, 892l]
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
+        // spin-window override for tuning A/Bs (0 disables the spin)
+        if (has_env_variable("DAS_WORKER_SPIN_US")) {
+            let spin_us = to_int(get_env_variable("DAS_WORKER_SPIN_US"))
+            set_jobque_worker_spin(spin_us)
+            print("worker spin override: {spin_us}us\n")
+        }
         // prefill (untimed)
         var pos = 0l
         for (tk in prompt) {

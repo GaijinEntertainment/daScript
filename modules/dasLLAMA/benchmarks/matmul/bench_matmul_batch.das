@@ -87,6 +87,8 @@ def bench_matmul_batch(b : B?) {
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         bench_batch_shape(b, "qo  2048x2048", 2048l, 2048l)
         bench_batch_shape(b, "w13 2048x5632", 2048l, 5632l)
     }

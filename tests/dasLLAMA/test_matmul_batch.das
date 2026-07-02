@@ -96,6 +96,8 @@ def check_q8(t : T?; n, d, ntok : int64) {
 def test_matmul_batch(t : T?) {
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         t |> run("fp32 single 64x5 ntok=4") @(t : T?) {
             check_fp32(t, 64l, 5l, 4l)
         }

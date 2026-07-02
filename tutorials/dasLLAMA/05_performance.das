@@ -12,7 +12,7 @@ require math
 //
 // This tutorial covers:
 //   - Why model programs always run with -jit (and _jit_fast_math)
-//   - Threading the kernels: with_job_que + set_jobque_fork_pool
+//   - Threading the kernels: with_job_que + the jobque dispatch knobs
 //   - Quantization: fp32 vs q8 vs q4 — memory and speed
 //   - Reading stats(): prefill vs generation, time to first token
 //
@@ -57,18 +57,25 @@ def bench_gen(m : Model; tag : string) {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // The matmul kernels split their rows across the job queue — they REQUIRE one
-// (running model code outside with_job_que panics). set_jobque_fork_pool(true, true)
-// pools the per-job fork contexts: the kernels are pure data-parallel jobs, so their
-// contexts can be reused and skip re-init.
+// (running model code outside with_job_que panics). Three knobs configure the queue
+// for this pure fork/join workload, and every dasLLAMA runner sets all three:
+//   set_jobque_fork_pool(true, true) — pool the per-job fork contexts: the kernels are
+//     pure data-parallel jobs, so their contexts can be reused and skip re-init.
+//   set_jobque_batch_dispatch(true) — publish each matmul's jobs under ONE queue lock
+//     at join time instead of one push (and one worker wake) per job.
+//   set_jobque_worker_spin(1000) — idle workers spin-poll for 1ms before parking, so a
+//     token's back-to-back matmuls never pay the OS thread-wake per dispatched job.
 //
-// The worker count is fixed when the queue is created — the DAS_JOBQUE_THREADS
-// environment variable overrides the default (which is deliberately conservative).
-// To see what threading buys, re-run this tutorial with DAS_JOBQUE_THREADS=1 and
-// compare; the win grows with model size, since tiny models have tiny matmuls.
+// The worker count is fixed when the queue is created — one worker per core minus one
+// by default; the DAS_JOBQUE_THREADS environment variable overrides it. To see what
+// threading buys, re-run this tutorial with DAS_JOBQUE_THREADS=1 and compare; the win
+// grows with model size, since tiny models have tiny matmuls.
 
 def section_threads(m : Model) {
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         print("job queue: {get_total_hw_jobs()} hardware jobs (override with DAS_JOBQUE_THREADS=N)\n")
         bench_gen(m, "threaded: ")
     }
@@ -91,6 +98,8 @@ def section_quant(path : string; mode : QuantMode; tag : string) {
     print("{tag}: {mb(int64(heap_bytes_allocated()))} MB resident | ")
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         bench_gen(m, "")
     }
     delete m

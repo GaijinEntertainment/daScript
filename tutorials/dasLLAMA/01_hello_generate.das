@@ -90,6 +90,8 @@ def main() {
 
     with_job_que() {
         set_jobque_fork_pool(true, true)   // pool per-job fork contexts (pure-data matmul jobs)
+        set_jobque_batch_dispatch(true)   // publish each parallel_for's jobs under one lock at join
+        set_jobque_worker_spin(1000)      // spin-before-park: back-to-back matmuls pay no thread wakes
         var s = create_session(m)
         print("{PROMPT}")
         generate(m, s, ids, SamplingParams(), N_GEN) $(_id, piece) {

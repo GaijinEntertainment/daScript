@@ -88,6 +88,7 @@ namespace das {
         int getNumberOfQueuedJobs();
         int getTotalHwJobs();
         void push(Job && job, JobCategory category, JobPriority priority);
+        void pushBatch(vector<Job> && jobs, JobCategory category, JobPriority priority);   // one lock hold + one notify_all for the whole batch
         void parallel_for ( JobStatus & status, int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for ( int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for_with_consume (int from, int to, const JobChunk & chunk, const JobChunk & consume, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1);
@@ -96,6 +97,12 @@ namespace das {
         void EvalMainThreadJobs();
         void wait();
         void Reset() { wait( ); }
+        // Worker spin-before-park window, microseconds (0 = park on the condvar immediately, the
+        // default). An idle worker spin-polls the fifo for this long before blocking, so a
+        // fork/join burst (e.g. an LLM decode token's back-to-back matmuls) never pays the OS
+        // thread-wake per job — measured ~3-4.5us per notify_one to a PARKED worker vs ~0.1us to a
+        // spinning one, paid serially by the DISPATCHING thread. Opt-in: spinning burns idle CPU.
+        void setWorkerSpin ( int usec ) { mSpinUs = usec; }
     protected:
         struct JobEntry {
             JobEntry( Job&& _function, JobCategory _category, JobPriority _priority) {
@@ -131,6 +138,8 @@ namespace das {
         deque<JobEntry> mFifo;
         vector<ThreadEntry> mThreads;
         atomic<int> mJobsRunning{0};
+        atomic<int32_t> mSpinUs{0};
+        atomic<int32_t> mFifoCount{0};  // lock-free mirror of mFifo.size() for the spin poll
     protected:
         mutex mEvalMainThreadMutex;
         vector<Job> mEvalMainThread;

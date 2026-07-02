@@ -160,6 +160,8 @@ def bench_matmul_real(b : B?) {
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         let hw = int64(get_total_hw_jobs())
         bench_qkv(b, hw)
         bench_shape(b, "kv  256x2048 ", 2048l, 256l, hw)     // 0.52M — currently SINGLE

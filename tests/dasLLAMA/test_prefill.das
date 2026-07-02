@@ -34,6 +34,8 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
     let n = int64(length(prompt))
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {
@@ -56,6 +58,8 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
     let n = int64(length(prompt))
     with_job_que() {
         set_jobque_fork_pool(true, true)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {

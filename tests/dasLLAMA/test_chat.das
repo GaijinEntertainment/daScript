@@ -202,6 +202,8 @@ def test_chat_end_to_end(t : T?) {
         var ntok = 0l
         with_job_que() {
             set_jobque_fork_pool(true, true)
+            set_jobque_batch_dispatch(true)
+            set_jobque_worker_spin(1000)
             var c = create_chat(m, "", 24l)   // no system prompt, short budget
             add_user(c, "Say hello in one short sentence.")
             reply = respond(m, c, SamplingParams()) $(piece) {   // greedy

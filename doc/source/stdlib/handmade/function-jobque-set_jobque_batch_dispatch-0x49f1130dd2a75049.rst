@@ -1,0 +1,2 @@
+Enable batched fork-job dispatch on the calling thread: new_job keeps the prepared job closures locally, and join publishes the whole batch to the queue under one lock with a single wake, instead of one push (and one worker wake) per job.
+Only safe for pure fork/join use where every dispatched job is joined via its wait group — a job whose results are consumed before join would stall, since jobs enter the queue at the join. with_job_que exit and destroy_job_que flush stragglers and reset the flag, so the mode cannot leak past its block.

@@ -112,6 +112,8 @@ def test_forward_q8_pooled(t : T?) {
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
         with_job_que() {
             set_jobque_fork_pool(true, true)
+            set_jobque_batch_dispatch(true)
+            set_jobque_worker_spin(1000)
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))

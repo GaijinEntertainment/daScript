@@ -80,6 +80,8 @@ def main {
 
     with_job_que() {
         set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
+        set_jobque_batch_dispatch(true)
+        set_jobque_worker_spin(1000)
         var fp = 0.0lf
         var q8 = 0.0lf
         var q4 = 0.0lf

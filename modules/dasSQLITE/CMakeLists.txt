@@ -14,6 +14,11 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
   		${DAS_SQLITE_DIR}/sqlite/sqlite3.h
 	  	${DAS_SQLITE_DIR}/sqlite/sqlite3ext.h
 	)
+	IF(MSVC)
+		# vendor amalgamation: newer MSVC flow analysis flags 'pScan' in FTS5 (C4701/C4703),
+		# which /WX turns fatal — suppress on this file only, it is not ours to fix
+		SET_SOURCE_FILES_PROPERTIES(${DAS_SQLITE_DIR}/sqlite/sqlite3.c PROPERTIES COMPILE_OPTIONS "/wd4701;/wd4703")
+	ENDIF()
 
 	# sqlite shell
 	SET(DAS_SQLITE_SHELL_SRC
