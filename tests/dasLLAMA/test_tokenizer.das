@@ -68,7 +68,7 @@ def private corpus_gate(t : T?; vocab_path : string) {
 [test]
 def test_tokenizer_gemma4(t : T?) {
     t |> run("gemma4 SPM-style BPE vs the llama.cpp corpus") @(t : T?) {
-        let path = "{models_dir()}ggml-vocab-gemma-4.gguf"
+        let path = path_join(models_dir(), "ggml-vocab-gemma-4.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -80,7 +80,7 @@ def test_tokenizer_gemma4(t : T?) {
 [test]
 def test_tokenizer_llama_bpe(t : T?) {
     t |> run("llama3 byte-level BPE vs the llama.cpp corpus") @(t : T?) {
-        let path = "{models_dir()}ggml-vocab-llama-bpe.gguf"
+        let path = path_join(models_dir(), "ggml-vocab-llama-bpe.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
