@@ -323,7 +323,7 @@ addInterop<new_and_init, void *, vec4f>(*this, lib, "new_and_init",
 - Main type inference: `src/ast/ast_infer_type.cpp` (implementation) + `include/daScript/ast/ast_infer_type.h` (class declarations for `CaptureLambda` and `InferTypes`)
 - Builtin runtime functions: `src/builtin/module_builtin_runtime.cpp`
 - Smart pointer builtins: `move`, `move_new`, `smart_ptr_clone`, `smart_ptr_use_count`
-- Compilation errors: `include/daScript/ast/compilation_errors.h` (error codes 10001–40214)
+- Compilation errors: `include/daScript/ast/compilation_errors.h` (error codes 10005–50640)
 - Lexer: `src/parser/ds2_lexer.lpp`
 - Parser: `src/parser/ds2_parser.ypp`
 
@@ -410,24 +410,20 @@ diffing `options log_nodes` output between `daslang.exe` and
 Highest-risk surface: 2-arg overloads (no `Context*` parameter) used in
 constant-foldable expressions — `find`, `rfind`, `contains`, etc.
 
-## Searching C++ — prefer `mcp__cplusplus__*` over Bash/Grep
+## Searching C++ — prefer `mcp__daslang__cpp_*` over Bash/Grep
 
-For navigating C++ in this repo, default to the C++ MCP tools, not
-`Bash grep` / `rg` / the Grep tool. The MCP server builds a real C++
-index (~9k files) that resolves symbols, call graphs, class hierarchies,
-and overrides — plain text search misses overloads, virtual dispatch,
-macro-defined names, and cross-file relationships.
+For navigating C++ in this repo, default to the daslang MCP server's
+C++ tools, not `Bash grep` / `rg` / the Grep tool — they are parse-aware
+(ast-grep + tree-sitter-cpp) and pre-scoped to `src/` `include/`
+`modules/`, so they don't drown in submodule/vendored noise.
 
-- **First call of a session:** `mcp__cplusplus__set_project_directory`
-  with `d:\Work\daScript` (required before any other C++ MCP call).
-- **Refresh on demand:** `mcp__cplusplus__refresh_project` after
-  significant edits or when switching branches.
 - **Tool picks:**
-  - `search_symbols` / `search_functions` / `search_classes` — find by name
-  - `find_callers` / `find_callees` / `get_call_path` — call graphs
-  - `get_class_info` / `get_class_hierarchy` / `get_derived_classes` — OOP structure
-  - `get_function_signature` — exact signature including overloads
-  - `find_in_file` — scoped, symbol-aware file search
+  - `cpp_find_symbol` — declarations by name + kind (function/class/struct/enum/union/typedef/namespace/macro)
+  - `cpp_grep_usage` — usage search across `.cpp/.h/.hpp/.cc`
+  - `cpp_outline` — top-level declarations of a file
+  - `cpp_goto_definition` — best-effort "where is this defined" (up to 5 ranked candidates, no scope resolution)
+  - `cpp_compile_check` / `cpp_build_info` — syntax-check a TU / exact compile command, off `compile_commands.json`
 - **Fall back to `Grep` only for:** string literals, comments, non-C++
-  files (CMake, shell, docs), or when the index is stale and refresh
-  is too slow.
+  files (CMake, shell, docs).
+
+Full tool table, caveats, and configuration: `skills/mcp_tools.md`.

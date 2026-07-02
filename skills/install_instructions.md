@@ -68,7 +68,7 @@ Since the skills tree is single-sourced, most updates only touch one file. The e
 
 ## CMake install rules
 
-Install rules live in the root `CMakeLists.txt` near line 1471. The shape:
+Install rules live in the root `CMakeLists.txt` near line 1763. The shape:
 
 ```cmake
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})

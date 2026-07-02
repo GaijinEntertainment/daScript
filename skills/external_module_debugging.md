@@ -1,6 +1,6 @@
 # Debugging an external daslang module locally
 
-When you're iterating on a daslang module that lives OUTSIDE the main daslang repo — dasImgui, dasPUGIXML, dasSQLITE, dasCards, dasTelegram, your own daspkg package, etc. — you need a way to run/lint/test from a standalone `daslang.exe` (or via the MCP server) without a full `daspkg install`.
+When you're iterating on a daslang module that lives OUTSIDE the main daslang repo — dasImgui, dasCards, dasTelegram, your own daspkg package, etc. — you need a way to run/lint/test from a standalone `daslang.exe` (or via the MCP server) without a full `daspkg install`.
 
 The **recommended approach** is `-load_module <path>` (repeatable). The older **junction trick** still works and is documented below as a fallback for workflows that need to exercise the `<project_root>/modules/<name>` scan path itself.
 

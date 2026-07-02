@@ -181,7 +181,7 @@ hits `os_debug_break()`. Attach a debugger (or `-das-wait-debugger`) to
 collect stack traces.
 
 **Automatic companion:** at exit `daslang` calls
-`ptr_ref_count::DumpTrackPtr()` (`utils/daScript/main.cpp:723`) which prints
+`ptr_ref_count::DumpTrackPtr()` (`utils/daScript/main.cpp:960`) which prints
 all surviving smart pointers. Read a suspect id from there, rerun with
 `--track-smart-ptr <id>`, debug.
 
@@ -328,4 +328,4 @@ Common non-leaks that look like leaks:
 - `include/daScript/misc/handle_registry.h` — dasHV handle infrastructure (#6).
 - `include/daScript/misc/gc_node.h` — gc_node header (`DAS_GC_BREAK_ON_ID`).
 - `include/daScript/misc/smart_ptr.h` — `ptr_ref_count`, `ref_count_track` (#4).
-- `include/daScript/misc/platform.h:448-456` — `DAS_TRACK_ALLOCATIONS` compile-time gate (#2).
+- `include/daScript/misc/platform.h:490-497` — `DAS_TRACK_ALLOCATIONS` compile-time gate (#2).

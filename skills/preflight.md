@@ -91,9 +91,10 @@ Release shared modules. Run it in a separate clone or worktree only:
 
 ```powershell
 # SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
-# Generator must match the CI lane (build.yml pins "Visual Studio 18 2026" on the VS2026 image).
-cmake -B build-clangcl -G "Visual Studio 18 2026" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release
-cmake --build build-clangcl --config Release --parallel
+# CI drives clang-cl directly with Ninja — NOT the VS generator / "ClangCL" toolset
+# (deliberate: the VS generator produced spurious MSB8066 -1 false reds; see the job header in build.yml).
+cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+cmake --build build-clangcl --parallel
 ```
 
 Manual single-file check (what the gate automates):

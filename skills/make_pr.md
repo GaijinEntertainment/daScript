@@ -4,7 +4,7 @@ Before creating a pull request, complete ALL of the following steps in order. Do
 
 **Shortcut:** `daslang utils/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
 
-## 0. Sync with origin/master, rebase, and start from a clean build dir
+## 0. Sync with origin/master and rebase
 
 **Always do this first.** If you skip it, a stale local `master` will cause your squashed commit to absorb other already-merged PRs as if they were branch-original work — the PR ends up touching files it has no business touching.
 
@@ -21,22 +21,22 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
-### 0b. Delete and regenerate the build dir — non-negotiable
+### 0b. Build-config drift — nuke `build/` only when you see it
 
-**Immediately after the rebase, and before any preflight gate, delete `build/` and configure+build fresh.** This is the single sanctioned exception to the "never `rm -rf build`" rule (which otherwise stands — see `feedback_build_and_ci`). A long-lived build dir — especially a worktree carried across sessions or branch switches — drifts in ways no incremental build fixes:
+The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:
 
-- **Stale generated project files.** A cache var (e.g. `DAS_USE_STATIC_STD_LIBS`) that toggled across configures can leave `.vcxproj`s describing one CRT while the cache says another.
-- **`ExternalProject` byproducts are built once and never rebuilt when their args change.** libhv's `hv_static.lib` freezes at whatever CRT it first built with; a later config change can't move it.
+- **MSVC `LNK2038` `/MT` vs `/MD` mismatch** (canonically on `dasModuleHV`) — a cache var (e.g. `DAS_USE_STATIC_STD_LIBS`) toggled across configures leaves `.vcxproj`s describing one CRT while the cache says another.
+- **Stale `ExternalProject` byproducts** — libhv's `hv_static.lib` freezes at whatever CRT it first built with; no incremental build moves it after a config change.
+- **Build/link errors that survive a full rebuild** of the affected target and vanish in a fresh build dir.
 
-Drift like this produces preflight failures that look like code bugs but aren't — the recurring MSVC `/MT` vs `/MD` `LNK2038` on `dasModuleHV` is the canonical example. **Do not debug a drifted build dir. Replace it.**
+When a symptom hits, do not debug the drifted dir — replace it:
 
 ```bash
-rm -rf build                                            # the ONE sanctioned rm -rf build
-# One-time per machine: point OpenSSL at a shared cache so `rm -rf build` doesn't
-# rebuild it from source (several min) every clean build. dasHV reads DASLANG_OPENSSL_DIR
+rm -rf build                                            # sanctioned only on the drift symptoms above
+# One-time per machine (Windows): point OpenSSL at a shared cache so a clean build doesn't
+# rebuild it from source (several min). dasHV reads DASLANG_OPENSSL_DIR
 # (find_package(OpenSSL) then resolves it via OPENSSL_ROOT_DIR and skips the source build);
-# unset → it builds into build/openssl, which the rm -rf just deleted. CI is ephemeral
-# (no cache, sets neither) so it always builds OpenSSL from source — that's fine.
+# unset → it builds into build/openssl, which the rm -rf just deleted.
 #   setx DASLANG_OPENSSL_DIR "%LOCALAPPDATA%\daslang\openssl"   (build OpenSSL there once)
 # Configure with CI's release modules ON (mirror ci/release_modules.txt — see skills/preflight.md):
 cmake -S . -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLED=OFF \
@@ -44,7 +44,7 @@ cmake -S . -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DI
 cmake --build build --config Release -j 64              # full clean build; pass timeout: 0
 ```
 
-The clean build is the cost of never debugging build-config drift again. It also means preflight runs against generated files that actually match HEAD's source — which is the whole point of the gate.
+Orthogonal (and still mandatory): after a rebase that pulls in C++ changes (`src/builtin/*.cpp` etc.), rebuild incrementally before trusting test/AOT results — a stale `bin/test_aot` fails AOT where interp passes.
 
 ## 1. Lint all changed `.das` files — **zero warnings required**
 
@@ -173,7 +173,7 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 
 **Expected:** empty output (no verifier errors). The LLVM IR generation succeeded.
 
-**Windows local caveat:** `clang-cl` may report `unable to execute command: program not executable` when linking the JIT'd `.dll`. That's a local Windows env issue (linker discovery), **not the JIT codegen** — IR was already generated and verified before the link step. Treat the `clang-cl` link failure as a known-local artifact; the only signal you care about for this gate is *no verifier errors*. For full end-to-end JIT validation, use WSL/Linux (`feedback_wsl_tsan_repro`) where clang's link path works.
+**Windows local caveat:** `clang-cl` may report `unable to execute command: program not executable` when linking the JIT'd `.dll`. That's a local Windows env issue (linker discovery), **not the JIT codegen** — IR was already generated and verified before the link step. Treat the `clang-cl` link failure as a known-local artifact; the only signal you care about for this gate is *no verifier errors*. For full end-to-end JIT validation, use WSL/Linux (`skills/wsl_ci_repro.md`) where clang's link path works.
 
 **What this catches:** struct-layout drift (i32 vs i64 fields in JIT mirror), mixed-width arithmetic (i64 × i32), missing intrinsic lowering after a runtime-side widening. The two suggested tests cover array indexing + table operations; widen the smoke list to `tests/soa/test_soa_basic.das` and `tests/language/typeAlias.das` if you touched generic-instance lowering or capture frames.
 
@@ -222,9 +222,9 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 - C++ bindings in `modules/*/src/*.cpp` or `src/builtin/*.cpp` that add new public functions, types, or struct fields
 - **Struct fields or enum values added, REMOVED, or reordered** in any C++ type documented under `doc/source/stdlib/handmade/` — das2rst validates handmade docs **positionally** (line 1 = type description, line N+1 = Nth field/value), so a removed field is just as CI-fatal as an added one
 - RST files in `doc/source/` (handwritten tutorials, reference pages, TOCs)
-- `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
+- `doc/reflections/das2rst.das` or `daslib/rst.das` / `daslib/rst_comment.das`
 
-Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs six gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
+Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs seven gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
 
 **Which substeps to run** — match what changed, not "all in order":
 
@@ -343,9 +343,8 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | Type-system/generics | sequence smoke (`skills/preflight.md`) + externals sweep (`skills/abi_break_sweep.md`) | Only for type-system / AST-layout / daslib-generics changes |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
-| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx latex AND html | Any daslib/src-builtin/RST change triggers all six gates — `skills/preflight.md` |
+| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx latex AND html | Any daslib/src-builtin/RST change triggers all seven gates — `skills/preflight.md` |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
-| Wrap-up curation | `skills/task_wrap_up.md` | Optional. Add answers for cache misses, edit cached answers this PR invalidated |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
 | Babysit | Follow `skills/babysit.md` | One round per Copilot pass; convergence in 1-3 rounds is normal |

@@ -120,7 +120,7 @@ Most of the `T?` (testing) assertions can be used as well:
 
 ```
 // Prefer this
-b |> stringEqual(x, y)
+b |> equal(x, y)
 
 // To this
 if (x != y) {

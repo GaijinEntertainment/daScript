@@ -54,18 +54,14 @@ The default (no env, no flag) stays per-build-dir, so **CI is unchanged** — it
 
 Optional modules are controlled by CMake flags (`DAS_*_DISABLED`). The active configuration lives in `.vscode/settings.json` under `cmake.configureSettings` (the "WIP" block is the active one; others are commented-out presets).
 
-Key flags (all default to `ON` = disabled in CMakeLists.txt):
-- `DAS_HV_DISABLED` — dasHV (HTTP/WebSocket via libhv)
-- `DAS_PUGIXML_DISABLED` — dasPUGIXML (XML parsing)
-- `DAS_GLFW_DISABLED` — GLFW (OpenGL windowing)
-- `DAS_IMGUI_DISABLED` — ImGui
-- `DAS_LLVM_DISABLED` — LLVM JIT
-- `DAS_CLANG_BIND_DISABLED` — Clang bindings
-- `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STBTRUETYPE_DISABLED`, `DAS_STDDLG_DISABLED`, `DAS_SQLITE_DISABLED`
+Key flags (defaults are MIXED — see CMakeLists.txt:28-43):
+- Default `OFF` (module ENABLED by default): `DAS_HV_DISABLED` (dasHV — HTTP/WebSocket via libhv), `DAS_GLFW_DISABLED` (GLFW/OpenGL windowing), `DAS_PUGIXML_DISABLED` (XML), `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STDDLG_DISABLED`
+- Default `ON` (module DISABLED by default): `DAS_LLVM_DISABLED` (LLVM JIT), `DAS_CLANG_BIND_DISABLED` (Clang bindings), `DAS_SQLITE_DISABLED`
+- dasImgui has no `_DISABLED` toggle — it's wired via `DAS_WEB_IMGUI_DIR`
 
 **To change modules:** edit the active `cmake.configureSettings` in `.vscode/settings.json`, then reconfigure. Or pass `-DFLAG=VALUE` to your `cmake -B build ...` command. VSCode CMake Tools will pick up settings changes automatically.
 
-**Documentation generation** (`doc/reflections/das2rst.das`) requires `DAS_HV_DISABLED=OFF` and `DAS_PUGIXML_DISABLED=OFF` because it documents all modules. Temporarily enable them, rebuild `daslang`, run das2rst, then revert settings.
+**Documentation generation** (`doc/reflections/das2rst.das`) requires `DAS_HV_DISABLED=OFF` and `DAS_PUGIXML_DISABLED=OFF` (both the default) because it documents all modules. If your local config disabled them, re-enable, rebuild `daslang`, run das2rst, then revert.
 
 ## AOT hash mismatches
 
@@ -73,4 +69,4 @@ When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic h
 
 For the full debugging workflow, see `skills/aot_hash_desync_debugging.md` (side-by-side SimNode dumps via `options log_nodes`/`log_nodes_aot_hash`, common shapes, C++ debug switches).
 
-The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was emptied by commit `581363ebc`). When codegen output diverges, edit `daslib/aot_cpp.das` — not the C++ stub in `src/ast/`.
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was deleted by commit `581363ebc`). When codegen output diverges, edit `daslib/aot_cpp.das`.
