@@ -402,6 +402,32 @@ what it costs today and what the fix would change.
   is why it wasn't chased. The clean fix (per Copilot on #3346): precompute a per-layer KV-ROW
   prefix array (kv_dim sums, seq_len-independent) once at load and multiply by the LIVE seq_len
   at call time, so the tests' post-load seq_len cap keeps working. (Spotted post-wave-3 review.)
+- **Decode attention runs the head loop single-threaded.** `attention_std_decode` walks all
+  n_heads inline (dasllama_common.das, the `for (h in range64(n_heads))` loop) while prefill
+  threads the same loop over heads. Per-token KV traffic is cnt × kv_dim × 2 × 4B × n_layers —
+  on the 12B at 2048 ctx that's ~1.6GB/token vs ~12GB of Q8 weights (~12%), and it grows
+  linearly with context, so it dominates decode at 32k-class contexts. llama.cpp threads decode
+  attention. Fix = maybe_parallel_for over heads gated on a cnt threshold (per-layer per-token
+  job dispatch is ~90µs on M1, so short contexts must stay inline). (Spotted tune audit,
+  2026-07-02.)
+- **LOW PRIORITY: `sample_` top-k is O(top_k × vocab) scalar selection.** Each of the top_k
+  rounds rescans the whole vocab (dasllama_common.das sample_) — top_k=40 on gemma-4's 262144
+  vocab is ~10M compares per sampled token. Cold today (SamplingParams defaults are greedy /
+  top_k=0, and all parity fixtures are greedy), but it's the sampling path the tutorials teach.
+  Fix = single-pass partial selection (bounded min-heap of size top_k, or threshold-and-count).
+  (Spotted tune audit, 2026-07-02.)
+- **Flash-attention tile shape is a frozen compile-time constant — deferred x64 tuning axis.**
+  `ATTN_FLASH_QT/KV = 64×64` (dasllama_common.das) was chosen on M1 and never swept; tile shape
+  is the classic per-box cache parameter, and x64's small private L2 differs in kind from M1's
+  big shared L2. QT is compile-time-coupled to the `float[64]` running max/sum fixed arrays and
+  the fa_* scratch sizing, so this is a compile-time axis à la `[tuned]` (profile-keyed), not a
+  runtime setter. DEFERRED until an x64 box exists to measure on — do not solve the coupling
+  speculatively. (Spotted tune audit, 2026-07-02.)
+- **LOW PRIORITY: decode-path micros.** (a) `forward_prefill` resizes `att_b` to the blocked
+  layout (n_heads × ATTN_BLOCK_Q × ctx) even in flash mode, which never reads it — dead scratch,
+  memory only. (b) Decode `layer_out_scale`, the MoE weighted accumulate, and the embedding-row
+  copy use scalar bounds-checked loops where `scale_inplace`/`axpy`/`copy_floats` exist (prefill
+  already uses them). Free consistency, negligible time. (Spotted tune audit, 2026-07-02.)
 
 ## What collapsed (done — Phase 5)
 
