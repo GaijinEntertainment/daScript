@@ -1286,8 +1286,9 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "rope_par_threshold") $(v) { set_rope_par_threshold(v) }
     apply_i64_knob(rt, "kv_store_par_threshold") $(v) { set_kv_store_par_threshold(v) }
     apply_i64_knob(rt, "act_par_threshold") $(v) { set_act_par_threshold(v) }
-    apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(v)) }
-    apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(v)) }
+    // the two int-typed knobs clamp into int range before the cast — int() wraps silently on int64
+    apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(min(v, 2147483647l))) }
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
         pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
