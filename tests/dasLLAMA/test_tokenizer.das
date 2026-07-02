@@ -42,6 +42,9 @@ def private corpus_gate(t : T?; vocab_path : string) {
     var outlines <- split(fread(vocab_path + ".out"), "\n")
     drop_trailing_empty(inputs)
     drop_trailing_empty(outlines)
+    // fread returns "" for a missing file — without this check a present .gguf with absent
+    // .inp/.out corpora would run 0 vectors and pass trivially
+    t |> success(!empty(inputs), "corpus files present and non-empty: {vocab_path}.inp/.out")
     t |> equal(length(inputs), length(outlines))
     var npass = 0
     var rt_ok = 0
