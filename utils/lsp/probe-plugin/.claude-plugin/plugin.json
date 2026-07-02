@@ -5,8 +5,7 @@
     "daslang-probe": {
       "command": "python3",
       "args": ["${CLAUDE_PLUGIN_ROOT}/probe_server.py"],
-      "extensionToLanguage": { ".das": "daslang" },
-      "env": { "PROBE_LOG": "/private/tmp/claude-501/-Users-borisbatkin-Work-daScript/23018673-bf1a-4a26-be6a-210a3168f749/scratchpad/lsp_probe.log" }
+      "extensionToLanguage": { ".das": "daslang" }
     }
   }
 }
