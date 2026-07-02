@@ -18,7 +18,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
     SET(DAS_LLVM_TARGET_VERSION "22.1.5")
     # Sentinel value carries a -r<N> revision on top of the LLVM version: the
     # prebuilt can change (different cmake flags) without an LLVM version bump.
-    SET(DAS_LLVM_SENTINEL_VERSION "${DAS_LLVM_TARGET_VERSION}-r3")
+    SET(DAS_LLVM_SENTINEL_VERSION "${DAS_LLVM_TARGET_VERSION}-r4")
     SET(DAS_LLVM_REFETCH FALSE)
     IF (NOT EXISTS "${DAS_LLVM_LIB_OUTPUT}/${DAS_LLVM_DLL_NAME}")
         SET(DAS_LLVM_REFETCH TRUE)
@@ -36,27 +36,28 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
     IF (DAS_LLVM_REFETCH)
         find_package(LLVM ${DAS_LLVM_TARGET_VERSION})
         # A system LLVM is only usable here if it ships the prebuilt-release
-        # layout we copy from. On Windows that means bin/clang-cl.exe +
+        # layout we copy from. On Windows that means bin/lld-link.exe +
         # bin/LLVM-C.dll. msys2/mingw clang64 provides LLVMConfig.cmake but lays
         # the binaries out differently (libLLVM-NN.dll, no LLVM-C.dll); a
         # 2026-06 msys2 package update started reporting a matching version so
         # find_package now succeeds where it used to fail the version match.
         # Treat that as not-found and fall through to the prebuilt download.
         IF (LLVM_FOUND AND WIN32 AND
-            ((NOT EXISTS "${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe") OR
+            ((NOT EXISTS "${LLVM_INSTALL_PREFIX}/bin/lld-link.exe") OR
              (NOT EXISTS "${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll")))
             MESSAGE(STATUS "dasLlvm: system LLVM at ${LLVM_INSTALL_PREFIX} lacks "
-                "Windows-release clang-cl.exe/LLVM-C.dll (msys2/mingw layout); "
+                "Windows-release lld-link.exe/LLVM-C.dll (msys2/mingw layout); "
                 "using prebuilt download")
             SET(LLVM_FOUND FALSE)
         ENDIF()
         IF (LLVM_FOUND)
             MESSAGE(STATUS "LLVM found at: ${LLVM_INSTALL_PREFIX}")
             IF(WIN32)
-                # Copy clang-cl to use it as a linker
+                # Copy lld-link — module_jit.cpp's find_linker drives the JIT
+                # -exe/-dll link with it directly (no compiler driver in front)
                 FILE(COPY
-                    "${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe" DESTINATION
-                    "${DAS_CLANG_OUTPUT}/clang-cl.exe"
+                    "${LLVM_INSTALL_PREFIX}/bin/lld-link.exe" DESTINATION
+                    "${DAS_CLANG_OUTPUT}"
                 )
                 set(DAS_LLVM_DLL_PATH ${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll)
             ELSEIF(APPLE)
@@ -120,7 +121,10 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
             file(COPY ${das_llvm_shared_lib_SOURCE_DIR}/LLVM.dll DESTINATION ${CMAKE_SOURCE_DIR}/lib)
             IF(WIN32)
-                file(COPY ${das_llvm_shared_lib_SOURCE_DIR}/clang-cl.exe DESTINATION ${CMAKE_SOURCE_DIR}/bin)
+                # The package also ships clang-cl.exe (utils/preflight probes it
+                # in the FetchContent source dir as a bundled-compiler fallback);
+                # only the linker goes to bin/.
+                file(COPY ${das_llvm_shared_lib_SOURCE_DIR}/lld-link.exe DESTINATION ${CMAKE_SOURCE_DIR}/bin)
             ENDIF()
             file(WRITE "${DAS_LLVM_LIB_OUTPUT}/LLVM.dll.version" "${DAS_LLVM_SENTINEL_VERSION}")
         ENDIF()
@@ -129,7 +133,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
     ENDIF()
 
     IF(WIN32)
-        install(FILES "${DAS_CLANG_OUTPUT}/clang-cl.exe" DESTINATION ${DAS_INSTALL_BINDIR})
+        install(FILES "${DAS_CLANG_OUTPUT}/lld-link.exe" DESTINATION ${DAS_INSTALL_BINDIR})
     ENDIF()
     # Always put to single place, path and name should match with llvm_func.das definitions
     install(FILES "${DAS_LLVM_LIB_OUTPUT}/${DAS_LLVM_DLL_NAME}" DESTINATION ${DAS_INSTALL_LIBDIR})

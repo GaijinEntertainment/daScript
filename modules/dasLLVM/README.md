@@ -87,7 +87,7 @@ The supported cross-target is `wasm32-unknown-emscripten` (the default when no
 explicit triple is passed).
 
 ### How it works
-`-exe` mode usually emits a host object via LLVM and links it with `clang`/`clang-cl`.
+`-exe` mode usually emits a host object via LLVM and links it with the host linker (`lld-link` on Windows-MSVC, `c++`/`clang` elsewhere).
 When a cross-compile target is selected, dasLLVM instead:
 1. Initializes the WebAssembly LLVM target (lazy — no JIT-startup overhead when unused).
 2. Builds a `TargetMachine` for the requested triple and pins the module's data
