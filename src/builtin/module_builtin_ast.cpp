@@ -396,8 +396,14 @@ namespace das {
     }
 
     void ast_gc_guard ( const TBlock<void> & block, Context * context, LineInfoArg * at ) {
-        gc_guard scope;
-        das_invoke<void>::invoke(context,at,block);
+        bool ok;
+        {
+            gc_guard scope;
+            ok = context->runWithCatch([&]() {
+                das_invoke<void>::invoke(context,at,block);
+            });
+        }
+        if ( !ok ) context->rethrow();
     }
 
     // Build fn->body inside `block` on a fresh scoped gc root; on exit, promote the body's
@@ -407,11 +413,17 @@ namespace das {
     // at fn->body, not fn: fn already lives on the enclosing root, so fn->gc_collect would hit
     // the gc_owner==target early-out and collect nothing.
     void ast_gc_collect_scope ( FunctionPtr fn, const TBlock<void> & block, Context * context, LineInfoArg * at ) {
-        gc_guard scope;
-        das_invoke<void>::invoke(context,at,block);
-        if ( fn && fn->body ) {
-            fn->body->gc_collect(scope.saved_thread_root, &scope.guard_root);
+        bool ok;
+        {
+            gc_guard scope;
+            ok = context->runWithCatch([&]() {
+                das_invoke<void>::invoke(context,at,block);
+            });
+            if ( fn && fn->body ) {
+                fn->body->gc_collect(scope.saved_thread_root, &scope.guard_root);
+            }
         }
+        if ( !ok ) context->rethrow();
     }
 
     // Free a SINGLE orphaned AST expression node mid-compile, instead of waiting for the
