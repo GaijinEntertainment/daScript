@@ -28,12 +28,7 @@ FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPEN
 #                                 annotation_arguments, ExprBlock) lacking AOT header decls
 #   network                    — daslang class `Server` shadows C++ `das::Server`,
 #                                codegen resolves NetworkServer? to the daslang class
-#   style_lint                 — [lint_macro] consumed only at compile time; calls
-#                                AST/module-introspection builtins (for_each_pass_macro,
-#                                for_each_capture_macro, for_each_simulate_macro,
-#                                for_each_function_annotation, module_has_comment_reader)
-#                                that lack AOT header declarations
-list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network|style_lint)\\.das$")
+list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network)\\.das$")
 # just_in_time bootstraps the LLVM-backed JIT module via [extern](library=LLVM.dll).
 # Without DAS_LLVM_DISABLED=OFF, the [extern] macro fails at compile time.
 IF(DAS_LLVM_DISABLED)
@@ -484,6 +479,11 @@ FILE(GLOB AOT_MCP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/
 # at a fixture that doesn't need it and bloats the build for no coverage.
 list(FILTER AOT_MCP_FILES EXCLUDE REGEX "/_")
 
+# AOT for LSP server tests (subprocess LSP protocol tests)
+FILE(GLOB AOT_LSP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lsp/*.das")
+# Skip _fixture_*.das — opened THROUGH the supervisor by the tests, not test entry points
+list(FILTER AOT_LSP_FILES EXCLUDE REGEX "/_")
+
 # AOT for lint test files
 FILE(GLOB AOT_LINT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lint/*.das")
 # Exclude _*.das fixture files (consumed at runtime via compile_file, not invoked by dastest)
@@ -872,6 +872,10 @@ add_custom_target(test_aot_mcp)
 SET(MCP_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MCP_FILES}" MCP_AOT_GENERATED_SRC test_aot_mcp daslang)
 
+add_custom_target(test_aot_lsp)
+SET(LSP_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_LSP_FILES}" LSP_AOT_GENERATED_SRC test_aot_lsp daslang)
+
 add_custom_target(test_aot_stbimage)
 SET(STBIMAGE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_STBIMAGE_FILES}" STBIMAGE_AOT_GENERATED_SRC test_aot_stbimage daslang)
@@ -961,6 +965,7 @@ SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MCP_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" LSP_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MINFFT_AOT_GENERATED_SRC)
@@ -1061,6 +1066,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DASHV_MODULES_AOT_GENERATED_SRC}
     ${DASHV_AOT_GENERATED_SRC}
     ${MCP_AOT_GENERATED_SRC}
+    ${LSP_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -1102,6 +1108,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_pugixml test_aot_pugixml_modules
     test_aot_dashv test_aot_dashv_modules
     test_aot_mcp
+    test_aot_lsp
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${CIPIC_HRTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft ${PROJECT_SOURCE_DIR}/modules/dasPUGIXML/pugixml ${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include ${SQLITE_INCLUDE_DIR})
 target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT MINFFT_SINGLE HRTF_SAMPLE_RATE=${DAS_AUDIO_SAMPLE_RATE})

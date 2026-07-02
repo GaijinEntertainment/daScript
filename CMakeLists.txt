@@ -193,8 +193,16 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
         list(APPEND all_outputs ${out_src})
         list(APPEND ${genList} ${out_src})
 
+        # The compile-time file path reaches generated code (quote-lowered
+        # functions embed it in hashed constants), so the input must be
+        # spelled EXACTLY as the dastest suite spells it when running from
+        # the source root — source-root-relative. An absolute input here
+        # desyncs the AOT hash against `test_aot -use-aot --test tests`
+        # (error[50101]) and bakes machine-specific paths into the stubs.
+        file(RELATIVE_PATH input_rel ${PROJECT_SOURCE_DIR} ${input_src})
+
         # Build command arguments for the current batch
-        list(APPEND _current_batch ${dasAotToolArg} ${input_src} ${out_arg})
+        list(APPEND _current_batch ${dasAotToolArg} ${input_rel} ${out_arg})
 
         file(MAKE_DIRECTORY ${out_dir})
         set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
@@ -221,6 +229,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     ADD_CUSTOM_COMMAND(
         OUTPUT  ${all_outputs}
         DEPENDS ${all_depends}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "AOT compiling files..."
         ${_commands}
     )
@@ -1761,6 +1770,7 @@ install(FILES
 
 install(FILES ${PROJECT_SOURCE_DIR}/install/README.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
+install(FILES ${PROJECT_SOURCE_DIR}/GETTING_STARTED.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 
 # Skills shipped to the SDK — the manifest install/skills.list names which
@@ -1829,6 +1839,31 @@ install(FILES
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     DESTINATION utils/mcp/tests
     FILES_MATCHING PATTERN "*.das"
+)
+
+# Install LSP server (Claude Code plugin: push diagnostics after every edit +
+# definition/references/hover/symbols/call hierarchy/implementation).
+#   lsp_supervisor.py — the LSP endpoint (python; zero language knowledge)
+#   subtools/*.das    — stateless spawn-per-request batch tools
+# The .claude/skills manifest auto-loads the plugin for Claude Code sessions
+# started at the install root; utils/lsp/plugin serves explicit --plugin-dir
+# registration from anywhere else. Same relative layout as the repo, so both
+# manifests work unchanged.
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/lsp/lsp_supervisor.py
+    ${PROJECT_SOURCE_DIR}/utils/lsp/README.md
+    DESTINATION utils/lsp
+)
+file(GLOB DAS_LSP_SUBTOOLS ${PROJECT_SOURCE_DIR}/utils/lsp/subtools/*.das)
+install(FILES ${DAS_LSP_SUBTOOLS} DESTINATION utils/lsp/subtools)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/lsp/plugin/.claude-plugin/plugin.json
+    DESTINATION utils/lsp/plugin/.claude-plugin
+)
+# prefix-root pinned (NOT ${DAS_INSTALL_DOCDIR}, which packagers may redirect):
+# auto-load needs the manifest at the root a session starts in, and its args
+# hop ../../../utils/lsp relative to this exact depth
+install(FILES ${PROJECT_SOURCE_DIR}/.claude/skills/daslang-lsp/.claude-plugin/plugin.json
+    DESTINATION .claude/skills/daslang-lsp/.claude-plugin
 )
 
 # Install dascov (code coverage)

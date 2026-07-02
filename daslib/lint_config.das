@@ -146,3 +146,31 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     }
     return <- disabled
 }
+
+//! One structured lint finding — the machine-readable twin of the
+//! ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect``
+//! overloads emit. Produced by the ``*_collect_issues`` overloads in
+//! ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for
+//! consumers that need positions (e.g. the LSP validate subtool).
+struct public LintIssue {
+    code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none
+    message : string        //!< message text without the position suffix; may be multi-line (instanced-from chains)
+    file : string           //!< source file as spelled by the compiler; "" when the location has no file info
+    line : int              //!< 1-based start line
+    column : int            //!< 0-based start column (byte offset — the LineInfo convention)
+    last_line : int         //!< 1-based end line; 0 when unknown
+    last_column : int       //!< 0-based end column (byte offset, end-exclusive)
+}
+
+//! Builds a ``LintIssue`` from a lint message and its source location.
+//! Shared funnel helper for the three lint visitors.
+def public make_lint_issue(message : string; at : LineInfo) : LintIssue {
+    return LintIssue(
+        code = extract_lint_code(message),
+        message = message,
+        file = at.fileInfo != null ? "{at.fileInfo.name}" : "",
+        line = int(at.line),
+        column = int(at.column),
+        last_line = int(at.last_line),
+        last_column = int(at.last_column))
+}

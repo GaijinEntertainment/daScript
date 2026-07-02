@@ -73,6 +73,7 @@ class StyleLintVisitor : AstVisitor {
     // collection mode
     collect_warnings : bool = false
     warnings : array<string>
+    issues : array<LintIssue>       // structured twin of `warnings`, same entries in the same order
     // dedup: suppress duplicate warnings from generic instantiations
     reported_locations : table<uint64>
     // current function (for inferStack reporting)
@@ -138,6 +139,7 @@ class StyleLintVisitor : AstVisitor {
             compiling_program() |> macro_style_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("style warning: {msg} at {describe(at)}")
+            issues |> push(make_lint_issue(msg, at))
         } else {
             to_log(LOG_WARNING, "style warning: {msg} at {describe(at)}\n")
         }
@@ -2639,6 +2641,33 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     }
     let count = astVisitor.warning_count
     warnings |> push_from(astVisitor.warnings)
+    unsafe { delete astVisitor; }
+    return count
+}
+
+def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintIssue>;
+                                     disabled_codes, enabled_codes : table<string>;
+                                     comment_hygiene : bool = false) : int {
+    //! Structured twin of ``style_lint_collect`` — same filters, but emits
+    //! ``LintIssue`` records (rule code + position) instead of display strings.
+    var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = comment_hygiene)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
+    astVisitor.this_module = prog.getThisModule
+    astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_with_generics(prog, astVisitorAdapter)
+    }
+    if (comment_hygiene) {
+        astVisitor->scan_long_comment_blocks(prog)
+    }
+    astVisitor->st029_check_requires(prog)
+    // STYLE024/025 stack-balance sanity check.
+    if (!empty(astVisitor.unsafe_stack)) {
+        panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
+    }
+    let count = astVisitor.warning_count
+    issues |> push_from(astVisitor.issues)
     unsafe { delete astVisitor; }
     return count
 }

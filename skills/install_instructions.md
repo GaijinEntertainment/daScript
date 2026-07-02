@@ -11,7 +11,9 @@ When updating or creating AI instruction files (`CLAUDE.md` + skills) for the in
 | `install/CLAUDE.md` | `CLAUDE.md` (root) | Main AI instructions for SDK users |
 | `install/skills.list` | (not installed) | Manifest naming which `skills/*.md` to ship |
 | `skills/<name>.md` | `skills/<name>.md` | Each skill listed in `install/skills.list` |
+| `GETTING_STARTED.md` | `GETTING_STARTED.md` (root) | First-run walkthrough (run a program, editor + AI tooling) |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
+| `utils/lsp/` (supervisor + subtools + plugin manifest) | `utils/lsp/` + `.claude/skills/daslang-lsp/` | LSP server for Claude Code (the `.claude/skills` copy auto-loads for sessions started at the SDK root) |
 | `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector |
 
 The current ship list lives in [install/skills.list](../install/skills.list) — alphabetical, `#` comments allowed.

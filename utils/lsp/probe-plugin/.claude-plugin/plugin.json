@@ -1,0 +1,11 @@
+{
+  "name": "daslang-lsp-probe",
+  "description": "Wave-0 probe: hardcoded-diagnostic LSP server for .das (see utils/lsp/ROADMAP.md)",
+  "lspServers": {
+    "daslang-probe": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/probe_server.py"],
+      "extensionToLanguage": { ".das": "daslang" }
+    }
+  }
+}

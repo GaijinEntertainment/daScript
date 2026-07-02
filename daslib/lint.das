@@ -71,6 +71,7 @@ class LintVisitor : AstVisitor {
     // collection mode — when true, errors are appended to `errors` instead of error()
     collect_errors : bool = false
     errors : array<string>
+    issues : array<LintIssue>       // structured twin of `errors`, same entries in the same order
     // Filters: disabled (denylist) and enabled (whitelist; empty == all).
     // Caller-populated via collect overload; applied alongside // nolint suppression.
     disabled_codes : table<string>
@@ -96,6 +97,7 @@ class LintVisitor : AstVisitor {
             compiling_program() |> macro_error(at, text)
         } elif (collect_errors) {
             errors |> push("{text} at {describe(at)}")
+            issues |> push(make_lint_issue(text, at))
         } else {
             error("{text} at {describe(at)}\n")
         }
@@ -554,6 +556,25 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
     }
     let count = length(astVisitor.errors)
     errors |> push_from(astVisitor.errors)
+    unsafe {
+        delete astVisitor
+    }
+    return count
+}
+
+def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIssue>;
+                                   disabled_codes, enabled_codes : table<string>) : int {
+    //! Structured twin of ``paranoid_collect`` — same filters, but emits
+    //! ``LintIssue`` records (rule code + position) instead of display strings.
+    var astVisitor = new LintVisitor(compile_time_errors = false, collect_errors = true)
+    astVisitor.disabled_codes := disabled_codes
+    astVisitor.enabled_codes := enabled_codes
+    make_visitor(*astVisitor) $(adapter) {
+        astVisitor.astVisitorAdapter = adapter
+        visit(prog, astVisitor.astVisitorAdapter)
+    }
+    let count = length(astVisitor.issues)
+    issues |> push_from(astVisitor.issues)
     unsafe {
         delete astVisitor
     }
