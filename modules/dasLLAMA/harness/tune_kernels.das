@@ -17,6 +17,7 @@ require dasllama/dasllama_math   // nolint:STYLE030 — side-effect: loads the *
 require dasllama/dasllama_math_default   // nolint:STYLE030 — dot_q8q8_template lives here
 require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template + backend registration (pin for the repack)
 require dasllama/dasllama_quant  // quantize templates + the Q4/Q8 reference quantizers
+require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require math                     // mad (referenced by the cloned template bodies)
@@ -967,6 +968,7 @@ def bench_laneq4x4() : string {
 
 [export]
 def main {
+    create_job_que()   // the benches are single-thread, but the runtime snapshot reads get_total_hw_jobs()
     print("kernel tuner: N={N}, {ROUNDS} rounds x {REPS} reps, interleaved best-of\n\n")
 
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
@@ -1036,11 +1038,22 @@ def main {
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
     // mirrors softmax's winner instead of paying its own sweep.
+    // The "runtime" section snapshots the CURRENT runtime knobs (defaults unless this process changed
+    // them) so the written profile is complete and hand-editable: load_model applies it via
+    // apply_box_profile_runtime. TB/L2-budget refinement stays manual (tune_tb.das shows the raw
+    // cliff; edit the file under the knee); "threads" is advisory — set DAS_JOBQUE_THREADS to change it.
+    let runtime = JV((q8_token_block = get_q8_token_block(), q8_l2_budget = get_q8_l2_budget(),
+        matmul_par_threshold = get_matmul_par_threshold(), attn_par_threshold = get_attn_par_threshold(),
+        requant_par_threshold = get_requant_par_threshold(), norm_par_threshold = get_norm_par_threshold(),
+        rope_par_threshold = get_rope_par_threshold(), kv_store_par_threshold = get_kv_store_par_threshold(),
+        act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
+        q4_chunks_per_job = get_q4_chunks_per_job(), threads = get_total_hw_jobs()))
     let profile = JV((dot = dotw, axpy = axpyw, add_inplace = addw,
         mul_inplace = mulw, scale_inplace = scalew, copy_floats = copyw,
         softmax = softmaxw, softmax_sink = softmaxw, rmsnorm = rmsw,
         dot_q4 = dq4w, dot_q8q8 = dq8w, quantize_q8_0_into_ptr = quantw,
-        rope_scaled_neox_tab = ropew, gemm_f32_uk_4x16 = gemmw, dot_q8q8_laneq4x4 = laneqw))
+        rope_scaled_neox_tab = ropew, gemm_f32_uk_4x16 = gemmw, dot_q8q8_laneq4x4 = laneqw,
+        runtime = runtime))
     let js = write_json(profile)
     let ppath = box_profile_path()   // same resolution [tuned] reads from: env override, else <das_root>
     if (fwrite(ppath, js)) {

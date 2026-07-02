@@ -1223,10 +1223,11 @@ def apply_box_profile_runtime(path : string = "") {
         to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend pin = {be}\n")
     }
     // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
-    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it.
+    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
+    // comparison here: get_total_hw_jobs() throws outside a job queue, and load_model may run there.
     let adv = read_json_field(rt, "threads", -1l)
-    if (adv > 0l && adv != int64(get_total_hw_jobs())) {
-        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} (current {get_total_hw_jobs()}) — set DAS_JOBQUE_THREADS={adv}\n")
+    if (adv > 0l) {
+        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} — ensure DAS_JOBQUE_THREADS={adv}\n")
     }
 }
 
@@ -1752,10 +1753,7 @@ def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
     }
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
     if (c.layer_out_scale) {  // gemma4: scale the whole layer output (after the residual)
-        let os = t.fblob[t.out_scale_off + l]
-        for (i in range64(dim)) {
-            s.x[i] *= os
-        }
+        scale_inplace(unsafe(addr(s.x[0])), t.fblob[t.out_scale_off + l], dim)
     }
 }
 
@@ -1883,10 +1881,7 @@ def private ffn_moe_decode(t : Model; var s : Session; l : int64) {
     }
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
     if (c.layer_out_scale) {
-        let os = t.fblob[t.out_scale_off + l]
-        for (i in range64(dim)) {
-            s.x[i] *= os
-        }
+        scale_inplace(unsafe(addr(s.x[0])), t.fblob[t.out_scale_off + l], dim)
     }
 }
 
@@ -1895,15 +1890,9 @@ def forward(t : Model; var s : Session; token, pos : int64) {
     let dim = c.dim
 
     // token embedding: copy row `token` of the fp32 embedding table into the residual stream
-    array_view(t.fblob, t.tok_emb_off + token * dim, dim) $(row : array<float>#) {
-        for (i in range64(dim)) {
-            s.x[i] = row[i]
-        }
-    }
+    copy_floats(unsafe(addr(s.x[0])), unsafe(addr(t.fblob[t.tok_emb_off + token * dim])), dim)
     if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        for (i in range64(dim)) {
-            s.x[i] *= c.embed_scale
-        }
+        scale_inplace(unsafe(addr(s.x[0])), c.embed_scale, dim)
     }
 
     // per-layer transformer stack — attention then FFN, each through the arch's registered block
@@ -2181,7 +2170,9 @@ def private prefill_attention(var s : Session; loff, npos, start_pos, head_size,
         let kcp = reinterpret<float const?>(addr(s.key_cache[0]))
         let vcp = reinterpret<float const?>(addr(s.value_cache[0]))
         var xbp = addr(s.xb_b[0])
-        var attp = addr(s.att_b[0])
+        // att_b is sized only for the blocked/classic modes (flash packs into fa_* instead), so the
+        // base pointer must not index an empty array under flash — null there, never dereferenced.
+        var attp = !empty(s.att_b) ? addr(s.att_b[0]) : null
         if (g_attn_prefill_mode == AttnPrefillMode.flash) {
             // per-head packing scratch bases (sized in forward_prefill for this mode)
             var qpk0 = addr(s.fa_q[0]);  var kpk0 = addr(s.fa_k[0]);  var vpk0 = addr(s.fa_v[0])
@@ -2511,32 +2502,28 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     s.hb2_b |> resize(npos * hidden)
     s.xqb |> resize(npos * maxn)
     s.xsb |> resize(npos * maxn / 32l)
-    // per-head attention scratch. classic uses one (start_pos+npos)-wide score row per head; blocked
-    // needs ATTN_BLOCK_Q such rows per head (one per query in the block). Size for blocked — classic
-    // indexes the first row of each head's block, so the wider allocation is a harmless superset.
-    s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+    // per-head attention scratch, per the selected algorithm. classic uses one (start_pos+npos)-wide
+    // score row per head; blocked needs ATTN_BLOCK_Q such rows per head (one per query in the block) —
+    // size for blocked, classic indexes the first row of each head's block, so the wider allocation is
+    // a harmless superset. flash never touches att_b (it packs into the fa_* tiles instead), so it
+    // skips that allocation entirely.
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
         s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_k |> resize(n_heads * head_size * ATTN_FLASH_KV)
         s.fa_v |> resize(n_heads * ATTN_FLASH_KV * head_size)
         s.fa_kq |> resize(n_heads * ATTN_FLASH_QT * ATTN_FLASH_KV)
         s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
+    } else {
+        s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
     }
 
     // token embeddings -> residual stream x_b [npos x dim]
     let ts_embed = ref_time_ticks()
     for (p in range64(npos)) {
-        let tok = tokens[p]
-        array_view(t.fblob, t.tok_emb_off + tok * dim, dim) $(row : array<float>#) {
-            for (i in range64(dim)) {
-                s.x_b[p * dim + i] = row[i]
-            }
-        }
+        copy_floats(unsafe(addr(s.x_b[p * dim])), unsafe(addr(t.fblob[t.tok_emb_off + tokens[p] * dim])), dim)
     }
     if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        for (k in range64(npos * dim)) {
-            s.x_b[k] *= c.embed_scale
-        }
+        scale_inplace(unsafe(addr(s.x_b[0])), c.embed_scale, npos * dim)
     }
     prof_add("embed", ts_embed)
 

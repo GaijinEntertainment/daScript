@@ -32,4 +32,12 @@ IF(NOT DAS_LLAMA_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
+    # per-box tuning: the profile producer ([tuned] in the module is the consumer) + its doc
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/harness/tune_kernels.das
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/harness/tune_tb.das
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/harness
+    )
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/tune_for_this_box.md
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
+    )
 ENDIF()

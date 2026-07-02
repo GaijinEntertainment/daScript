@@ -15,14 +15,23 @@ finish it first; tuning an incorrect kernel is worse than pointless).
 
 | Axis | Knob | Bound when | Consumer |
 |---|---|---|---|
-| Kernel backend (ISA) | auto by priority; `pin_kernel_backend(name)` for A/B; loader picks repack backends | runtime | `matmul_q8q8*` wrappers |
-| Loop hints per kernel (`vectorize_width` × `unroll_count`) | `box_profile.json`, read at **compile time** by `[tuned]` | compile (JIT re-keys automatically) | the 6 migrated float kernels (dot, axpy, add/mul/scale_inplace, copy_floats) |
-| Token block `TB` | `set_q8_token_block(n)` (default 128) | runtime | the repack-tier batch kernel only |
-| L2 budget (TB cliff guard) | `set_q8_l2_budget(bytes)` (default 4 MB — provisional, one M1 Max) | runtime | `effective_token_block(tb, n) = clamp(tb, 1, budget/n)` (`dasllama_math.das:301`) |
-| Threads | `DAS_JOBQUE_THREADS` env (overrides all); build-time `-DDAS_MAX_HW_JOBS=N` | process | every `maybe_parallel_for` |
+| Kernel backend (ISA) | auto by priority; `pin_kernel_backend(name)` for A/B; loader picks repack backends; profile `runtime.backend` pins | runtime | `matmul_q8q8*` wrappers |
+| Loop hints per kernel (`vectorize_width` × `unroll_count`) | `box_profile.json` flat keys, read at **compile time** by `[tuned]` | compile (JIT re-keys automatically) | all 15 `[tuned]` kernels: dot, axpy, add/mul/scale_inplace, copy_floats, softmax(+_sink), rmsnorm, dot_q4, dot_q8q8, quantize_q8_0_into_ptr, rope_scaled_neox_tab, gemm_f32_uk_4x16, dot_q8q8_laneq4x4 |
+| Token block `TB` | `set_q8_token_block(n)` (default 128) / profile `runtime.q8_token_block` | runtime | the repack-tier batch kernel only |
+| L2 budget (TB cliff guard) | `set_q8_l2_budget(bytes)` (default 4 MB — provisional, one M1 Max) / profile `runtime.q8_l2_budget` | runtime | `effective_token_block(tb, n) = clamp(tb, 1, budget/n)` (dasllama_math.das) |
+| Threading thresholds | `set_matmul_par_threshold` + the six prefill-pass setters (`set_attn/requant/norm/rope/kv_store/act_par_threshold`) / profile `runtime.*_par_threshold` | runtime | every `maybe_parallel_for` gate — the crossovers encode the box's ~90µs (M1) job-dispatch cost |
+| Chunks per hw job | `set_q8_chunks_per_job` (default 2) / `set_q4_chunks_per_job` (default 4) / profile `runtime.q{8,4}_chunks_per_job` | runtime | the quantized matmuls' row split |
+| Threads | `DAS_JOBQUE_THREADS` env (overrides all); build-time `-DDAS_MAX_HW_JOBS=N`; profile `runtime.threads` is ADVISORY (logs a recommendation — worker count is fixed at jobque creation) | process | every `maybe_parallel_for` |
 
 Axes are ~independent (unroll ⊥ width ⊥ TB ⊥ threads) — sweep them separately
 (coordinate descent), never as a full cross-product.
+
+**One file carries all of it.** `box_profile.json` resolves as `DASLLAMA_BOX_PROFILE` env when
+set, else `<das_root>/box_profile.json` (per-install == per-box; `get_das_root()` — never the
+cwd). Flat keys = the compile-time kernel perms (`[tuned]` reads them, precedence
+`perm=` pin > profile > the kernel's `fallback=` > `vec8_u2`); the `"runtime"` object = the
+runtime knobs above, applied by `load_model` (logged per entry) or explicitly via
+`apply_box_profile_runtime(path)`. Direct `load_gguf` users opt in by calling the latter.
 
 ---
 
@@ -49,30 +58,42 @@ Axes are ~independent (unroll ⊥ width ⊥ TB ⊥ threads) — sweep them separ
 
 ---
 
-## Tool 1 — `harness/tune_kernels.das` (loop-hint sweep → `box_profile.json`)
+## Tool 1 — `harness/tune_kernels.das` (the box tuner → `box_profile.json`)
 
 ```
-bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das      # run from the repo root
+bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das
 ```
 
-Sweeps all 6 migrated float kernels across the 20-permutation grid
+Sweeps every `[tuned]` kernel (15: the float elementwise set, softmax, rmsnorm, the quantized
+dots, the activation requant, the NEOX rope-table leaf, the fp32 GEMM tile, and — arm64+JIT
+only, clean skip elsewhere — the laneq4x4 tile) across the 20-permutation grid
 (`{plain, u2, u4, u8} ∪ {vec4,vec8,vec16,vec32} × {-, u2, u4, u8}`), interleaved best-of-N
-(80 rounds × 2000 reps at N=4096), f64 correctness gate per variant, reports each variant as
-%Δ vs the shipped `vec8_u2` baseline, and writes the full profile:
+(80 rounds × 2000 reps at N=4096), correctness gate per variant (f64 reference; EXACT
+quant/scale equality for the requant), reports each variant as %Δ vs that kernel's SHIPPED
+fallback perm (`vec8_u2` for most; dot_q8q8 ships `vec16`, dot_q4 `vec4_u4`, the tile k-loops
+`u2`, rmsnorm/requant `plain`), and writes the COMPLETE profile — flat kernel-perm keys plus a
+`"runtime"` section snapshotting the current runtime knobs (hand-editable afterwards;
+`softmax_sink` mirrors `softmax`'s winner — same loop shape):
 
 ```json
-{"dot":"vec8_u2","axpy":"vec8_u2","add_inplace":"vec8_u2",
- "mul_inplace":"vec8_u2","scale_inplace":"vec16_u4","copy_floats":"vec8_u2"}
+{"dot":"vec8_u2", "...":"...", "dot_q8q8":"vec16",
+ "runtime":{"q8_token_block":128,"q8_l2_budget":4194304,"matmul_par_threshold":2000000,
+            "attn_par_threshold":100000, "...":0, "q8_chunks_per_job":2,"threads":8}}
 ```
 
-**How the profile is consumed:** `[tuned]` (`dasllama_tune.das`) reads `box_profile.json` at
-**compile time** (cwd-relative — compile from the repo root), keyed by function name;
-precedence = explicit `perm=` pin > profile > `DEFAULT_PERM` (`vec8_u2`). Missing file or key
-= silent default, so an untuned box ships the hand-tuned M1 hints. The file is **gitignored**
-(per-box artifact) and any change **re-keys the JIT DLL cache automatically** (loop hints are
-folded into `jit_dll_basename` — no manual `.jitted_scripts` clearing). A consumer compile
-logs `dasllama_tune: dot <- vec16 (box_profile.json)` per applied entry — that's your proof
-it took.
+**How the profile is consumed:** the flat keys are read at **compile time** by `[tuned]`
+(`dasllama_tune.das`), keyed by function name; precedence = explicit `perm=` pin > profile >
+the kernel's `fallback=` > `vec8_u2`. The `"runtime"` section is applied at **run time** by
+`load_model` (or `apply_box_profile_runtime(path)` for direct `load_gguf` users). Both sides
+resolve the same path: `DASLLAMA_BOX_PROFILE` env, else `<das_root>/box_profile.json` — and
+the tuner WRITES through that resolution too, failing loudly with env advice when das_root is
+read-only (installed SDK). Missing file or key = silent default, so an untuned box ships the
+hand-tuned M1 hints. The file is **gitignored** (per-box artifact) and any change **re-keys
+the JIT DLL cache automatically** (loop hints are folded into `jit_dll_basename` — no manual
+`.jitted_scripts` clearing). A consumer compile logs
+`dasllama_tune: dot <- vec16 (<resolved path>)` per applied flat entry, and `load_model` logs
+`dasLLAMA: box profile runtime: <key> = <v>` per applied runtime entry — that's your proof it
+took.
 
 **Interpreting the sweep** (M1 Max reference, so you know a healthy result when you see it):
 
@@ -86,10 +107,14 @@ it took.
   randomly between runs. Don't chase it.
 
 **Adding a kernel to the rig:** make it a `def template <name>_template` with the hot loop
-marked `for [tune = 1] (...)`, add a bare-`[tuned]` reconstitution stub `<name>` (empty body),
-keep the current hand hints as a grid permutation (bit-identity of the shipped default is the
-invariant), then add a `[dasllama_grid(src="<name>_template")]` + bench block in
-`tune_kernels.das`. `tests/dasLLAMA/test_tune/test_tuned/test_grid.das` are the patterns.
+marked `for [tune = 1] (...)` (several loops may share the tag — they get the same perm) and
+an EXPLICIT return type (the variants registry is typed from `function_to_type(template)`; an
+inferred return lands as `:auto` and won't match the clones), add a `[tuned]` reconstitution
+stub `<name>` (empty body) — with `fallback="<perm>"` when the shipped hand hints aren't
+`vec8_u2`, so bit-identity of the shipped default holds (that's the invariant) — then a
+`[dasllama_grid(src="<name>_template")]` + bench block in `tune_kernels.das`, passing the
+fallback as `report(...)`'s baseline. `tests/dasLLAMA/test_tune/test_tuned/test_grid.das` are
+the patterns.
 
 ## Tool 2 — `harness/tune_tb.das` (token-block sweep)
 
@@ -148,12 +173,17 @@ other models. This is the kernel scoreboard; `prefill_perf.das` is the end-to-en
 
 ## Suggested order for a fresh box
 
-1. Thread sweep first (`DAS_JOBQUE_THREADS` × `bench_gemm_iso`) — establishes the parallel
-   ceiling everything else is measured under.
-2. `tune_kernels.das` → `box_profile.json` → recompile a consumer and confirm the
-   `dasllama_tune:` log lines → re-run an end-to-end bench to see if it moved anything.
-3. If a token-blocked (repack) kernel exists: `tune_tb.das` raw curve → set budget under the
-   cliff; leave TB at 128 unless the curve says otherwise.
+1. Thread sweep first (`DAS_JOBQUE_THREADS` can't be swept in-process — the worker count is
+   fixed at jobque creation, so it's one process per value: `DAS_JOBQUE_THREADS=N` ×
+   `bench_gemm_iso`) — establishes the parallel ceiling everything else is measured under.
+   Record the winner in the profile's `runtime.threads` (advisory — `load_model` logs a
+   recommendation when the live count differs).
+2. `tune_kernels.das` → the complete `box_profile.json` (kernel perms + runtime snapshot) →
+   recompile a consumer and confirm the `dasllama_tune:` log lines → re-run an end-to-end
+   bench to see if it moved anything.
+3. If a token-blocked (repack) kernel exists: `tune_tb.das` raw curve → hand-edit
+   `runtime.q8_l2_budget` under the cliff; leave `q8_token_block` at 128 unless the curve
+   says otherwise.
 4. `prefill_perf.das` + `llama-bench` head-to-head; if a gap remains, per-op profile both
    sides (Tool 4) before touching any kernel.
 
