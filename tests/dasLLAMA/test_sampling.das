@@ -12,11 +12,15 @@ require daslib/fio
 
 let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
 
-// gemma-2-2b-it Q8_0, "Once upon a time" (BOS=2) — same frozen oracle as test_parity.das.
-let GEMMA2_PROMPT <- [2l, 14326l, 3054l, 476l, 1069l]
-let GEMMA2_GEN <- [235269l, 575l, 476l, 2840l, 10545l, 675l, 166962l, 27836l, 578l, 121048l,
-                   17200l, 235269l, 11012l, 476l, 3486l, 4602l, 8602l, 2810l, 1610l, 235265l,
-                   2810l, 1610l, 729l, 3836l]
+// gemma-2-2b-it Q8_0, "1, 2, 3, 4, 5, 6, 7," (BOS=2) — same frozen oracle as test_parity.das
+// (re-frozen to the counting prompt with the cls_q8 tied classifier; see the note there).
+let GEMMA2_PROMPT <- [2l, 235274l, 235269l, 235248l, 235284l, 235269l, 235248l, 235304l, 235269l, 235248l,
+                      235310l, 235269l, 235248l, 235308l, 235269l, 235248l, 235318l, 235269l, 235248l, 235324l,
+                      235269l]
+let GEMMA2_GEN <- [235248l, 235321l, 235269l, 235248l, 235315l, 235269l, 235248l, 235274l, 235276l, 235269l,
+                   235248l, 235274l, 235274l, 235269l, 235248l, 235274l, 235284l, 235269l, 235248l, 235274l,
+                   235304l, 235269l, 235248l, 235274l, 235310l, 235269l, 235248l, 235274l, 235308l, 235269l,
+                   235248l, 235274l, 235318l, 235269l, 235248l, 235274l, 235324l, 235269l, 235248l, 235274l]
 
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
