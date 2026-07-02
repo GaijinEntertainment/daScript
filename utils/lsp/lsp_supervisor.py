@@ -341,6 +341,15 @@ class Server:
 
         if method == "initialize":
             self.init_options = params.get("initializationOptions") or {}
+            # subtools spawn with a per-request cwd, so relative option paths
+            # would re-resolve per file — pin them to the supervisor's startup
+            # cwd (the workspace root) once, here
+            for k in ("project", "project_root"):
+                if self.init_options.get(k):
+                    self.init_options[k] = os.path.abspath(self.init_options[k])
+            if self.init_options.get("load_module"):
+                self.init_options["load_module"] = [
+                    os.path.abspath(m) for m in self.init_options["load_module"]]
             self.reply(mid, {
                 "capabilities": {
                     "textDocumentSync": {"openClose": True, "change": 1,

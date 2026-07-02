@@ -57,10 +57,13 @@ Any other stdio LSP client works too — point it at
 | `load_module` | List; each entry passed as `-load_module` |
 
 Compiler lookup order: `initializationOptions.compiler` →
-`$DASLANG_LSP_COMPILER` → repo layouts (`bin/Release/daslang[.exe]`,
-`bin/daslang`, `build/daslang`, `build/bin/daslang`) under the workspace and
-the plugin's own repo → `daslang` on `PATH`. Relative paths are absolutized
-at discovery (subtools spawn with per-request cwd).
+`$DASLANG_LSP_COMPILER` → repo and installed-SDK layouts
+(`bin/Release/daslang[.exe]`, `bin/daslang[.exe]`, `build/daslang`,
+`build/bin/daslang`) under the workspace and the supervisor's own tree →
+`daslang` on `PATH`. All option paths (`compiler`, `project`, `project_root`,
+`load_module`) are absolutized against the workspace root at initialize —
+subtools spawn with a per-request cwd, so relative paths would otherwise
+re-resolve per file.
 
 Debug log: set `DASLANG_LSP_LOG=<path>` (default: `daslang_lsp.log` in the
 system temp dir).
