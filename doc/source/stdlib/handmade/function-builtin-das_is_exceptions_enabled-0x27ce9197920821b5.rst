@@ -1,0 +1,1 @@
+Reports whether the runtime was built with DAS_ENABLE_EXCEPTIONS=1, i.e. panics propagate as C++ exceptions rather than longjmp. The JIT consults this to decide whether emitted functions need unwind tables.

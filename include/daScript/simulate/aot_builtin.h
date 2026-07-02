@@ -4,6 +4,7 @@
 
 namespace das {
     DAS_API bool das_is_dll_build();
+    DAS_API bool das_is_exceptions_enabled();
     DAS_API bool is_in_aot();
     DAS_API void set_aot();
     DAS_API void reset_aot();
