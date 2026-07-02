@@ -24,12 +24,18 @@ require daslib/shader_block_layout public
 // Mesh + Task (VK_EXT_mesh_shader) pull in the MeshShadingEXT capability + SPV_EXT_mesh_shader
 // extension; both need LocalSize and Mesh additionally needs OutputVertices + OutputPrimitivesEXT
 // + an output-topology mode (triangles / lines / points), all configurable via the [mesh_shader] args.
+// RayGen + Miss + ClosestHit (VK_KHR_ray_tracing_pipeline) pull in the RayTracingKHR capability +
+// SPV_KHR_ray_tracing extension (SPIR-V >= 1.4); none needs an execution mode. (AnyHit / Intersection /
+// Callable follow the same rail and land with their first consumer.)
 enum public ShaderStage {
     Compute
     Vertex
     Fragment
     Mesh
     Task
+    RayGen
+    Miss
+    ClosestHit
 }
 
 // Mesh-shader output configuration, parsed from the [mesh_shader] annotation args
@@ -67,6 +73,8 @@ struct GlobalInfo {
     elem_type  : uint               // SSBO runtime-array element type-id (vec/struct elements can't go through emit_type) OR descriptor-array element type-id (sampled-image / image / sampler)
     is_constant : bool              // a module-scope `let X = <const>` folded to an OpConstant; references resolve to const_id directly (no OpVariable / OpLoad)
     const_id   : uint               // the OpConstant result-id (when is_constant)
+    is_accel   : bool               // an accelerationStructureEXT descriptor (UniformConstant OpTypeAccelerationStructureKHR); consumed by traceRayEXT
+    is_ray_payload : bool           // a @ray_payload / @incoming_ray_payload variable; traceRayEXT's payload operand names its var_id
 }
 
 // A memory-backed local: an OpVariable in Function storage. Mutable locals (`var x`) and loop
@@ -93,6 +101,7 @@ struct EmitCtx {
     descriptor_indexing_cap : bool              // OpCapability ShaderNonUniform + OpExtension "SPV_EXT_descriptor_indexing" already emitted (nonuniformEXT, descriptor arrays)
     sampled_image_nu_cap : bool                 // OpCapability SampledImageArrayNonUniformIndexing already emitted (NonUniform-indexed sampler descriptor array)
     mesh_shading_cap : bool                     // OpCapability MeshShadingEXT + OpExtension "SPV_EXT_mesh_shader" already emitted (mesh / task stages)
+    ray_tracing_cap : bool                      // OpCapability RayTracingKHR + OpExtension "SPV_KHR_ray_tracing" already emitted (raygen / miss / closest-hit stages)
     mesh_max_vertices : int                     // mesh-output array sizing (from MeshOutputConfig): gl_MeshVerticesEXT length
     mesh_max_primitives : int                   // mesh-output array sizing: gl_PrimitiveTriangleIndicesEXT length
     mesh_topology : MeshOutputTopology          // declared output topology; the index-array builtin must match it (triangles -> gl_PrimitiveTriangleIndicesEXT)
@@ -182,9 +191,38 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
     if (name == "gl_PointCoord") return (ok = true, bi = SpvBuiltIn.PointCoord, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
     // gl_PrimitiveID: fragment Input (the per-primitive id a mesh shader wrote via gl_MeshPrimitivesEXT).
     // In a mesh pipeline it is NOT fixed-function-generated, so reading it pulls in the MeshShadingEXT
-    // capability on the fragment module (handled at classification).
+    // capability on the fragment module (handled at classification). ALSO valid in a closest-hit shader
+    // (the hit triangle's index within its geometry) -- rt_builtin_stage_ok widens the check there.
     if (name == "gl_PrimitiveID") return (ok = true, bi = SpvBuiltIn.PrimitiveId, storage = SpvStorageClass.Input, req = ShaderStage.Fragment)
+    // ray tracing (VK_KHR_ray_tracing_pipeline). `req` lists the PRIMARY stage; several are legal in
+    // more than one RT stage -- rt_builtin_stage_ok encodes the full per-name stage sets.
+    if (name == "gl_LaunchIDEXT") return (ok = true, bi = SpvBuiltIn.LaunchIdKHR, storage = SpvStorageClass.Input, req = ShaderStage.RayGen)
+    if (name == "gl_LaunchSizeEXT") return (ok = true, bi = SpvBuiltIn.LaunchSizeKHR, storage = SpvStorageClass.Input, req = ShaderStage.RayGen)
+    if (name == "gl_WorldRayOriginEXT") return (ok = true, bi = SpvBuiltIn.WorldRayOriginKHR, storage = SpvStorageClass.Input, req = ShaderStage.ClosestHit)
+    if (name == "gl_WorldRayDirectionEXT") return (ok = true, bi = SpvBuiltIn.WorldRayDirectionKHR, storage = SpvStorageClass.Input, req = ShaderStage.ClosestHit)
+    if (name == "gl_HitTEXT") return (ok = true, bi = SpvBuiltIn.RayTmaxKHR, storage = SpvStorageClass.Input, req = ShaderStage.ClosestHit)
+    if (name == "gl_InstanceCustomIndexEXT") return (ok = true, bi = SpvBuiltIn.InstanceCustomIndexKHR, storage = SpvStorageClass.Input, req = ShaderStage.ClosestHit)
     return (ok = false, bi = SpvBuiltIn.Position, storage = SpvStorageClass.Input, req = ShaderStage.Compute)
+}
+
+// The multi-stage validity sets for the ray-tracing builtins (and gl_PrimitiveID's closest-hit reuse).
+// Returns ok=true when `name` is one of the multi-stage names AND `stage` is in its set; a name not
+// listed here falls back to classify_global's exact `req == stage` check.
+def private rt_builtin_stage_ok(name : string; stage : ShaderStage) : bool {
+    // the launch grid: every ray-pipeline stage sees it
+    if (name == "gl_LaunchIDEXT" || name == "gl_LaunchSizeEXT") {
+        return is_rt_stage(stage)
+    }
+    // the world-space ray: miss + closest-hit (raygen has no current ray)
+    if (name == "gl_WorldRayOriginEXT" || name == "gl_WorldRayDirectionEXT") {
+        return stage == ShaderStage.Miss || stage == ShaderStage.ClosestHit
+    }
+    // hit-only state; gl_PrimitiveID doubles as the closest-hit triangle index (its fragment role
+    // stays on the req == stage path)
+    if (name == "gl_HitTEXT" || name == "gl_InstanceCustomIndexEXT" || name == "gl_PrimitiveID") {
+        return stage == ShaderStage.ClosestHit
+    }
+    return false
 }
 
 def private stage_name(stage : ShaderStage) : string {
@@ -192,7 +230,14 @@ def private stage_name(stage : ShaderStage) : string {
     if (stage == ShaderStage.Fragment) return "fragment"
     if (stage == ShaderStage.Mesh) return "mesh"
     if (stage == ShaderStage.Task) return "task"
+    if (stage == ShaderStage.RayGen) return "raygen"
+    if (stage == ShaderStage.Miss) return "miss"
+    if (stage == ShaderStage.ClosestHit) return "closest-hit"
     return "compute"
+}
+
+def private is_rt_stage(stage : ShaderStage) : bool {
+    return stage == ShaderStage.RayGen || stage == ShaderStage.Miss || stage == ShaderStage.ClosestHit
 }
 
 // Build a laid-out interface struct from a daslang struct's fields. Supported member shapes:
@@ -302,6 +347,9 @@ def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
     if (stage == ShaderStage.Fragment) return SpirvStageFlags.fragment
     if (stage == ShaderStage.Mesh) return SpirvStageFlags.mesh
     if (stage == ShaderStage.Task) return SpirvStageFlags.task
+    if (stage == ShaderStage.RayGen) return SpirvStageFlags.raygen
+    if (stage == ShaderStage.Miss) return SpirvStageFlags.miss
+    if (stage == ShaderStage.ClosestHit) return SpirvStageFlags.closest_hit
     return SpirvStageFlags.compute
 }
 
@@ -487,11 +535,13 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // gl_NumWorkGroups / gl_LocalInvocationIndex, all req=Compute in builtin_info) are equally valid
         // in MESH and TASK shaders -- those stages are workgroup-dispatched (LocalSize) too, and a real
         // mesh/task shader needs them to index its slice of the work (e.g. the payload survivor-list).
+        // The ray-tracing builtins are legal in per-name SETS of RT stages (rt_builtin_stage_ok).
         let workgroup_builtin = bi.req == ShaderStage.Compute
         let stage_ok = (bi.req == stage ||
-            (workgroup_builtin && (stage == ShaderStage.Mesh || stage == ShaderStage.Task)))
+            (workgroup_builtin && (stage == ShaderStage.Mesh || stage == ShaderStage.Task)) ||
+            rt_builtin_stage_ok(vname, stage))
         if (!stage_ok) {
-            errors |> push("builtin '{vname}' is only available in the {stage_name(bi.req)} stage, not {stage_name(stage)}")
+            errors |> push("builtin '{vname}' is not available in the {stage_name(stage)} stage")
             return
         }
         let vt = emit_type(m, v._type)
@@ -514,7 +564,10 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // gl_PrimitiveID in a fragment of a mesh pipeline: the id is not fixed-function-generated, so
         // reading it pulls in MeshShadingEXT + SPV_EXT_mesh_shader (→ SPIR-V 1.4), same as the mesh stage.
         // It is an integer fragment Input, so it MUST be Flat (no interpolation for ints; VUID-…-Flat-04744).
-        if (bi.bi == SpvBuiltIn.PrimitiveId) {
+        // In a CLOSEST-HIT shader the same builtin is the hit triangle's index: no interpolation happens
+        // there (Flat is fragment-interface-only) and the capability is RayTracingKHR, already enabled
+        // by the stage itself -- so the fragment-side extras are fragment-gated.
+        if (bi.bi == SpvBuiltIn.PrimitiveId && stage == ShaderStage.Fragment) {
             ensure_per_primitive(m, ctx)
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Flat))
         }
@@ -757,6 +810,33 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     // a sampler is a standalone OpTypeSampler -- each its own UniformConstant descriptor. sampleTexture()
     // combines them at the call site (OpSampledImage).
     let stn = v._type != null && v._type.baseType == Type.tStructure && v._type.structType != null ? "{v._type.structType.name}" : ""
+    // top-level acceleration structure (VK_KHR_ray_tracing_pipeline): the opaque accelerationStructureEXT
+    // marker -> a UniformConstant OpTypeAccelerationStructureKHR descriptor, traced via traceRayEXT.
+    // RT-pipeline stages only (ray QUERY from compute/fragment is a different extension and a separate
+    // slice -- fail closed here rather than emit a blob spirv-val rejects).
+    if (stn == "accelerationStructureEXT") {
+        if (!is_rt_stage(stage)) {
+            errors |> push("accelerationStructureEXT '{vname}' is only valid in a raygen / miss / closest-hit shader (ray queries from other stages are not supported yet)")
+            return
+        }
+        let set = v.annotation |> find_arg("set") ?as tInt ?? 0
+        let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
+        if (set < 0 || binding < 0) {
+            errors |> push("accelerationStructureEXT '{vname}' set/binding must be non-negative (got set={set}, binding={binding})")
+            return
+        }
+        let vt = type_acceleration_structure(m)
+        let pt = type_pointer(m, SpvStorageClass.UniformConstant, vt)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(SpvStorageClass.UniformConstant))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
+        emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.UniformConstant,
+            value_type = vt, is_accel = true))
+        reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
+            kind = SpirvDescriptorKind.acceleration_structure, count = 1, stages = stage_flag(stage)))
+        return
+    }
     if (stn == "texture2D" || stn == "sampler") {
         let set = v.annotation |> find_arg("set") ?as tInt ?? 0
         let binding = v.annotation |> find_arg("binding") ?as tInt ?? 0
@@ -897,6 +977,69 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         ctx.task_payload_id = vid
         return
     }
+    // ray payloads + hit attributes (VK_KHR_ray_tracing_pipeline) -- three logical storage classes,
+    // all plain-laid-out like @task_payload:
+    //   @ray_payload           RayPayloadKHR          the OUTGOING payload a stage passes to traceRayEXT
+    //                                                 (raygen; also miss / closest-hit for recursive rays)
+    //   @incoming_ray_payload  IncomingRayPayloadKHR  the payload THIS stage was invoked with
+    //                                                 (miss / closest-hit; they write the result here)
+    //   @hit_attribute         HitAttributeKHR        the triangle barycentrics (float2 on the fixed-function
+    //                                                 triangle path), closest-hit read-only
+    // Payloads carry a Location decoration (@location, default 0) like glslang's rayPayloadEXT lowering;
+    // hit attributes carry none. Struct payloads lay out plainly (build_plain_struct, member access via
+    // the is_block path); scalar / vector / matrix payloads emit directly and load/store whole.
+    let is_ray_payload = v.annotation |> find_arg("ray_payload") is tBool
+    let is_incoming_payload = v.annotation |> find_arg("incoming_ray_payload") is tBool
+    let is_hit_attribute = v.annotation |> find_arg("hit_attribute") is tBool
+    if (is_ray_payload || is_incoming_payload || is_hit_attribute) {
+        let ann_name = is_ray_payload ? "@ray_payload" : (is_incoming_payload ? "@incoming_ray_payload" : "@hit_attribute")
+        if (is_ray_payload && !is_rt_stage(stage)) {
+            errors |> push("{ann_name} '{vname}' is only valid in a raygen / miss / closest-hit shader")
+            return
+        }
+        if (is_incoming_payload && stage != ShaderStage.Miss && stage != ShaderStage.ClosestHit) {
+            errors |> push("{ann_name} '{vname}' is only valid in a miss or closest-hit shader")
+            return
+        }
+        if (is_hit_attribute && stage != ShaderStage.ClosestHit) {
+            errors |> push("{ann_name} '{vname}' is only valid in a closest-hit shader")
+            return
+        }
+        var storage = SpvStorageClass.RayPayloadKHR
+        if (is_incoming_payload) {
+            storage = SpvStorageClass.IncomingRayPayloadKHR
+        } elif (is_hit_attribute) {
+            storage = SpvStorageClass.HitAttributeKHR
+        }
+        var vt : uint
+        var as_block = false
+        if (v._type.baseType == Type.tStructure && v._type.structType != null) {
+            vt = build_plain_struct(m, vname, v._type.structType, errors)
+            if (vt == 0u) return
+            as_block = true
+        } elif (is_emittable_value_type(v._type)) {
+            vt = emit_type(m, v._type)
+        } else {
+            errors |> push("{ann_name} '{vname}' must be a struct or a scalar / vector / matrix / fixed array of those")
+            return
+        }
+        let pt = type_pointer(m, storage, vt)
+        let vid = alloc_id(m)
+        emit(m, SEC_TYPES, SpvOp.Variable, pt, vid, uint(storage))
+        if (!is_hit_attribute) {
+            let loc = v.annotation |> find_arg("location") ?as tInt ?? 0
+            if (loc < 0) {
+                errors |> push("{ann_name} '{vname}' @location must be non-negative (got {loc})")
+                return
+            }
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Location), uint(loc))
+        }
+        ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = storage, value_type = vt,
+            is_block = as_block, is_ray_payload = !is_hit_attribute))
+        // not pushed into interface_ids here: RT modules are SPIR-V 1.4, whose every-referenced-global
+        // interface pass appends these (they are not Input/Output, so the <= 1.3 rule never applies)
+        return
+    }
     // module-scope constant: an immutable `let X = <const-expr>` referenced by the shader body. Fold the
     // initializer to an OpConstant and resolve references straight to it (no OpVariable / OpLoad), so a
     // shader can hoist view rectangles, iteration counts, etc. to module scope and share them with the
@@ -911,7 +1054,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             return
         }
     }
-    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, a constant `let`, or an opaque type e.g. sampler2D / image2D / subpassInput)")
+    errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, @ray_payload / @incoming_ray_payload / @hit_attribute, a constant `let`, or an opaque type e.g. sampler2D / image2D / subpassInput / accelerationStructureEXT)")
 }
 
 // ===== member index of a struct field by name =====
@@ -1163,6 +1306,19 @@ def private ensure_mesh_shading(var m : SpirvModule; var ctx : EmitCtx) {
 def private ensure_per_primitive(var m : SpirvModule; var ctx : EmitCtx) {
     ensure_mesh_shading(m, ctx)
     m.version = SPV_VERSION_1_4
+}
+
+// Ray-tracing stages (VK_KHR_ray_tracing_pipeline): OpCapability RayTracingKHR + OpExtension
+// "SPV_KHR_ray_tracing". Emit-once + ctx-flag dedupe; the cap gates the RayGenerationKHR / MissKHR /
+// ClosestHitKHR execution models, the RT storage classes, OpTypeAccelerationStructureKHR, and
+// OpTraceRayKHR. SPV_KHR_ray_tracing requires SPIR-V >= 1.4 (set by the caller alongside this).
+def private ensure_ray_tracing(var m : SpirvModule; var ctx : EmitCtx) {
+    if (ctx.ray_tracing_cap) return
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.RayTracingKHR))
+    var nm <- string_words("SPV_KHR_ray_tracing")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm)
+    delete nm
+    ctx.ray_tracing_cap = true
 }
 
 // daslang math builtin -> GLSL.std.450 ext-inst opcode. abs/min/max/clamp/sign pick the F/S/U
@@ -2381,6 +2537,63 @@ class SpirvEmit : AstVisitor {
             ctx.terminated = true
             return expr
         }
+        // traceRayEXT(accel, ray_flags, cull_mask, sbt_offset, sbt_stride, miss_index, origin, tmin,
+        // direction, tmax, payload): OpTraceRayKHR. The accel operand is an OpLoad of the
+        // accelerationStructureEXT descriptor; the payload operand names the @ray_payload /
+        // @incoming_ray_payload VARIABLE itself (a pointer, per SPV_KHR_ray_tracing), so the last
+        // argument must be a payload global, not an arbitrary expression. RT-pipeline stages only.
+        // The stub is GENERIC over the payload type, so the resolved call carries the mangled
+        // instance name — match on the ORIGIN generic's name instead of the ExprCall name.
+        var origin_name = name
+        if (expr.func != null) {
+            var co = expr.func
+            while (co.fromGeneric != null) {
+                co = co.fromGeneric
+            }
+            origin_name = "{co.name}"
+        }
+        if (origin_name == "traceRayEXT") {
+            if (!is_rt_stage(ctx.stage)) {
+                errs |> push("traceRayEXT is only valid in a raygen / miss / closest-hit shader")
+                return expr
+            }
+            if (length(expr.arguments) != 11) {
+                errs |> push("traceRayEXT expects (accel, ray_flags, cull_mask, sbt_offset, sbt_stride, miss_index, origin, tmin, direction, tmax, payload)")
+                return expr
+            }
+            let accel_g = global_var_of(expr.arguments[0])
+            let agi = accel_g != null ? (ctx.globals?[intptr(accel_g)] ?? GlobalInfo()) : GlobalInfo()
+            if (accel_g == null || !agi.is_accel) {
+                errs |> push("traceRayEXT: the first argument must be an accelerationStructureEXT global")
+                return expr
+            }
+            let payload_g = global_var_of(expr.arguments[10])
+            let pgi = payload_g != null ? (ctx.globals?[intptr(payload_g)] ?? GlobalInfo()) : GlobalInfo()
+            if (payload_g == null || !pgi.is_ray_payload) {
+                errs |> push("traceRayEXT: the payload argument must be a @ray_payload / @incoming_ray_payload global")
+                return expr
+            }
+            var vals : array<uint>
+            vals |> reserve(9)
+            for (ai in range(1, 10)) {
+                let vv = value_of(expr.arguments[ai])
+                if (vv == 0u) {
+                    errs |> push("traceRayEXT: could not evaluate operand {ai}")
+                    delete vals
+                    return expr
+                }
+                vals |> push(vv)
+            }
+            let accel_id = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, agi.value_type, accel_id, agi.var_id)
+            var ops <- [accel_id]
+            ops |> push_from(vals)
+            ops |> push(pgi.var_id)
+            emit_n(bm, SEC_FUNCS, SpvOp.TraceRayKHR, ops)
+            delete ops
+            delete vals
+            return expr
+        }
         // barrier(): control + shared-memory barrier (OpControlBarrier at Workgroup execution+memory
         // scope, WorkgroupMemory|AcquireRelease semantics). memoryBarrierShared(): the memory-only
         // variant (OpMemoryBarrier, same scope/semantics). Both compute-only; not block terminators.
@@ -3344,8 +3557,14 @@ def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool
     // module "" is the user's own root module (a shader written without an explicit `module` line) —
     // a valid place for helper functions. Host/extern builtins are already excluded by flags.builtIn
     // above; the named modules below have their calls intercepted by name (math -> GLSL.std.450,
-    // spirv_builtins -> texture/imageStore/...), so they must never be emitted as OpFunctions.
-    let mn = "{f._module.name}"
+    // spirv_builtins -> texture/imageStore/traceRayEXT/...), so they must never be emitted as
+    // OpFunctions. A GENERIC intrinsic stub (traceRayEXT) instantiates into the caller's module, so
+    // classify by the ORIGIN generic's module, not the instance's.
+    var forigin = f
+    while (forigin.fromGeneric != null) {
+        forigin = forigin.fromGeneric
+    }
+    let mn = "{forigin._module.name}"
     return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins" || mn == "shader_lingua_franca")
 }
 
@@ -3547,6 +3766,9 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
     if (stage == ShaderStage.Fragment) return SpvExecutionModel.Fragment
     if (stage == ShaderStage.Mesh) return SpvExecutionModel.MeshEXT
     if (stage == ShaderStage.Task) return SpvExecutionModel.TaskEXT
+    if (stage == ShaderStage.RayGen) return SpvExecutionModel.RayGenerationKHR
+    if (stage == ShaderStage.Miss) return SpvExecutionModel.MissKHR
+    if (stage == ShaderStage.ClosestHit) return SpvExecutionModel.ClosestHitKHR
     return SpvExecutionModel.GLCompute
 }
 
@@ -3577,6 +3799,12 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     if (stage == ShaderStage.Mesh || stage == ShaderStage.Task) {
         m.version = SPV_VERSION_1_4
         ensure_mesh_shading(m, ctx)
+    }
+    // Ray-tracing stages pull in the RayTracingKHR capability + SPV_KHR_ray_tracing, which likewise
+    // requires SPIR-V >= 1.4 (the every-referenced-global interface rule below then applies).
+    if (is_rt_stage(stage)) {
+        m.version = SPV_VERSION_1_4
+        ensure_ray_tracing(m, ctx)
     }
     // Mesh per-vertex / per-primitive Output arrays (gl_MeshVerticesEXT, gl_PrimitiveTriangleIndicesEXT)
     // are sized from the [mesh_shader] output config; classify_global reads these off ctx when it
