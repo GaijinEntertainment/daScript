@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost
 require daslib/ast
+require daslib/rtti
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
@@ -9,8 +10,33 @@ require daslib/lint_config
 require daslib/strings_boost
 require strings
 
+// The lint-dirty fixture lives as an embedded string, injected via
+// set_file_source — an on-disk copy would (correctly) fail the repo lint
+// gate, and nolint-ing it would suppress the very issues this test collects.
+// Line numbers are index+1; the assertions below pin 9 / 11 / 14.
+def fixture_source() : string {
+    return [
+        /*  1 */ "options gen2",
+        /*  2 */ "",
+        /*  3 */ "// virtual fixture for test_collect_issues.das — one LINT003",
+        /*  4 */ "// (var-can-be-let), one PERF018 (index-only range loop), one",
+        /*  5 */ "// STYLE024 (redundant unsafe wrap), at pinned line numbers",
+        /*  6 */ "",
+        /*  7 */ "[export]",
+        /*  8 */ "def fixture_function() : int \{",
+        /*  9 */ "    var can_be_const <- [1, 2, 3]",
+        /* 10 */ "    var total = 0",
+        /* 11 */ "    for (i in range(length(can_be_const))) \{",
+        /* 12 */ "        total += can_be_const[i]",
+        /* 13 */ "    \}",
+        /* 14 */ "    let wrapped = unsafe(3 + 4)",
+        /* 15 */ "    return total + wrapped",
+        /* 16 */ "\}"
+    ] |> join("\n")
+}
+
 def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_collect_issues_fixture.das"
+    return "{get_das_root()}/tests/lint/_collect_issues_fixture.das"  // virtual — not on disk
 }
 
 def check_issue(t : T?; issue : LintIssue; code : string; line : int; needle : string) {
@@ -25,6 +51,7 @@ def check_issue(t : T?; issue : LintIssue; code : string; line : int; needle : s
 def test_collect_issues(t : T?) {
     t |> run("*_collect_issues emit structured twins of the string collectors") @@(t : T?) {
         var inscope access <- make_file_access("")
+        set_file_source(access, fixture_path(), fixture_source())
         using() $(var mg : ModuleGroup) {
             using() $(var cop : CodeOfPolicies) {
                 cop.export_all = true
