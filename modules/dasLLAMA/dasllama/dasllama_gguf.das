@@ -339,6 +339,60 @@ def gguf_i32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
+//! True if `key` is present AND holds an array-typed value (some keys are scalar-or-array,
+//! e.g. gemma4's per-layer attention.head_count_kv / sliding_window_pattern).
+def gguf_is_array(m : GGUFMeta; key : string) : bool {
+    if (!key_exists(m.kv, key)) {
+        return false
+    }
+    return (m.kv?[key] ?? default<GGUFKVLoc>).gtype == GT_ARRAY
+}
+
+//! Read an integer array of any element width (u8/i8/bool/u16/i16/u32/i32/u64/i64), widened to
+//! int64. gemma4 stores sliding_window_pattern as bool[] and head_count_kv as i32[].
+def gguf_int_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<int64> {
+    if (!key_exists(m.kv, key)) {
+        panic("gguf: missing key '{key}'")
+    }
+    let loc = m.kv?[key] ?? default<GGUFKVLoc>
+    if (loc.gtype != GT_ARRAY) {
+        panic("gguf: key '{key}' is not an array")
+    }
+    let et = loc.arr_type
+    var out : array<int64>
+    out |> resize(loc.count)
+    var o = loc.data_off
+    for (i in range64(loc.count)) {
+        if (et == GT_U8 || et == GT_BOOL) {
+            out[i] = int64(bytes[o])
+            o++
+        } elif (et == GT_I8) {
+            let v = int(bytes[o])
+            out[i] = int64(v < 128 ? v : v - 256)
+            o++
+        } elif (et == GT_U16) {
+            out[i] = int64(rd_u16(bytes, o))
+            o += 2l
+        } elif (et == GT_I16) {
+            let v = int(rd_u16(bytes, o))
+            out[i] = int64(v < 32768 ? v : v - 65536)
+            o += 2l
+        } elif (et == GT_U32) {
+            out[i] = int64(rd_u32(bytes, o))
+            o += 4l
+        } elif (et == GT_I32) {
+            out[i] = int64(rd_i32(bytes, o))
+            o += 4l
+        } elif (et == GT_U64 || et == GT_I64) {
+            out[i] = rd_i64(bytes, o)
+            o += 8l
+        } else {
+            panic("gguf: key '{key}' element type {et} is not an integer")
+        }
+    }
+    return <- out
+}
+
 //! Index of tensor `name` in m.tensors, or -1 if absent.
 def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     for (i in range(length(m.tensors))) {

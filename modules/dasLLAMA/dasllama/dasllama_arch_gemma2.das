@@ -12,8 +12,9 @@ def private configure_gemma2(var c : Config) {
     c.ffn_act = FfnAct.gelu             // GeGLU (tanh-approx gelu) instead of SwiGLU
     c.attn_logit_softcap = 50.0         // soft-cap attention scores before softmax
     c.final_logit_softcap = 30.0        // soft-cap the classifier logits
-    c.sliding_window = 4096l            // local attention on even layers (swa_period=2)
+    c.sliding_window = 4096l            // local attention on even layers (swa_pattern default 2)
     c.pre_post_norm = true              // extra post-attn + post-FFN norms (4 norms/layer)
+    c.embed_scale_sqrt_dim = true       // scale token embeddings by sqrt(dim)
 }
 
 [init]

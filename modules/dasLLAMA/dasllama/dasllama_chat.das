@@ -54,10 +54,55 @@ def private zephyr_chat_template() : ChatTemplate {
     return <- ct
 }
 
-//! The chat template for a loaded model. GGUF general.architecture is "llama" for BOTH Llama-3
-//! (byte-level BPE) and Llama-2/TinyLlama (SentencePiece) — different chat formats — so disambiguate
-//! by tokenizer backend: BPE => the registry's Llama-3 instruct template, SPM => Zephyr.
+// The Mistral-Instruct template (v0.3). [INST] / [/INST] are control tokens in the v0.3 vocab, so
+// they render as specials. No system role — the renderer folds it into the first user turn.
+def private mistral_instruct_template() : ChatTemplate {
+    var ct = ChatTemplate()
+    ct.add_bos = true   // <s>
+    ct.user.parts <- [chat_special("[INST]"), chat_text(" "), chat_content(), chat_text(" "), chat_special("[/INST]")]
+    ct.stop <- ["</s>"]
+    return <- ct
+}
+
+// Pick a named template by sniffing the GGUF's embedded Jinja source for each family's distinctive
+// marker — detection only, the Jinja is never executed. This is what resolves fine-tunes and the
+// arch-name collisions (a Mistral GGUF is arch "llama" but spells [INST]). Checked most-specific
+// first: Phi-3's source spells both <|user|> and <|end|>, Zephyr's only <|user|>.
+def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
+    let src = m.chat_template_str
+    if (empty(src)) {
+        return false
+    }
+    if (contains(src, "<|start_header_id|>")) {   // Llama-3 instruct
+        out <- arch_chat("llama")
+    } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
+        out <- arch_chat("qwen2")
+    } elif (contains(src, "<|turn>")) {           // Gemma-4 channel-based turn format
+        out <- arch_chat("gemma4")
+    } elif (contains(src, "<start_of_turn>")) {   // Gemma (2 and 3 share the turn shape)
+        out <- arch_chat("gemma2")
+    } elif (contains(src, "<|end|>")) {           // Phi-3
+        out <- arch_chat("phi3")
+    } elif (contains(src, "[INST]")) {            // Mistral instruct
+        out <- mistral_instruct_template()
+    } elif (contains(src, "<|user|>")) {          // Zephyr / TinyLlama-chat
+        out <- zephyr_chat_template()
+    } else {
+        return false
+    }
+    return true
+}
+
+//! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template` first
+//! (see detect_chat_template). When the GGUF carries none, fall back to the arch heuristic — GGUF
+//! general.architecture is "llama" for BOTH Llama-3 (byte-level BPE) and Llama-2/TinyLlama
+//! (SentencePiece), so disambiguate by tokenizer backend: BPE => the registry's Llama-3 instruct
+//! template, SPM => Zephyr.
 def chat_template(m : Model) : ChatTemplate {
+    var det = ChatTemplate()
+    if (detect_chat_template(m, det)) {
+        return <- det
+    }
     if (m.arch == "llama" && m.tok.kind == TokKind.spm) {
         return <- zephyr_chat_template()
     }
@@ -149,9 +194,23 @@ def add_user(var c : ChatSession; text : string) {
     c.history |> push(Message(role = Role.user, content = text))
 }
 
+//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format) —
+//! the reasoning of prior turns is excluded from chat history per the Qwen3 protocol. Replies that
+//! don't open with `<think>` pass through unchanged; an unterminated block (the token budget ran out
+//! mid-think) strips to empty, since the reasoning never reached an answer.
+def strip_think(reply : string) : string {
+    let open = find(reply, "<think>")
+    if (open < 0 || !is_null_or_whitespace(slice(reply, 0, open))) {
+        return reply
+    }
+    let close = find(reply, "</think>")
+    return close < 0 ? "" : strip(slice(reply, close + length("</think>"), length(reply)))
+}
+
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
 //! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the budget.
-//! Terminates the turn in the KV cache and appends it to the transcript. Returns the full reply text.
+//! Terminates the turn in the KV cache and appends it to the transcript (with any `<think>` block
+//! stripped — see strip_think). Returns the full reply text, thinking included.
 //! Timing is available afterwards via stats(c.session).
 def respond(m : Model; var c : ChatSession; params : SamplingParams;
             blk : block<(piece : string) : bool>) : string {
@@ -177,6 +236,6 @@ def respond(m : Model; var c : ChatSession; params : SamplingParams;
     render_parts(m, c.close_parts, "", close)
     eval(m, c.session, close)
     let reply = join(reply_parts, "")
-    c.history |> push(Message(role = Role.assistant, content = reply))
+    c.history |> push(Message(role = Role.assistant, content = strip_think(reply)))
     return reply
 }
