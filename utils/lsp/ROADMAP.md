@@ -116,6 +116,16 @@ every didChange or only on content change — observe with real compiler output.
 
 ### Wave 1 — diagnostics MVP
 
+**Status: core SHIPPED and proven live** — `lsp_supervisor.py` + `subtools/validate.das`
++ `plugin/.claude-plugin/plugin.json`. A headless CC session with the plugin gets real
+compiler diagnostics after an Edit (verified verbatim: position, error code 30341, full
+message). Injection semantics: diagnostics attach to the **next tool result** after the
+edit — a publish that lands after the model's final message has nowhere to inject, so
+latency matters. Debounce is 0.1 s (CC sends exactly one didChange per Edit call — no
+keystroke bursts exist in this client); small-file validate measures ~70 ms spawn+compile
+on top. Remaining in this wave: lint-as-diagnostics (below), supervisor-kill restart
+probe.
+
 - Supervisor: lifecycle, doc sync per wave-0 findings, ~300 ms debounce,
   kill-stale-validate, config via `initializationOptions` (project `.das_project`,
   `project_root`, `load_module` list, exe override) mapped onto subtool argv exactly
