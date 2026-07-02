@@ -38,7 +38,8 @@ def create_session(model : Model) : Session {
 
 def encode(model : Model; text : string; add_special = true; parse_special = false) : array<int64> {
     //! Encode ``text`` to token ids with the model's tokenizer. ``add_special`` prepends BOS where the
-    //! model expects one; ``parse_special`` additionally recognizes special-token spellings in the text.
+    //! model expects one. ``parse_special`` is reserved and not yet honored — special tokens reach the
+    //! model as atomic ids from the chat layer's template renderer, never by spelling them in text.
     return <- encode_(model, text, add_special, parse_special)
 }
 

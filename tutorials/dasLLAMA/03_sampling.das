@@ -1,10 +1,12 @@
 options gen2
+options persistent_heap   // six fresh sessions below — their deletes must really free (tutorial 04 explains)
 
 require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/fio
 require strings
+require math
 
 // Tutorial dasLLAMA-03: Sampling
 //
@@ -40,7 +42,9 @@ def run_once(m : Model; prompt : array<int64>; params : SamplingParams; seed : i
         parts |> push(piece)
         return true
     }
-    return join(parts, "")
+    let out = join(parts, "")
+    delete s
+    return out
 }
 
 [export]
@@ -51,6 +55,7 @@ def main() {
         return
     }
     var m <- load_model(path, QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, 1024l)   // bound each session's KV cache (tutorial 04)
     let prompt <- encode(m, PROMPT)
 
     with_job_que() {
@@ -98,4 +103,5 @@ def main() {
         print("seed 8:{s8}\n")
         print("seed 7 reproduces: {s7 == s7again}\n")
     }
+    delete m
 }

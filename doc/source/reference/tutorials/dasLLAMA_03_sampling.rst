@@ -62,7 +62,9 @@ Sampling draws from the *session's* RNG, so variety comes from the seed — and
            parts |> push(piece)
            return true
        }
-       return join(parts, "")
+       let out = join(parts, "")
+       delete s                    // six sessions in one run — free each (tutorial 04)
+       return out
    }
 
    let params = SamplingParams(temp = 0.8, top_k = 40l, penalty = 1.1)

@@ -85,8 +85,8 @@ def main() {
     // trailing block with (id, piece) — return false to stop early. SamplingParams()
     // defaults are greedy (always the most likely token); tutorial 03 covers the knobs.
     //
-    // The kernels thread through the job queue — wrap generation in with_job_que()
-    // or it runs single-threaded (tutorial 05 measures the difference).
+    // The kernels split their work across the job queue and REQUIRE one — model code
+    // outside with_job_que() panics. Tutorial 05 measures what the threads buy.
 
     with_job_que() {
         set_jobque_fork_pool(true, true)   // pool per-job fork contexts (pure-data matmul jobs)
