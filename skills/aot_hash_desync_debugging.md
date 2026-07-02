@@ -32,7 +32,7 @@ The error dumps the runtime's view:
 error[50101]: AOT link failed on test_double_match C1<S<testing::T>>?
 semantic hash is 5fa4c638bec10ddb
 did you forget to add this file (or a module it requires) to the AOT build?
-otherwise the AOT-generated C++ is stale - regenerate it and rebuild
+otherwise the AOT-generated C++ is stale; regenerate it and rebuild
 // test_double_match C1<S<testing::T>>? hash=0xedef0d103b30be69, @dep_a=0x..., @dep_b=0x..., ...
 ... full SimNode dump of <fn>'s body ...
 ```

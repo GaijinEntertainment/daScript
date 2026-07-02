@@ -1859,8 +1859,11 @@ install(FILES ${DAS_LSP_SUBTOOLS} DESTINATION utils/lsp/subtools)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/lsp/plugin/.claude-plugin/plugin.json
     DESTINATION utils/lsp/plugin/.claude-plugin
 )
+# prefix-root pinned (NOT ${DAS_INSTALL_DOCDIR}, which packagers may redirect):
+# auto-load needs the manifest at the root a session starts in, and its args
+# hop ../../../utils/lsp relative to this exact depth
 install(FILES ${PROJECT_SOURCE_DIR}/.claude/skills/daslang-lsp/.claude-plugin/plugin.json
-    DESTINATION ${DAS_INSTALL_DOCDIR}/.claude/skills/daslang-lsp/.claude-plugin
+    DESTINATION .claude/skills/daslang-lsp/.claude-plugin
 )
 
 # Install dascov (code coverage)

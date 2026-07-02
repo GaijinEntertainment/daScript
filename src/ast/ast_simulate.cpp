@@ -4107,7 +4107,7 @@ namespace das
                     TextWriter tp;
                     tp << "semantic hash is " << HEX << semHash << DEC << "\n";
                     tp << "did you forget to add this file (or a module it requires) to the AOT build?\n";
-                    tp << "otherwise the AOT-generated C++ is stale - regenerate it and rebuild\n";
+                    tp << "otherwise the AOT-generated C++ is stale; regenerate it and rebuild\n";
                     tp << "// " << getAotHashComment(fnn[fni]) << "\n";
                     printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
                     linkError(string(fn.mangledName), tp.str() );
