@@ -240,13 +240,21 @@ def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentLis
     return "{func.name}_template"     // convention: dot -> dot_template
 }
 
-let private BOX_PROFILE_PATH = "box_profile.json"
+//! The per-box profile location, shared by the `[tuned]` compile-time read, the runtime apply
+//! (load_model), and the tuner harness write. `DASLLAMA_BOX_PROFILE` env overrides; otherwise
+//! `<das_root>/box_profile.json` — per-install == per-box, and independent of the compile cwd
+//! (a bare-cwd read silently loses the profile when compiling from anywhere but the repo root).
+def box_profile_path() : string {
+    let env = get_env_variable("DASLLAMA_BOX_PROFILE")
+    if (!empty(env)) return env
+    return path_join(get_das_root(), "box_profile.json")
+}
 
 // Compile-time read of the per-box profile written by the tuner harness:
 // function name -> winning perm suffix. Returns "" if the file is absent or lacks
 // the key (macros can do fio; fread returns "" on a missing file).
 def private config_perm_for(fname : string) : string {
-    let text = fread(BOX_PROFILE_PATH)
+    let text = fread(box_profile_path())
     if (empty(text)) return ""
     var err = ""
     let jv = read_json(text, err)
@@ -255,16 +263,20 @@ def private config_perm_for(fname : string) : string {
 }
 
 // Perm precedence: explicit `perm=` pin (the profiler's per-variant stubs) >
-// per-box `box_profile.json` (keyed by the emitted function name) > DEFAULT_PERM
-// (the bit-identical fallback when no profile exists).
+// per-box `box_profile.json` (keyed by the emitted function name) > `fallback=`
+// (the kernel's own hand-tuned hints when they aren't the global vec8_u2) >
+// DEFAULT_PERM (the bit-identical fallback when no profile exists).
+// (`fallback`, not `default` — `default` is a grammar keyword and won't parse as an arg name.)
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
     let cfg = config_perm_for("{func.name}")
     if (!empty(cfg)) {
-        print("dasllama_tune: {func.name} <- {cfg} (box_profile.json)\n")
+        print("dasllama_tune: {func.name} <- {cfg} ({box_profile_path()})\n")
         return cfg
     }
+    let dv = find_arg(args, "fallback")
+    if (dv is tString) return dv as tString
     return DEFAULT_PERM
 }
 
@@ -283,11 +295,11 @@ def private find_template_function(name : string) : FunctionPtr {
     return found
 }
 
-//! `[tuned(perm="vec8_u2")]` on an empty-body function clones the body of its source
-//! template (`<name>_template`, or `src="..."`) and stamps the selected permutation's
-//! hints onto the `[tune=N]` loops. The annotated function IS the real symbol — callers are
-//! untouched. The perm comes from the annotation today (default DEFAULT_PERM); reading it
-//! from the profiler's box config is the next hook.
+//! `[tuned]` on an empty-body function clones the body of its source template
+//! (`<name>_template`, or `src="..."`) and stamps the selected permutation's hints onto the
+//! `[tune=N]` loops. The annotated function IS the real symbol — callers are untouched.
+//! Perm precedence: `perm="..."` pin > box_profile.json (see box_profile_path) >
+//! `fallback="..."` (the kernel's own hand hints when they aren't vec8_u2) > vec8_u2.
 [function_macro(name="tuned")]
 class private TunedMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;

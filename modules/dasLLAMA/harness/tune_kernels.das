@@ -400,9 +400,10 @@ def main {
     let profile = JV((dot = dotw, axpy = axpyw, add_inplace = addw,
         mul_inplace = mulw, scale_inplace = scalew, copy_floats = copyw))
     let js = write_json(profile)
-    if (fwrite("box_profile.json", js)) {
-        print("wrote box_profile.json: {js}\n")
+    let ppath = box_profile_path()   // same resolution [tuned] reads from: env override, else <das_root>
+    if (fwrite(ppath, js)) {
+        print("wrote {ppath}: {js}\n")
     } else {
-        print("failed to write box_profile.json\n")
+        print("FAILED to write {ppath} — if das_root is read-only (installed SDK), set DASLLAMA_BOX_PROFILE to a writable path\n")
     }
 }

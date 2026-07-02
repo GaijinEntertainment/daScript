@@ -17,6 +17,13 @@ def template sample_dot_template(a, b : array<float>) : float {
 [tuned(perm = "vec8_u2")]
 def sample_dot(a, b : array<float>) : float {}
 
+// `fallback=` supplies a kernel's own hand hints when they aren't the global vec8_u2; the box
+// profile still overrides it (precedence: perm > profile > fallback > vec8_u2). Resolution proof:
+// an unknown fallback fails the compile with "tuned: unknown perm" (negative-probed), so this
+// compiling at all means the fallback was consulted and found in the grid.
+[tuned(fallback = "u4", src = "sample_dot_template")]
+def sample_dot_u4(a, b : array<float>) : float {}
+
 def private reference(a, b : array<float>) : float {
     var s = 0f
     for (i in range(length(a))) {
@@ -30,4 +37,5 @@ def test_tuned_reconstitutes(t : T?) {
     let a = [for (i in range(64)); float(i)]
     let b = [for (_i in range(64)); 1.0f]
     t |> equal(sample_dot(a, b), reference(a, b), "tuned sample_dot == reference")
+    t |> equal(sample_dot_u4(a, b), reference(a, b), "tuned default=u4 sample_dot_u4 == reference")
 }
