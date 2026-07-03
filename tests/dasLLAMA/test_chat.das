@@ -14,7 +14,11 @@ require math
 // tokens. Each case rebuilds the old demo's first-turn prefill against the RAW tokenizer backend and
 // compares it to render_turn(). GGUF models are gitignored, so each case skips cleanly when absent.
 
-let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
+// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
+def private models_dir() : string {
+    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
 let SYS = "You are a helpful, friendly assistant. Keep answers concise."
 let USR = "Once upon a time"
 
@@ -50,7 +54,7 @@ def private engine_prefill(m : Model; system, user : string) : array<int64> {
 [test]
 def test_chat_tinyllama_zephyr(t : T?) {
     t |> run("TinyLlama (arch=llama + SPM) renders the Zephyr prefill") @(t : T?) {
-        let path = "{MODELS_DIR}tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
+        let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -74,7 +78,7 @@ def test_chat_tinyllama_zephyr(t : T?) {
 [test]
 def test_chat_gemma(t : T?) {
     t |> run("Gemma-2 (SPM, no system role) folds system into the first user turn") @(t : T?) {
-        let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -99,7 +103,7 @@ def test_chat_gemma(t : T?) {
 [test]
 def test_chat_phi(t : T?) {
     t |> run("Phi-3.5 (SPM) renders the Phi-3 prefill") @(t : T?) {
-        let path = "{MODELS_DIR}Phi-3.5-mini-instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Phi-3.5-mini-instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -127,7 +131,7 @@ def test_chat_phi(t : T?) {
 [test]
 def test_chat_qwen(t : T?) {
     t |> run("Qwen2.5 (BPE) renders the ChatML prefill") @(t : T?) {
-        let path = "{MODELS_DIR}Qwen2.5-1.5B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -157,7 +161,7 @@ def test_chat_qwen(t : T?) {
 [test]
 def test_chat_llama3(t : T?) {
     t |> run("Llama-3 (arch=llama + BPE) renders the Llama-3 header prefill") @(t : T?) {
-        let path = "{MODELS_DIR}Llama-3.2-1B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -191,7 +195,7 @@ def test_chat_end_to_end(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -201,9 +205,7 @@ def test_chat_end_to_end(t : T?) {
         var reply = ""
         var ntok = 0l
         with_job_que() {
-            set_jobque_fork_pool(true, true)
-            set_jobque_batch_dispatch(true)
-            set_jobque_worker_spin(1000)
+            setup_dasllama_jobque()
             var c = create_chat(m, "", 24l)   // no system prompt, short budget
             add_user(c, "Say hello in one short sentence.")
             reply = respond(m, c, SamplingParams()) $(piece) {   // greedy

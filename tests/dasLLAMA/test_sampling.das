@@ -11,7 +11,11 @@ require daslib/fio
 // frozen greedy oracle bit-for-bit; temp>0 sampling must be deterministic under a fixed seed.
 // GGUF models are gitignored, so each case skips cleanly when its model is absent.
 
-let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
+// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
+def private models_dir() : string {
+    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
 
 // gemma-2-2b-it Q8_0, "1, 2, 3, 4, 5, 6, 7," (BOS=2) — same frozen oracle as test_parity.das
 // (re-frozen to the counting prompt with the cls_q8 tied classifier; see the note there).
@@ -42,7 +46,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -56,9 +60,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
         set_act_vec(false)
         var got : array<int64>
         with_job_que() {
-            set_jobque_fork_pool(true, true)
-            set_jobque_batch_dispatch(true)
-            set_jobque_worker_spin(1000)
+            setup_dasllama_jobque()
             var s = create_session(m)
             generate(m, s, GEMMA2_PROMPT, SamplingParams(), int64(length(GEMMA2_GEN))) $(id, piece) {
                 got |> push(id)
@@ -80,7 +82,7 @@ def test_sampling_deterministic(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -91,9 +93,7 @@ def test_sampling_deterministic(t : T?) {
         var a : array<int64>
         var b : array<int64>
         with_job_que() {
-            set_jobque_fork_pool(true, true)
-            set_jobque_batch_dispatch(true)
-            set_jobque_worker_spin(1000)
+            setup_dasllama_jobque()
             var s1 = create_session(m)
             set_seed(s1, 12345)
             generate(m, s1, GEMMA2_PROMPT, params, n) $(id, piece) {

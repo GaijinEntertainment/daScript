@@ -181,6 +181,9 @@ namespace das {
     DAS_API void set_jobque_fork_skip_heap_reset ( bool skip, Context * context, LineInfoArg * at );
     DAS_API void set_jobque_worker_spin ( int32_t usec, Context * context, LineInfoArg * at );
     DAS_API void set_jobque_batch_dispatch ( bool batch, Context * context, LineInfoArg * at );
+    DAS_API void flush_jobque_batch ( Context * context, LineInfoArg * at );
+    DAS_API void set_jobque_join_spin ( int32_t level, Context * context, LineInfoArg * at );
+    DAS_API bool jobque_try_run_one ( Context * context, LineInfoArg * at );
     DAS_API void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
     DAS_API void createJobQue ( Context * context, LineInfoArg * lineInfo );

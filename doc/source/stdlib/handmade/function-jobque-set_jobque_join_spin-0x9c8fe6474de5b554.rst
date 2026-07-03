@@ -1,0 +1,2 @@
+Set the fork/join join-poll level: JobStatus join polls the remaining-counter for level×1024×128 relax-rounds before parking on the condvar (0 = park immediately, the default). The level shares ggml's --poll denomination (0..100, 50 = their default), so A/Bs against llama.cpp compare like for like.
+With parallel_for executing chunks on the calling thread, the join wait is just the workers' in-flight tail — the poll removes the last OS park/wake of the fork/join path. Opt in for fork/join-heavy compute; leave off where idle CPU matters.

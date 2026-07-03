@@ -6,13 +6,19 @@ require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires ea
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
 // prefill that continues an already-populated cache (start_pos > 0, the multi-turn-chat path).
 // Needs llama2.c's stories15M.bin (gitignored, 60MB); skips cleanly when absent.
-let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
-let TOKENIZER_PATH = "/Users/borisbatkin/Work/llama2.c/tokenizer.bin"
+// override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
+def private llama2c_dir() : string {
+    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
+}
+let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
+let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 
 def feq(a, b : array<float>) : bool {
     if (length(a) != length(b)) {
@@ -33,9 +39,7 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
     let c = tr.config
     let n = int64(length(prompt))
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {
@@ -57,9 +61,7 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
     let c = tr.config
     let n = int64(length(prompt))
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {

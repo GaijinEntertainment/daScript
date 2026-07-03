@@ -328,20 +328,47 @@ namespace das {
         return feof(f);
     }
 
+    // 64-bit-size stat/fstat (see das_filestat in aot_builtin_fio.h): on Windows the plain
+    // stat/fstat truncate st_size to 32 bits and FAIL outright past 2GB.
+    static int das_stat64 ( const char * path, das_filestat & st ) {
+#if defined(_WIN32)
+        return _stat64(path, &st);
+#else
+        return stat(path, &st);
+#endif
+    }
+
+    static int das_fstat64 ( int fd, das_filestat & st ) {
+#if defined(_WIN32)
+        return _fstat64(fd, &st);
+#else
+        return fstat(fd, &st);
+#endif
+    }
+
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
         if ( !f ) context->throw_error_at(at, "can't map NULL file");
-        struct stat st;
+        das_filestat st;
         int fd = fileno((FILE *)f);
-        fstat(fd, &st);
-        void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        if ( das_fstat64(fd, st) != 0 ) context->throw_error_at(at, "fmap: can't stat file");
+        if ( st.st_size == 0 ) {    // empty file: mmap(0) fails (EINVAL) — invoke with an empty array instead
+            Array arr;
+            array_mark_locked(arr, nullptr, 0);
+            vec4f args[1];
+            args[0] = cast<Array *>::from(&arr);
+            context->invoke(blk, args, nullptr, at);
+            return;
+        }
+        void* data = mmap(nullptr, size_t(st.st_size), PROT_READ, MAP_SHARED, fd, 0);
+        if ( data == MAP_FAILED ) context->throw_error_at(at, "fmap: can't map file (%llu bytes)", (unsigned long long)st.st_size);
         Array arr;
-        // st.st_size is 64-bit (off_t); array_mark_locked takes a uint64 size and
+        // st.st_size is 64-bit (off_t / __int64); array_mark_locked takes a uint64 size and
         // Array::size is uint64 — a uint32 cast here truncated maps of files >4GB.
         array_mark_locked(arr, data, uint64_t(st.st_size));
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr, at);
-        munmap(data, st.st_size);
+        munmap(data, size_t(st.st_size));
     }
 
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) {
@@ -356,9 +383,9 @@ namespace das {
 
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fread NULL");
-        struct stat st;
+        das_filestat st;
         int fd = fileno((FILE*)f);
-        fstat(fd, &st);
+        if ( das_fstat64(fd, st) != 0 ) context->throw_error_at(at, "fread: can't stat file");
         char * res = context->allocateString(nullptr, st.st_size,at);
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
@@ -516,12 +543,12 @@ namespace das {
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "fstat of null");
-        return fstat(fileno((FILE *)f), &fs.stats) == 0;
+        return das_fstat64(fileno((FILE *)f), fs.stats) == 0;
     }
 
     bool builtin_stat ( const char * filename, FStat & fs ) {
         if ( filename!=nullptr ) {
-            return stat(filename, &fs.stats) == 0;
+            return das_stat64(filename, fs.stats) == 0;
         } else {
             return false;
         }
@@ -1219,8 +1246,8 @@ namespace das {
 
     bool builtin_fexist ( const char * path ) {
         if ( !path ) return false;
-        struct stat st;
-        return stat(path, &st) == 0;
+        das_filestat st;
+        return das_stat64(path, st) == 0;
     }
 
 #if defined(_WIN32)
@@ -2094,11 +2121,12 @@ void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, of
     HANDLE hmap;
     void* temp;
     size_t len;
-    struct stat st;
+    struct _stat64 st;   // plain fstat truncates st_size to 32 bits and fails past 2GB
     uint64_t o = offset;
     uint32_t l = o & 0xFFFFFFFF;
     uint32_t h = (o >> 32) & 0xFFFFFFFF;
-    fstat(fd, &st);
+    if (_fstat64(fd, &st) != 0)
+        return MAP_FAILED;
     len = (size_t)st.st_size;
     if ((length + offset) > len)
         length = len - offset;

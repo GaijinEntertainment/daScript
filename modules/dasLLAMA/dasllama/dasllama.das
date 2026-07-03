@@ -15,12 +15,21 @@ module dasllama shared public
 
 require dasllama/dasllama_transformer public   // the engine + arch registry; every arch [init] fires
 require dasllama/dasllama_chat public          // layer 2: chat sessions over the same engine
+require dasllama/dasllama_math                 // setup_dasllama_jobque_ (engine-level, wrapped below, not re-exported)
 
 // This facade owns the good names; the engine spells each wrapped function with a trailing
 // underscore (load_model_, eval_, ...) so the public re-export above and the documented stub
 // below never collide at a call site.
 
 // ===== Model, session, tokenizer =====
+
+def setup_dasllama_jobque() {
+    //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
+    //! batched dispatch, and the worker spin-before-park window (``box_profile.json``'s runtime
+    //! ``jobque_spin_us`` tunes the window per box; 0 disables the spin). Call it INSIDE
+    //! ``with_job_que()``, before the first ``generate``/``eval`` — see ``examples/dasLLAMA/run.das``.
+    setup_dasllama_jobque_()
+}
 
 def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     //! Load a model AND its tokenizer from a GGUF file — the one entry point. The architecture and

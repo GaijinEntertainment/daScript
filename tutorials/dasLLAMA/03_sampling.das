@@ -59,9 +59,7 @@ def main() {
     let prompt <- encode(m, PROMPT)
 
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque()
 
         // ──────────────────────────────────────────────────────────────────────
         // Section 1 — Greedy: deterministic, and loop-prone

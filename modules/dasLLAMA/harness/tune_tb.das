@@ -1,9 +1,10 @@
 options gen2
 
-// Per-box TB (token-block) measurement harness for the laneq batched Q8·Q8 GEMM.
-// TB is a RUNTIME knob (set_q8_token_block) read only by q8q8_batch_kernel_neon_laneq: it tiles the
-// token loop so a TB×n activation slice stays L2-resident and is reused across the d/4 weight groups,
-// instead of re-streaming the whole weight matrix once per token-block. Physics: TB_opt ≈ L2/n — n
+// Per-box TB (token-block) measurement harness for the repack-tier batched Q8·Q8 GEMM
+// (arm64-laneq / x64-avx2-repack). TB is a RUNTIME knob (set_q8_token_block) read by the repack
+// batch kernels: it tiles the token loop so a TB×n activation slice stays cache-resident and is
+// reused across the d/4 weight groups, instead of re-streaming the whole weight matrix once per
+// token-block. Physics: TB_opt ≈ cache/n — n
 // sets the ceiling (the slice must fit L2), d only scales the payoff (bigger weights = more to save by
 // not re-streaming), so the optimum should track n and be ~flat in d. This harness MEASURES that:
 //   1. n-sweep (d fixed): TB*(n) — expect it to fall as n rises (~L2/n).
@@ -18,13 +19,17 @@ options gen2
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default          // nolint:STYLE030 — portable fallback + [init] ordering
 require dasllama/dasllama_math_aarch64_neon      // nolint:STYLE030 — registers the arm64-laneq backend at [init]
+require dasllama/dasllama_math_x64_avx           // nolint:STYLE030 — registers the x64-avx2-repack backend at [init]
 require dasllama/dasllama_quant
 require daslib/jobque_boost
 require math
 
-// TB only bites when the FULL activation (ntok×n) spills L2 (~12MB on M1 Max) — then blocking keeps a
-// TB×n slice resident. So ntok must be large and the grid must reach the ~L2/n knee (n=8192 → ~1500).
-let TB_GRID = fixed_array(128l, 256l, 512l, 1024l, 2048l)
+// TB only bites when the FULL activation (ntok×n) spills the cache that serves re-streaming — then
+// blocking keeps a TB×n slice resident. So ntok must be large and the grid must bracket the knee on
+// both sides: M1 Max (big shared ~12MB L2) put TB* at 128 with the knee at cache/n; Zen2 has 512KB
+// PRIVATE L2 per core + 16MB L3 per 4-core CCX, so the L2 knee sits BELOW 128 for wide n
+// (n=8192 × TB=64 = 512KB) — hence the 32/64 rows.
+let TB_GRID = fixed_array(32l, 64l, 128l, 256l, 512l, 1024l, 2048l)
 let NTOK = 2048l
 let ROUNDS = 20
 let REPS = 1
@@ -167,13 +172,12 @@ def main {
         return
     }
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         let need_repack = select_matmul_backend_for_load()
         print("active backend: {active_kernel_backend()} (needs_repack={need_repack})\n")
-        if (active_kernel_backend() != "arm64-laneq") {
-            print("skipped: laneq backend not active (needs arm64+jit) — TB is only read by the laneq batch kernel\n")
+        let repack_backend = get_architecture_name() == "arm64" ? "arm64-laneq" : "x64-avx2-repack"
+        if (active_kernel_backend() != repack_backend) {
+            print("skipped: {repack_backend} backend not active (needs its arch + jit) — TB is only read by the repack-tier batch kernels\n")
             return
         }
         set_q8_l2_budget(1l << 40l)   // disable the production cliff-guard clamp — this harness MEASURES the raw TB curve (incl. the cliff)

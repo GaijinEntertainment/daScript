@@ -23,6 +23,14 @@
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#if defined(_MSC_VER)
+#include <intrin.h>     // __cpuidex, _xgetbv
+#else
+#include <cpuid.h>      // __get_cpuid_count
+#endif
+#endif
+
 MAKE_TYPE_FACTORY(HashBuilder, HashBuilder)
 
 namespace das
@@ -1885,6 +1893,60 @@ namespace das
         #endif
     }
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+    static void das_cpuidex ( int leaf, int subleaf, int * regs ) {
+        #if defined(_MSC_VER)
+            __cpuidex(regs, leaf, subleaf);
+        #else
+            unsigned int a=0, b=0, c=0, d=0;
+            __get_cpuid_count(unsigned(leaf), unsigned(subleaf), &a, &b, &c, &d);
+            regs[0]=int(a); regs[1]=int(b); regs[2]=int(c); regs[3]=int(d);
+        #endif
+    }
+    static uint64_t das_xgetbv0 () {
+        #if defined(_MSC_VER)
+            return _xgetbv(0);
+        #else
+            unsigned int eax, edx;
+            __asm__ volatile ( "xgetbv" : "=a"(eax), "=d"(edx) : "c"(0u) );
+            return (uint64_t(edx) << 32u) | eax;
+        #endif
+    }
+#endif
+
+    // Runtime CPU-feature truth for kernel/backend gating — e.g. the dasLLAMA x64 backends register
+    // (and the JIT emits AVX2 intrinsics) only when cpu_supports("avx2"). On x86/x86_64 this is cpuid
+    // plus the OSXSAVE/XGETBV dance: a feature reports true only when the CPU has it AND the OS saves
+    // the register state it needs (ymm for avx*, zmm/opmask for avx512*). Fail-closed by design:
+    // unknown feature names, and every name on a non-x86 architecture, return false — a backend gated
+    // on cpu_supports can never register where its instructions can't execute.
+    bool das_cpu_supports ( const char * feature ) {
+        if ( !feature ) return false;
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+        int r0[4] = {0,0,0,0};
+        das_cpuidex(0, 0, r0);                                  // r0[0] = max basic leaf
+        int r1[4] = {0,0,0,0};
+        if ( r0[0] >= 1 ) das_cpuidex(1, 0, r1);
+        int r7[4] = {0,0,0,0};
+        if ( r0[0] >= 7 ) das_cpuidex(7, 0, r7);
+        int r71[4] = {0,0,0,0};
+        if ( r0[0] >= 7 && r7[0] >= 1 ) das_cpuidex(7, 1, r71); // leaf 7 eax = max subleaf
+        const bool osxsave = (r1[2] & (1<<27)) != 0;
+        const uint64_t xcr0 = osxsave ? das_xgetbv0() : 0;
+        const bool os_ymm = (xcr0 & 0x6) == 0x6;                // OS saves xmm+ymm state
+        const bool os_zmm = (xcr0 & 0xE6) == 0xE6;              // + opmask/zmm state
+        if ( strcmp(feature, "sse4.2")==0 )     return (r1[2] & (1<<20)) != 0;
+        if ( strcmp(feature, "fma")==0 )        return os_ymm && (r1[2] & (1<<12)) != 0;
+        if ( strcmp(feature, "f16c")==0 )       return os_ymm && (r1[2] & (1<<29)) != 0;
+        if ( strcmp(feature, "avx")==0 )        return os_ymm && (r1[2] & (1<<28)) != 0;
+        if ( strcmp(feature, "avx2")==0 )       return os_ymm && (r7[1] & (1<<5)) != 0;
+        if ( strcmp(feature, "avxvnni")==0 )    return os_ymm && (r71[0] & (1<<4)) != 0;
+        if ( strcmp(feature, "avx512f")==0 )    return os_zmm && (r7[1] & (1<<16)) != 0;
+        if ( strcmp(feature, "avx512vnni")==0 ) return os_zmm && (r7[2] & (1<<11)) != 0;
+#endif
+        return false;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -2523,6 +2585,10 @@ namespace das
             SideEffects::none, "das_get_cross_platform_name");
         addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
+        // accessExternal (NOT ::none) on purpose: CPU features are a property of the RUNNING box,
+        // so this must never const-fold into AOT artifacts built on a different machine.
+        addExtern<DAS_BIND_FUN(das_cpu_supports)>(*this, lib, "cpu_supports",
+            SideEffects::accessExternal, "das_cpu_supports")->args({"feature"});
         // fmt
         addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
             SideEffects::none, "fmt_i8")->args({"format","value","context","at"});

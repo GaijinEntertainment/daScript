@@ -5,6 +5,7 @@ require daslib/jobque_boost
 require strings
 require daslib/strings_boost
 require math
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // dasLLAMA parity harness — the dasLLAMA side of the token-for-token oracle check.
 // Feed the prompt token IDs the reference (harness/oracle/simple_ids) produced, greedily generate N
@@ -63,9 +64,7 @@ def main {
     let c = t.config
     var s = make_run_state(c)
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         let ids <- generate(t, s, prompt, length(prompt) + n_gen)
         // generate echoes prompt[1..] then the continuation, so the first generated token is at
         // index length(prompt)-1 (same indexing the runners use)

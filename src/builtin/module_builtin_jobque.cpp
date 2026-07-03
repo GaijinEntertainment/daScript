@@ -655,6 +655,32 @@ namespace das {
         }
     }
 
+    void flush_jobque_batch ( Context *, LineInfoArg * ) {
+        // Publish this thread's pending batched fork jobs NOW instead of at join — pair with
+        // jobque_try_run_one when the dispatching thread participates in the work.
+        flushPendingForkJobs();
+    }
+
+    bool jobque_try_run_one ( Context * context, LineInfoArg * at ) {
+        // Dispatcher-side work stealing: flush any pending batch, then pop ONE queued job and run
+        // it on the calling thread (the same cloned-closure job a worker would run — full capture
+        // semantics). parallel_for loops this until its wait group is ready, so the dispatching
+        // core computes chunks instead of sleeping through the fork. False = fifo empty.
+        if ( !g_jobQue ) context->throw_error_at(at, "need to be in a 'with_job_que' block, or call create_job_que() first");
+        flushPendingForkJobs();
+        return g_jobQue->tryRunOneJob();
+    }
+
+    void set_jobque_join_spin ( int32_t level, Context *, LineInfoArg * ) {
+        // JobStatus::Wait (the fork/join `join`) polls the remaining-counter for level*1024*128
+        // relax-rounds before parking on the condvar (0 = park immediately, the default) — the
+        // ggml hybrid-poll shape and denomination (their --poll 0..100, 50 = their default). With
+        // parallel_for executing chunks on the calling thread, the join wait is just the workers'
+        // tail — the poll removes the last OS park/wake of the fork/join path. Opt in for
+        // fork/join-heavy compute (LLM decode/prefill); leave off where idle CPU matters.
+        JobStatus::sJoinSpin.store(level, std::memory_order_relaxed);
+    }
+
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in a 'with_job_que' block, or call create_job_que() first");
         if ( context->keepForkContexts ) {
@@ -1078,6 +1104,15 @@ namespace das {
             addExtern<DAS_BIND_FUN(set_jobque_batch_dispatch)>(*this, lib,  "set_jobque_batch_dispatch",
                 SideEffects::modifyExternal, "set_jobque_batch_dispatch")
                     ->args({"batch","context","line"});
+            addExtern<DAS_BIND_FUN(flush_jobque_batch)>(*this, lib,  "flush_jobque_batch",
+                SideEffects::modifyExternal, "flush_jobque_batch")
+                    ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(jobque_try_run_one)>(*this, lib,  "jobque_try_run_one",
+                SideEffects::modifyExternal, "jobque_try_run_one")
+                    ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(set_jobque_join_spin)>(*this, lib,  "set_jobque_join_spin",
+                SideEffects::modifyExternal, "set_jobque_join_spin")
+                    ->args({"level","context","line"});
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue")
                     ->args({"block","context","line"});

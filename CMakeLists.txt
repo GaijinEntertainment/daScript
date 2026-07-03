@@ -48,10 +48,9 @@ option(DAS_ENABLE_PIC "Build static libs as position-independent code (UNIX, req
 # lockstep, so no target can disagree on /MT vs /MD. See CMakeCommon.txt.
 option(DAS_USE_STATIC_STD_LIBS "Link the static MSVC runtime (/MT); OFF = dynamic (/MD)" OFF)
 # Upper bound on JobQue worker threads (caps get_total_hw_threads / get_total_hw_jobs and the
-# persistent job pool). Empty = platform.h default (4), which keeps a wasm/web build from spawning
-# one Web Worker per logical core. Set e.g. -DDAS_MAX_HW_JOBS=64 for a desktop build that wants the
-# full core count.
-set(DAS_MAX_HW_JOBS "" CACHE STRING "Max JobQue worker threads (empty = platform.h default of 4)")
+# persistent job pool). Empty = platform.h default: 4 on wasm (keeps a web build from spawning one
+# Web Worker per logical core), effectively uncapped elsewhere (the cores-1 rule governs).
+set(DAS_MAX_HW_JOBS "" CACHE STRING "Max JobQue worker threads (empty = platform.h default: 4 wasm, uncapped elsewhere)")
 if(DAS_MAX_HW_JOBS)
     add_compile_definitions(DAS_MAX_HW_JOBS=${DAS_MAX_HW_JOBS})
 endif()

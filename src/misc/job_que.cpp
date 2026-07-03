@@ -19,6 +19,22 @@
 #endif
 
 namespace das {
+    // A single CPU spin-wait hint — the poll-loop relax (one PAUSE/YIELD, the ggml
+    // ggml_thread_cpu_relax shape; the loop itself is a counted number of these).
+    static inline void jobque_spin_relax() {
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+        _mm_pause();
+#elif defined(_MSC_VER) && defined(_M_ARM64)
+        __yield();
+#elif defined(__x86_64__) || defined(__i386__)
+        __builtin_ia32_pause();
+#elif defined(__aarch64__)
+        __asm__ __volatile__("yield");
+#else
+        ;
+#endif
+    }
+
     // One short burst of the CPU's spin-wait hint (worker spin-before-park, see JobQue::job).
     static inline void jobque_spin_pause() {
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
@@ -53,20 +69,22 @@ namespace das {
     }
 #endif
 
-    // Worker count. Generic rule: logical cores - 1, capped at DAS_MAX_HW_JOBS — parallel_for has the
-    // CALLING (main) thread run a chunk and then wait, so it occupies a core; cores-1 workers + main ==
-    // cores avoids the oversubscription that otherwise makes the surplus worker "trickle in" over the
-    // first ~37% of every matmul. DAS_MAX_HW_JOBS (4 on wasm so a web build doesn't spawn one Web
-    // Worker per logical core; effectively uncapped elsewhere). On heterogeneous Apple Silicon we
-    // instead run one worker per PERFORMANCE core (no -1, no cap): the efficiency cores absorb the main
-    // thread + OS, whereas cores-1 (logical) spills a worker onto a slow E-core that stalls every
-    // parallel_for on the straggler — measured ~1.6x slower on an M-series 8P+2E prefill. DAS_JOBQUE_THREADS
-    // is an explicit override that bypasses everything (0/unset = the default).
+    // Worker count. Generic rule: logical cores - 1, capped at DAS_MAX_HW_JOBS — parallel_for's
+    // CALLING (main) thread now executes queued chunks itself (jobque_try_run_one), so it IS a
+    // compute thread and occupies a core; cores-1 workers + main == cores avoids the oversubscription
+    // that otherwise makes the surplus thread "trickle in" over the first ~37% of every matmul.
+    // DAS_MAX_HW_JOBS (4 on wasm so a web build doesn't spawn one Web Worker per logical core;
+    // effectively uncapped elsewhere). On heterogeneous Apple Silicon the same -1 applies to the
+    // PERFORMANCE-core count: P-1 workers + the computing main == P. Landing any compute thread on a
+    // slow E-core stalls every parallel_for on its straggler chunk (measured ~1.6x slower on an
+    // M-series 8P+2E prefill vs P-only) — pre-main-steal that ruled out logical cores-1 here; now
+    // that the main thread computes too, the -1 is what keeps every compute thread on a P-core.
+    // DAS_JOBQUE_THREADS is an explicit override that bypasses everything (0/unset = the default).
     static int jobque_thread_count(int hw) {
         static int forced = []{ const char * e = getenv("DAS_JOBQUE_THREADS"); return e ? atoi(e) : 0; }();
         if ( forced > 0 ) return forced;
 #if defined(__APPLE__)
-        if ( int good = apple_perf_core_count() ) return good;
+        if ( int good = apple_perf_core_count() ) return max(1, good - 1);
 #endif
         return max(1, min(DAS_MAX_HW_JOBS, hw - 1));
     }
@@ -218,6 +236,29 @@ namespace das {
         // syscalls are paid by the (parallel) workers, not the flushing thread.
         mCond.notify_one();
         jobs.clear();
+    }
+
+    bool JobQue::tryRunOneJob() {
+        // Dispatcher-side work stealing: a thread sitting at a fork/join (parallel_for) pops queued
+        // jobs and runs them itself instead of sleeping — the job closures are thread-agnostic (the
+        // same closures any worker would run), so the only difference is who executes. Wake
+        // propagation mirrors job(): if our pop left work behind, kick parked workers.
+        Job job;
+        size_t moreWork = 0;
+        {
+            lock_guard<mutex> lock(mFifoMutex);
+            if ( mFifo.empty() ) return false;
+            job = das::move(mFifo.front().function);
+            mFifo.pop_front();
+            mFifoCount.fetch_sub(1, std::memory_order_relaxed);
+            mJobsRunning++;
+            moreWork = mFifo.size();
+        }
+        if ( moreWork >= 1 ) mCond.notify_one();
+        if ( moreWork >= 2 ) mCond.notify_one();
+        job();
+        --mJobsRunning;
+        return true;
     }
 
     void JobQue::job(int threadIndex) {
@@ -486,6 +527,29 @@ namespace das {
         // cannot make progress while we block, so there is nothing to wait for.)
         return;
 #else
+        // Join spin-before-park (opt-in via set_jobque_join_spin, default 0 = park immediately):
+        // poll the counter before blocking — the ggml hybrid-poll shape verbatim
+        // (ggml_graph_compute_poll_for_work): a COUNTED loop of one relaxed load + one cpu-relax
+        // per round, no clock anywhere in the loop (a steady_clock read per round costs more than
+        // the pause and caps the poll rate). level*1024*128 rounds, level 50 ≈ ggml's default
+        // window. The final seq_cst load reading 0 synchronizes with every notifier's decrement
+        // (RMW release sequence), so the workers' results are visible without taking mCompleteMutex.
+        int level = sJoinSpin.load(std::memory_order_relaxed);
+        if ( level > 0 ) {
+            const uint64_t nRounds = uint64_t(level) * 1024ull * 128ull;
+            for ( uint64_t i = 0; mRemaining.load(std::memory_order_relaxed) != 0 && i < nRounds; ++i ) {
+                jobque_spin_relax();
+            }
+            if ( mRemaining.load() == 0 ) {
+                // Lifetime handshake: the last notifier decrements under mCompleteMutex and can
+                // still be inside notify_all/unlock ON THIS OBJECT when the lock-free load sees 0.
+                // Callers destroy the JobStatus right after Wait returns (with_wait_group holds it
+                // on the stack), so take the lock once to wait the notifier out of its locked
+                // region. Uncontended in the common case — the notifier is nanoseconds from done.
+                lock_guard<mutex> guard(mCompleteMutex);
+                return;
+            }
+        }
         unique_lock<mutex> lock(mCompleteMutex);
         mCond.wait(lock, [this] {
             return mRemaining==0;

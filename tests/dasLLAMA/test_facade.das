@@ -11,7 +11,11 @@ require daslib/fio
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.
 // GGUF models are gitignored multi-GB files; each case skips cleanly when its model is absent.
 
-let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
+// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
+def private models_dir() : string {
+    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
 
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
@@ -44,7 +48,7 @@ def test_spm_encode_respects_model_bos_eos(t : T?) {
 [test]
 def test_facade_spm(t : T?) {
     t |> run("SPM facade auto-dispatch matches raw SentencePiece") @(t : T?) {
-        let path = "{MODELS_DIR}tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
+        let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -64,7 +68,7 @@ def test_facade_spm(t : T?) {
 [test]
 def test_facade_bpe(t : T?) {
     t |> run("BPE facade auto-dispatch matches raw byte-level BPE") @(t : T?) {
-        let path = "{MODELS_DIR}Qwen2.5-0.5B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -93,7 +97,7 @@ def test_facade_bpe(t : T?) {
 [test]
 def test_facade_model(t : T?) {
     t |> run("load_model owns the tokenizer; model facade delegates") @(t : T?) {
-        let path = "{MODELS_DIR}Qwen2.5-0.5B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return

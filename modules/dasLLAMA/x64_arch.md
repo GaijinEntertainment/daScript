@@ -60,11 +60,13 @@ activations; the kernel does exact int8·int8 integer MACs per 32-block, then ac
 
 **Threading:** kernels own their threading via `maybe_parallel_for` (`dasllama_par.das`);
 dispatch through the backend function pointers happens at whole-matmul level (the pointer is
-never read inside a worker). Worker count (`src/misc/job_que.cpp:42-48`): the
-`DAS_JOBQUE_THREADS` env var overrides everything; Apple Silicon gets one worker per P-core;
-**everything else gets `min(DAS_MAX_HW_JOBS, cores-1)` and `DAS_MAX_HW_JOBS` defaults to 4**
-(`include/daScript/misc/platform.h:585`, a CMake `-DDAS_MAX_HW_JOBS=N` define). An x64 box
-must raise it or every "threaded" number is a 4-thread number — see `get_x64_going.md` step 0.
+never read inside a worker). Worker count (`src/misc/job_que.cpp`): the
+`DAS_JOBQUE_THREADS` env var overrides everything; Apple Silicon gets `P-cores - 1` workers,
+everything else `cores - 1` — parallel_for's calling thread executes chunks itself
+(main-steal), so workers + main == compute cores either way (`DAS_MAX_HW_JOBS` caps at 4 on
+**wasm only** — fixed 2026-07-02; it used to default to 4 everywhere, so distrust any pre-fix
+"threaded" x64 number).
+For profiling, pin the count per run via `DAS_JOBQUE_THREADS` — see `get_x64_going.md` step 0.
 
 ---
 
@@ -109,27 +111,39 @@ of it.
 
 | name | file | priority | needs_repack | registration gate |
 |---|---|---|---|---|
-| `portable` | `dasllama_math_default.das:170` | 0 | no | none (always) |
-| `arm64-sdot` | `dasllama_math_aarch64_neon.das:415` | 10 | no | `get_architecture_name() == "arm64" && jit_enabled()` (:412) |
-| `arm64-laneq` | `dasllama_math_aarch64_neon.das:420` | 20 | **yes** | same |
+| `portable` | `dasllama_math_default.das` | 0 | no | none (always) |
+| `arm64-sdot` | `dasllama_math_aarch64_neon.das` | 10 | no | `get_architecture_name() == "arm64" && jit_enabled()` |
+| `arm64-laneq` | `dasllama_math_aarch64_neon.das` | 20 | **yes** | same |
+| `x64-avx2` | `dasllama_math_x64_avx.das` | 10 | no | `x86_64 && jit_enabled() && cpu_supports("avx2")` |
+| `x64-avx2-repack` | `dasllama_math_x64_avx.das` | 20 | **yes** | same |
+| `x64-avx2-acc8` | `dasllama_math_x64_avx.das` | 9 | no | same — pinnable experiment |
+| `x64-avx2-ps` | `dasllama_math_x64_avx.das` | 8 | no | same — pinnable experiment |
 
 The `jit_enabled()` half of the gate matters: off-JIT the intrinsic functions run their scalar
 fallback bodies, which are *slower* than the vectorized portable kernels — so interp/AOT stay
 on `portable` on every platform.
 
-**What x64 adds:** one new file `dasllama_math_x64_avx.das`, registering (suggested)
-`"x64-vnni"` (row-major, priority 10, `needs_repack = false`) and — only if measurement
-justifies it — `"x64-vnni-repack"` (priority 20, `needs_repack = true`). Gate:
-`get_architecture_name() == "x86_64" && jit_enabled()` — the builtin returns `"x86_64"` on
-x64 (`src/builtin/module_builtin_runtime.cpp:1860`). Wiring checklist (all mechanical):
+The `cpu_supports("avx2")` half (a cpuid builtin, OSXSAVE-honest) exists because AVX2 is NOT
+universal on x86-64 — unlike arm64 dotprod, which the JIT force-appends. It mirrors the JIT's
+own emitter gate (`g_target_x64_avx2` in `llvm_jit_common.das`): without it the emitter would
+issue `llvm.x86.avx2.*` against a TargetMachine whose cpuid features lack `+avx2` — a fatal
+"Cannot select" at codegen that would kill EVERY dasLLAMA program under `-jit` on such a box,
+since the umbrella requires this module and the JIT compiles the whole program up-front. With
+the gate, an AVX2-less x64 box compiles the intrinsics' portable fallback bodies (correct,
+slow) and keeps `portable` selected. The same rail answers future ISA tiers: a `"x64-vnni"`
+backend gates on `cpu_supports("avx512vnni") || cpu_supports("avxvnni")`, AVX-512 kernels on
+`cpu_supports("avx512f")` — the builtin knows the leaf-7 map, and unknown names fail closed.
 
-1. `require dasllama/dasllama_math_x64_avx` in `dasllama_common.das` (next to :8-9; needs
-   `// nolint:STYLE030` like its siblings — it's a side-effect require).
-2. `.das_module` `register_native_path` list (:7).
-3. `modules/dasLLAMA/CMakeLists.txt` — one `ADD_MODULE_DAS` line (:6-7 pattern).
-4. `tests/aot/CMakeLists.txt` — `AOT_DASLLAMA_MODULE_FILES` (:106), leaf-order before the
-   umbrella.
-5. `README.md` module-layout tree.
+**The x64 backends** (all in `dasllama_math_x64_avx.das`, shipped 2026-07): `x64-avx2` =
+row-major dot4x4 over the `dot32` ymm intrinsic (the auto row-major default); `x64-avx2-repack` =
+grp4 4-row block-interleave + token-blocked batch GEMM (picked by
+`select_matmul_backend_for_load`, mirrors arm64-laneq); `x64-avx2-acc8` = llama.cpp's exact
+per-block shape (`dot32_acc8` float[8] memory accumulator, LICM-promoted to 4 ymm regs) — the
+fastest kernel at LOW thread counts (+50% over ggml at 1 core) but a wash at 32T, so priority 9
+keeps it pin-only; `x64-avx2-ps` = fused float epilogue (`dot32_ps`), −13% on Zen2 (port-bound),
+priority 8, kept for A/B archaeology. The 5-spot wiring checklist (dasllama_common require,
+`.das_module`, module CMakeLists, `tests/aot/CMakeLists.txt` leaf-order, README tree) is done
+for both new files (`llvm/daslib/x64_avx.das` carries the intrinsics + emitters).
 
 ---
 
@@ -247,12 +261,13 @@ the numbers are M1's.
 The ARM SMMLA experiment is **not in the tree**; it's preserved on branch
 `bbatkin/dasllama-smmla-i8mm` for future i8mm hardware.
 
-**A queued decision that unblocks on x64:** the `exp(floatN)` vector intrinsic
-(`build_vector_expf`, `llvm_jit_intrin.das:885-919`) emits generic vector IR proven via `llc`
-to vectorize on SSE2/AVX2/AVX-512 with zero scalarization, but is **gated to aarch64**
-(:928) pending real-hardware validation. The recorded plan: validate on x64 → widen the gate →
-add the fast-path branch (recover ~7× from ~2.9×) → retire the local `exp4` fast-path helper
-in `dasllama_math.das`. Until then dasLLAMA's `exp4`/`swiglu4`/`geglu4`/`softcap4`/`hmax` are
+**The `exp(floatN)` queued decision — RESOLVED (znver2, 2026-07-02): keep the aarch64 gate.**
+Measured on real x64 hardware, the guarded polynomial (`build_vector_expf`) is a loss: 1.12×
+scalar libm (vs ~2.9× on M1) — the always-computed branchless guard tree dominates on SSE/AVX2 —
+while dasLLAMA's unguarded `exp4` runs 4.3×. Even adding the fast-path branch would only reach
+exp4 parity, so the gate stays aarch64-only by measurement and `exp4` stays. (Side finding, out
+of scope here: interp/const-fold `exp(float4)` is the unguarded fast path — it returns `-0`
+past overflow instead of `+inf`.) dasLLAMA's `exp4`/`swiglu4`/`geglu4`/`softcap4`/`hmax` are
 plain portable float4 and work on x64 as-is.
 
 ---

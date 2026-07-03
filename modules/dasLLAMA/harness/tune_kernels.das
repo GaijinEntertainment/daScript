@@ -1138,7 +1138,9 @@ def main {
         requant_par_threshold = get_requant_par_threshold(), norm_par_threshold = get_norm_par_threshold(),
         rope_par_threshold = get_rope_par_threshold(), kv_store_par_threshold = get_kv_store_par_threshold(),
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
-        q4_chunks_per_job = get_q4_chunks_per_job(), threads = get_total_hw_jobs()))
+        q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
+        jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
+        threads = get_total_hw_jobs()))
     let profile = JV((dot = dotw, axpy = axpyw, add_inplace = addw,
         mul_inplace = mulw, scale_inplace = scalew, copy_floats = copyw,
         softmax = softmaxw, softmax_sink = softmaxw, rmsnorm = rmsw,

@@ -112,6 +112,35 @@ var g_matmul_par_threshold = 2_000_000l
 def public set_matmul_par_threshold(v : int64) { g_matmul_par_threshold = max(v, 0l) }
 def public get_matmul_par_threshold() : int64 { return g_matmul_par_threshold }
 
+// Spin-before-park window for the jobque workers (see setup_dasllama_jobque). Runtime knob:
+// the useful window tracks the box's serial-gap lengths and burn tolerance, not the kernel.
+// 30ms covers the between-call gaps of a decode/prefill dispatch loop (with main-steal +
+// join-poll the workers stay hot through a whole token instead of parking between matmuls).
+var g_jobque_spin_us = 30000l
+def public set_jobque_spin_us(v : int64) { g_jobque_spin_us = max(v, 0l) }
+def public get_jobque_spin_us() : int64 { return g_jobque_spin_us }
+
+// Join-poll level for fork/join joins (see setup_dasllama_jobque) — ggml's --poll denomination:
+// level*1024*128 relax-rounds on the joining thread before it parks (0 = park immediately).
+// 50 is ggml's shipped default; the poll burns only the calling thread and is bounded (~100ms).
+var g_jobque_join_poll = 50l
+def public set_jobque_join_poll(v : int64) { g_jobque_join_poll = max(v, 0l) }
+def public get_jobque_join_poll() : int64 { return g_jobque_join_poll }
+
+//! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
+//! batched dispatch, the spin-before-park window (box_profile.json "runtime" `jobque_spin_us`
+//! overrides the shipped 30000us; 0 disables the spin), and the join-poll level ("jobque_join_poll",
+//! shipped 50 = ggml's default; 0 parks). Call INSIDE `with_job_que` (or after `create_job_que`) —
+//! the queue must exist, which is why apply_box_profile_runtime cannot apply these knobs itself
+//! (load_model may run outside a queue, same as the advisory "threads").
+//! Engine spelling — the facade re-exports it as `setup_dasllama_jobque`.
+def setup_dasllama_jobque_() {
+    set_jobque_fork_pool(true, true)
+    set_jobque_batch_dispatch(true)
+    set_jobque_worker_spin(int(min(g_jobque_spin_us, 2147483647l)))
+    set_jobque_join_spin(int(min(g_jobque_join_poll, 2147483647l)))
+}
+
 // Chunks-per-hw-job for the quantized matmuls' row split (the fp32 kernels use 1). Q8's
 // dequant-in-dot is compute-bound and balances better at 2 chunks/job; Q4's heavy nibble
 // unpack at 4 (both measured M1 Max). Per-box knobs; clamped to >= 1.
@@ -121,6 +150,14 @@ def public set_q8_chunks_per_job(v : int) { g_q8_chunks_per_job = max(v, 1) }
 def public get_q8_chunks_per_job() : int { return g_q8_chunks_per_job }
 def public set_q4_chunks_per_job(v : int) { g_q4_chunks_per_job = max(v, 1) }
 def public get_q4_chunks_per_job() : int { return g_q4_chunks_per_job }
+
+// Oversplit factor for the quantized BATCH matmuls (prefill GEMM): chunks = hw_jobs * this.
+// More chunks than workers lets awake workers pop a late-woken worker's remaining chunks off the
+// fifo, so a straggler strands one small chunk instead of a whole 1/K row range (measured on the
+// 3990X @32 workers: fork/join bill -41% -> -15% at x4; x8 is past the per-chunk-overhead knee).
+var g_q8_batch_chunks_per_job = 4
+def public set_q8_batch_chunks_per_job(v : int) { g_q8_batch_chunks_per_job = max(v, 1) }
+def public get_q8_batch_chunks_per_job() : int { return g_q8_batch_chunks_per_job }
 
 //! y = W·x — matrix-vector product, the dominant LLM compute kernel.
 //! W is row-major [d rows x n cols], x is [n], y is [d]; each y[i] is one dot
@@ -300,6 +337,17 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
         }
     }
 }
+
+// ===== Token-block width (shared, ISA-agnostic) =====
+// Batched-GEMM token-block width: a token-blocked batch kernel (arm64 laneq, x64 grp4) tiles tokens
+// into TB-sized blocks (outer), looping weight groups inside, so a TB×n activation slice stays
+// L2-resident and is reused across a thread's groups instead of re-streaming the whole activation per
+// group. 128 is the tuned default (Llama-3.2-1B, M1 Max — pipeline best-of-5 @2048); exposed as a
+// runtime knob for per-model tuning (larger n wants a smaller TB to stay in L2). Clamped to >= 1:
+// the kernels advance `tb += TB`, so a non-positive block width would never make progress.
+var g_q8_token_block = 128l
+def public set_q8_token_block(tb : int64) { g_q8_token_block = max(tb, 1l) }
+def public get_q8_token_block() : int64 { return g_q8_token_block }
 
 // ===== Token-block L2 budget (shared, ISA-agnostic) =====
 // A token-blocked Q8·Q8 GEMM keeps a TB×n activation slice L2-resident and reuses it across the weight

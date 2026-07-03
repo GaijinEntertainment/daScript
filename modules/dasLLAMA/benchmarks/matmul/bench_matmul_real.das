@@ -6,6 +6,7 @@ require matmul_variants
 require dasllama/dasllama_quant
 require daslib/jobque_boost
 require math
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // Re-measure the parallel-vs-single threshold and the job-splitting granularity on the REAL
 // TinyLlama-1.1B matmul shapes, with the current FAST job manager (cond-var waiter + fork pool).
@@ -48,7 +49,7 @@ def bench_shape(b : B?; name : string; n, d : int64; hw : int64) {
         matmul_par(y, w, x, n, d, int(4l * hw))
     }
     b |> run("{name} q8q8 single ") {
-        matmul_q8q8(y, qt8.q, qt8.scales, xq, xs, n, d)
+        matmul_variants::matmul_q8q8(y, qt8.q, qt8.scales, xq, xs, n, d)
     }
     b |> run("{name} q8q8_w8 single ") {
         matmul_q8q8_w8(y, qt8.q, qt8.scales, xq, xs, n, d)
@@ -141,8 +142,8 @@ def bench_qkv(b : B?; hw : int64) {
     yV |> resize(kv)
     b |> run("QKV seq (Q par-1N + K,V single)") {
         matmul_q8q8_par(yQ, qQ.q, qQ.scales, xq, xs, n, dim, int(hw))
-        matmul_q8q8(yK, qK.q, qK.scales, xq, xs, n, kv)
-        matmul_q8q8(yV, qV.q, qV.scales, xq, xs, n, kv)
+        matmul_variants::matmul_q8q8(yK, qK.q, qK.scales, xq, xs, n, kv)
+        matmul_variants::matmul_q8q8(yV, qV.q, qV.scales, xq, xs, n, kv)
     }
     b |> run("QKV fused group3 par-1N    ") {
         matmul_q8q8_group3_par(yQ, yK, yV, qAll.q, qAll.scales, 0l, dim * n, (dim + kv) * n, xq, xs, n, dim, kv, kv, int(hw))
@@ -159,9 +160,7 @@ def bench_matmul_real(b : B?) {
         return
     }
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         let hw = int64(get_total_hw_jobs())
         bench_qkv(b, hw)
         bench_shape(b, "kv  256x2048 ", 2048l, 256l, hw)     // 0.52M — currently SINGLE

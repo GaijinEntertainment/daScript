@@ -183,7 +183,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now|format_time)$%%),
-        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name)$%%),
+        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|cpu_supports)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
         group_by_regex("Lock checking", mod, %regex~(lock_count)$%%),
@@ -293,7 +293,7 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
 def document_module_dasllama(_root : string) {
     var mod = find_module("dasllama")
     var groups <- array<DocGroup>(
-        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session)$%%),
+        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|setup_dasllama_jobque)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
         group_by_regex("Evaluation and sampling", mod, %regex~(eval|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate)$%%),
@@ -563,7 +563,7 @@ def document_module_jobque(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Channel, JobStatus, Lockbox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%),
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|is_job_que_shutting_down|count_jobque_leaks)$%%),
-        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch)$%%),
+        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|flush_jobque_batch|jobque_try_run_one)$%%),
         group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|create_job_que|destroy_job_que)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     )

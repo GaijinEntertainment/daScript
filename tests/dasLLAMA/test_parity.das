@@ -16,7 +16,11 @@ require strings
 // Prompts are deliberately the *confident* ones: high-entropy prompts flip on genuine near-ties
 // (sub-ULP libm cos/sin/exp/tanh vs llama.cpp), which are not bugs. See dasllama_newmodels_arc.
 
-let MODELS_DIR = "/Users/borisbatkin/Work/llama.cpp/models/"
+// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
+def private models_dir() : string {
+    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
 
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
@@ -47,9 +51,7 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
     let prev_act = get_act_vec()
     set_act_vec(false)
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque()
         var s = make_run_state(tr.config)
         let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
         // generate echoes prompt[1..] then the continuation, so the first generated token is at
@@ -88,7 +90,7 @@ def test_parity_tied_cls_q8_rows(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}SmolLM2-135M-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -134,7 +136,7 @@ def test_parity_gemma2(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-2-2b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -158,7 +160,7 @@ def test_parity_tinyllama_v03(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}tinyllama-1.1b-v0.3-f16.gguf"
+        let path = path_join(models_dir(), "tinyllama-1.1b-v0.3-f16.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -182,7 +184,7 @@ def test_parity_llama3_2_1b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Llama-3.2-1B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -208,7 +210,7 @@ def test_parity_qwen25_15b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Qwen2.5-1.5B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -233,7 +235,7 @@ def test_parity_phi35(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Phi-3.5-mini-instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "Phi-3.5-mini-instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -256,7 +258,7 @@ def test_parity_smollm2(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}SmolLM2-1.7B-Instruct-Q8_0.gguf"
+        let path = path_join(models_dir(), "SmolLM2-1.7B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -279,7 +281,7 @@ def test_parity_mistral7b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Mistral-7B-Instruct-v0.3-Q8_0.gguf"
+        let path = path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -305,7 +307,7 @@ def test_parity_qwen3_06b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Qwen3-0.6B-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -321,7 +323,7 @@ def test_parity_qwen3_4b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Qwen3-4B-Instruct-2507-Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -343,7 +345,7 @@ def test_parity_qwen2moe(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"
+        let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -396,7 +398,7 @@ def test_parity_gemma3_1b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-3-1b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -412,7 +414,7 @@ def test_parity_gemma3_4b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-3-4b-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-3-4b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -465,7 +467,7 @@ def test_parity_gemma4_12b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gemma-4-12B-it-Q8_0.gguf"
+        let path = path_join(models_dir(), "gemma-4-12B-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return
@@ -513,7 +515,7 @@ def test_parity_gptoss_20b(t : T?) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = "{MODELS_DIR}gpt-oss-20b-mxfp4.gguf"
+        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
         if (!stat(path).is_valid) {
             t |> success(true, "skipped: {path} not present")
             return

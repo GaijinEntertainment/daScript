@@ -2,8 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
-require dasllama/dasllama_math  // the knob setters/getters + the backend registry (engine-level, not re-exported)
-require dasllama/dasllama_math_aarch64_neon  // set/get_q8_token_block
+require dasllama/dasllama_math  // the knob setters/getters (incl. set/get_q8_token_block) + the backend registry (engine-level, not re-exported)
 require daslib/fio
 
 // box_profile.json "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs and
@@ -23,6 +22,9 @@ def private restore_defaults() {
     set_act_par_threshold(100_000l)
     set_q8_chunks_per_job(2)
     set_q4_chunks_per_job(4)
+    set_q8_batch_chunks_per_job(4)
+    set_jobque_spin_us(30000l)
+    set_jobque_join_poll(50l)
 }
 
 [test]
@@ -35,7 +37,8 @@ def test_runtime_section_applies(t : T?) {
         + "\"matmul_par_threshold\":1000000,\"attn_par_threshold\":50000,\"decode_attn_par_threshold\":2000000,"
         + "\"requant_par_threshold\":128000,"
         + "\"norm_par_threshold\":128000,\"rope_par_threshold\":50000,\"kv_store_par_threshold\":128000,"
-        + "\"act_par_threshold\":50000,\"q8_chunks_per_job\":3,\"q4_chunks_per_job\":5\}\}")
+        + "\"act_par_threshold\":50000,\"q8_chunks_per_job\":3,\"q4_chunks_per_job\":5,"
+        + "\"q8_batch_chunks_per_job\":2,\"jobque_spin_us\":1000,\"jobque_join_poll\":10\}\}")
     t |> success(fwrite(path, js), "profile written")
     apply_box_profile_runtime(path)
     t |> equal(get_q8_token_block(), 256l, "q8_token_block applied")
@@ -50,6 +53,9 @@ def test_runtime_section_applies(t : T?) {
     t |> equal(get_act_par_threshold(), 50000l, "act_par_threshold applied")
     t |> equal(get_q8_chunks_per_job(), 3, "q8_chunks_per_job applied")
     t |> equal(get_q4_chunks_per_job(), 5, "q4_chunks_per_job applied")
+    t |> equal(get_q8_batch_chunks_per_job(), 2, "q8_batch_chunks_per_job applied")
+    t |> equal(get_jobque_spin_us(), 1000l, "jobque_spin_us stored")
+    t |> equal(get_jobque_join_poll(), 10l, "jobque_join_poll stored")
     remove(path)
     restore_defaults()
 }

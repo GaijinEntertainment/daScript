@@ -21,6 +21,8 @@ finish it first; tuning an incorrect kernel is worse than pointless).
 | L2 budget (TB cliff guard) | `set_q8_l2_budget(bytes)` (default 4 MB — provisional, one M1 Max) / profile `runtime.q8_l2_budget` | runtime | `effective_token_block(tb, n) = clamp(tb, 1, budget/n)` (dasllama_math.das) |
 | Threading thresholds | `set_matmul_par_threshold`, `set_decode_attn_par_threshold` (decode attention over heads — default 262144, the measured M1 Max crossover; sweep inline-vs-threaded at a few context depths to re-derive on a new box), + the six prefill-pass setters (`set_attn/requant/norm/rope/kv_store/act_par_threshold`) / profile `runtime.*_par_threshold` | runtime | every `maybe_parallel_for` gate — the crossovers encode the box's ~90µs (M1) job-dispatch cost |
 | Chunks per hw job | `set_q8_chunks_per_job` (default 2) / `set_q4_chunks_per_job` (default 4) / profile `runtime.q{8,4}_chunks_per_job` | runtime | the quantized matmuls' row split |
+| Batch oversplit | `set_q8_batch_chunks_per_job` (default 4) / profile `runtime.q8_batch_chunks_per_job` — chunks = hw_jobs × this, so awake workers steal a straggler's remaining chunks (measured 3990X @32w: +9-14% on the fat shapes; the grp4 kernel floors at 4 groups/chunk — see the kernel note) | runtime | the x64 batch (prefill GEMM) kernels |
+| Jobque spin | `set_jobque_spin_us` (default 30000, worker spin-before-park) / `set_jobque_join_poll` (default 50, ggml's poll denomination: level×1024×128 relax-rounds at join before parking) / profile `runtime.jobque_spin_us`, `runtime.jobque_join_poll` — both applied by `setup_dasllama_jobque` inside the queue | runtime | every fork/join dispatch |
 | Threads | `DAS_JOBQUE_THREADS` env (overrides all); build-time `-DDAS_MAX_HW_JOBS=N`; profile `runtime.threads` is ADVISORY (logs a recommendation — worker count is fixed at jobque creation) | process | every `maybe_parallel_for` |
 
 Axes are ~independent (unroll ⊥ width ⊥ TB ⊥ threads) — sweep them separately
@@ -159,14 +161,21 @@ other models. This is the kernel scoreboard; `prefill_perf.das` is the end-to-en
 - **Ours:** `forward_profile_report()` buckets (embed / rope_build / rope / kv_store / attn /
   mm_qkv / mm_wo / mm_ffn / mm_moe / act / gate / final...) — decode and prefill feed the same
   accumulator, so reset the window around whichever phase you're measuring
-  (`benchmarks/prefill_perf.das` exercises the prefill paths). Caveat: `mm_gemm`/`mm_requant`
+  (`benchmarks/prefill_perf.das` drives the prefill paths; `llama3_perf.das` resets before its
+  timed decode window and reports after — the decode table). Caveat: `mm_gemm`/`mm_requant`
   are inner-leaf timers of the batched matmuls and double-count against the `mm_*` site
   buckets — compare within a tier, don't sum across tiers.
-- **Theirs (the recipe that found the M1 gap):** patch llama.cpp's
-  `ggml_graph_compute_thread` (ggml-cpu.c) to accumulate thread-0 wall time per `node->op`
-  into a static table dumped at exit → a MUL_MAT / FLASH_ATTN_EXT / ROPE / ... breakdown to
-  set against our buckets. ~15 lines, revert after. This is how "we're behind" became "we're
-  31% *ahead* on attention; the whole gap is the projection GEMM" — profile before optimizing.
+- **Theirs (the recipe that found the M1 gap, now shipped):** `harness/ggml_op_profile.patch` —
+  apply to llama.cpp with `git apply --ignore-whitespace` and rebuild. It times thread-0 wall
+  per graph node in `ggml_graph_compute_thread` (ggml-cpu.c) into buckets NAMED LIKE OURS
+  (MUL_MATs split by tensor name: Qcur/Kcur/Vcur → mm_qkv, kqv_out → mm_wo, ffn_* → mm_ffn,
+  result_output → mm_cls, kq/kqv + FLASH_ATTN_EXT/SOFT_MAX → attn; SET_ROWS → kv_store;
+  norm-weight MULs fold into rmsnorm), gated on `GGML_OP_PROFILE=1`, dumped to stderr at exit.
+  Run `llama-bench -p 0 -n 64` for a decode table, `-p 512 -n 0` for prefill (separate
+  processes — the dump is whole-process). Divide by the mm_cls node count (= tokens) for
+  per-token numbers. This recipe is how "we're behind" became "we're 31% *ahead* on attention;
+  the whole gap is the projection GEMM" on M1 — and on the 3990X it split the decode gap into
+  ~1.17× on the repack-less quantized GEMVs + 1.66× on the small `mm_wo` — profile before optimizing.
 - Fairness: end-to-end comparisons run ours with `options _jit_fast_math = true` (ggml
   hand-codes equivalent FP laxity; strict-IEEE-us vs fast-ggml understates us ~8-10%).
   Tests and oracle gates stay bit-exact — never put fast-math on a test.

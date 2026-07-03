@@ -16,7 +16,8 @@ require daslib/strings_boost
 let FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
 let ENGINE_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_common.das",
-    "modules/dasLLAMA/dasllama/dasllama_chat.das"
+    "modules/dasLLAMA/dasllama/dasllama_chat.das",
+    "modules/dasLLAMA/dasllama/dasllama_math.das"   // setup_dasllama_jobque_ (jobque setup lives with the runtime knobs)
 ]
 let EXAMPLES = ["examples/dasLLAMA/run.das", "examples/dasLLAMA/chat.das"]
 

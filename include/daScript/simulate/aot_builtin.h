@@ -279,6 +279,7 @@ namespace das {
     const char * das_get_platform_name();
     const char * das_get_cross_platform_name();
     const char * das_get_architecture_name();
+    DAS_API bool das_cpu_supports ( const char * feature );
 
     DAS_API char * fmt_i8 ( const char * fmt, int8_t value, Context * context, LineInfoArg * at );
     DAS_API char * fmt_u8 ( const char * fmt, uint8_t value, Context * context, LineInfoArg * at );

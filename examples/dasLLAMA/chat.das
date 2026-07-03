@@ -35,9 +35,7 @@ def main {
     let params = SamplingParams(temp = 0.7, top_k = 40l, penalty = 1.1)
 
     with_job_que() {
-        set_jobque_fork_pool(true, true)  // pool per-job fork contexts + skip their init (pure-data matmul jobs)
-        set_jobque_batch_dispatch(true)   // publish each parallel_for's jobs under one lock at join
-        set_jobque_worker_spin(1000)      // spin-before-park: back-to-back matmuls pay no thread wakes
+        setup_dasllama_jobque()   // pooled forks + batched dispatch + spin window (box-profile tunable)
         var chat = create_chat(m, SYSTEM)
         while (true) {
             fprint(fstdout(), "You: ")

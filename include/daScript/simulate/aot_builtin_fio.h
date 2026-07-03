@@ -33,8 +33,16 @@ namespace das {
 
 #if !DAS_NO_FILEIO
 
+    // 64-bit-size stat: MSVC's plain `struct stat` is _stat64i32 (32-bit st_size), and its
+    // stat/fstat FAIL with EOVERFLOW on files >2GB — an 8GB GGUF stat'd as absent/unmappable.
+#if defined(_WIN32)
+    typedef struct _stat64 das_filestat;
+#else
+    typedef struct stat das_filestat;
+#endif
+
     struct FStat {
-        struct stat stats;
+        das_filestat stats;
         bool        is_valid;
         uint64_t size() const   { return stats.st_size; }
         Time     atime() const  { return { stats.st_atime }; }

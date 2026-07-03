@@ -12,12 +12,12 @@ Path convention below is the single-config layout (`build/daslang`); on Windows 
 
 ## Step 0 — toolchain sanity (portable path, zero code changes)
 
-1. **Build with a real thread pool.** Non-Apple builds cap jobque workers at
-   `min(DAS_MAX_HW_JOBS, cores-1)` and `DAS_MAX_HW_JOBS` **defaults to 4**
-   (`include/daScript/misc/platform.h:585`, `src/misc/job_que.cpp:42-48`). On a many-core x64
-   box configure with `-DDAS_MAX_HW_JOBS=<physical cores>` (or export
-   `DAS_JOBQUE_THREADS=<n>` per run — it overrides everything). Forgetting this makes every
-   threaded number in later steps a 4-thread number.
+1. **Verify the thread pool is real.** The old default cap of 4 workers is fixed (2026-07-02:
+   `DAS_MAX_HW_JOBS` is wasm-only now; desktop gets `cores-1` — `platform.h:580-590`,
+   `src/misc/job_que.cpp:42-48`) — but on a pre-fix binary every threaded number is a 4-thread
+   number, so check the binary is fresh. For profiling pin the count explicitly per run with
+   `DAS_JOBQUE_THREADS=<n>` (overrides everything) and keep ONE count for every recorded
+   number of the campaign.
 2. Build (Release, dasLLVM enabled so `-jit` exists). Builds are slow — don't treat silence
    as failure.
 3. **JIT smoke:** run any small script with `-jit`; then the dasLLAMA suite on the portable
@@ -166,6 +166,13 @@ building. Gate everything the same way as step 5.
 ---
 
 ## Gotcha ledger (things that already bit us once)
+
+- **Windows llama.cpp checkout + `core.autocrlf=true` corrupts the tokenizer corpora.** The
+  `models/ggml-vocab-*.gguf.inp/.out` fixtures have no `.gitattributes` protection, so a default
+  Windows git CRLF-converts them and `test_tokenizer.das` fails (the `\n__ggml_vocab_test__\n`
+  separator stops matching: 1 input vs 46 outlines). Vectors legitimately contain control
+  characters, so the parser must NOT strip `\r` — fix the checkout instead:
+  `git config core.autocrlf false` (repo-local), delete the fixtures, `git checkout -- models/`.
 
 - **JIT DLL cache staleness:** the cache key folds the codegen version, function hashes, loop
   hints, and fast-math — your version bump (step 4.6) invalidates everything correctly, and

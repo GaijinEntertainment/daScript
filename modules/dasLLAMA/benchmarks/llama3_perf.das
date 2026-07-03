@@ -5,6 +5,7 @@ require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires ea
 require daslib/jobque_boost
 require daslib/fio
 require strings
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // Generation-speed profile for a Llama-3 GGUF (Q8). Prefills a short prompt (untimed),
 // then times N greedy generation steps — the batch-1 gemv path, matching llama.cpp's `tg`.
@@ -43,22 +44,32 @@ def main {
     if (!empty(args) && ends_with(args[length(args) - 1], ".gguf")) {
         path = args[length(args) - 1]
     }
+    // backend pin for A/B on one binary (e.g. x64-avx2 row-major vs x64-avx2-repack) — must land
+    // BEFORE load_gguf: select_matmul_backend_for_load honors the pin at load, which decides repack
+    if (has_env_variable("DASLLAMA_PIN_BACKEND")) {
+        pin_kernel_backend(get_env_variable("DASLLAMA_PIN_BACKEND"))
+    }
     print("loading {path}\n")
     let t <- load_gguf(path, QuantMode.q8)
     let c = t.config
     print("config: dim={c.dim} hidden={c.hidden_dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size}\n")
+    print("active backend: {active_kernel_backend()}\n")
 
     var s <- make_run_state(c)
     let prompt = [128000l, 12805l, 5304l, 264l, 892l]
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         // spin-window override for tuning A/Bs (0 disables the spin)
         if (has_env_variable("DAS_WORKER_SPIN_US")) {
             let spin_us = to_int(get_env_variable("DAS_WORKER_SPIN_US"))
             set_jobque_worker_spin(spin_us)
             print("worker spin override: {spin_us}us\n")
+        }
+        // join poll-level override (ggml denomination 0..100; setup default 50, 0 = park at join)
+        if (has_env_variable("DAS_JOBQUE_JOIN_SPIN")) {
+            let join_spin = to_int(get_env_variable("DAS_JOBQUE_JOIN_SPIN"))
+            set_jobque_join_spin(join_spin)
+            print("join spin override: level {join_spin}\n")
         }
         // prefill (untimed)
         var pos = 0l
@@ -67,7 +78,8 @@ def main {
             pos++
         }
         var token = argmax_logits(s, c.vocab_size)
-        // timed generation
+        // timed generation; per-section decode profile over exactly this window
+        forward_profile_reset()
         let t0 = ref_time_ticks()
         for (_i in range(N_TOKENS)) {
             forward(t, s, token, pos)
@@ -78,5 +90,6 @@ def main {
         let tps = double(N_TOKENS) / (double(us) * 1.0e-6lf)
         let gf = double(int64(N_TOKENS) * flops_per_token(c)) / (double(us) * 1000.0lf)
         print("gen Q8: {N_TOKENS} tok in {us} us -> {tps} tok/s ({gf} GFLOP/s)\n")
+        forward_profile_report()   // the decode per-section table (set against llama.cpp's GGML_OP_PROFILE dump)
     }
 }

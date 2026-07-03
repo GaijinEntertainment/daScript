@@ -57,14 +57,17 @@ def bench_gen(m : Model; tag : string) {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // The matmul kernels split their rows across the job queue — they REQUIRE one
-// (running model code outside with_job_que panics). Three knobs configure the queue
-// for this pure fork/join workload, and every dasLLAMA runner sets all three:
-//   set_jobque_fork_pool(true, true) — pool the per-job fork contexts: the kernels are
-//     pure data-parallel jobs, so their contexts can be reused and skip re-init.
-//   set_jobque_batch_dispatch(true) — publish each matmul's jobs under ONE queue lock
-//     at join time instead of one push (and one worker wake) per job.
-//   set_jobque_worker_spin(1000) — idle workers spin-poll for 1ms before parking, so a
-//     token's back-to-back matmuls never pay the OS thread-wake per dispatched job.
+// (running model code outside with_job_que panics). setup_dasllama_jobque() configures
+// the queue for this pure fork/join workload, and every dasLLAMA runner calls it:
+//   fork-context pooling (set_jobque_fork_pool) — the kernels are pure data-parallel
+//     jobs, so their contexts are reused and skip re-init;
+//   batched dispatch (set_jobque_batch_dispatch) — each matmul's jobs publish under ONE
+//     queue lock at join time instead of one push (and one worker wake) per job;
+//   spin-before-park (set_jobque_worker_spin) — idle workers spin-poll before parking,
+//     so a token's back-to-back matmuls never pay the OS thread-wake per dispatched job.
+//     The window ships at 30ms; box_profile.json's "runtime" `jobque_spin_us` tunes it per box.
+//   join poll (set_jobque_join_spin) — the joining thread polls the wait counter before
+//     parking (ships at level 50, ggml's --poll denomination; "runtime" `jobque_join_poll`).
 //
 // The worker count is fixed when the queue is created — one worker per core minus one
 // by default; the DAS_JOBQUE_THREADS environment variable overrides it. To see what
@@ -73,9 +76,7 @@ def bench_gen(m : Model; tag : string) {
 
 def section_threads(m : Model) {
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque()
         print("job queue: {get_total_hw_jobs()} hardware jobs (override with DAS_JOBQUE_THREADS=N)\n")
         bench_gen(m, "threaded: ")
     }
@@ -97,9 +98,7 @@ def section_quant(path : string; mode : QuantMode; tag : string) {
     m.config.seq_len = min(m.config.seq_len, CTX)
     print("{tag}: {mb(int64(heap_bytes_allocated()))} MB resident | ")
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque()
         bench_gen(m, "")
     }
     delete m

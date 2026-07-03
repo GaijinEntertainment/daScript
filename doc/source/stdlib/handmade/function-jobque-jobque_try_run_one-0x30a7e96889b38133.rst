@@ -1,0 +1,2 @@
+Pop one queued job off the fifo and run it on the calling thread (the same cloned-closure job a worker would run — full capture semantics), returning false if the fifo is empty; any batch pending on this thread (see set_jobque_batch_dispatch) is flushed first.
+This is dispatcher-side work stealing: parallel_for loops it until its wait group is ready, so the dispatching core computes chunks instead of sleeping through the fork.

@@ -1,0 +1,132 @@
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 8a0e5c255..abbc5161b 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -3018,6 +3018,96 @@ static int ggml_cpu_try_fuse_ops(
+     return 0;
+ }
+ 
++// ===== per-op wall-time profile (GGML_OP_PROFILE=1) ==========================================
++// Thread-0 wall time per graph node, accumulated into buckets that mirror dasLLAMA's
++// forward_profile_report() so the two engines' per-op tables line up column-for-column
++// (embed / rmsnorm / rope / kv_store / attn / mm_qkv / mm_wo / mm_ffn / mm_cls / act+gate ...).
++// MUL_MATs are split by tensor name (Qcur/Kcur/Vcur, kqv_out, ffn_*, result_output, kq/kqv);
++// everything unmapped lands in "other" with a raw per-ggml-op breakdown so nothing hides.
++// Dumped to stderr at exit. Zero cost when the env var is unset.
++
++enum llm_prof_bucket {
++    LLM_PROF_EMBED, LLM_PROF_RMSNORM, LLM_PROF_ROPE, LLM_PROF_KV_STORE, LLM_PROF_ATTN,
++    LLM_PROF_MM_QKV, LLM_PROF_MM_WO, LLM_PROF_MM_FFN, LLM_PROF_MM_CLS, LLM_PROF_MM_OTHER,
++    LLM_PROF_ACT_GATE, LLM_PROF_ADD, LLM_PROF_CPY, LLM_PROF_OTHER, LLM_PROF_COUNT
++};
++
++static const char * llm_prof_bucket_names[LLM_PROF_COUNT] = {
++    "embed", "rmsnorm", "rope", "kv_store", "attn",
++    "mm_qkv", "mm_wo", "mm_ffn", "mm_cls", "mm_other",
++    "act+gate", "add", "cpy", "other"
++};
++
++static double  llm_prof_us[LLM_PROF_COUNT];
++static int64_t llm_prof_n [LLM_PROF_COUNT];
++static double  llm_prof_other_us[GGML_OP_COUNT];
++
++static int llm_prof_bucket_of(const struct ggml_tensor * node) {
++    const char * n = node->name;
++    switch (node->op) {
++        case GGML_OP_MUL_MAT:
++        case GGML_OP_MUL_MAT_ID: {
++            if (!strncmp(n, "Qcur", 4) || !strncmp(n, "Kcur", 4) || !strncmp(n, "Vcur", 4)) return LLM_PROF_MM_QKV;
++            if (!strncmp(n, "kqv_out", 7) || !strncmp(n, "attn_out", 8)) return LLM_PROF_MM_WO;
++            if (!strncmp(n, "ffn_", 4)) return LLM_PROF_MM_FFN;
++            if (!strncmp(n, "result_output", 13)) return LLM_PROF_MM_CLS;
++            if (!strncmp(n, "kq", 2)) return LLM_PROF_ATTN;   // kq + kqv (score / context GEMMs = attention, matching our attn bucket)
++            return LLM_PROF_MM_OTHER;
++        }
++        case GGML_OP_FLASH_ATTN_EXT:
++        case GGML_OP_SOFT_MAX:       return LLM_PROF_ATTN;
++        case GGML_OP_ROPE:           return LLM_PROF_ROPE;
++        case GGML_OP_RMS_NORM:
++        case GGML_OP_NORM:           return LLM_PROF_RMSNORM;
++        case GGML_OP_GET_ROWS:       return LLM_PROF_EMBED;
++        case GGML_OP_SET_ROWS:       return LLM_PROF_KV_STORE;   // kv-cache writes in the LLM graphs
++        case GGML_OP_UNARY:
++        case GGML_OP_GLU:            return LLM_PROF_ACT_GATE;
++        case GGML_OP_MUL:            return strstr(n, "norm") ? LLM_PROF_RMSNORM : LLM_PROF_ACT_GATE;  // norm-weight mul belongs with rmsnorm (our bucket includes it)
++        case GGML_OP_ADD:            return LLM_PROF_ADD;
++        case GGML_OP_CPY:
++        case GGML_OP_DUP:
++        case GGML_OP_CONT:           return LLM_PROF_CPY;
++        default:                     return LLM_PROF_OTHER;
++    }
++}
++
++static void llm_prof_dump(void) {
++    double total = 0;
++    for (int i = 0; i < LLM_PROF_COUNT; i++) total += llm_prof_us[i];
++    if (total <= 0) return;
++    fprintf(stderr, "\n===== GGML_OP_PROFILE (thread-0 wall, whole process) =====\n");
++    for (int i = 0; i < LLM_PROF_COUNT; i++) {
++        if (llm_prof_n[i] == 0) continue;
++        fprintf(stderr, "%-9s %12.0f us  %5.1f%%  (%lld nodes)\n",
++            llm_prof_bucket_names[i], llm_prof_us[i], 100.0 * llm_prof_us[i] / total, (long long) llm_prof_n[i]);
++    }
++    fprintf(stderr, "total     %12.0f us\n", total);
++    for (int i = 0; i < GGML_OP_COUNT; i++) {
++        if (llm_prof_other_us[i] > 0) {
++            fprintf(stderr, "  other: %-16s %12.0f us\n", ggml_op_name((enum ggml_op) i), llm_prof_other_us[i]);
++        }
++    }
++}
++
++static bool llm_prof_enabled(void) {
++    static int on = -1;
++    if (on < 0) {
++        const char * e = getenv("GGML_OP_PROFILE");
++        on = (e && e[0] && e[0] != '0') ? 1 : 0;
++        if (on) atexit(llm_prof_dump);
++    }
++    return on == 1;
++}
++
++static void llm_prof_add(const struct ggml_tensor * node, int64_t us) {
++    const int b = llm_prof_bucket_of(node);
++    llm_prof_us[b] += (double) us;
++    llm_prof_n [b] += 1;
++    if (b == LLM_PROF_OTHER) llm_prof_other_us[node->op] += (double) us;
++}
++// ===== end per-op profile =====================================================================
++
+ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
+     struct ggml_threadpool    * tp    = state->threadpool;
+@@ -3046,6 +3136,8 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     GGML_PRINT_DEBUG("thread #%d compute-start cplan %p last-graph %d\n", state->ith, (const void *)cplan, state->last_graph);
+ #endif
+ 
++    const bool prof = state->ith == 0 && llm_prof_enabled();
++
+     for (int node_n = 0; node_n < cgraph->n_nodes && atomic_load_explicit(&tp->abort, memory_order_relaxed) != node_n; node_n++) {
+         struct ggml_tensor * node = cgraph->nodes[node_n];
+ 
+@@ -3058,6 +3150,8 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+             continue;
+         }
+ 
++        const int64_t prof_t0 = prof ? ggml_time_us() : 0;
++
+         // TODO: move fused-op detection into ggml_graph_plan so fusion decisions are made once at planning time
+         // Try fused ops, fall back to normal compute
+         const int n_fused = ggml_cpu_try_fuse_ops(cgraph, node_n, &params, cplan);
+@@ -3076,6 +3170,12 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+         if (node_n + 1 < cgraph->n_nodes) {
+             ggml_barrier(state->threadpool);
+         }
++
++        // after the barrier: thread-0 span = the node's full wall time incl. straggler wait
++        // (a fused run is attributed to its FIRST node's bucket)
++        if (prof) {
++            llm_prof_add(node, ggml_time_us() - prof_t0);
++        }
+     }
+ 
+ #ifdef GGML_USE_OPENMP

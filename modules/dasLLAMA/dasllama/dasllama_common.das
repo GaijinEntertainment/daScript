@@ -7,6 +7,7 @@ require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYL
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backends at [init]; no-op off-ARM
+require dasllama/dasllama_math_x64_avx  // registers the x86-64 dot4 Q8·Q8 backend at [init]; no-op off-x64
 require dasllama/dasllama_quant
 require dasllama/dasllama_gguf
 require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
@@ -1378,9 +1379,13 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "rope_par_threshold") $(v) { set_rope_par_threshold(v) }
     apply_i64_knob(rt, "kv_store_par_threshold") $(v) { set_kv_store_par_threshold(v) }
     apply_i64_knob(rt, "act_par_threshold") $(v) { set_act_par_threshold(v) }
-    // the two int-typed knobs clamp into int range before the cast — int() wraps silently on int64
+    // the int-typed knobs clamp into int range before the cast — int() wraps silently on int64
     apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "q8_batch_chunks_per_job") $(v) { set_q8_batch_chunks_per_job(int(min(v, 2147483647l))) }
+    // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
+    apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
+    apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
         pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
@@ -2500,7 +2505,7 @@ def forward_profile_report() {
     for (v in values(g_forward_prof_acc)) {
         total += v
     }
-    to_log(LOG_INFO, "=== forward profile (us, summed over the window) ===\n")
+    to_log(LOG_INFO, "=== forward profile (us, summed over the window; prefill + decode share the buckets) ===\n")
     for (k, v in keys(g_forward_prof_acc), values(g_forward_prof_acc)) {
         to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%)\n")
     }

@@ -525,8 +525,10 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
     //! Partitions ``[range_begin..range_end)`` into ``num_jobs`` chunks and invokes ``blk`` once per chunk
     //! on the calling thread with ``(chunk_begin, chunk_end, wg)``. The block is expected to dispatch work
     //! via ``new_job`` and call ``wg |> notify_and_release`` when each job finishes.
-    //! ``parallel_for`` blocks until all notifications are received (via internal ``with_wait_group``).
-    //! Requires ``with_job_que`` context.
+    //! After dispatch the CALLING thread participates: it pops queued jobs off the fifo and executes
+    //! them inline (same cloned-closure jobs the workers run — full capture semantics) until its own
+    //! wait group is satisfiable, so the dispatching core computes chunks instead of sleeping through
+    //! the fork. Blocks until all notifications are received. Requires ``with_job_que`` context.
     let total = range_end - range_begin
     if (total <= 0 || num_jobs <= 0) return
     let actual_jobs = min(num_jobs, total)
@@ -540,6 +542,11 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
             let job_end = offset + this_chunk
             offset = job_end
             invoke(blk, job_begin, job_end, wg)
+        }
+        // main participates: flush the batch, then keep executing queued jobs on this thread until
+        // the wait group is ready (or the fifo drains — the workers then finish their in-flight tail)
+        while (!wg.isReady) {
+            break if (!jobque_try_run_one())
         }
     }
 }
@@ -574,7 +581,8 @@ def _parallel_for_each(arr : array<auto(TT)>; num_jobs : int; blk : block<(job_b
     //! with ``(chunk_begin_idx, chunk_end_idx, wg)`` on the calling thread.
     //! The block should dispatch ``new_job`` calls that process ``arr[i]`` for ``i`` in ``[chunk_begin_idx..chunk_end_idx)``,
     //! then call ``wg |> notify_and_release``.
-    //! Blocks until all jobs finish. Requires ``with_job_que`` context.
+    //! Blocks until all jobs finish (the caller executes queued chunks too — see ``_parallel_for``).
+    //! Requires ``with_job_que`` context.
     _parallel_for(0, length(arr), num_jobs, blk)
 }
 

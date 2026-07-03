@@ -151,6 +151,19 @@ let g_aarch64_intrin_lookup <- {
     "aarch64_neon::tbl16_hi" => @@intrinsic_tbl16
 }
 
+// x86-64 intrinsics (the llvm/x64_avx header) — same contract as the aarch64 table above, gated on
+// g_target_x64_avx2 (NOT just the arch: AVX2 is not universal on x86-64, and emitting llvm.x86.avx2.*
+// against a target without +avx2 is a fatal "Cannot select" at codegen — without AVX2 the calls
+// compile their portable fallback bodies instead). dot4/dot32 emit the pre-VNNI exact sign-trick
+// sequence (ABS/PSIGNB + PMADDUBSW + PMADDWD) at 128/256 bits; exactness precondition
+// (x in [-127,127], the Q8 quantizer's range) documented at the daslang declarations in x64_avx.das.
+let g_x64_intrin_lookup <- {
+    "x64_avx::dot4" => @@intrinsic_dot4_x64,
+    "x64_avx::dot32" => @@intrinsic_dot32_x64,
+    "x64_avx::dot32_ps" => @@intrinsic_dot32_ps_x64,
+    "x64_avx::dot32_acc8" => @@intrinsic_dot32_acc8_x64
+}
+
 def public has_intrinsic(expr : ExprCallFunc?) {
     var result = false
     assume argType = expr.arguments[0]._type
@@ -177,6 +190,11 @@ def public has_intrinsic(expr : ExprCallFunc?) {
             result = true
         }
     }
+    if (!result && g_target_x64_avx2) {
+        g_x64_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
     return result
 }
 
@@ -188,6 +206,11 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
     }
     if (result == null && g_target_is_aarch64) {
         g_aarch64_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
+    }
+    if (result == null && g_target_x64_avx2) {
+        g_x64_intrin_lookup |> get(call_name) $(pfun) {
             result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
         }
     }
@@ -882,10 +905,11 @@ def private vexpf_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 // The default lowering (@llvm.exp.vNf32) scalarizes to N libm expf calls on targets without a vector
 // libm (Darwin-ARM, most others) — ~7x slower. The |n|>126 overflow/underflow path is a branchless
 // select tree (correct inf/0), so this is a full-range drop-in: callers need no clamp.
-// The always-computed guard costs ~2.4x of the throughput (~2.9x vs scalar here, vs ~7x for a fast-path-
-// only form like dasLLAMA's exp4). TODO (post-x64): add ggml's fast-path branch — reduce-OR the |n|>126
-// mask, cond-br past the slow path when no lane overflows — to recover ~7x on the common case, then
-// dasLLAMA's exp4 can be retired in favor of plain exp(float4).
+// The always-computed guard costs ~2.4x of the throughput (~2.9x vs scalar on M1, vs ~7x for a fast-
+// path-only form like dasLLAMA's exp4). On x64 (znver2, 2026-07-02) the guard is fatal — 1.12x scalar —
+// so this stays aarch64-only (see intrinsic_math_exp below) and exp4 stays. TODO (aarch64 only): ggml's
+// fast-path branch — reduce-OR the |n|>126 mask, cond-br past the slow path when no lane overflows —
+// would recover ~7x on the common case there.
 def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let dim = opType.vectorDim
@@ -923,10 +947,12 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
 }
 
 // exp: on aarch64, vector-float gets the inline polynomial (the default @llvm.exp.vNf32 scalarizes to
-// libm). The IR is generic vector ops, so it lowers fine on x64 too (verified via llc: SSE2/AVX2/AVX-512
-// all vectorize, zero scalarization) — but it's GATED to aarch64 pending validation on real x64 hardware;
-// flip g_target_is_aarch64 to drop the gate. Scalar float/double, and all non-aarch64 vector exp, keep
-// @llvm.exp (libm, correctly rounded — a single scalar call carries no scalarization penalty).
+// libm). The IR is generic vector ops and lowers on x64 too, but VALIDATED ON REAL x64 (znver2,
+// 2026-07-02) it is a LOSS: 1.12x scalar (vs ~2.9x on M1) — the always-computed branchless guard tree
+// dominates on SSE/AVX2, while dasLLAMA's unguarded exp4 runs 4.3x. Even a fast-path branch would only
+// reach exp4 parity, so the gate stays aarch64-only BY MEASUREMENT, not caution. Scalar float/double,
+// and all non-aarch64 vector exp, keep @llvm.exp (libm, correctly rounded — a single scalar call
+// carries no scalarization penalty).
 def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     if (g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat) {
@@ -1600,6 +1626,203 @@ def intrinsic_tbl16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
     var callArgs <- [tvec, idx]
     var tbl = LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "tbl16")
     return LLVMBuildBitCast(ctx.builder, tbl, v4i32, "")
+}
+
+// Emitter for x64_avx::dot4 (gated by g_x64_intrin_lookup, only reached on x86-64). Same contract as
+// intrinsic_sdot4: 16 int8·int8 MACs into the 4 lanes of `acc` (each lane sums 4 products), exact
+// int32 accumulate, NO horizontal reduce. Pre-VNNI x86 has no s8×s8 dot, so this emits the standard
+// exact sign trick (ggml's pre-VNNI path): uw = |w| as u8 (@llvm.abs, poison-off so |-128| wraps to
+// the 0x80 bit pattern = u8 128), sx = PSIGNB(x, w) (x with w's sign, 0 where w is 0), then
+// PMADDUBSW(uw, sx) sums u8×s8 pairs into v8i16 (saturating — cannot fire: the dot4 precondition
+// |x| <= 127 bounds every pair sum by 128*127*2 = 32512 < 32767), and PMADDWD(pairs, 1) sums i16
+// pairs exactly into v4i32. The x64_avx module's daslang body is the interp / AOT / non-x64 fallback.
+def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
+    let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
+    let v4i32 = ctx.types.LLVMInt4Type()
+    var wptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
+    var xptr = LLVMBuildPointerCast(ctx.builder, arguments[2], LLVMPointerType(v16i8, 0u), "")
+    var wvec = LLVMBuildLoad2(ctx.builder, v16i8, wptr, "")
+    LLVMSetAlignment(wvec, 1u)
+    var xvec = LLVMBuildLoad2(ctx.builder, v16i8, xptr, "")
+    LLVMSetAlignment(xvec, 1u)
+    // uw = |w| — generic @llvm.abs.v16i8 (lowers to PABSB); is_int_min_poison = false keeps -128 defined
+    let abs_id = LLVMLookupIntrinsicID("llvm.abs")
+    var absTypes <- [v16i8]
+    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, abs_id, absTypes)
+    var absArgTypes <- [v16i8, ctx.types.t_int1]
+    var absTy = LLVMFunctionType(v16i8, absArgTypes)
+    var absArgs <- [wvec, ctx.types.ConstI1(false)]
+    var uw = LLVMBuildCall2(ctx.builder, absTy, abs_decl, absArgs, "dot4.absw")
+    // sx = PSIGNB(x, w)
+    let psign_id = LLVMLookupIntrinsicID("llvm.x86.ssse3.psign.b.128")
+    var noTypes : array<LLVMOpaqueType?>
+    var psign_decl = LLVMGetIntrinsicDeclaration(g_mod, psign_id, noTypes)
+    if (psign_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.ssse3.psign.b.128 (non-x64 target?)")
+        return null
+    }
+    var b2Types <- [v16i8, v16i8]
+    var psignTy = LLVMFunctionType(v16i8, b2Types)
+    var psignArgs <- [xvec, wvec]
+    var sx = LLVMBuildCall2(ctx.builder, psignTy, psign_decl, psignArgs, "dot4.signx")
+    // pairs = PMADDUBSW(uw, sx) : v8i16
+    let madd_id = LLVMLookupIntrinsicID("llvm.x86.ssse3.pmadd.ub.sw.128")
+    var madd_decl = LLVMGetIntrinsicDeclaration(g_mod, madd_id, noTypes)
+    if (madd_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.ssse3.pmadd.ub.sw.128 (non-x64 target?)")
+        return null
+    }
+    var maddTy = LLVMFunctionType(v8i16, b2Types)
+    var maddArgs <- [uw, sx]
+    var pairs = LLVMBuildCall2(ctx.builder, maddTy, madd_decl, maddArgs, "dot4.pairs")
+    // quads = PMADDWD(pairs, splat(1)) : v4i32
+    let maddwd_id = LLVMLookupIntrinsicID("llvm.x86.sse2.pmadd.wd")
+    var maddwd_decl = LLVMGetIntrinsicDeclaration(g_mod, maddwd_id, noTypes)
+    if (maddwd_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.sse2.pmadd.wd (non-x64 target?)")
+        return null
+    }
+    let one16 = ctx.types.ConstI16(int16(1))
+    var oneElems <- [one16, one16, one16, one16, one16, one16, one16, one16]
+    var ones = LLVMConstVector(array_data_ptr(oneElems), uint(length(oneElems)))
+    var w2Types <- [v8i16, v8i16]
+    var maddwdTy = LLVMFunctionType(v4i32, w2Types)
+    var maddwdArgs <- [pairs, ones]
+    var quads = LLVMBuildCall2(ctx.builder, maddwdTy, maddwd_decl, maddwdArgs, "dot4.quads")
+    return LLVMBuildAdd(ctx.builder, arguments[0], quads, "dot4")
+}
+
+// Emitter for x64_avx::dot32 (gated by g_x64_intrin_lookup, only reached on x86-64). The 256-bit
+// dot4: one full Q8_0 block (32 int8 per operand) per call, the same exact sign-trick chain as
+// intrinsic_dot4_x64 on ymm (VPABSB/VPSIGNB + VPMADDUBSW + VPMADDWD — the AVX2 v32i8/v16i16 forms),
+// then the v8i32 quads fold to int4 by adding the high 128-bit half onto the low (shufflevector
+// pair + add; the x86 backend selects VEXTRACTI128 + VPADDD). Lane j of the result therefore sums
+// quads j and j+4 — exactly the daslang fallback's grouping, so both paths agree bit for bit.
+// Saturation analysis is dot4's, unchanged: pair sums bounded by 128*127*2 = 32512 < 32767.
+def intrinsic_dot32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    var folded = emit_dot32_folded(ctx, _expr, arguments[1], arguments[2])
+    if (folded == null) {
+        return null
+    }
+    return LLVMBuildAdd(ctx.builder, arguments[0], folded, "dot32")
+}
+
+// Emitter for x64_avx::dot32_ps: dot32's exact chain and fold, then VCVTDQ2PS on the int4 partials
+// (bounded < 2^24 — exact), broadcast-multiply by the scalar scale, vector-add into the float4
+// accumulator. Lane for lane the daslang fallback (acc + float4(dot32(0,w,x)) * s) under strict FP;
+// _jit_fast_math may contract the mul+add, the same laxity as every float kernel.
+def intrinsic_dot32_ps_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    var folded = emit_dot32_folded(ctx, _expr, arguments[1], arguments[2])
+    if (folded == null) {
+        return null
+    }
+    let v4f32 = LLVMVectorType(ctx.types.t_float, 4u)
+    var fp = LLVMBuildSIToFP(ctx.builder, folded, v4f32, "dot32ps.cvt")
+    var sv = LLVMGetUndef(v4f32)
+    sv = LLVMBuildInsertElement(ctx.builder, sv, arguments[3], ctx.types.ConstI32(0ul), "")
+    sv = LLVMBuildShuffleVector(ctx.builder, ctx.types, sv, sv, [0, 0, 0, 0], "dot32ps.splat")
+    var scaled = LLVMBuildFMul(ctx.builder, fp, sv, "dot32ps.scale")
+    return LLVMBuildFAdd(ctx.builder, arguments[0], scaled, "dot32_ps")
+}
+
+// Emitter for x64_avx::dot32_acc8: dot32's exact chain WITHOUT the fold — the 8 int32 quads convert
+// straight to float (VCVTDQ2PS ymm; exact, each quad bounded < 2^24), broadcast-multiply by the
+// scalar scale, and accumulate into the caller's 8-float memory accumulator as load + FAdd + store
+// (LICM promotes the location into a ymm register across a block loop — the llama.cpp vec_dot
+// shape: no per-block fold or hsum, ONE reduce per row in the caller). Lane for lane the daslang
+// fallback under strict FP; _jit_fast_math may contract the mul+add into VFMADD, the same laxity as
+// every float kernel. The das call is void — the returned value only marks "intrinsic emitted" for
+// make_call (null would mean "not an intrinsic, emit the fallback call").
+def intrinsic_dot32_acc8_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    var quads = emit_dot32_quads(ctx, _expr, arguments[1], arguments[2])
+    if (quads == null) {
+        return null
+    }
+    let v8f32 = LLVMVectorType(ctx.types.t_float, 8u)
+    var accPtr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(v8f32, 0u), "")
+    var accVec = LLVMBuildLoad2(ctx.builder, v8f32, accPtr, "acc8.load")
+    LLVMSetAlignment(accVec, 4u)
+    var fp = LLVMBuildSIToFP(ctx.builder, quads, v8f32, "acc8.cvt")
+    var sv = LLVMGetUndef(v8f32)
+    sv = LLVMBuildInsertElement(ctx.builder, sv, arguments[3], ctx.types.ConstI32(0ul), "")
+    sv = LLVMBuildShuffleVector(ctx.builder, ctx.types, sv, sv, [0, 0, 0, 0, 0, 0, 0, 0], "acc8.splat")
+    var scaled = LLVMBuildFMul(ctx.builder, fp, sv, "acc8.scale")
+    var sum = LLVMBuildFAdd(ctx.builder, accVec, scaled, "acc8.sum")
+    var wrt = LLVMBuildStore(ctx.builder, sum, accPtr)
+    LLVMSetAlignment(wrt, 4u)
+    return sum
+}
+
+// dot32's folded partials: emit_dot32_quads + the v8i32 → v4i32 fold (high 128-bit half added onto
+// the low — VEXTRACTI128 + VPADDD). Lane j = quads j + j+4. Null propagates from the core.
+def emit_dot32_folded(var ctx : JitCtx; _expr : ExprCallFunc?; wArg, xArg : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    var quads = emit_dot32_quads(ctx, _expr, wArg, xArg)
+    if (quads == null) {
+        return null
+    }
+    var lo = LLVMBuildShuffleVector(ctx.builder, ctx.types, quads, quads, [0, 1, 2, 3], "dot32.lo")
+    var hi = LLVMBuildShuffleVector(ctx.builder, ctx.types, quads, quads, [4, 5, 6, 7], "dot32.hi")
+    return LLVMBuildAdd(ctx.builder, lo, hi, "dot32.fold")
+}
+
+// The shared dot32 core: loads + sign-trick chain to the raw v8i32 quads (quad j = the dot of bytes
+// 4j..4j+3), NO fold. Returns the quads, or null after failed_E on a missing target intrinsic.
+def emit_dot32_quads(var ctx : JitCtx; _expr : ExprCallFunc?; wArg, xArg : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let v32i8 = LLVMVectorType(ctx.types.t_int8, 32u)
+    let v16i16 = LLVMVectorType(ctx.types.t_int16, 16u)
+    let v8i32 = LLVMVectorType(ctx.types.t_int32, 8u)
+    var wptr = LLVMBuildPointerCast(ctx.builder, wArg, LLVMPointerType(v32i8, 0u), "")
+    var xptr = LLVMBuildPointerCast(ctx.builder, xArg, LLVMPointerType(v32i8, 0u), "")
+    var wvec = LLVMBuildLoad2(ctx.builder, v32i8, wptr, "")
+    LLVMSetAlignment(wvec, 1u)
+    var xvec = LLVMBuildLoad2(ctx.builder, v32i8, xptr, "")
+    LLVMSetAlignment(xvec, 1u)
+    // uw = |w| — generic @llvm.abs.v32i8 (lowers to VPABSB ymm); is_int_min_poison = false keeps -128 defined
+    let abs_id = LLVMLookupIntrinsicID("llvm.abs")
+    var absTypes <- [v32i8]
+    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, abs_id, absTypes)
+    var absArgTypes <- [v32i8, ctx.types.t_int1]
+    var absTy = LLVMFunctionType(v32i8, absArgTypes)
+    var absArgs <- [wvec, ctx.types.ConstI1(false)]
+    var uw = LLVMBuildCall2(ctx.builder, absTy, abs_decl, absArgs, "dot32.absw")
+    // sx = VPSIGNB(x, w)
+    let psign_id = LLVMLookupIntrinsicID("llvm.x86.avx2.psign.b")
+    var noTypes : array<LLVMOpaqueType?>
+    var psign_decl = LLVMGetIntrinsicDeclaration(g_mod, psign_id, noTypes)
+    if (psign_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.avx2.psign.b (non-x64 target?)")
+        return null
+    }
+    var b2Types <- [v32i8, v32i8]
+    var psignTy = LLVMFunctionType(v32i8, b2Types)
+    var psignArgs <- [xvec, wvec]
+    var sx = LLVMBuildCall2(ctx.builder, psignTy, psign_decl, psignArgs, "dot32.signx")
+    // pairs = VPMADDUBSW(uw, sx) : v16i16
+    let madd_id = LLVMLookupIntrinsicID("llvm.x86.avx2.pmadd.ub.sw")
+    var madd_decl = LLVMGetIntrinsicDeclaration(g_mod, madd_id, noTypes)
+    if (madd_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.avx2.pmadd.ub.sw (non-x64 target?)")
+        return null
+    }
+    var maddTy = LLVMFunctionType(v16i16, b2Types)
+    var maddArgs <- [uw, sx]
+    var pairs = LLVMBuildCall2(ctx.builder, maddTy, madd_decl, maddArgs, "dot32.pairs")
+    // quads = VPMADDWD(pairs, splat(1)) : v8i32
+    let maddwd_id = LLVMLookupIntrinsicID("llvm.x86.avx2.pmadd.wd")
+    var maddwd_decl = LLVMGetIntrinsicDeclaration(g_mod, maddwd_id, noTypes)
+    if (maddwd_decl == null) {
+        failed_E(_expr, "missing intrinsic llvm.x86.avx2.pmadd.wd (non-x64 target?)")
+        return null
+    }
+    let one16 = ctx.types.ConstI16(int16(1))
+    var oneElems <- [one16, one16, one16, one16, one16, one16, one16, one16,
+                     one16, one16, one16, one16, one16, one16, one16, one16]
+    var ones = LLVMConstVector(array_data_ptr(oneElems), uint(length(oneElems)))
+    var w2Types <- [v16i16, v16i16]
+    var maddwdTy = LLVMFunctionType(v8i32, w2Types)
+    var maddwdArgs <- [pairs, ones]
+    return LLVMBuildCall2(ctx.builder, maddwdTy, maddwd_decl, maddwdArgs, "dot32.quads")
 }
 
 def intrinsic_math_store_neq_mask(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

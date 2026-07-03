@@ -61,6 +61,13 @@ namespace das {
         static constexpr uint32_t TRACK_CHANNEL    = 0xDA5CA002;
         static constexpr uint32_t TRACK_LOCKBOX    = 0xDA5CA003;
         static constexpr uint32_t TRACK_STREAM     = 0xDA5CA004;
+        // Join poll level (0 = park on the condvar immediately, the default). Wait() polls
+        // mRemaining for level*1024*128 relax-rounds before blocking — the ggml hybrid-poll shape
+        // and denomination (their --poll 0..100; 50 = their default ≈ 6.5M rounds). With the
+        // calling thread executing parallel_for chunks itself, the join wait is just the workers'
+        // tail — the poll removes the last per-fork OS park/wake. Global (all wait groups),
+        // opt-in via set_jobque_join_spin: polling burns idle CPU.
+        static atomic<int32_t> sJoinSpin;
         static void DumpJobQueLeaks();
         static uint64_t CountJobQueLeaks();
         void trackEvent ( LineInfo * at, bool isAddRef );
@@ -69,7 +76,7 @@ namespace das {
         void trackRemove();
     protected:
         mutable mutex       mCompleteMutex;
-        uint32_t            mRemaining = 0;
+        atomic<uint32_t>    mRemaining{0};  // atomic so Wait()'s spin phase can poll lock-free; all writes stay under mCompleteMutex for the condvar protocol
         condition_variable  mCond;
         atomic<int>         mRef{0};
         uint32_t            mMagic = uint32_t(STATUS_MAGIC);
@@ -89,6 +96,7 @@ namespace das {
         int getTotalHwJobs();
         void push(Job && job, JobCategory category, JobPriority priority);
         void pushBatch(vector<Job> && jobs, JobCategory category, JobPriority priority);   // one lock hold + one notify for the whole batch (workers wake-propagate, see JobQue::job)
+        bool tryRunOneJob();    // pop one queued job and execute it on the CALLING thread (dispatcher work-stealing at a fork/join); false when the fifo is empty
         void parallel_for ( JobStatus & status, int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for ( int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for_with_consume (int from, int to, const JobChunk & chunk, const JobChunk & consume, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1);

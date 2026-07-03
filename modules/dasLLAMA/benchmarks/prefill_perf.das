@@ -3,8 +3,10 @@ options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%);
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
+require daslib/fio
 require strings
 require math
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // Prompt-processing (TTFT) profile for a Llama-3 GGUF (Q8): the OLD per-token path (N× forward,
 // decode-style gemv per token) vs ONE batched forward_prefill. Token content doesn't affect speed,
@@ -37,9 +39,13 @@ def main {
 
     var s <- make_run_state(c)
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
+        // join poll-level override (ggml denomination 0..100; setup default 50, 0 = park at join)
+        if (has_env_variable("DAS_JOBQUE_JOIN_SPIN")) {
+            let join_spin = to_int(get_env_variable("DAS_JOBQUE_JOIN_SPIN"))
+            set_jobque_join_spin(join_spin)
+            print("join spin override: level {join_spin}\n")
+        }
         // warmup — JIT both paths
         let warm <- build_prompt(8l)
         for (p in range64(8l)) {
@@ -55,6 +61,7 @@ def main {
                 forward(t, s, prompt[p], p)
             }
             let us_old = get_time_usec(t0)
+            forward_profile_reset()   // per-section table over the LAST batched prefill only
             let t1 = ref_time_ticks()
             forward_prefill(t, s, prompt, n, 0l)
             let us_new = get_time_usec(t1)
@@ -63,5 +70,6 @@ def main {
             let speedup = double(us_old) / double(us_new)
             print("N={n}: per-token {us_old}us {tps_old} tok/s  |  prefill {us_new}us {tps_new} tok/s  |  {speedup}x\n")
         }
+        forward_profile_report()   // buckets for the N=512 batched prefill (set against GGML_OP_PROFILE pp512)
     }
 }

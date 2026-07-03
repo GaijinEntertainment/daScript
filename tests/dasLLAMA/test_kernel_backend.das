@@ -4,10 +4,11 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" / "arm64-laneq" on arm64+jit
+require dasllama/dasllama_math_x64_avx        // registers "x64-avx2*" (+repack/acc8/ps) on x86-64+avx2+jit
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack
-// backend (arm64 laneq) is only activated by select_matmul_backend_for_load. No model file needed.
+// backend (arm64 laneq / x64 grp4) is only activated by select_matmul_backend_for_load. No model file needed.
 
 def private registered(name : string) : bool {
     for (n in kernel_backend_names()) {

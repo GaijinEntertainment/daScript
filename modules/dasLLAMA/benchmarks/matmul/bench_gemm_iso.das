@@ -5,10 +5,12 @@ require dastest/testing_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
+require dasllama/dasllama_math_x64_avx  // self-registers the x64 backends on x86-64 (nothing off-x64) — without it BOTH halves run portable here
 require dasllama/dasllama_quant
 require daslib/jobque_boost
 require daslib/fio
 require math
+require strings
 
 // Isolated batched-GEMM throughput, ours (production matmul_q8q8_batch) on the REAL Llama matmul
 // shapes at the prefill batch width (ntok = 512), THREADED, reported as GMAC/s aggregate AND per
@@ -104,24 +106,37 @@ def bench_gemm_iso(b : B?) {
         return
     }
     with_job_que() {
-        set_jobque_fork_pool(true, true)
-        set_jobque_batch_dispatch(true)
-        set_jobque_worker_spin(1000)
+        setup_dasllama_jobque_()
         // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it
         let skip_reset = has_env_variable("DAS_FORK_SKIP_HEAP_RESET")
         if (skip_reset) {
             set_jobque_fork_skip_heap_reset(true)
         }
         to_log(LOG_INFO, "fork_skip_heap_reset = {skip_reset}\n")
-        to_log(LOG_INFO, "=== sdot4x4 backend (row-major) ===\n")
+        // A/B the worker spin window (0 disables — suspect on thermally-bound boxes: 32 spinners
+        // through the serial gaps depress package clocks for the WHOLE process)
+        if (has_env_variable("DAS_WORKER_SPIN_US")) {
+            let spin_us = to_int(get_env_variable("DAS_WORKER_SPIN_US"))
+            set_jobque_worker_spin(spin_us)
+            to_log(LOG_INFO, "worker spin override: {spin_us}us\n")
+        }
+        // backend pin for row-major A/Bs on one binary (e.g. x64-avx2 vs x64-avx2-acc8), same
+        // env contract as llama3_perf; the repack half below still switches to the repack tier
+        if (has_env_variable("DASLLAMA_PIN_BACKEND")) {
+            pin_kernel_backend(get_env_variable("DASLLAMA_PIN_BACKEND"))
+        }
+        to_log(LOG_INFO, "=== {active_kernel_backend()} backend (row-major) ===\n")
+        bench_one("kv  2048x512  ", 2048l, 512l, 100, false)
         bench_one("qo  2048x2048 ", 2048l, 2048l, 30, false)
         bench_one("w13 2048x5632 ", 2048l, 5632l, 20, false)
         bench_one("w2  5632x2048 ", 5632l, 2048l, 20, false)
         bench_one("cls 2048x32000", 2048l, 32000l, 6, false)
 
-        // switch to laneq for the rest of the run; each shape repacks its own weight
-        select_kernel_backend("arm64-laneq")
-        to_log(LOG_INFO, "=== laneq backend (4x4 tile, interleaved repack) ===\n")
+        // switch to the arch's repack tier for the rest of the run; each shape repacks its own weight
+        let repack_backend = get_architecture_name() == "arm64" ? "arm64-laneq" : "x64-avx2-repack"
+        select_kernel_backend(repack_backend)
+        to_log(LOG_INFO, "=== {repack_backend} backend (tiled, interleaved repack) ===\n")
+        bench_one("kv  2048x512  ", 2048l, 512l, 100, true)
         bench_one("qo  2048x2048 ", 2048l, 2048l, 30, true)
         bench_one("w13 2048x5632 ", 2048l, 5632l, 20, true)
         bench_one("w2  5632x2048 ", 5632l, 2048l, 20, true)

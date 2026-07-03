@@ -7,11 +7,17 @@ require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires ea
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio
+require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // End-to-end oracle: needs llama2.c's stories15M.bin + tokenizer.bin (gitignored, 60MB).
 // Skips cleanly when absent (e.g. in CI), so it's a real regression locally and a no-op elsewhere.
-let MODEL_PATH = "/Users/borisbatkin/Work/llama2.c/stories15M.bin"
-let TOKENIZER_PATH = "/Users/borisbatkin/Work/llama2.c/tokenizer.bin"
+// override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
+def private llama2c_dir() : string {
+    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
+}
+let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
+let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 // llama2.c greedy (-t 0.0): empty-prompt IDs, and encode("Once upon a time", bos).
 let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
 let PROMPT_ORACLE <- [1l, 9038l, 2501l, 263l, 931l]
@@ -112,9 +118,7 @@ def test_forward_q8_pooled(t : T?) {
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
         with_job_que() {
-            set_jobque_fork_pool(true, true)
-            set_jobque_batch_dispatch(true)
-            set_jobque_worker_spin(1000)
+            setup_dasllama_jobque_()
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))

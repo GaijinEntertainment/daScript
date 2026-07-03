@@ -21,16 +21,6 @@ require math  // min/max in the token-block bounds
 // MatmulQ8Q8*Fn typedefs, same 1N threading) and differ only in the inner dot. They are free to
 // diverge in threading/tiling per-platform since dispatch is at the whole-matmul level.
 
-// Batched-GEMM token-block width: the laneq batch kernel tiles tokens into TB-sized blocks (outer),
-// looping weight groups inside, so a TB×n activation slice stays L2-resident and is reused across a
-// thread's groups instead of re-streaming the whole activation per group. 128 is the tuned default
-// (Llama-3.2-1B, M1 Max — pipeline best-of-5 @2048); exposed as a runtime knob for per-model tuning
-// (larger n wants a smaller TB to stay in L2). Clamped to >= 1: the kernel advances `tb += TB`, so a
-// non-positive block width would never make progress (infinite loop).
-var g_q8_token_block = 128l
-def public set_q8_token_block(tb : int64) { g_q8_token_block = max(tb, 1l) }
-def public get_q8_token_block() : int64 { return g_q8_token_block }
-
 //! ARM SDOT dot: 4 blocks/iter, 4 independent int4 accumulators (each block = 2 sdot4 of 16 int8),
 //! hsum + dual-scale flushed per block into 4 separate float accumulators. Bit-for-bit close to
 //! dot_q8q8 (~3.8e-6). Not `private`: it is called from inside the parallel_for worker lambdas, which

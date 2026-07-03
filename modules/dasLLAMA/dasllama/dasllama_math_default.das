@@ -194,7 +194,10 @@ def dot_mx4q8_scalar(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq
     return f
 }
 
-def private mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+// mx4q8_kernel / q8q8_groupn_kernel / mx4q8_groupn_kernel are NOT private: backends without a
+// native mx4/groupn tier yet (the x64 family) register these portable forms to satisfy the
+// every-backend-supplies-one contract (see KernelBackend in dasllama_math).
+def mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
     var lut : int8[16]
@@ -211,7 +214,7 @@ def private mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; 
     }
 }
 
-def private q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
+def q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
     maybe_parallel_for(n * d * nregions >= g_matmul_par_threshold, 0, int(nregions * d), get_total_hw_jobs()) $(rb, re) {
@@ -232,7 +235,7 @@ def private q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float con
     }
 }
 
-def private mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
+def mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
     let nb = n / 32l
     var myp = yp
     var lut : int8[16]
