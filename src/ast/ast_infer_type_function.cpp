@@ -1524,6 +1524,34 @@ namespace das {
                 auto genName = getGenericInstanceName(oneGeneric);
                 auto instancedFunctions = findMatchingFunctions(program->thisModule->name, thisModule, genName, types, true); // "__::genName"
                 if (instancedFunctions.size() > 1) {
+                    // pointer/iterator element variance lets one call match several flavor
+                    // siblings (a const-element instance accepts a mut-element call). prefer
+                    // the single exact-flavor sibling; with none, fall through and mint the
+                    // exact one. several exact matches remain a genuine ICE
+                    auto stripTop = [](const TypeDecl * t) {
+                        auto c = new TypeDecl(*t);
+                        c->ref = false;
+                        c->constant = false;
+                        return gc_local<TypeDecl>(c);
+                    };
+                    MatchingFunctions exact;
+                    for (auto & instFn : instancedFunctions) {
+                        if (instFn->arguments.size() < types.size()) continue;
+                        bool same = true;
+                        for (size_t ai = 0, ais = types.size(); ai != ais; ++ai) {
+                            if (!stripTop(types[ai])->isSameType(*stripTop(instFn->arguments[ai]->type),
+                                    RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::no, false)) {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if (same) exact.push_back(instFn);
+                    }
+                    if (exact.size() <= 1) {
+                        instancedFunctions = das::move(exact);
+                    }
+                }
+                if (instancedFunctions.size() > 1) {
                     TextWriter ss;
                     for (auto &instFn : instancedFunctions) {
                         ss << "\t" << describeFunction(instFn) << " in "
