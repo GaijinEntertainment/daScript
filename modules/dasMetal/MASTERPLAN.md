@@ -889,3 +889,16 @@ in-process A/B setter). Tests: gemv_gate x2 shapes in test_metal_prefill_kernels
 BIT-exact, incl. the guarded-tail grid), 1B parity token-for-token with GPU logits active, leak
 gates green. Attribution rail: g_skip modes keep logits OFF so knockout deltas stay comparable.
 **NEXT: prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**
+
+**2026-07-13 — Phase 7 (session 5c): prefill scratch alloc — framing 5.7ms -> 1.1ms.** The
+"alloc 5ms" was forward_prefill_alloc's batched-scratch GROWTH cost on the first prefill at a
+new npos (~70 MB across 10 arrays at 512 rows): das `resize` zero-fills the grown span AND the
+realloc copies the old block. Both are pure waste here — the scratch is stage output, fully
+written before any read. Fix = `scratch_resize` (dasllama_common): grow-only, contents-
+DISCARDING (`delete` on grow skips the realloc's old-block copy), `resize_no_init` (skips the
+zero-fill). Measured (3B pp512, per-bucket profile): alloc 4969us -> 55us; embed +0.2ms
+(absorbs the first-touch page faults); framing TOTAL 5728 -> 1075us. A new `alloc` prof bucket
+makes the cost visible in every profile run. Exotic scratch (ple/deltanet/att_b/fa_*) stays on
+zeroing resize — only the 10 always-fully-written arrays switch. Gate: full tests/dasLLAMA
+suite (model oracles token-for-token).
+**NEXT: PR the arc — preflight --full + clean Parsec-off measurement round (announce, wait for go).**

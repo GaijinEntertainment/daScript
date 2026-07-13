@@ -8435,8 +8435,10 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
         return
     }
+    let ts_alloc = ref_time_ticks()
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
+    prof_add("alloc", ts_alloc)
 
     // token embeddings -> residual stream x_b [npos x dim]
     let dim = c.dim
@@ -8571,6 +8573,16 @@ def embed_(m : Model; text : string) : array<float> {
 }
 
 // batched-prefill scratch sizing, shared by the token and embedding entries
+// grow-only, contents-DISCARDING, no-init scratch sizing: the batched scratch is stage output —
+// old bytes are garbage, new bytes are fully written before any read. `delete` on grow skips
+// both the realloc's old-block copy and the zero-fill (together ~5ms on a first 512-row prefill).
+def private scratch_resize(var a : array<auto(numT)>; need : int64) {
+    if (int64(length(a)) < need) {
+        delete a
+    }
+    a |> resize_no_init(need)
+}
+
 def private forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -8581,17 +8593,20 @@ def private forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : 
     let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2/gemma4)
     let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
     let maxn = max(xdim, hidden)
-    // size the batched scratch to this prompt
-    s.x_b |> resize(npos * dim)
-    s.xb_b |> resize(npos * xdim)
-    s.xb2_b |> resize(npos * dim)
-    s.q_b |> resize(npos * qd)
-    s.k_b |> resize(npos * kv_dim)
-    s.v_b |> resize(npos * kv_dim)
-    s.hb_b |> resize(npos * hidden)
-    s.hb2_b |> resize(npos * hidden)
-    s.xqb |> resize(npos * maxn)
-    s.xsb |> resize(npos * maxn / 32l)
+    // size the batched scratch to this prompt — no-init: every array here is stage output,
+    // fully written before the next stage reads it (embed fills x_b; each block writes its
+    // whole [npos x width] result), so the grow-time zero-fill was ~5ms of pure waste on a
+    // first 512-row prefill (~70 MB of scratch)
+    s.x_b |> scratch_resize(npos * dim)
+    s.xb_b |> scratch_resize(npos * xdim)
+    s.xb2_b |> scratch_resize(npos * dim)
+    s.q_b |> scratch_resize(npos * qd)
+    s.k_b |> scratch_resize(npos * kv_dim)
+    s.v_b |> scratch_resize(npos * kv_dim)
+    s.hb_b |> scratch_resize(npos * hidden)
+    s.hb2_b |> scratch_resize(npos * hidden)
+    s.xqb |> scratch_resize(npos * maxn)
+    s.xsb |> scratch_resize(npos * maxn / 32l)
     if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
         s.xbsb |> resize(npos * maxn / 16l)
     }
