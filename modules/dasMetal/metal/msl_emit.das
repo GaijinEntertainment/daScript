@@ -938,8 +938,9 @@ def private emit_store_target(var ctx : MslCtx; e : Expression?) : string {
 def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
     let isLoad = cname == "simdgroup_load"
-    if (length(ec.arguments) != 4) {
-        err(ctx, ec.at, "{cname} takes (matrix, buffer, offset, stride)")
+    let nargs = length(ec.arguments)
+    if (!(nargs == 4 || (isLoad && nargs == 5))) {
+        err(ctx, ec.at, "{cname} takes (matrix, buffer, offset, stride{isLoad ? "[, transpose]" : ""})")
         return
     }
     let sgname = sgmat_type_name(ec.arguments[0]._type)
@@ -965,12 +966,45 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     let off = emit_value(ctx, ec.arguments[2])
     let stride = emit_value(ctx, ec.arguments[3])
     let cls = sgmat_census_class(sgname)
+    if (nargs == 5) {   // the transpose-flag load: MSL's 5-arg form (origin 0, transpose_matrix)
+        note(ctx, m.workgroup ? "call.sgmat_load_tg_t.{cls}" : "call.sgmat_load_t.{cls}")
+        let tv = emit_value(ctx, ec.arguments[4])
+        lines |> push("{indent}{cname}({mv}, {m.msl_name} + {off}, {stride}, ulong2(0), {tv});")
+        return
+    }
     if (isLoad) {
         note(ctx, m.workgroup ? "call.sgmat_load_tg.{cls}" : "call.sgmat_load.{cls}")
     } else {
         note(ctx, "call.sgmat_store.{cls}")
     }
     lines |> push("{indent}{cname}({mv}, {m.msl_name} + {off}, {stride});")
+}
+
+// tg_store_half4(dst, idx, v): one aligned half4 vector store into a float16 @workgroup array —
+// `*(threadgroup half4*)(dst + idx) = half4(v);` (idx % 4 == 0 by contract; 8-byte alignment)
+def private emit_tg_store_half4(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 3) {
+        err(ctx, ec.at, "tg_store_half4 takes (workgroup array, index, float4)")
+        return
+    }
+    let mem = member_lookup(ctx, ec.arguments[0])
+    if (empty(mem)) {
+        err(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
+        return
+    }
+    let m = ctx.members[mem]
+    if (!m.workgroup) {
+        err(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
+        return
+    }
+    if (m.elem != "half") {
+        err(ctx, ec.at, "tg_store_half4 destination must be a float16 workgroup array (got {m.elem})")
+        return
+    }
+    let idx = emit_value(ctx, ec.arguments[1])
+    let v = emit_value(ctx, ec.arguments[2])
+    note(ctx, "call.tg_store_half4")
+    lines |> push("{indent}*(threadgroup half4*)({m.msl_name} + ({idx})) = half4({v});")
 }
 
 // simdgroup_multiply_accumulate(d, a, b, c) / simdgroup_multiply(d, a, b) — argument-type combos
@@ -1122,6 +1156,8 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             lines |> push("{indent}threadgroup_barrier(mem_flags::mem_threadgroup);")
         } elif (cname == "simdgroup_load" || cname == "simdgroup_store") {
             emit_sgmat_load_store(ctx, ec, indent, lines)
+        } elif (cname == "tg_store_half4") {
+            emit_tg_store_half4(ctx, ec, indent, lines)
         } elif (cname == "simdgroup_multiply_accumulate" || cname == "simdgroup_multiply") {
             emit_sgmat_multiply(ctx, ec, indent, lines)
         } else {

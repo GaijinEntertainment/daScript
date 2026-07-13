@@ -40,6 +40,132 @@ def private approx(x, y : float) : bool {
     return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 }
 
+// The tiled sgmat attention trio (QK^T -> softmax -> P.V) vs a direct causal-GQA oracle at one
+// (head_size, heads, kv_heads, npos) shape. Buffers carry np32 rows like the driver's (whole-tile
+// sgmat stores + staging reads walk the padded rows); rows >= npos are pad. GENERIC (untyped
+// dev/queue) so it instantiates only inside the Apple static_if.
+def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int) {
+    let kv_mul = n_heads / n_kv_heads
+    let qd = n_heads * head_size
+    let kv_dim = n_kv_heads * head_size
+    let np32 = (npos + 31) / 32 * 32
+    var err : string
+    var pso_sc = pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err)
+    t |> success(pso_sc != null, "qk pipeline: {err}")
+    var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
+    t |> success(pso_sm != null, "softmax pipeline: {err}")
+    var pso_av = pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err)
+    t |> success(pso_av != null, "av pipeline: {err}")
+    let scale = 1.0 / sqrt(float(head_size))
+    var aq : array<float>
+    var ak : array<float>
+    var av : array<float>
+    var axb_want : array<float>
+    aq |> resize(np32 * qd)
+    ak |> resize(np32 * kv_dim)
+    av |> resize(np32 * kv_dim)
+    axb_want |> resize(npos * qd)
+    for (k in range(npos * qd)) {
+        aq[k] = 0.13 * float(k % 31) - 1.9
+    }
+    for (k in range(npos * kv_dim)) {
+        ak[k] = 0.17 * float(k % 23) - 1.8
+        av[k] = 0.09 * float(k % 37) - 1.6
+    }
+    var prow : array<float>
+    prow |> resize(npos)
+    for (h in range(n_heads)) {
+        let kvhoff = (h / kv_mul) * head_size
+        for (qi in range(npos)) {
+            let cnt = qi + 1
+            var m = -1.0e30
+            for (j in range(cnt)) {
+                var dot = 0.0
+                for (d in range(head_size)) {
+                    dot += aq[qi * qd + h * head_size + d] * ak[j * kv_dim + kvhoff + d]
+                }
+                prow[j] = dot * scale
+                m = max(m, prow[j])
+            }
+            var sum = 0.0
+            for (j in range(cnt)) {
+                prow[j] = exp(prow[j] - m)
+                sum += prow[j]
+            }
+            for (d in range(head_size)) {
+                var acc = 0.0
+                for (j in range(cnt)) {
+                    acc += (prow[j] / sum) * av[j * kv_dim + kvhoff + d]
+                }
+                axb_want[qi * qd + h * head_size + d] = acc
+            }
+        }
+    }
+    var baq = buf_upload(dev, aq)
+    var bak = buf_upload(dev, ak)
+    var bav = buf_upload(dev, av)
+    var batt = buf_fill(dev, n_heads * np32 * np32, 0.0)
+    var bxb = buf_fill(dev, np32 * qd, 0.0)
+    var bqd = buf_u32(dev, uint(qd))
+    var bkvd = buf_u32(dev, uint(kv_dim))
+    var bhs = buf_u32(dev, uint(head_size))
+    var bkvm = buf_u32(dev, uint(kv_mul))
+    var bnp = buf_u32(dev, uint(npos))
+    var bnp32 = buf_u32(dev, uint(np32))
+    var bscale = buf_f32(dev, scale)
+    let aran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_sc)
+        metal_set_buffer(enc, baq, 0ul, 0)
+        metal_set_buffer(enc, bak, 0ul, 1)
+        metal_set_buffer(enc, batt, 0ul, 2)
+        metal_set_buffer(enc, bqd, 0ul, 3)
+        metal_set_buffer(enc, bkvd, 0ul, 4)
+        metal_set_buffer(enc, bhs, 0ul, 5)
+        metal_set_buffer(enc, bkvm, 0ul, 6)
+        metal_set_buffer(enc, bnp, 0ul, 7)
+        metal_set_buffer(enc, bnp32, 0ul, 8)
+        metal_set_buffer(enc, bscale, 0ul, 9)
+        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / 32), uint(n_heads)), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_sm)
+        metal_set_buffer(enc, batt, 0ul, 0)
+        metal_set_buffer(enc, bnp32, 0ul, 1)
+        metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_av)
+        metal_set_buffer(enc, batt, 0ul, 0)
+        metal_set_buffer(enc, bav, 0ul, 1)
+        metal_set_buffer(enc, bxb, 0ul, 2)
+        metal_set_buffer(enc, bqd, 0ul, 3)
+        metal_set_buffer(enc, bkvd, 0ul, 4)
+        metal_set_buffer(enc, bhs, 0ul, 5)
+        metal_set_buffer(enc, bkvm, 0ul, 6)
+        metal_set_buffer(enc, bnp, 0ul, 7)
+        metal_set_buffer(enc, bnp32, 0ul, 8)
+        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / 32), uint(n_heads)), uint3(128u, 1u, 1u))
+    }
+    t |> success(aran, "attention dispatches (hs={head_size}): {err}")
+    t |> equal(buf_mismatch_approx(bxb, axb_want), 0)
+    metal_release(baq)
+    metal_release(bak)
+    metal_release(bav)
+    metal_release(batt)
+    metal_release(bxb)
+    metal_release(bqd)
+    metal_release(bkvd)
+    metal_release(bhs)
+    metal_release(bkvm)
+    metal_release(bnp)
+    metal_release(bnp32)
+    metal_release(bscale)
+    metal_release(pso_sc)
+    metal_release(pso_sm)
+    metal_release(pso_av)
+    delete aq
+    delete ak
+    delete av
+    delete axb_want
+    delete prow
+}
+
 [test]
 def test_metal_prefill_kernels(t : T?) {
     t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") <| @(t : T?) {
@@ -203,118 +329,11 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(brnp)
                 metal_release(pso_rope)
 
-                // ===== attention: the tiled sgmat trio (QK^T -> softmax -> P.V) vs a direct
-                // causal-GQA oracle. Buffers carry NP32 rows like the driver's (whole-tile sgmat
-                // stores + staging reads walk the padded rows); rows >= NPOS are pad.
-                var pso_sc = pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err)
-                t |> success(pso_sc != null, "qk pipeline: {err}")
-                var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
-                t |> success(pso_sm != null, "softmax pipeline: {err}")
-                var pso_av = pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err)
-                t |> success(pso_av != null, "av pipeline: {err}")
-                let scale = 1.0 / sqrt(float(HEAD_SIZE))
-                var aq : array<float>
-                var ak : array<float>
-                var av : array<float>
-                var axb_want : array<float>
-                aq |> resize(NP32 * QD)
-                ak |> resize(NP32 * KV_DIM)
-                av |> resize(NP32 * KV_DIM)
-                axb_want |> resize(NPOS * QD)
-                for (k in range(NPOS * QD)) {
-                    aq[k] = 0.13 * float(k % 31) - 1.9
-                }
-                for (k in range(NPOS * KV_DIM)) {
-                    ak[k] = 0.17 * float(k % 23) - 1.8
-                    av[k] = 0.09 * float(k % 37) - 1.6
-                }
-                var prow : array<float>
-                prow |> resize(NPOS)
-                for (h in range(N_HEADS)) {
-                    let kvhoff = (h / KV_MUL) * HEAD_SIZE
-                    for (qi in range(NPOS)) {
-                        let cnt = qi + 1
-                        var m = -1.0e30
-                        for (j in range(cnt)) {
-                            var dot = 0.0
-                            for (d in range(HEAD_SIZE)) {
-                                dot += aq[qi * QD + h * HEAD_SIZE + d] * ak[j * KV_DIM + kvhoff + d]
-                            }
-                            prow[j] = dot * scale
-                            m = max(m, prow[j])
-                        }
-                        var sum = 0.0
-                        for (j in range(cnt)) {
-                            prow[j] = exp(prow[j] - m)
-                            sum += prow[j]
-                        }
-                        for (d in range(HEAD_SIZE)) {
-                            var acc = 0.0
-                            for (j in range(cnt)) {
-                                acc += (prow[j] / sum) * av[j * KV_DIM + kvhoff + d]
-                            }
-                            axb_want[qi * QD + h * HEAD_SIZE + d] = acc
-                        }
-                    }
-                }
-                var baq = buf_upload(dev, aq)
-                var bak = buf_upload(dev, ak)
-                var bav = buf_upload(dev, av)
-                var batt = buf_fill(dev, N_HEADS * NP32 * NP32, 0.0)
-                var bxb = buf_fill(dev, NP32 * QD, 0.0)
-                var bqd = buf_u32(dev, uint(QD))
-                var bkvd = buf_u32(dev, uint(KV_DIM))
-                var bhs = buf_u32(dev, uint(HEAD_SIZE))
-                var bkvm = buf_u32(dev, uint(KV_MUL))
-                var bnp = buf_u32(dev, uint(NPOS))
-                var bnp32 = buf_u32(dev, uint(NP32))
-                var bscale = buf_f32(dev, scale)
-                let aran = with_compute_encoder(queue, err) <| $(enc : MetalComputeEncoder?) {
-                    metal_set_pipeline(enc, pso_sc)
-                    metal_set_buffer(enc, baq, 0ul, 0)
-                    metal_set_buffer(enc, bak, 0ul, 1)
-                    metal_set_buffer(enc, batt, 0ul, 2)
-                    metal_set_buffer(enc, bqd, 0ul, 3)
-                    metal_set_buffer(enc, bkvd, 0ul, 4)
-                    metal_set_buffer(enc, bhs, 0ul, 5)
-                    metal_set_buffer(enc, bkvm, 0ul, 6)
-                    metal_set_buffer(enc, bnp, 0ul, 7)
-                    metal_set_buffer(enc, bnp32, 0ul, 8)
-                    metal_set_buffer(enc, bscale, 0ul, 9)
-                    metal_dispatch_threadgroups(enc, uint3(uint(NP32 / 32), uint(NP32 / 32), uint(N_HEADS)), uint3(128u, 1u, 1u))
-                    metal_set_pipeline(enc, pso_sm)
-                    metal_set_buffer(enc, batt, 0ul, 0)
-                    metal_set_buffer(enc, bnp32, 0ul, 1)
-                    metal_dispatch_threadgroups(enc, uint3(uint(NPOS), uint(N_HEADS), 1u), uint3(128u, 1u, 1u))
-                    metal_set_pipeline(enc, pso_av)
-                    metal_set_buffer(enc, batt, 0ul, 0)
-                    metal_set_buffer(enc, bav, 0ul, 1)
-                    metal_set_buffer(enc, bxb, 0ul, 2)
-                    metal_set_buffer(enc, bqd, 0ul, 3)
-                    metal_set_buffer(enc, bkvd, 0ul, 4)
-                    metal_set_buffer(enc, bhs, 0ul, 5)
-                    metal_set_buffer(enc, bkvm, 0ul, 6)
-                    metal_set_buffer(enc, bnp, 0ul, 7)
-                    metal_set_buffer(enc, bnp32, 0ul, 8)
-                    metal_dispatch_threadgroups(enc, uint3(uint(NP32 / 32), uint(HEAD_SIZE / 32), uint(N_HEADS)), uint3(128u, 1u, 1u))
-                }
-                t |> success(aran, "attention dispatches: {err}")
-                t |> equal(buf_mismatch_approx(bxb, axb_want), 0)
-                metal_release(baq)
-                metal_release(bak)
-                metal_release(bav)
-                metal_release(batt)
-                metal_release(bxb)
-                metal_release(bqd)
-                metal_release(bkvd)
-                metal_release(bhs)
-                metal_release(bkvm)
-                metal_release(bnp)
-                metal_release(bnp32)
-                metal_release(bscale)
-                metal_release(pso_sc)
-                metal_release(pso_sm)
-                metal_release(pso_av)
+                // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the
+                // classic small shape (hs 32 — one QK k-slab) AND the llama-3B head shape
+                // (hs 128 — the QK kernel's two-k-slab path; 2 heads keep the oracle cheap)
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS)
+                attn_trio_gate(t, dev, queue, 128, 2, 1, NPOS)
 
                 // ===== swiglu + residual add =====
                 var pso_sw = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, err)

@@ -101,6 +101,37 @@ def public simdgroup_load(var m : simdgroup_half8x8; src; offset : uint; stride 
     }
 }
 
+// The transpose-flag overloads: with transpose == true the (r, c) element is
+// src[offset + c*stride + r] — MSL's transpose_matrix argument. Lets a GEMM stage its B tile
+// ROW-major (contiguous threadgroup writes) and transpose at the simdgroup load instead of
+// paying strided staging stores.
+def public simdgroup_load(var m : simdgroup_float8x8; src; offset : uint; stride : uint; transpose : bool) {
+    for (r in range(8)) {
+        for (c in range(8)) {
+            m.data[r * 8 + c] = src[int(offset) + (transpose ? c * int(stride) + r : r * int(stride) + c)]
+        }
+    }
+}
+
+def public simdgroup_load(var m : simdgroup_half8x8; src; offset : uint; stride : uint; transpose : bool) {
+    for (r in range(8)) {
+        for (c in range(8)) {
+            m.data[r * 8 + c] = src[int(offset) + (transpose ? c * int(stride) + r : r * int(stride) + c)]
+        }
+    }
+}
+
+// tg_store_half4(dst, idx, v): dst[idx..idx+3] = half4(v) as ONE aligned vector store into a
+// float16 @workgroup array (idx % 4 == 0 — 8-byte alignment). The staging-loop sugar: four
+// scalar threadgroup stores collapse to one instruction on the GPU; the reference body is the
+// exact elementwise equivalent.
+def public tg_store_half4(var dst; idx : uint; v : float4) {
+    dst[int(idx)] = float16(v.x)
+    dst[int(idx) + 1] = float16(v.y)
+    dst[int(idx) + 2] = float16(v.z)
+    dst[int(idx) + 3] = float16(v.w)
+}
+
 // simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo destinations only.
 def public simdgroup_store(m : simdgroup_float8x8; var dst; offset : uint; stride : uint) {
     for (r in range(8)) {

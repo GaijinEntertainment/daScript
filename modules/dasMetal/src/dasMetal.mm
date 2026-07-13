@@ -155,6 +155,19 @@ namespace das {
         }
     }
 
+    // UNTRACKED buffer: opts out of the driver's per-command-buffer hazard/dependency analysis.
+    // For GPU-read-only data written by the CPU before commit (weights) — commit-boundary
+    // CPU->GPU coherency still holds for shared storage; the caller owns any GPU-GPU ordering.
+    MetalBuffer * metal_new_buffer_untracked ( MetalDevice * dev, uint64_t bytes, Context * ctx, LineInfoArg * at ) {
+        if ( !dev ) ctx->throw_error_at(at, "metal_new_buffer_untracked: null device");
+        if ( bytes == 0 ) ctx->throw_error_at(at, "metal_new_buffer_untracked: zero size");
+        @autoreleasepool {
+            id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
+            return retain_handle<MetalBuffer>([d newBufferWithLength:bytes
+                options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked]);
+        }
+    }
+
     void * metal_buffer_contents ( MetalBuffer * buf, Context * ctx, LineInfoArg * at ) {
         if ( !buf ) ctx->throw_error_at(at, "metal_buffer_contents: null buffer");
         id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;
@@ -315,6 +328,9 @@ namespace das {
 
             addExtern<DAS_BIND_FUN(metal_new_buffer)>(*this, lib, "metal_new_buffer",
                 SideEffects::modifyExternal, "metal_new_buffer")
+                    ->args({"device", "bytes", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_new_buffer_untracked)>(*this, lib, "metal_new_buffer_untracked",
+                SideEffects::modifyExternal, "metal_new_buffer_untracked")
                     ->args({"device", "bytes", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_buffer_contents)>(*this, lib, "metal_buffer_contents",
                 SideEffects::modifyExternal, "metal_buffer_contents")

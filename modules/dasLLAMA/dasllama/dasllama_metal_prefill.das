@@ -155,7 +155,9 @@ class MetalRope {
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 score block (grid: qi-blocks x j-blocks
 // x heads; blocks fully above the causal diagonal exit early — softmax zeroes them). Q staging
 // folds `scale` in; K stages transposed with rows >= npos zeroed (V-GEMM pads can carry NaN and
-// 0*NaN would poison the tile). hs <= 64, % 8 (the 32x64 staging tiles are statically sized).
+// 0*NaN would poison the tile). head_size walks in 64-wide K-SLABS through the statically-sized
+// 32x64 staging tiles (accumulators persist across slabs), so any hs % 8 fits in the same
+// threadgroup footprint — hs 64 (llama-1B) is one slab, 128 (llama-3B) two.
 class MetalAttnQK {
     @ssbo @binding = 0 q : array<float>     // [mp x qd], roped
     @ssbo @binding = 1 k : array<float>     // [mp x kv_dim], roped
@@ -181,38 +183,44 @@ class MetalAttnQK {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let kvhoff = (h / kv_mul) * head_size
-        var e = lid
-        while (e < 2048u) {
-            let r = e / 64u
-            let c = e % 64u
-            ta[e] = c < head_size ? q[(qi0 + r) * qd + h * head_size + c] * scale : 0.0
-            let jr = e % 32u
-            let kc = e / 32u
-            tb[e] = (kc < head_size && j0 + jr < npos) ? k[(j0 + jr) * kv_dim + kvhoff + kc] : 0.0
-            e += 128u
-        }
-        barrier()
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
         var c10 : simdgroup_float8x8
         var c11 : simdgroup_float8x8
-        var k8 = 0u
-        while (k8 < head_size) {
-            var a0 : simdgroup_float8x8
-            var a1 : simdgroup_float8x8
-            var b0 : simdgroup_float8x8
-            var b1 : simdgroup_float8x8
-            simdgroup_load(a0, ta, qm * 64u + k8, 64u)
-            simdgroup_load(a1, ta, (qm + 8u) * 64u + k8, 64u)
-            simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
-            simdgroup_load(b1, tb, k8 * 32u + (qn + 8u), 32u)
-            simdgroup_multiply_accumulate(c00, a0, b0, c00)
-            simdgroup_multiply_accumulate(c01, a0, b1, c01)
-            simdgroup_multiply_accumulate(c10, a1, b0, c10)
-            simdgroup_multiply_accumulate(c11, a1, b1, c11)
-            k8 += 8u
+        var ks = 0u
+        while (ks < head_size) {
+            let kslab = min(head_size - ks, 64u)
+            var e = lid
+            while (e < 2048u) {
+                let r = e / 64u
+                let c = e % 64u
+                ta[e] = c < kslab ? q[(qi0 + r) * qd + h * head_size + ks + c] * scale : 0.0
+                let jr = e % 32u
+                let kc = e / 32u
+                tb[e] = (kc < kslab && j0 + jr < npos) ? k[(j0 + jr) * kv_dim + kvhoff + ks + kc] : 0.0
+                e += 128u
+            }
+            barrier()
+            var k8 = 0u
+            while (k8 < kslab) {
+                var a0 : simdgroup_float8x8
+                var a1 : simdgroup_float8x8
+                var b0 : simdgroup_float8x8
+                var b1 : simdgroup_float8x8
+                simdgroup_load(a0, ta, qm * 64u + k8, 64u)
+                simdgroup_load(a1, ta, (qm + 8u) * 64u + k8, 64u)
+                simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
+                simdgroup_load(b1, tb, k8 * 32u + (qn + 8u), 32u)
+                simdgroup_multiply_accumulate(c00, a0, b0, c00)
+                simdgroup_multiply_accumulate(c01, a0, b1, c01)
+                simdgroup_multiply_accumulate(c10, a1, b0, c10)
+                simdgroup_multiply_accumulate(c11, a1, b1, c11)
+                k8 += 8u
+            }
+            barrier()
+            ks += 64u
         }
         let row0 = (h * np32 + qi0 + qm) * np32 + (j0 + qn)
         simdgroup_store(c00, att, row0, np32)
@@ -566,7 +574,10 @@ def private upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     if (key_exists(g_regions, key)) {
         return g_regions[key]
     }
-    var buf = metal_new_buffer(g_dev, bytes)
+    // UNTRACKED: weights are GPU-read-only (written once here, before any commit), so they
+    // carry no hazards — keeping ~450 of them tracked made the command-buffer scheduler's
+    // dependency analysis the dominant non-GPU cost (~70ms/prefill on the 3B)
+    var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, int(bytes))
     }
@@ -588,8 +599,8 @@ def private uniform_f32(v : float) : MetalBuffer? {
     return buf
 }
 
-// only the llama-family std shape is wired (Phase-6 mandate: ONE model, Llama-3.2-1B) — anything
-// else declines to the CPU loop
+// only the llama-family std shape is wired (Llama-3.2 class — 1B hs=64 and 3B hs=128 both
+// serve) — anything else declines to the CPU loop
 def private prefill_supported(t : Model; s : Session; npos, start_pos : int64) : bool {
     // the GEMM kernel reads ROW-MAJOR Q8 weights — a repack backend's interleaved layout is
     // unreadable here (the same donor contract as the Phase-5c batch offload: load under
@@ -609,7 +620,8 @@ def private prefill_supported(t : Model; s : Session; npos, start_pos : int64) :
     let qd = c.n_heads * head_size
     let kv_dim = layer_kv_dim(c, 0l)
     let hidden = layer_hidden(t, 0l)
-    if ((qd != c.dim || (head_size % 32l) != 0l || head_size > 64l) ||
+    // head_size % 32: the AV kernel grids d in 32-blocks; the QK kernel k-slabs any size
+    if ((qd != c.dim || (head_size % 32l) != 0l) ||
             ((c.dim % 32l) != 0l || (kv_dim % 32l) != 0l || (hidden % 32l) != 0l)) {
         return false
     }
@@ -792,7 +804,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let setup_us = get_time_usec(ts_all)
     var err : string
     var gpu_ms = 0.0lf
-    let ran = with_compute_encoder_timed(g_queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
+    var encode_ms = 0.0lf
+    let ran = with_compute_encoder_timed(g_queue, err, gpu_ms, encode_ms) $(enc : MetalComputeEncoder?) {
         for (l in range64(c.n_layers)) {
             unsafe {
                 var bw_att = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_att_off + l * dim])), uint64(dim * 4l))
@@ -924,7 +937,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_pool, u_eps, 4ul)
     if (ok) {
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={21l * c.n_layers}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={21l * c.n_layers}\n")
     }
     return ok
 }
