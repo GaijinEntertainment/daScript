@@ -715,3 +715,29 @@ MORE device traffic). Next lever: port that geometry faithfully as a das lab var
 masterplan's step-2 idea, now de-risked — the win is proven in OUR harness, not inferred from
 their walls). Repro: `DASMETAL_LAB_VARIANTS=v0_prod32,v0b_prod64,lcpp_mulmm bin/daslang -jit
 dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/matmul/bench_metal_gemm_kernels.das`.
+
+**2026-07-13 — Phase 7 (session 2b): the ggml geometry port (v21) + the attribution ledger —
++19% over v0_prod32, beats BOTH production kernels, still 13-19% behind verbatim.**
+`v21_ggmlgeo` (+`v21sct` scale-transpose flavor): ggml's exact geometry on our planar contract
+— 64-output x 32-token tile, tile-major 8x8 shared blocks (every sgload = one contiguous
+64-half run), W transposed within tiles at staging, byte4 device loads to registers before the
+pre-staging barrier, fully-unrolled math (4 slabs x 6 loads + 8 macs), 2D grid tokens-fast,
+tg_store_half4 B stores. Bit-exact. CLEAN M1 Max (GMAC/s): kv 2948 / q 3474 / w13 3633 / w2
+3512 / cls 3684 / kv3b 3268 / q3b 3555 / w13_3b 3639 / w2_3b 3577 — beats v0b_prod64 on every
+shape (+1-4% big, and it WINS the kv shapes where v0b loses to v0_prod32, so one kernel could
+replace both + the gemm_use64 heuristic). Verbatim lcpp still +13-19% ahead. **Attribution
+(q3b, knockouts + string-surgery on the verbatim source):** total gap 0.186 ms/dispatch =
+math-loop codegen ~0.045 (their staging-stripped ceiling 4936 vs v21's 4719 GMAC/s) + staging
+~0.144 (theirs 0.197 vs ours 0.341). Within staging: dequant multiplies + dependency chain
+~0.076 (scales-baked-to-1.0 probe), B int-dequant ~0.024 (f32-activation-panel probe v21f32x:
+their B contract reads raw f32 — no dequant at all), residual staging codegen ~0.044. RULED
+OUT by measurement: simdgroup_barrier(mem_none) hints (lcpp_nosgbar identical), rasterization
+order (2D grid no change), scale-stream cacheline scatter (v21sct [block][row] transpose
++0.4%). **Upshot: the remaining lcpp edge is their DATA CONTRACT (f32 activations, inline
+scales) plus better-scheduled staging/math MSL — no single structural lever left on the planar
+format.** Production fork to decide: (A) adopt their contract for GPU prefill — one-time W
+repack to interleaved blobs at region-cache upload + feed f32 activations directly (also
+deletes the X-quant dispatches from the graph) → the lab-proven 4000-4250 rate; (B) ship v21
+as the planar harvest (+2-4% big shapes, kv fix, kernel unification) and put the effort into
+the ~90ms non-GEMM tail; (C) f32-X feed only (cheap, +2%, kills quant dispatches). All probe
+variants live in the lab (lcpp_nosgbar/lcpp_nostage/vk21_*/v21f32x/v21sct).
