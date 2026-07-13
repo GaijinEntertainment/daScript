@@ -114,6 +114,60 @@ class MetalRmsNorm {
     }
 }
 
+// One simdgroup per output row: the classifier GEMV — a dim-long Q8 row dot one f32 vector
+// (the final-normed last position). Bandwidth-bound on the [vocab x dim] weight stream; x stays
+// cache-resident across rows. Lanes stride byte4s within the row; each byte4's int dot rides its
+// block's scale (exact under the unit tests' pow2-scale fills). 128 threads = 4 rows per group.
+class MetalQ8Gemv {
+    @ssbo @binding = 0 wq : array<byte4>    // [d x n] Q8 rows, byte4 view
+    @ssbo @binding = 1 ws : array<float>    // [d x n/32] scales
+    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view
+    @ssbo @binding = 3 y : array<float>     // [d] logits
+    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
+    @uniform @binding = 5 ddim : uint       // d (output rows)
+
+    [metal_kernel(name="metal_q8_gemv_msl")]
+    def metal_q8_gemv {
+        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (row >= ddim) {
+            return
+        }
+        let lane = gl_SubgroupInvocationID
+        let nb4 = ndim / 4u
+        let wbase = row * nb4
+        let sbase = row * (ndim / 32u)
+        var acc = 0.0
+        var k = lane
+        // 4 blocks-in-flight per iteration (128 byte4s per simdgroup step) — amortizes the
+        // loop overhead on the bandwidth-bound weight stream; the plain loop drains the tail
+        while (k + 96u < nb4) {
+            let wa = float4(int4(wq[wbase + k]))
+            let xa = x[k]
+            let wb = float4(int4(wq[wbase + (k + 32u)]))
+            let xb = x[k + 32u]
+            let wc = float4(int4(wq[wbase + (k + 64u)]))
+            let xc = x[k + 64u]
+            let wd = float4(int4(wq[wbase + (k + 96u)]))
+            let xd = x[k + 96u]
+            acc += (wa.x * xa.x + wa.y * xa.y + wa.z * xa.z + wa.w * xa.w) * ws[sbase + k / 8u]
+            acc += (wb.x * xb.x + wb.y * xb.y + wb.z * xb.z + wb.w * xb.w) * ws[sbase + (k + 32u) / 8u]
+            acc += (wc.x * xc.x + wc.y * xc.y + wc.z * xc.z + wc.w * xc.w) * ws[sbase + (k + 64u) / 8u]
+            acc += (wd.x * xd.x + wd.y * xd.y + wd.z * xd.z + wd.w * xd.w) * ws[sbase + (k + 96u) / 8u]
+            k += 128u
+        }
+        while (k < nb4) {
+            let w4 = float4(int4(wq[wbase + k]))
+            let x4 = x[k]
+            acc += (w4.x * x4.x + w4.y * x4.y + w4.z * x4.z + w4.w * x4.w) * ws[sbase + k / 8u]
+            k += gl_SubgroupSize
+        }
+        acc = simd_sum(acc)
+        if (lane == 0u) {
+            y[row] = acc
+        }
+    }
+}
+
 // One thread per rotation pair, NORM layout (adjacent elements 2j, 2j+1 within each head):
 // v0*c - v1*s / v0*s + v1*c with this position's precomputed table row — rope_scaled_tab exactly.
 // One kernel serves q (n = qd) and k (n = kv_dim) as two dispatches.
@@ -935,7 +989,9 @@ var private g_pso_flash128f16 : MetalComputePipeline?
 var private g_pso_flashblk : MetalComputePipeline?  // verbatim lcpp mask-block scan (causal skip)
 var private g_pso_famask : MetalComputePipeline?    // our causal [mp x mp] f16 mask generator
 var private g_pso_fapack : MetalComputePipeline?    // our f32 -> f16 K/V pack (pad rows zeroed)
+var private g_pso_gemv : MetalComputePipeline?      // classifier GEMV (logits-on-GPU)
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
+var private g_logits_cpu = false            // set_metal_prefill_logits_cpu — the logits A/B rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm): skips encoding
 // that stage family (nongemm = attn AND ew, leaving the pure GEMM chain) — output is GARBAGE,
 // gpu-time deltas attribute the budget. Debug rail only.
@@ -945,6 +1001,12 @@ var private g_skip = ""
 //! Set 1 to force every prefill onto the GPU (tests).
 def public set_metal_prefill_min_npos(v : int64) {
     g_min_npos = v
+}
+
+//! Pin the CPU final-norm/classifier step (logits-on-GPU off) — the A/B and fallback rail.
+//! `DASLLAMA_METAL_LOGITS=0` pins it process-wide.
+def public set_metal_prefill_logits_cpu(v : bool) {
+    g_logits_cpu = v
 }
 
 //! Pin the legacy quantized-activation GEMM path (q8 X + planar weights) instead of the default
@@ -999,6 +1061,10 @@ def public metal_prefill_shutdown {
     if (g_pso_rms != null) {
         metal_release(g_pso_rms)
         g_pso_rms = null
+    }
+    if (g_pso_gemv != null) {
+        metal_release(g_pso_gemv)
+        g_pso_gemv = null
     }
     if (g_pso_rope != null) {
         metal_release(g_pso_rope)
@@ -1133,6 +1199,7 @@ def private metal_prefill_init : bool {
     g_pso_mulmm = compile_pso(LCPP_MUL_MM_Q8_MSL, LCPP_MUL_MM_Q8_ENTRY, true, ok)   // ggml compiles fast-math ON
     g_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pso_avmm = compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
+    g_pso_gemv = compile_pso(metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, ok)
     // flash-attn pipelines are compiled lazily (ensure_flash_pipelines) — the trio is the default,
     // so the flash MSL (a 33 KB source compiled per entry) only pays its cost under DASLLAMA_METAL_FLASH=1
     if (!ok) {
@@ -1416,6 +1483,29 @@ def private enc_rms(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBu
     metal_set_buffer(enc, bdim, 0ul, 3)
     metal_set_buffer(enc, beps, 0ul, 4)
     metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
+}
+
+// the final rmsnorm on ONE row: bx bound at the last position's byte offset (one threadgroup)
+def private enc_rms_last(enc : MetalComputeEncoder?; bx : MetalBuffer?; xoff : uint64; bw, by, bdim, beps : MetalBuffer?) {
+    metal_set_pipeline(enc, g_pso_rms)
+    metal_set_buffer(enc, bx, xoff, 0)
+    metal_set_buffer(enc, bw, 0ul, 1)
+    metal_set_buffer(enc, by, 0ul, 2)
+    metal_set_buffer(enc, bdim, 0ul, 3)
+    metal_set_buffer(enc, beps, 0ul, 4)
+    metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(256u, 1u, 1u))
+}
+
+// the classifier GEMV: d rows of logits, 4 rows (one simdgroup each) per threadgroup
+def private enc_gemv(enc : MetalComputeEncoder?; bwq, bws, bx, by, bn, bd : MetalBuffer?; d : int64) {
+    metal_set_pipeline(enc, g_pso_gemv)
+    metal_set_buffer(enc, bwq, 0ul, 0)
+    metal_set_buffer(enc, bws, 0ul, 1)
+    metal_set_buffer(enc, bx, 0ul, 2)
+    metal_set_buffer(enc, by, 0ul, 3)
+    metal_set_buffer(enc, bn, 0ul, 4)
+    metal_set_buffer(enc, bd, 0ul, 5)
+    metal_dispatch_threadgroups(enc, uint3(uint((d + 3l) / 4l), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
 def private enc_rope(enc : MetalComputeEncoder?; bv, bcos, bsin, bn, bhs, bnpairs : MetalBuffer?; npairs : int64) {
@@ -1708,6 +1798,18 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_mm_wo = uniform_mm_args(qd, dim, mp)
     var u_mm_w13 = uniform_mm_args(dim, hidden, mp)
     var u_mm_w2 = uniform_mm_args(hidden, dim, mp)
+    // logits-on-GPU (default ON, DASLLAMA_METAL_LOGITS=0 pins the CPU classifier): the final
+    // rmsnorm on the last position + the classifier GEMV ride the last command buffer, and the
+    // caller's CPU final step is skipped (prefill_override_logits_done). Mirrors the CPU q8
+    // `mm` path only — softcap / suppression / non-q8 classifiers decline to the CPU step.
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
+    let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
+    let gpu_logits = (!g_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_skip) &&
+        cls_fmt == KqFmt.q8 && !tied_f32 && c.final_logit_softcap <= 0.0 &&
+        empty(t.suppress) && t.wcls_off >= 0l)
+    var bxf = gpu_logits ? pool_acquire(g_pool, g_dev, uint64(dim * 4l)) : null
+    var blog = gpu_logits ? pool_acquire(g_pool, g_dev, uint64(c.vocab_size * 4l)) : null
+    var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
     // the fused add+rms+quant stages one row in threadgroup memory — dim must fit its 3072 cap.
     // DASLLAMA_METAL_FUSE=0 pins the unfused dispatch set (the A/B rail). The lcpp path runs the
     // unfused elementwise set (no quant tails to fuse).
@@ -1896,6 +1998,17 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         if (fused && g_skip != "ew" && g_skip != "nongemm") {
             enc_ew2(enc, g_pso_add, bx, bxb, u_total_dim, npos * dim)   // the last layer's pending W2 add
         }
+        if (gpu_logits) {
+            // final rmsnorm on the LAST position + classifier GEMV — the caller samples from
+            // s.logits, so this closes the whole forward inside the GPU window
+            unsafe {
+                var bwfin = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_final_off])), uint64(dim * 4l))
+                var bwc = upload_region(reinterpret<void?>(addr(t.qblob[t.wcls_off])), uint64(c.vocab_size * dim))
+                var bwc_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wcls_off / 32l])), uint64(c.vocab_size * (dim / 32l) * 4l))
+                enc_rms_last(enc, bx, uint64((npos - 1l) * dim * 4l), bwfin, bxf, u_dim, u_eps)
+                enc_gemv(enc, bwc, bwc_s, bxf, blog, u_dim, u_vocab, c.vocab_size)
+            }
+        }
         metal_end_encoding(enc)
         metal_release(enc)
         encode_ms = double(get_time_usec(ts_enc)) / 1000.0lf
@@ -1953,6 +2066,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         let ts_rb = ref_time_ticks()
         unsafe {
             memcpy(reinterpret<void?>(addr(s.x_b[0])), metal_buffer_contents(bx), int(npos * dim * 4l))
+            if (gpu_logits) {
+                memcpy(reinterpret<void?>(addr(s.logits[0])), metal_buffer_contents(blog), int(c.vocab_size * 4l))
+            }
+        }
+        if (gpu_logits) {
+            prefill_override_logits_done()
         }
         readback_us += int64(get_time_usec(ts_rb))
         g_prefills++
@@ -1981,6 +2100,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
     } else {
         pool_release(g_pool, batt, bytes_att)
+    }
+    if (gpu_logits) {
+        pool_release(g_pool, bxf, uint64(dim * 4l))
+        pool_release(g_pool, blog, uint64(c.vocab_size * 4l))
+        pool_release(g_upool, u_vocab, 4ul)
     }
     pool_release(g_upool, bcos, bytes_tab)
     pool_release(g_upool, bsin, bytes_tab)
@@ -2023,7 +2147,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         let total_us = get_time_usec(ts_all)
         let repack_note = g_repack_us > 0l ? " weight-repack={float(g_repack_us) / 1000.0}ms(one-time)" : ""
         g_repack_us = 0l
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm={lcppmm ? "lcpp-mulmm" : "q8"} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={((fused ? 15l : lcppmm ? 17l : 21l) - (flash ? 2l : 0l) + (flash_f16 ? 2l : 0l)) * c.n_layers + (fused ? 1l : 0l) + (flash ? 2l : 0l)}{repack_note}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm={lcppmm ? "lcpp-mulmm" : "q8"} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={((fused ? 15l : lcppmm ? 17l : 21l) - (flash ? 2l : 0l) + (flash_f16 ? 2l : 0l)) * c.n_layers + (fused ? 1l : 0l) + (flash ? 2l : 0l) + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}{repack_note}\n")
     }
     return ok
 }

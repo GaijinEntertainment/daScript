@@ -403,6 +403,13 @@ def test_metal_prefill_kernels(t : T?) {
                 mulmm_gate(t, dev, queue, 96, 128, 64)      // 3 k-blocks, 2 output tiles, 2 token tiles
                 mulmm_gate(t, dev, queue, 64, 192, 32)      // 2 k-blocks, 3 output tiles, 1 token tile
 
+                // ===== the classifier GEMV (logits-on-GPU) =====
+                // exact-arithmetic data (quants in [-8, 7], pow2 scales, int x): every per-byte4
+                // dot, scale product, and simd_sum partial is exactly representable — BIT-exact
+                // vs the CPU reference. d = 21 exercises the row < ddim tail guard (grid pads to 24).
+                gemv_gate(t, dev, queue, 96, 21)            // 3 blocks per row, guarded tail
+                gemv_gate(t, dev, queue, 160, 64)           // 5 blocks per row, exact grid
+
                 metal_release(queue)
             }
             t |> equal(metal_live_object_count(), 0l)
@@ -410,6 +417,72 @@ def test_metal_prefill_kernels(t : T?) {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }
     }
+}
+
+// The classifier GEMV kernel on exact-arithmetic data: [d x n] Q8 rows dot one f32 vector vs
+// a direct CPU dot, BIT-exact (see the call site for why exactness holds).
+def private gemv_gate(t : T?; dev, queue; n, d : int) {
+    var err : string
+    var pso = pipeline_from_source(dev, metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, err)
+    t |> success(pso != null, "gemv pipeline: {err}")
+    if (pso == null) {
+        return
+    }
+    let nblk = n / 32
+    var wq : array<int8>
+    var ws : array<float>
+    var xv : array<float>
+    var want : array<float>
+    wq |> resize(d * n)
+    ws |> resize(d * nblk)
+    xv |> resize(n)
+    want |> resize(d)
+    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    for (i in range(d * n)) {
+        wq[i] = int8((i * 7 + i / 31) % 16 - 8)
+    }
+    for (i in range(d * nblk)) {
+        ws[i] = lut[(i / 5) % 4]
+    }
+    for (i in range(n)) {
+        xv[i] = float((i * 3) % 9 - 4)
+    }
+    for (r in range(d)) {
+        var acc = 0.0
+        for (k in range(n)) {
+            acc += float(wq[r * n + k]) * ws[r * nblk + k / 32] * xv[k]
+        }
+        want[r] = acc
+    }
+    var bwq = buf_upload(dev, wq)
+    var bws = buf_upload(dev, ws)
+    var bx = buf_upload(dev, xv)
+    var by = buf_fill(dev, d, -1000.0)
+    var bn = buf_u32(dev, uint(n))
+    var bd = buf_u32(dev, uint(d))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bwq, 0ul, 0)
+        metal_set_buffer(enc, bws, 0ul, 1)
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_set_buffer(enc, bd, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "gemv dispatch n={n} d={d}: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(bwq)
+    metal_release(bws)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bd)
+    metal_release(pso)
+    delete wq
+    delete ws
+    delete xv
+    delete want
 }
 
 // The verbatim llama.cpp mul_mm kernel — the lcpp GEMM path's exact PSO — on exact-arithmetic

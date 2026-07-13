@@ -871,3 +871,21 @@ the last ~2% is AGX-backend scheduling even hand-MSL in the same shape can't rea
 GEMM ~= ~1% pp512 = the margin by which das beats lcpp fa=0. The das v25 kernel + constructs
 are the retirement PATH once the last 2% closes (ISA-level chase, priced separately).
 **NEXT: logits-on-GPU ~3ms, prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**
+
+**2026-07-13 — Phase 7 (session 5b): logits-on-GPU — 3B pp512 -5.5ms (interleaved, rock-steady
+across 5 rounds: 377.3 vs 382.9 ms/prefill, ~+1.5%).** The final rmsnorm (one row, bx bound at
+the last position's byte offset into the existing rms PSO) + a new classifier GEMV kernel
+(`metal_q8_gemv`: one simdgroup per output row, lanes stride byte4s, 4-blocks-in-flight unroll —
+the rolled x1 form measured only ~140 GB/s; per-byte4 scale product, simd_sum reduce, row < ddim
+tail guard) ride the END of the last command buffer; s.logits reads back with the residual copy.
+The saving EXCEEDS the ~3.7ms CPU logits it replaces because the GEMV overlaps the interleaved
+KV-readback tail instead of serializing after the wait. Contract: the override calls the new
+`prefill_override_logits_done()` (dasllama_common) after filling s.logits; forward_prefill_body
+then skips its CPU final-norm/classifier step. Gates mirror the CPU q8 `mm` branch only — softcap,
+suppressed-token pins, non-q8 / tied-f32 classifiers decline to the CPU step (semantics preserved
+by construction). Cls weights ride the existing upload_region cache (tied-q8 = the embedding
+region, one-time). Rails: `DASLLAMA_METAL_LOGITS=0` env + `set_metal_prefill_logits_cpu()` (the
+in-process A/B setter). Tests: gemv_gate x2 shapes in test_metal_prefill_kernels (exact-arithmetic
+BIT-exact, incl. the guarded-tail grid), 1B parity token-for-token with GPU logits active, leak
+gates green. Attribution rail: g_skip modes keep logits OFF so knockout deltas stay comparable.
+**NEXT: prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**
