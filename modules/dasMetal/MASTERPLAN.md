@@ -810,3 +810,30 @@ verbatim lcpp kernel_flash_attn_ext port — collapses QK+softmax+AV (~14 -> ~6m
 AND kills the heads x np32^2 score slab (the g_max_npos=2048 cap). Needs their KV-dtype
 contract read first (f16 K/V vs our f32 buffers). Micro ledger: softmax restructure ~2ms,
 logits-on-GPU ~3ms, prefill alloc caching ~5ms.**
+
+**2026-07-13 — Phase 7 (session 4): verbatim flash-attn ported — CORRECT but LOSES to the trio,
+kept as an opt-in rail.** New module `dasllama/dasllama_lcpp_flash_attn.das` = `kernel_flash_attn_ext`
++ `_blk` brought VERBATIM (byte round-trip-diffed; 33 KB MSL das-escaped) with three mechanical
+deviations (baked `constant` function-constants for our fixed specialization: causal mask, no
+bias/sinks/softcap, has_kvpad=false, nsg=4; NS10/NS20 from args so one entry pair serves every
+kv_dim; f32 AND f16 KV entries for dk64/dk128), plus one non-lcpp `metal_fa_causal_mask` kernel
+(ggml builds KQ_mask host-side). KEY layout fact: lcpp's KV-pad kernel assumes ggml's per-head-
+contiguous KV (nb11=head_size); OURS is interleaved [token][kv_head][d] (nb11=kv_dim), so the pad
+kernel is unusable — instead ne11=mp (64-padded => has_kvpad=false) + the causal mask covers the pad
+columns [npos,mp). V pad rows are safe (the mul_mm GEMM writes ALL mp rows finite => 0*finite=0). The
+flash impl is otherwise stride-generic so our strides drop straight into nb11/nb12/ns10; GQA via
+ne_12_2=n_kv_heads; ne1=n_heads lands dst in our [token][head][d] bxb. CORRECTNESS (both KV dtypes):
+1B parity exact vs CPU control; 3B (hs128) token-for-token vs the trio. **PERF (2 clean Parsec-off
+same-session A/B, flash-MINUS-trio delta rock-consistent): flash attention costs ~3ms MORE than the
+ggml-geometry trio — f32 KV +3.3ms (13.9 vs 10.6), f16 KV +3.1ms (17.4 vs 14.3).** f16 KV (lcpp's
+contract, via a per-layer f32->f16 pack) did NOT help — the pack overhead (56 dispatches + KV
+bandwidth) cancels the f16 kernel's bandwidth saving. WHY flash loses: the trio already runs QK/AV as
+mul_mm-rate GEMMs (session 3, 4190 GMAC/s) + causal skips, so the score-slab device round-trip flash
+eliminates is NOT the bottleneck (M1 Max bandwidth ample); meanwhile flash RE-READS K/V once per
+query block (~32x after the causal skip vs the trio's 1x), costing more than the fusion saves. lcpp's
+fa=1 +3% over fa=0 comes from their WHOLE f16 pipeline, not graftable via a KV-only pack. DECISION
+(Boris): keep the trio as default; flash is an OPT-IN rail (`DASLLAMA_METAL_FLASH=1`, KV dtype via
+`DASLLAMA_METAL_FLASH_KV=f16|f32`) with lazy pipeline compile (default never pays the 33 KB compile).
+Residual flash value = drops the heads x mp^2 score slab (memory) => a future lever to lift
+g_max_npos for long-context prefill. **NEXT: das-emitter codegen chase (retire the verbatim mul_mm),
+logits-on-GPU ~3ms, prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**

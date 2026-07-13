@@ -11,6 +11,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_math_metal
 require dasllama/dasllama_lcpp_mulmm
+require dasllama/dasllama_lcpp_flash_attn
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the Q8 GEMMs
 // that Phase 5c left on the CPU: activation requant, rmsnorm, table-driven NORM RoPE, fused
@@ -927,6 +928,13 @@ var private g_pso_ropeqk : MetalComputePipeline?
 var private g_pso_mulmm : MetalComputePipeline?
 var private g_pso_qkmm : MetalComputePipeline?
 var private g_pso_avmm : MetalComputePipeline?
+var private g_pso_flash64 : MetalComputePipeline?      // verbatim lcpp flash-attn, f32 KV, hs 64 (1B)
+var private g_pso_flash128 : MetalComputePipeline?     // verbatim lcpp flash-attn, f32 KV, hs 128 (3B)
+var private g_pso_flash64f16 : MetalComputePipeline?   // ... f16 KV (default — halves the KV re-read)
+var private g_pso_flash128f16 : MetalComputePipeline?
+var private g_pso_flashblk : MetalComputePipeline?  // verbatim lcpp mask-block scan (causal skip)
+var private g_pso_famask : MetalComputePipeline?    // our causal [mp x mp] f16 mask generator
+var private g_pso_fapack : MetalComputePipeline?    // our f32 -> f16 K/V pack (pad rows zeroed)
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm): skips encoding
 // that stage family (nongemm = attn AND ew, leaving the pure GEMM chain) — output is GARBAGE,
@@ -1040,6 +1048,34 @@ def public metal_prefill_shutdown {
         metal_release(g_pso_avmm)
         g_pso_avmm = null
     }
+    if (g_pso_flash64 != null) {
+        metal_release(g_pso_flash64)
+        g_pso_flash64 = null
+    }
+    if (g_pso_flash128 != null) {
+        metal_release(g_pso_flash128)
+        g_pso_flash128 = null
+    }
+    if (g_pso_flash64f16 != null) {
+        metal_release(g_pso_flash64f16)
+        g_pso_flash64f16 = null
+    }
+    if (g_pso_flash128f16 != null) {
+        metal_release(g_pso_flash128f16)
+        g_pso_flash128f16 = null
+    }
+    if (g_pso_fapack != null) {
+        metal_release(g_pso_fapack)
+        g_pso_fapack = null
+    }
+    if (g_pso_flashblk != null) {
+        metal_release(g_pso_flashblk)
+        g_pso_flashblk = null
+    }
+    if (g_pso_famask != null) {
+        metal_release(g_pso_famask)
+        g_pso_famask = null
+    }
     if (g_queue != null) {
         metal_release(g_queue)
         g_queue = null
@@ -1049,6 +1085,7 @@ def public metal_prefill_shutdown {
         g_dev = null
     }
     g_failed = false
+    g_flash_pso_failed = false
 }
 
 def private env_int(name : string; dflt : int) : int {
@@ -1096,6 +1133,8 @@ def private metal_prefill_init : bool {
     g_pso_mulmm = compile_pso(LCPP_MUL_MM_Q8_MSL, LCPP_MUL_MM_Q8_ENTRY, true, ok)   // ggml compiles fast-math ON
     g_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pso_avmm = compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
+    // flash-attn pipelines are compiled lazily (ensure_flash_pipelines) — the trio is the default,
+    // so the flash MSL (a 33 KB source compiled per entry) only pays its cost under DASLLAMA_METAL_FLASH=1
     if (!ok) {
         metal_prefill_shutdown()
         g_failed = true
@@ -1103,6 +1142,31 @@ def private metal_prefill_init : bool {
     }
     to_log(LOG_INFO, "dasLLAMA metal prefill: resident path live on {metal_device_name(g_dev)}\n")
     return true
+}
+
+// lazily compile the verbatim lcpp flash-attn pipelines the first time DASLLAMA_METAL_FLASH=1
+// selects the flash path (opt-in rail — the trio wins on M1 Max, so the default never pays this).
+// Returns false and leaves the caller to fall back to the trio if any entry fails to compile.
+var private g_flash_pso_failed = false
+def private ensure_flash_pipelines : bool {
+    if (g_pso_flashblk != null) {
+        return true
+    }
+    if (g_flash_pso_failed) {
+        return false
+    }
+    var ok = true
+    g_pso_flash64 = compile_pso(LCPP_FLASH_ATTN_MSL, LCPP_FLASH_ATTN_DK64_ENTRY, true, ok)    // ggml compiles fast-math ON
+    g_pso_flash128 = compile_pso(LCPP_FLASH_ATTN_MSL, LCPP_FLASH_ATTN_DK128_ENTRY, true, ok)
+    g_pso_flash64f16 = compile_pso(LCPP_FLASH_ATTN_MSL, LCPP_FLASH_ATTN_DK64_F16_ENTRY, true, ok)
+    g_pso_flash128f16 = compile_pso(LCPP_FLASH_ATTN_MSL, LCPP_FLASH_ATTN_DK128_F16_ENTRY, true, ok)
+    g_pso_flashblk = compile_pso(LCPP_FLASH_ATTN_MSL, LCPP_FLASH_ATTN_BLK_ENTRY, true, ok)
+    g_pso_famask = compile_pso(FA_CAUSAL_MASK_MSL, FA_CAUSAL_MASK_ENTRY, true, ok)
+    g_pso_fapack = compile_pso(FA_PACK_F16_MSL, FA_PACK_F16_ENTRY, true, ok)
+    if (!ok) {
+        g_flash_pso_failed = true
+    }
+    return ok
 }
 
 // lazily upload one stable region (weight quants / scales / norm vectors), keyed by base address
@@ -1178,6 +1242,81 @@ def private uniform_mm_args(k, d, m : int64) : MetalBuffer? {
         pi[19] = int(m)                     // ne1
         ps[40] = int16(1)                   // r2
         ps[41] = int16(1)                   // r3
+    }
+    return buf
+}
+
+// ggml_metal_kargs_flash_attn_ext image (192 bytes) for the resident causal prefill. Q/K/V are our
+// interleaved [token][head][d] f32 buffers, so the head/token strides go straight into the nb**
+// fields; ns10/ns20 = kv_dim (the K/V device leading dims the kernel's simdgroup_load walks). ne11
+// = mp (padded to 64 so has_kvpad stays false); the mask masks the pad columns [npos, mp). ne1 =
+// n_heads makes the kernel's dst index land in our [token][head][d] output layout.
+def private uniform_fa_args(npos, mp, n_heads, n_kv_heads, head_size, qd, kv_dim, kv_esz : int64; scale : float) : MetalBuffer? {
+    var buf = pool_acquire_untracked(g_upool, g_dev, 192ul)
+    let pc = metal_buffer_contents(buf)
+    var pi = unsafe(reinterpret<int?>(pc))
+    var pu = unsafe(reinterpret<uint64?>(pc))
+    var pf = unsafe(reinterpret<float?>(pc))
+    for (i in range(24)) {
+        unsafe(pu[i]) = 0ul
+    }
+    unsafe {
+        pi[0]  = int(npos)                  // ne01 (query count)
+        pi[1]  = int(n_heads)               // ne02
+        pi[2]  = 1                          // ne03
+        pu[2]  = uint64(qd * 4l)            // nb01 (Q token stride — Q device is always f32)
+        pu[3]  = uint64(head_size * 4l)     // nb02 (Q head stride)
+        pu[4]  = uint64(qd * 4l * npos)     // nb03
+        pi[10] = int(mp)                    // ne11 (kv length, 64-padded)
+        pi[11] = int(n_kv_heads)            // ne_12_2
+        pi[12] = 1                          // ne_12_3
+        pi[13] = int(kv_dim)                // ns10 (K leading dim — ELEMENTS, dtype-independent)
+        pu[7]  = uint64(kv_dim * kv_esz)    // nb11 (K token stride, bytes)
+        pu[8]  = uint64(head_size * kv_esz) // nb12 (K kv-head stride, bytes)
+        pu[9]  = uint64(kv_dim * kv_esz * mp)   // nb13
+        pi[20] = int(kv_dim)                // ns20 (V leading dim — elements)
+        pu[11] = uint64(kv_dim * kv_esz)    // nb21 (V token stride, bytes)
+        pu[12] = uint64(head_size * kv_esz) // nb22 (V kv-head stride, bytes)
+        pu[13] = uint64(kv_dim * kv_esz * mp)   // nb23
+        pi[28] = int(mp)                    // ne31 (mask rows >= ne01)
+        pi[29] = 1                          // ne32 (mask broadcast over heads)
+        pi[30] = 1                          // ne33
+        pu[16] = uint64(mp * 2l)            // nb31 (mask row stride, f16)
+        pu[17] = uint64(mp * mp * 2l)       // nb32
+        pu[18] = uint64(mp * mp * 2l)       // nb33
+        pi[38] = int(n_heads)               // ne1 (output row stride in heads)
+        pi[39] = int(n_heads)               // ne2
+        pi[40] = 1                          // ne3
+        pf[41] = scale                      // scale
+        pf[42] = 0.0                        // max_bias
+        pf[43] = 1.0                        // m0
+        pf[44] = 1.0                        // m1
+        pi[45] = int(n_heads)               // n_head_log2 (unused — bias off)
+        pf[46] = 0.0                        // logit_softcap
+    }
+    return buf
+}
+
+// ggml_metal_kargs_flash_attn_ext_blk image (48 bytes) — the mask-block scan's dims. ne30 = mp so
+// its nblk0 (= ceil(ne30/64)) matches the main kernel's nblk0 (= ceil(ne11/64)); the blk buffer is
+// indexed [q_block][kv_block] by both.
+def private uniform_fablk_args(npos, mp : int64) : MetalBuffer? {
+    var buf = pool_acquire_untracked(g_upool, g_dev, 48ul)
+    let pc = metal_buffer_contents(buf)
+    var pi = unsafe(reinterpret<int?>(pc))
+    var pu = unsafe(reinterpret<uint64?>(pc))
+    for (i in range(6)) {
+        unsafe(pu[i]) = 0ul
+    }
+    unsafe {
+        pi[0] = int(npos)               // ne01
+        pi[1] = int(mp)                 // ne30 (mask columns)
+        pi[2] = int(mp)                 // ne31 (mask rows)
+        pi[3] = 1                       // ne32
+        pi[4] = 1                       // ne33
+        pu[3] = uint64(mp * 2l)         // nb31
+        pu[4] = uint64(mp * mp * 2l)    // nb32
+        pu[5] = uint64(mp * mp * 2l)    // nb33
     }
     return buf
 }
@@ -1395,6 +1534,56 @@ def private enc_av(enc : MetalComputeEncoder?; batt, bv, bxb, bqd, bkvd, bhs, bk
     metal_dispatch_threadgroups(enc, uint3(uint(mp / 32l), uint(head_size / 32l), uint(heads)), uint3(128u, 1u, 1u))
 }
 
+// causal [mp x mp] f16 mask generator: one thread per (row, col). Built once per prefill.
+def private enc_famask(enc : MetalComputeEncoder?; bmask, bmp : MetalBuffer?; mp : int64) {
+    metal_set_pipeline(enc, g_pso_famask)
+    metal_set_buffer(enc, bmask, 0ul, 0)
+    metal_set_buffer(enc, bmp, 0ul, 1)
+    metal_dispatch_threadgroups(enc, uint3(uint(mp / 16l), uint(mp / 16l), 1u), uint3(16u, 16u, 1u))
+}
+
+// verbatim lcpp mask-block scan: marks each [8 queries x 64 keys] block skippable / all-zero /
+// masked. Grid (kv-blocks, q-blocks, 1) x 32 lanes. Built once per prefill.
+def private enc_fablk(enc : MetalComputeEncoder?; bargs, bmask, bblk : MetalBuffer?; npos, mp : int64) {
+    metal_set_pipeline(enc, g_pso_flashblk)
+    metal_set_buffer(enc, bargs, 0ul, 0)
+    metal_set_buffer(enc, bmask, 0ul, 1)
+    metal_set_buffer(enc, bblk, 0ul, 2)
+    metal_dispatch_threadgroups(enc, uint3(uint(mp / 64l), uint((npos + 7l) / 8l), 1u), uint3(32u, 1u, 1u))
+}
+
+// verbatim lcpp flash-attention: fused QK^T -> online causal softmax -> P.V, straight into bxb.
+// 128 threads (32 lanes x nsg=4) per (q-block, head). Dynamic threadgroup scratch per the FATTN_SMEM
+// formula (f32 KV, no quant term): 16 * (3*head_size + 256) bytes. Sinks/pad params are bound to bq
+// (a valid buffer) — their code paths are baked off (has_sinks/has_kvpad = false), so unread.
+// f32 -> f16 pack of one K/V buffer (bsrc f32 [mp x kv_dim] -> bdst f16). Pad rows [npos, mp) zeroed.
+def private enc_fapack(enc : MetalComputeEncoder?; bsrc, bdst, bkvd, bnp, bmp : MetalBuffer?; mp, kv_dim : int64) {
+    metal_set_pipeline(enc, g_pso_fapack)
+    metal_set_buffer(enc, bsrc, 0ul, 0)
+    metal_set_buffer(enc, bdst, 0ul, 1)
+    metal_set_buffer(enc, bkvd, 0ul, 2)
+    metal_set_buffer(enc, bnp, 0ul, 3)
+    metal_set_buffer(enc, bmp, 0ul, 4)
+    metal_dispatch_threadgroups(enc, uint3(uint(kv_dim / 16l), uint(mp / 16l), 1u), uint3(16u, 16u, 1u))
+}
+
+def private enc_flash(enc : MetalComputeEncoder?; bargs, bq, bk, bv, bmask, bblk, bxb : MetalBuffer?; npos, n_heads, head_size : int64; f16kv : bool) {
+    metal_set_pipeline(enc, head_size == 128l
+        ? (f16kv ? g_pso_flash128f16 : g_pso_flash128)
+        : (f16kv ? g_pso_flash64f16 : g_pso_flash64))
+    metal_set_buffer(enc, bargs, 0ul, 0)
+    metal_set_buffer(enc, bq, 0ul, 1)
+    metal_set_buffer(enc, bk, 0ul, 2)
+    metal_set_buffer(enc, bv, 0ul, 3)
+    metal_set_buffer(enc, bmask, 0ul, 4)
+    metal_set_buffer(enc, bq, 0ul, 5)      // sinks — unused (has_sinks off)
+    metal_set_buffer(enc, bq, 0ul, 6)      // pad — unused (has_kvpad off)
+    metal_set_buffer(enc, bblk, 0ul, 7)
+    metal_set_buffer(enc, bxb, 0ul, 8)
+    metal_set_threadgroup_memory_length(enc, uint64(16l * (3l * head_size + 256l)), 0)
+    metal_dispatch_threadgroups(enc, uint3(uint((npos + 7l) / 8l), uint(n_heads), 1u), uint3(32u, 4u, 1u))
+}
+
 // swiglu and add share the (a, b, total) elementwise shape
 def private enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba, bb, btot : MetalBuffer?; total : int64) {
     metal_set_pipeline(enc, pso)
@@ -1425,6 +1614,20 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let half = head_size / 2l
     let mp = ((npos + 63l) / 64l) * 64l    // 64 = the big GEMM kernel's M tile; attention kernels only assume %32
     let maxn = max(qd, hidden)
+    // verbatim lcpp flash-attention (OPT-IN rail, head_size in {64,128}): fuses QK^T / online causal
+    // softmax / P.V into one dispatch straight to bxb, dropping the heads x mp^2 score slab (batt).
+    // Measured ~3ms SLOWER than the ggml-geometry trio on M1 Max (the trio's mul_mm-rate QK/AV GEMMs
+    // already win; flash re-reads K/V per query block, costing more than its fusion saves — f16 KV
+    // doesn't help, the pack overhead cancels it). Kept as DASLLAMA_METAL_FLASH=1 for the memory win
+    // (no score slab) and correctness reference; pipelines compile lazily on first use.
+    var flash = (head_size == 64l || head_size == 128l) && get_env_variable("DASLLAMA_METAL_FLASH") == "1"
+    if (flash && !ensure_flash_pipelines()) {
+        flash = false   // a flash pipeline failed to compile — fall back to the trio
+    }
+    // f16 KV cache (default when flash is on): the flash kernel re-reads K/V once per query block, so
+    // narrowing them to f16 (lcpp's contract) halves that bandwidth. A per-layer pack packs the roped
+    // f32 K/V into shared f16 buffers. DASLLAMA_METAL_FLASH_KV=f32 pins the f32 entries (no pack).
+    let flash_f16 = flash && get_env_variable("DASLLAMA_METAL_FLASH_KV") != "f32"
     // pooled per-prefill buffers (activations sized mp rows — the GEMM has no edge masking; rows
     // past npos are never read by the norm/rope/attention/elementwise kernels, and stale bytes in
     // the requant image only ever land in pad output rows: C-block rows are independent)
@@ -1434,7 +1637,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_h = uint64(mp * hidden * 4l)
     let bytes_xq = uint64(mp * maxn)
     let bytes_xs = uint64(mp * (maxn / 32l) * 4l)
-    let bytes_att = uint64(n_heads * mp * mp * 4l)   // np32-padded per-head score slabs
+    let bytes_att = uint64(n_heads * mp * mp * 4l)   // np32-padded per-head score slabs (trio only)
+    let bytes_mask = uint64(mp * mp * 2l)            // flash: causal [mp x mp] f16 mask (heads share)
+    let bytes_blk = max(uint64(((npos + 7l) / 8l) * (mp / 64l)), 1ul)   // flash: [q-block x kv-block] scan
+    let bytes_kvh = uint64(mp * kv_dim * 2l)         // flash f16: one shared f16 K + V pack target
     let bytes_tab = uint64(npos * half * 4l)
     var bx = pool_acquire(g_pool, g_dev, bytes_x)
     var bxb = pool_acquire(g_pool, g_dev, bytes_x)
@@ -1444,7 +1650,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bhb2 = pool_acquire(g_pool, g_dev, bytes_h)
     var bxq = pool_acquire(g_pool, g_dev, bytes_xq)
     var bxs = pool_acquire(g_pool, g_dev, bytes_xs)
-    var batt = pool_acquire(g_pool, g_dev, bytes_att)
+    var batt = flash ? null : pool_acquire(g_pool, g_dev, bytes_att)
+    var bmask = flash ? pool_acquire(g_pool, g_dev, bytes_mask) : null
+    var bblk = flash ? pool_acquire(g_pool, g_dev, bytes_blk) : null
+    var bkh = flash_f16 ? pool_acquire(g_pool, g_dev, bytes_kvh) : null   // shared f16 K pack target
+    var bvh = flash_f16 ? pool_acquire(g_pool, g_dev, bytes_kvh) : null   // shared f16 V pack target
     var bcos = pool_acquire_untracked(g_upool, g_dev, bytes_tab)
     var bsin = pool_acquire_untracked(g_upool, g_dev, bytes_tab)
     var bks : array<MetalBuffer?>
@@ -1482,6 +1692,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_addv0 = uniform_u32(0u)
     var u_addv1 = uniform_u32(1u)
     var u_npairs_all = uniform_u32(uint(npos * (qd + kv_dim) / 2l))
+    // flash-attn kargs (layer-invariant: strides/dims only, buffers bound per dispatch)
+    var u_fa = flash ? uniform_fa_args(npos, mp, n_heads, n_heads / kv_mul, head_size, qd, kv_dim, flash_f16 ? 2l : 4l, scale) : null
+    var u_fablk = flash ? uniform_fablk_args(npos, mp) : null
+    var u_mp = flash ? uniform_u32(uint(mp)) : null
     // llama.cpp mul_mm GEMM path (the default): W as resident block_q8_0 blobs, raw f32
     // activations — the X-quant dispatches disappear and the GEMMs run ~19% faster (lab).
     // Needs every GEMM output dim % 64 (the pipeline is specialized bc_out=false);
@@ -1532,6 +1746,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 cb = unret ? metal_new_command_buffer_unretained(g_queue) : metal_new_command_buffer(g_queue)
                 enc = metal_new_compute_encoder(cb)
             }
+            // build the causal mask + block scan once, in the first command buffer (both are
+            // layer-invariant; tracked-buffer hazards order mask -> blk -> every layer's flash)
+            if (flash && l == 0l) {
+                enc_famask(enc, bmask, u_mp, mp)
+                enc_fablk(enc, u_fablk, bmask, bblk, npos, mp)
+            }
             unsafe {
                 var bw_att = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_att_off + l * dim])), uint64(dim * 4l))
                 var bw_ffn = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_ffn_off + l * dim])), uint64(dim * 4l))
@@ -1578,21 +1798,33 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if (g_skip != "attn" && g_skip != "nongemm") {
-                    if (g_skip != "attn_qk") {
-                        if (mmattn) {
-                            enc_qk_mm(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                    if (flash) {
+                        if (flash_f16) {
+                            // narrow the roped f32 K and raw f32 V into the shared f16 pack targets,
+                            // then flash reads them (halved KV re-read bandwidth)
+                            enc_fapack(enc, bks[l], bkh, u_kvd, u_np, u_np32, mp, kv_dim)
+                            enc_fapack(enc, bvs[l], bvh, u_kvd, u_np, u_np32, mp, kv_dim)
+                            enc_flash(enc, u_fa, bq, bkh, bvh, bmask, bblk, bxb, npos, n_heads, head_size, true)
                         } else {
-                            enc_qk(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                            enc_flash(enc, u_fa, bq, bks[l], bvs[l], bmask, bblk, bxb, npos, n_heads, head_size, false)
                         }
-                    }
-                    if (g_skip != "attn_sm") {
-                        enc_softmax(enc, batt, u_np32, npos, n_heads)
-                    }
-                    if (g_skip != "attn_av") {
-                        if (mmattn) {
-                            enc_av_mm(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
-                        } else {
-                            enc_av(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                    } else {
+                        if (g_skip != "attn_qk") {
+                            if (mmattn) {
+                                enc_qk_mm(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                            } else {
+                                enc_qk(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                            }
+                        }
+                        if (g_skip != "attn_sm") {
+                            enc_softmax(enc, batt, u_np32, npos, n_heads)
+                        }
+                        if (g_skip != "attn_av") {
+                            if (mmattn) {
+                                enc_av_mm(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                            } else {
+                                enc_av(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                            }
                         }
                     }
                 }
@@ -1737,7 +1969,19 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_pool, bhb2, bytes_h)
     pool_release(g_pool, bxq, bytes_xq)
     pool_release(g_pool, bxs, bytes_xs)
-    pool_release(g_pool, batt, bytes_att)
+    if (flash) {
+        pool_release(g_pool, bmask, bytes_mask)
+        pool_release(g_pool, bblk, bytes_blk)
+        pool_release(g_upool, u_fa, 192ul)
+        pool_release(g_upool, u_fablk, 48ul)
+        pool_release(g_upool, u_mp, 4ul)
+        if (flash_f16) {
+            pool_release(g_pool, bkh, bytes_kvh)
+            pool_release(g_pool, bvh, bytes_kvh)
+        }
+    } else {
+        pool_release(g_pool, batt, bytes_att)
+    }
     pool_release(g_upool, bcos, bytes_tab)
     pool_release(g_upool, bsin, bytes_tab)
     for (l in range64(c.n_layers)) {
@@ -1779,7 +2023,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         let total_us = get_time_usec(ts_all)
         let repack_note = g_repack_us > 0l ? " weight-repack={float(g_repack_us) / 1000.0}ms(one-time)" : ""
         g_repack_us = 0l
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm={lcppmm ? "lcpp-mulmm" : "q8"} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={(fused ? 15l : lcppmm ? 17l : 21l) * c.n_layers + (fused ? 1l : 0l)}{repack_note}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm={lcppmm ? "lcpp-mulmm" : "q8"} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={((fused ? 15l : lcppmm ? 17l : 21l) - (flash ? 2l : 0l) + (flash_f16 ? 2l : 0l)) * c.n_layers + (fused ? 1l : 0l) + (flash ? 2l : 0l)}{repack_note}\n")
     }
     return ok
 }
