@@ -22,6 +22,8 @@ Background on the hash machinery is in [`skills/aot_testing.md`](aot_testing.md)
 
 4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it — source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every ``quote`lowered`N`` in it.
 
+5. **The failing function has a `[tune]` family in its static call graph.** Generation and runtime must agree on the tune gate (`llvm_tune::tune_aot_gate` — `tune_frozen` at generation, `policies.aot && !jit` at runtime); a driver missing `tune_frozen` compiles in the STAMPED world (manifest/fallback stamps + full variants registries — the registries take function addresses, which flips `fastCall` on call sites) while the runtime compiles gated to the reference tier. There are TWO generation drivers that both need the policy: `utils/daScript/main.cpp` (`-aot`) **and** `utils/aot/main.das` (what the cmake AOT rules actually invoke) — the .das one was missed when #3423 introduced the policy (fixed in #3450). Diagnostic tell: a hand-run `bin/daslang -aot <file>` records hashes matching the runtime while the cmake-generated `.cpp` doesn't.
+
 If none apply, you have a real desync. Continue.
 
 ## Step 1 — Read the diagnostic
