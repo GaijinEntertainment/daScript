@@ -544,6 +544,318 @@ class MetalAttnAV {
     }
 }
 
+// The ggml-geometry attention pair (v21 lessons applied to the trio's QK/AV GEMMs — the old
+// 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate and owned 24ms of the 3B window):
+// 32x64 C tiles, tile-major 8x8 shared blocks staged as HALF via vectorized float4 loads (the
+// f32_f32 mul_mm instantiation llama.cpp ships stages half from f32 sources too), 2x4 simdgroup
+// quadrants, fully unrolled math. Same buffer contract and oracle as the trio; the trio stays
+// as the DASLLAMA_METAL_ATTN=0 rail (and serves hs % 64 != 0 shapes).
+//
+// QK: S[h] = scale * Q_h . K_h^T — C tile 32 queries x 64 keys, k walks head_size in 32-blocks.
+// K stages TRANSPOSED within 8x8 tiles (v21's A pattern; loads stay contiguous along hs);
+// Q stages rows with scale folded (v21's B pattern). Blocks strictly above the causal diagonal
+// exit early (softmax zeroes them); K pad rows need no guard — their scores land in columns
+// j >= npos, which the causal softmax zeroes for every live row.
+class MetalAttnQKMm {
+    @ssbo @binding = 0 q : array<float4>    // [mp x qd/4], roped
+    @ssbo @binding = 1 k : array<float4>    // [mp x kv_dim/4], roped
+    @ssbo @binding = 2 att : array<float>   // [n_heads x np32 x np32] raw scores out
+    @uniform @binding = 3 qd : uint
+    @uniform @binding = 4 kv_dim : uint
+    @uniform @binding = 5 head_size : uint
+    @uniform @binding = 6 kv_mul : uint
+    @uniform @binding = 7 npos : uint
+    @uniform @binding = 8 np32 : uint
+    @uniform @binding = 9 scale : float
+    @workgroup ta : float16[2048]           // K: k-tiles x 8 key-tiles of 8x8, tile (k row, key col)
+    @workgroup tb : float16[1024]           // Q: k-tiles x 4 query-tiles of 8x8 (query row, k col)
+
+    [metal_kernel(name="metal_attn_qk_mm_msl")]
+    def metal_attn_qk_mm {
+        let mBase = gl_WorkGroupID.x * 32u  // query rows
+        let nBase = gl_WorkGroupID.y * 64u  // key rows
+        if (nBase > mBase + 31u) {
+            return                          // fully above the causal diagonal
+        }
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let h = gl_WorkGroupID.z
+        let kvhoff4 = ((h / kv_mul) * head_size) / 4u
+        let qoff4 = (h * head_size) / 4u
+        let qd4 = qd / 4u
+        let kvd4 = kv_dim / 4u
+        var c00 : simdgroup_float8x8
+        var c01 : simdgroup_float8x8
+        var c02 : simdgroup_float8x8
+        var c03 : simdgroup_float8x8
+        var c10 : simdgroup_float8x8
+        var c11 : simdgroup_float8x8
+        var c12 : simdgroup_float8x8
+        var c13 : simdgroup_float8x8
+        let lr0 = lid / 2u                  // A split: key row + 16-k half
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let tA1 = ((il0 * 2u + 1u) * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u                  // B split: query row + 8-k run
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var ma0 : simdgroup_half8x8
+        var ma1 : simdgroup_half8x8
+        var ma2 : simdgroup_half8x8
+        var ma3 : simdgroup_half8x8
+        var mb0 : simdgroup_half8x8
+        var mb1 : simdgroup_half8x8
+        var kb = 0u
+        while (kb * 32u < head_size) {
+            let srcA = (nBase + lr0) * kvd4 + kvhoff4 + (kb * 32u + il0 * 16u) / 4u
+            let a0 = k[srcA]
+            let a1 = k[srcA + 1u]
+            let a2 = k[srcA + 2u]
+            let a3 = k[srcA + 3u]
+            let srcB = (mBase + lr1) * qd4 + qoff4 + (kb * 32u + iy) / 4u
+            let b0 = q[srcB] * scale
+            let b1 = q[srcB + 1u] * scale
+            barrier()
+            ta[tA0] = float16(a0.x)
+            ta[tA0 + 8u] = float16(a0.y)
+            ta[tA0 + 16u] = float16(a0.z)
+            ta[tA0 + 24u] = float16(a0.w)
+            ta[tA0 + 32u] = float16(a1.x)
+            ta[tA0 + 40u] = float16(a1.y)
+            ta[tA0 + 48u] = float16(a1.z)
+            ta[tA0 + 56u] = float16(a1.w)
+            ta[tA1] = float16(a2.x)
+            ta[tA1 + 8u] = float16(a2.y)
+            ta[tA1 + 16u] = float16(a2.z)
+            ta[tA1 + 24u] = float16(a2.w)
+            ta[tA1 + 32u] = float16(a3.x)
+            ta[tA1 + 40u] = float16(a3.y)
+            ta[tA1 + 48u] = float16(a3.z)
+            ta[tA1 + 56u] = float16(a3.w)
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            simdgroup_load(ma0, ta, aB, 8u)
+            simdgroup_load(ma1, ta, aB + 64u, 8u)
+            simdgroup_load(ma2, ta, aB + 128u, 8u)
+            simdgroup_load(ma3, ta, aB + 192u, 8u)
+            simdgroup_load(mb0, tb, bB, 8u)
+            simdgroup_load(mb1, tb, bB + 64u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 512u, 8u)
+            simdgroup_load(ma1, ta, aB + 576u, 8u)
+            simdgroup_load(ma2, ta, aB + 640u, 8u)
+            simdgroup_load(ma3, ta, aB + 704u, 8u)
+            simdgroup_load(mb0, tb, bB + 256u, 8u)
+            simdgroup_load(mb1, tb, bB + 320u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1024u, 8u)
+            simdgroup_load(ma1, ta, aB + 1088u, 8u)
+            simdgroup_load(ma2, ta, aB + 1152u, 8u)
+            simdgroup_load(ma3, ta, aB + 1216u, 8u)
+            simdgroup_load(mb0, tb, bB + 512u, 8u)
+            simdgroup_load(mb1, tb, bB + 576u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1536u, 8u)
+            simdgroup_load(ma1, ta, aB + 1600u, 8u)
+            simdgroup_load(ma2, ta, aB + 1664u, 8u)
+            simdgroup_load(ma3, ta, aB + 1728u, 8u)
+            simdgroup_load(mb0, tb, bB + 768u, 8u)
+            simdgroup_load(mb1, tb, bB + 832u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            kb++
+        }
+        let base = h * np32 * np32
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = queries
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = keys
+        simdgroup_store(c00, att, base + row0 * np32 + col0, np32)
+        simdgroup_store(c01, att, base + row0 * np32 + (col0 + 8u), np32)
+        simdgroup_store(c02, att, base + row0 * np32 + (col0 + 16u), np32)
+        simdgroup_store(c03, att, base + row0 * np32 + (col0 + 24u), np32)
+        simdgroup_store(c10, att, base + (row0 + 8u) * np32 + col0, np32)
+        simdgroup_store(c11, att, base + (row0 + 8u) * np32 + (col0 + 8u), np32)
+        simdgroup_store(c12, att, base + (row0 + 8u) * np32 + (col0 + 16u), np32)
+        simdgroup_store(c13, att, base + (row0 + 8u) * np32 + (col0 + 24u), np32)
+    }
+}
+
+// AV: O_h = P_h . V_h — C tile 32 tokens x 64 V-columns, k walks the (causally limited)
+// position axis in 32-blocks. V stages in its natural (position row, column) orientation into
+// the tile-major A grid — contiguous float4 loads, position rows >= npos ZEROED (the causal
+// softmax zeroes P columns >= npos EXACTLY, and 0 * NaN from a pad V row would poison the
+// tile); P stages rows via float4 loads of the score slab (v21's B pattern).
+class MetalAttnAVMm {
+    @ssbo @binding = 0 att : array<float4>  // [n_heads x np32 x np32/4] normalized P
+    @ssbo @binding = 1 v : array<float4>    // [mp x kv_dim/4] raw V
+    @ssbo @binding = 2 xb : array<float>    // [mp x qd] attention output
+    @uniform @binding = 3 qd : uint
+    @uniform @binding = 4 kv_dim : uint
+    @uniform @binding = 5 head_size : uint
+    @uniform @binding = 6 kv_mul : uint
+    @uniform @binding = 7 npos : uint
+    @uniform @binding = 8 np32 : uint
+    @workgroup ta : float16[2048]           // V: pos-tiles x 8 col-tiles of 8x8, tile (pos row, col col)
+    @workgroup tb : float16[1024]           // P: pos-tiles x 4 token-tiles of 8x8 (token row, pos col)
+
+    [metal_kernel(name="metal_attn_av_mm_msl")]
+    def metal_attn_av_mm {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows
+        let vBase = gl_WorkGroupID.y * 64u  // V columns within the head
+        let h = gl_WorkGroupID.z
+        let kvhoff4 = ((h / kv_mul) * head_size) / 4u
+        let kvd4 = kv_dim / 4u
+        let np324 = np32 / 4u
+        var c00 : simdgroup_float8x8
+        var c01 : simdgroup_float8x8
+        var c02 : simdgroup_float8x8
+        var c03 : simdgroup_float8x8
+        var c10 : simdgroup_float8x8
+        var c11 : simdgroup_float8x8
+        var c12 : simdgroup_float8x8
+        var c13 : simdgroup_float8x8
+        // A split: thread stages one position row x 16 contiguous V columns (4 x tg_store_half4)
+        let pr = lid / 4u
+        let vc16 = (lid % 4u) * 16u
+        let sxyA = (pr / 8u) * 8u * 64u + (pr % 8u) * 8u   // 64*(8*(pos/8)) + 8*(pos%8)
+        // B split: thread stages one token row x 8 contiguous positions of P
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var ma0 : simdgroup_half8x8
+        var ma1 : simdgroup_half8x8
+        var ma2 : simdgroup_half8x8
+        var ma3 : simdgroup_half8x8
+        var mb0 : simdgroup_half8x8
+        var mb1 : simdgroup_half8x8
+        let klimit = min(mBase + 32u, np32) // causal: P rows here are zero past mBase+31
+        var kb = 0u
+        while (kb * 32u < klimit) {
+            let posg = kb * 32u + pr
+            let srcA = posg * kvd4 + kvhoff4 + (vBase + vc16) / 4u
+            let zero = float4(0.0)
+            let a0 = posg < npos ? v[srcA] : zero
+            let a1 = posg < npos ? v[srcA + 1u] : zero
+            let a2 = posg < npos ? v[srcA + 2u] : zero
+            let a3 = posg < npos ? v[srcA + 3u] : zero
+            let srcB = (h * np32 + mBase + lr1) * np324 + (kb * 32u + iy) / 4u
+            let b0 = att[srcB]
+            let b1 = att[srcB + 1u]
+            barrier()
+            let tbase = sxyA + (vc16 / 8u) * 64u            // first col-tile this thread touches
+            tg_store_half4(ta, tbase, a0)
+            tg_store_half4(ta, tbase + 4u, a1)
+            tg_store_half4(ta, tbase + 64u, a2)             // next 8-column tile
+            tg_store_half4(ta, tbase + 68u, a3)
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            simdgroup_load(ma0, ta, aB, 8u)
+            simdgroup_load(ma1, ta, aB + 64u, 8u)
+            simdgroup_load(ma2, ta, aB + 128u, 8u)
+            simdgroup_load(ma3, ta, aB + 192u, 8u)
+            simdgroup_load(mb0, tb, bB, 8u)
+            simdgroup_load(mb1, tb, bB + 64u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 512u, 8u)
+            simdgroup_load(ma1, ta, aB + 576u, 8u)
+            simdgroup_load(ma2, ta, aB + 640u, 8u)
+            simdgroup_load(ma3, ta, aB + 704u, 8u)
+            simdgroup_load(mb0, tb, bB + 256u, 8u)
+            simdgroup_load(mb1, tb, bB + 320u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1024u, 8u)
+            simdgroup_load(ma1, ta, aB + 1088u, 8u)
+            simdgroup_load(ma2, ta, aB + 1152u, 8u)
+            simdgroup_load(ma3, ta, aB + 1216u, 8u)
+            simdgroup_load(mb0, tb, bB + 512u, 8u)
+            simdgroup_load(mb1, tb, bB + 576u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1536u, 8u)
+            simdgroup_load(ma1, ta, aB + 1600u, 8u)
+            simdgroup_load(ma2, ta, aB + 1664u, 8u)
+            simdgroup_load(ma3, ta, aB + 1728u, 8u)
+            simdgroup_load(mb0, tb, bB + 768u, 8u)
+            simdgroup_load(mb1, tb, bB + 832u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = h * head_size + vBase + (sg % 2u) * 32u
+        simdgroup_store(c00, xb, row0 * qd + col0, qd)
+        simdgroup_store(c01, xb, row0 * qd + (col0 + 8u), qd)
+        simdgroup_store(c02, xb, row0 * qd + (col0 + 16u), qd)
+        simdgroup_store(c03, xb, row0 * qd + (col0 + 24u), qd)
+        simdgroup_store(c10, xb, (row0 + 8u) * qd + col0, qd)
+        simdgroup_store(c11, xb, (row0 + 8u) * qd + (col0 + 8u), qd)
+        simdgroup_store(c12, xb, (row0 + 8u) * qd + (col0 + 16u), qd)
+        simdgroup_store(c13, xb, (row0 + 8u) * qd + (col0 + 24u), qd)
+    }
+}
+
 // Fused SwiGLU gate, one thread per element: g = silu(g) * u — swiglu exactly (the CPU side's
 // exp4 polynomial vs the GPU exp differ inside the shared tolerance envelope).
 class MetalSwiglu {
@@ -613,6 +925,8 @@ var private g_pso_addrmsq : MetalComputePipeline?
 var private g_pso_swigluq : MetalComputePipeline?
 var private g_pso_ropeqk : MetalComputePipeline?
 var private g_pso_mulmm : MetalComputePipeline?
+var private g_pso_qkmm : MetalComputePipeline?
+var private g_pso_avmm : MetalComputePipeline?
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm): skips encoding
 // that stage family (nongemm = attn AND ew, leaving the pure GEMM chain) — output is GARBAGE,
@@ -718,6 +1032,14 @@ def public metal_prefill_shutdown {
         metal_release(g_pso_mulmm)
         g_pso_mulmm = null
     }
+    if (g_pso_qkmm != null) {
+        metal_release(g_pso_qkmm)
+        g_pso_qkmm = null
+    }
+    if (g_pso_avmm != null) {
+        metal_release(g_pso_avmm)
+        g_pso_avmm = null
+    }
     if (g_queue != null) {
         metal_release(g_queue)
         g_queue = null
@@ -772,6 +1094,8 @@ def private metal_prefill_init : bool {
     g_pso_swigluq = compile_pso(metal_swiglu_quant_msl, metal_swiglu_quant_msl_entry, metal_swiglu_quant_msl_fastmath, ok)
     g_pso_ropeqk = compile_pso(metal_rope_qk_msl, metal_rope_qk_msl_entry, metal_rope_qk_msl_fastmath, ok)
     g_pso_mulmm = compile_pso(LCPP_MUL_MM_Q8_MSL, LCPP_MUL_MM_Q8_ENTRY, true, ok)   // ggml compiles fast-math ON
+    g_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
+    g_pso_avmm = compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
     if (!ok) {
         metal_prefill_shutdown()
         g_failed = true
@@ -1005,6 +1329,36 @@ def private enc_rope_qk(enc : MetalComputeEncoder?; bq, bk, bcos, bsin, bqd, bkv
     metal_dispatch_threadgroups(enc, uint3(uint((npairs + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
+// the ggml-geometry attention pair: same buffer lists as the trio, 32x64 C tiles, z = heads
+def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt, bqd, bkvd, bhs, bkvm, bnp, bnp32, bscale : MetalBuffer?; mp, heads : int64) {
+    metal_set_pipeline(enc, g_pso_qkmm)
+    metal_set_buffer(enc, bq, 0ul, 0)
+    metal_set_buffer(enc, bk, 0ul, 1)
+    metal_set_buffer(enc, batt, 0ul, 2)
+    metal_set_buffer(enc, bqd, 0ul, 3)
+    metal_set_buffer(enc, bkvd, 0ul, 4)
+    metal_set_buffer(enc, bhs, 0ul, 5)
+    metal_set_buffer(enc, bkvm, 0ul, 6)
+    metal_set_buffer(enc, bnp, 0ul, 7)
+    metal_set_buffer(enc, bnp32, 0ul, 8)
+    metal_set_buffer(enc, bscale, 0ul, 9)
+    metal_dispatch_threadgroups(enc, uint3(uint(mp / 32l), uint(mp / 64l), uint(heads)), uint3(128u, 1u, 1u))
+}
+
+def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb, bqd, bkvd, bhs, bkvm, bnp, bnp32 : MetalBuffer?; mp, heads, head_size : int64) {
+    metal_set_pipeline(enc, g_pso_avmm)
+    metal_set_buffer(enc, batt, 0ul, 0)
+    metal_set_buffer(enc, bv, 0ul, 1)
+    metal_set_buffer(enc, bxb, 0ul, 2)
+    metal_set_buffer(enc, bqd, 0ul, 3)
+    metal_set_buffer(enc, bkvd, 0ul, 4)
+    metal_set_buffer(enc, bhs, 0ul, 5)
+    metal_set_buffer(enc, bkvm, 0ul, 6)
+    metal_set_buffer(enc, bnp, 0ul, 7)
+    metal_set_buffer(enc, bnp32, 0ul, 8)
+    metal_dispatch_threadgroups(enc, uint3(uint(mp / 32l), uint(head_size / 64l), uint(heads)), uint3(128u, 1u, 1u))
+}
+
 def private enc_qk(enc : MetalComputeEncoder?; bq, bk, batt, bqd, bkvd, bhs, bkvm, bnp, bnp32, bscale : MetalBuffer?; mp, heads : int64) {
     metal_set_pipeline(enc, g_pso_qk)
     metal_set_buffer(enc, bq, 0ul, 0)
@@ -1144,6 +1498,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // DASLLAMA_METAL_FUSE=0 pins the unfused dispatch set (the A/B rail). The lcpp path runs the
     // unfused elementwise set (no quant tails to fuse).
     let fused = !lcppmm && dim <= 3072l && get_env_variable("DASLLAMA_METAL_FUSE") != "0"
+    // ggml-geometry QK/AV (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid)
+    // and mp % 64 (the QK key grid — true by construction). DASLLAMA_METAL_ATTN=0 pins the trio.
+    let mmattn = (head_size % 64l) == 0l && get_env_variable("DASLLAMA_METAL_ATTN") != "0"
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
     var err : string
@@ -1221,9 +1578,23 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if (g_skip != "attn" && g_skip != "nongemm") {
-                    enc_qk(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
-                    enc_softmax(enc, batt, u_np32, npos, n_heads)
-                    enc_av(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                    if (g_skip != "attn_qk") {
+                        if (mmattn) {
+                            enc_qk_mm(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                        } else {
+                            enc_qk(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
+                        }
+                    }
+                    if (g_skip != "attn_sm") {
+                        enc_softmax(enc, batt, u_np32, npos, n_heads)
+                    }
+                    if (g_skip != "attn_av") {
+                        if (mmattn) {
+                            enc_av_mm(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                        } else {
+                            enc_av(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
+                        }
+                    }
                 }
                 if (!lcppmm && g_skip != "ew" && g_skip != "nongemm") {
                     enc_quant(enc, bxb, bxq, bxs, u_qd, u_nblk_qd, npos * (qd / 32l))

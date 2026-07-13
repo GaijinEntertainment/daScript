@@ -786,3 +786,27 @@ DASLLAMA_METAL_UNRETAINED=1) — neutral at every chunk count, kept as surface. 
 BOTH modes green on the chunked driver, mulmm unit, donor gemm, leak gates. **Remaining vs
 lcpp 1402: the 398ms GPU window itself** — gemm ~343 (verbatim-rate; emitter chase is the
 lever), attn ~25 (f16 candidate), ew ~28.
+
+**2026-07-13 — Phase 7 (session 3): ggml-geometry attention pair — 3B pp512 1220 -> 1251 t/s;
+we now beat llama.cpp's fa=0 wall.** Window re-attribution first (new attn_qk/attn_sm/attn_av
+sub-skip rails): gemm ~350 / attn 28 (QK 14.2 + AV 10.2 + softmax 3.2) / ew only ~9 (the
+quant deletions already took the old 28ms bucket). llama-bench 3B: fa=0 1350.5, fa=1 1391.4
+— their OWN flash attention nets +3%, and their fa=0 attention is mul_mm + masked softmax =
+exactly our structure, so the trio's kernels were the outlier (32x32 C tiles, scalar f32
+staging, the pre-run-staging style — ~60x below mul_mm rate). Rewrote QK/AV with the v21
+lessons (MetalAttnQKMm/MetalAttnAVMm): 32x64 C tiles, tile-major 8x8 shared blocks staged
+HALF via float4 loads (lcpp's f32_f32 mul_mm stages half from f32 too), 2x4 sg quadrants,
+unrolled math, per-head z grid, QK causal block early-exit, AV causal k-limit, V pad rows
+zeroed at staging (0*NaN guard); K pads need NO guard (their scores land in columns the
+causal softmax zeroes). Softmax unchanged. Default at head_size % 64 == 0; rail
+DASLLAMA_METAL_ATTN=0 pins the trio (also serves other hs). Attention 28 -> 14.2ms
+(QK 5.2 + AV 6.3 + softmax 3.5); GPU window ~374ms; our wall 376ms vs their fa=0 379ms.
+Gates: causal-GQA oracle hs64-GQA2 + hs128-GQA3 within the half-staging envelope (2e-2 —
+the honest envelope of half-staged scores through softmax, same as lcpp's), parity 40/40
+exact both modes. Framing re-measured same-run: ~10ms (logits 3.7 + embed 0.7 + alloc ~5),
+NOT the 33ms cross-run wobble suggested. GEMM chain check: 1.44 TMAC / 343ms = 4190 GMAC/s =
+AT the verbatim kernel's lab rate — that bucket is done. **NEXT (the one big lever left):
+verbatim lcpp kernel_flash_attn_ext port — collapses QK+softmax+AV (~14 -> ~6ms, +2.5-3%)
+AND kills the heads x np32^2 score slab (the g_max_npos=2048 cap). Needs their KV-dtype
+contract read first (f16 K/V vs our f32 buffers). Micro ledger: softmax restructure ~2ms,
+logits-on-GPU ~3ms, prefill alloc caching ~5ms.**

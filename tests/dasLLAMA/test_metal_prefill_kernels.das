@@ -45,18 +45,22 @@ def private approx(x, y : float) : bool {
 // (head_size, heads, kv_heads, npos) shape. Buffers carry np32 rows like the driver's (whole-tile
 // sgmat stores + staging reads walk the padded rows); rows >= npos are pad. GENERIC (untyped
 // dev/queue) so it instantiates only inside the Apple static_if.
-def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int) {
+def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int; mm : bool) {
     let kv_mul = n_heads / n_kv_heads
     let qd = n_heads * head_size
     let kv_dim = n_kv_heads * head_size
     let np32 = (npos + 31) / 32 * 32
     var err : string
-    var pso_sc = pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err)
-    t |> success(pso_sc != null, "qk pipeline: {err}")
+    var pso_sc = (mm
+        ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
+    t |> success(pso_sc != null, "qk pipeline (mm={mm}): {err}")
     var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
     t |> success(pso_sm != null, "softmax pipeline: {err}")
-    var pso_av = pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err)
-    t |> success(pso_av != null, "av pipeline: {err}")
+    var pso_av = (mm
+        ? pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
+    t |> success(pso_av != null, "av pipeline (mm={mm}): {err}")
     let scale = 1.0 / sqrt(float(head_size))
     var aq : array<float>
     var ak : array<float>
@@ -126,7 +130,7 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         metal_set_buffer(enc, bnp, 0ul, 7)
         metal_set_buffer(enc, bnp32, 0ul, 8)
         metal_set_buffer(enc, bscale, 0ul, 9)
-        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / 32), uint(n_heads)), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_sm)
         metal_set_buffer(enc, batt, 0ul, 0)
         metal_set_buffer(enc, bnp32, 0ul, 1)
@@ -141,10 +145,12 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         metal_set_buffer(enc, bkvm, 0ul, 6)
         metal_set_buffer(enc, bnp, 0ul, 7)
         metal_set_buffer(enc, bnp32, 0ul, 8)
-        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / 32), uint(n_heads)), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
-    t |> success(aran, "attention dispatches (hs={head_size}): {err}")
-    t |> equal(buf_mismatch_approx(bxb, axb_want), 0)
+    t |> success(aran, "attention dispatches (hs={head_size}, mm={mm}): {err}")
+    // the mm pair stages HALF (llama.cpp's f32_f32 mul_mm does the same) — the envelope is the
+    // half-precision score shift through softmax, ~1% of the convex-combination output
+    t |> equal(buf_mismatch_tol(bxb, axb_want, mm ? 2e-2 : 1e-4), 0)
     metal_release(baq)
     metal_release(bak)
     metal_release(bav)
@@ -333,8 +339,11 @@ def test_metal_prefill_kernels(t : T?) {
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the
                 // classic small shape (hs 32 — one QK k-slab) AND the llama-3B head shape
                 // (hs 128 — the QK kernel's two-k-slab path; 2 heads keep the oracle cheap)
-                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS)
-                attn_trio_gate(t, dev, queue, 128, 2, 1, NPOS)
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false)
+                attn_trio_gate(t, dev, queue, 128, 2, 1, NPOS, false)
+                // the ggml-geometry pair (hs % 64 shapes: llama-1B/3B classes + GQA)
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true)
+                attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
 
                 // ===== swiglu + residual add =====
                 var pso_sw = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, err)
@@ -559,6 +568,18 @@ def private buf_mismatch_exact(buf; want : array<auto(TT)>) : int {
     var bad = 0
     for (k in range(length(want))) {
         if (unsafe(p[k]) != want[k]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+def private buf_mismatch_tol(buf; want : array<float>; tol : float) : int {
+    let p = unsafe(reinterpret<float const?>(metal_buffer_contents(buf)))
+    var bad = 0
+    for (k in range(length(want))) {
+        let g = unsafe(p[k])
+        if (abs(g - want[k]) > tol * max(1.0, max(abs(g), abs(want[k])))) {
             bad++
         }
     }
