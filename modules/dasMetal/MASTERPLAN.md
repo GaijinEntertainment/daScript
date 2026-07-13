@@ -741,3 +741,28 @@ deletes the X-quant dispatches from the graph) → the lab-proven 4000-4250 rate
 as the planar harvest (+2-4% big shapes, kv fix, kernel unification) and put the effort into
 the ~90ms non-GEMM tail; (C) f32-X feed only (cheap, +2%, kills quant dispatches). All probe
 variants live in the lab (lcpp_nosgbar/lcpp_nostage/vk21_*/v21f32x/v21sct).
+
+**2026-07-13 — Phase 7 (session 2c): Option A SHIPPED — verbatim mul_mm + blob repack + f32-X
+in the resident prefill. 3B pp512 850 -> 1053 t/s (+24%); gap to lcpp 1402 now 1.33x.** Boris
+picked (A). First tried the das-native blob kernel (lab v22_blob36: das-friendly 36B blocks,
+f32 scale + byte4-aligned quants, two typed views of one buffer) — 3623 GMAC/s, only +2.3%
+over v21: the residual ~13% vs verbatim is emitter/MSL codegen, not format. So production runs
+the VERBATIM kernel: `dasllama/dasllama_lcpp_mulmm.das` (moved from the bench fixture, in
+.das_module), compiled alongside the kernel set. Driver (dasllama_metal_prefill.das):
+`upload_blob_region` lazily repacks each (quants, scales) weight region into resident
+block_q8_0 blobs — one-time CPU pass, 235ms 1B / 686ms 3B, f32->f16 scale exact for
+GGUF-q8_0-sourced weights; `uniform_mm_args` pooled 88-byte kargs images; `enc_gemm_lcpp`
+(kargs/blob/f32-X/dst, 6144B dynamic tg scratch, grid (mp/32, d/64) x (32,4,1)); mode gate
+`lcppmm` = default when every GEMM output dim % 64 == 0 (bc_out=false specialization), rails:
+`DASLLAMA_METAL_MULMM=0` env + `set_metal_prefill_mulmm_legacy()` setter. The lcpp path runs
+the UNFUSED elementwise set minus ALL X-quant dispatches (17/layer; rms/swiglu feed f32
+straight to mul_mm). Legacy quantized path fully preserved (donor/batch path untouched).
+Gates: mulmm_gate unit (verbatim PSO on exact-arithmetic blob W x f32 X vs CPU ref, BIT-exact,
+2 shapes — also the kargs layout oracle), parity test now runs BOTH modes — 40-token greedy
+matches the CPU control EXACTLY on the f32-X path too (counting-prompt family robust as
+designed), leak gates green. E2E A/B (clean, same binary, 3B): N=256 748.9 -> 899.4 t/s,
+N=512 849.8 -> 1053.0 t/s (GPU 508 -> 396 ms, -22%); 1B parity-run GPU 150.9 -> 116.9 ms
+(-22.5%). NEXT: the ~80ms non-GEMM tail (slack attribution / split command buffers /
+retainedReferences; f16 attention; readback overlap) — at gpu=396ms the tail is now ~17% of
+total; then the das-emitter codegen chase to retire the verbatim kernel (ledger: math-loop
+scheduling ~4.5%, staging codegen ~0.04ms/dispatch).

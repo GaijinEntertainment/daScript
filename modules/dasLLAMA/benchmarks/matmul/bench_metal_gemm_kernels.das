@@ -5,7 +5,7 @@ require dastest/testing_boost
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production kernel MSL (v0 baseline)
-require _lcpp_mul_mm_q8  // nolint:STYLE030 — llama.cpp's verbatim kernel_mul_mm_q8_0_f32, used only in the Apple half
+require dasllama/dasllama_lcpp_mulmm  // nolint:STYLE030 — llama.cpp's verbatim kernel_mul_mm_q8_0_f32, used only in the Apple half
 require daslib/fio
 require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require strings
@@ -2790,6 +2790,162 @@ class MetalGemmLabGgmlGeoScT {
     }
 }
 
+class MetalGemmLabBlob36 {
+    @ssbo @binding = 0 wsc : array<float>   // 36B-block W blob (f32 scale + 32 int8), SCALE view: scale of block b at 9*b
+    @ssbo @binding = 1 wqv : array<byte4>   // the SAME blob buffer, QUANT view: block b quants at 9*b + 1 .. 9*b + 8
+    @ssbo @binding = 2 xf : array<float4>   // PRE-DEQUANTIZED f32 activations — the lcpp B contract
+    @ssbo @binding = 3 xs : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup ta : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, each tile (k row, wrow col)
+    @workgroup tb : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, each tile (token row, k col)
+
+    [metal_kernel(name="lab_blob36_msl")]
+    def lab_blob36 {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
+        var c00 : simdgroup_float8x8
+        var c01 : simdgroup_float8x8
+        var c02 : simdgroup_float8x8
+        var c03 : simdgroup_float8x8
+        var c10 : simdgroup_float8x8
+        var c11 : simdgroup_float8x8
+        var c12 : simdgroup_float8x8
+        var c13 : simdgroup_float8x8
+        let kdim4 = kdim / 4u
+        let nkb = kdim / 32u
+        // A split: each thread stages 16 weight elems — row lr0, k half il0
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA         // k-tiles il0*2 (lanes at stride 8)
+        let tA1 = ((il0 * 2u + 1u) * 8u + syA) * 64u + lxA  // k-tile il0*2+1
+        // B split: each thread stages 8 activation elems — token lr1, k offset iy
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
+        let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
+        var ma0 : simdgroup_half8x8
+        var ma1 : simdgroup_half8x8
+        var ma2 : simdgroup_half8x8
+        var ma3 : simdgroup_half8x8
+        var mb0 : simdgroup_half8x8
+        var mb1 : simdgroup_half8x8
+        var kb = 0u
+        while (kb < nkb) {
+            // device reads first — they fly while the previous math loop drains
+            let b9 = ((nBase + lr0) * nkb + kb) * 9u
+            let sA = wsc[b9]                // scale rides the quants' cacheline — the blob's point
+            let srcA = b9 + 1u + il0 * 4u
+            let a0 = wqv[srcA]
+            let a1 = wqv[srcA + 1u]
+            let a2 = wqv[srcA + 2u]
+            let a3 = wqv[srcA + 3u]
+            let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+            let b0 = xf[srcB]
+            let b1 = xf[srcB + 1u]
+            barrier()                       // previous math done reading the tiles
+            let va0 = float4(int4(a0)) * sA
+            let va1 = float4(int4(a1)) * sA
+            let va2 = float4(int4(a2)) * sA
+            let va3 = float4(int4(a3)) * sA
+            ta[tA0] = float16(va0.x)        // ly = k%8 -> +8 per lane; +32 = second 4-k half
+            ta[tA0 + 8u] = float16(va0.y)
+            ta[tA0 + 16u] = float16(va0.z)
+            ta[tA0 + 24u] = float16(va0.w)
+            ta[tA0 + 32u] = float16(va1.x)
+            ta[tA0 + 40u] = float16(va1.y)
+            ta[tA0 + 48u] = float16(va1.z)
+            ta[tA0 + 56u] = float16(va1.w)
+            ta[tA1] = float16(va2.x)
+            ta[tA1 + 8u] = float16(va2.y)
+            ta[tA1 + 16u] = float16(va2.z)
+            ta[tA1 + 24u] = float16(va2.w)
+            ta[tA1 + 32u] = float16(va3.x)
+            ta[tA1 + 40u] = float16(va3.y)
+            ta[tA1 + 48u] = float16(va3.z)
+            ta[tA1 + 56u] = float16(va3.w)
+            tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // constant tile offsets off hoisted quadrant bases
+            simdgroup_load(ma0, ta, aB, 8u)
+            simdgroup_load(ma1, ta, aB + 64u, 8u)
+            simdgroup_load(ma2, ta, aB + 128u, 8u)
+            simdgroup_load(ma3, ta, aB + 192u, 8u)
+            simdgroup_load(mb0, tb, bB, 8u)
+            simdgroup_load(mb1, tb, bB + 64u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 512u, 8u)
+            simdgroup_load(ma1, ta, aB + 576u, 8u)
+            simdgroup_load(ma2, ta, aB + 640u, 8u)
+            simdgroup_load(ma3, ta, aB + 704u, 8u)
+            simdgroup_load(mb0, tb, bB + 256u, 8u)
+            simdgroup_load(mb1, tb, bB + 320u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1024u, 8u)
+            simdgroup_load(ma1, ta, aB + 1088u, 8u)
+            simdgroup_load(ma2, ta, aB + 1152u, 8u)
+            simdgroup_load(ma3, ta, aB + 1216u, 8u)
+            simdgroup_load(mb0, tb, bB + 512u, 8u)
+            simdgroup_load(mb1, tb, bB + 576u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1536u, 8u)
+            simdgroup_load(ma1, ta, aB + 1600u, 8u)
+            simdgroup_load(ma2, ta, aB + 1664u, 8u)
+            simdgroup_load(ma3, ta, aB + 1728u, 8u)
+            simdgroup_load(mb0, tb, bB + 768u, 8u)
+            simdgroup_load(mb1, tb, bB + 832u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = outputs
+        simdgroup_store(c00, y, row0 * ndim + col0, ndim)
+        simdgroup_store(c01, y, row0 * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c02, y, row0 * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c03, y, row0 * ndim + (col0 + 24u), ndim)
+        simdgroup_store(c10, y, (row0 + 8u) * ndim + col0, ndim)
+        simdgroup_store(c11, y, (row0 + 8u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c12, y, (row0 + 8u) * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c13, y, (row0 + 8u) * ndim + (col0 + 24u), ndim)
+    }
+}
+
 // knockouts: v21 staging bisect — A half only / B half only (timing-only)
 class MetalGemmLabGgmlGeoAOnly {
     @ssbo @binding = 0 wq : array<byte4>
@@ -3190,6 +3346,7 @@ struct private LabVariant {
     grid2d : bool = false                   // dispatch (M'/bm, d/bn, 1) — tokens on the fast axis (ggml rasterization)
     f32x : bool = false                     // binding 2 gets the PRE-DEQUANTIZED f32 activation panel
     wscT : bool = false                     // binding 1 gets the [block][row]-TRANSPOSED W scales
+    blob36 : bool = false                   // bindings 0+1 get the SAME 36B-block W blob (scale/quant views) + f32 X
 }
 
 def private align_up(v, a : int64) : int64 => ((v + a - 1l) / a) * a
@@ -3294,6 +3451,34 @@ def private upload_lcpp_f32_x(dev; xq : array<int8>; xs : array<float>; rows, k 
         let s0 = r * nb
         for (i in range(kk)) {
             unsafe(pf[r * kk + i]) = float(xq[r * kk + i]) * xs[s0 + i / 32]
+        }
+    }
+    return buf
+}
+
+// interleaved 36B-block W blob (f32 scale + 32 int8 quants, 4-aligned) — the Option-A
+// production layout: same bytes as planar quants+scales, but the scale rides the quants'
+// cacheline and byte4 quant loads stay aligned (ggml's 34B half-scale blocks force scalar reads)
+def private upload_blob36(dev; q : array<int8>; s : array<float>; rows, k : int64; enabled : bool) {
+    if (!enabled) {
+        return metal_new_buffer(dev, 64ul)
+    }
+    let nb = int(k / 32l)
+    let kk = int(k)
+    var buf = metal_new_buffer(dev, uint64(rows * (k / 32l) * 36l))
+    var pf = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
+    var p8 = unsafe(reinterpret<int8?>(metal_buffer_contents(buf)))
+    for (r in range(int(rows))) {
+        for (bi in range(nb)) {
+            let b = r * nb + bi
+            unsafe {
+                pf[b * 9] = s[b]
+                let dst = b * 36 + 4
+                let src = r * kk + bi * 32
+                for (c in range(32)) {
+                    p8[dst + c] = q[src + c]
+                }
+            }
         }
     }
     return buf
@@ -3462,8 +3647,14 @@ def private run_lab(b : B?; variants) {
             if (v.lcpp && want("DASMETAL_LAB_VARIANTS", v.name) && ntok % 32l == 0l && (d % int64(v.bn)) == 0l) {
                 lcppOn = true
             }
-            if ((v.lcpp || v.f32x) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+            if ((v.lcpp || v.f32x || v.blob36) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
                 xf32On = true
+            }
+        }
+        var blob36On = false
+        for (v in variants) {
+            if (v.blob36 && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+                blob36On = true
             }
         }
         var lcpp_wblob = upload_lcpp_q8_blob(dev, wq, ws, d, n, lcppOn)
@@ -3481,6 +3672,8 @@ def private run_lab(b : B?; variants) {
         var wsTbuf = upload_array(dev, wsT, d * nb * 4l)
         delete wsT
         var bufswsct <- [wbuf, wsTbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
+        var wblob36 = upload_blob36(dev, wq, ws, d, n, blob36On)
+        var bufs36 <- [wblob36, wblob36, lcpp_xbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
         let setup_ms = double(ref_time_ticks() - t_shape0) / 1000000.0lf
         to_log(LOG_INFO, "=== {sh._0} n={n} d={d} === (setup {setup_ms} ms)\n")
         var y0 : array<float>                // v0's full output — the cross-variant reference
@@ -3502,7 +3695,7 @@ def private run_lab(b : B?; variants) {
             let ms = (v.lcpp                    // warmup + correctness dispatch
                 ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
                                  uint3(uint(ntok / 32l), uint(d / 64l), 1u), 1)
-                : time_reps(queue, pso, v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs)), groups, uint(v.threads), 1))
+                : time_reps(queue, pso, v.blob36 ? bufs36 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs))), groups, uint(v.threads), 1))
             if (ms < 0.0lf) {
                 b |> success(false, "{v.name} {sh._0}: dispatch")
                 continue
@@ -3551,7 +3744,7 @@ def private run_lab(b : B?; variants) {
                 let ms = (v.lcpp
                     ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
                                      uint3(uint(ntok / 32l), uint(d / 64l), 1u), reps)
-                    : time_reps(queue, pso, v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs)), groups, uint(v.threads), reps))
+                    : time_reps(queue, pso, v.blob36 ? bufs36 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs))), groups, uint(v.threads), reps))
                 if (ms > 0.0lf && ms < best[idx]) {
                     best[idx] = ms
                 }
@@ -3581,6 +3774,11 @@ def private run_lab(b : B?; variants) {
         bufswsct |> clear()
         unsafe {
             delete bufswsct
+        }
+        metal_release(wblob36)               // bound twice in bufs36 — release exactly once here
+        bufs36 |> clear()
+        unsafe {
+            delete bufs36
         }
         metal_release(whbuf)
         bufs16 |> clear()
@@ -3647,6 +3845,10 @@ def bench_metal_gemm_kernels(b : B?) {
             // W path; tests whether in-kernel X dequant is the residual staging tax
             LabVariant(name = "v21f32x", src = lab_ggmlgeof32x_msl, entry = lab_ggmlgeof32x_msl_entry,
                        fastmath = lab_ggmlgeof32x_msl_fastmath, bm = 32, bn = 64, grid2d = true, f32x = true),
+            // v22: the Option-A production kernel — v21 geometry, W from the interleaved 36B
+            // blob (scale + quants one cacheline, byte4-aligned), X from the f32 panel
+            LabVariant(name = "v22_blob36", src = lab_blob36_msl, entry = lab_blob36_msl_entry,
+                       fastmath = lab_blob36_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob36 = true),
             // v21 + [block][row]-transposed W scales — format-compatible (planar q8 unchanged,
             // scale array re-laid at upload); collapses the A-scale reads to 4 cachelines/tg
             LabVariant(name = "v21sct", src = lab_ggmlgeosct_msl, entry = lab_ggmlgeosct_msl_entry,

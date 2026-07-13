@@ -1,7 +1,10 @@
 options gen2
 
-// llama.cpp's Metal Q8_0 GEMM kernel (kernel_mul_mm_q8_0_f32) brought VERBATIM for the
-// ours-vs-llama.cpp comparison in bench_metal_gemm_kernels.das. Assembled from ggml-metal.metal
+module dasllama_lcpp_mulmm shared public
+
+// llama.cpp's Metal Q8_0 GEMM kernel (kernel_mul_mm_q8_0_f32) brought VERBATIM — the resident
+// Metal prefill's production GEMM (dasllama_metal_prefill.das, W as interleaved block_q8_0
+// blobs + raw f32 activations) and the lab reference in bench_metal_gemm_kernels.das. Assembled from ggml-metal.metal
 // + ggml-common.h + ggml-metal-impl.h @ llama.cpp ebd048f (MIT license, (c) ggml authors).
 // Deviations, both mechanical: the six FC_mul_mm_* [[function_constant]] declarations are baked
 // to the values llama.cpp specializes for these shapes (bc_inp=false, bc_out=false,

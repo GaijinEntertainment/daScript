@@ -9,6 +9,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_math_metal
+require dasllama/dasllama_lcpp_mulmm
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the Q8 GEMMs
 // that Phase 5c left on the CPU: activation requant, rmsnorm, table-driven NORM RoPE, fused
@@ -589,6 +590,8 @@ var private g_dev : MetalDevice?
 var private g_queue : MetalCommandQueue?
 var private g_failed = false
 var private g_regions : table<uint64; MetalBuffer?>    // base address -> resident weight/scale/norm region
+var private g_blob_regions : table<uint64; MetalBuffer?>    // quant base address -> resident block_q8_0 blob (lcpp mul_mm path)
+var private g_repack_us = 0l
 var private g_pool : MetalBufferPool
 var private g_upool : MetalBufferPool     // UNTRACKED pool: uniforms + rope tables (GPU-read-only)
 var private g_min_npos = 64l
@@ -608,6 +611,8 @@ var private g_pso_add : MetalComputePipeline?
 var private g_pso_addrmsq : MetalComputePipeline?
 var private g_pso_swigluq : MetalComputePipeline?
 var private g_pso_ropeqk : MetalComputePipeline?
+var private g_pso_mulmm : MetalComputePipeline?
+var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm): skips encoding
 // that stage family (nongemm = attn AND ew, leaving the pure GEMM chain) — output is GARBAGE,
 // gpu-time deltas attribute the budget. Debug rail only.
@@ -617,6 +622,13 @@ var private g_skip = ""
 //! Set 1 to force every prefill onto the GPU (tests).
 def public set_metal_prefill_min_npos(v : int64) {
     g_min_npos = v
+}
+
+//! Pin the legacy quantized-activation GEMM path (q8 X + planar weights) instead of the default
+//! llama.cpp mul_mm path (f32 X + block_q8_0 blobs). The legacy path is bit-identical to the CPU
+//! forward — the tests' exact-parity rail. `DASLLAMA_METAL_MULMM=0` pins it process-wide.
+def public set_metal_prefill_mulmm_legacy(v : bool) {
+    g_mm_legacy = v
 }
 
 //! (gpu prefills served, declines to the CPU path) since load — diagnostics / tests.
@@ -637,6 +649,16 @@ def public metal_prefill_shutdown {
     unsafe {
         delete g_regions
     }
+    for (buf in values(g_blob_regions)) {
+        if (buf != null) {
+            metal_release(buf)
+        }
+        buf = null
+    }
+    unsafe {
+        delete g_blob_regions
+    }
+    g_repack_us = 0l
     pool_drain(g_pool)
     pool_drain(g_upool)
     if (g_pso_gemm != null) {
@@ -691,6 +713,10 @@ def public metal_prefill_shutdown {
         metal_release(g_pso_ropeqk)
         g_pso_ropeqk = null
     }
+    if (g_pso_mulmm != null) {
+        metal_release(g_pso_mulmm)
+        g_pso_mulmm = null
+    }
     if (g_queue != null) {
         metal_release(g_queue)
         g_queue = null
@@ -740,6 +766,7 @@ def private metal_prefill_init : bool {
     g_pso_addrmsq = compile_pso(metal_add_rms_quant_msl, metal_add_rms_quant_msl_entry, metal_add_rms_quant_msl_fastmath, ok)
     g_pso_swigluq = compile_pso(metal_swiglu_quant_msl, metal_swiglu_quant_msl_entry, metal_swiglu_quant_msl_fastmath, ok)
     g_pso_ropeqk = compile_pso(metal_rope_qk_msl, metal_rope_qk_msl_entry, metal_rope_qk_msl_fastmath, ok)
+    g_pso_mulmm = compile_pso(LCPP_MUL_MM_Q8_MSL, LCPP_MUL_MM_Q8_ENTRY, true, ok)   // ggml compiles fast-math ON
     if (!ok) {
         metal_prefill_shutdown()
         g_failed = true
@@ -763,6 +790,66 @@ def private upload_region(src : void?; bytes : uint64) : MetalBuffer? {
         memcpy(metal_buffer_contents(buf), src, int(bytes))
     }
     g_regions[key] = buf
+    return buf
+}
+
+// lazily repack one weight region (planar quants + f32 scale plane) into a resident block_q8_0
+// blob — llama.cpp's mul_mm layout: 34-byte blocks of half scale + 32 int8 quants. One-time CPU
+// pass per region, keyed by the quant base address; f32 -> f16 scale narrowing is exact for
+// GGUF-q8_0-sourced weights (the loader widened the file's native f16 scales)
+def private upload_blob_region(qsrc : void?; ssrc : void?; rows, k : int64) : MetalBuffer? {
+    let key = intptr(qsrc)
+    if (key_exists(g_blob_regions, key)) {
+        return g_blob_regions[key]
+    }
+    let ts = ref_time_ticks()
+    let nblocks = int(rows * (k / 32l))
+    var buf = metal_new_buffer_untracked(g_dev, uint64(nblocks) * 34ul)
+    var base = unsafe(reinterpret<int8?>(metal_buffer_contents(buf)))
+    var qp = unsafe(reinterpret<int8?>(qsrc))
+    var sp = unsafe(reinterpret<float?>(ssrc))
+    for (b in range(nblocks)) {
+        let off = b * 34
+        unsafe {
+            var ph = reinterpret<float16?>(base + off)
+            ph[0] = float16(sp[b])
+            let src = b * 32
+            for (c in range(32)) {
+                base[off + 2 + c] = qp[src + c]
+            }
+        }
+    }
+    g_blob_regions[key] = buf
+    g_repack_us += int64(get_time_usec(ts))
+    return buf
+}
+
+// ggml_metal_kargs_mul_mm image for a plain 2D GEMM (88 bytes; padding after ne12 zeroed):
+// dst[m x d] = W[d x k] . X[m x k]^T with W as block_q8_0 blobs and X as raw f32 rows
+def private uniform_mm_args(k, d, m : int64) : MetalBuffer? {
+    var buf = pool_acquire_untracked(g_upool, g_dev, 88ul)
+    let pc = metal_buffer_contents(buf)
+    var pi = unsafe(reinterpret<int?>(pc))
+    var pu = unsafe(reinterpret<uint64?>(pc))
+    var ps = unsafe(reinterpret<int16?>(pc))
+    let nb01 = (k / 32l) * 34l
+    unsafe {
+        pi[0] = int(k)                      // ne00
+        pi[1] = 1                           // ne02
+        pu[1] = uint64(nb01)                // nb01
+        pu[2] = uint64(nb01 * d)            // nb02
+        pu[3] = uint64(nb01 * d)            // nb03
+        pi[8] = 1                           // ne12
+        pi[9] = 0                           // struct padding — keep deterministic
+        pu[5] = 4ul                         // nb10
+        pu[6] = uint64(k * 4l)              // nb11
+        pu[7] = uint64(k * 4l * m)          // nb12
+        pu[8] = uint64(k * 4l * m)          // nb13
+        pi[18] = int(d)                     // ne0
+        pi[19] = int(m)                     // ne1
+        ps[40] = int16(1)                   // r2
+        ps[41] = int16(1)                   // r3
+    }
     return buf
 }
 
@@ -828,6 +915,19 @@ def private enc_gemm(enc : MetalComputeEncoder?; bwq, bws, bxq, bxs, by, bkdim, 
     metal_set_buffer(enc, bndim, 0ul, 6)
     let groups = uint(use64 ? (mp / 64l) * (d / 64l) : (mp / 32l) * (d / 32l))
     metal_dispatch_threadgroups(enc, uint3(groups, 1u, 1u), uint3(128u, 1u, 1u))
+}
+
+// the llama.cpp mul_mm dispatch: kargs + blob W + raw f32 X + f32 dst, 6144 B dynamic threadgroup
+// scratch, grid (mp/32 token tiles, d/64 output tiles) x (32,4,1). Requires d % 64 == 0 and
+// mp % 32 == 0 (the pipeline is specialized bc_out=false)
+def private enc_gemm_lcpp(enc : MetalComputeEncoder?; bargs, bwblob, bx, by : MetalBuffer?; mp, d : int64) {
+    metal_set_pipeline(enc, g_pso_mulmm)
+    metal_set_buffer(enc, bargs, 0ul, 0)
+    metal_set_buffer(enc, bwblob, 0ul, 1)
+    metal_set_buffer(enc, bx, 0ul, 2)
+    metal_set_buffer(enc, by, 0ul, 3)
+    metal_set_threadgroup_memory_length(enc, 6144ul, 0)
+    metal_dispatch_threadgroups(enc, uint3(uint(mp / 32l), uint(d / 64l), 1u), uint3(32u, 4u, 1u))
 }
 
 def private enc_quant(enc : MetalComputeEncoder?; bx, bxq, bxs, bn, bnblk : MetalBuffer?; nblk : int64) {
@@ -1023,9 +1123,22 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_addv0 = uniform_u32(0u)
     var u_addv1 = uniform_u32(1u)
     var u_npairs_all = uniform_u32(uint(npos * (qd + kv_dim) / 2l))
+    // llama.cpp mul_mm GEMM path (the default): W as resident block_q8_0 blobs, raw f32
+    // activations — the X-quant dispatches disappear and the GEMMs run ~19% faster (lab).
+    // Needs every GEMM output dim % 64 (the pipeline is specialized bc_out=false);
+    // DASLLAMA_METAL_MULMM=0 (or the setter) pins the legacy quantized path, which is
+    // bit-identical to the CPU forward.
+    let lcppmm = (!g_mm_legacy && get_env_variable("DASLLAMA_METAL_MULMM") != "0" &&
+        (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l)
+    var u_mm_q = uniform_mm_args(dim, qd, mp)
+    var u_mm_kv = uniform_mm_args(dim, kv_dim, mp)
+    var u_mm_wo = uniform_mm_args(qd, dim, mp)
+    var u_mm_w13 = uniform_mm_args(dim, hidden, mp)
+    var u_mm_w2 = uniform_mm_args(hidden, dim, mp)
     // the fused add+rms+quant stages one row in threadgroup memory — dim must fit its 3072 cap.
-    // DASLLAMA_METAL_FUSE=0 pins the unfused dispatch set (the A/B rail).
-    let fused = dim <= 3072l && get_env_variable("DASLLAMA_METAL_FUSE") != "0"
+    // DASLLAMA_METAL_FUSE=0 pins the unfused dispatch set (the A/B rail). The lcpp path runs the
+    // unfused elementwise set (no quant tails to fuse).
+    let fused = !lcppmm && dim <= 3072l && get_env_variable("DASLLAMA_METAL_FUSE") != "0"
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
     var err : string
@@ -1036,35 +1149,39 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             unsafe {
                 var bw_att = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_att_off + l * dim])), uint64(dim * 4l))
                 var bw_ffn = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_ffn_off + l * dim])), uint64(dim * 4l))
-                var bwq = upload_region(reinterpret<void?>(addr(t.qblob[t.wq_offs[l]])), uint64(qd * dim))
-                var bwq_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wq_offs[l] / 32l])), uint64(qd * (dim / 32l) * 4l))
-                var bwk = upload_region(reinterpret<void?>(addr(t.qblob[t.wk_offs[l]])), uint64(kv_dim * dim))
-                var bwk_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wk_offs[l] / 32l])), uint64(kv_dim * (dim / 32l) * 4l))
-                var bwv = upload_region(reinterpret<void?>(addr(t.qblob[t.wv_offs[l]])), uint64(kv_dim * dim))
-                var bwv_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wv_offs[l] / 32l])), uint64(kv_dim * (dim / 32l) * 4l))
-                var bwo = upload_region(reinterpret<void?>(addr(t.qblob[t.wo_offs[l]])), uint64(dim * qd))
-                var bwo_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wo_offs[l] / 32l])), uint64(dim * (qd / 32l) * 4l))
-                var bw1 = upload_region(reinterpret<void?>(addr(t.qblob[t.w1_offs[l]])), uint64(hidden * dim))
-                var bw1_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w1_offs[l] / 32l])), uint64(hidden * (dim / 32l) * 4l))
-                var bw3 = upload_region(reinterpret<void?>(addr(t.qblob[t.w3_offs[l]])), uint64(hidden * dim))
-                var bw3_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w3_offs[l] / 32l])), uint64(hidden * (dim / 32l) * 4l))
-                var bw2 = upload_region(reinterpret<void?>(addr(t.qblob[t.w2_offs[l]])), uint64(dim * hidden))
-                var bw2_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w2_offs[l] / 32l])), uint64(dim * (hidden / 32l) * 4l))
-                // attention: [pending W2 residual +] norm -> requant -> Q/K/V -> rope ->
+                // attention: [pending W2 residual +] norm -> [requant ->] Q/K/V -> rope ->
                 // scores+softmax -> P.V -> out-proj (fused path folds each residual add into
-                // the FOLLOWING add+rms+quant; the last layer's pending add lands after the loop)
+                // the FOLLOWING add+rms+quant; the last layer's pending add lands after the loop;
+                // the lcpp path feeds the normed f32 rows straight to mul_mm — no requant)
                 if (g_skip != "ew" && g_skip != "nongemm") {
                     if (fused) {
                         enc_add_rms_quant(enc, bx, bxb, bw_att, bxq, bxs, u_dim, u_eps, l > 0l ? u_addv1 : u_addv0, npos)
                     } else {
                         enc_rms(enc, bx, bw_att, bxb, u_dim, u_eps, npos)
-                        enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                        if (!lcppmm) {
+                            enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                        }
                     }
                 }
                 if (g_skip != "gemm") {
-                    enc_gemm(enc, bwq, bwq_s, bxq, bxs, bq, u_dim, u_qd, mp, qd)
-                    enc_gemm(enc, bwk, bwk_s, bxq, bxs, bks[l], u_dim, u_kvd, mp, kv_dim)
-                    enc_gemm(enc, bwv, bwv_s, bxq, bxs, bvs[l], u_dim, u_kvd, mp, kv_dim)
+                    if (lcppmm) {
+                        var bwqb = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.wq_offs[l]])), reinterpret<void?>(addr(t.qscales[t.wq_offs[l] / 32l])), qd, dim)
+                        var bwkb = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.wk_offs[l]])), reinterpret<void?>(addr(t.qscales[t.wk_offs[l] / 32l])), kv_dim, dim)
+                        var bwvb = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.wv_offs[l]])), reinterpret<void?>(addr(t.qscales[t.wv_offs[l] / 32l])), kv_dim, dim)
+                        enc_gemm_lcpp(enc, u_mm_q, bwqb, bxb, bq, mp, qd)
+                        enc_gemm_lcpp(enc, u_mm_kv, bwkb, bxb, bks[l], mp, kv_dim)
+                        enc_gemm_lcpp(enc, u_mm_kv, bwvb, bxb, bvs[l], mp, kv_dim)
+                    } else {
+                        var bwq = upload_region(reinterpret<void?>(addr(t.qblob[t.wq_offs[l]])), uint64(qd * dim))
+                        var bwq_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wq_offs[l] / 32l])), uint64(qd * (dim / 32l) * 4l))
+                        var bwk = upload_region(reinterpret<void?>(addr(t.qblob[t.wk_offs[l]])), uint64(kv_dim * dim))
+                        var bwk_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wk_offs[l] / 32l])), uint64(kv_dim * (dim / 32l) * 4l))
+                        var bwv = upload_region(reinterpret<void?>(addr(t.qblob[t.wv_offs[l]])), uint64(kv_dim * dim))
+                        var bwv_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wv_offs[l] / 32l])), uint64(kv_dim * (dim / 32l) * 4l))
+                        enc_gemm(enc, bwq, bwq_s, bxq, bxs, bq, u_dim, u_qd, mp, qd)
+                        enc_gemm(enc, bwk, bwk_s, bxq, bxs, bks[l], u_dim, u_kvd, mp, kv_dim)
+                        enc_gemm(enc, bwv, bwv_s, bxq, bxs, bvs[l], u_dim, u_kvd, mp, kv_dim)
+                    }
                 }
                 if (g_skip != "ew" && g_skip != "nongemm") {
                     if (fused) {
@@ -1079,36 +1196,65 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     enc_softmax(enc, batt, u_np32, npos, n_heads)
                     enc_av(enc, batt, bvs[l], bxb, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, mp, n_heads, head_size)
                 }
-                if (g_skip != "ew" && g_skip != "nongemm") {
+                if (!lcppmm && g_skip != "ew" && g_skip != "nongemm") {
                     enc_quant(enc, bxb, bxq, bxs, u_qd, u_nblk_qd, npos * (qd / 32l))
                 }
                 if (g_skip != "gemm") {
-                    enc_gemm(enc, bwo, bwo_s, bxq, bxs, bxb2, u_qd, u_dim, mp, dim)
+                    if (lcppmm) {
+                        var bwob = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.wo_offs[l]])), reinterpret<void?>(addr(t.qscales[t.wo_offs[l] / 32l])), dim, qd)
+                        enc_gemm_lcpp(enc, u_mm_wo, bwob, bxb, bxb2, mp, dim)
+                    } else {
+                        var bwo = upload_region(reinterpret<void?>(addr(t.qblob[t.wo_offs[l]])), uint64(dim * qd))
+                        var bwo_s = upload_region(reinterpret<void?>(addr(t.qscales[t.wo_offs[l] / 32l])), uint64(dim * (qd / 32l) * 4l))
+                        enc_gemm(enc, bwo, bwo_s, bxq, bxs, bxb2, u_qd, u_dim, mp, dim)
+                    }
                 }
-                // ffn: [WO residual +] norm -> requant -> W1/W3 -> swiglu+requant -> W2
+                // ffn: [WO residual +] norm -> [requant ->] W1/W3 -> swiglu[+requant] -> W2
                 if (g_skip != "ew" && g_skip != "nongemm") {
                     if (fused) {
                         enc_add_rms_quant(enc, bx, bxb2, bw_ffn, bxq, bxs, u_dim, u_eps, u_addv1, npos)
                     } else {
                         enc_ew2(enc, g_pso_add, bx, bxb2, u_total_dim, npos * dim)
                         enc_rms(enc, bx, bw_ffn, bxb, u_dim, u_eps, npos)
-                        enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                        if (!lcppmm) {
+                            enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                        }
                     }
                 }
                 if (g_skip != "gemm") {
-                    enc_gemm(enc, bw1, bw1_s, bxq, bxs, bhb, u_dim, u_hidden, mp, hidden)
-                    enc_gemm(enc, bw3, bw3_s, bxq, bxs, bhb2, u_dim, u_hidden, mp, hidden)
+                    if (lcppmm) {
+                        var bw1b = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.w1_offs[l]])), reinterpret<void?>(addr(t.qscales[t.w1_offs[l] / 32l])), hidden, dim)
+                        var bw3b = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.w3_offs[l]])), reinterpret<void?>(addr(t.qscales[t.w3_offs[l] / 32l])), hidden, dim)
+                        enc_gemm_lcpp(enc, u_mm_w13, bw1b, bxb, bhb, mp, hidden)
+                        enc_gemm_lcpp(enc, u_mm_w13, bw3b, bxb, bhb2, mp, hidden)
+                    } else {
+                        var bw1 = upload_region(reinterpret<void?>(addr(t.qblob[t.w1_offs[l]])), uint64(hidden * dim))
+                        var bw1_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w1_offs[l] / 32l])), uint64(hidden * (dim / 32l) * 4l))
+                        var bw3 = upload_region(reinterpret<void?>(addr(t.qblob[t.w3_offs[l]])), uint64(hidden * dim))
+                        var bw3_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w3_offs[l] / 32l])), uint64(hidden * (dim / 32l) * 4l))
+                        enc_gemm(enc, bw1, bw1_s, bxq, bxs, bhb, u_dim, u_hidden, mp, hidden)
+                        enc_gemm(enc, bw3, bw3_s, bxq, bxs, bhb2, u_dim, u_hidden, mp, hidden)
+                    }
                 }
                 if (g_skip != "ew" && g_skip != "nongemm") {
                     if (fused) {
                         enc_swiglu_quant(enc, bhb, bhb2, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
                     } else {
                         enc_ew2(enc, g_pso_swiglu, bhb, bhb2, u_total_h, npos * hidden)
-                        enc_quant(enc, bhb, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
+                        if (!lcppmm) {
+                            enc_quant(enc, bhb, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
+                        }
                     }
                 }
                 if (g_skip != "gemm") {
-                    enc_gemm(enc, bw2, bw2_s, bxq, bxs, bxb, u_hidden, u_dim, mp, dim)
+                    if (lcppmm) {
+                        var bw2b = upload_blob_region(reinterpret<void?>(addr(t.qblob[t.w2_offs[l]])), reinterpret<void?>(addr(t.qscales[t.w2_offs[l] / 32l])), dim, hidden)
+                        enc_gemm_lcpp(enc, u_mm_w2, bw2b, bhb, bxb, mp, dim)
+                    } else {
+                        var bw2 = upload_region(reinterpret<void?>(addr(t.qblob[t.w2_offs[l]])), uint64(dim * hidden))
+                        var bw2_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w2_offs[l] / 32l])), uint64(dim * (hidden / 32l) * 4l))
+                        enc_gemm(enc, bw2, bw2_s, bxq, bxs, bxb, u_hidden, u_dim, mp, dim)
+                    }
                 }
                 if (!fused && g_skip != "ew" && g_skip != "nongemm") {
                     enc_ew2(enc, g_pso_add, bx, bxb, u_total_dim, npos * dim)
@@ -1185,9 +1331,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_upool, u_addv0, 4ul)
     pool_release(g_upool, u_addv1, 4ul)
     pool_release(g_upool, u_npairs_all, 4ul)
+    pool_release(g_upool, u_mm_q, 88ul)
+    pool_release(g_upool, u_mm_kv, 88ul)
+    pool_release(g_upool, u_mm_wo, 88ul)
+    pool_release(g_upool, u_mm_w13, 88ul)
+    pool_release(g_upool, u_mm_w2, 88ul)
     if (ok) {
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={(fused ? 15l : 21l) * c.n_layers + (fused ? 1l : 0l)}\n")
+        let repack_note = g_repack_us > 0l ? " weight-repack={float(g_repack_us) / 1000.0}ms(one-time)" : ""
+        g_repack_us = 0l
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm={lcppmm ? "lcpp-mulmm" : "q8"} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={(fused ? 15l : lcppmm ? 17l : 21l) * c.n_layers + (fused ? 1l : 0l)}{repack_note}\n")
     }
     return ok
 }
