@@ -144,6 +144,167 @@ class MetalRope {
     }
 }
 
+// The dispatch-fusion set (the 21 -> 15 dispatches/layer collapse — ew cost on M1 is launch
+// gaps, not bandwidth):
+//   metal_add_rms_quant  ~ add_inplace? + rmsnorm + quantize_q8_0 in ONE pass — the summed row
+//                          is staged in threadgroup memory (device writeback for the residual
+//                          stream happens alongside), so the normalized values never round-trip
+//                          device memory and the standalone add dispatch disappears. One
+//                          threadgroup per row; dim <= 3072 (the tg stage) gates the fused path.
+//   metal_swiglu_quant   ~ swiglu + quantize_q8_0 per 32-block, silu recomputed on the quant
+//                          pass instead of buffered — the gated activation is dead after the
+//                          quant, so it is never written back at all.
+//   metal_rope_qk        ~ both rope dispatches in one grid (q pairs first, then k).
+class MetalAddRmsQuant {
+    @ssbo @binding = 0 x : array<float>     // [nrows x dim] residual stream, updated in place
+    @ssbo @binding = 1 r : array<float>     // [nrows x dim] delta to fold in (addv != 0)
+    @ssbo @binding = 2 w : array<float>     // [dim] rms weight
+    @ssbo @binding = 3 xq : array<int8>     // [mp x dim] quants out
+    @ssbo @binding = 4 xs : array<float>    // [mp x dim/32] scales out
+    @uniform @binding = 5 dim : uint
+    @uniform @binding = 6 eps : float
+    @uniform @binding = 7 addv : uint       // 0 = plain rms+quant (layer 0 / no pending add)
+    @workgroup xrow : float[3072]           // the summed row (pre-norm) — llama-1B/3B dims fit
+    @workgroup partial : float[8]
+    @workgroup inv_sh : float
+
+    [metal_kernel(name="metal_add_rms_quant_msl")]
+    def metal_add_rms_quant {
+        let row = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var k = lid
+        while (k < dim) {
+            var xv = x[row * dim + k]
+            if (addv != 0u) {
+                xv += r[row * dim + k]
+                x[row * dim + k] = xv          // the residual stream keeps the sum
+            }
+            xrow[k] = xv
+            ss += xv * xv
+            k += gl_WorkGroupSize.x
+        }
+        ss = simd_sum(ss)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            inv_sh = rsqrt(tot / float(dim) + eps)
+        }
+        barrier()
+        let inv = inv_sh
+        let nb = dim / 32u
+        var cb = lid
+        while (cb < nb) {
+            let base = cb * 32u
+            var amax = 0.0
+            var e = 0u
+            while (e < 32u) {
+                amax = max(amax, abs(w[base + e] * (xrow[base + e] * inv)))
+                e++
+            }
+            let d = amax / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            xs[row * nb + cb] = d
+            e = 0u
+            while (e < 32u) {
+                xq[row * dim + base + e] = int8(round(w[base + e] * (xrow[base + e] * inv) * id))
+                e++
+            }
+            cb += gl_WorkGroupSize.x
+        }
+    }
+}
+
+class MetalSwigluQuant {
+    @ssbo @binding = 0 g : array<float>     // [ntok x hidden] W1 gate (read-only — dead after)
+    @ssbo @binding = 1 u : array<float>     // [ntok x hidden] W3 up
+    @ssbo @binding = 2 xq : array<int8>     // [mp x hidden] quants out
+    @ssbo @binding = 3 xs : array<float>    // [mp x hidden/32] scales out
+    @uniform @binding = 4 n : uint          // hidden, % 32
+    @uniform @binding = 5 nblk : uint       // ntok * hidden/32 — grid guard
+
+    [metal_kernel(name="metal_swiglu_quant_msl")]
+    def metal_swiglu_quant {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= nblk) {
+            return
+        }
+        let nb = n / 32u
+        let row = gid / nb
+        let cb = gid % nb
+        let base = row * n + cb * 32u
+        var amax = 0.0
+        var k = 0u
+        while (k < 32u) {
+            let gv = g[base + k]
+            let sv = (gv / (1.0 + exp(-gv))) * u[base + k]
+            amax = max(amax, abs(sv))
+            k++
+        }
+        let d = amax / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        xs[row * nb + cb] = d
+        k = 0u
+        while (k < 32u) {
+            let gv = g[base + k]
+            let sv = (gv / (1.0 + exp(-gv))) * u[base + k]
+            xq[base + k] = int8(round(sv * id))
+            k++
+        }
+    }
+}
+
+class MetalRopeQK {
+    @ssbo @binding = 0 q : array<float>     // [ntok x qd], roped in place
+    @ssbo @binding = 1 k : array<float>     // [ntok x kv_dim], roped in place
+    @ssbo @binding = 2 tcos : array<float>  // [ntok x head_size/2]
+    @ssbo @binding = 3 tsin : array<float>
+    @uniform @binding = 4 qd : uint
+    @uniform @binding = 5 kvd : uint
+    @uniform @binding = 6 head_size : uint
+    @uniform @binding = 7 npairs_q : uint   // ntok * qd/2 — the q half of the grid
+    @uniform @binding = 8 npairs : uint     // + ntok * kv_dim/2 — grid guard
+
+    [metal_kernel(name="metal_rope_qk_msl")]
+    def metal_rope_qk {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= npairs) {
+            return
+        }
+        let isK = gid >= npairs_q
+        let n = isK ? kvd : qd
+        let lgid = isK ? gid - npairs_q : gid
+        let pairs_per_row = n / 2u
+        let p = lgid / pairs_per_row
+        let rem = lgid % pairs_per_row
+        let half = head_size / 2u
+        let h = rem / half
+        let j = rem % half
+        let i = p * n + h * head_size + 2u * j
+        let fcr = tcos[p * half + j]
+        let fci = tsin[p * half + j]
+        if (isK) {
+            let v0 = k[i]
+            let v1 = k[i + 1u]
+            k[i] = v0 * fcr - v1 * fci
+            k[i + 1u] = v0 * fci + v1 * fcr
+        } else {
+            let v0 = q[i]
+            let v1 = q[i + 1u]
+            q[i] = v0 * fcr - v1 * fci
+            q[i + 1u] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
 // Attention runs as a tiled-GEMM trio over a per-head score slab PADDED to 32-row blocks
 // (np32 = ceil32(npos) — sgmat stores are whole 8x8 tiles, so the slab must absorb edge tiles):
 //   metal_attn_qk       S = scale * Q_h . K_hT   (32x32 C blocks, mixed... all-f32 sgmat macs)
@@ -443,6 +604,9 @@ var private g_pso_softmax : MetalComputePipeline?
 var private g_pso_av : MetalComputePipeline?
 var private g_pso_swiglu : MetalComputePipeline?
 var private g_pso_add : MetalComputePipeline?
+var private g_pso_addrmsq : MetalComputePipeline?
+var private g_pso_swigluq : MetalComputePipeline?
+var private g_pso_ropeqk : MetalComputePipeline?
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm): skips encoding
 // that stage family (nongemm = attn AND ew, leaving the pure GEMM chain) — output is GARBAGE,
 // gpu-time deltas attribute the budget. Debug rail only.
@@ -513,6 +677,18 @@ def public metal_prefill_shutdown {
         metal_release(g_pso_add)
         g_pso_add = null
     }
+    if (g_pso_addrmsq != null) {
+        metal_release(g_pso_addrmsq)
+        g_pso_addrmsq = null
+    }
+    if (g_pso_swigluq != null) {
+        metal_release(g_pso_swigluq)
+        g_pso_swigluq = null
+    }
+    if (g_pso_ropeqk != null) {
+        metal_release(g_pso_ropeqk)
+        g_pso_ropeqk = null
+    }
     if (g_queue != null) {
         metal_release(g_queue)
         g_queue = null
@@ -559,6 +735,9 @@ def private metal_prefill_init : bool {
     g_pso_av = compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
     g_pso_swiglu = compile_pso(metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, ok)
     g_pso_add = compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
+    g_pso_addrmsq = compile_pso(metal_add_rms_quant_msl, metal_add_rms_quant_msl_entry, metal_add_rms_quant_msl_fastmath, ok)
+    g_pso_swigluq = compile_pso(metal_swiglu_quant_msl, metal_swiglu_quant_msl_entry, metal_swiglu_quant_msl_fastmath, ok)
+    g_pso_ropeqk = compile_pso(metal_rope_qk_msl, metal_rope_qk_msl_entry, metal_rope_qk_msl_fastmath, ok)
     if (!ok) {
         metal_prefill_shutdown()
         g_failed = true
@@ -677,6 +856,45 @@ def private enc_rope(enc : MetalComputeEncoder?; bv, bcos, bsin, bn, bhs, bnpair
     metal_set_buffer(enc, bn, 0ul, 3)
     metal_set_buffer(enc, bhs, 0ul, 4)
     metal_set_buffer(enc, bnpairs, 0ul, 5)
+    metal_dispatch_threadgroups(enc, uint3(uint((npairs + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+}
+
+// the fused add?+rms+quant: one threadgroup per row, r folded in when baddv reads 1
+def private enc_add_rms_quant(enc : MetalComputeEncoder?; bx, br, bw, bxq, bxs, bdim, beps, baddv : MetalBuffer?; nrows : int64) {
+    metal_set_pipeline(enc, g_pso_addrmsq)
+    metal_set_buffer(enc, bx, 0ul, 0)
+    metal_set_buffer(enc, br, 0ul, 1)
+    metal_set_buffer(enc, bw, 0ul, 2)
+    metal_set_buffer(enc, bxq, 0ul, 3)
+    metal_set_buffer(enc, bxs, 0ul, 4)
+    metal_set_buffer(enc, bdim, 0ul, 5)
+    metal_set_buffer(enc, beps, 0ul, 6)
+    metal_set_buffer(enc, baddv, 0ul, 7)
+    metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
+}
+
+def private enc_swiglu_quant(enc : MetalComputeEncoder?; bg, bu, bxq, bxs, bn, bnblk : MetalBuffer?; nblk : int64) {
+    metal_set_pipeline(enc, g_pso_swigluq)
+    metal_set_buffer(enc, bg, 0ul, 0)
+    metal_set_buffer(enc, bu, 0ul, 1)
+    metal_set_buffer(enc, bxq, 0ul, 2)
+    metal_set_buffer(enc, bxs, 0ul, 3)
+    metal_set_buffer(enc, bn, 0ul, 4)
+    metal_set_buffer(enc, bnblk, 0ul, 5)
+    metal_dispatch_threadgroups(enc, uint3(uint((nblk + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+}
+
+def private enc_rope_qk(enc : MetalComputeEncoder?; bq, bk, bcos, bsin, bqd, bkvd, bhs, bnpq, bnpall : MetalBuffer?; npairs : int64) {
+    metal_set_pipeline(enc, g_pso_ropeqk)
+    metal_set_buffer(enc, bq, 0ul, 0)
+    metal_set_buffer(enc, bk, 0ul, 1)
+    metal_set_buffer(enc, bcos, 0ul, 2)
+    metal_set_buffer(enc, bsin, 0ul, 3)
+    metal_set_buffer(enc, bqd, 0ul, 4)
+    metal_set_buffer(enc, bkvd, 0ul, 5)
+    metal_set_buffer(enc, bhs, 0ul, 6)
+    metal_set_buffer(enc, bnpq, 0ul, 7)
+    metal_set_buffer(enc, bnpall, 0ul, 8)
     metal_dispatch_threadgroups(enc, uint3(uint((npairs + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
@@ -800,6 +1018,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_total_h = uniform_u32(uint(npos * hidden))
     var u_scale = uniform_f32(scale)
     var u_eps = uniform_f32(c.norm_eps)
+    var u_addv0 = uniform_u32(0u)
+    var u_addv1 = uniform_u32(1u)
+    var u_npairs_all = uniform_u32(uint(npos * (qd + kv_dim) / 2l))
+    // the fused add+rms+quant stages one row in threadgroup memory — dim must fit its 3072 cap.
+    // DASLLAMA_METAL_FUSE=0 pins the unfused dispatch set (the A/B rail).
+    let fused = dim <= 3072l && get_env_variable("DASLLAMA_METAL_FUSE") != "0"
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
     var err : string
@@ -824,10 +1048,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 var bw3_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w3_offs[l] / 32l])), uint64(hidden * (dim / 32l) * 4l))
                 var bw2 = upload_region(reinterpret<void?>(addr(t.qblob[t.w2_offs[l]])), uint64(dim * hidden))
                 var bw2_s = upload_region(reinterpret<void?>(addr(t.qscales[t.w2_offs[l] / 32l])), uint64(dim * (hidden / 32l) * 4l))
-                // attention: norm -> requant -> Q/K/V -> rope -> scores+softmax -> P.V -> out-proj -> residual
+                // attention: [pending W2 residual +] norm -> requant -> Q/K/V -> rope ->
+                // scores+softmax -> P.V -> out-proj (fused path folds each residual add into
+                // the FOLLOWING add+rms+quant; the last layer's pending add lands after the loop)
                 if (g_skip != "ew" && g_skip != "nongemm") {
-                    enc_rms(enc, bx, bw_att, bxb, u_dim, u_eps, npos)
-                    enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                    if (fused) {
+                        enc_add_rms_quant(enc, bx, bxb, bw_att, bxq, bxs, u_dim, u_eps, l > 0l ? u_addv1 : u_addv0, npos)
+                    } else {
+                        enc_rms(enc, bx, bw_att, bxb, u_dim, u_eps, npos)
+                        enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                    }
                 }
                 if (g_skip != "gemm") {
                     enc_gemm(enc, bwq, bwq_s, bxq, bxs, bq, u_dim, u_qd, mp, qd)
@@ -835,8 +1065,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     enc_gemm(enc, bwv, bwv_s, bxq, bxs, bvs[l], u_dim, u_kvd, mp, kv_dim)
                 }
                 if (g_skip != "ew" && g_skip != "nongemm") {
-                    enc_rope(enc, bq, bcos, bsin, u_qd, u_hs, u_npairs_q, npos * qd / 2l)
-                    enc_rope(enc, bks[l], bcos, bsin, u_kvd, u_hs, u_npairs_k, npos * kv_dim / 2l)
+                    if (fused) {
+                        enc_rope_qk(enc, bq, bks[l], bcos, bsin, u_qd, u_kvd, u_hs, u_npairs_q, u_npairs_all, npos * (qd + kv_dim) / 2l)
+                    } else {
+                        enc_rope(enc, bq, bcos, bsin, u_qd, u_hs, u_npairs_q, npos * qd / 2l)
+                        enc_rope(enc, bks[l], bcos, bsin, u_kvd, u_hs, u_npairs_k, npos * kv_dim / 2l)
+                    }
                 }
                 if (g_skip != "attn" && g_skip != "nongemm") {
                     enc_qk(enc, bq, bks[l], batt, u_qd, u_kvd, u_hs, u_kvm, u_np, u_np32, u_scale, mp, n_heads)
@@ -849,27 +1083,38 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (g_skip != "gemm") {
                     enc_gemm(enc, bwo, bwo_s, bxq, bxs, bxb2, u_qd, u_dim, mp, dim)
                 }
-                // ffn: norm -> requant -> W1/W3 -> swiglu -> requant -> W2 -> residual
+                // ffn: [WO residual +] norm -> requant -> W1/W3 -> swiglu+requant -> W2
                 if (g_skip != "ew" && g_skip != "nongemm") {
-                    enc_ew2(enc, g_pso_add, bx, bxb2, u_total_dim, npos * dim)
-                    enc_rms(enc, bx, bw_ffn, bxb, u_dim, u_eps, npos)
-                    enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                    if (fused) {
+                        enc_add_rms_quant(enc, bx, bxb2, bw_ffn, bxq, bxs, u_dim, u_eps, u_addv1, npos)
+                    } else {
+                        enc_ew2(enc, g_pso_add, bx, bxb2, u_total_dim, npos * dim)
+                        enc_rms(enc, bx, bw_ffn, bxb, u_dim, u_eps, npos)
+                        enc_quant(enc, bxb, bxq, bxs, u_dim, u_nblk_dim, npos * (dim / 32l))
+                    }
                 }
                 if (g_skip != "gemm") {
                     enc_gemm(enc, bw1, bw1_s, bxq, bxs, bhb, u_dim, u_hidden, mp, hidden)
                     enc_gemm(enc, bw3, bw3_s, bxq, bxs, bhb2, u_dim, u_hidden, mp, hidden)
                 }
                 if (g_skip != "ew" && g_skip != "nongemm") {
-                    enc_ew2(enc, g_pso_swiglu, bhb, bhb2, u_total_h, npos * hidden)
-                    enc_quant(enc, bhb, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
+                    if (fused) {
+                        enc_swiglu_quant(enc, bhb, bhb2, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
+                    } else {
+                        enc_ew2(enc, g_pso_swiglu, bhb, bhb2, u_total_h, npos * hidden)
+                        enc_quant(enc, bhb, bxq, bxs, u_hidden, u_nblk_h, npos * (hidden / 32l))
+                    }
                 }
                 if (g_skip != "gemm") {
                     enc_gemm(enc, bw2, bw2_s, bxq, bxs, bxb, u_hidden, u_dim, mp, dim)
                 }
-                if (g_skip != "ew" && g_skip != "nongemm") {
+                if (!fused && g_skip != "ew" && g_skip != "nongemm") {
                     enc_ew2(enc, g_pso_add, bx, bxb, u_total_dim, npos * dim)
                 }
             }
+        }
+        if (fused && g_skip != "ew" && g_skip != "nongemm") {
+            enc_ew2(enc, g_pso_add, bx, bxb, u_total_dim, npos * dim)   // the last layer's pending W2 add
         }
     }
     let encwait_us = get_time_usec(ts_enc)
@@ -935,9 +1180,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_pool, u_total_h, 4ul)
     pool_release(g_pool, u_scale, 4ul)
     pool_release(g_pool, u_eps, 4ul)
+    pool_release(g_pool, u_addv0, 4ul)
+    pool_release(g_pool, u_addv1, 4ul)
+    pool_release(g_pool, u_npairs_all, 4ul)
     if (ok) {
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={21l * c.n_layers}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={(fused ? 15l : 21l) * c.n_layers + (fused ? 1l : 0l)}\n")
     }
     return ok
 }
