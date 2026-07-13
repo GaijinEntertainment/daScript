@@ -590,6 +590,7 @@ var private g_queue : MetalCommandQueue?
 var private g_failed = false
 var private g_regions : table<uint64; MetalBuffer?>    // base address -> resident weight/scale/norm region
 var private g_pool : MetalBufferPool
+var private g_upool : MetalBufferPool     // UNTRACKED pool: uniforms + rope tables (GPU-read-only)
 var private g_min_npos = 64l
 var private g_max_npos = 2048l          // naive-attention P footprint cap: heads x npos^2 floats
 var private g_prefills = 0l
@@ -637,6 +638,7 @@ def public metal_prefill_shutdown {
         delete g_regions
     }
     pool_drain(g_pool)
+    pool_drain(g_upool)
     if (g_pso_gemm != null) {
         metal_release(g_pso_gemm)
         g_pso_gemm = null
@@ -765,14 +767,14 @@ def private upload_region(src : void?; bytes : uint64) : MetalBuffer? {
 }
 
 def private uniform_u32(v : uint) : MetalBuffer? {
-    var buf = pool_acquire(g_pool, g_dev, 4ul)
+    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
     var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
     unsafe(p[0]) = v
     return buf
 }
 
 def private uniform_f32(v : float) : MetalBuffer? {
-    var buf = pool_acquire(g_pool, g_dev, 4ul)
+    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
     var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
     unsafe(p[0]) = v
     return buf
@@ -984,8 +986,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bxq = pool_acquire(g_pool, g_dev, bytes_xq)
     var bxs = pool_acquire(g_pool, g_dev, bytes_xs)
     var batt = pool_acquire(g_pool, g_dev, bytes_att)
-    var bcos = pool_acquire(g_pool, g_dev, bytes_tab)
-    var bsin = pool_acquire(g_pool, g_dev, bytes_tab)
+    var bcos = pool_acquire_untracked(g_upool, g_dev, bytes_tab)
+    var bsin = pool_acquire_untracked(g_upool, g_dev, bytes_tab)
     var bks : array<MetalBuffer?>
     var bvs : array<MetalBuffer?>
     bks |> reserve(int(c.n_layers))
@@ -1151,8 +1153,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_pool, bxq, bytes_xq)
     pool_release(g_pool, bxs, bytes_xs)
     pool_release(g_pool, batt, bytes_att)
-    pool_release(g_pool, bcos, bytes_tab)
-    pool_release(g_pool, bsin, bytes_tab)
+    pool_release(g_upool, bcos, bytes_tab)
+    pool_release(g_upool, bsin, bytes_tab)
     for (l in range64(c.n_layers)) {
         pool_release(g_pool, bks[l], bytes_kv)
         pool_release(g_pool, bvs[l], bytes_kv)
@@ -1163,26 +1165,26 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         delete bks
         delete bvs
     }
-    pool_release(g_pool, u_dim, 4ul)
-    pool_release(g_pool, u_qd, 4ul)
-    pool_release(g_pool, u_kvd, 4ul)
-    pool_release(g_pool, u_hidden, 4ul)
-    pool_release(g_pool, u_hs, 4ul)
-    pool_release(g_pool, u_kvm, 4ul)
-    pool_release(g_pool, u_np, 4ul)
-    pool_release(g_pool, u_np32, 4ul)
-    pool_release(g_pool, u_nblk_dim, 4ul)
-    pool_release(g_pool, u_nblk_qd, 4ul)
-    pool_release(g_pool, u_nblk_h, 4ul)
-    pool_release(g_pool, u_npairs_q, 4ul)
-    pool_release(g_pool, u_npairs_k, 4ul)
-    pool_release(g_pool, u_total_dim, 4ul)
-    pool_release(g_pool, u_total_h, 4ul)
-    pool_release(g_pool, u_scale, 4ul)
-    pool_release(g_pool, u_eps, 4ul)
-    pool_release(g_pool, u_addv0, 4ul)
-    pool_release(g_pool, u_addv1, 4ul)
-    pool_release(g_pool, u_npairs_all, 4ul)
+    pool_release(g_upool, u_dim, 4ul)
+    pool_release(g_upool, u_qd, 4ul)
+    pool_release(g_upool, u_kvd, 4ul)
+    pool_release(g_upool, u_hidden, 4ul)
+    pool_release(g_upool, u_hs, 4ul)
+    pool_release(g_upool, u_kvm, 4ul)
+    pool_release(g_upool, u_np, 4ul)
+    pool_release(g_upool, u_np32, 4ul)
+    pool_release(g_upool, u_nblk_dim, 4ul)
+    pool_release(g_upool, u_nblk_qd, 4ul)
+    pool_release(g_upool, u_nblk_h, 4ul)
+    pool_release(g_upool, u_npairs_q, 4ul)
+    pool_release(g_upool, u_npairs_k, 4ul)
+    pool_release(g_upool, u_total_dim, 4ul)
+    pool_release(g_upool, u_total_h, 4ul)
+    pool_release(g_upool, u_scale, 4ul)
+    pool_release(g_upool, u_eps, 4ul)
+    pool_release(g_upool, u_addv0, 4ul)
+    pool_release(g_upool, u_addv1, 4ul)
+    pool_release(g_upool, u_npairs_all, 4ul)
     if (ok) {
         let total_us = get_time_usec(ts_all)
         to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={(fused ? 15l : 21l) * c.n_layers + (fused ? 1l : 0l)}\n")

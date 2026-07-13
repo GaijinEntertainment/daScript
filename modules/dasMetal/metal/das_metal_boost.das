@@ -132,6 +132,20 @@ def public pool_acquire(var pool : MetalBufferPool; dev : MetalDevice?; bytes : 
     return metal_new_buffer(dev, bucket)
 }
 
+//! The UNTRACKED-pool twin, for GPU-read-only pool data the CPU fills before commit (uniforms,
+//! lookup tables): skips the command-buffer scheduler's per-resource hazard analysis. Keep a
+//! SEPARATE MetalBufferPool for these — tracked and untracked buffers must not mix in one pool.
+def public pool_acquire_untracked(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? {
+    let bucket = pool_bucket(bytes)
+    var lst & = unsafe(pool.free_bufs[bucket])
+    if (!empty(lst)) {
+        var buf = lst[length(lst) - 1]
+        lst |> pop()
+        return buf
+    }
+    return metal_new_buffer_untracked(dev, bucket)
+}
+
 def public pool_release(var pool : MetalBufferPool; var buf : MetalBuffer?; bytes : uint64) {
     pool.free_bufs[pool_bucket(bytes)] |> push(buf)
 }

@@ -1624,6 +1624,122 @@ class MetalGemmLab6464Trans {
     }
 }
 
+// v20: DEVICE-DIRECT B — the W tile never stages at all: B tiles simdgroup_load straight from
+// a resident PRE-DEQUANTIZED f16 W panel (row-major, transposed at load), killing the whole
+// B-side staging chain (device byte4 loads + dequant ALU + tg stores + half the barrier
+// pressure); only the A (activation) half stages. Trades W device traffic 1.03 -> 2 B/weight.
+class MetalGemmLab6464DevB {
+    @ssbo @binding = 0 wh : array<float16>  // [d x kdim] f16 weights (dequantized at upload)
+    @ssbo @binding = 2 xq : array<byte4>
+    @ssbo @binding = 3 xs : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup ta : float16[2048]           // 64 tokens x 32 k — the only staged tile
+
+    [metal_kernel(name="lab_6464devb_msl")]
+    def lab_6464devb {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let ntileN = ndim / 64u
+        let mBase = (gl_WorkGroupID.x / ntileN) * 64u
+        let nBase = (gl_WorkGroupID.x % ntileN) * 64u
+        let qm = (sg / 2u) * 32u
+        let qn = (sg % 2u) * 32u
+        var c00 : simdgroup_float8x8
+        var c01 : simdgroup_float8x8
+        var c02 : simdgroup_float8x8
+        var c03 : simdgroup_float8x8
+        var c10 : simdgroup_float8x8
+        var c11 : simdgroup_float8x8
+        var c12 : simdgroup_float8x8
+        var c13 : simdgroup_float8x8
+        var c20 : simdgroup_float8x8
+        var c21 : simdgroup_float8x8
+        var c22 : simdgroup_float8x8
+        var c23 : simdgroup_float8x8
+        var c30 : simdgroup_float8x8
+        var c31 : simdgroup_float8x8
+        var c32 : simdgroup_float8x8
+        var c33 : simdgroup_float8x8
+        let kdim4 = kdim / 4u
+        let ra = lid / 2u
+        let c0a = (lid % 2u) * 16u
+        var kb = 0u
+        while (kb * 32u < kdim) {
+            {
+                let s = xs[(mBase + ra) * (kdim / 32u) + kb]
+                let src = (mBase + ra) * kdim4 + (kb * 32u + c0a) / 4u
+                let dst = ra * 32u + c0a
+                var i4 = 0u
+                while (i4 < 4u) {
+                    let v = float4(int4(xq[src + i4])) * s
+                    tg_store_half4(ta, dst + i4 * 4u, v)
+                    i4++
+                }
+            }
+            barrier()
+            let kw = kb * 32u
+            var k8 = 0u
+            while (k8 < 32u) {
+                var a0 : simdgroup_half8x8
+                var a1 : simdgroup_half8x8
+                var a2 : simdgroup_half8x8
+                var a3 : simdgroup_half8x8
+                var b0 : simdgroup_half8x8
+                var b1 : simdgroup_half8x8
+                var b2 : simdgroup_half8x8
+                var b3 : simdgroup_half8x8
+                simdgroup_load(a0, ta, qm * 32u + k8, 32u)
+                simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
+                simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
+                simdgroup_load(a3, ta, (qm + 24u) * 32u + k8, 32u)
+                simdgroup_load(b0, wh, (nBase + qn) * kdim + kw + k8, kdim, true)
+                simdgroup_load(b1, wh, (nBase + qn + 8u) * kdim + kw + k8, kdim, true)
+                simdgroup_load(b2, wh, (nBase + qn + 16u) * kdim + kw + k8, kdim, true)
+                simdgroup_load(b3, wh, (nBase + qn + 24u) * kdim + kw + k8, kdim, true)
+                simdgroup_multiply_accumulate(c00, a0, b0, c00)
+                simdgroup_multiply_accumulate(c01, a0, b1, c01)
+                simdgroup_multiply_accumulate(c02, a0, b2, c02)
+                simdgroup_multiply_accumulate(c03, a0, b3, c03)
+                simdgroup_multiply_accumulate(c10, a1, b0, c10)
+                simdgroup_multiply_accumulate(c11, a1, b1, c11)
+                simdgroup_multiply_accumulate(c12, a1, b2, c12)
+                simdgroup_multiply_accumulate(c13, a1, b3, c13)
+                simdgroup_multiply_accumulate(c20, a2, b0, c20)
+                simdgroup_multiply_accumulate(c21, a2, b1, c21)
+                simdgroup_multiply_accumulate(c22, a2, b2, c22)
+                simdgroup_multiply_accumulate(c23, a2, b3, c23)
+                simdgroup_multiply_accumulate(c30, a3, b0, c30)
+                simdgroup_multiply_accumulate(c31, a3, b1, c31)
+                simdgroup_multiply_accumulate(c32, a3, b2, c32)
+                simdgroup_multiply_accumulate(c33, a3, b3, c33)
+                k8 += 8u
+            }
+            barrier()
+            kb++
+        }
+        let row0 = mBase + qm
+        let col0 = nBase + qn
+        simdgroup_store(c00, y, row0 * ndim + col0, ndim)
+        simdgroup_store(c01, y, row0 * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c02, y, row0 * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c03, y, row0 * ndim + (col0 + 24u), ndim)
+        simdgroup_store(c10, y, (row0 + 8u) * ndim + col0, ndim)
+        simdgroup_store(c11, y, (row0 + 8u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c12, y, (row0 + 8u) * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c13, y, (row0 + 8u) * ndim + (col0 + 24u), ndim)
+        simdgroup_store(c20, y, (row0 + 16u) * ndim + col0, ndim)
+        simdgroup_store(c21, y, (row0 + 16u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c22, y, (row0 + 16u) * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c23, y, (row0 + 16u) * ndim + (col0 + 24u), ndim)
+        simdgroup_store(c30, y, (row0 + 24u) * ndim + col0, ndim)
+        simdgroup_store(c31, y, (row0 + 24u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c32, y, (row0 + 24u) * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c33, y, (row0 + 24u) * ndim + (col0 + 24u), ndim)
+    }
+}
+
 // knockout: v13 with staging removed — the 64x64 math + barrier + store ceiling
 class MetalGemmLab6464NoStage {
     @ssbo @binding = 0 wq : array<byte4>
@@ -2045,6 +2161,7 @@ struct private LabVariant {
     bn : int                                // C-tile output columns — requires d % bn == 0
     check : bool = true                     // false = knockout: time it, never compare output
     threads : int = 128                     // threads per threadgroup
+    f16w : bool = false                     // binding 0 gets the PRE-DEQUANTIZED f16 W panel
 }
 
 def private align_up(v, a : int64) : int64 => ((v + a - 1l) / a) * a
@@ -2199,12 +2316,21 @@ def private run_lab(b : B?; variants) {
         var yref <- cpu_ref_rows(wq, ws, xq, xs, n, d, ref_rows)
         var wbuf = upload_array(dev, wq, d * n)
         var sbuf = upload_array(dev, ws, d * nb * 4l)
+        // the f16 W panel (v.f16w variants): W dequantized once host-side — exact in f16 under
+        // the lab's exact-arithmetic fill (|w| <= 16, int x pow2)
+        var wh : array<float16>
+        wh |> resize(int(d * n))
+        for (i in range64(d * n)) {
+            wh[i] = float16(float(wq[i]) * ws[(i / n) * nb + (i % n) / 32l])
+        }
+        var whbuf = upload_array(dev, wh, d * n * 2l)
         var xqbuf = upload_array(dev, xq, mp_max * n)
         var xsbuf = upload_array(dev, xs, mp_max * nb * 4l)
         var ybuf = metal_new_buffer(dev, uint64(mp_max * d * 4l))
         var kdimbuf = upload_u32(dev, uint(n))
         var ndimbuf = upload_u32(dev, uint(d))
         var bufs <- [wbuf, sbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
+        var bufs16 <- [whbuf, sbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
         let setup_ms = double(ref_time_ticks() - t_shape0) / 1000000.0lf
         to_log(LOG_INFO, "=== {sh._0} n={n} d={d} === (setup {setup_ms} ms)\n")
         var y0 : array<float>                // v0's full output — the cross-variant reference
@@ -2221,7 +2347,7 @@ def private run_lab(b : B?; variants) {
             }
             let mp = align_up(ntok, int64(v.bm))
             let groups = uint((mp / int64(v.bm)) * (d / int64(v.bn)))
-            let ms = time_reps(queue, pso, bufs, groups, uint(v.threads), 1)   // warmup + correctness dispatch
+            let ms = time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), 1)   // warmup + correctness dispatch
             if (ms < 0.0lf) {
                 b |> success(false, "{v.name} {sh._0}: dispatch")
                 continue
@@ -2265,7 +2391,7 @@ def private run_lab(b : B?; variants) {
                 let mp = align_up(ntok, int64(v.bm))
                 let groups = uint((mp / int64(v.bm)) * (d / int64(v.bn)))
                 let reps = clamp(int(25.0lf / max(est_ms[idx], 0.01lf)) + 1, 1, 128)
-                let ms = time_reps(queue, pso, bufs, groups, uint(v.threads), reps)
+                let ms = time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), reps)
                 if (ms > 0.0lf && ms < best[idx]) {
                     best[idx] = ms
                 }
@@ -2284,6 +2410,12 @@ def private run_lab(b : B?; variants) {
             let rel = base_gmacs > 0.0lf ? gmacs / base_gmacs : 0.0lf
             to_log(LOG_INFO, "{v.name}  {sh._0} {best[idx]} ms  {gmacs} GMAC/s  {rel}x vs v0\n")
         }
+        metal_release(whbuf)
+        bufs16 |> clear()
+        unsafe {
+            delete bufs16
+        }
+        delete wh
         for (buf in bufs) {
             metal_release(buf)
         }
@@ -2359,6 +2491,8 @@ def bench_metal_gemm_kernels(b : B?) {
                        fastmath = lab_6464run32_msl_fastmath, bm = 64, bn = 64),
             LabVariant(name = "v19_6464trans", src = lab_6464trans_msl, entry = lab_6464trans_msl_entry,
                        fastmath = lab_6464trans_msl_fastmath, bm = 64, bn = 64),
+            LabVariant(name = "v20_6464devb", src = lab_6464devb_msl, entry = lab_6464devb_msl_entry,
+                       fastmath = lab_6464devb_msl_fastmath, bm = 64, bn = 64, f16w = true),
             LabVariant(name = "v15_6464x256", src = lab_6464x256_msl, entry = lab_6464x256_msl_entry,
                        fastmath = lab_6464x256_msl_fastmath, bm = 64, bn = 64, threads = 256),
             LabVariant(name = "v16_6464pf", src = lab_6464pf_msl, entry = lab_6464pf_msl_entry,

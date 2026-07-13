@@ -650,3 +650,35 @@ it once). Anchors (stored from the 2026-07-11 clean window, per the no-baseline-
 rule): llama.cpp CPU pp512 813 (das CPU 823 ✓ sane window); **llama.cpp full-Metal pp512 3960 —
 das GPU-resident is now 1.65x away** (hybrid clean was 3.75x, resident-with-old-kernel dirty
 2.5x). Clean best == the dirty single-shot (2395 vs 2398) — the box was quiet.
+
+**2026-07-13 — Phase 7 (session 1): llama-3B unlock + the overhead hunt — pp512 111 (CPU
+fallback) -> ~880-960 tok/s DIRTY; lcpp full-Metal 3B = 1402 (1.5-1.6x away).** The 3B
+(dim 3072, hs 128, 28L) now serves: MetalAttnQK walks head_size in 64-wide k-slabs through the
+same 32x64 staging tiles (hs=64 one slab bit-identical, 128 two; gate's hs<=64 dropped;
+hs=128 unit arm + 1B parity green). Overhead work, measured by the new encode-vs-gpu split
+(with_compute_encoder_timed 4-out overload; encode is ~0.15ms = FREE): (1) weight region
+buffers HAZARD-UNTRACKED (new metal_new_buffer_untracked extern) — the scheduler's
+per-resource analysis over ~450 tracked weights was the dominant slack, 72 -> 32ms on its
+first read (876 -> 962 t/s), though later reps put the slack band at ~50-70ms (box wobble;
+re-read on a clean window); (2) uniforms + rope tables moved to an UNTRACKED pool
+(pool_acquire_untracked) — measured NO-OP on top of (1); the residual commit-to-done slack is
+NOT per-resource analysis; (3) fused dispatch set 21 -> 15/layer (metal_add_rms_quant folds
+the pending residual add into the next norm with a threadgroup row stage — dim <= 3072 gates
+it; metal_swiglu_quant recomputes silu on the quant pass, gate never written back;
+metal_rope_qk one grid) — interleaved ABBA says NEUTRAL (the "ew = launch gaps" hypothesis was
+WRONG — Metal pipelines back-to-back dispatches; the ew bucket is real kernel time and the
+fused rms+quant's 12KB tg stage gives the saving back in occupancy); kept for the smaller
+graph; DASLLAMA_METAL_FUSE=0 is the A/B rail. GEMM kernel round 2 (lab, 3B shapes kv3b/q3b/
+w13_3b/w2_3b added): **three structural variants ALL LOST to v13** — v18 32-elem runs (-1%),
+v19 row-major-B + transposed sgload + tg_store_half4 (-1.3%; the two NEW emitter constructs —
+simdgroup_load transpose-flag overload and tg_store_half4 — are GPU-validated bit-exact and
+stay as surface), v20 device-direct f16 B panels (-6-9%; strided transposed device loads beat
+by staging). v13 (run-staging + 64x64) holds a ~3480-3590 GMAC/s plateau vs the staging-
+removed ceiling 4600-4950 at 3B shapes; lcpp's implied kernel rate ~4400-4500 (from their own
+1B/3B walls). 3B GPU budget: gemm ~415ms, attn ~25, ew ~28; slack ~50-70; readback ~14.
+**Parity ledger (needs BOTH):** kernel 3590 -> ~4400 (next ideas: faithful ggml
+kernel_mul_mm geometry port — 64x32, 2x4 sg layout, their exact staging shape — as a lab
+variant; simdgroup async device->tg copies; f16-accumulate risk analysis) AND the ~90ms
+non-GEMM tail -> ~35 (next: commit-to-done slack attribution beyond resource tracking —
+retainedReferences=NO, split command buffers, concurrent encoder + coarse barriers; attention
+f16; readback overlap). Numbers want a clean Parsec-off window re-read (all tonight DIRTY).
