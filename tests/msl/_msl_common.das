@@ -450,6 +450,55 @@ class SgMatTiled {
     }
 }
 
+// Phase-7 rolled-GEMM shape: simdgroup-matrix ARRAYS + unroll_range loops + a fixed-array
+// staging local — the register-pressure-safe form (loops stay rolled through the Metal
+// frontend; the GPU backend unrolls with budget awareness). C(16x8) = A(16xK) x B(Kx8),
+// f32 accumulators over f16 operands, one simdgroup (32 threads).
+class SgMatRolled {
+    @ssbo @binding = 0 xa : array<float16>
+    @ssbo @binding = 1 wb : array<float16>
+    @ssbo @binding = 2 yo : array<float>
+    @uniform @binding = 3 kdim : uint
+    @workgroup ta : float16[128]        // A slab: 2 row-tiles of 8x8
+    @workgroup tb : float16[64]         // B slab: one 8x8 tile
+
+    [metal_kernel(name="sgmat_rolled_msl"), marker(no_coverage)]
+    def sgmat_rolled {
+        let lid = gl_LocalInvocationID.x
+        var mc : simdgroup_float8x8[2]
+        var ma : simdgroup_half8x8[2]
+        var va : float16[4]
+        var kk = 0u
+        while (kk < kdim) {
+            // this thread's 4 A elements are contiguous in xa — read through a device cursor
+            let flat0 = lid * 4u
+            let xcur = dev_cursor(xa, ((flat0 / 64u) * 8u + (flat0 % 64u) / 8u) * kdim + kk + (flat0 % 8u))
+            for (i in unroll_range(4)) {
+                va[i] = xa[xcur + uint(i)]
+            }
+            for (i in unroll_range(4)) {
+                ta[lid * 4u + uint(i)] = va[i]
+            }
+            tb[lid] = wb[(kk + lid / 8u) * 8u + (lid % 8u)]
+            tb[lid + 32u] = wb[(kk + (lid + 32u) / 8u) * 8u + ((lid + 32u) % 8u)]
+            barrier()
+            var mbb : simdgroup_half8x8
+            simdgroup_load(mbb, tb, 0u, 8u)
+            var acur = tg_cursor(ta, 0u)
+            for (i in unroll_range(2)) {
+                simdgroup_load(ma[i], ta, acur, 8u)
+                simdgroup_multiply_accumulate(mc[i], ma[i], mbb, mc[i])
+                acur += 64u
+            }
+            barrier()
+            kk += 8u
+        }
+        for (i in unroll_range(2)) {
+            simdgroup_store(mc[i], yo, uint(i) * 64u, 8u)
+        }
+    }
+}
+
 // Phase-6 math builtins: the value-call whitelist with 1:1 MSL spellings — float scalar +
 // vector classes throughout (abs also signed int; min/max any numeric class)
 class MathCalls {
@@ -626,6 +675,7 @@ def public declared_msl_census : table<string> {
         "cvt.i32.i16",
         "cvt.i16.i32",
         "cvt.i8.i32",
+        "cvt.i32.u32",
         "cvt_sat.i32v.i8v",
         "cvt_sat.u32v.u16v",
         // comparisons
@@ -674,6 +724,14 @@ def public declared_msl_census : table<string> {
         // multiply, multiply-accumulate (all-f32, all-f16, and the mixed f32-acc/f16-operand combo)
         "stmt.var.sgmat",
         "stmt.var.sgmat.zero",
+        "stmt.var.sgmat_array.f32",
+        "stmt.var.sgmat_array.f16",
+        "stmt.var.array",
+        "stmt.for.unroll",
+        "stmt.var.tg_cursor",
+        "stmt.var.dev_cursor",
+        "expr.index.cur",
+        "call.sgmat_load_cur.f16",
         "call.sgmat_fill.f32",
         "call.sgmat_fill.f16",
         "call.sgmat_load.f32",
@@ -738,5 +796,5 @@ def public all_msl_censuses : array<string> {
     return <- [mul_ab_msl_census, uarith_msl_census, iarith_msl_census, farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
-        sgmat_tiled_msl_census, mathcalls_msl_census]
+        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census]
 }

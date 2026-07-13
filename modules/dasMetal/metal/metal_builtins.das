@@ -24,6 +24,29 @@ var gl_SubgroupSize : uint              // simdgroup execution width   -> [[thre
 var gl_NumSubgroups : uint              // simdgroups per threadgroup  -> [[simdgroups_per_threadgroup]]
 var gl_SubgroupID : uint                // simdgroup within the group  -> [[simdgroup_index_in_threadgroup]]
 
+// ===== loop shaping =====
+// tg_cursor(member, base): a tile cursor into a @workgroup array. On CPU it is just `base`
+// (a plain uint offset — reference bodies index the array with it unchanged); the emitter
+// declares a threadgroup POINTER local (`threadgroup const T * cur = member + base;`) and a
+// simdgroup_load whose offset is `cur + rest` lowers to `simdgroup_load(m, cur + rest, ...)`.
+// Advance with `cur += N`. The pointer form matters: spelling the same address as
+// `member + (uint offset)` lets LLVM precompute every tile address into long-lived registers
+// (measured on mul_mm: max_threads 1024 -> 896, -12%); the loop-carried pointer keeps 1024.
+[unused_argument(src)] def public tg_cursor(src; base : uint) : uint => base
+
+// dev_cursor(member, base): the device-memory sibling — a `device const T *` local into a
+// read-only @ssbo member; element reads spell `member[cur + rest]` in das and lower to
+// `cur[rest]`. Same rationale as tg_cursor (the mul_mm A-staging pointer was worth ~1.5%).
+[unused_argument(src)] def public dev_cursor(src; base : uint) : uint => base
+
+// unroll_range(n): range(0, n) whose MSL lowering keeps the loop ROLLED and marks it
+// `#pragma clang loop unroll(full)` — the GPU backend unrolls late, with register-budget
+// awareness. Hand-unrolled das statements reach the Metal frontend as one giant straight-line
+// block whose loop-invariant addresses LLVM hoists into long-lived registers; on the mul_mm
+// GEMM that cost an occupancy tier (max_threads 1024 -> 832) and ~10% of the kernel rate.
+// `n` must be a compile-time constant. CPU semantics: identical to range(0, n).
+def public unroll_range(n : int) : range => range(0, n)
+
 // ===== simdgroup reductions + shuffles (Metal spellings — the Metal value-add) =====
 // simd_sum(v): sum of v across the simdgroup's active lanes.
 [unused_argument(v), sideeffects] def public simd_sum(v : float) : float { return v }

@@ -144,6 +144,19 @@ namespace das {
         }
     }
 
+    // occupancy introspection: register-pressure-limited kernels report < 1024 here
+    uint32_t metal_pipeline_max_total_threads ( MetalComputePipeline * pso, Context * ctx, LineInfoArg * at ) {
+        if ( !pso ) ctx->throw_error_at(at, "metal_pipeline_max_total_threads: null pipeline");
+        id<MTLComputePipelineState> p = (__bridge id<MTLComputePipelineState>)(void *) pso;
+        return (uint32_t) p.maxTotalThreadsPerThreadgroup;
+    }
+
+    uint32_t metal_pipeline_thread_execution_width ( MetalComputePipeline * pso, Context * ctx, LineInfoArg * at ) {
+        if ( !pso ) ctx->throw_error_at(at, "metal_pipeline_thread_execution_width: null pipeline");
+        id<MTLComputePipelineState> p = (__bridge id<MTLComputePipelineState>)(void *) pso;
+        return (uint32_t) p.threadExecutionWidth;
+    }
+
     // ===== buffers =====
 
     MetalBuffer * metal_new_buffer ( MetalDevice * dev, uint64_t bytes, Context * ctx, LineInfoArg * at ) {
@@ -347,6 +360,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(metal_new_compute_pipeline)>(*this, lib, "metal_new_compute_pipeline",
                 SideEffects::modifyArgumentAndExternal, "metal_new_compute_pipeline")
                     ->args({"device", "function", "error", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_pipeline_max_total_threads)>(*this, lib, "metal_pipeline_max_total_threads",
+                SideEffects::none, "metal_pipeline_max_total_threads")
+                    ->args({"pipeline", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_pipeline_thread_execution_width)>(*this, lib, "metal_pipeline_thread_execution_width",
+                SideEffects::none, "metal_pipeline_thread_execution_width")
+                    ->args({"pipeline", "context", "at"});
 
             addExtern<DAS_BIND_FUN(metal_new_buffer)>(*this, lib, "metal_new_buffer",
                 SideEffects::modifyExternal, "metal_new_buffer")

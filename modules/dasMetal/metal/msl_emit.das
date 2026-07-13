@@ -45,6 +45,7 @@ struct private MslCtx {
     members : table<string; MslMember>          // das field name -> lowering
     builtins_used : table<string>               // referenced builtin globals (gl_*)
     renames : table<string; string>             // das identifier -> MSL-safe identifier
+    cursors : table<string; string>             // tg_cursor local -> its @workgroup member (das names)
     self_name : string
 }
 
@@ -552,9 +553,20 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         return "/*.{fieldName}*/"
     } elif (e is ExprAt) {
         let ea = e as ExprAt
+        let pm = member_lookup(ctx, ea.subexpr)
+        if (!empty(pm)) {
+            // an index led by a tile cursor bound to this member reads THROUGH the cursor
+            // pointer — see tg_cursor/dev_cursor in metal_builtins for why the form matters
+            var curRest : Expression?
+            let curName = cursor_split(ctx, ea.index, curRest)
+            if (!empty(curName) && ctx.cursors[curName] == pm) {
+                let cn = ctx.renames[curName]
+                note(ctx, "expr.index.cur")
+                return curRest == null ? "{cn}[0]" : "{cn}[({emit_value(ctx, curRest)})]"
+            }
+        }
         let sub = emit_value(ctx, ea.subexpr)
         let idx = emit_value(ctx, ea.index)
-        let pm = member_lookup(ctx, ea.subexpr)
         if (!empty(pm) && ctx.members[pm].packed) {
             // a packed 3-lane element loads back into its plain-type value form (packed types
             // have no arithmetic operators of their own)
@@ -930,11 +942,44 @@ def private emit_store_target(var ctx : MslCtx; e : Expression?) : string {
     return emit_value(ctx, e)
 }
 
+// Splits a sgmat offset expression on a leading tile-cursor term: `cur + rest` / bare `cur`
+// (cursor must be the LEFTMOST additive term). Returns "" when no cursor leads; `rest` gets
+// the remainder expression (null for a bare cursor).
+def private cursor_split(ctx : MslCtx; e : Expression?; var rest : Expression?&) : string {
+    rest = null
+    var x = e
+    if (x != null && x is ExprRef2Value) {
+        x = (x as ExprRef2Value).subexpr
+    }
+    if (x == null) {
+        return ""
+    }
+    if (x is ExprVar) {
+        let n = "{(x as ExprVar).name}"
+        return key_exists(ctx.cursors, n) ? n : ""
+    }
+    if (x is ExprOp2 && (x as ExprOp2).op == "+") {
+        var l = (x as ExprOp2).left
+        if (l != null && l is ExprRef2Value) {
+            l = (l as ExprRef2Value).subexpr
+        }
+        if (l != null && l is ExprVar) {
+            let n = "{(l as ExprVar).name}"
+            if (key_exists(ctx.cursors, n)) {
+                rest = (x as ExprOp2).right
+                return n
+            }
+        }
+    }
+    return ""
+}
+
 // simdgroup_load(m, src, offset, stride) / simdgroup_store(m, dst, offset, stride): the buffer
 // argument must be a kernel-class member — @ssbo (device) for both, @workgroup (threadgroup)
 // additionally as a load source — and lowers as `name + offset`. Element-type agreement is
 // enforced upstream by the das overloads (the reference body indexes src/dst with the matrix's
-// element type).
+// element type). An offset led by a tile cursor (`cur + rest`) lowers through the cursor
+// POINTER instead of the member base — see tg_cursor in metal_builtins for why that matters.
 def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
     let isLoad = cname == "simdgroup_load"
@@ -963,9 +1008,29 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
         return
     }
     let mv = emit_value(ctx, ec.arguments[0])
+    let cls = sgmat_census_class(sgname)
+    var curRest : Expression?
+    let curName = cursor_split(ctx, ec.arguments[2], curRest)
+    if (!empty(curName)) {
+        if (ctx.cursors[curName] != mem) {
+            err(ctx, ec.at, "tile cursor `{curName}` addresses @workgroup member `{ctx.cursors[curName]}`, not `{mem}`")
+            return
+        }
+        let cn = ctx.renames[curName]
+        let caddr = curRest == null ? cn : "{cn} + ({emit_value(ctx, curRest)})"
+        let stride0 = emit_value(ctx, ec.arguments[3])
+        if (nargs == 5) {
+            let tv = emit_value(ctx, ec.arguments[4])
+            note(ctx, "call.sgmat_load_cur_t.{cls}")
+            lines |> push("{indent}{cname}({mv}, {caddr}, {stride0}, ulong2(0), {tv});")
+            return
+        }
+        note(ctx, "call.sgmat_load_cur.{cls}")
+        lines |> push("{indent}{cname}({mv}, {caddr}, {stride0});")
+        return
+    }
     let off = emit_value(ctx, ec.arguments[2])
     let stride = emit_value(ctx, ec.arguments[3])
-    let cls = sgmat_census_class(sgname)
     if (nargs == 5) {   // the transpose-flag load: MSL's 5-arg form (origin 0, transpose_matrix)
         note(ctx, m.workgroup ? "call.sgmat_load_tg_t.{cls}" : "call.sgmat_load_t.{cls}")
         let tv = emit_value(ctx, ec.arguments[4])
@@ -1062,6 +1127,74 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                     note(ctx, "stmt.var.sgmat")
                     lines |> push("{indent}{sgname} {ctx.renames[sgVarName]} = {init};")
                 }
+                continue
+            }
+            let initCursor = (v.init != null && v.init is ExprCall) ? call_base_name("{(v.init as ExprCall).name}") : ""
+            if (initCursor == "tg_cursor" || initCursor == "dev_cursor") {
+                // tile cursor: a threadgroup/device POINTER local (CPU sees a plain uint
+                // offset). The pointer form is the point — see tg_cursor in metal_builtins
+                let cc = v.init as ExprCall
+                if (length(cc.arguments) != 2) {
+                    err(ctx, v.at, "{initCursor} takes (member, base offset)")
+                    continue
+                }
+                let cmem = member_lookup(ctx, cc.arguments[0])
+                if (empty(cmem)) {
+                    err(ctx, v.at, "{initCursor} source must be a kernel-class member")
+                    continue
+                }
+                let cm = ctx.members[cmem]
+                if (initCursor == "tg_cursor" && !cm.workgroup) {
+                    err(ctx, v.at, "tg_cursor source must be a @workgroup member (use dev_cursor for @ssbo)")
+                    continue
+                }
+                if (initCursor == "dev_cursor" && (cm.workgroup || cm.uniform || cm.written || cm.packed)) {
+                    err(ctx, v.at, "dev_cursor source must be a read-only non-packed @ssbo member")
+                    continue
+                }
+                let cname0 = string(v.name)
+                ctx.renames[cname0] = msl_safe_name(cname0)
+                ctx.cursors[cname0] = cmem
+                let base = emit_value(ctx, cc.arguments[1])
+                let space = initCursor == "tg_cursor" ? "threadgroup" : "device"
+                note(ctx, "stmt.var.{initCursor}")
+                lines |> push("{indent}{space} const {cm.elem} * {ctx.renames[cname0]} = {cm.msl_name} + ({base});")
+                continue
+            }
+            if (v._type != null && v._type.baseType == Type.tFixedArray && v._type.firstType != null &&
+                    v._type.firstType.baseType != Type.tFixedArray) {
+                // single-dim fixed-array local; das zero-init semantics, no initializer form
+                if (v.init != null) {
+                    err(ctx, v.at, "fixed-array local `{v.name}` takes no initializer — das zero-init is the MSL form")
+                    continue
+                }
+                let et = v._type.firstType
+                let n = v._type.fixedDim
+                let aname = string(v.name)
+                ctx.renames[aname] = msl_safe_name(aname)
+                let an = ctx.renames[aname]
+                let asg = sgmat_type_name(et)
+                if (!empty(asg)) {
+                    // the opaque tile type: `= {}` does not construct it — zero-fill in a
+                    // rolled pragma'd loop (the array form exists exactly for rolled math)
+                    note(ctx, "stmt.var.sgmat_array.{sgmat_census_class(asg)}")
+                    lines |> push("{indent}{asg} {an}[{n}];")
+                    lines |> push("{indent}#pragma clang loop unroll(full)")
+                    lines |> push("{indent}for (int {an}_zi = 0; {an}_zi < {n}; ++{an}_zi) \{")
+                    lines |> push("{indent}    {an}[{an}_zi] = {sgmat_zero_fill(asg)};")
+                    lines |> push("{indent}\}")
+                    continue
+                }
+                if (reject_cpu_only_width(ctx, v.at, et)) {
+                    continue
+                }
+                let ename = msl_type_name(et)
+                if (empty(ename)) {
+                    err(ctx, v.at, "local array `{v.name}` element type {describe(et)} has no MSL form")
+                    continue
+                }
+                note(ctx, "stmt.var.array")
+                lines |> push("{indent}{ename} {an}[{n}] = \{\};")
                 continue
             }
             if (reject_cpu_only_width(ctx, v.at, v._type)) {
@@ -1231,6 +1364,23 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
         lo = "{fromto.x}u"
         hi = "{fromto.y}u"
         hiIsConst = true
+    } elif (fr.sources[0] is ExprCall && call_base_name("{(fr.sources[0] as ExprCall).name}") == "unroll_range") {
+        // rolled-with-pragma loop: the GPU backend unrolls late, with register-budget awareness
+        let src = fr.sources[0] as ExprCall
+        if (length(src.arguments) != 1 || !(src.arguments[0] is ExprConstInt)) {
+            err(ctx, fr.at, "unroll_range takes one compile-time constant bound")
+            return
+        }
+        let n = (src.arguments[0] as ExprConstInt).value
+        let ivName0 = string(iv.name)
+        ctx.renames[ivName0] = msl_safe_name(ivName0)
+        let mn0 = ctx.renames[ivName0]
+        note(ctx, "stmt.for.unroll")
+        lines |> push("{indent}#pragma clang loop unroll(full)")
+        lines |> push("{indent}for (int {mn0} = 0; {mn0} < {n}; ++{mn0}) \{")
+        emit_stmt(ctx, fr.body, indent + "    ", lines)
+        lines |> push("{indent}\}")
+        return
     } else {
         let src = fr.sources[0] ?as ExprCall
         if (src == null || (src.name != "range" && src.name != "urange")) {

@@ -837,3 +837,37 @@ fa=1 +3% over fa=0 comes from their WHOLE f16 pipeline, not graftable via a KV-o
 Residual flash value = drops the heads x mp^2 score slab (memory) => a future lever to lift
 g_max_npos for long-context prefill. **NEXT: das-emitter codegen chase (retire the verbatim mul_mm),
 logits-on-GPU ~3ms, prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**
+
+**2026-07-13 — Phase 7 (session 5): the emitter codegen chase — das kernel from 87% to ~98% of
+verbatim; the gap was REGISTER PRESSURE from frontend-unrolled statements.** Method: AIR-level
+IR diff (new Metal offline toolchain, `xcrun metal -S -emit-llvm`) + the new occupancy
+introspection externs (`metal_pipeline_max_total_threads` / `_thread_execution_width`, printed
+per variant by the lab) + hand-MSL morph probes bisected one spelling at a time. ROOT CAUSE:
+the das emitter's hand-unrolled statement blocks reach LLVM as one giant SSA body; LLVM hoists
+every loop-invariant tile address (~42 pointers: 16 A-store + 2 B-store + 24 sgmat-load) into
+long-lived registers -> max_threads 1024 -> 832 (an occupancy tier) -> flat -13% vs the verbatim
+lcpp kernel on every shape. llama.cpp's kernel keeps its loops ROLLED with
+`_Pragma("clang loop unroll(full)")` + two bumped tile POINTERS; the AGX backend unrolls late,
+register-budget-aware. Bisect verdicts (all on the 34B-blob contract, bit-exact, interleaved):
+34B-blob/byte loads on the OLD unrolled shape = neutral (v23); rolled math = +10-11% and 1024
+back (v24_roll); rolled A-staging = neutral; device-pointer k-loop bumps = -1%; vectorized
+half2x4 B move = -1%; ushort prologue = -1%; int-vs-short loop vars = FREE; index-form tile
+addressing (`aB + ik*512`) REGRESSES to 896/-12% even inside pragma'd loops (v24h1, kept in lab
+as the negative control) — the load operand must be a loop-carried POINTER; A-staging via a
+hoisted device pointer = the last +1.5%. SHIPPED (emitter + builtins, pure das, no C++ rebuild
+for the das half): `unroll_range(n)` (rolled-with-pragma for; const bound), fixed-array locals
+(scalar `half va[16] = {};` + sgmat arrays w/ pragma'd zero-fill loops), indexed sgmat args
+(`mc[i]`), `tg_cursor(member, base)` / `dev_cursor(member, base)` (CPU = plain uint offset;
+MSL = threadgroup/device const pointer local; sgmat-load offsets and element reads led by a
+cursor lower through the pointer; advance = `cur += N`). New dasMetal externs (dasMetal.mm):
+pipeline occupancy introspection (the register-pressure oracle — a reg-limited PSO reports
+max_threads < 1024). Tests: tests/msl census +8 tags + SgMatRolled fixture + golden (73/73);
+tests/metal test_metal_sgmat_rolled GPU-vs-CPU bit-exact (36/36). Lab: `v25_das_rolled` = the
+das-AUTHORED kernel on the production 34B contract — q3b 4028 / w13_3b 4112 / w2_3b 4034 GMAC/s
+= 97.6-98.6% of verbatim (4101/4201/4132), == the hand-MSL v24g reference, +11-12% over v22.
+One-shot morph probes pruned post-verdict; v22/v23/v24_roll/v24g/v24h1/v25 kept as the
+reproducible A/B family. PRODUCTION CALL (for PR review): verbatim stays the default GEMM —
+the last ~2% is AGX-backend scheduling even hand-MSL in the same shape can't reach, and ~2%
+GEMM ~= ~1% pp512 = the margin by which das beats lcpp fa=0. The das v25 kernel + constructs
+are the retirement PATH once the last 2% closes (ISA-level chase, priced separately).
+**NEXT: logits-on-GPU ~3ms, prefill-alloc caching ~5ms. Then PR the arc (preflight --full).**

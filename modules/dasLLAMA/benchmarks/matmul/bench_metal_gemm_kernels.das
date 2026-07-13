@@ -2946,6 +2946,262 @@ class MetalGemmLabBlob36 {
     }
 }
 
+// v23: v22's geometry on llama.cpp's OWN 34B blob (half scale + 32 int8, quants 2-byte-offset)
+// — their exact W contract and byte-wise load/dequant pattern, das-authored. Isolates the
+// residual data-contract share of the verbatim gap: half scale = 5.6% less W traffic, and the
+// +2 quant offset forces scalar byte loads (the reason ggml reads bytes, not vectors).
+class MetalGemmLabBlob34 {
+    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
+    @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
+    @ssbo @binding = 2 xf : array<float4>   // PRE-DEQUANTIZED f32 activations — the lcpp B contract
+    @ssbo @binding = 3 xs : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup ta : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, each tile (k row, wrow col)
+    @workgroup tb : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, each tile (token row, k col)
+
+    [metal_kernel(name="lab_blob34_msl")]
+    def lab_blob34 {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
+        var c00 : simdgroup_float8x8
+        var c01 : simdgroup_float8x8
+        var c02 : simdgroup_float8x8
+        var c03 : simdgroup_float8x8
+        var c10 : simdgroup_float8x8
+        var c11 : simdgroup_float8x8
+        var c12 : simdgroup_float8x8
+        var c13 : simdgroup_float8x8
+        let kdim4 = kdim / 4u
+        let nkb = kdim / 32u
+        // A split: each thread stages 16 weight elems — row lr0, k half il0
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA         // k-tiles il0*2 (lanes at stride 8)
+        let tA1 = ((il0 * 2u + 1u) * 8u + syA) * 64u + lxA  // k-tile il0*2+1
+        // B split: each thread stages 8 activation elems — token lr1, k offset iy
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
+        let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
+        var ma0 : simdgroup_half8x8
+        var ma1 : simdgroup_half8x8
+        var ma2 : simdgroup_half8x8
+        var ma3 : simdgroup_half8x8
+        var mb0 : simdgroup_half8x8
+        var mb1 : simdgroup_half8x8
+        var kb = 0u
+        while (kb < nkb) {
+            // device reads first — they fly while the previous math loop drains
+            let blk = (nBase + lr0) * nkb + kb
+            let sA = float(wsh[blk * 17u])   // half scale rides the quants' cacheline
+            let qb = blk * 34u + 2u + il0 * 16u
+            let q0 = wqb[qb]
+            let q1 = wqb[qb + 1u]
+            let q2 = wqb[qb + 2u]
+            let q3 = wqb[qb + 3u]
+            let q4 = wqb[qb + 4u]
+            let q5 = wqb[qb + 5u]
+            let q6 = wqb[qb + 6u]
+            let q7 = wqb[qb + 7u]
+            let q8 = wqb[qb + 8u]
+            let q9 = wqb[qb + 9u]
+            let q10 = wqb[qb + 10u]
+            let q11 = wqb[qb + 11u]
+            let q12 = wqb[qb + 12u]
+            let q13 = wqb[qb + 13u]
+            let q14 = wqb[qb + 14u]
+            let q15 = wqb[qb + 15u]
+            let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+            let b0 = xf[srcB]
+            let b1 = xf[srcB + 1u]
+            barrier()                       // previous math done reading the tiles
+            ta[tA0] = float16(float(q0) * sA)   // ly = k%8 -> +8 per lane; tA1 = second 8-k tile
+            ta[tA0 + 8u] = float16(float(q1) * sA)
+            ta[tA0 + 16u] = float16(float(q2) * sA)
+            ta[tA0 + 24u] = float16(float(q3) * sA)
+            ta[tA0 + 32u] = float16(float(q4) * sA)
+            ta[tA0 + 40u] = float16(float(q5) * sA)
+            ta[tA0 + 48u] = float16(float(q6) * sA)
+            ta[tA0 + 56u] = float16(float(q7) * sA)
+            ta[tA1] = float16(float(q8) * sA)
+            ta[tA1 + 8u] = float16(float(q9) * sA)
+            ta[tA1 + 16u] = float16(float(q10) * sA)
+            ta[tA1 + 24u] = float16(float(q11) * sA)
+            ta[tA1 + 32u] = float16(float(q12) * sA)
+            ta[tA1 + 40u] = float16(float(q13) * sA)
+            ta[tA1 + 48u] = float16(float(q14) * sA)
+            ta[tA1 + 56u] = float16(float(q15) * sA)
+            tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // constant tile offsets off hoisted quadrant bases
+            simdgroup_load(ma0, ta, aB, 8u)
+            simdgroup_load(ma1, ta, aB + 64u, 8u)
+            simdgroup_load(ma2, ta, aB + 128u, 8u)
+            simdgroup_load(ma3, ta, aB + 192u, 8u)
+            simdgroup_load(mb0, tb, bB, 8u)
+            simdgroup_load(mb1, tb, bB + 64u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 512u, 8u)
+            simdgroup_load(ma1, ta, aB + 576u, 8u)
+            simdgroup_load(ma2, ta, aB + 640u, 8u)
+            simdgroup_load(ma3, ta, aB + 704u, 8u)
+            simdgroup_load(mb0, tb, bB + 256u, 8u)
+            simdgroup_load(mb1, tb, bB + 320u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1024u, 8u)
+            simdgroup_load(ma1, ta, aB + 1088u, 8u)
+            simdgroup_load(ma2, ta, aB + 1152u, 8u)
+            simdgroup_load(ma3, ta, aB + 1216u, 8u)
+            simdgroup_load(mb0, tb, bB + 512u, 8u)
+            simdgroup_load(mb1, tb, bB + 576u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            simdgroup_load(ma0, ta, aB + 1536u, 8u)
+            simdgroup_load(ma1, ta, aB + 1600u, 8u)
+            simdgroup_load(ma2, ta, aB + 1664u, 8u)
+            simdgroup_load(ma3, ta, aB + 1728u, 8u)
+            simdgroup_load(mb0, tb, bB + 768u, 8u)
+            simdgroup_load(mb1, tb, bB + 832u, 8u)
+            simdgroup_multiply_accumulate(c00, mb0, ma0, c00)
+            simdgroup_multiply_accumulate(c01, mb0, ma1, c01)
+            simdgroup_multiply_accumulate(c02, mb0, ma2, c02)
+            simdgroup_multiply_accumulate(c03, mb0, ma3, c03)
+            simdgroup_multiply_accumulate(c10, mb1, ma0, c10)
+            simdgroup_multiply_accumulate(c11, mb1, ma1, c11)
+            simdgroup_multiply_accumulate(c12, mb1, ma2, c12)
+            simdgroup_multiply_accumulate(c13, mb1, ma3, c13)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = outputs
+        simdgroup_store(c00, y, row0 * ndim + col0, ndim)
+        simdgroup_store(c01, y, row0 * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c02, y, row0 * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c03, y, row0 * ndim + (col0 + 24u), ndim)
+        simdgroup_store(c10, y, (row0 + 8u) * ndim + col0, ndim)
+        simdgroup_store(c11, y, (row0 + 8u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(c12, y, (row0 + 8u) * ndim + (col0 + 16u), ndim)
+        simdgroup_store(c13, y, (row0 + 8u) * ndim + (col0 + 24u), ndim)
+    }
+}
+
+// v25: the v24g shape das-AUTHORED — simdgroup-matrix arrays + unroll_range rolled loops
+// (the Phase-7 emitter constructs). Same 34B-blob contract as v24g; the emitted MSL is the
+// rolled-with-pragma form, so the GPU backend unrolls with register-budget awareness
+// (max_threads 1024, vs 832 for the hand-unrolled v22 statements).
+class MetalGemmLabRolled34 {
+    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
+    @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
+    @ssbo @binding = 2 xf : array<float4>   // PRE-DEQUANTIZED f32 activations — the lcpp B contract
+    @ssbo @binding = 3 xs : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup ta : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, each tile (k row, wrow col)
+    @workgroup tb : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, each tile (token row, k col)
+
+    [metal_kernel(name="lab_rolled34_msl")]
+    def lab_rolled34 {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
+        var mc : simdgroup_float8x8[8]      // per-simdgroup C quadrant: 2 token-tiles x 4 output-tiles
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        var va : float16[16]                // dequantized A staging regs (this thread's block half)
+        let kdim4 = kdim / 4u
+        let nkb = kdim / 32u
+        // A split: each thread stages 16 weight elems — row lr0, k half il0
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA         // k-tile il0*2 (lanes at stride 8; +512 = next k-tile)
+        // B split: each thread stages 8 activation elems — token lr1, k offset iy
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
+        let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
+        var kb = 0u
+        while (kb < nkb) {
+            // device reads + dequant first — they fly while the previous math loop drains
+            let blk = (nBase + lr0) * nkb + kb
+            let sA = float(wsh[blk * 17u])  // half scale rides the quants' cacheline
+            let qp = dev_cursor(wqb, blk * 34u + 2u + il0 * 16u)
+            let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+            let b0 = xf[srcB]
+            let b1 = xf[srcB + 1u]
+            for (i in unroll_range(16)) {
+                va[i] = float16(float(wqb[qp + uint(i)]) * sA)
+            }
+            barrier()                       // previous math done reading the tiles
+            for (i in unroll_range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            // math ROLLED: the pragma'd loops reach the backend intact — 4 k-slabs x
+            // (6 tile loads + 8 macs). Tile addresses advance via loop-carried tg_cursor
+            // POINTERS, not aB + ik*512 index math — the pointer bump denies LLVM the
+            // freedom to precompute every tile address into a long-lived register (index
+            // form measured max_threads 896 and -12%; the carried pointer keeps 1024)
+            var acur = tg_cursor(ta, aB)
+            var bcur = tg_cursor(tb, bB)
+            for (_ik in unroll_range(4)) {
+                for (i in unroll_range(4)) {
+                    simdgroup_load(ma[i], ta, acur + uint(i) * 64u, 8u)
+                }
+                for (i in unroll_range(2)) {
+                    simdgroup_load(mb[i], tb, bcur + uint(i) * 64u, 8u)
+                }
+                for (i in unroll_range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur += 512u
+                bcur += 256u
+            }
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = outputs
+        for (i in unroll_range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+        }
+    }
+}
+
 // knockouts: v21 staging bisect — A half only / B half only (timing-only)
 class MetalGemmLabGgmlGeoAOnly {
     @ssbo @binding = 0 wq : array<byte4>
@@ -3347,6 +3603,7 @@ struct private LabVariant {
     f32x : bool = false                     // binding 2 gets the PRE-DEQUANTIZED f32 activation panel
     wscT : bool = false                     // binding 1 gets the [block][row]-TRANSPOSED W scales
     blob36 : bool = false                   // bindings 0+1 get the SAME 36B-block W blob (scale/quant views) + f32 X
+    blob34 : bool = false                   // bindings 0+1 get llama.cpp's OWN 34B blob (half-scale/byte views) + f32 X
 }
 
 def private align_up(v, a : int64) : int64 => ((v + a - 1l) / a) * a
@@ -3408,6 +3665,293 @@ def private download_floats(buf; var dst : array<float>; count : int64) {
         memcpy(reinterpret<void?>(addr(dst[0])), metal_buffer_contents(buf), int(count * 4l))
     }
 }
+
+// ===== v24 probe: hand-restructured MSL — v22's emitted text, math section lcpp-style =====
+// The emitted v22 is fully unrolled SSA: LLVM hoists ~42 loop-invariant threadgroup addresses
+// (16 A-store + 2 B-store + 24 sgmat-load pointers) out of the k-loop, holding them in registers
+// for the kernel's whole life — max_threads drops 1024 -> 832 (register-limited) and occupancy
+// eats ~13%. This probe keeps v22's staging verbatim but rewrites the math as llama.cpp shapes
+// it: matrix ARRAYS + rolled unroll(full) loops + two bumped tile pointers, so the AGX backend
+// unrolls with register-budget awareness. das-side equivalent needs emitter work — probe first.
+let LAB_V22ROLL_MSL = "#include <metal_stdlib>
+using namespace metal;
+kernel void lab_v22roll(device const float* wsc [[buffer(0)]],
+        device const char4* wqv [[buffer(1)]],
+        device const float4* xf [[buffer(2)]],
+        device const float* xs [[buffer(3)]],
+        device float* y [[buffer(4)]],
+        constant uint& kdim [[buffer(5)]],
+        constant uint& ndim [[buffer(6)]],
+        uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]],
+        uint gl_SubgroupID [[simdgroup_index_in_threadgroup]],
+        uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]) \{
+    threadgroup half ta[2048];
+    threadgroup half tb[1024];
+    uint lid = gl_LocalInvocationID.x;
+    uint sg = gl_SubgroupID;
+    uint mBase = (gl_WorkGroupID.x * 32u);
+    uint nBase = (gl_WorkGroupID.y * 64u);
+    simdgroup_half8x8 ma[4];
+    simdgroup_half8x8 mb[2];
+    simdgroup_float8x8 mc[8];
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        mc[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
+    \}
+    uint kdim4 = (kdim / 4u);
+    uint nkb = (kdim / 32u);
+    uint lr0 = (lid / 2u);
+    uint il0 = (lid % 2u);
+    uint syA = (lr0 / 8u);
+    uint lxA = (lr0 % 8u);
+    uint tA0 = (((((il0 * 2u) * 8u) + syA) * 64u) + lxA);
+    uint tA1 = ((((((il0 * 2u) + 1u) * 8u) + syA) * 64u) + lxA);
+    uint lr1 = (lid / 4u);
+    uint iy = ((lid % 4u) * 8u);
+    uint ibB = (((((lid % 4u) * 4u) + (lr1 / 8u)) * 64u) + ((lr1 % 8u) * 8u));
+    uint aB = ((sg % 2u) * 256u);
+    uint bB = ((sg / 2u) * 128u);
+    uint kb = 0u;
+    while ((kb < nkb)) \{
+        uint b9 = ((((nBase + lr0) * nkb) + kb) * 9u);
+        float sA = wsc[b9];
+        uint srcA = ((b9 + 1u) + (il0 * 4u));
+        char4 a0 = wqv[srcA];
+        char4 a1 = wqv[(srcA + 1u)];
+        char4 a2 = wqv[(srcA + 2u)];
+        char4 a3 = wqv[(srcA + 3u)];
+        uint srcB = (((mBase + lr1) * kdim4) + (((kb * 32u) + iy) / 4u));
+        float4 b0 = xf[srcB];
+        float4 b1 = xf[(srcB + 1u)];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        float4 va0 = (float4(int4(a0)) * sA);
+        float4 va1 = (float4(int4(a1)) * sA);
+        float4 va2 = (float4(int4(a2)) * sA);
+        float4 va3 = (float4(int4(a3)) * sA);
+        ta[tA0] = half(va0.x);
+        ta[(tA0 + 8u)] = half(va0.y);
+        ta[(tA0 + 16u)] = half(va0.z);
+        ta[(tA0 + 24u)] = half(va0.w);
+        ta[(tA0 + 32u)] = half(va1.x);
+        ta[(tA0 + 40u)] = half(va1.y);
+        ta[(tA0 + 48u)] = half(va1.z);
+        ta[(tA0 + 56u)] = half(va1.w);
+        ta[tA1] = half(va2.x);
+        ta[(tA1 + 8u)] = half(va2.y);
+        ta[(tA1 + 16u)] = half(va2.z);
+        ta[(tA1 + 24u)] = half(va2.w);
+        ta[(tA1 + 32u)] = half(va3.x);
+        ta[(tA1 + 40u)] = half(va3.y);
+        ta[(tA1 + 48u)] = half(va3.z);
+        ta[(tA1 + 56u)] = half(va3.w);
+        *(threadgroup half4*)(tb + (ibB)) = half4(b0);
+        *(threadgroup half4*)(tb + ((ibB + 4u))) = half4(b1);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        threadgroup const half * lsma = ta + aB;
+        threadgroup const half * lsmb = tb + bB;
+        #pragma clang loop unroll(full)
+        for (short ik = 0; ik < 4; ik++) \{
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 4; i++) \{
+                simdgroup_load(ma[i], lsma + 64*i, 8, 0, false);
+            \}
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 2; i++) \{
+                simdgroup_load(mb[i], lsmb + 64*i, 8, 0, false);
+            \}
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 8; i++) \{
+                simdgroup_multiply_accumulate(mc[i], mb[i/4], ma[i%4], mc[i]);
+            \}
+            lsma += 8*64;
+            lsmb += 4*64;
+        \}
+        ++kb;
+    \}
+    uint row0 = (mBase + ((sg / 2u) * 16u));
+    uint col0 = (nBase + ((sg % 2u) * 32u));
+    device float * C = y + ((row0 * ndim) + col0);
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        simdgroup_store(mc[i], C + 8*(i%4) + 8*ndim*(i/4), ndim, 0, false);
+    \}
+\}
+"
+
+let LAB_V24G_MSL = "#include <metal_stdlib>
+using namespace metal;
+kernel void lab_v24g(device const half* wsh [[buffer(0)]],
+        device const char* wqb [[buffer(1)]],
+        device const float4* xf [[buffer(2)]],
+        device const float* xs [[buffer(3)]],
+        device float* y [[buffer(4)]],
+        constant uint& kdim [[buffer(5)]],
+        constant uint& ndim [[buffer(6)]],
+        uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]],
+        uint gl_SubgroupID [[simdgroup_index_in_threadgroup]],
+        uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]) \{
+    threadgroup half ta[2048];
+    threadgroup half tb[1024];
+    uint lid = gl_LocalInvocationID.x;
+    uint sg = gl_SubgroupID;
+    uint mBase = (gl_WorkGroupID.x * 32u);
+    uint nBase = (gl_WorkGroupID.y * 64u);
+    simdgroup_half8x8 ma[4];
+    simdgroup_half8x8 mb[2];
+    simdgroup_float8x8 mc[8];
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        mc[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
+    \}
+    uint kdim4 = (kdim / 4u);
+    uint nkb = (kdim / 32u);
+    uint lr0 = (lid / 2u);
+    uint il0 = (lid % 2u);
+    uint syA = (lr0 / 8u);
+    uint lxA = (lr0 % 8u);
+    uint tA0 = (((((il0 * 2u) * 8u) + syA) * 64u) + lxA);
+    uint lr1 = (lid / 4u);
+    uint iy = ((lid % 4u) * 8u);
+    uint ibB = (((((lid % 4u) * 4u) + (lr1 / 8u)) * 64u) + ((lr1 % 8u) * 8u));
+    uint aB = ((sg % 2u) * 256u);
+    uint bB = ((sg / 2u) * 128u);
+    uint kb = 0u;
+    while ((kb < nkb)) \{
+        uint blk = (((nBase + lr0) * nkb) + kb);
+        float sA = (float)wsh[blk * 17u];
+        device const char * qp = wqb + blk * 34u + 2u + il0 * 16u;
+        uint srcB = (((mBase + lr1) * kdim4) + (((kb * 32u) + iy) / 4u));
+        float4 b0 = xf[srcB];
+        float4 b1 = xf[(srcB + 1u)];
+        half va[16];
+        #pragma clang loop unroll(full)
+        for (short i = 0; i < 16; i++) \{
+            va[i] = (half)((float)qp[i] * sA);
+        \}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        #pragma clang loop unroll(full)
+        for (short i = 0; i < 16; i++) \{
+            ta[tA0 + (i/8)*512 + (i%8)*8] = va[i];
+        \}
+        *(threadgroup half4*)(tb + (ibB)) = half4(b0);
+        *(threadgroup half4*)(tb + ((ibB + 4u))) = half4(b1);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        threadgroup const half * lsma = ta + aB;
+        threadgroup const half * lsmb = tb + bB;
+        #pragma clang loop unroll(full)
+        for (short ik = 0; ik < 4; ik++) \{
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 4; i++) \{
+                simdgroup_load(ma[i], lsma + 64*i, 8, 0, false);
+            \}
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 2; i++) \{
+                simdgroup_load(mb[i], lsmb + 64*i, 8, 0, false);
+            \}
+            #pragma clang loop unroll(full)
+            for (short i = 0; i < 8; i++) \{
+                simdgroup_multiply_accumulate(mc[i], mb[i/4], ma[i%4], mc[i]);
+            \}
+            lsma += 8*64;
+            lsmb += 4*64;
+        \}
+        ++kb;
+    \}
+    uint row0 = (mBase + ((sg / 2u) * 16u));
+    uint col0 = (nBase + ((sg % 2u) * 32u));
+    device float * C = y + ((row0 * ndim) + col0);
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        simdgroup_store(mc[i], C + 8*(i%4) + 8*ndim*(i/4), ndim, 0, false);
+    \}
+\}
+"
+
+let LAB_V24H1_MSL = "#include <metal_stdlib>
+using namespace metal;
+kernel void lab_v24h1(device const half* wsh [[buffer(0)]],
+        device const char* wqb [[buffer(1)]],
+        device const float4* xf [[buffer(2)]],
+        device const float* xs [[buffer(3)]],
+        device float* y [[buffer(4)]],
+        constant uint& kdim [[buffer(5)]],
+        constant uint& ndim [[buffer(6)]],
+        uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]],
+        uint gl_SubgroupID [[simdgroup_index_in_threadgroup]],
+        uint3 gl_WorkGroupID [[threadgroup_position_in_grid]]) \{
+    threadgroup half ta[2048];
+    threadgroup half tb[1024];
+    uint lid = gl_LocalInvocationID.x;
+    uint sg = gl_SubgroupID;
+    uint mBase = (gl_WorkGroupID.x * 32u);
+    uint nBase = (gl_WorkGroupID.y * 64u);
+    simdgroup_half8x8 ma[4];
+    simdgroup_half8x8 mb[2];
+    simdgroup_float8x8 mc[8];
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        mc[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
+    \}
+    uint kdim4 = (kdim / 4u);
+    uint nkb = (kdim / 32u);
+    uint lr0 = (lid / 2u);
+    uint il0 = (lid % 2u);
+    uint syA = (lr0 / 8u);
+    uint lxA = (lr0 % 8u);
+    uint tA0 = (((((il0 * 2u) * 8u) + syA) * 64u) + lxA);
+    uint lr1 = (lid / 4u);
+    uint iy = ((lid % 4u) * 8u);
+    uint ibB = (((((lid % 4u) * 4u) + (lr1 / 8u)) * 64u) + ((lr1 % 8u) * 8u));
+    uint aB = ((sg % 2u) * 256u);
+    uint bB = ((sg / 2u) * 128u);
+    uint kb = 0u;
+    while ((kb < nkb)) \{
+        uint blk = (((nBase + lr0) * nkb) + kb);
+        float sA = (float)wsh[blk * 17u];
+        device const char * qp = wqb + blk * 34u + 2u + il0 * 16u;
+        uint srcB = (((mBase + lr1) * kdim4) + (((kb * 32u) + iy) / 4u));
+        float4 b0 = xf[srcB];
+        float4 b1 = xf[(srcB + 1u)];
+        half va[16];
+        #pragma clang loop unroll(full)
+        for (short i = 0; i < 16; i++) \{
+            va[i] = (half)((float)qp[i] * sA);
+        \}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        #pragma clang loop unroll(full)
+        for (short i = 0; i < 16; i++) \{
+            ta[tA0 + (i/8)*512 + (i%8)*8] = va[i];
+        \}
+        *(threadgroup half4*)(tb + (ibB)) = half4(b0);
+        *(threadgroup half4*)(tb + ((ibB + 4u))) = half4(b1);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        #pragma clang loop unroll(full)
+        for (int ik = 0; ik < 4; ++ik) \{
+            #pragma clang loop unroll(full)
+            for (int i = 0; i < 4; ++i) \{
+                simdgroup_load(ma[i], ta + ((aB + (uint(ik) * 512u)) + (uint(i) * 64u)), 8u);
+            \}
+            #pragma clang loop unroll(full)
+            for (int i = 0; i < 2; ++i) \{
+                simdgroup_load(mb[i], tb + ((bB + (uint(ik) * 256u)) + (uint(i) * 64u)), 8u);
+            \}
+            #pragma clang loop unroll(full)
+            for (int i = 0; i < 8; ++i) \{
+                simdgroup_multiply_accumulate(mc[i], mb[(i / 4)], ma[(i % 4)], mc[i]);
+            \}
+        \}
+        ++kb;
+    \}
+    uint row0 = (mBase + ((sg / 2u) * 16u));
+    uint col0 = (nBase + ((sg % 2u) * 32u));
+    device float * C = y + ((row0 * ndim) + col0);
+    #pragma clang loop unroll(full)
+    for (short i = 0; i < 8; i++) \{
+        simdgroup_store(mc[i], C + 8*(i%4) + 8*ndim*(i/4), ndim, 0, false);
+    \}
+\}
+"
+
 
 // ===== llama.cpp verbatim-kernel leg (see _lcpp_mul_mm_q8.das) =====
 // Their production contract differs from ours end to end: src0 = interleaved block_q8_0 blobs
@@ -3600,6 +4144,10 @@ def private run_lab(b : B?; variants) {
     var psos <- [for (v in variants); compile_lab_pso(dev, v)]
     for (v, pso in variants, psos) {
         b |> success(pso != null, "pipeline compiles: {v.name}")
+        if (pso != null && want("DASMETAL_LAB_VARIANTS", v.name)) {
+            // register-pressure signal: a reg-limited kernel reports max_threads < 1024
+            to_log(LOG_INFO, "{v.name}: max_threads={metal_pipeline_max_total_threads(pso)} simd_width={metal_pipeline_thread_execution_width(pso)}\n")
+        }
     }
     // llama1b GEMM geometries (n = reduction dim, d = output rows)
     var shapes <- [("kv", 2048l, 512l), ("q", 2048l, 2048l), ("w13", 2048l, 8192l),
@@ -3647,17 +4195,21 @@ def private run_lab(b : B?; variants) {
             if (v.lcpp && want("DASMETAL_LAB_VARIANTS", v.name) && ntok % 32l == 0l && (d % int64(v.bn)) == 0l) {
                 lcppOn = true
             }
-            if ((v.lcpp || v.f32x || v.blob36) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+            if ((v.lcpp || v.f32x || v.blob36 || v.blob34) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
                 xf32On = true
             }
         }
         var blob36On = false
+        var blob34On = false
         for (v in variants) {
             if (v.blob36 && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
                 blob36On = true
             }
+            if (v.blob34 && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+                blob34On = true
+            }
         }
-        var lcpp_wblob = upload_lcpp_q8_blob(dev, wq, ws, d, n, lcppOn)
+        var lcpp_wblob = upload_lcpp_q8_blob(dev, wq, ws, d, n, lcppOn || blob34On)
         var lcpp_xbuf = upload_lcpp_f32_x(dev, xq, xs, mp_max, n, xf32On)
         var lcpp_abuf = upload_lcpp_args(dev, n, d, ntok)
         var bufsf32x <- [wbuf, sbuf, lcpp_xbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
@@ -3674,6 +4226,7 @@ def private run_lab(b : B?; variants) {
         var bufswsct <- [wbuf, wsTbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
         var wblob36 = upload_blob36(dev, wq, ws, d, n, blob36On)
         var bufs36 <- [wblob36, wblob36, lcpp_xbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
+        var bufs34 <- [lcpp_wblob, lcpp_wblob, lcpp_xbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
         let setup_ms = double(ref_time_ticks() - t_shape0) / 1000000.0lf
         to_log(LOG_INFO, "=== {sh._0} n={n} d={d} === (setup {setup_ms} ms)\n")
         var y0 : array<float>                // v0's full output — the cross-variant reference
@@ -3695,7 +4248,7 @@ def private run_lab(b : B?; variants) {
             let ms = (v.lcpp                    // warmup + correctness dispatch
                 ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
                                  uint3(uint(ntok / 32l), uint(d / 64l), 1u), 1)
-                : time_reps(queue, pso, v.blob36 ? bufs36 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs))), groups, uint(v.threads), 1))
+                : time_reps(queue, pso, v.blob36 ? bufs36 : (v.blob34 ? bufs34 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs)))), groups, uint(v.threads), 1))
             if (ms < 0.0lf) {
                 b |> success(false, "{v.name} {sh._0}: dispatch")
                 continue
@@ -3744,7 +4297,7 @@ def private run_lab(b : B?; variants) {
                 let ms = (v.lcpp
                     ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
                                      uint3(uint(ntok / 32l), uint(d / 64l), 1u), reps)
-                    : time_reps(queue, pso, v.blob36 ? bufs36 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs))), groups, uint(v.threads), reps))
+                    : time_reps(queue, pso, v.blob36 ? bufs36 : (v.blob34 ? bufs34 : (v.wscT ? bufswsct : (v.f32x ? bufsf32x : (v.f16w ? bufs16 : bufs)))), groups, uint(v.threads), reps))
                 if (ms > 0.0lf && ms < best[idx]) {
                     best[idx] = ms
                 }
@@ -3779,6 +4332,10 @@ def private run_lab(b : B?; variants) {
         bufs36 |> clear()
         unsafe {
             delete bufs36
+        }
+        bufs34 |> clear()                    // pointees released via lcpp releases + bufs loop
+        unsafe {
+            delete bufs34
         }
         metal_release(whbuf)
         bufs16 |> clear()
@@ -3849,6 +4406,24 @@ def bench_metal_gemm_kernels(b : B?) {
             // blob (scale + quants one cacheline, byte4-aligned), X from the f32 panel
             LabVariant(name = "v22_blob36", src = lab_blob36_msl, entry = lab_blob36_msl_entry,
                        fastmath = lab_blob36_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob36 = true),
+            // v23: v22's geometry on llama.cpp's OWN 34B blob (half scale, byte-wise quant
+            // loads) — das-authored on their exact W contract; isolates the data-contract
+            // residue of the verbatim gap from emitter codegen
+            LabVariant(name = "v23_blob34", src = lab_blob34_msl, entry = lab_blob34_msl_entry,
+                       fastmath = lab_blob34_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob34 = true),
+            // v24: hand-MSL probe — v22's emitted text with the math section restructured
+            // lcpp-style (matrix arrays + rolled unroll(full) loops + bumped tile pointers);
+            // tests the register-pressure/occupancy hypothesis (v22 max_threads 832 vs 1024)
+            LabVariant(name = "v24_roll", src = LAB_V22ROLL_MSL, entry = "lab_v22roll",
+                       fastmath = true, bm = 32, bn = 64, grid2d = true, blob36 = true),
+            LabVariant(name = "v24g_roll34", src = LAB_V24G_MSL, entry = "lab_v24g",
+                       fastmath = true, bm = 32, bn = 64, grid2d = true, blob34 = true),
+            LabVariant(name = "v24h1_idx", src = LAB_V24H1_MSL, entry = "lab_v24h1",
+                       fastmath = true, bm = 32, bn = 64, grid2d = true, blob34 = true),
+            // v25: the v24g shape das-AUTHORED via the Phase-7 emitter constructs (matrix
+            // arrays + unroll_range) — the emitter-codegen-chase deliverable
+            LabVariant(name = "v25_das_rolled", src = lab_rolled34_msl, entry = lab_rolled34_msl_entry,
+                       fastmath = lab_rolled34_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob34 = true),
             // v21 + [block][row]-transposed W scales — format-compatible (planar q8 unchanged,
             // scale array re-laid at upload); collapses the A-scale reads to 4 cachelines/tg
             LabVariant(name = "v21sct", src = lab_ggmlgeosct_msl, entry = lab_ggmlgeosct_msl_entry,

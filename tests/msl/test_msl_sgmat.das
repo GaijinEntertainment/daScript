@@ -104,6 +104,83 @@ def test_sgmat_shape(t : T?) {
     }
 }
 
+// Phase-7 rolled-GEMM shape: matrix arrays declare + zero-fill in a pragma'd loop; all
+// unroll_range loops stay ROLLED with `#pragma clang loop unroll(full)` (the GPU backend
+// unrolls late, register-budget-aware — pre-unrolled statements cost an occupancy tier);
+// fixed-array locals get the aggregate zero form.
+let GOLDEN_SGMAT_ROLLED = "#include <metal_stdlib>
+using namespace metal;
+kernel void sgmat_rolled(device const half* xa [[buffer(0)]],
+        device const half* wb [[buffer(1)]],
+        device float* yo [[buffer(2)]],
+        constant uint& kdim [[buffer(3)]],
+        uint3 gl_LocalInvocationID [[thread_position_in_threadgroup]]) \{
+    threadgroup half ta[128];
+    threadgroup half tb[64];
+    uint lid = gl_LocalInvocationID.x;
+    simdgroup_float8x8 mc[2];
+    #pragma clang loop unroll(full)
+    for (int mc_zi = 0; mc_zi < 2; ++mc_zi) \{
+        mc[mc_zi] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+    \}
+    simdgroup_half8x8 ma[2];
+    #pragma clang loop unroll(full)
+    for (int ma_zi = 0; ma_zi < 2; ++ma_zi) \{
+        ma[ma_zi] = make_filled_simdgroup_matrix<half, 8, 8>(0.0h);
+    \}
+    half va[4] = \{\};
+    uint kk = 0u;
+    while ((kk < kdim)) \{
+        uint flat0 = (lid * 4u);
+        device const half * xcur = xa + (((((((flat0 / 64u) * 8u) + ((flat0 % 64u) / 8u)) * kdim) + kk) + (flat0 % 8u)));
+        #pragma clang loop unroll(full)
+        for (int i = 0; i < 4; ++i) \{
+            va[i] = xcur[(uint(i))];
+        \}
+        #pragma clang loop unroll(full)
+        for (int i = 0; i < 4; ++i) \{
+            ta[((lid * 4u) + uint(i))] = va[i];
+        \}
+        tb[lid] = wb[(((kk + (lid / 8u)) * 8u) + (lid % 8u))];
+        tb[(lid + 32u)] = wb[(((kk + ((lid + 32u) / 8u)) * 8u) + ((lid + 32u) % 8u))];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        simdgroup_half8x8 mbb = make_filled_simdgroup_matrix<half, 8, 8>(0.0h);
+        simdgroup_load(mbb, tb + 0u, 8u);
+        threadgroup const half * acur = ta + (0u);
+        #pragma clang loop unroll(full)
+        for (int i = 0; i < 2; ++i) \{
+            simdgroup_load(ma[i], acur, 8u);
+            simdgroup_multiply_accumulate(mc[i], ma[i], mbb, mc[i]);
+            acur += 64u;
+        \}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        kk += 8u;
+    \}
+    #pragma clang loop unroll(full)
+    for (int i = 0; i < 2; ++i) \{
+        simdgroup_store(mc[i], yo + (uint(i) * 64u), 8u);
+    \}
+\}
+"
+
+[test]
+def test_sgmat_rolled_shape(t : T?) {
+    t |> run("sgmat rolled: arrays + unroll_range keep loops rolled") <| @(t : T?) {
+        t |> success(contains(sgmat_rolled_msl, "simdgroup_float8x8 mc[2];"), "f32 matrix array local")
+        t |> success(contains(sgmat_rolled_msl, "simdgroup_half8x8 ma[2];"), "f16 matrix array local")
+        t |> success(contains(sgmat_rolled_msl, "half va[4] = \{\};"), "fixed-array local zero form")
+        t |> success(contains(sgmat_rolled_msl, "#pragma clang loop unroll(full)"), "unroll pragma present")
+        t |> success(contains(sgmat_rolled_msl, "for (int i = 0; i < 2; ++i) \{"), "rolled loop form")
+        t |> success(contains(sgmat_rolled_msl, "threadgroup const half * acur = ta + (0u);"), "tg_cursor pointer decl")
+        t |> success(contains(sgmat_rolled_msl, "device const half * xcur = xa + ("), "dev_cursor pointer decl")
+        t |> success(contains(sgmat_rolled_msl, "simdgroup_load(ma[i], acur, 8u);"), "matrix load through cursor")
+        t |> success(contains(sgmat_rolled_msl, "va[i] = xcur[(uint(i))];"), "element read through cursor")
+        t |> success(contains(sgmat_rolled_msl, "acur += 64u;"), "cursor advance")
+        t |> success(contains(sgmat_rolled_msl, "simdgroup_multiply_accumulate(mc[i], ma[i], mbb, mc[i]);"), "indexed mac")
+        t |> success(contains(sgmat_rolled_msl, "mc[mc_zi] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);"), "array zero-fill loop")
+    }
+}
+
 [test]
 def test_sgmat_golden(t : T?) {
     t |> run("sgmat: golden snapshot") <| @(t : T?) {
@@ -111,5 +188,8 @@ def test_sgmat_golden(t : T?) {
     }
     t |> run("sgmat tiled: golden snapshot") <| @(t : T?) {
         t |> equal(sgmat_tiled_msl, GOLDEN_SGMAT_TILED)
+    }
+    t |> run("sgmat rolled: golden snapshot") <| @(t : T?) {
+        t |> equal(sgmat_rolled_msl, GOLDEN_SGMAT_ROLLED)
     }
 }
