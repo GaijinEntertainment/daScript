@@ -5,6 +5,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_quant  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Phase-6 prefill kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device/pipeline/buffer plumbing + the leak gate
+require dasllama/dasllama_lcpp_mulmm  // nolint:STYLE030 — the verbatim mul_mm kernel (the lcpp GEMM path), used only in the Apple half
 require math
 
 // The Phase-6 GPU prefill kernels vs their dasLLAMA CPU twins on synthetic data. Quantize gets a
@@ -389,6 +390,10 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(pso_sw)
                 metal_release(pso_add)
 
+                // ===== the verbatim llama.cpp mul_mm — the resident path's default GEMM =====
+                mulmm_gate(t, dev, queue, 96, 128, 64)      // 3 k-blocks, 2 output tiles, 2 token tiles
+                mulmm_gate(t, dev, queue, 64, 192, 32)      // 2 k-blocks, 3 output tiles, 1 token tile
+
                 metal_release(queue)
             }
             t |> equal(metal_live_object_count(), 0l)
@@ -396,6 +401,106 @@ def test_metal_prefill_kernels(t : T?) {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }
     }
+}
+
+// The verbatim llama.cpp mul_mm kernel — the lcpp GEMM path's exact PSO — on exact-arithmetic
+// data: block_q8_0 W blobs x raw f32 X rows vs a CPU reference, BIT-exact (quants in [-8, 7],
+// pow2 scales: every staged half, every product, and every f32 partial sum is exactly
+// representable, so any deviation is a real bug). The kargs image is built here independently
+// of the driver — it doubles as the layout oracle for uniform_mm_args.
+def private mulmm_gate(t : T?; dev, queue; k, d, m : int) {
+    var err : string
+    var pso = pipeline_from_source(dev, LCPP_MUL_MM_Q8_MSL, LCPP_MUL_MM_Q8_ENTRY, true, err)
+    t |> success(pso != null, "mul_mm pipeline: {err}")
+    let nb = k / 32
+    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    var wq : array<int8>
+    var ws : array<float>
+    wq |> resize(d * k)
+    ws |> resize(d * nb)
+    for (i in range(d * k)) {
+        wq[i] = int8((i * 7 + i / 31) % 16 - 8)
+    }
+    for (i in range(d * nb)) {
+        ws[i] = lut[(i / 5) % 4]
+    }
+    // W blob: 34-byte blocks (half scale + 32 quants), built straight in the buffer
+    var bw = metal_new_buffer(dev, uint64(d * nb * 34))
+    var base = unsafe(reinterpret<int8?>(metal_buffer_contents(bw)))
+    for (b in range(d * nb)) {
+        let off = b * 34
+        unsafe {
+            var ph = reinterpret<float16?>(base + off)
+            ph[0] = float16(ws[b])
+            for (c in range(32)) {
+                base[off + 2 + c] = wq[b * 32 + c]
+            }
+        }
+    }
+    // X: raw f32 rows, integer-times-pow2 values (exact in half)
+    var xf : array<float>
+    xf |> resize(m * k)
+    for (i in range(m * k)) {
+        xf[i] = float((i * 5 + i / 17) % 16 - 8) * lut[(i / 3) % 4]
+    }
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, m * d, 0.0)
+    // the ggml_metal_kargs_mul_mm image (88 bytes; plain 2D GEMM)
+    var ba = metal_new_buffer(dev, 88ul)
+    let pc = metal_buffer_contents(ba)
+    var pi = unsafe(reinterpret<int?>(pc))
+    var pu = unsafe(reinterpret<uint64?>(pc))
+    var ps = unsafe(reinterpret<int16?>(pc))
+    unsafe {
+        pi[0] = k                           // ne00
+        pi[1] = 1                           // ne02
+        pu[1] = uint64(nb * 34)             // nb01
+        pu[2] = uint64(nb * 34 * d)         // nb02
+        pu[3] = uint64(nb * 34 * d)         // nb03
+        pi[8] = 1                           // ne12
+        pi[9] = 0                           // struct padding
+        pu[5] = 4ul                         // nb10
+        pu[6] = uint64(k * 4)               // nb11
+        pu[7] = uint64(k * 4 * m)           // nb12
+        pu[8] = uint64(k * 4 * m)           // nb13
+        pi[18] = d                          // ne0
+        pi[19] = m                          // ne1
+        ps[40] = int16(1)                   // r2
+        ps[41] = int16(1)                   // r3
+    }
+    var want : array<float>
+    want |> resize(m * d)
+    for (r in range(m)) {
+        for (j in range(d)) {
+            var acc = 0.0lf
+            for (c in range(k)) {
+                acc += double(float(wq[j * k + c]) * ws[j * nb + c / 32]) * double(xf[r * k + c])
+            }
+            want[r * d + j] = float(acc)
+        }
+    }
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, ba, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_threadgroup_memory_length(enc, 6144ul, 0)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(d / 64), 1u), uint3(32u, 4u, 1u))
+    }
+    t |> success(ran, "mul_mm dispatch {k}x{d}x{m}: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(ba)
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    if (pso != null) {
+        metal_release(pso)
+    }
+    delete wq
+    delete ws
+    delete xf
+    delete want
 }
 
 // ===== local GPU plumbing (generic bodies instantiate only inside the static_if above) =====

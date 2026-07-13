@@ -80,20 +80,26 @@ def test_metal_prefill_parity(t : T?) {
             t |> success(select_prefill_override("metal"), "override registered")
             set_metal_prefill_min_npos(1l)
             let before = metal_prefill_stats().prefills
-            let gpu <- continuation(tr, prompt, 40)
+            let gpu <- continuation(tr, prompt, 40)         // default = lcpp mul_mm (f32 activations)
             let served = metal_prefill_stats().prefills - before
+            set_metal_prefill_mulmm_legacy(true)            // the quantized path — bit-identical to CPU
+            let before2 = metal_prefill_stats().prefills
+            let gpu_legacy <- continuation(tr, prompt, 40)
+            let served2 = metal_prefill_stats().prefills - before2
+            set_metal_prefill_mulmm_legacy(false)
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
             set_wscale_f16(prior_wscale)
-            if (served == 0l) {
+            if (served == 0l || served2 == 0l) {
                 metal_prefill_shutdown()
                 delete tr
                 feint("metal prefill declined (no Metal device?); GPU parity skipped\n")
                 return
             }
-            t |> success(same(cpu, gpu), "40-token continuation matches the CPU control")
+            t |> success(same(cpu, gpu_legacy), "40-token continuation matches the CPU control (legacy quantized GEMM)")
+            t |> success(same(cpu, gpu), "40-token continuation matches the CPU control (lcpp mul_mm, f32 activations)")
             metal_prefill_shutdown()
             t |> equal(metal_live_object_count(), 0l)
             delete tr
