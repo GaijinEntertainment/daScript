@@ -5,6 +5,7 @@ require dastest/testing_boost
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production kernel MSL (v0 baseline)
+require _lcpp_mul_mm_q8  // nolint:STYLE030 — llama.cpp's verbatim kernel_mul_mm_q8_0_f32, used only in the Apple half
 require daslib/fio
 require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require strings
@@ -2162,6 +2163,7 @@ struct private LabVariant {
     check : bool = true                     // false = knockout: time it, never compare output
     threads : int = 128                     // threads per threadgroup
     f16w : bool = false                     // binding 0 gets the PRE-DEQUANTIZED f16 W panel
+    lcpp : bool = false                     // llama.cpp buffer contract (kargs/blob/f32-X/dst) + 3D grid
 }
 
 def private align_up(v, a : int64) : int64 => ((v + a - 1l) / a) * a
@@ -2222,6 +2224,102 @@ def private download_floats(buf; var dst : array<float>; count : int64) {
     unsafe {
         memcpy(reinterpret<void?>(addr(dst[0])), metal_buffer_contents(buf), int(count * 4l))
     }
+}
+
+// ===== llama.cpp verbatim-kernel leg (see _lcpp_mul_mm_q8.das) =====
+// Their production contract differs from ours end to end: src0 = interleaved block_q8_0 blobs
+// (half scale + 32 int8, 34 B/block), src1 = raw f32 activations (their mul_mm never sees
+// quantized X), dst = same y[tok*d + out] layout as v0, kargs struct in buffer 0, 6144 B of
+// dynamic threadgroup scratch, grid (ne1/32, ne0/64, 1) x (32,4,1) threads.
+
+def private upload_lcpp_q8_blob(dev; q : array<int8>; s : array<float>; rows, k : int64; enabled : bool) {
+    if (!enabled) {
+        return metal_new_buffer(dev, 64ul)
+    }
+    let nb = int(k / 32l)
+    let kk = int(k)
+    var buf = metal_new_buffer(dev, uint64(rows * (k / 32l) * 34l))
+    var base = unsafe(reinterpret<int8?>(metal_buffer_contents(buf)))
+    for (r in range(int(rows))) {
+        for (bi in range(nb)) {
+            let off = (r * nb + bi) * 34
+            unsafe {
+                var ph = reinterpret<float16?>(base + off)
+                ph[0] = float16(s[r * nb + bi])
+                let src = r * kk + bi * 32
+                for (c in range(32)) {
+                    base[off + 2 + c] = q[src + c]
+                }
+            }
+        }
+    }
+    return buf
+}
+
+def private upload_lcpp_f32_x(dev; xq : array<int8>; xs : array<float>; rows, k : int64; enabled : bool) {
+    if (!enabled) {
+        return metal_new_buffer(dev, 64ul)
+    }
+    let nb = int(k / 32l)
+    let kk = int(k)
+    var buf = metal_new_buffer(dev, uint64(rows * k * 4l))
+    var pf = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
+    for (r in range(int(rows))) {
+        let s0 = r * nb
+        for (i in range(kk)) {
+            unsafe(pf[r * kk + i]) = float(xq[r * kk + i]) * xs[s0 + i / 32]
+        }
+    }
+    return buf
+}
+
+// byte-exact image of ggml_metal_kargs_mul_mm (2 i32, 3 u64, i32 + 4 pad, 4 u64, 2 i32, 2 i16 = 88 B)
+def private upload_lcpp_args(dev; k, d, ntok : int64) {
+    var buf = metal_new_buffer(dev, 88ul)
+    var pc = metal_buffer_contents(buf)
+    var pi = unsafe(reinterpret<int?>(pc))
+    var pu = unsafe(reinterpret<uint64?>(pc))
+    var ps = unsafe(reinterpret<int16?>(pc))
+    let nb01 = (k / 32l) * 34l
+    unsafe {
+        pi[0] = int(k)                      // ne00
+        pi[1] = 1                           // ne02
+        pu[1] = uint64(nb01)                // nb01
+        pu[2] = uint64(nb01 * d)            // nb02
+        pu[3] = uint64(nb01 * d)            // nb03
+        pi[8] = 1                           // ne12
+        pi[9] = 0                           // struct padding — keep deterministic
+        pu[5] = 4ul                         // nb10
+        pu[6] = uint64(k * 4l)              // nb11
+        pu[7] = uint64(k * 4l * ntok)       // nb12
+        pu[8] = uint64(k * 4l * ntok)       // nb13
+        pi[18] = int(d)                     // ne0
+        pi[19] = int(ntok)                  // ne1
+        ps[40] = int16(1)                   // r2
+        ps[41] = int16(1)                   // r3
+    }
+    return buf
+}
+
+def private time_reps_lcpp(queue; pso; abuf, wblob, xbuf, ybuf; groups : uint3; reps : int) : double {
+    var err : string
+    var gpu_ms = 0.0lf
+    let ok = with_compute_encoder_timed(queue, err, gpu_ms) $(enc) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, abuf, 0ul, 0)
+        metal_set_buffer(enc, wblob, 0ul, 1)
+        metal_set_buffer(enc, xbuf, 0ul, 2)
+        metal_set_buffer(enc, ybuf, 0ul, 3)
+        metal_set_threadgroup_memory_length(enc, 6144ul, 0)
+        for (_i in range(reps)) {
+            metal_dispatch_threadgroups(enc, groups, uint3(32u, 4u, 1u))
+        }
+    }
+    if (!ok) {
+        to_log(LOG_ERROR, "lcpp dispatch failed: {err}\n")
+        return -1.0lf
+    }
+    return gpu_ms / double(reps)
 }
 
 // count bit-mismatches vs the reference (exact-arithmetic data — any deviation is a real bug)
@@ -2331,6 +2429,16 @@ def private run_lab(b : B?; variants) {
         var ndimbuf = upload_u32(dev, uint(d))
         var bufs <- [wbuf, sbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
         var bufs16 <- [whbuf, sbuf, xqbuf, xsbuf, ybuf, kdimbuf, ndimbuf]
+        // the llama.cpp leg's buffers — built only when an lcpp variant will actually run
+        var lcppOn = false
+        for (v in variants) {
+            if (v.lcpp && want("DASMETAL_LAB_VARIANTS", v.name) && ntok % 32l == 0l && (d % int64(v.bn)) == 0l) {
+                lcppOn = true
+            }
+        }
+        var lcpp_wblob = upload_lcpp_q8_blob(dev, wq, ws, d, n, lcppOn)
+        var lcpp_xbuf = upload_lcpp_f32_x(dev, xq, xs, ntok, n, lcppOn)
+        var lcpp_abuf = upload_lcpp_args(dev, n, d, ntok)
         let setup_ms = double(ref_time_ticks() - t_shape0) / 1000000.0lf
         to_log(LOG_INFO, "=== {sh._0} n={n} d={d} === (setup {setup_ms} ms)\n")
         var y0 : array<float>                // v0's full output — the cross-variant reference
@@ -2342,12 +2450,15 @@ def private run_lab(b : B?; variants) {
         for (v, pso, idx in variants, psos, count()) {
             alive[idx] = false
             est_ms[idx] = -1.0lf
-            if (pso == null || (d % int64(v.bn)) != 0l || !want("DASMETAL_LAB_VARIANTS", v.name)) {
+            if (pso == null || (d % int64(v.bn)) != 0l || !want("DASMETAL_LAB_VARIANTS", v.name) || (v.lcpp && !lcppOn)) {
                 continue
             }
             let mp = align_up(ntok, int64(v.bm))
             let groups = uint((mp / int64(v.bm)) * (d / int64(v.bn)))
-            let ms = time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), 1)   // warmup + correctness dispatch
+            let ms = (v.lcpp                    // warmup + correctness dispatch
+                ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
+                                 uint3(uint(ntok / 32l), uint(d / 64l), 1u), 1)
+                : time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), 1))
             if (ms < 0.0lf) {
                 b |> success(false, "{v.name} {sh._0}: dispatch")
                 continue
@@ -2391,7 +2502,10 @@ def private run_lab(b : B?; variants) {
                 let mp = align_up(ntok, int64(v.bm))
                 let groups = uint((mp / int64(v.bm)) * (d / int64(v.bn)))
                 let reps = clamp(int(25.0lf / max(est_ms[idx], 0.01lf)) + 1, 1, 128)
-                let ms = time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), reps)
+                let ms = (v.lcpp
+                    ? time_reps_lcpp(queue, pso, lcpp_abuf, lcpp_wblob, lcpp_xbuf, ybuf,
+                                     uint3(uint(ntok / 32l), uint(d / 64l), 1u), reps)
+                    : time_reps(queue, pso, v.f16w ? bufs16 : bufs, groups, uint(v.threads), reps))
                 if (ms > 0.0lf && ms < best[idx]) {
                     best[idx] = ms
                 }
@@ -2410,6 +2524,9 @@ def private run_lab(b : B?; variants) {
             let rel = base_gmacs > 0.0lf ? gmacs / base_gmacs : 0.0lf
             to_log(LOG_INFO, "{v.name}  {sh._0} {best[idx]} ms  {gmacs} GMAC/s  {rel}x vs v0\n")
         }
+        metal_release(lcpp_wblob)
+        metal_release(lcpp_xbuf)
+        metal_release(lcpp_abuf)
         metal_release(whbuf)
         bufs16 |> clear()
         unsafe {
@@ -2461,6 +2578,10 @@ def bench_metal_gemm_kernels(b : B?) {
                        fastmath = metal_q8_gemm_msl_fastmath, bm = 32, bn = 32),
             LabVariant(name = "v0b_prod64", src = metal_q8_gemm64_msl, entry = metal_q8_gemm64_msl_entry,
                        fastmath = metal_q8_gemm64_msl_fastmath, bm = 64, bn = 64),
+            // llama.cpp's kernel_mul_mm_q8_0_f32, byte-verbatim, on its own production contract
+            // (block_q8_0 blob + f32 activations); ggml compiles with fast math ON
+            LabVariant(name = "lcpp_mulmm", src = LCPP_MUL_MM_Q8_MSL, entry = LCPP_MUL_MM_Q8_ENTRY,
+                       fastmath = true, bm = 32, bn = 64, lcpp = true),
             LabVariant(name = "v1_n64", src = lab_n64_msl, entry = lab_n64_msl_entry,
                        fastmath = lab_n64_msl_fastmath, bm = 32, bn = 64),
             LabVariant(name = "v2_m64", src = lab_m64_msl, entry = lab_m64_msl_entry,

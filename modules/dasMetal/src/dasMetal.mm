@@ -208,6 +208,18 @@ namespace das {
         [e setBuffer:(__bridge id<MTLBuffer>)(void *) buf offset:offset atIndex:NSUInteger(index)];
     }
 
+    void metal_set_threadgroup_memory_length ( MetalComputeEncoder * enc, uint64_t length, int32_t index,
+            Context * ctx, LineInfoArg * at ) {
+        if ( !enc ) ctx->throw_error_at(at, "metal_set_threadgroup_memory_length: null encoder");
+        if ( index < 0 ) ctx->throw_error_at(at, "metal_set_threadgroup_memory_length: negative index %i", index);
+        if ( length == 0 || (length % 16) != 0 ) {   // Metal requires a non-zero multiple of 16
+            ctx->throw_error_at(at, "metal_set_threadgroup_memory_length: length %llu is not a non-zero multiple of 16",
+                (unsigned long long) length);
+        }
+        id<MTLComputeCommandEncoder> e = (__bridge id<MTLComputeCommandEncoder>)(void *) enc;
+        [e setThreadgroupMemoryLength:NSUInteger(length) atIndex:NSUInteger(index)];
+    }
+
     static bool valid_grid ( uint3 g ) {
         return g.x > 0 && g.y > 0 && g.z > 0;
     }
@@ -348,6 +360,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(metal_set_buffer)>(*this, lib, "metal_set_buffer",
                 SideEffects::modifyExternal, "metal_set_buffer")
                     ->args({"encoder", "buffer", "offset", "index", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_set_threadgroup_memory_length)>(*this, lib, "metal_set_threadgroup_memory_length",
+                SideEffects::modifyExternal, "metal_set_threadgroup_memory_length")
+                    ->args({"encoder", "length", "index", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_dispatch_threadgroups)>(*this, lib, "metal_dispatch_threadgroups",
                 SideEffects::modifyExternal, "metal_dispatch_threadgroups")
                     ->args({"encoder", "groups", "threads_per_group", "context", "at"});

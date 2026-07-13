@@ -681,4 +681,37 @@ kernel_mul_mm geometry port — 64x32, 2x4 sg layout, their exact staging shape 
 variant; simdgroup async device->tg copies; f16-accumulate risk analysis) AND the ~90ms
 non-GEMM tail -> ~35 (next: commit-to-done slack attribution beyond resource tracking —
 retainedReferences=NO, split command buffers, concurrent encoder + coarse barriers; attention
-f16; readback overlap). Numbers want a clean Parsec-off window re-read (all tonight DIRTY).
+f16; readback overlap). (Labeled DIRTY when logged; Boris 2026-07-13: Parsec was OFF for
+these windows — treat the numbers as clean. The ~50-70ms slack band variance is real
+box-side variance, not Parsec.)
+
+**2026-07-13 — Phase 7 (session 2): llama.cpp's kernel VERBATIM in the lab — their geometry is
+worth +16-21% over our best, measured head-to-head.** `kernel_mul_mm_q8_0_f32` (classic
+simdgroup path, ggml @ ebd048f) now runs as lab variant `lcpp_mulmm` — byte-verbatim MSL
+(`benchmarks/matmul/_lcpp_mul_mm_q8.das`, function constants baked to their same-shape
+specialization), on their own production contract: interleaved block_q8_0 blobs, RAW F32
+activations (4x our activation bytes — they still win), kargs struct, 6144 B dynamic tg
+scratch via new `metal_set_threadgroup_memory_length` extern. Bit-exact vs v0 on all 9 shapes.
+M1 Max, ntok=512, CLEAN window (Parsec off — Boris), interleaved best-of-3 (GMAC/s):
+
+| shape | v0_prod32 | v0b_prod64 | lcpp_mulmm | lcpp vs our best |
+|---|---|---|---|---|
+| kv 2048x512 | 2742 | 2516 | 3330 | 1.21x |
+| q 2048x2048 | 2932 | 3345 | 4001 | 1.20x |
+| w13 2048x8192 | 3004 | 3595 | 4180 | 1.16x |
+| w2 8192x2048 | 2958 | 3393 | 4074 | 1.20x |
+| cls 2048x128256 | 3024 | 3648 | 4245 | 1.16x |
+| kv3b 3072x1024 | 2854 | 3220 | 3884 | 1.21x |
+| q3b 3072x3072 | 2969 | 3463 | 4105 | 1.19x |
+| w13_3b 3072x8192 | 3008 | 3573 | 4199 | 1.18x |
+| w2_3b 8192x3072 | 2984 | 3485 | 4134 | 1.19x |
+
+These are clean numbers: lcpp's real kernel rate on M1 Max is ~3900-4250 GMAC/s — slightly
+BELOW the ~4400-4500 implied-from-their-walls estimate, so the kernel gap to close is
+1.16-1.21x, not 1.25x+. Settles the Phase-7 kernel question: the gap is their 64x32 tile +
+2x4 sg layout + tile-major 8x8
+shared blocks + dequant-to-registers-then-scatter staging, not their data format (they pay
+MORE device traffic). Next lever: port that geometry faithfully as a das lab variant (the
+masterplan's step-2 idea, now de-risked — the win is proven in OUR harness, not inferred from
+their walls). Repro: `DASMETAL_LAB_VARIANTS=v0_prod32,v0b_prod64,lcpp_mulmm bin/daslang -jit
+dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/matmul/bench_metal_gemm_kernels.das`.
