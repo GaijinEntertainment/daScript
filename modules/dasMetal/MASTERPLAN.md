@@ -902,3 +902,17 @@ makes the cost visible in every profile run. Exotic scratch (ple/deltanet/att_b/
 zeroing resize — only the 10 always-fully-written arrays switch. Gate: full tests/dasLLAMA
 suite (model oracles token-for-token).
 **NEXT: PR the arc — preflight --full + clean Parsec-off measurement round (announce, wait for go).**
+
+**2026-07-13 — Phase 7 CLEAN MEASUREMENT ROUND (Parsec off, Boris-confirmed window, best-of-3
+process-fresh prefill_perf runs + one interleaved lab sweep).** llama-3.2-3B pp512: **1300.5 t/s
+best** (median 1256; GPU window 375.4-378.9 ms, tight; e2e spread is commit-wait slack 15-35 ms);
+pp256 best 1256. Anchors: lcpp -ngl 99 fa=1 = 1402 (0.93x), fa=0 = ~1351 (0.96x) — GPU-window-vs-
+GPU-window we hold the session-3 fa=0 win (375-379 vs their 379). llama-3.2-1B pp512: **3467 t/s
+best** (median 3440; GPU 137.1-138.4 ms); pp256 best 3173; lcpp full-Metal anchor 3960 (0.88x) —
+vs Phase-6's 1054 clean hybrid = 3.3x across Phase 7. Lab GEMM (GMAC/s, das v25 vs verbatim lcpp):
+kv 3197/3326, q 3959/3999, w13 4099/4184, w2 4010/4069, cls 4161/4245, kv3b 3898/3890 (das WINS),
+q3b 4028/4102, w13_3b 4115/4200, w2_3b 4047/4132 — the das-authored kernel at 96-100% of verbatim
+everywhere, >= the hand-MSL v24g reference on most shapes. NOTE: 1B GPU window vs session 2c's
+dirty 116.9 ms is not comparable — the chunked driver's window now spans first-chunk-start to
+last-chunk-end (includes inter-chunk gaps) and sessions 3-5 added the attention pair + logits
+dispatches; the t/s headline is the honest cross-session metric.
