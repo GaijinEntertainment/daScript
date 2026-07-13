@@ -766,3 +766,23 @@ N=512 849.8 -> 1053.0 t/s (GPU 508 -> 396 ms, -22%); 1B parity-run GPU 150.9 -> 
 retainedReferences; f16 attention; readback overlap) — at gpu=396ms the tail is now ~17% of
 total; then the das-emitter codegen chase to retire the verbatim kernel (ledger: math-loop
 scheduling ~4.5%, staging codegen ~0.04ms/dispatch).
+
+**2026-07-13 — Phase 7 (session 2d): the tail is DEAD — chunked command buffers + interleaved
+KV readback. 3B pp512 1053 -> 1219.6 t/s (+16%); gap to lcpp 1402 now 1.15x.**
+metal_prefill_forward now splits the layer loop across N command buffers (default ~4
+layers/chunk = 7 on the 3B; DASLLAMA_METAL_NCB overrides, =1 restores single-buffer), each
+committed the moment it finishes encoding — the scheduler analyzes chunk k while chunk k-1
+executes (same-queue commit order + hazard tracking on the activation buffers carries
+cross-chunk ordering; untracked weights/uniforms are CPU-written before their chunk commits).
+Measured (3B pp512): slack 57ms -> 9ms, 1069 -> 1176 t/s. Then completion+readback
+interleave: wait per chunk in commit order, stream that chunk's K/V rows into the CPU KV
+codec while later chunks run — the 13ms store cost disappears inside the GPU window; residual
+stream copies after the last chunk. 1176 -> 1219.6 t/s; total-minus-GPU-window is now ~11ms
+(was ~80). Bonus: the one-time blob repack ALSO overlaps (encode of later chunks proceeds
+while earlier chunks execute — 1B first-prefill total 277ms w/ 242ms repack inside), and the
+legacy q8 path gains equally (1B GPU-run total 243 -> 173ms). RULED OUT by measurement:
+commandBufferWithUnretainedReferences (new extern metal_new_command_buffer_unretained, rail
+DASLLAMA_METAL_UNRETAINED=1) — neutral at every chunk count, kept as surface. Gates: parity
+BOTH modes green on the chunked driver, mulmm unit, donor gemm, leak gates. **Remaining vs
+lcpp 1402: the 398ms GPU window itself** — gemm ~343 (verbatim-rate; emitter chase is the
+lever), attn ~25 (f16 candidate), ew ~28.

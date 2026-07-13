@@ -184,6 +184,16 @@ namespace das {
         }
     }
 
+    // UNRETAINED command buffer: skips the per-dispatch retain/release of every referenced
+    // resource at commit — the CALLER guarantees all buffers/pipelines outlive completion
+    MetalCommandBuffer * metal_new_command_buffer_unretained ( MetalCommandQueue * queue, Context * ctx, LineInfoArg * at ) {
+        if ( !queue ) ctx->throw_error_at(at, "metal_new_command_buffer_unretained: null command queue");
+        @autoreleasepool {
+            id<MTLCommandQueue> q = (__bridge id<MTLCommandQueue>)(void *) queue;
+            return retain_handle<MetalCommandBuffer>([q commandBufferWithUnretainedReferences]);
+        }
+    }
+
     MetalComputeEncoder * metal_new_compute_encoder ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at ) {
         if ( !cb ) ctx->throw_error_at(at, "metal_new_compute_encoder: null command buffer");
         @autoreleasepool {
@@ -350,6 +360,9 @@ namespace das {
 
             addExtern<DAS_BIND_FUN(metal_new_command_buffer)>(*this, lib, "metal_new_command_buffer",
                 SideEffects::modifyExternal, "metal_new_command_buffer")
+                    ->args({"queue", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_new_command_buffer_unretained)>(*this, lib, "metal_new_command_buffer_unretained",
+                SideEffects::modifyExternal, "metal_new_command_buffer_unretained")
                     ->args({"queue", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_new_compute_encoder)>(*this, lib, "metal_new_compute_encoder",
                 SideEffects::modifyExternal, "metal_new_compute_encoder")

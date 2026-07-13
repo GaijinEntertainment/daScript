@@ -3,6 +3,7 @@ options gen2
 module dasllama_metal_prefill shared public
 
 require math
+require strings
 require daslib/fio
 require metal/msl_shader
 require metal/das_metal_boost
@@ -728,6 +729,10 @@ def public metal_prefill_shutdown {
     g_failed = false
 }
 
+def private env_int(name : string; dflt : int) : int {
+    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
+}
+
 def private compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
     var pso = pipeline_from_source(g_dev, source, entry, fastmath, err)
@@ -1142,10 +1147,34 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
     var err : string
-    var gpu_ms = 0.0lf
-    var encode_ms = 0.0lf
-    let ran = with_compute_encoder_timed(g_queue, err, gpu_ms, encode_ms) $(enc : MetalComputeEncoder?) {
+    var gpu_ms : double
+    var encode_ms : double
+    // command-buffer split (DASLLAMA_METAL_NCB chunks): each chunk commits as soon as it is
+    // encoded, so the scheduler analyzes chunk k while chunk k-1 executes — same-queue commit
+    // order plus hazard tracking on the activation buffers keeps cross-chunk ordering. With
+    // DASLLAMA_METAL_UNRETAINED=1 the chunks also skip the per-dispatch resource retain/release
+    // (safe here: pooled buffers release back only after the wait, weight regions are resident).
+    // default = ~4 layers per chunk (3B measured: slack 57ms -> 9ms, +10% pp512; finer splits
+    // are neutral). DASLLAMA_METAL_NCB=1 restores the single-buffer path.
+    let ncb = clamp(int64(env_int("DASLLAMA_METAL_NCB", int((c.n_layers + 3l) / 4l))), 1l, c.n_layers)
+    let unret = get_env_variable("DASLLAMA_METAL_UNRETAINED") == "1"
+    let layers_per_cb = (c.n_layers + ncb - 1l) / ncb
+    var cbs : array<MetalCommandBuffer?>
+    cbs |> reserve(int(ncb))
+    var cb : MetalCommandBuffer?
+    var enc : MetalComputeEncoder?
+    {
         for (l in range64(c.n_layers)) {
+            if (l % layers_per_cb == 0l) {
+                if (enc != null) {
+                    metal_end_encoding(enc)
+                    metal_release(enc)
+                    metal_commit(cb)
+                    cbs |> push(cb)
+                }
+                cb = unret ? metal_new_command_buffer_unretained(g_queue) : metal_new_command_buffer(g_queue)
+                enc = metal_new_compute_encoder(cb)
+            }
             unsafe {
                 var bw_att = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_att_off + l * dim])), uint64(dim * 4l))
                 var bw_ffn = upload_region(reinterpret<void?>(addr(t.fblob[t.rms_ffn_off + l * dim])), uint64(dim * 4l))
@@ -1264,26 +1293,65 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         if (fused && g_skip != "ew" && g_skip != "nongemm") {
             enc_ew2(enc, g_pso_add, bx, bxb, u_total_dim, npos * dim)   // the last layer's pending W2 add
         }
+        metal_end_encoding(enc)
+        metal_release(enc)
+        encode_ms = double(get_time_usec(ts_enc)) / 1000.0lf
+        metal_commit(cb)
+        cbs |> push(cb)
     }
+    // completion + readback INTERLEAVE: chunks complete in commit order, and each completed
+    // chunk's roped-K/raw-V rows stream into the CPU KV codec while later chunks keep the GPU
+    // busy (unified memory — the memcpy is safe the moment the chunk reports complete). The
+    // residual-stream copy needs the LAST chunk and lands after the loop.
+    var ran = true
+    var gpu_t0 = 0.0lf
+    var gpu_t1 = 0.0lf
+    var readback_us = 0l
+    unsafe {
+        let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
+        let runsp = reinterpret<KVRun const?>(addr(s.kv_runs[0]))
+        for (cbi, i in cbs, count()) {
+            metal_wait_until_completed(cbi)
+            let e = metal_command_buffer_error(cbi)
+            if (!empty(e)) {
+                ran = false
+                err = e
+            }
+            let t0 = metal_command_buffer_gpu_start_time(cbi)
+            let t1 = metal_command_buffer_gpu_end_time(cbi)
+            if (i == 0 || t0 < gpu_t0) {
+                gpu_t0 = t0
+            }
+            if (i == 0 || t1 > gpu_t1) {
+                gpu_t1 = t1
+            }
+            metal_release(cbi)
+            if (ran) {
+                let ts_rb = ref_time_ticks()
+                let l1 = min(int64(i + 1) * layers_per_cb, c.n_layers)
+                for (l in range64(int64(i) * layers_per_cb, l1)) {
+                    memcpy(reinterpret<void?>(addr(s.k_b[0])), metal_buffer_contents(bks[l]), int(npos * kv_dim * 4l))
+                    memcpy(reinterpret<void?>(addr(s.v_b[0])), metal_buffer_contents(bvs[l]), int(npos * kv_dim * 4l))
+                    kv_store_batch(kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len),
+                        s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b, runsp, store_nrun, start_pos, npos, kv_dim)
+                }
+                readback_us += int64(get_time_usec(ts_rb))
+            }
+        }
+    }
+    cbs |> clear()
+    unsafe {
+        delete cbs
+    }
+    gpu_ms = (gpu_t1 - gpu_t0) * 1000.0lf   // whole-GPU window: first chunk start -> last chunk end
     let encwait_us = get_time_usec(ts_enc)
     let ok = ran
-    var readback_us = 0
     if (ran) {
-        // unified-memory readback: final residual stream + per-layer roped-K/raw-V into the
-        // session KV cache (codec stays CPU-side — any KV dtype works)
         let ts_rb = ref_time_ticks()
         unsafe {
             memcpy(reinterpret<void?>(addr(s.x_b[0])), metal_buffer_contents(bx), int(npos * dim * 4l))
-            let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
-            let runsp = reinterpret<KVRun const?>(addr(s.kv_runs[0]))
-            for (l in range64(c.n_layers)) {
-                memcpy(reinterpret<void?>(addr(s.k_b[0])), metal_buffer_contents(bks[l]), int(npos * kv_dim * 4l))
-                memcpy(reinterpret<void?>(addr(s.v_b[0])), metal_buffer_contents(bvs[l]), int(npos * kv_dim * 4l))
-                kv_store_batch(kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len),
-                    s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b, runsp, store_nrun, start_pos, npos, kv_dim)
-            }
         }
-        readback_us = get_time_usec(ts_rb)
+        readback_us += int64(get_time_usec(ts_rb))
         g_prefills++
     } else {
         to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")
