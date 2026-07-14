@@ -275,10 +275,10 @@ Optimization and AOT
 ``[inline]``
     Splices the function body into every direct call site during compilation, in every
     execution tier (interpreter, JIT, AOT). This is a contract, not a hint: a function
-    shape the inliner can't splice (multiple returns, by-reference result, generators,
-    lambdas, class methods, block/lambda literals in the body, recursion through other
-    ``[inline]`` functions) is a compile-time error, as is taking the function's address
-    with ``@@`` or calling it from a global or field initializer:
+    shape the inliner can't splice (by-reference or temporary ``#`` result, generators,
+    lambdas, class methods, block/lambda literals or ``assume`` expressions in the body,
+    recursion through other ``[inline]`` functions) is a compile-time error, as is taking
+    the function's address with ``@@`` or calling it from a global or field initializer:
 
     .. code-block:: das
 
@@ -289,7 +289,14 @@ Optimization and AOT
 
     Leaf arguments (constants and variables) substitute textually; pure single-use
     arguments substitute in place; everything else binds a temporary at the call site,
-    preserving call-order evaluation of side effects. Operator overloads (``+``, ``==``,
+    preserving call-order evaluation of side effects. Bodies may return from several
+    places: every return becomes a store into the call site's result temporary — a
+    return after which nothing executes rewrites in place at zero cost, and a return
+    under a loop rides a generated boolean flag that breaks out of the spliced loops
+    (``finally`` sections and iterator cleanup run exactly as they did for the real
+    return). The one refused mix is an early return inside a ``finally``-carrying
+    block with statements after it — the rewrite would separate the finally from
+    declarations it references. Operator overloads (``+``, ``==``,
     ``+=``, unary ``-``, ...) take ``[inline]`` too - their operator sites splice exactly
     like calls; punctuation functions dispatched through other node kinds (``[]``,
     ``??``, properties) are refused. ``options disable_inline`` (or the

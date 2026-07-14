@@ -103,6 +103,86 @@ def twice(x : auto) {
     return x + x;
 }
 
+[inline]
+def guard_ladder(x : int) : int {
+    if (x < 0) {
+        return -1;
+    }
+    if (x == 0) {
+        return 0;
+    }
+    return 1;
+}
+
+[inline]
+def both_arms(x : int) : int {
+    if (x > 0) {
+        let a = x * 2;
+        return a + 1;
+    } else {
+        let b = x * 3;
+        return b - 1;
+    }
+}
+
+[inline]
+def find_first_gt(src : array<int>; k : int) : int {
+    for (v in src) {
+        if (v > k) {
+            return v; // return under a loop: rides the generated flag
+        }
+    }
+    return -1;
+}
+
+[inline]
+def find_nested(m : array<array<int>>; k : int) : int {
+    for (row in m) {
+        for (v in row) {
+            if (v == k) {
+                return 1; // nested loops: the cascade breaks both
+            }
+        }
+    }
+    return 0;
+}
+
+[inline]
+def early_void(var s : SVec; x : int) {
+    if (x < 0) {
+        return ;
+    }
+    s.y = x;
+}
+
+[inline]
+def move_under_loop(n : int) : array<int> {
+    for (k in range(n)) {
+        if (k == 3) {
+            var early <- [k, k]; // nolint:PERF009 -- named-local move-return is the shape under test
+            return <- early;
+        }
+    }
+    var full <- [n]; // nolint:PERF009 -- same: pins ExprMove from a typed local through the flag store
+    return <- full;
+}
+
+[inline]
+def loop_ret_finally(n : int) : int {
+    var seen = 0;
+    {
+        for (k in range(n)) {
+            if (k == 2) {
+                return 100 + seen; // the block's finally must still run on this exit
+            }
+            seen++;
+        }
+    } finally {
+        g_count = seen;
+    }
+    return seen;
+}
+
 def for_each_hlp(src : array<int>; blk : block<(v : int) : void>) {
     for (v in src) {
         invoke(blk, v);
@@ -157,6 +237,21 @@ def target_lazy(q : int) : int {
     return (c ? 1 : 0) + s;
 }
 
+[export]
+def target_guard(x : int) : int {
+    return guard_ladder(x); // canonicalization makes it terminal: splices flag-free
+}
+
+[export]
+def target_both_arms(x : int) : int {
+    return both_arms(x); // terminal returns in both arms: in-place stores, no flag
+}
+
+[export]
+def target_loop_ret(src : array<int>; k : int) : int {
+    return find_first_gt(src, k); // return under a loop: generated flag + break
+}
+
 def has(s, sub : string) : bool {
     return find(s, sub, 0) >= 0;
 }
@@ -203,6 +298,21 @@ def test_inline_fired(t : T?) {
         t |> run("lazy operators lower, calls inline in the branches") @(t : T?) {
             let b = body_of(t, "target_lazy");
             t |> equal(count_of(b, "madd("), 0);
+        }
+        t |> run("guard ladder canonicalizes and splices with no flag") @(t : T?) {
+            let b = body_of(t, "target_guard");
+            t |> equal(count_of(b, "guard_ladder("), 0);
+            t |> success(!has(b, "_ret"), "terminal returns need no flag: {b}");
+        }
+        t |> run("both-arms-return body splices with in-place stores") @(t : T?) {
+            let b = body_of(t, "target_both_arms");
+            t |> equal(count_of(b, "both_arms("), 0);
+            t |> success(!has(b, "_ret"), "terminal returns need no flag: {b}");
+        }
+        t |> run("return under a loop splices through the generated flag") @(t : T?) {
+            let b = body_of(t, "target_loop_ret");
+            t |> equal(count_of(b, "find_first_gt("), 0);
+            t |> success(has(b, "_ret"), "loop return rides the flag: {b}");
         }
     }
 }
@@ -288,6 +398,50 @@ def test_inline_behavior(t : T?) {
             total += z;
         }
         t |> equal(total, 3);
+    }
+    t |> run("multi-return values preserved") @(t : T?) {
+        t |> equal(target_guard(-5), -1);
+        t |> equal(target_guard(0), 0);
+        t |> equal(target_guard(7), 1);
+        t |> equal(target_both_arms(2), 5);
+        t |> equal(target_both_arms(-1), -4);
+    }
+    t |> run("return under a loop exits at the right element") @(t : T?) {
+        let arr <- [3, 9, 1, 7];
+        t |> equal(target_loop_ret(arr, 5), 9);
+        t |> equal(target_loop_ret(arr, 100), -1);
+    }
+    t |> run("return under nested loops breaks all the way out") @(t : T?) {
+        var m : array<array<int>>;
+        var r1 <- [1, 2];
+        var r2 <- [3, 4];
+        m |> emplace(r1);
+        m |> emplace(r2);
+        t |> equal(find_nested(m, 4), 1);
+        t |> equal(find_nested(m, 9), 0);
+    }
+    t |> run("void early return skips the write") @(t : T?) {
+        var v = SVec(x = 0, y = 7);
+        early_void(v, -1);
+        t |> equal(v.y, 7);
+        early_void(v, 5);
+        t |> equal(v.y, 5);
+    }
+    t |> run("move return under a loop moves into the result") @(t : T?) {
+        let a <- move_under_loop(5);
+        t |> equal(length(a), 2);
+        t |> equal(a[0], 3);
+        let b <- move_under_loop(2);
+        t |> equal(length(b), 1);
+        t |> equal(b[0], 2);
+    }
+    t |> run("block finally runs on a flagged loop exit") @(t : T?) {
+        g_count = -1;
+        t |> equal(loop_ret_finally(5), 102);
+        t |> equal(g_count, 2);
+        g_count = -1;
+        t |> equal(loop_ret_finally(1), 1);
+        t |> equal(g_count, 1);
     }
     t |> run("user let keeps its metadata through lazy lowering") @(t : T?) {
         // the ?: lowering must hoist to a generated temp, not rewrite the user

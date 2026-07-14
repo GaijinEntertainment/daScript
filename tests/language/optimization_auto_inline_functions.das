@@ -48,6 +48,27 @@ def clamped01(x : float) : float {
     return x
 }
 
+def two_arm_pick(x : int) : int {
+    // a multi-statement returning arm: canonicalization synthesizes the else but
+    // cannot ternary-fold it, and the terminal returns store in place - no flag
+    if (x > 0) {
+        let a = x * 2
+        return a + 1
+    }
+    return x - 1
+}
+
+def private find_gt_once(src : array<int>; k : int) : int {
+    // private with exactly one reference: budget-exempt despite the loop, and the
+    // return under the loop splices through the generated flag + break
+    for (v in src) {
+        if (v > k) {
+            return v
+        }
+    }
+    return -1
+}
+
 [never_inline]
 def marked_off(a, b : int) : int => a + b
 
@@ -189,6 +210,16 @@ def target_stmt_body(a : int) : int {
 [export]
 def target_canonicalized(x : float) : float {
     return clamped01(x)
+}
+
+[export]
+def target_two_arms(x : int) : int {
+    return two_arm_pick(x)
+}
+
+[export]
+def target_private_loop_ret(src : array<int>; k : int) : int {
+    return find_gt_once(src, k)
 }
 
 [export]
@@ -374,6 +405,16 @@ def test_auto_inline_functions_fired(t : T?) {
             let b = body_of(t, "target_canonicalized")
             t |> success(!has(b, "clamped01("), "call is gone: {b}")
         }
+        t |> run("multi-statement both-arms-return callee splices flag-free") @(t : T?) {
+            let b = body_of(t, "target_two_arms")
+            t |> success(!has(b, "two_arm_pick("), "call is gone: {b}")
+            t |> success(!has(b, "_ret"), "terminal returns need no flag: {b}")
+        }
+        t |> run("private called-once loop-return callee splices through the flag") @(t : T?) {
+            let b = body_of(t, "target_private_loop_ret")
+            t |> success(!has(b, "find_gt_once("), "call is gone: {b}")
+            t |> success(has(b, "_ret"), "loop return rides the flag: {b}")
+        }
         t |> run("private called-once callee splices regardless of budget") @(t : T?) {
             let b = body_of(t, "target_private_once")
             t |> success(!has(b, "big_private_once("), "call is gone: {b}")
@@ -477,6 +518,10 @@ def test_auto_inline_functions_behavior(t : T?) {
         t |> equal(target_canonicalized(0.25), 0.25)
         t |> equal(target_canonicalized(7.0), 1.0)
         t |> equal(target_private_once([1, 2, 3]), 1 + 4 + 9 + 100)
+        t |> equal(target_two_arms(2), 5)
+        t |> equal(target_two_arms(-1), -2)
+        t |> equal(target_private_loop_ret([3, 9, 1, 7], 5), 9)
+        t |> equal(target_private_loop_ret([3, 9, 1, 7], 100), -1)
     }
     t |> run("declined results match") @(t : T?) {
         t |> equal(target_never_inline(2, 3), 5)

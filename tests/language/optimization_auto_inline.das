@@ -14,7 +14,7 @@ require daslib/strings_boost
 // block LITERAL argument splices the callee body (best-effort MAY contract - silent
 // declines, never errors), and an invoke whose block resolves to a same-function
 // literal splices the block body in place. The negative tests pin the decline gates:
-// forwarded (non-literal) blocks, multi-exit callees, and recursion stay regular calls.
+// forwarded (non-literal) blocks and recursion stay regular calls.
 
 var g_log : string = ""
 
@@ -43,9 +43,8 @@ def chain_sum(src : array<int>; k : int; blk : block<(v : int) : int>) : int {
 }
 
 def multi_exit(src : array<int>; blk : block<(v : int) : int>) : int {
-    // early guard + loop tail: return canonicalization synthesizes the else arm but
-    // cannot ternary-fold it (the arm is not a single return), so this stays
-    // multi-exit and the single-exit gate declines it
+    // early guard + loop tail: canonicalization synthesizes the else arm, both
+    // returns are then terminal, and the splice stores them in place - no flag
     if (empty(src)) {
         return -1
     }
@@ -299,9 +298,10 @@ def test_auto_inline_fired(t : T?) {
             t |> success(!has(b, "transform_sum("), "forwarded call is gone: {b}")
             t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
         }
-        t |> run("multi-exit callee declines") @(t : T?) {
+        t |> run("multi-exit callee splices with in-place stores") @(t : T?) {
             let b = body_of(t, "target_multi_exit")
-            t |> success(has(b, "multi_exit("), "call stays regular: {b}")
+            t |> success(!has(b, "multi_exit("), "call is gone: {b}")
+            t |> success(!has(b, "_ret"), "terminal returns need no flag: {b}")
         }
         t |> run("if/else-return callee canonicalizes and splices") @(t : T?) {
             let b = body_of(t, "target_canonicalized")
@@ -345,6 +345,21 @@ def test_auto_inline_fired(t : T?) {
 
 [test]
 def test_auto_inline_behavior(t : T?) {
+    t |> run("iterator argument borrowing a temporary keeps call-scoped storage alive") @(t : T?) {
+        // devirt/auto splices decline composed iterator arguments: an arg temp would
+        // shrink the borrowed temporary's lifetime to the temp's own statement and
+        // the spliced body would iterate freed memory (latent in v1's devirt too)
+        let r <- invoke($(var it : iterator<int&>) : array<int> {
+            var buf : array<int>
+            for (x in it) {
+                buf |> push(x * 2)
+            }
+            return <- buf
+        }, unsafe(each([5, 3, 8, 1])))
+        t |> equal(4, length(r))
+        t |> equal(10, r[0])
+        t |> equal(2, r[3])
+    }
     t |> run("values preserved") @(t : T?) {
         let src <- [1, 2, 3, 4]
         t |> equal(target_auto(src), 30)

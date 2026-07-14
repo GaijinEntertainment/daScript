@@ -32,10 +32,6 @@ def expect_issue(t : T?; fixture, message : string) {
 
 [test]
 def test_inline_contract_errors(t : T?) {
-    t |> run("multiple returns violate single-exit") @(t : T?) {
-        t |> expect_issue("_inline_multiret.das",
-            "[inline] requires a single-exit body")
-    }
     t |> run("taking the address of an [inline] function") @(t : T?) {
         t |> expect_issue("_inline_addr.das",
             "can't take the address of [inline] function")
@@ -67,6 +63,10 @@ def test_inline_contract_errors(t : T?) {
     t |> run("[inline] combined with [never_inline]") @(t : T?) {
         t |> expect_issue("_inline_never_inline_conflict.das",
             "[never_inline] conflicts with [inline]")
+    }
+    t |> run("early return with a tail inside a finally-carrying block") @(t : T?) {
+        t |> expect_issue("_inline_finally_hazard.das",
+            "early returns conflict with a finally section")
     }
     t |> run("[inline] call in a mixed-type ternary arm") @(t : T?) {
         t |> expect_issue("_inline_mixed_ternary.das",

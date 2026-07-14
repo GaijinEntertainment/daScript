@@ -11,6 +11,10 @@ namespace das {
     // buildAccessFlags, before lint and optimize. Splices are syntax-level: cloned callee
     // statements land in the caller, the pass reports astChanged, and the compiler restarts
     // infer, which re-resolves every ExprVar by name and legalizes types/r2v/temporaries.
+    // Multi-return bodies splice: every function-level return in the CLONE becomes a
+    // result store - terminal shapes in place, the rest through a generated bool flag
+    // with break/guard plumbing (ReturnStoreRewrite; no goto - a label would disqualify
+    // the whole caller from CSE and DSE).
     //
     // Three site kinds, two contracts:
     //  * [inline] calls (MUST): fail-closed. A callee shape the inliner can't splice is a
@@ -96,9 +100,6 @@ namespace das {
         public:
             InlineShapeScan ( bool blockLiteral = false ) : forBlockLiteral(blockLiteral) {}
             string reason;
-            int returnCount = 0;
-            Expression * lastTopLevelStmt = nullptr;
-            Expression * misplacedReturn = nullptr;
             bool bad = false;
         protected:
             bool forBlockLiteral;
@@ -139,12 +140,10 @@ namespace das {
                 return Visitor::visit(expr);
             }
             virtual void preVisit ( ExprMakeGenerator * expr ) override { Visitor::preVisit(expr); flag("body contains a generator"); }
-            virtual void preVisit ( ExprReturn * expr ) override {
-                Visitor::preVisit(expr);
-                if ( makeBlockDepth ) return;   // a return inside a block literal exits the block
-                returnCount ++;
-                if ( expr != lastTopLevelStmt ) misplacedReturn = expr;
-            }
+            // assume aliases are function-scoped by name and are not renamed by the
+            // splice: two spliced bodies (or a body and its caller) declaring the same
+            // alias collide (30700, proven: llvm_jit_intrin's opType helpers)
+            virtual void preVisit ( ExprAssume * expr ) override { Visitor::preVisit(expr); flag("body contains an assume expression"); }
         };
 
         bool isPlainIdentifier ( const string & name ) {
@@ -1028,6 +1027,346 @@ namespace das {
             return let;
         }
 
+        // ----- multi-return rewrite on the spliced clone -----
+        // a callee may return from several places; on the CLONE (the standalone
+        // function keeps its shape) every function-level return becomes a store into
+        // the result temp. two tiers:
+        //  * every return TERMINAL (no loop on its ancestor path, and transitively
+        //    the last statement of every enclosing list - control after it is
+        //    already function exit): stores substitute in place, zero overhead.
+        //    ReturnCanonicalization manufactures these shapes ahead of candidacy.
+        //  * otherwise a generated `__inl<N>_ret : bool` guards the fallthrough:
+        //    a return becomes `store; flag = true` (+ `break` under a loop), an
+        //    inner loop that may have flagged gets `if (flag) break` right after it
+        //    (the cascade), and at non-loop levels the statement tail wraps in
+        //    `if (!flag) { ... }`. break unwinds block finallys and closes iterators
+        //    exactly like return did, and the store runs before the unwind - the
+        //    same order as the real return. NO goto: a label would disqualify the
+        //    whole caller from CSE and DSE (both bail on ExprLabel).
+        // block literals are never descended into - their returns exit the block.
+
+        enum class RetExit { None, Maybe, Always };
+
+        struct ReturnStoreRewrite {
+            string resName;     // empty = void subject
+            string flagName;
+            bool flagUsed = false;
+
+            void apply ( ExprBlock * body ) {
+                if ( blockTerminal(body, true, false) ) {
+                    rewriteTerminalBlock(body);
+                } else {
+                    // any non-terminal shape stores through the flag on every return
+                    flagUsed = true;
+                    transformBlock(body, false);
+                }
+            }
+
+            // pure prescan for the shape gates: the flag tier truncates or wraps the
+            // statement tail of the block holding a return, and doing that to a
+            // finalList-carrying block can hide declarations its finally references
+            // by name (re-infer resolves finally references by name). those bodies
+            // decline up front - the terminal tier rewrites in place and is exempt
+            static bool finallyWrapHazard ( ExprBlock * body ) {
+                if ( blockTerminal(body, true, false) ) return false;
+                return hazardBlock(body);
+            }
+
+            static bool stmtHasReturn ( Expression * s ) {
+                if ( s->rtti_isReturn() ) return true;
+                if ( s->rtti_isIfThenElse() ) {
+                    auto ite = static_cast<ExprIfThenElse *>(s);
+                    if ( stmtHasReturn(ite->if_true) ) return true;
+                    return ite->if_false && stmtHasReturn(ite->if_false);
+                }
+                if ( s->rtti_isBlock() ) {
+                    auto blk = static_cast<ExprBlock *>(s);
+                    for ( auto & st : blk->list ) {
+                        if ( stmtHasReturn(st) ) return true;
+                    }
+                    return false;
+                }
+                if ( s->rtti_isFor() ) {
+                    auto f = static_cast<ExprFor *>(s);
+                    return f->body && stmtHasReturn(f->body);
+                }
+                if ( s->rtti_isWhile() ) {
+                    auto w = static_cast<ExprWhile *>(s);
+                    return w->body && stmtHasReturn(w->body);
+                }
+                if ( s->rtti_isUnsafe() ) {
+                    auto u = static_cast<ExprUnsafe *>(s);
+                    return u->body && stmtHasReturn(u->body);
+                }
+                if ( s->rtti_isWith() ) {
+                    auto w = static_cast<ExprWith *>(s);
+                    return w->body && stmtHasReturn(w->body);
+                }
+                return false;   // block literals keep their returns - not ours
+            }
+
+            static bool hazardStmt ( Expression * s ) {
+                if ( s->rtti_isIfThenElse() ) {
+                    auto ite = static_cast<ExprIfThenElse *>(s);
+                    if ( hazardStmt(ite->if_true) ) return true;
+                    return ite->if_false && hazardStmt(ite->if_false);
+                }
+                if ( s->rtti_isBlock() ) return hazardBlock(static_cast<ExprBlock *>(s));
+                if ( s->rtti_isFor() ) {
+                    auto f = static_cast<ExprFor *>(s);
+                    return f->body && hazardStmt(f->body);
+                }
+                if ( s->rtti_isWhile() ) {
+                    auto w = static_cast<ExprWhile *>(s);
+                    return w->body && hazardStmt(w->body);
+                }
+                if ( s->rtti_isUnsafe() ) {
+                    auto u = static_cast<ExprUnsafe *>(s);
+                    return u->body && hazardStmt(u->body);
+                }
+                if ( s->rtti_isWith() ) {
+                    auto w = static_cast<ExprWith *>(s);
+                    return w->body && hazardStmt(w->body);
+                }
+                return false;
+            }
+
+            static bool hazardBlock ( ExprBlock * blk ) {
+                auto & list = blk->list;
+                for ( size_t i=0, n=list.size(); i!=n; ++i ) {
+                    if ( !blk->finalList.empty() && i+1<n && stmtHasReturn(list[i]) ) return true;
+                    if ( hazardStmt(list[i]) ) return true;
+                }
+                return false;
+            }
+
+            // the result store, mirroring the call's own return semantics: `return <- x`
+            // moves, `return x` copies. a move store is illegal from a copyable rvalue -
+            // `return <- g(...)` of a pointer result must store as a COPY (identical
+            // semantics for an rvalue; ExprMove rejects it, 30941). only a PROVEN
+            // copyable rvalue demotes: an untyped subexpr (a same-round chained splice's
+            // manufactured result-temp read) keeps the move - those reads are
+            // references, and demoting a non-copyable to a copy is 30950
+            Expression * makeStore ( ExprReturn * ret ) const {
+                if ( resName.empty() ) return ret->subexpr; // void: keep the side effects, if any
+                if ( !ret->subexpr ) return nullptr;        // defensive - infer rejects value-less returns
+                bool storeAsCopy = ret->moveSemantics
+                    && ret->subexpr->type
+                    && !ret->subexpr->type->ref
+                    && ret->subexpr->type->canCopy();
+                if ( ret->moveSemantics && !storeAsCopy ) {
+                    return new ExprMove(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                }
+                return new ExprCopy(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+            }
+
+        protected:
+
+            // ----- terminality prescan (read-only) -----
+
+            static bool stmtTerminal ( Expression * stmt, bool tail, bool underLoop ) {
+                if ( stmt->rtti_isReturn() ) return tail && !underLoop;
+                if ( stmt->rtti_isIfThenElse() ) {
+                    auto ite = static_cast<ExprIfThenElse *>(stmt);
+                    if ( !armTerminal(ite->if_true, tail, underLoop) ) return false;
+                    if ( ite->if_false && !armTerminal(ite->if_false, tail, underLoop) ) return false;
+                    return true;
+                }
+                if ( stmt->rtti_isBlock() ) {
+                    return blockTerminal(static_cast<ExprBlock *>(stmt), tail, underLoop);
+                }
+                if ( stmt->rtti_isFor() ) {
+                    auto f = static_cast<ExprFor *>(stmt);
+                    return !f->body || stmtTerminal(f->body, false, true);
+                }
+                if ( stmt->rtti_isWhile() ) {
+                    auto w = static_cast<ExprWhile *>(stmt);
+                    return !w->body || stmtTerminal(w->body, false, true);
+                }
+                if ( stmt->rtti_isUnsafe() ) {
+                    auto u = static_cast<ExprUnsafe *>(stmt);
+                    return !u->body || stmtTerminal(u->body, tail, underLoop);
+                }
+                if ( stmt->rtti_isWith() ) {
+                    auto w = static_cast<ExprWith *>(stmt);
+                    return !w->body || stmtTerminal(w->body, tail, underLoop);
+                }
+                // returns are statements; no other statement kind hosts one
+                // (block literals keep theirs - they exit the block, not the function)
+                return true;
+            }
+
+            static bool armTerminal ( Expression * arm, bool tail, bool underLoop ) {
+                if ( arm->rtti_isReturn() ) return tail && !underLoop;  // naked canonicalized arm
+                return stmtTerminal(arm, tail, underLoop);
+            }
+
+            static bool blockTerminal ( ExprBlock * blk, bool tail, bool underLoop ) {
+                for ( size_t i=0, n=blk->list.size(); i!=n; ++i ) {
+                    if ( !stmtTerminal(blk->list[i], tail && (i==n-1), underLoop) ) return false;
+                }
+                return true;
+            }
+
+            // ----- terminal tier: in-place stores -----
+
+            void rewriteTerminalBlock ( ExprBlock * blk ) {
+                auto & list = blk->list;
+                for ( size_t i=0; i<list.size(); ) {
+                    if ( list[i]->rtti_isReturn() ) {
+                        auto store = makeStore(static_cast<ExprReturn *>(list[i]));
+                        if ( store ) { list[i] = store; ++i; }
+                        else list.erase(list.begin()+i);    // bare void return
+                        continue;
+                    }
+                    rewriteTerminalStmt(list[i]);
+                    ++i;
+                }
+            }
+
+            void rewriteTerminalArm ( ExpressionPtr & arm ) {
+                if ( arm->rtti_isReturn() ) {
+                    auto store = makeStore(static_cast<ExprReturn *>(arm));
+                    auto blk = new ExprBlock();
+                    blk->at = arm->at;
+                    if ( store ) blk->list.push_back(store);
+                    arm = blk;
+                    return;
+                }
+                rewriteTerminalStmt(arm);
+            }
+
+            void rewriteTerminalStmt ( ExpressionPtr & slot ) {
+                Expression * s = slot;
+                if ( s->rtti_isIfThenElse() ) {
+                    auto ite = static_cast<ExprIfThenElse *>(s);
+                    rewriteTerminalArm(ite->if_true);
+                    if ( ite->if_false ) rewriteTerminalArm(ite->if_false);
+                } else if ( s->rtti_isBlock() ) {
+                    rewriteTerminalBlock(static_cast<ExprBlock *>(s));
+                } else if ( s->rtti_isUnsafe() ) {
+                    auto u = static_cast<ExprUnsafe *>(s);
+                    if ( u->body ) rewriteTerminalStmt(u->body);
+                } else if ( s->rtti_isWith() ) {
+                    auto w = static_cast<ExprWith *>(s);
+                    if ( w->body ) rewriteTerminalStmt(w->body);
+                }
+                // loops hold no returns here (terminality proved it) - nothing to descend for
+            }
+
+            // ----- flag tier -----
+
+            Expression * flagRead ( const LineInfo & at ) const {
+                return new ExprVar(at, flagName);
+            }
+            Expression * flagSet ( const LineInfo & at ) const {
+                return new ExprCopy(at, new ExprVar(at, flagName), new ExprConstBool(at, true));
+            }
+
+            RetExit transformBlock ( ExprBlock * blk, bool inLoop ) {
+                auto & list = blk->list;
+                RetExit overall = RetExit::None;
+                for ( size_t i=0; i<list.size(); ++i ) {
+                    RetExit st = transformStmt(list[i], inLoop);
+                    if ( st==RetExit::Always ) {
+                        list.resize(i+1);   // anything after is dead
+                        return RetExit::Always;
+                    }
+                    if ( st!=RetExit::Maybe ) continue;
+                    overall = RetExit::Maybe;
+                    if ( i+1 >= list.size() ) break;
+                    if ( inLoop ) {
+                        // the cascade: control continuing past a flagged inner exit
+                        // (an inner loop's break) leaves this loop too. for a non-loop
+                        // Maybe statement the returning paths already broke - the
+                        // guard is dead there and folds away
+                        auto brkBlk = new ExprBlock();
+                        brkBlk->at = list[i]->at;
+                        brkBlk->list.push_back(new ExprBreak(list[i]->at));
+                        list.insert(list.begin()+i+1,
+                            new ExprIfThenElse(list[i]->at, flagRead(list[i]->at), brkBlk, nullptr));
+                        ++i;    // past the guard
+                        continue;
+                    }
+                    // non-loop level: the tail runs only when no return fired
+                    auto tailBlk = new ExprBlock();
+                    tailBlk->at = list[i+1]->at;
+                    tailBlk->list.assign(list.begin()+i+1, list.end());
+                    list.resize(i+1);
+                    RetExit tailSt = transformBlock(tailBlk, false);
+                    list.push_back(new ExprIfThenElse(tailBlk->at,
+                        new ExprOp1(tailBlk->at, "!", flagRead(tailBlk->at)), tailBlk, nullptr));
+                    // flagged paths returned, and an always-returning tail covers the rest
+                    return tailSt==RetExit::Always ? RetExit::Always : RetExit::Maybe;
+                }
+                return overall;
+            }
+
+            RetExit transformArm ( ExpressionPtr & arm, bool inLoop ) {
+                if ( arm->rtti_isReturn() ) {   // naked canonicalized arm - re-block and retry
+                    auto blk = new ExprBlock();
+                    blk->at = arm->at;
+                    blk->list.push_back(arm);
+                    arm = blk;
+                }
+                return transformStmt(arm, inLoop);
+            }
+
+            RetExit transformStmt ( ExpressionPtr & slot, bool inLoop ) {
+                Expression * s = slot;
+                if ( s->rtti_isReturn() ) {
+                    auto ret = static_cast<ExprReturn *>(s);
+                    auto blk = new ExprBlock();
+                    blk->at = ret->at;
+                    if ( auto store = makeStore(ret) ) blk->list.push_back(store);
+                    blk->list.push_back(flagSet(ret->at));
+                    if ( inLoop ) blk->list.push_back(new ExprBreak(ret->at));
+                    slot = blk;
+                    return RetExit::Always;
+                }
+                if ( s->rtti_isIfThenElse() ) {
+                    auto ite = static_cast<ExprIfThenElse *>(s);
+                    RetExit a = transformArm(ite->if_true, inLoop);
+                    RetExit b = ite->if_false ? transformArm(ite->if_false, inLoop) : RetExit::None;
+                    if ( a==RetExit::Always && ite->if_false && b==RetExit::Always ) return RetExit::Always;
+                    if ( a!=RetExit::None || b!=RetExit::None ) return RetExit::Maybe;
+                    return RetExit::None;
+                }
+                if ( s->rtti_isBlock() ) {
+                    return transformBlock(static_cast<ExprBlock *>(s), inLoop);
+                }
+                if ( s->rtti_isFor() ) {
+                    auto f = static_cast<ExprFor *>(s);
+                    if ( f->body && f->body->rtti_isBlock() ) {
+                        if ( transformBlock(static_cast<ExprBlock *>(f->body), true)!=RetExit::None ) {
+                            return RetExit::Maybe;  // may have exited via a flagged break
+                        }
+                    }
+                    return RetExit::None;
+                }
+                if ( s->rtti_isWhile() ) {
+                    auto w = static_cast<ExprWhile *>(s);
+                    if ( w->body && w->body->rtti_isBlock() ) {
+                        if ( transformBlock(static_cast<ExprBlock *>(w->body), true)!=RetExit::None ) {
+                            return RetExit::Maybe;
+                        }
+                    }
+                    return RetExit::None;
+                }
+                if ( s->rtti_isUnsafe() ) {
+                    auto u = static_cast<ExprUnsafe *>(s);
+                    if ( u->body ) return transformStmt(u->body, inLoop);
+                    return RetExit::None;
+                }
+                if ( s->rtti_isWith() ) {
+                    auto w = static_cast<ExprWith *>(s);
+                    if ( w->body ) return transformStmt(w->body, inLoop);
+                    return RetExit::None;
+                }
+                return RetExit::None;
+            }
+        };
+
     } // anonymous namespace
 
     // ----- the [inline] shape contract -----
@@ -1053,6 +1392,12 @@ namespace das {
                 err = "[inline] result must be by-value (or void)";
                 return false;
             }
+            // `#` is a call-boundary lifetime annotation; the splice dissolves that
+            // boundary, and the result store would copy a temporary (30915)
+            if ( fn->result->temporary ) {
+                err = "[inline] does not support a temporary (#) result";
+                return false;
+            }
             // a refType result splices through a manufactured uninitialized (zeroed)
             // temp that the trailing return fully writes before any read; a type whose
             // C++ constructor must run cannot take that path
@@ -1071,22 +1416,16 @@ namespace das {
         }
         if ( fn->result && fn->result->smartPtr ) { err = "[inline] does not support a smart-pointer result"; return false; }
         auto body = static_cast<ExprBlock *>(fn->body);
-        // the splicer pops the trailing return out of the top block and appends the
-        // result store in its place - a function-level finally on that block would
-        // run against reordered statements (probe: glob_count drifted). block-level
-        // finally INSIDE the body keeps its own block and splices fine
+        // a function-level finally stays refused: it runs against the spliced result
+        // stores in the caller's frame, an interaction the v1 probe already caught
+        // misordering (glob_count drifted). block-level finally INSIDE the body keeps
+        // its own block and splices fine
         if ( !body->finalList.empty() ) { err = "[inline] does not support a function-level finally"; return false; }
         InlineShapeScan scan;
-        scan.lastTopLevelStmt = body->list.empty() ? nullptr : body->list.back();
         fn->body->visit(scan);
         if ( scan.bad ) { err = "[inline] " + scan.reason; return false; }
-        if ( scan.misplacedReturn ) {
-            err = "[inline] requires a single-exit body - return is only allowed as the last statement";
-            return false;
-        }
-        bool isVoid = !fn->result || fn->result->isVoid();
-        if ( !isVoid && scan.returnCount!=1 ) {
-            err = "[inline] requires a single-exit body with one trailing return";
+        if ( ReturnStoreRewrite::finallyWrapHazard(body) ) {
+            err = "[inline] early returns conflict with a finally section";
             return false;
         }
         return true;
@@ -1191,6 +1530,10 @@ namespace das {
                 why = "result is not by-value";
                 return false;
             }
+            if ( !isVoid && blk->returnType->temporary ) {
+                why = "temporary result";
+                return false;
+            }
             if ( !isVoid && blk->returnType->isRefType() && blk->returnType->hasNonTrivialCtor() ) {
                 why = "result requires nontrivial construction";
                 return false;
@@ -1204,11 +1547,9 @@ namespace das {
             if ( blk->returnType && blk->returnType->smartPtr ) { why = "smart-pointer result"; return false; }
             if ( reinferFragile(mkb) ) { why = "body carries a temporary-flavored call"; return false; }
             InlineShapeScan scan(true);
-            scan.lastTopLevelStmt = blk->list.empty() ? nullptr : blk->list.back();
             blk->visit(scan);
             if ( scan.bad ) { why = scan.reason; return false; }
-            if ( scan.misplacedReturn ) { why = "multiple exits"; return false; }
-            if ( !isVoid && scan.returnCount!=1 ) { why = "multiple exits"; return false; }
+            if ( ReturnStoreRewrite::finallyWrapHazard(blk) ) { why = "early returns conflict with a finally section"; return false; }
             return true;
         }
 
@@ -1258,6 +1599,40 @@ namespace das {
             das_hash_map<Function *, pair<bool,string>> autoOkCache;
             das_hash_map<ExprMakeBlock *, pair<bool,string>> devirtShapeCache;
             das_hash_map<Function *, string> privateUseCache;
+            das_hash_map<Function *, bool> cycleCache;
+
+            // reachability of `fn` from its own body over the RUNTIME call graph
+            // (every call, not just splice-eligible ones), capped: cycles are short
+            // in practice, and beyond the cap we assume acyclic - the per-round
+            // growth bounds still apply. splices only move already-reachable calls
+            // inline, so a cached verdict stays valid across rounds (a stale `true`
+            // after a cycle splices away merely declines conservatively)
+            bool callerOnCallCycle ( Function * fn ) {
+                auto it = cycleCache.find(fn);
+                if ( it != cycleCache.end() ) return it->second;
+                das_hash_set<Function *> visited;
+                vector<Function *> work;
+                auto push = [&](Function * f) {
+                    if ( f && f->body && visited.size()<128 && visited.insert(f).second ) {
+                        work.push_back(f);
+                    }
+                };
+                push(fn);
+                bool found = false;
+                while ( !work.empty() && !found ) {
+                    Function * cur = work.back();
+                    work.pop_back();
+                    lookupExpressions(cur->body, [&](Expression * e) {
+                        if ( found ) return;
+                        Function * callee = callLikeFunc(e);
+                        if ( !callee ) return;
+                        if ( callee==fn ) { found = true; return; }
+                        push(callee);
+                    });
+                }
+                cycleCache[fn] = found;
+                return found;
+            }
 
             bool calleeShapeOk ( Function * fn ) {
                 auto it = shapeCache.find(fn);
@@ -1435,6 +1810,13 @@ namespace das {
                     // a frame already this large is one deep-chain hop away from an
                     // `options stack` overflow - stop growing it (recomputed per round,
                     // so accumulated splices shut the door behind themselves)
+                    fnCfg.functions = false;
+                } else if ( callerOnCallCycle(fn) ) {
+                    // a recursive caller multiplies every spliced byte by its live
+                    // stack depth - the frame bounds assume one instance (proven:
+                    // ast_boost's walk_and_convert family, mutually recursive with
+                    // its nine multi-return helpers, overflowed the macro context
+                    // stack once they spliced in)
                     fnCfg.functions = false;
                 }
             }
@@ -1635,6 +2017,19 @@ namespace das {
                         sub.substitute = leafA;
                         paramSub[P] = sub;
                         continue;
+                    }
+                    // an iterator argument BORROWS whatever storage its expression built
+                    // (`each(<temporary array>)` being the canonical case). the real call
+                    // keeps that storage alive for the whole call statement; a manufactured
+                    // arg temp shrinks it to the temp's own statement, and the spliced body
+                    // then iterates freed memory (proven: linq fold cascade - empty results,
+                    // heap crash; latent for v1's devirt too). only a plain variable read is
+                    // borrow-neutral - anything composed declines
+                    if ( A->type && A->type->baseType==Type::tIterator && !leafVar ) {
+                        siteFail(site, "can't inline " + subjName + ": iterator argument '"
+                            + P->name + "' borrows call-scoped storage", callLike->at);
+                        argFlavorFail = true;
+                        break;
                     }
                     // a substitution (or an inferred temp) carries the ARGUMENT's exact type
                     // into the body, where the call boundary coerced it to the PARAM's type.
@@ -1993,6 +2388,13 @@ namespace das {
                         prefixFailed = true;
                         break;
                     }
+                    if ( pe->type && pe->type->baseType==Type::tIterator && !pe->rtti_isVar() ) {
+                        // same borrow hazard as iterator arguments: the hoist statement
+                        // would outlive the storage the iterator expression borrowed
+                        siteFail(site, "can't inline " + subjName + " here: iterator expression in the evaluation prefix", callLike->at);
+                        prefixFailed = true;
+                        break;
+                    }
                     string tname = "__inl" + to_string(inlineId) + "_pre" + to_string(preIdx++);
                     // non-const temps throughout: the hoisted expression was a non-const
                     // rvalue (or keeps its lvalue constness via the reference binding), and
@@ -2056,33 +2458,22 @@ namespace das {
                         bodyClone->copyOnReturn = false;
                         bodyClone->moveOnReturn = false;
                     }
-                    ExpressionPtr trailing = nullptr;
-                    if ( !bodyClone->list.empty() && bodyClone->list.back()->rtti_isReturn() ) {
-                        trailing = bodyClone->list.back();
-                        bodyClone->list.pop_back();
+                    // every function-level return in the clone becomes a result store
+                    // (terminal shapes in place, the rest through a generated bool flag -
+                    // see ReturnStoreRewrite). the standalone callee keeps its shape
+                    ReturnStoreRewrite rsr;
+                    rsr.flagName = "__inl" + to_string(inlineId) + "_ret";
+                    if ( !isVoid ) {
+                        rsr.resName = "__inl" + to_string(inlineId) + "_res";
+                        splice.push_back(makeUninitDecl(callLike->at, rsr.resName, subjResult));
+                    }
+                    rsr.apply(bodyClone);
+                    if ( rsr.flagUsed ) {
+                        splice.push_back(makeTemp(callLike->at, rsr.flagName,
+                            new ExprConstBool(callLike->at, false), false, false, false));
                     }
                     if ( !isVoid ) {
-                        string resName = "__inl" + to_string(inlineId) + "_res";
-                        splice.push_back(makeUninitDecl(callLike->at, resName, subjResult));
-                        auto ret = static_cast<ExprReturn *>(trailing);
-                        // `return <- x` becomes a move into the result temp, `return x` a copy.
-                        // a move store is illegal from a copyable rvalue - `return <- g(...)`
-                        // of a pointer result must store as a COPY (identical semantics for
-                        // an rvalue; ExprMove rejects it, 30941). only a PROVEN copyable
-                        // rvalue demotes: an untyped subexpr (a same-round chained splice's
-                        // manufactured result-temp read) keeps the move - those reads are
-                        // references, and demoting a non-copyable to a copy is 30950
-                        bool storeAsCopy = ret->moveSemantics
-                            && ret->subexpr && ret->subexpr->type
-                            && !ret->subexpr->type->ref
-                            && ret->subexpr->type->canCopy();
-                        Expression * store = (ret->moveSemantics && !storeAsCopy)
-                            ? static_cast<Expression *>(new ExprMove(ret->at,
-                                new ExprVar(ret->at, resName), ret->subexpr))
-                            : static_cast<Expression *>(new ExprCopy(ret->at,
-                                new ExprVar(ret->at, resName), ret->subexpr));
-                        bodyClone->list.push_back(store);
-                        callReplacement = new ExprVar(callLike->at, resName);
+                        callReplacement = new ExprVar(callLike->at, rsr.resName);
                     }
                     ExpressionPtr spliced = bodyClone->visit(rewriter);
                     if ( calleeFn && calleeFn->hasUnsafe ) {
@@ -2151,8 +2542,10 @@ namespace das {
         //      tail into a synthesized else arm (what CondFolding does for nested blocks
         //      at optimize time; here it also covers the function's top block);
         //  (2) `if (c) return a; else return b;` folds to `return c ? a : b`.
-        // together they turn early-exit bodies into the single-trailing-return shape the
-        // inliner requires. new nodes are untyped: the pass reports astChanged and the
+        // together they turn early-exit bodies into terminal-return shapes the splicer
+        // stores in place with zero overhead (non-canonical shapes still splice, through
+        // the generated flag - see ReturnStoreRewrite). new nodes are untyped: the pass
+        // reports astChanged and the
         // restarted infer legalizes them, the same protocol as a splice. the optimize-time
         // CondFolding copy stays - it serves compiles this pre-pass never sees (auto
         // inlining off) and macro-generated post-infer shapes.
@@ -2255,12 +2648,10 @@ namespace das {
         bool canonicalizeReturns ( Function * fn, const AutoInlineCfg & cfg ) {
             if ( !fn->body || !fn->body->rtti_isBlock() ) return false;
             if ( fn->generator || fn->isTemplate ) return false;
-            // [inline] bodies stay untouched: their shape contract is fail-closed, and a
-            // multi-exit [inline] callee must be the same compile error at every -O level
-            if ( fn->mustInline ) return false;
             if ( fn->neverInline ) return false;    // never a candidate - don't reshape
             // the rewrite costs a re-infer round on every module that has one, so only
-            // functions that can plausibly become splice candidates qualify: a block
+            // functions that can plausibly become splice candidates qualify: [inline]
+            // (every site splices, and canonical shapes splice flag-free), a block
             // parameter (block-literal-arg candidacy), or - heuristic tier on - a body
             // that pre-screens close to the worthiness budget (25% slack: folding can
             // shrink a body into budget) or a budget-exempt private single-call callee
@@ -2268,7 +2659,7 @@ namespace das {
             for ( auto & arg : fn->arguments ) {
                 if ( arg->type && arg->type->baseType==Type::tBlock ) { hasBlockParam = true; break; }
             }
-            if ( !hasBlockParam ) {
+            if ( !hasBlockParam && !fn->mustInline ) {
                 if ( !cfg.functions ) return false;
                 bool exempt = cfg.budgetExempt
                     && cfg.budgetExempt->find(fn)!=cfg.budgetExempt->end();
