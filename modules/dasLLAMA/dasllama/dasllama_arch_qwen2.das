@@ -17,6 +17,9 @@ def register_arch_qwen2() {
     d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
+    // ChatML template detection maps every <|im_start|> GGUF here, thinking fine-tunes (Qwen3,
+    // Qwen3.6) included — the suppress renders only when the vocab carries the think specials
+    d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
     d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
     hermes_tools(d.chat)
     // audio-capable qwen2 family (Qwen2-Audio, Qwen2.5-Omni) wraps the soft-token span in

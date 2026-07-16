@@ -347,6 +347,76 @@ def test_chat_tools_hermes(t : T?) {
     }
 }
 
+// ===== Non-thinking mode (the Qwen3 family's enable_thinking=false) =====
+
+[test]
+def test_chat_think_suppress(t : T?) {
+    t |> run("set_thinking(false) appends the empty think block to the generation prompt (needs Qwen3-0.6B)") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        var raw <- load_bpe_tokenizer_gguf(path)
+        let ims = special_id(raw, "<|im_start|>")
+        let ime = special_id(raw, "<|im_end|>")
+        let tho = special_id(m, "<think>")
+        let thc = special_id(m, "</think>")
+        t |> success(tho >= 0l && thc >= 0l, "the vocab carries the think markers")
+
+        // thinking on (the default): the plain ChatML generation prompt, no think block
+        var c = create_chat_renderer(m, "", 8l)
+        add_user(c, USR)
+        let got <- render_turn(m, c)
+        var want : array<int64>
+        want |> push(ims)
+        want |> push_from(bpe_encode(raw, "user\n{USR}"))
+        want |> push(ime)
+        want |> push_from(bpe_encode(raw, "\n"))
+        want |> push(ims)
+        want |> push_from(bpe_encode(raw, "assistant\n"))
+        t |> success(same(got, want), "thinking default renders unchanged")
+        delete c
+
+        // thinking off: the Jinja template's enable_thinking=false form
+        var c2 = create_chat_renderer(m, "", 8l)
+        set_thinking(c2, false)
+        add_user(c2, USR)
+        let got2 <- render_turn(m, c2)
+        var want2 : array<int64>
+        want2 |> push_from(want)
+        want2 |> push(tho)
+        want2 |> push_from(bpe_encode(raw, "\n\n"))
+        want2 |> push(thc)
+        want2 |> push_from(bpe_encode(raw, "\n\n"))
+        t |> success(same(got2, want2), "set_thinking(false) appends <think>\\n\\n</think>\\n\\n")
+        delete c2
+        delete raw
+        delete m
+    }
+    t |> run("suppress is a vocab-gated no-op without think tokens (needs Qwen2.5-0.5B)") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        t |> equal(special_id(m, "<think>"), -1l)
+        var a = create_chat_renderer(m, "", 8l)
+        add_user(a, USR)
+        let got_on <- render_turn(m, a)
+        delete a
+        var b = create_chat_renderer(m, "", 8l)
+        set_thinking(b, false)
+        add_user(b, USR)
+        let got_off <- render_turn(m, b)
+        t |> success(same(got_on, got_off), "no think tokens => prompt unchanged, no panic")
+        delete b
+        delete m
+    }
+}
+
 // ===== Template detection (model-free) =====
 
 // Distinctive first special of a template's user turn — "" when the user turn opens with plain

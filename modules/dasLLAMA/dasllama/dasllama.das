@@ -174,8 +174,9 @@ def eval_batch(model : Model; var ws : BatchWorkspace; var sessions : array<Sess
 }
 
 def sample(var session : Session; params : SamplingParams) : int64 {
-    //! Sample the next token from ``session.logits`` per ``params``: repetition penalty over the recent
-    //! window, then temperature + top-k + softmax + CDF — or greedy argmax when ``params.temp <= 0``.
+    //! Sample the next token from ``session.logits`` per ``params``: repetition/presence/frequency
+    //! penalties over the recent window, then temperature + top-k on logits, softmax, top-p / min-p
+    //! on probabilities, and a CDF draw — or greedy argmax when ``params.temp <= 0``.
     //! ``SamplingParams()`` defaults are greedy.
     return sample_(session, params)
 }
@@ -311,6 +312,14 @@ def add_tool_results(var chat : ChatSession; results : array<string>) {
     //! Queue tool results as the next pending turn — the reply to an assistant turn that called
     //! tools. Call in place of ``add_user``, then ``respond``/``render_turn`` as usual.
     add_tool_results_(chat, results)
+}
+
+def set_thinking(var chat : ChatSession; on : bool) {
+    //! Toggle reasoning for a hybrid thinking model (Qwen3 family): ``false`` appends the
+    //! template's empty think block to every generation prompt (the Jinja
+    //! ``enable_thinking=false`` form), so the model answers directly. No-op for templates with
+    //! no suppress form or vocabs without the think specials. Default is on.
+    set_thinking_(chat, on)
 }
 
 def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>) {

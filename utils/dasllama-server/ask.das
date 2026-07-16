@@ -38,6 +38,29 @@ struct AskArgs {
     @clarg_doc = "Sampling temperature, 0 = greedy (default 0)"
     temp : float
 
+    @clarg_short = "k"
+    @clarg_doc = "Top-k cutoff, 0 = off (default 0)"
+    top_k : int
+
+    @clarg_doc = "Top-p (nucleus) cutoff, keeps the smallest prob mass >= p (default 1 = off)"
+    top_p : float = 1.0
+
+    @clarg_doc = "Min-p cutoff relative to the max probability (default 0 = off)"
+    min_p : float
+
+    @clarg_doc = "Multiplicative repetition penalty over recent tokens (default 1 = off)"
+    repeat_penalty : float = 1.0
+
+    @clarg_doc = "Presence penalty: flat logit subtraction for recent tokens (default 0)"
+    presence_penalty : float
+
+    @clarg_doc = "Frequency penalty: per-occurrence logit subtraction (default 0)"
+    frequency_penalty : float
+
+    @clarg_short = "s"
+    @clarg_doc = "Override the sampling seed, 0 = keep the session's fixed default seed (default 0)"
+    seed : int
+
     @clarg_doc = "Weight quantization: fp32 | q8 | q4 (default q8)"
     quant : string
 
@@ -83,10 +106,19 @@ def main : int {
     let toks <- encode(m, cfg.prompt, true, false)
     var params = SamplingParams()
     params.temp = cfg.temp
+    params.top_k = int64(cfg.top_k)
+    params.top_p = cfg.top_p
+    params.min_p = cfg.min_p
+    params.penalty = cfg.repeat_penalty
+    params.presence_penalty = cfg.presence_penalty
+    params.frequency_penalty = cfg.frequency_penalty
 
     with_job_que() {
         setup_dasllama_jobque()
         var s = create_session(m)
+        if (cfg.seed != 0) {
+            set_seed(s, cfg.seed)
+        }
         generate(m, s, toks, params, max_new) $(_id, piece) {
             fprint(fstdout(), piece)
             fflush(fstdout())

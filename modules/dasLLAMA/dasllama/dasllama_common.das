@@ -594,6 +594,8 @@ struct ChatTemplate {
     user : ChatTurn = ChatTurn()
     assistant_open : ChatTurn = ChatTurn()
     assistant_close : ChatTurn = ChatTurn()   // empty = derive from the user turn's tail parts
+    think_suppress : ChatTurn = ChatTurn()    // appended to the generation prompt when thinking is off
+                                              // (Qwen3-style empty think block; empty = no suppress form)
     audio_pre : ChatTurn = ChatTurn()
     audio_post : ChatTurn = ChatTurn()
     stop : array<string>
@@ -10030,12 +10032,18 @@ def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : i
 
 // ===== Sampling =====
 
-//! Sampling parameters. Defaults are greedy (temp = 0, penalty = 1.0) — bit-identical to argmax.
+//! Sampling parameters. Defaults are greedy (temp = 0, all cutoffs/penalties off) — bit-identical
+//! to argmax. Cutoff order matches llama.cpp: top-k on logits, then top-p and min-p on the
+//! softmaxed probabilities.
 struct SamplingParams {
     temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
     top_k : int64 = 0l             // <= 0 or >= vocab => no top-k cutoff
-    penalty : float = 1.0          // repetition penalty over recent tokens (1.0 = none)
-    penalty_last_n : int64 = 64l   // repetition-penalty window (most recent N generated tokens)
+    top_p : float = 1.0            // nucleus: keep the smallest prob mass >= top_p (>= 1 = off)
+    min_p : float = 0.0            // drop tokens with prob < min_p * max prob (<= 0 = off)
+    penalty : float = 1.0          // multiplicative repetition penalty over recent tokens (1 = none; <= 0 treated as none)
+    presence_penalty : float = 0.0   // subtracted from the logit of every distinct token in the window
+    frequency_penalty : float = 0.0  // subtracted per occurrence in the window (OpenAI semantics)
+    penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
 }
 
 //! Seed the session's sampling RNG for reproducible generation.
@@ -10043,21 +10051,52 @@ def set_seed_(var s : Session; seed : int) {
     s.rng = random_seed(seed)
 }
 
-//! Sample the next token from `s.logits` per `params`: repetition penalty over the last
-//! `penalty_last_n` of `s.recent`, then temperature + top-k + softmax + CDF (or greedy argmax when
-//! temp <= 0). Consumes `s.logits` in place and advances `s.rng`.
+// Repetition / presence / frequency penalties over the last `penalty_last_n` of `s.recent`.
+// Each unique token in the window is penalized ONCE (llama.cpp semantics): multiplicative
+// repetition penalty, then `presence + frequency * count` subtracted. The O(w^2) membership
+// scan is fine at the default 64-token window.
+def private apply_penalties_(var s : Session; params : SamplingParams) {
+    // multiplicative penalty: 1 = off; <= 0 is treated as off too — 0 would inf/NaN the logits,
+    // and clients used to the additive penalties (0 = off) do send it
+    let rep = params.penalty > 0.0 && params.penalty != 1.0
+    if (!rep && params.presence_penalty == 0.0 && params.frequency_penalty == 0.0) {
+        return
+    }
+    let n = length(s.recent)
+    let win = int(params.penalty_last_n)
+    let pstart = n > win ? n - win : 0
+    for (k in range(pstart, n)) {
+        let id = s.recent[k]
+        var seen = false
+        for (j in range(pstart, k)) {
+            if (s.recent[j] == id) {
+                seen = true
+                break
+            }
+        }
+        continue if (seen)
+        var cnt = 1
+        for (j in range(k + 1, n)) {
+            if (s.recent[j] == id) {
+                cnt++
+            }
+        }
+        var v = s.logits[id]
+        if (rep) {
+            v = v > 0.0 ? v / params.penalty : v * params.penalty
+        }
+        v -= params.presence_penalty + params.frequency_penalty * float(cnt)
+        s.logits[id] = v
+    }
+}
+
+//! Sample the next token from `s.logits` per `params`: penalties over the last `penalty_last_n`
+//! of `s.recent`, then temperature + top-k on logits, softmax, top-p / min-p on probabilities,
+//! and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place and advances
+//! `s.rng`.
 def sample_(var s : Session; params : SamplingParams) : int64 {
     let vocab = int64(length(s.logits))
-    if (params.penalty != 1.0) {
-        let n = length(s.recent)
-        let win = int(params.penalty_last_n)
-        let pstart = n > win ? n - win : 0
-        for (k in range(pstart, n)) {
-            let id = s.recent[k]
-            let v = s.logits[id]
-            s.logits[id] = v > 0.0 ? v / params.penalty : v * params.penalty
-        }
-    }
+    apply_penalties_(s, params)
     if (params.temp <= 0.0) {
         return argmax(s, vocab)
     }
@@ -10089,7 +10128,48 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
         }
     }
     softmax(s.logits, vocab)
-    let r = random_float(s.rng)
+    if (params.top_p < 1.0) {
+        // nucleus cut: sort a prob copy descending-by-walk, find the smallest prefix whose mass
+        // reaches top_p, zero everything below that prefix's boundary probability
+        for (i in range64(vocab)) {
+            s.sample_scratch[i] = s.logits[i]
+        }
+        sort(s.sample_scratch)
+        let target = max(params.top_p, 0.0)
+        var mass = 0.0
+        var cut = 0.0
+        var idx = length(s.sample_scratch) - 1
+        while (idx >= 0) {
+            cut = s.sample_scratch[idx]
+            mass += cut
+            break if (mass >= target)
+            idx--
+        }
+        for (i in range64(vocab)) {
+            if (s.logits[i] < cut) {
+                s.logits[i] = 0.0
+            }
+        }
+    }
+    if (params.min_p > 0.0) {
+        var maxp = 0.0
+        for (i in range64(vocab)) {
+            maxp = max(maxp, s.logits[i])
+        }
+        let thr = min(params.min_p, 1.0) * maxp
+        for (i in range64(vocab)) {
+            if (s.logits[i] < thr) {
+                s.logits[i] = 0.0
+            }
+        }
+    }
+    // the cuts above zero probabilities without renormalizing — draw against the surviving mass
+    // (cdf accumulates in the same order as total, so the walk always lands on a surviving token)
+    var total = 0.0
+    for (i in range64(vocab)) {
+        total += s.logits[i]
+    }
+    let r = random_float(s.rng) * total
     var cdf = 0.0
     for (i in range64(vocab)) {
         cdf += s.logits[i]

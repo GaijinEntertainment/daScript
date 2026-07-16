@@ -24,6 +24,7 @@ def register_arch_qwen3moe() {
     d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
+    d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
     d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
     hermes_tools(d.chat)
     // Qwen3-Omni-30B's thinker converts as `qwen3vlmoe` — qwen3moe + M-RoPE + deepstack. For

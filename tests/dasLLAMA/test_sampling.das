@@ -75,6 +75,139 @@ def test_sampling_greedy_matches_oracle(t : T?) {
     }
 }
 
+// ===== Model-free sampler units =====
+
+// sample() only touches logits / sample_scratch / recent / rng, so a bare Session with hand-set
+// logits exercises every cutoff and penalty without a model (and without JIT gating).
+def private mk_sampler(n : int) : Session {
+    var s = Session()
+    s.logits |> resize(n)
+    s.sample_scratch |> resize(n)
+    set_seed(s, 12345)
+    return <- s
+}
+
+def private set_logits(var s : Session; vals : array<float>) {
+    for (i in range(length(vals))) {
+        s.logits[i] = vals[i]
+    }
+}
+
+[test]
+def test_sampler_units(t : T?) {
+    t |> run("defaults are greedy argmax") @(t : T?) {
+        var s = mk_sampler(4)
+        set_logits(s, [0.5, 3.0, 1.0, 2.0])
+        t |> equal(sample(s, SamplingParams()), 1l)
+        delete s
+    }
+    t |> run("top_p cuts the tail to the dominant token") @(t : T?) {
+        var s = mk_sampler(4)
+        let params = SamplingParams(temp = 1.0, top_p = 0.5)
+        for (_i in range(64)) {
+            set_logits(s, [10.0, 1.0, 1.0, 1.0])
+            t |> equal(sample(s, params), 0l)
+        }
+        delete s
+    }
+    t |> run("top_p keeps the top pair, drops the tail") @(t : T?) {
+        var s = mk_sampler(4)
+        let params = SamplingParams(temp = 1.0, top_p = 0.9)
+        var seen0 = 0
+        var seen1 = 0
+        for (_i in range(256)) {
+            set_logits(s, [5.0, 5.0, 0.0, -1.0])
+            let id = sample(s, params)
+            t |> success(id == 0l || id == 1l, "sampled inside the nucleus")
+            if (id == 0l) {
+                seen0++
+            } elif (id == 1l) {
+                seen1++
+            }
+        }
+        t |> success(seen0 > 0 && seen1 > 0, "both nucleus tokens are reachable")
+        delete s
+    }
+    t |> run("min_p drops tokens below the relative floor") @(t : T?) {
+        var s = mk_sampler(3)
+        let params = SamplingParams(temp = 1.0, min_p = 0.5)
+        for (_i in range(128)) {
+            set_logits(s, [5.0, 5.0, 0.0])
+            t |> success(sample(s, params) != 2l, "below-floor token never sampled")
+        }
+        delete s
+    }
+    t |> run("presence penalty moves greedy off a recent token") @(t : T?) {
+        var s = mk_sampler(8)
+        s.recent |> push(3l)
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, SamplingParams(presence_penalty = 1.0)), 7l)
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, SamplingParams()), 3l)   // no penalty: greedy stays on the recent token
+        delete s
+    }
+    t |> run("frequency penalty scales with occurrence count") @(t : T?) {
+        var s = mk_sampler(8)
+        let params = SamplingParams(frequency_penalty = 0.3)
+        s.recent |> push(3l)
+        s.recent |> push(3l)
+        s.recent |> push(3l)
+        // 3 occurrences: 2.0 - 3 * 0.3 = 1.1 < 1.5 => argmax moves to 7
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, params), 7l)
+        // 1 occurrence: 2.0 - 0.3 = 1.7 > 1.5 => argmax stays on 3
+        s.recent |> clear()
+        s.recent |> push(3l)
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, params), 3l)
+        delete s
+    }
+    t |> run("repeat penalty <= 0 is treated as off, not a divide-by-zero") @(t : T?) {
+        var s = mk_sampler(8)
+        s.recent |> push(3l)
+        // additive-penalty clients send 0 meaning "off" — greedy must stay on the recent argmax
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, SamplingParams(penalty = 0.0)), 3l)
+        set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, SamplingParams(penalty = -1.0)), 3l)
+        delete s
+    }
+    t |> run("repetition penalty applies once per unique token (llama.cpp semantics)") @(t : T?) {
+        var s = mk_sampler(8)
+        s.recent |> push(3l)
+        s.recent |> push(3l)
+        s.recent |> push(3l)
+        // once: 3.0 / 1.5 = 2.0 > 1.5 => argmax stays on 3; per-occurrence (the old behavior)
+        // would give 3.0 / 1.5^3 = 0.89 and move to 7
+        set_logits(s, [0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.5])
+        t |> equal(sample(s, SamplingParams(penalty = 1.5)), 3l)
+        delete s
+    }
+    t |> run("seeded sampled draws reproduce") @(t : T?) {
+        let params = SamplingParams(temp = 1.0, top_p = 0.95, min_p = 0.05, presence_penalty = 0.5)
+        var a : array<int64>
+        var b : array<int64>
+        for (pass_idx in range(2)) {
+            var s = mk_sampler(16)
+            set_seed(s, 777)
+            for (_i in range(32)) {
+                for (i in range(16)) {
+                    s.logits[i] = float(i % 5)
+                }
+                let id = sample(s, params)
+                if (pass_idx == 0) {
+                    a |> push(id)
+                } else {
+                    b |> push(id)
+                }
+                s.recent |> push(id)
+            }
+            delete s
+        }
+        t |> success(same(a, b) && length(a) == 32, "same seed => identical draws")
+    }
+}
+
 [test]
 def test_sampling_deterministic(t : T?) {
     t |> run("same seed => identical sampled output") @(t : T?) {

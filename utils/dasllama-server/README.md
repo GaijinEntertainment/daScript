@@ -100,6 +100,36 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 }'
 ```
 
+### Sampling parameters
+
+Both completion routes accept the OpenAI sampling fields plus the llama.cpp-style extensions —
+absent fields keep the greedy default (`temperature: 0`):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `temperature` | 0 | `<= 0` = greedy argmax |
+| `top_k` | 0 (off) | keep only the k highest logits |
+| `top_p` | 1 (off) | nucleus: keep the smallest probability mass `>= top_p` |
+| `min_p` | 0 (off) | drop tokens with probability `< min_p * max_prob` |
+| `repeat_penalty` | 1 (off) | multiplicative repetition penalty over the recent window, applied once per unique token (llama.cpp semantics) |
+| `presence_penalty` | 0 | flat logit subtraction for every distinct token in the recent window |
+| `frequency_penalty` | 0 | per-occurrence logit subtraction (OpenAI semantics) |
+| `seed` | 0 (default seed) | non-zero overrides the stream's RNG seed; sessions start from a fixed default seed, so identical no-seed requests already reproduce |
+
+The cutoffs (`top_k` / `top_p` / `min_p`) shape the sampled distribution, so they only take
+effect with `temperature > 0` — greedy short-circuits to argmax; the penalties apply in greedy
+mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_p": 0.8,
+"presence_penalty": 1.5`.
+
+### Thinking control
+
+Hybrid thinking models (the Qwen3/Qwen3.6 family) reason in a `<think>` block by default. Set
+`"enable_thinking": false` (top-level, or the llama.cpp spelling
+`"chat_template_kwargs": {"enable_thinking": false}`) and the server appends the template's
+empty think block (`<think>\n\n</think>\n\n`) to the generation prompt — the model answers
+directly, matching the family Jinja's `enable_thinking=false` form. A no-op for models whose
+vocab has no think tokens.
+
 ### Tool / function calling
 
 `/v1/chat/completions` speaks the OpenAI function-calling protocol: pass `tools` (and optionally

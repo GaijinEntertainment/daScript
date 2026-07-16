@@ -281,7 +281,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
-        if (sch.mtp && sch.streams[i].params.temp <= 0.0 && sch.streams[i].params.penalty == 1.0) {
+        if (sch.mtp && sch.streams[i].params.temp <= 0.0 && sch.streams[i].params.penalty == 1.0 &&
+                sch.streams[i].params.presence_penalty == 0.0 && sch.streams[i].params.frequency_penalty == 0.0) {
             // greedy self-spec tick: draft + 2-row batched verify on this stream's own session
             // (the stream trades its cross-stream batch row for up to two positions per tick;
             // sampled/penalized streams stay on the batch — the greedy verify wouldn't match them).

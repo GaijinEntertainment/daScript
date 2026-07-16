@@ -398,10 +398,28 @@ def private tmpdir() : string {
 
 // Top-level fields each JSON route reads; anything else in a request logs a warning instead of
 // silently vanishing — the diagnostic for "agent X immediately fails against this server".
-let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature", "top_k", "max_tokens",
-                                     "max_completion_tokens", "tools", "tool_choice" }
-let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "max_tokens" }
+let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature", "top_k", "top_p", "min_p",
+                                     "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
+                                     "max_tokens", "max_completion_tokens", "tools", "tool_choice",
+                                     "enable_thinking", "chat_template_kwargs" }
+let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
+                                     "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
+                                     "max_tokens" }
 let EMB_FIELDS : table<string> <- { "model", "input" }
+
+// Sampling knobs shared by both completion routes — OpenAI names, plus the llama.cpp-style
+// extensions (top_k / min_p / repeat_penalty). Absent fields keep the greedy defaults.
+def private parse_sampling(js : JsonValue?) : SamplingParams {
+    var params = SamplingParams()
+    params.temp = js?["temperature"] ?? 0.0
+    params.top_k = js?["top_k"] ?? 0l
+    params.top_p = js?["top_p"] ?? 1.0
+    params.min_p = js?["min_p"] ?? 0.0
+    params.penalty = js?["repeat_penalty"] ?? 1.0
+    params.presence_penalty = js?["presence_penalty"] ?? 0.0
+    params.frequency_penalty = js?["frequency_penalty"] ?? 0.0
+    return params
+}
 
 def private warn_ignored_fields(js : JsonValue?; known : table<string>; route : string) {
     if (js == null || !(js.value is _object)) {
@@ -517,7 +535,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              var prompt, stop_ids, close_toks : array<int64>;
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
-                             tools_declared : bool = false; call_open : string = ""; call_close : string = "") {
+                             tools_declared : bool = false; call_open : string = ""; call_close : string = "";
+                             seed : int = 0) {
     let np = int64(length(prompt))
     if (np + 1l > g_model.config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {g_model.config.seq_len} — shorten the conversation or raise --ctx")
@@ -526,7 +545,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let rid = next_id()
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed)
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.close_toks <- close_toks
@@ -566,9 +585,8 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
         return
     }
     let streaming = js?["stream"] ?? false
-    var params = SamplingParams()
-    params.temp = js?["temperature"] ?? 0.0
-    params.top_k = js?["top_k"] ?? 0l
+    let params = parse_sampling(js)
+    let seed = js?["seed"] ?? 0
     var req_max = js?["max_tokens"] ?? 0l
     if (req_max <= 0l) {
         req_max = js?["max_completion_tokens"] ?? g_default_max_new   // the newer OpenAI spelling
@@ -616,6 +634,23 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     }
     var chat <- create_chat_renderer(g_model, system, max_new)
     defer() { delete chat }
+    // top-level enable_thinking, or the llama.cpp-server spelling chat_template_kwargs.enable_thinking;
+    // other kwargs keys warn like any unsupported field instead of vanishing
+    let ctk = js?["chat_template_kwargs"]
+    if (ctk != null && ctk.value is _object) {
+        for (k in keys(ctk.value as _object)) {
+            if (k != "enable_thinking") {
+                to_log(LOG_WARNING, "/v1/chat/completions: ignoring unsupported chat_template_kwargs key '{k}'\n")
+            }
+        }
+    } elif (ctk != null && !(ctk.value is _null)) {
+        to_log(LOG_WARNING, "/v1/chat/completions: 'chat_template_kwargs' must be an object — ignoring\n")
+    }
+    var think = js?["enable_thinking"] ?? true
+    think = think && (ctk?["enable_thinking"] ?? true)
+    if (!think) {
+        set_thinking(chat, false)
+    }
     let has_tools = !empty(tools)
     if (has_tools) {
         if (empty(chat.tmpl.tool_call_open)) {
@@ -696,7 +731,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     var close <- render_close(g_model, chat)
     defer() { delete close }   // register_request moves it on success; the 400/503 paths leave it here
     register_request(srv, writer, prompt, chat.stop_ids, close, params, max_new, streaming, true, "chatcmpl",
-                     has_tools, chat.tmpl.tool_call_open, chat.tmpl.tool_call_close)
+                     has_tools, chat.tmpl.tool_call_open, chat.tmpl.tool_call_close, seed)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -714,16 +749,16 @@ def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var
         return
     }
     let streaming = js?["stream"] ?? false
-    var params = SamplingParams()
-    params.temp = js?["temperature"] ?? 0.0
-    params.top_k = js?["top_k"] ?? 0l
+    let params = parse_sampling(js)
+    let seed = js?["seed"] ?? 0
     let max_new = clamp_max(js?["max_tokens"] ?? g_default_max_new)
     var toks <- encode(g_model, prompt, true, false)
     defer() { delete toks }
     // no stop ids and no close: raw completions run to the budget, matching bare generate()
     var none_stop : array<int64>
     var none_close : array<int64>
-    register_request(srv, writer, toks, none_stop, none_close, params, max_new, streaming, false, "cmpl")
+    register_request(srv, writer, toks, none_stop, none_close, params, max_new, streaming, false, "cmpl",
+                     [seed = seed])
 }
 
 // Evict streams whose client vanished: is_writer_connected reads false once the connection is
