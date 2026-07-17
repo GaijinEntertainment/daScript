@@ -113,6 +113,12 @@ namespace das {
     __forceinline void __bit_set ( uint32_t & value, uint32_t mask, bool on ) {
         value = on ? (value | mask) : (value & ~mask);
     }
+    // Mixed overload: a LOCAL das bitfield's field-assign emits a raw uint literal mask
+    // (`__bit_set(bf, 0x1u, on)`) — without this exact match, the Bitfield and raw-uint32
+    // overloads above are one user-conversion each and the call is ambiguous.
+    __forceinline void __bit_set ( Bitfield & value, uint32_t mask, bool on ) {
+        value.value = on ? (value.value | mask) : (value.value & ~mask);
+    }
     __forceinline void __bit_set ( uint8_t & value, uint8_t mask, bool on ) {
         value = on ? uint8_t(value | mask) : uint8_t(value & ~mask);
     }

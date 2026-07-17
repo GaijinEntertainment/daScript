@@ -257,3 +257,27 @@ def test_bitfield_64(t : T?) {
         }
     }
 }
+
+[test]
+def test_bitfield_field_assign(t : T?) {
+    t |> run("field assign on a LOCAL bitfield (the AOT __bit_set lowering)") @(t : T?) {
+        // `bf.field = bool` on a local das-typed bitfield AOT-emits `__bit_set(bf, <uint
+        // literal>, on)` — the aot.h overload set must resolve it unambiguously (the mixed
+        // (Bitfield&, uint32_t) overload; regression for the metal_needs-shaped derivation)
+        var n : Baz
+        n.bit0 = true
+        n.bit2 = true
+        t |> equal(Baz.bit0 | Baz.bit2, n)
+        n.bit0 = false
+        t |> equal(Baz.bit2, n)
+        // expression RHS, both polarities in one pass
+        let src = 5
+        n.bit0 = src > 0
+        n.bit1 = src < 0
+        n.bit2 = src != 5
+        t |> equal(Baz.bit0, n)
+        // read-back through the field form
+        t |> success(n.bit0)
+        t |> success(!n.bit1)
+    }
+}
