@@ -41,6 +41,7 @@ module style_lint shared private
 //!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign). Cloneable elements only (a copyable-but-not-cloneable element such as a lambda stays silent — ':=' would not compile)
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
 //!   STYLE034 — reinterpret<T?>(addr(x)) — use addr<T?>(x); one unsafe() covers both halves (pointer targets only; the sugar's own desugared output is exempt via fromAddrSugar)
+//!   STYLE035 — uint variable compared with uint('<char>') — make the variable int and compare directly with the character literal
 
 require daslib/ast_boost
 require daslib/is_local
@@ -483,6 +484,7 @@ class StyleLintVisitor : AstVisitor {
 
     // --- STYLE006: string(__rtti) == "..." should use `is` ---
     // --- STYLE018: b == true / b == false / b != true / b != false ---
+    // --- STYLE035: uint variable compared with uint('<char>') ---
 
     def peel_ref2value_const(e : Expression? const) : Expression? const {
         if (e != null && e is ExprRef2Value) return (e as ExprRef2Value.subexpr)
@@ -493,6 +495,87 @@ class StyleLintVisitor : AstVisitor {
         //! Structural equality via describe(). No purity filter.
         if (a == null || b == null) return false
         return describe(a) == describe(b)
+    }
+
+    def plain_uint_variable(expr : Expression?) : Variable const? {
+        //! Return the variable behind a plain uint ExprVar read. Fields, indexes,
+        //! calls, and other expressions are deliberately excluded: STYLE035's
+        //! fix changes the variable declaration itself.
+        if (expr == null) return null
+        var inner = expr
+        if (inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value.subexpr)
+        }
+        if (inner == null || !(inner is ExprVar)) return null
+        let ev = inner as ExprVar
+        let v = ev.variable
+        // Under lint policies an ExprVar read can have no expression type even
+        // though its declaration is fully inferred, so use the Variable type as
+        // the stable source of truth.
+        if (v == null || v._type == null || v._type.baseType != Type.tUInt) return null
+        return v
+    }
+
+    def source_spells_uint_char_literal(expr : Expression const?) : bool {
+        //! uint('<char>') folds to ExprConstUInt before this pass under normal
+        //! compilation, but LineInfo retains the exact source span. Inspect that
+        //! span so uint(40) and ordinary uint expressions stay silent.
+        if (expr != null && expr is ExprCall) {
+            // Under lint policies the cast stays as an ExprCall whose own `at`
+            // covers only the `uint` name. Its argument retains the quoted span.
+            let call = expr as ExprCall
+            if (call.func == null || call.func.name != "uint"
+                    || length(call.arguments) != 1 || call.arguments[0] == null) return false
+            let arg = call.arguments[0]
+            if (arg.at.fileInfo == null || arg.at.line == 0u
+                    || arg.at.line != arg.at.last_line
+                    || arg.at.last_column <= arg.at.column) return false
+            var arg_src = ""
+            get_file_source_line(arg.at.fileInfo, arg.at.line) $(line) {
+                let start = int(arg.at.column)
+                let finish = int(arg.at.last_column)
+                if (start >= 0 && finish <= length(line)) {
+                    arg_src = slice(line, start, finish)
+                }
+            }
+            let inner = strip(arg_src)
+            return length(inner) >= 3 && starts_with(inner, "'") && ends_with(inner, "'")
+        }
+        if (expr == null || expr.at.fileInfo == null
+                || expr.at.line == 0u || expr.at.line != expr.at.last_line
+                || expr.at.last_column <= expr.at.column) return false
+        var src = ""
+        get_file_source_line(expr.at.fileInfo, expr.at.line) $(line) {
+            let start = int(expr.at.column)
+            let finish = int(expr.at.last_column)
+            if (start >= 0 && finish <= length(line)) {
+                src = slice(line, start, finish)
+            }
+        }
+        let spelling = strip(src)
+        if (!starts_with(spelling, "uint")) return false
+        let after_name = strip_left(slice(spelling, 4))
+        if (!starts_with(after_name, "(") || !ends_with(after_name, ")")) return false
+        let inner = strip(slice(after_name, 1, length(after_name) - 1))
+        // The parser guarantees a quoted scalar here is a valid character
+        // literal, including escaped forms such as '\n' and '\''.
+        return length(inner) >= 3 && starts_with(inner, "'") && ends_with(inner, "'")
+    }
+
+    def check_style035_uint_char_compare(expr : ExprOp2?) : void {
+        if (expr.genFlags.generated
+                || (expr.op != "==" && expr.op != "!=" && expr.op != "<"
+                    && expr.op != "<=" && expr.op != ">" && expr.op != ">=")) return
+        var v = plain_uint_variable(expr.left)
+        var literal = expr.right
+        if (v == null) {
+            v = plain_uint_variable(expr.right)
+            literal = expr.left
+        }
+        if (v == null || !source_spells_uint_char_literal(literal)) return
+        // Report at the declaration. This both points at the requested fix and
+        // collapses a whole comparison chain on the same variable to one warning.
+        style_warning("STYLE035: uint variable '{v.name}' is compared with a uint-cast character literal; make '{v.name}' int and compare directly with the character literal", v.at)
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
@@ -530,6 +613,7 @@ class StyleLintVisitor : AstVisitor {
         if (expr.op == "==" || expr.op == "!=") {
             check_style023_bitfield_test(expr)
         }
+        check_style035_uint_char_compare(expr)
     }
 
     // --- STYLE022: bitfield-as-field compound-set/clear ---
