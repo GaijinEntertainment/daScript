@@ -20,13 +20,14 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // `:=` / concat clone the source elements, so the FRESH-EMPTY suggestions are gated on
 // the element being cloneable: a lambda array is copyable (`push_from` works) but NOT
 // cloneable, so `var c := src` would not compile — STYLE032/033-concat stay silent for
-// it. The existing-array variadic collapse preserves the exact `push_from` op, so it is
-// NOT gated (a lambda existing-run still collapses).
+// it. Existing-array variadic calls take const sources, so that form additionally
+// requires elements that can be copied from const (a lambda existing-run still works).
 
 expect 31209:7
 
 require daslib/style_lint
 require daslib/linq
+require daslib/ast
 
 struct Bag {
     nums : array<int>
@@ -171,4 +172,11 @@ def good_lambda_fresh_run(a, b : array<IntFn>) : array<IntFn> {
     c |> push_from(a)
     c |> push_from(b)
     return <- c
+}
+
+def good_mutable_only_existing(var dst : array<Expression?>; var a, b : array<Expression?>) {
+    // Expression smart pointers copy from mutable arrays, but not from the const sources
+    // required by the variadic overload.
+    dst |> push_from(a)
+    dst |> push_from(b)
 }

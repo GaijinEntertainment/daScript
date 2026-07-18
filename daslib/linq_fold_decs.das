@@ -1282,8 +1282,7 @@ def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; ctx : Emit
     }
     var collectInner = build_decs_inner_for(bridgeB, tupBindB, stmts_to_expr(collectBody), at)
     var probeInner = build_decs_inner_for(bridgeA, tupBindA, pieces.probeOuter, at)
-    var allStmts : array<Expression?>
-    allStmts |> push_from(pieces.preludeStmts)
+    var allStmts := pieces.preludeStmts
     allStmts |> push <| qmacro_expr() {
         var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
     }

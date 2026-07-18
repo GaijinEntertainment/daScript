@@ -61,12 +61,6 @@ def install_new_thread_local_debug_agent(var agentPtr) {
 }
 
 // das::Array. should we bind C++ structure?
-//
-// IMPORTANT: keep this struct byte-compatible with C++ `das::Array` in
-// include/daScript/misc/arraytype.h. The `_pad_after_flags` field mirrors
-// the explicit pad added to the C++ struct to make Table::keys land at the
-// same offset on every ABI (clang/Itanium 32-bit would otherwise reuse base
-// trailing padding and put keys 4 bytes earlier than MSVC).
 struct DapiArray {
     data : void?
     size : uint64

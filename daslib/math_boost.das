@@ -182,10 +182,6 @@ def perspective_rh_opengl(fovy, aspect, zn, zf : float) {
 }
 
 // perspective_rh_0_to_1 / perspective_rh_minus1_to_1 are the corrected, depth-range-explicit builders.
-// The legacy perspective_rh / _lh / _rh_opengl above leave m[3][3]=1 (identity residue), so their w-row
-// is (0,0,-1,1) not (0,0,-1,0) -> clip.w = -z_view + 1. That mild bias is invisible at camera distance
-// ~O(1..10) but shrinks a sub-metre model dramatically; those legacy fns stay as-is so the demos tuned
-// to them are unchanged. New code should use these two (correct w-row) and pick by clip-space z range.
 def perspective_rh_0_to_1(fovy, aspect, zn, zf : float) {
     //! right-handed (z toward viewer) perspective matrix, clip-space z in [0..1] (Vulkan / D3D).
     let yScale = 1. / tan(fovy / 2.)

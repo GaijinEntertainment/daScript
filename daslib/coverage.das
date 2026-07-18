@@ -31,8 +31,7 @@ require daslib/templates_boost
 let private builtin_files = fixed_array("fio.das", "ast.das", "builtin.das", "debugger.das", "network.das", "rtti.das")
 
 def private generated_call(var e : ExpressionPtr) : ExpressionPtr {
-    // instrumentation calls are machinery output: lint skips them, and the inliner's
-    // cross-module `_::` gate exempts generated calls whose target resolves anywhere
+    // instrumentation calls are machinery output: lint skips them, and the inliner's cross-module `_::` gate exempts generated calls whose target resolves anywhere
     e.genFlags.generated = true
     return e
 }
@@ -329,9 +328,6 @@ class CoverageMacro : AstVisitor {
 
     def override visitExprIfThenElse(var ifte : ExprIfThenElse?) : ExpressionPtr {
         //! Instruments if/else branches with branch coverage tracking calls.
-        // if (ifte.isStatic) {
-        //     return <- ifte
-        // }
         if (ifte.at.fileInfo == null) return <- ifte
         let file = resolve_file_path(string(ifte.at.fileInfo.name))
         if (file |> ends_with("coverage.das")) return <- ifte

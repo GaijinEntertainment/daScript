@@ -46,23 +46,6 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
 
 class LintVisitor : AstVisitor {
     //! AST visitor that performs lint checks.
-    //!
-    //! Rule codes (for ``// nolint:LINTxxx`` suppression):
-    //!   - LINT001: unreachable code
-    //!   - LINT002: unused variable
-    //!   - LINT003: variable can be made const (var→let)
-    //!   - LINT004: underscore-prefixed variable is actually used (locals only)
-    //!   - LINT005: redundant reinterpret<T>(x) where T matches source type
-    //!   - LINT006: division by zero (constant 0 divisor)
-    //!   - LINT007: left and right operands of binary operator are identical
-    //!   - LINT008: both branches of ternary ``?:`` are equivalent
-    //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
-    //!   - LINT010: dead store — local variable written but value never read
-    //!   - LINT011: int literal promoted to float/double with precision loss
-    //!   - LINT012: unused function argument (class-method and [extern] args skipped — signature is dictated externally)
-    //!   - LINT013: unused block argument
-    //!   - LINT014: mutable (var) function argument is never written — drop the var
-    //!   - LINT015: free-floating unary +/- expression statement — value discarded; a continuation line missing its parens
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -93,9 +76,7 @@ class LintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
     def lint_error(text : string; at : LineInfo) : void {
-        // a node carrying another file's lineinfo (an inliner splice from a required
-        // module, macro-manufactured code) gets its diagnostics from that file's own
-        // compile — reporting it here would fail modules on idioms they cannot edit
+        // a node carrying another file's lineinfo (an inliner splice from a required module, macro-manufactured code) gets its diagnostics from that file's own compile — reporting it here would fail modules on idioms they cannot edit
         if (noLint || is_suppressed(text, at)
                 || (at.fileInfo != null && !empty(funcFile) && at.fileInfo.name != funcFile)) return
         if (compile_time_errors) {
@@ -145,10 +126,7 @@ class LintVisitor : AstVisitor {
     }
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         exprForTerminator |> push(0ul)
-        // LINT010: a block passed as a closure / lambda body / generator body
-        // executes deferred or conditionally — treat it as a branch so writes
-        // inside don't kill pending stores outside and reads inside don't keep
-        // an outside-init "live" (the callback may never fire).
+        // LINT010: a block passed as a closure / lambda body / generator body executes deferred or conditionally — treat it as a branch so writes inside don't kill pending stores outside and reads inside don't keep an outside-init "live" (the callback may never fire).
         let bf = blk.blockFlags
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth++
@@ -170,13 +148,7 @@ class LintVisitor : AstVisitor {
         if (lb != 0ul) {
             lint_error("LINT001: unreachable code", expr.at)
         }
-        // LINT015: a free-floating unary +/- subexpression used as a statement — a
-        // continuation line that lost its wrapping parens (`let x = a` ⏎ `+ b`,
-        // which re-parses as a unary `+b` whose value is discarded; if the operand
-        // is pure the optimizer drops the whole statement silently). Only `+`/`-`
-        // qualify: they are the only operators that are both binary and unary, so a
-        // split binary `a + b` orphans as a valid unary statement (`~`/`!` aren't
-        // binary, `*`/`|>`/etc. can't start a statement → loud error).
+        // LINT015: a free-floating unary +/- subexpression used as a statement — a continuation line that lost its wrapping parens (`let x = a` ⏎ `+ b`, which re-parses as a unary `+b` whose value is discarded; if the operand is pure the optimizer drops the whole statement silently). Only `+`/`-` qualify: they are the only operators that are both binary and unary, so a split binary `a + b` orphans as a valid unary statement (`~`/`!` aren't binary, `*`/`|>`/etc. can't start a statement → loud error).
         if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
             let op1 = expr as ExprOp1
             if (op1.op == "+" || op1.op == "-") {
@@ -184,10 +156,6 @@ class LintVisitor : AstVisitor {
             }
         }
         // Mark this block as terminated only when `expr` IS a direct-child terminator.
-        // Tracking from preVisitExprReturn/preVisitExprCall(panic) was incorrect: it
-        // fired for returns nested in braceless `if/elif <terminator>` whose then-body
-        // is an ExprReturn directly under ExprIf (no synthetic block), poisoning the
-        // ENCLOSING block's slot.
         if (is_block_terminator(expr)) {
             exprForTerminator |> pop()
             exprForTerminator |> push(intptr(expr))
@@ -252,8 +220,6 @@ class LintVisitor : AstVisitor {
             return
         }
         // inScope variables can't be const — delete/finalize at scope exit requires mutability.
-        // access_info_pass_mutable: passed to a mutable-ref slot whose callee never writes —
-        // access_ref stays false, but a `let` no longer matches the signature (issue #3090)
         if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
             lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
@@ -269,10 +235,7 @@ class LintVisitor : AstVisitor {
         // skip template/generic/[no_lint] context, generated vars, and [unused_argument(name)] (marked_used)
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // A leading underscore on an argument means "leave it alone": intentionally unused, or
-        // dodging a reserved keyword / shadow (e.g. `_in`). Unlike locals, we do NOT raise LINT004
-        // for a used `_arg` — a parameter name is often constrained and can't drop the underscore.
-        // Backtick names are compiler-generated.
+        // A leading underscore on an argument means "leave it alone": intentionally unused, or dodging a reserved keyword / shadow (e.g. `_in`). Unlike locals, we do NOT raise LINT004 for a used `_arg` — a parameter name is often constrained and can't drop the underscore.
         if (name |> starts_with("_") || find(name, "`") >= 0) return
         if (v.isAccessUnused) {
             lint_error("{code}: unused {kind} {v.name}: {describe(v._type)} (add an underscore prefix or [unused_argument({v.name})] if intentional)", v.at)
@@ -282,12 +245,7 @@ class LintVisitor : AstVisitor {
     def validate_unwritten_var_argument(fun : FunctionPtr; v : VariablePtr) {
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // skips, in order: leave-it-alone names; `finalize` overloads (the delete protocol
-        // dictates var) and address-taken functions (signature conforms to a function-pointer
-        // type); by-value parameters (a mutable copy is not a caller burden); written params
-        // (access_ref) and params whose mutability a callee's signature demands transitively
-        // (access_info_pass_mutable — the leaf callee gets flagged first; fixing it re-exposes
-        // this one); entirely-unused params (LINT012's report)
+        // skips, in order: leave-it-alone names; `finalize` overloads (the delete protocol dictates var) and address-taken functions (signature conforms to a function-pointer type); by-value parameters (a mutable copy is not a caller burden); written params (access_ref) and params whose mutability a callee's signature demands transitively (access_info_pass_mutable — the leaf callee gets flagged first; fixing it re-exposes this one); entirely-unused params (LINT012's report)
         if ((name |> starts_with("_")) || find(name, "`") >= 0
                 || fun.name == "finalize" || fun.moreFlags.addressTaken
                 || v._type == null || v._type.flags.constant
@@ -300,9 +258,7 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
-        // class-method signatures are dictated by the base class / interface, and
-        // [extern] stubs by the bound C function — unused params there are
-        // structural, not a mistake
+        // class-method signatures are dictated by the base class / interface, and [extern] stubs by the bound C function — unused params there are structural, not a mistake
         if (fun.flags.isClassMethod) return
         for (ann in fun.annotations) {
             if (ann.annotation.name == "extern") return
@@ -344,9 +300,7 @@ class LintVisitor : AstVisitor {
     def expr_equal(a : ExpressionPtr; b : ExpressionPtr; require_pure : bool = true) : bool {
         if (a == null || b == null
             || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) return false
-        // daslang AST nodes are not shared — each Expression has exactly one parent, so
-        // pointer-equality between sibling operands (left vs right) is effectively never
-        // true. Structural compare via describe() is the only correct option here.
+        // daslang AST nodes are not shared — each Expression has exactly one parent, so pointer-equality between sibling operands (left vs right) is effectively never true. Structural compare via describe() is the only correct option here.
         return describe(a) == describe(b)
     }
 
@@ -366,8 +320,7 @@ class LintVisitor : AstVisitor {
             op == "&"  || op == "|"  || op == "^" ||
             op == "-=" || op == "/=" || op == "%="
         )
-        // identical constants are macro-splice residue (`$v(n) > 1` with n == 1),
-        // const-fold food rather than a copy-paste typo
+        // identical constants are macro-splice residue (`$v(n) > 1` with n == 1), const-fold food rather than a copy-paste typo
         if (op_same_suspicious && expr_equal(expr.left, expr.right, false)
                 && !(expr.left.__rtti |> starts_with("ExprConst"))) {
             lint_error("LINT007: left and right operands of '{op}' are the same", expr.at)
@@ -411,11 +364,7 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprLetVariable(_let : ExprLet?; v : VariablePtr; _last : bool) : void {
-        // Skip reference bindings (`var r & = x`) and inscope smart_ptr vars —
-        // these have aliasing or scope-exit semantics we don't reason about.
-        // Skip constant-folded vars (their reads were inlined to use sites,
-        // so no ExprVar reference remains for us to observe) and vars whose
-        // whole-variable unusedness is already LINT002's territory.
+        // Skip reference bindings (`var r & = x`) and inscope smart_ptr vars — these have aliasing or scope-exit semantics we don't reason about.
         if (noLint || genericDepth > 0
             || (v._type != null && v._type.flags.ref)
             || v.flags.inScope
@@ -437,16 +386,12 @@ class LintVisitor : AstVisitor {
         let i = ds_find(expr.variable)
         if (i < 0 || ds_entries[i].skip) return
         let vf = expr.varFlags
-        // Any reference inside a branch/loop/lambda body, OR a write under an
-        // aliasing context (addr-of, ref-bind, mutable-ref-arg, compound op),
-        // means we can't reason about this var — bail.
+        // Any reference inside a branch/loop/lambda body, OR a write under an aliasing context (addr-of, ref-bind, mutable-ref-arg, compound op), means we can't reason about this var — bail.
         if (branch_depth > 0 || (vf.write && !vf.under_clone)) {
             ds_entries[i].skip = true
             return
         }
-        // Pure store — handled in postVisit for ExprCopy/Clone/Move so the
-        // RHS reads have been observed first. preVisit of the LHS fires
-        // BEFORE the RHS is walked, so we do nothing here.
+        // Pure store — handled in postVisit for ExprCopy/Clone/Move so the RHS reads have been observed first. preVisit of the LHS fires BEFORE the RHS is walked, so we do nothing here.
         if (vf.write) return
         // Read — kills any pending dead store on this var.
         ds_entries[i].has_pending = false
@@ -503,11 +448,6 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
     // NOTE on lambda capture: by-copy/clone captures (the daslang default) read
-    // the local at capture time and place a copy into the lambda's struct
-    // frame — subsequent writes to the local don't reach the lambda. So the
-    // capture site is just a read for our purposes (clears pending), and
-    // later writes that aren't read again ARE dead. By-ref captures and
-    // addr-of are caught by the `write && !under_clone` check above.
 
     // --- LINT011: int-literal-to-float precision loss ---
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {

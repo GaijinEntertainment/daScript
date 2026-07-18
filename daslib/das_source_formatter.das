@@ -594,7 +594,6 @@ def mark_token_context(var ctx : FormatterCtx) {
     }
 
     // reader macro: %name~ ... %% (visit / module-level suffix) and %name! ... %% (inline suffix).
-    // The whole construct is emitted verbatim (dontFormat) up to the %% terminator.
     for (i in range(0, length(ctx.tokens) - 4)) {
         if (ctx |> eq(i, "%") && ctx.tokens[i + 1].tokenType == TokenType.KEYWORD_OR_IDENTIFIER
                 && (ctx |> eq(i + 2, "~") || ctx |> eq(i + 2, "!"))) {

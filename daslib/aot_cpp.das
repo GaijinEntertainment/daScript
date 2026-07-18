@@ -26,8 +26,7 @@ options stack = 1_048_576
 
 def aotFieldName(name : string) : string {
     var result = replace(name, "`", "__");
-    // Escape names that clash with C++ keywords (e.g. `char`, `register`, `extern`)
-    // or with Windows SDK macros (e.g. `DELETE` from winnt.h).
+    // Escape names that clash with C++ keywords (e.g. `char`, `register`, `extern`) or with Windows SDK macros (e.g. `DELETE` from winnt.h).
     if (is_cpp_keyword(result) || result == "DELETE") {
         result = "_f_" + result;
     }
@@ -314,11 +313,7 @@ def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
     return prefix ? (suffix + name) : name;
 }
 
-// Names used by BOTH a struct and an enum within one C++ namespace (module). In AOT
-// output a struct emits `struct X` and an enum `enum class X`; sharing a name is a hard
-// C++ redefinition. daslang keeps structs and enums in separate lookup tables, so this
-// is legal das (the fuzzer found it, #3065). Such names are disambiguated by prepending
-// `_S`/`_E` (aotSuffixNameEx prepends its arg); keyed by "{namespace}::{name}", rebuilt per run.
+// Names used by BOTH a struct and an enum within one C++ namespace (module). In AOT output a struct emits `struct X` and an enum `enum class X`; sharing a name is a hard C++ redefinition. daslang keeps structs and enums in separate lookup tables, so this is legal das (the fuzzer found it, #3065). Such names are disambiguated by prepending `_S`/`_E` (aotSuffixNameEx prepends its arg); keyed by "{namespace}::{name}", rebuilt per run.
 var private g_struct_enum_collide : table<string>
 
 def private structEnumNsKey(moduleName : string; name : string) : string {
@@ -348,9 +343,7 @@ def buildStructEnumCollisions(program : ProgramPtr) {
 }
 
 def aotStructName(st : Structure?) {
-    // Suffix "_S" is prepended when `st.name` is a C++ keyword, contains a non-alnum
-    // char (parser-disallowed for struct names — so in practice keyword names), or
-    // collides with a same-namespace enum of the same name (see g_struct_enum_collide).
+    // Suffix "_S" is prepended when `st.name` is a C++ keyword, contains a non-alnum char (parser-disallowed for struct names — so in practice keyword names), or collides with a same-namespace enum of the same name (see g_struct_enum_collide).
     let collide = g_struct_enum_collide |> key_exists(structEnumNsKey(st._module, string(st.name)));
     return aotSuffixNameEx(st.name, "_S", collide);
 }
@@ -362,16 +355,13 @@ def aotEnumName(enu : Enumeration?) {
 }
 
 def aotEnumValueName(name : das_string) {
-    // Used for enum value identifiers inside `enum class { ... }` body and at access sites
-    // (`EnumName::ValueName`). Prepended `_V` only for C++ keyword names.
+    // Used for enum value identifiers inside `enum class { ... }` body and at access sites (`EnumName::ValueName`). Prepended `_V` only for C++ keyword names.
     return aotSuffixNameEx(name, "_V");
 }
 
 
 def fa_element(t : TypeDeclPtr) {
-    // element of a tFixedArray chain (a clone of t itself when not dim'd) - structural
-    // reads (argTypes/annotation/variant offsets) live on the element, not the chain
-    // head. Clone-walks so the result is non-const whatever the caller's view is.
+    // element of a tFixedArray chain (a clone of t itself when not dim'd) - structural reads (argTypes/annotation/variant offsets) live on the element, not the chain head. Clone-walks so the result is non-const whatever the caller's view is.
     var e = clone_type(t)
     while (e.baseType == Type.tFixedArray && e.firstType != null) {
         e = clone_type(e.firstType)
@@ -463,11 +453,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             }
         } elif (baseType == Type.tStructure) {
             if (typeDecl.structType != null) {
-                // Elaborated-type-specifier (`struct X`) keeps GCC's -Wchanges-meaning
-                // happy when a field name shadows the struct name in the same scope —
-                // e.g. `struct User { TTuple<...,struct Profile> Profile; }`. Valid in
-                // every C++ context where a bare struct name is, including template args
-                // and qualified names.
+                // Elaborated-type-specifier (`struct X`) keeps GCC's -Wchanges-meaning happy when a field name shadows the struct name in the same scope — e.g. `struct User { TTuple<...,struct Profile> Profile; }`. Valid in every C++ context where a bare struct name is, including template args and qualified names.
                 if (typeDecl.structType._module.name.empty()) {
                     write(writer, "struct {aotStructName(typeDecl.structType)}")
                 } else {
@@ -532,11 +518,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
-        // Reference handling: emit `*` when substitute_ref is requested (iterator
-        // and stack-temp variable emission paths use `T*` storage), otherwise emit
-        // `&` so writable reference parameters (including value-annotation handles
-        // like Handle<T>, EntityId, das::Time used as `var x : T&`) propagate
-        // mutations back to the caller in AOT.
+        // Reference handling: emit `*` when substitute_ref is requested (iterator and stack-temp variable emission paths use `T*` storage), otherwise emit `&` so writable reference parameters (including value-annotation handles like Handle<T>, EntityId, das::Time used as `var x : T&`) propagate mutations back to the caller in AOT.
         if (typeDecl.flags.ref && !cfg.skip_ref) {
             if (cfg.substitute_ref) {
                 write(writer, " *");
@@ -671,9 +653,7 @@ class UseTypeMarker : AstVisitor {
         mark(variable._type);
     }
     def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
-        // a global's type must be marked even if its fields are never accessed: das_global[_zero]
-        // needs the complete C++ type (sizeof), so a struct used ONLY as a global's type would
-        // otherwise be dropped to a forward declaration and fail to compile.
+        // a global's type must be marked even if its fields are never accessed: das_global[_zero] needs the complete C++ type (sizeof), so a struct used ONLY as a global's type would otherwise be dropped to a forward declaration and fail to compile.
         mark(variable._type);
     }
     def mark(decl : TypeDeclPtr) {
@@ -975,12 +955,7 @@ class public AotDebugInfoHelper {
             let prefix = (info.module_name |> !empty(info.module_name)) ? "{info.module_name}::" : "";
             writeVarAnnotationArgs(writer, fld, "{structInfoName(info)}_field_{fi}_ann");
             let fldAnnRef = fld.annotation_argument_count > 0u ? ", {structInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
-            // info.name is the struct's daslang name; the C++ identifier must match what
-            // the struct decl emitted (aotStructName) so offsetof() in describeCppVarInfo
-            // resolves: prepend "_S" for a C++ keyword, AND force it for a struct/enum
-            // name collision (cross_platform offsetof only — #3065). Keyed off the struct
-            // info's module name, which equals aotModuleName for the user namespaces where
-            // collisions are recorded.
+            // info.name is the struct's daslang name; the C++ identifier must match what the struct decl emitted (aotStructName) so offsetof() in describeCppVarInfo resolves: prepend "_S" for a C++ keyword, AND force it for a struct/enum name collision (cross_platform offsetof only — #3065). Keyed off the struct info's module name, which equals aotModuleName for the user namespaces where collisions are recorded.
             let structCppName = aotSuffixNameEx(info.name, "_S",
                 g_struct_enum_collide |> key_exists(structEnumNsKey(info.module_name, info.name)))
             write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + structCppName, fld,suffix)}{fldAnnRef} \};\n");
@@ -1042,11 +1017,7 @@ class public AotDebugInfoHelper {
     def describeCppEnumInfoValues(var writer : StringBuilderWriter?; einfo : EnumInfo?) {
         for (v in range(einfo.count)) {
             let val = unsafe(einfo.fields[v]);
-            // Portable C++ int64 literal: the previous `int64_t(UINT64_C(0x...))` form relied on
-            // the uint64→int64 narrowing being well-defined, which is only true post-C++20.
-            // Negative values are emitted via unary minus on a positive INT64_C literal;
-            // INT64_MIN is special-cased because |INT64_MIN| overflows int64 before the
-            // unary minus binds, so we construct it from valid signed parts instead.
+            // Portable C++ int64 literal: the previous `int64_t(UINT64_C(0x...))` form relied on the uint64→int64 narrowing being well-defined, which is only true post-C++20.
             let bits = uint64(val.value)
             var cppLit : string
             if (bits == 0x8000000000000000ul) {
@@ -2699,15 +2670,7 @@ class public CppAot : AstVisitor {
     }
 
     def to_cpp_double(val : double) : string {
-        // Mirror the C++-side to_cpp_double (runtime_string.cpp:526): emit
-        // portable C++ tokens for non-finite and boundary doubles. Without
-        // this, daslang's '{val:.17e}' formatter prints bare 'inf' / 'nan',
-        // which either don't exist in C++ (inf) or resolve to '<cmath>'s
-        // 'double nan(const char*)' overload (nan) — both bake into the
-        // AOT-emitted code and break the C++ build. Bit-pattern tests
-        // (val != val for NaN, magnitude vs DBL_MAX for ±inf) avoid pulling
-        // in `require math`, which interferes with this file's `match`-based
-        // type-table helpers (control-flow inference cascade).
+        // Mirror the C++-side to_cpp_double (runtime_string.cpp:526): emit portable C++ tokens for non-finite and boundary doubles. Without this, daslang's '{val:.17e}' formatter prints bare 'inf' / 'nan', which either don't exist in C++ (inf) or resolve to '<cmath>'s 'double nan(const char*)' overload (nan) — both bake into the AOT-emitted code and break the C++ build. Bit-pattern tests (val != val for NaN, magnitude vs DBL_MAX for ±inf) avoid pulling in `require math`, which interferes with this file's `match`-based type-table helpers (control-flow inference cascade).
         if (val == DBL_MIN) return "DBL_MIN"
         if (val == -DBL_MIN) return "(-DBL_MIN)"
         if (val == DBL_MAX) return "DBL_MAX"
@@ -4126,10 +4089,7 @@ class public CppAot : AstVisitor {
             write(*ss, "));\n");   // closes the anti-vexing-parse double paren
         }
 
-        // source
-        // A value (non-ref) loop var is a local copy that first()/next() write into, so it must not be
-        // C++-const — a const POD value local is ill-formed without a user default ctor (e.g. struct rows
-        // from a const-element iterator such as from_xml_node). Ref vars are pointers (const on pointee is ok).
+        // source A value (non-ref) loop var is a local copy that first()/next() write into, so it must not be C++-const — a const POD value local is ill-formed without a user default ctor (e.g. struct rows from a const-element iterator such as from_xml_node). Ref vars are pointers (const on pointee is ok).
         let skipTC : bool = !variable._type.flags.ref
         let cfg = DescribeConfig(substitute_ref = true, skip_const = skipTC, cross_platform = cross_platform)
         let type_str = describeCppType(variable._type, cfg);
@@ -4445,13 +4405,7 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
 
 
 def public fail_on_aot_emit_error(program : ProgramPtr) {
-    // Fail-closed (#3065). A macro/codegen exception during the emit visit -- e.g. an
-    // unbounded type recursion overflowing the stack -- is caught and recorded by the
-    // visitor adapter (sets macroException/failToCompile, appends to errors), but the
-    // visit is NOT aborted: it leaves the C++ output partial (a struct missing a field,
-    // a dangling offsetof, ...). Never write such broken C++ -- surface the recorded
-    // errors and abort so the build fails loudly instead of silently emitting code that
-    // does not compile.
+    // Fail-closed (#3065). A macro/codegen exception during the emit visit -- e.g. an unbounded type recursion overflowing the stack -- is caught and recorded by the visitor adapter (sets macroException/failToCompile, appends to errors), but the visit is NOT aborted: it leaves the C++ output partial (a struct missing a field, a dangling offsetof, ...). Never write such broken C++ -- surface the recorded errors and abort so the build fails loudly instead of silently emitting code that does not compile.
     if (!program.flags.macroException && !program.flags.failToCompile) {
         return
     }

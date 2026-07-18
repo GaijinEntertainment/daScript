@@ -863,12 +863,7 @@ def public lane_index(comp : string) : int {
     return 3
 }
 
-// Partition M lanes into groups of width [minWidth..4]. A tail smaller than minWidth is NOT grouped
-// (the caller leaves those lanes unpacked) — so sum(result) may be < M. A too-small tail is rebalanced
-// by shrinking the previous take when that keeps both groups >= minWidth (so M=5,minWidth=2 -> [3,2],
-// not [4]+1). Shared by the min/max reduction pack (minWidth=2) and the hadd fold (minWidth 2 or 3).
-// minWidth=2: 5 -> [3,2], 6 -> [4,2], 9 -> [4,3,2] (covers all, M>=2). minWidth=3: 5 -> [4] (+1 left),
-// 6 -> [3,3], 9 -> [4,4] (+1 left).
+// Partition M lanes into groups of width [minWidth..4]. A tail smaller than minWidth is NOT grouped (the caller leaves those lanes unpacked) — so sum(result) may be < M. A too-small tail is rebalanced by shrinking the previous take when that keeps both groups >= minWidth (so M=5,minWidth=2 -> [3,2], not [4]+1). Shared by the min/max reduction pack (minWidth=2) and the hadd fold (minWidth 2 or 3).
 def public plan_groups(M : int; minWidth : int = 2) : array<int> {
     assert(minWidth >= 2 && minWidth <= 4, "plan_groups expects minWidth in [2..4]")   // minWidth<=0 would divide by zero below / never terminate
     var g : array<int>

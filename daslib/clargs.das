@@ -66,11 +66,7 @@ def public get_program_args() : array<string> {
     return <- get_program_args(get_command_line_arguments())
 }
 
-// Mode-aware argv source.  Returns argv[1..] when running as a standalone exe
-// (built via `daslang -exe`), and the post-`--` slice when running under the
-// interpreter or in-process JIT.  This is what the macro-generated default
-// `parse_args()` uses, so utilities work the same whether interpreted or
-// shipped as a binary.
+// Mode-aware argv source.  Returns argv[1..] when running as a standalone exe (built via `daslang -exe`), and the post-`--` slice when running under the interpreter or in-process JIT.  This is what the macro-generated default `parse_args()` uses, so utilities work the same whether interpreted or shipped as a binary.
 def public get_user_args() : array<string> {
     let argv <- get_command_line_arguments()
     if (is_standalone_exe()) {
@@ -84,10 +80,7 @@ def clargs_flag_name(field_name : string) : string {
     return "--" + replace_multiple(field_name, [(text="_", replacement="-")])
 }
 
-// Duplicate-flag policy: last occurrence wins.  Matches GNU getopt, Python
-// argparse, Go flag, Rust clap, and most other CLI parsers — lets users
-// override an earlier flag (typically from an alias or wrapper script) by
-// appending a later one.
+// Duplicate-flag policy: last occurrence wins.  Matches GNU getopt, Python argparse, Go flag, Rust clap, and most other CLI parsers — lets users override an earlier flag (typically from an alias or wrapper script) by appending a later one.
 
 def public find_bool_flag_raw_value(args : array<string>; flag_name : string) : Option<string> {
     let prefix = "{flag_name}="
@@ -227,13 +220,7 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
     return !empty(arg_info.short_flag_name) && flag_present(args, arg_info.short_flag_name)
 }
 
-// For value-bearing flags (everything except bool), a bare "--flag" with no
-// following value token and no "=value" form is malformed input.  Each
-// parse_argument overload below returns Result<Option<T>, string> distinguishing
-// three states:
-//   - ok(some(v))   — found and parsed a value
-//   - ok(none)      — flag absent; caller leaves the field at its default
-//   - err("...")    — parse error (e.g. "missing value", "invalid int value '...')
+// For value-bearing flags (everything except bool), a bare "--flag" with no following value token and no "=value" form is malformed input.  Each parse_argument overload below returns Result<Option<T>, string> distinguishing three states:
 
 [unused_argument(t)]
 def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<string>) : Result<Option<string>; string> {
@@ -300,14 +287,6 @@ def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; 
 }
 
 // Positional-argument collection.
-//
-// Walks `args` and returns the tokens that should be treated as positionals —
-// i.e. tokens that don't match any declared flag (long or short, with or
-// without `=value`).  When a known value-bearing flag appears in its
-// space-separated form (e.g. "--root /tmp"), the next token is consumed as
-// the value (NOT a positional).  Tokens that look flag-shaped but don't match
-// any declared flag (`--unknown`, `-x`) are skipped one-by-one so they don't
-// land in the positional list either.
 
 def public collect_positional_args(args : array<string>; info : CommandInfo) : array<string> {
     var result : array<string>
@@ -436,21 +415,6 @@ def public format_help_with_auto_help(info : CommandInfo; prog_name : string) : 
 }
 
 // Help rendering.
-//
-// `format_help` builds the help text as a string (testable, redirectable).
-// `print_help` is a thin wrapper that prints it to stdout.
-//
-// Layout (standalone exe — `is_standalone_exe() == true`):
-//   Usage: <prog_name> [flags]
-//
-// Layout (interpreted script):
-//   Usage: daslang <prog_name> -- [flags]
-//
-//   Flags:
-//     -X, --long=PLACEHOLDER    doc_string (required) (repeated)
-//         --long=PLACEHOLDER    doc_string
-//
-// Bool flags omit the =PLACEHOLDER. Enum flag docs include `(V1|V2|...)`.
 
 def value_placeholder(arg : CommandArgumentInfo) : string {
     if (arg.is_positional || arg.is_count
@@ -646,8 +610,7 @@ class ArgsMacro : AstStructureAnnotation {
         var parse_args_default_fn = make_parse_default_fn(st)
         compiling_module() |> add_function(parse_args_default_fn)
 
-        // Auto --help/-h is only injected when the user did not declare their
-        // own help flag.  If they did, they're responsible for handling it.
+        // Auto --help/-h is only injected when the user did not declare their own help flag.  If they did, they're responsible for handling it.
         if (!command_info.has_user_help) {
             var parse_args_with_help_fn = make_parse_args_with_help_fn(st)
             compiling_module() |> add_function(parse_args_with_help_fn)
@@ -669,14 +632,6 @@ class ArgsMacro : AstStructureAnnotation {
     }
 
     // collect_command_info turns the structure info into command info.
-    // It serves two functions: it makes the code generation easier
-    // by pre-processing the raw type data, plus it makes it
-    // possible to have an easy-to-use runtime value with all command info.
-    // This info can be used to print command's help, for example.
-    //
-    // On invalid input (bad @clarg_short value, short-flag collision) populates
-    // `errors` and returns the partial result; the caller checks `errors` and
-    // aborts macro application.
     def collect_command_info(st : StructurePtr; var errors : das_string&) : CommandInfo {
         var result : CommandInfo
         result.args |> reserve(length(st.fields))
@@ -706,10 +661,7 @@ class ArgsMacro : AstStructureAnnotation {
                     errors := "field '{arg.field_name}': @clarg_short must be a single character (got '{short_char}')"
                     return <- result
                 }
-                // Reject characters that produce ambiguous or unparseable
-                // short flags: '-' yields '--' (collides with the script-args
-                // separator), '=' yields '-=' (collides with --flag=value
-                // form), whitespace can't be typed on the command line.
+                // Reject characters that produce ambiguous or unparseable short flags: '-' yields '--' (collides with the script-args separator), '=' yields '-=' (collides with --flag=value form), whitespace can't be typed on the command line.
                 if (short_char == "-" || short_char == "=" || short_char == " " || short_char == "\t" || short_char == "\n" || short_char == "\r") {
                     errors := "field '{arg.field_name}': @clarg_short cannot be '-', '=', or whitespace (got '{short_char}')"
                     return <- result
@@ -817,8 +769,7 @@ class ArgsMacro : AstStructureAnnotation {
     }
 
     def make_parse_args_with_help_fn(var st : StructurePtr) : FunctionPtr {
-        // Auto-handles --help/-h by printing format_help_with_auto_help and
-        // returning 0.  Returns -1 on clean parse, 1 on parse error.
+        // Auto-handles --help/-h by printing format_help_with_auto_help and returning 0.  Returns -1 on clean parse, 1 on parse error.
         var fn = qmacro_function("parse_args_with_help") $(var dst : $t(st); prog_name : string) : int {
             let auto_args <- get_user_args()
             if (find_index(auto_args, "--help") != -1 || find_index(auto_args, "-h") != -1) {

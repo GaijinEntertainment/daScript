@@ -38,10 +38,7 @@ var gl_PointSize  : float     // rasterised point size, POINT topology
 var gl_PointCoord : float2    // UV within a rasterised point, [0,1]^2 (fragment stage)
 var gl_FragCoord  : float4    // window-space fragment coordinate, .xy in pixels (fragment stage); GLSL name-identical, SPIR-V BuiltIn FragCoord
 var gl_FragDepth  : float     // fragment depth Output (fragment stage); GLSL name-identical (GL core + ES 3.0), SPIR-V BuiltIn FragDepth -- writing it forces the DepthReplacing execution mode
-// gl_VertexIndex / gl_InstanceIndex are the unified (Vulkan) spellings -- the SPIR-V emitter lowers
-// them to BuiltIn VertexIndex / InstanceIndex; the GLSL emitter renames them to gl_VertexID /
-// gl_InstanceID (the GLSL desktop-core / ES names for the same per-vertex / per-instance index) on
-// the way out. Author shaders with the one unified name on both rails.
+// gl_VertexIndex / gl_InstanceIndex are the unified (Vulkan) spellings -- the SPIR-V emitter lowers them to BuiltIn VertexIndex / InstanceIndex; the GLSL emitter renames them to gl_VertexID / gl_InstanceID (the GLSL desktop-core / ES names for the same per-vertex / per-instance index) on the way out. Author shaders with the one unified name on both rails.
 var gl_VertexIndex   : int    // per-vertex index (vertex stage)
 var gl_InstanceIndex : int    // per-instance index (vertex stage, instanced draws)
 
@@ -85,10 +82,7 @@ def public texelFetch(s : sampler2D; coord : int2; lod : int) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
 
-// texture() on the wider sampler dimensionalities: a samplerCube samples by a float3 direction, a
-// sampler2DArray by (u, v, layer). Both GLSL name-identical (the emitter's texture() is dimension-
-// agnostic); SPIR-V keys the marker by name (Dim Cube / Arrayed). textureSize returns the mip-level
-// size in texels (int2 for cube, int3 for 2D-array / 3D = width,height,layers-or-depth).
+// texture() on the wider sampler dimensionalities: a samplerCube samples by a float3 direction, a sampler2DArray by (u, v, layer). Both GLSL name-identical (the emitter's texture() is dimension- agnostic); SPIR-V keys the marker by name (Dim Cube / Arrayed). textureSize returns the mip-level size in texels (int2 for cube, int3 for 2D-array / 3D = width,height,layers-or-depth).
 [unused_argument(s, uv), sideeffects]
 def public texture(s : samplerCube; uv : float3) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
@@ -114,10 +108,7 @@ def public textureSize(s : sampler2DArray; lod : int) : int3 {
     return int3(0, 0, 0)
 }
 
-// textureCompare samples a depth-comparison (shadow) sampler: returns the scalar compare result in
-// [0,1] (1 = lit, 0 = shadowed; a filtered sampler returns the PCF average). Implicit LOD ->
-// fragment-only. SPIR-V lowers it to OpImageSampleDrefImplicitLod; the GLSL emitter rewrites it to
-// the GL spelling texture(sampler2DShadow, vec3(uv, compare)) (GL has no distinct shadow function).
+// textureCompare samples a depth-comparison (shadow) sampler: returns the scalar compare result in [0,1] (1 = lit, 0 = shadowed; a filtered sampler returns the PCF average). Implicit LOD -> fragment-only. SPIR-V lowers it to OpImageSampleDrefImplicitLod; the GLSL emitter rewrites it to the GL spelling texture(sampler2DShadow, vec3(uv, compare)) (GL has no distinct shadow function).
 [unused_argument(s, uv, compare), sideeffects]
 def public textureCompare(s : sampler2DShadow; uv : float2; compare : float) : float {
     return 0.0
@@ -149,10 +140,6 @@ def public barrier() : void {}
 def public memoryBarrierShared() : void {}
 
 // ===== fragment realism =====
-// discard(): abandon the current fragment (block terminator -- last statement on its path).
-// dFdx/dFdy: screen-space partial derivatives over the 2x2 fragment quad. fwidth = |dFdx| + |dFdy|,
-// the cheap antialiasing width. All fragment-only; GLSL spells them identically (the GL emitter
-// passes the names through), SPIR-V lowers to OpDPdx/OpDPdy/OpFwidth.
 [sideeffects]
 def public discard() : void {}
 
@@ -170,11 +157,6 @@ def public discard() : void {}
 [unused_argument(p), sideeffects] def public fwidth(p : float4) : float4 { return p }
 
 // ===== fp16 packing =====
-// packHalf2x16/unpackHalf2x16: the portable fp16 STORAGE bridge — core in GLSL ES 3.00 and
-// GL 4.20 (GL_ARB_shading_language_packing below 4.20; the GLSL emitter adds the #extension
-// on demand); SPIR-V lowers to GLSL.std.450 PackHalf2x16/UnpackHalf2x16. Unlike the emit-only
-// markers above these carry REAL bodies: the CPU converts are RNE like the GPU ops, and das
-// half2 is bit-layout-identical to the packed uint (lane 0 low), so CPU == GPU exactly.
 def public packHalf2x16(v : float2) : uint {
     return unsafe(reinterpret<uint>(half2(v)))
 }

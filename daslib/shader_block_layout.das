@@ -42,11 +42,7 @@ def public cpu_only_lattice_width(bt : Type) : bool {
         || bt == Type.tUByte8 || bt == Type.tUByte16)
 }
 
-// Type -> scalar class: 0 signed int, 1 unsigned int, 2 float — scalars and their shader-legal
-// vectors, INCLUDING the 16/8-bit lattice (scalar float16/int8/uint8/int16/uint16 + 2/3/4-lane
-// half/short/ushort/byte/ubyte vectors); -1 for anything else (8/16-lane forms stay -1: CPU-only).
-// NOTE: scalar_class >= 0 no longer implies 32-bit — width-sensitive consumers must ALSO check
-// scalar_width(bt) == 32 until their lattice feature wave lands.
+// Type -> scalar class: 0 signed int, 1 unsigned int, 2 float — scalars and their shader-legal vectors, INCLUDING the 16/8-bit lattice (scalar float16/int8/uint8/int16/uint16 + 2/3/4-lane half/short/ushort/byte/ubyte vectors); -1 for anything else (8/16-lane forms stay -1: CPU-only).
 def public scalar_class(bt : Type) : int {
     if (bt == Type.tInt || bt == Type.tInt2 || bt == Type.tInt3 || bt == Type.tInt4
             || bt == Type.tInt16 || bt == Type.tShort2 || bt == Type.tShort3 || bt == Type.tShort4
@@ -85,20 +81,12 @@ def public component_count(bt : Type) : int {
 }
 
 // ===== interface-block layout rules =====
-//! Which GLSL packing rules a block layout follows. std140 (@uniform / @push_constant): array
-//! elements and nested structs round up to 16 bytes, members are 32-bit only. std430 (@ssbo):
-//! tight width-aware packing — no 16-byte flooring, and 8/16-bit members are legal (the SPIR-V
-//! emitter pulls the matching StorageBuffer8/16BitAccess capabilities).
 enum public BlockLayoutRules {
     std140
     std430
 }
 
 // ===== std140 layout for a UBO interface block =====
-// std140 base alignment: scalar -> 4, vec2 -> 8, vec3/vec4 -> 16. The base *size* of a vec3 is 12
-// (only its alignment is 16), so a scalar can pack into the trailing 4 bytes after a vec3.
-// 32-BIT ONLY by contract: std140 has no 16/8-bit story — compute_block_layout rejects lattice
-// members before these are consulted (the scalar_width gate below).
 def public std140_align(bt : Type) : int {
     let cc = component_count(bt)
     if (cc == 1) return 4
@@ -110,10 +98,7 @@ def public std140_size(bt : Type) : int {
     return component_count(bt) * 4
 }
 
-// Width-aware base size / alignment — the std430 generalization of std140_size/std140_align
-// (identical values for 32-bit types). Size = lanes x bytes-per-lane; alignment = scalar -> 1 lane,
-// vec2 -> 2 lanes, vec3/vec4 -> 4 lanes, scaled by the lane width (half3 -> size 6, align 8;
-// byte4 -> size 4, align 4; int8 -> size 1, align 1).
+// Width-aware base size / alignment — the std430 generalization of std140_size/std140_align (identical values for 32-bit types). Size = lanes x bytes-per-lane; alignment = scalar -> 1 lane, vec2 -> 2 lanes, vec3/vec4 -> 4 lanes, scaled by the lane width (half3 -> size 6, align 8;
 def public block_scalar_size(bt : Type) : int {
     return component_count(bt) * (scalar_width(bt) / 8)
 }
@@ -129,20 +114,7 @@ def public round_up(off, a : int) : int {
     return ((off + a - 1) / a) * a
 }
 
-//! One std140-laid-out field of a @uniform / @push_constant interface block. Returned by
-//! compute_block_layout and consumed by host-side bind macros (e.g. dasVulkan's SpirvVulkanShader
-//! and dasOpenGL's GlslOpenGLShader) to emit one write per field at the right byte offset.
-//! `is_matrix` just means "this field IS a matrix" (and gets MatrixStride 16 in SPIR-V) — it does
-//! NOT by itself imply the daslang storage and std140 layout differ. For float4x4 the columns are
-//! already vec4-wide so a single memcpy works; for float3x3 / float3x4 the daslang storage is packed
-//! (3-wide columns) while std140 pads each column to vec4, so bind code must repack per-column.
-//! **Use `matrix_width` to choose**: `matrix_width == 4` → safe to memcpy the field; `matrix_width <
-//! 4` → repack per column.
-//!
-//! **Composite fields** (`is_array` / `is_struct`) carry the std140 layout of nested data but
-//! cannot be written by a single host-side `write_field(ptr, offset, value)` call. Host bind
-//! macros should detect `is_composite` and either recurse member-by-member using the published
-//! `offset` + `array_stride` / nested layout, or skip with a clear "manual bind required" message.
+//! One std140-laid-out field of a @uniform / @push_constant interface block. Returned by compute_block_layout and consumed by host-side bind macros (e.g. dasVulkan's SpirvVulkanShader and dasOpenGL's GlslOpenGLShader) to emit one write per field at the right byte offset.
 struct public BlockField {
     name              : string //!< field name as declared in the daslang struct
     offset            : int    //!< std140 byte offset from the block base
@@ -157,30 +129,13 @@ struct public BlockField {
     is_composite      : bool   //!< convenience flag — true when is_array OR is_struct (host bind macros can't write this with a flat overload)
 }
 
-// Array element stride for a fixed-array element type. std140: scalars/vectors round up to vec4
-// (16 bytes). std430: tight — the element's base size rounded to its base alignment. Nested-struct
-// elements take their laid-out struct size rounded to the struct alignment (handled by the caller).
-// Matrix elements and nested-array elements are rejected by the caller before reaching here.
-// Public: the SPIR-V emitter's member-access path (field_pointee_type) rebuilds array member types
-// and must compute the identical stride.
+// Array element stride for a fixed-array element type. std140: scalars/vectors round up to vec4 (16 bytes). std430: tight — the element's base size rounded to its base alignment. Nested-struct elements take their laid-out struct size rounded to the struct alignment (handled by the caller).
 def public block_array_element_stride(bt : Type; rules : BlockLayoutRules) : int {
     if (rules == BlockLayoutRules.std140) return round_up(std140_size(bt), 16)
     return round_up(block_scalar_size(bt), block_scalar_align(bt, rules))
 }
 
-//! Compute the std140 layout of one interface block. Pure: takes a Structure?, fills `fields` with
-//! per-field offsets / sizes / matrix and composite flags, returns the block total size and max
-//! member alignment. Used by build_block_struct (SPIR-V type emit), the OpenGL UBO pack binder, and
-//! dasVulkan's mapped-memory binder. Rejects bool and non-numeric fields fail-closed (no physical
-//! std140 layout). `sname` is only used in error messages. `fields` is cleared at entry so reuse
-//! across calls and partial-failure returns can't bleed. Supported field shapes (PR-G complete):
-//! 32-bit scalar / vector / matrix; nested struct (recursive); fixed-array of scalar / vector
-//! (std140 ArrayStride = element-size rounded to 16); fixed-array of nested struct (ArrayStride =
-//! laid-out struct size rounded to struct alignment). Out of scope (clean rejection): matrix-of-array,
-//! array-of-array, runtime arrays (use `@ssbo` for those).
-//! `rules` picks the packing (defaults to std140 — every pre-existing caller keeps its layout):
-//! std430 packs arrays/nested structs tight and admits 8/16-bit members.
-//! [macro_function]: callable from a backend's bind-gen macro at compile time, mirrors generate_spirv.
+//! Compute the std140 layout of one interface block. Pure: takes a Structure?, fills `fields` with per-field offsets / sizes / matrix and composite flags, returns the block total size and max member alignment. Used by build_block_struct (SPIR-V type emit), the OpenGL UBO pack binder, and dasVulkan's mapped-memory binder. Rejects bool and non-numeric fields fail-closed (no physical std140 layout). `sname` is only used in error messages. `fields` is cleared at entry so reuse across calls and partial-failure returns can't bleed. Supported field shapes (PR-G complete):
 [macro_function]
 def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>; rules : BlockLayoutRules = BlockLayoutRules.std140) : tuple<ok : bool; size : int; align : int> {
     fields |> clear
@@ -202,9 +157,6 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
             continue
         }
         // nested struct field (PR-G): recurse. Base alignment = round_up(inner_align, 16);
-        // size = round_up(inner_size, base_align). The inner field list isn't propagated up
-        // (host bind macros that recurse must re-invoke compute_block_layout on the nested
-        // Structure?). is_composite=true signals "no flat write_field overload exists".
         if (fld._type != null && fld._type.baseType == Type.tStructure && fld._type.structType != null) {
             var inner : array<BlockField>
             let inner_layout = compute_block_layout("{sname}.{fld.name}", fld._type.structType, inner, errors, rules)
@@ -224,10 +176,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
             max_align = max(max_align, struct_align)
             continue
         }
-        // fixed-array field (PR-G): element kind decides stride. Scalar/vector elements stride by
-        // their size rounded up to 16 (the std140 array padding rule — every array slot is at
-        // least vec4-wide). Nested-struct elements stride by their laid-out struct size. Matrix
-        // elements and nested-array elements (array of array) are rejected; wrap in a struct.
+        // fixed-array field (PR-G): element kind decides stride. Scalar/vector elements stride by their size rounded up to 16 (the std140 array padding rule — every array slot is at least vec4-wide). Nested-struct elements stride by their laid-out struct size. Matrix elements and nested-array elements (array of array) are rejected; wrap in a struct.
         if (fld._type != null && fld._type.baseType == Type.tFixedArray && fld._type.firstType != null) {
             let et = fld._type.firstType
             let nelem = fld._type.fixedDim
@@ -298,12 +247,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
     return (ok = true, size = off, align = max_align)
 }
 
-//! True iff the block has a physical std140 layout — i.e. compute_block_layout succeeds. That covers
-//! every supported field shape: 32-bit scalar / vector / matrix (float4x4 flat, float3x3 / float3x4
-//! per-column), nested structs, and fixed-arrays of those. False only for blocks with a bool or other
-//! non-numeric field (no std140 layout). A backend uses this to choose the std140 UBO pack path vs a
-//! loose by-name fallback for a given @uniform block, and the emitter + host binder MUST agree by both
-//! consulting it.
+//! True iff the block has a physical std140 layout — i.e. compute_block_layout succeeds. That covers every supported field shape: 32-bit scalar / vector / matrix (float4x4 flat, float3x3 / float3x4 per-column), nested structs, and fixed-arrays of those. False only for blocks with a bool or other non-numeric field (no std140 layout). A backend uses this to choose the std140 UBO pack path vs a loose by-name fallback for a given @uniform block, and the emitter + host binder MUST agree by both consulting it.
 [macro_function]
 def public std140_block_is_packable(st : Structure?) : bool {
     var fields : array<BlockField>
@@ -314,26 +258,13 @@ def public std140_block_is_packable(st : Structure?) : bool {
     return layout.ok
 }
 
-//! One std140 leaf write produced by std140_block_writes: a scalar / vector value (a plain field, a
-//! matrix COLUMN, or an array ELEMENT) and its std140 byte offset within the block. A backend's bind
-//! macro emits one memcpy-style write per entry — GL std140_set, dasVulkan write_field — each copying
-//! sizeof(value) bytes. No backend needs matrix / array / nesting knowledge: the decomposition lives in
-//! std140_block_writes, so every rail packs the same bytes by construction.
+//! One std140 leaf write produced by std140_block_writes: a scalar / vector value (a plain field, a matrix COLUMN, or an array ELEMENT) and its std140 byte offset within the block. A backend's bind macro emits one memcpy-style write per entry — GL std140_set, dasVulkan write_field — each copying sizeof(value) bytes. No backend needs matrix / array / nesting knowledge: the decomposition lives in std140_block_writes, so every rail packs the same bytes by construction.
 struct public Std140Write {
     offset : int             //!< std140 byte offset of this leaf within the block
     access : ExpressionPtr   //!< expression yielding the scalar/vector leaf value (field / column / element)
 }
 
-//! Decompose an interface block into a flat list of leaf writes (Std140Write) — the single shared
-//! std140 packing walk for every shader backend's host binder. float3x3 / float3x4 split into per-column
-//! writes (column c at offset + c*16; daslang stores width-wide packed columns, std140 pads each to a
-//! vec4, and the per-column memcpy gives that padding for free); float4x4 stays one whole-matrix write
-//! (its columns are already vec4-wide so a single memcpy is std140-correct); fixed-arrays split per
-//! element at the std140 stride; nested structs recurse; array-of-struct recurses per element. `access`
-//! is the accessor for the block instance (e.g. an ExprVar of the @uniform global), cloned per leaf;
-//! each emitted access node is moved by the caller into exactly one backend write call. Assumes the
-//! block is std140-packable (std140_block_is_packable) — array-of-matrix / bool fields are rejected
-//! upstream by compute_block_layout, so this never sees an unsupported shape.
+//! Decompose an interface block into a flat list of leaf writes (Std140Write) — the single shared std140 packing walk for every shader backend's host binder. float3x3 / float3x4 split into per-column writes (column c at offset + c*16; daslang stores width-wide packed columns, std140 pads each to a vec4, and the per-column memcpy gives that padding for free); float4x4 stays one whole-matrix write (its columns are already vec4-wide so a single memcpy is std140-correct); fixed-arrays split per element at the std140 stride; nested structs recurse; array-of-struct recurses per element. `access` is the accessor for the block instance (e.g. an ExprVar of the @uniform global), cloned per leaf;
 [macro_function]
 def public std140_block_writes(st : Structure?; access : ExpressionPtr; baseOffset : int; var out : array<Std140Write>) {
     var fields : array<BlockField>

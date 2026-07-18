@@ -2153,8 +2153,7 @@ class private AddColumnMacro : AstCallMacro {
                 "add_column: field '{field_name}' on '{st.name}' is non-nullable; provide a literal default (e.g. `add_column(type<T>, \"{field_name}\", 0)`) or wrap the field in Option<T>")
             return null
         }
-        // Build prefix + suffix at macro time; SQL type comes from the runtime adapter rail
-        // (sql_storage_type_for) unless the field is explicitly @sql_json / @sql_blob.
+        // Build prefix + suffix at macro time; SQL type comes from the runtime adapter rail (sql_storage_type_for) unless the field is explicitly @sql_json / @sql_blob.
         let null_clause = is_optional ? "" : " NOT NULL"
         let prefix = "ALTER TABLE \"{table_name}\" ADD COLUMN \"{col_name}\" "
         let suffix = "{null_clause}{default_clause}"

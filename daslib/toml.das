@@ -225,8 +225,7 @@ def private read_basic_string(data : array<uint8>&; var st : LexState&; var err 
 }
 
 def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var err : string&) : string {
-    // st.pos is just past the opening """
-    // Per TOML §Multi-line Basic Strings: an immediate newline after opening """ is trimmed.
+    // st.pos is just past the opening """ Per TOML §Multi-line Basic Strings: an immediate newline after opening """ is trimmed.
     if (st.pos < st.n && int(data[st.pos]) == '\r' && st.pos + 1 < st.n && int(data[st.pos + 1]) == '\n') {
         advance(data, st); advance(data, st)
     } elif (st.pos < st.n && int(data[st.pos]) == '\n') {
@@ -261,8 +260,7 @@ def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var e
                     look++
                 }
                 if (look < st.n && (int(data[look]) == '\n' || int(data[look]) == '\r')) {
-                    // Line-ending backslash. Consume the backslash, the trailing ws,
-                    // the newline, and all leading whitespace on subsequent lines.
+                    // Line-ending backslash. Consume the backslash, the trailing ws, the newline, and all leading whitespace on subsequent lines.
                     advance(data, st)  // consume backslash
                     while (st.pos < st.n) {
                         let cc = int(data[st.pos])
@@ -397,8 +395,7 @@ def private looks_like_time(data : array<uint8>&; pos : int) : bool {
 }
 
 def private read_datetime(data : array<uint8>&; var st : LexState&; allow_time : bool) : string {
-    // Consume a TOML date-time / local-date / local-time. Max length is
-    // ~35 (date+T+time+frac+offset); reserve once to avoid PERF006 churn.
+    // Consume a TOML date-time / local-date / local-time. Max length is ~35 (date+T+time+frac+offset); reserve once to avoid PERF006 churn.
     var buf : array<uint8>
     buf |> reserve(40)
     let n = st.n
@@ -509,11 +506,7 @@ def private parse_int_prefixed(rest : string; radix : int; var err : string&) : 
 }
 
 def private rewind_to_bare(data : array<uint8>&; var st : LexState&; start_pos, start_line, start_row : int; var out : TomlTokenAt&) : void {
-    // Rewinds the lexer to `start_pos` and re-scans a bare key. If the leading
-    // byte at start_pos is `+` (not a TOML bare-key char), the rewind would
-    // produce an empty token (F13). Per TOML 1.0 ABNF, `+` cannot begin a key —
-    // emit a stray-sign error so the parser sees the failure at the right
-    // location.
+    // Rewinds the lexer to `start_pos` and re-scans a bare key. If the leading byte at start_pos is `+` (not a TOML bare-key char), the rewind would produce an empty token (F13). Per TOML 1.0 ABNF, `+` cannot begin a key — emit a stray-sign error so the parser sees the failure at the right location.
     st.pos = start_pos
     st.line = start_line
     st.row = start_row
@@ -529,17 +522,6 @@ def private rewind_to_bare(data : array<uint8>&; var st : LexState&; start_pos, 
 
 def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&; var out : TomlTokenAt&) : bool {
     // Decides whether to lex a numeric / datetime token at st.pos. Returns true if consumed.
-    //
-    // Key vs value ambiguity: the scan may run, then discover the token is
-    // actually a bare key with a numeric prefix (e.g. `2024-01-15`, `123abc`,
-    // `infinity_count`). When the cursor would land on a bare-char
-    // continuation after a numeric/datetime/inf/nan match, we rewind to
-    // `start_pos` and re-emit as `_bare` so the parser sees the full
-    // identifier. Unsigned `inf`/`nan` always emit `_bare` — the parser
-    // re-interprets them as float values at value position, or accepts them
-    // as keys at key position. Signed `+inf`/`-inf`/`+nan`/`-nan` keep
-    // emitting `_float` since `+` is not a bare-key char (those are
-    // unambiguously values).
     let start_line = st.line
     let start_row = st.row
     let n = st.n
@@ -553,10 +535,7 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
             rewind_to_bare(data, st, start_pos, start_line, start_row, out)
             return true
         }
-        // F16: `2024-01-15:...` (a stray `:` directly after a date) almost
-        // certainly means the user mis-formatted a date-time. Surface a
-        // dedicated diagnostic instead of letting the parser hit the `:`
-        // as a generic "unexpected character".
+        // F16: `2024-01-15:...` (a stray `:` directly after a date) almost certainly means the user mis-formatted a date-time. Surface a dedicated diagnostic instead of letting the parser hit the `:` as a generic "unexpected character".
         if (st.pos < n && int(data[st.pos]) == ':') {
             out = TomlTokenAt(value = TomlToken(_error = "':' after date '{s}' — expected 'T' or space before the time at {start_line}:{start_row}"), line = start_line, row = start_row)
             return true
@@ -635,10 +614,6 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
             advance(data, st); advance(data, st)
             var tail : array<uint8>
             // Per TOML 1.0: `_` is only allowed between two valid digits.
-            // Leading (`0x_ff`), trailing (`0xff_`), and doubled (`0xff__aa`)
-            // underscores are rejected. If the run continues into bare-char
-            // territory (e.g. `0xff_oops`), the bare-key fallback below
-            // catches it as a single bare identifier instead.
             while (st.pos < n) {
                 let c = int(data[st.pos])
                 if (is_hex(c)) {
@@ -679,8 +654,6 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
         }
     }
     // Decimal integer or float. Per TOML 1.0: `_` must sit between two digits.
-    // If the run continues into bare-char territory, rewind to a bare-key
-    // scan rather than emit a number-syntax error.
     var saw_digit = false
     while (st.pos < n) {
         let c = int(data[st.pos])
@@ -741,8 +714,7 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
             push(buf, data[st.pos])
             advance(data, st)
         }
-        // Exponent must have at least one digit; track separately from mantissa
-        // so `1e` / `1e+` (where the mantissa already saw a digit) fail-fast.
+        // Exponent must have at least one digit; track separately from mantissa so `1e` / `1e+` (where the mantissa already saw a digit) fail-fast.
         var exp_saw_digit = false
         while (st.pos < n) {
             let c = int(data[st.pos])
@@ -774,9 +746,6 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
         return true
     }
     // Bare-key fallback: '123abc' — digits followed by alpha/dash/underscore.
-    // Only applies to unsigned tokens; signed '+'/'-' aren't valid bare-key prefixes
-    // (well, '-' is, but a '-'-prefix bare key wouldn't enter classify_* since the
-    // next_token gate routes those to the bare-key path).
     if (st.pos < n && is_bare_char(int(data[st.pos]))) {
         rewind_to_bare(data, st, start_pos, start_line, start_row, out)
         return true
@@ -865,9 +834,7 @@ def private next_token(data : array<uint8>&; var st : LexState&; var out : TomlT
     if (is_number(c) || c == '+' || c == '-'
             || (c == 'i' && starts_with_at(data, st.pos, "inf"))
             || (c == 'n' && starts_with_at(data, st.pos, "nan"))) {
-        // For sign-prefixed forms, lookahead: '+'/'-' must be followed by digit/inf/nan to
-        // start a numeric value. Otherwise it's a bare key starting with '-' (valid per
-        // TOML ABNF) or a stray '+' (illegal — '+' isn't a bare-key char).
+        // For sign-prefixed forms, lookahead: '+'/'-' must be followed by digit/inf/nan to start a numeric value. Otherwise it's a bare key starting with '-' (valid per TOML ABNF) or a stray '+' (illegal — '+' isn't a bare-key char).
         if (c == '+' || c == '-') {
             let nx = peek(data, st, 1)
             let is_value_continuation = (is_number(nx) ||
@@ -958,7 +925,6 @@ def private get_array(var v : JsonValue?) : array<JsonValue?>& {
 
 def private ensure_table(var parent : JsonValue?; key : string; var err : string&; at_line, at_row : int) : JsonValue? {
     // Find or create a child table named `key` in `parent`'s _object.
-    // Returns null on conflict (existing non-table value at that key).
     var tab & = get_object(parent)
     if (key_exists(tab, key)) {
         var child : JsonValue? = tab[key]
@@ -1020,12 +986,6 @@ def private parse_key_path(var ts : TomlTokenStream&; var out : array<string>&; 
 
 def private extract_key_segment(tk : TomlTokenAt; var out : array<string>&; var err : string&) : bool {
     // Accept any lexical form whose source text is a valid TOML bare key:
-    //  - `_bare`     ordinary alphanumeric / dash / underscore identifier
-    //  - `_string`   quoted (basic or literal) key, already unescaped
-    //  - `_integer`  digit-only key (e.g. `123 = 1`)
-    //  - `_datetime` date-shaped key (e.g. `2024-01-15 = 1`) — the lexer
-    //    recognized the date shape; per TOML ABNF the same chars are a
-    //    valid bare key, so we use the raw lexical form.
     if (tk.value is _bare) {
         out |> push(tk.value as _bare)
         return true
@@ -1119,10 +1079,7 @@ def private parse_inline_array(var ts : TomlTokenStream&; var err : string&) : J
 }
 
 def private parse_inline_table(var ts : TomlTokenStream&; var err : string&) : JsonValue? {
-    // Inline-table-internal closure tracking (F6): once a key inside the literal
-    // is bound to a nested `{...}` value, later dotted keys in the SAME literal
-    // cannot walk through it. Pointer-keyed for the same reason as the
-    // top-level set in TomlState.
+    // Inline-table-internal closure tracking (F6): once a key inside the literal is bound to a nested `{...}` value, later dotted keys in the SAME literal cannot walk through it. Pointer-keyed for the same reason as the top-level set in TomlState.
     var tab : table<string; JsonValue?>
     var root : JsonValue? = JV(tab)
     var inline_closed_local : table<uint64>
@@ -1203,26 +1160,17 @@ struct private TomlState {
     //! [a] implicitly creates `a.b`). Per TOML 1.0 these cannot be re-opened by
     //! a later [header] line. Keyed by joined path (path_key).
     dotted_keyed : table<string>
-    //! Tables whose value was assigned by an inline-table literal `{...}`. Per
-    //! TOML 1.0 these are immutable — neither dotted keys nor [header] may
-    //! extend them. Keyed by the JsonValue pointer (so AoT entries are tracked
-    //! distinctly: items[0].b and items[1].b are different pointers).
+    //! Tables whose value was assigned by an inline-table literal `{...}`. Per TOML 1.0 these are immutable — neither dotted keys nor [header] may extend them. Keyed by the JsonValue pointer (so AoT entries are tracked distinctly: items[0].b and items[1].b are different pointers).
     inline_closed : table<uint64>
 }
 
 def private jvkey(p : JsonValue?) : uint64 {
-    // Identity key for an _object node — used to mark inline-table-literal
-    // subtrees as immutable (TomlState.inline_closed). Distinct heap nodes get
-    // distinct keys, so the same logical path under different AoT entries does
-    // NOT collide.
+    // Identity key for an _object node — used to mark inline-table-literal subtrees as immutable (TomlState.inline_closed). Distinct heap nodes get distinct keys, so the same logical path under different AoT entries does NOT collide.
     return intptr(unsafe(reinterpret<void?>(p)))
 }
 
 def private mark_inline_subtree(var closed : table<uint64>&; v : JsonValue?) : void {
-    //! Recursively marks every `_object` JsonValue in `v`'s subtree as
-    //! inline-closed. Caller-supplied target table lets us reuse the walker
-    //! for both top-level state (apply_keyval) and inline-table-internal
-    //! tracking (parse_inline_table).
+    //! Recursively marks every `_object` JsonValue in `v`'s subtree as inline-closed. Caller-supplied target table lets us reuse the walker for both top-level state (apply_keyval) and inline-table-internal tracking (parse_inline_table).
     if (v == null || !(v.value is _object)) return
     let k = jvkey(v)
     if (!key_exists(closed, k)) {
@@ -1251,8 +1199,6 @@ def private path_key(path : array<string>) : string {
 
 def private resolve_header(var state : TomlState&; path : array<string>; is_array_of_tables : bool; var err : string&; at_line, at_row : int) : JsonValue? {
     // Walks `path` inside state.root, creating intermediate tables.
-    // For array-of-tables: appends a new entry at the leaf.
-    // For standard tables: creates (or accepts an existing empty) table at the leaf.
     var cur = state.root
     let n = length(path)
     for (i in range(n - 1)) {
@@ -1270,8 +1216,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
                 return null
             }
             if (existing.value is _array) {
-                // Array of tables — descend into last entry (TOML semantics: super-path of
-                // [[a]] is the LAST [[a]] element).
+                // Array of tables — descend into last entry (TOML semantics: super-path of [[a]] is the LAST [[a]] element).
                 var arr & = get_array(existing)                    // nolint:LINT003 — index must yield mutable for `cur = ...`
                 if (empty(arr)) {
                     err = "empty array-of-tables traversal at '{key}'"
@@ -1313,9 +1258,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
             err = "duplicate table header [{path |> join(".")}] at {at_line}:{at_row}"
             return null
         }
-        // F4: header cannot re-open a table that was implicitly created by a
-        // dotted-key statement. (Per TOML 1.0: "using dotted keys to redefine
-        // tables already defined ... is not allowed", same in reverse.)
+        // F4: header cannot re-open a table that was implicitly created by a dotted-key statement. (Per TOML 1.0: "using dotted keys to redefine tables already defined ... is not allowed", same in reverse.)
         if (key_exists(state.dotted_keyed, pk)) {
             err = "cannot open header [{path |> join(".")}] — table already implicitly defined by dotted key at {at_line}:{at_row}"
             return null
@@ -1331,14 +1274,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
 }
 
 def private apply_keyval(var state : TomlState&; var current : JsonValue?; path : array<string>; var v : JsonValue?; var err : string&; at_line, at_row : int) : bool {
-    // Walks `path` inside `current` (the active section's table). Each
-    // intermediate step:
-    //   - F5: rejects if the existing sub-table was bound by an inline literal.
-    //   - F4: marks the prefix path (current section + path[0..i]) as
-    //     implicitly created by a dotted key, so a later [header] line cannot
-    //     re-open it.
-    // The leaf write rejects duplicate keys and, when `v` is an inline-table
-    // _object literal, marks the assigned subtree as inline-closed (F5/F6).
+    // Walks `path` inside `current` (the active section's table). Each intermediate step:
     var holder = current
     let n = length(path)
     for (i in range(n - 1)) {

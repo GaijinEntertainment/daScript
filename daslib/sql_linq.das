@@ -58,10 +58,7 @@ def _first(arr : array<auto(TT)>) : TT -const -& {
 }
 
 def _aggregate_rows(rows : array<auto(TT)>; aggregate_block : block<(rows : array<TT>) : auto(RR)>) {
-    //! Compute several global aggregates from one source. In ordinary in-memory
-    //! chains the block runs over ``rows`` directly. Inside ``_sql(...)`` the
-    //! terminal lowers a named tuple of ``count`` / ``long_count`` / ``sum`` /
-    //! ``average`` / ``min`` / ``max`` expressions into one SQL SELECT row.
+    //! Compute several global aggregates from one source. In ordinary in-memory chains the block runs over ``rows`` directly. Inside ``_sql(...)`` the terminal lowers a named tuple of ``count`` / ``long_count`` / ``sum`` / ``average`` / ``min`` / ``max`` expressions into one SQL SELECT row.
     static_if (typeinfo can_copy(default<RR -const -#>)) {
         return invoke(aggregate_block, rows)
     } else {
@@ -1600,8 +1597,6 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     }
     if (subQ.proj == ProjectionShape.FullRow) {
         // FullRow inner: outer treats the wrapped subquery as its exact projected struct.
-        // Usually this is the original table type; a whole-source join projection may instead
-        // return one joined source (`$(l, r) => r`).
         if (q.rootType == null) {
             q.rootType = q.fromRowType
         }
@@ -1702,8 +1697,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(foCall.arguments[0], q, prog, at)
         }
     }
-    // Peel `_aggregate(prev, block)` — one named row containing several
-    // global aggregates, all evaluated by one SQL source scan.
+    // Peel `_aggregate(prev, block)` — one named row containing several global aggregates, all evaluated by one SQL source scan.
     {
         var gaCall = match_call_in_module(node, "_aggregate_rows", "sql_linq")
         if (gaCall != null) {
@@ -1715,8 +1709,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: `_aggregate` expects `(source, aggregate_block)`")
                 return false
             }
-            // Pre-set terminal state so a join source does not mistake this
-            // outer terminal for a terminal embedded in its own LHS/RHS.
+            // Pre-set terminal state so a join source does not mistake this outer terminal for a terminal embedded in its own LHS/RHS.
             q.matr = Materializer.One
             q.seenTerminal = true
             if (!analyze_chain(gaCall.arguments[0], q, prog, at)) return false
@@ -2371,9 +2364,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
         }
     }
     q.projectedRowType = null
-    // A join's bare source variable projects that exact source struct. Expand it to the
-    // source's qualified columns and reconstruct the nominal struct in build_row_builder.
-    // Single-source identity and scalar identity remain unsupported.
+    // A join's bare source variable projects that exact source struct. Expand it to the source's qualified columns and reconstruct the nominal struct in build_row_builder.
     if (body is ExprVar) {
         let argName = string((body as ExprVar).name)
         if (!q.seenJoin) {
@@ -4146,9 +4137,9 @@ def private next_placeholder(sql : string) : tuple<int; uint8> {
         var i = 0
         var in_quote = false
         while (i < n) {
-            let ch = bytes[i]
-            if (ch == uint8('\'')) {
-                if (in_quote && i + 1 < n && bytes[i + 1] == uint8('\'')) {
+            let ch = int(bytes[i])
+            if (ch == '\'') {
+                if (in_quote && i + 1 < n && int(bytes[i + 1]) == '\'') {
                     i += 2
                     continue
                 }
@@ -4156,9 +4147,9 @@ def private next_placeholder(sql : string) : tuple<int; uint8> {
                 i++
                 continue
             }
-            if (!in_quote && (ch == uint8('?') || ch == uint8(0x01))) {
+            if (!in_quote && (ch == '?' || ch == 0x01)) {
                 found_pos = i
-                found_ch = ch
+                found_ch = uint8(ch)
                 return
             }
             i++
@@ -4584,8 +4575,7 @@ class private SqlCreateViewMacro : AstCallMacro {
         if (!empty(pending)) {
             sb.elements |> push <| new ExprConstString(at = call.at, value := pending)
         }
-        // Pipe-rewrite turns `db |> _create_view(...)` into `_create_view(db, ...)` —
-        // arg 0 is exactly what the user wrote.
+        // Pipe-rewrite turns `db |> _create_view(...)` into `_create_view(db, ...)` — arg 0 is exactly what the user wrote.
         var res = qmacro(_::exec($e(call.arguments[0]), $e(sb)))
         res.force_at(call.at)
         return res
@@ -5731,8 +5721,7 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
     var setSqlClauses : array<string>
     var setBindExprs : array<ExpressionPtr>
     if (!analyze_upsert_set_clause(doUpdateE, rootT, tableName, provIdx, setSqlClauses, setBindExprs, prog, call.at)) return null
-    // 3) Build both INSERT spellings. An unset integer primary key must be
-    // omitted so each provider's auto-assignment mechanism can run.
+    // 3) Build both INSERT spellings. An unset integer primary key must be omitted so each provider's auto-assignment mechanism can run.
     var nWithoutPk = 0
     let sqlWithoutPk = build_upsert_sql(rootT, tableName, conflictCols, setSqlClauses,
         false, isReturning, nWithoutPk)

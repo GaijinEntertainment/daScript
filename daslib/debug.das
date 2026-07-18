@@ -706,7 +706,6 @@ class private DAStackWalker : DapiStackWalker {
 
     def override onCallAOT(pp : Prologue; fileName : string#) : void {
         //! Handles an AOT function call event, updating the current stack frame with AOT call info.
-        // print("AOT {fileName}\n")
         let n = length(ctx.stack)
         if (n > 0) {
             ctx.stack[n - 1].name = pp.info != null ? "def {pp.info.name} [AOT]" : "def [AOT]"
@@ -729,7 +728,6 @@ class private DAStackWalker : DapiStackWalker {
 
     def override onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void {
         //! Handles a function call event with source location, updating the stack frame name, path, and line.
-        // print("def {info.name} at {at}\n")
         let n = length(ctx.stack)
         if (n > 0) {
             ctx.stack[n - 1].name = "def {info.name}"
@@ -741,7 +739,6 @@ class private DAStackWalker : DapiStackWalker {
 
     def override onCall(pp : Prologue; info : FuncInfo) : void {
         //! Handles a function call event without source location, updating the stack frame name.
-        // print("def {info.name}\n")
         let n = length(ctx.stack)
         if (n > 0) {
             ctx.stack[n - 1].name = "def {info.name}"
@@ -1163,9 +1160,7 @@ class private DAgent : DapiDebugAgent {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
         if (at.fileInfo == null || server == null) return
 
-        // unsafe
-            // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
-            // print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
+        // unsafe self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n") print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
 
         if (ctx.category.debugger_attached) {
             addContext(ctx)
@@ -1437,16 +1432,12 @@ class private DAgent : DapiDebugAgent {
 
     def override onCreateContext(var ctx : Context) : void {
         //! Handles new context creation by registering it and re-instrumenting breakpoints.
-        // unsafe
-        //     print("dap: context created {intptr(addr(ctx))} {ctx.category} `{ctx.name}`")
         addContext(ctx)
         invalidateBreakpoints(ctx)
     }
 
     def override onDestroyContext(var ctx : Context) : void {
         //! Handles context destruction by unregistering it and updating breakpoint instrumentation.
-        // unsafe
-        //     print("dap: context destroyed {intptr(addr(ctx))} {ctx.category} `{ctx.name}`\n")
         removeContext(ctx)
         invalidateBreakpoints(ctx)
     }
@@ -1485,8 +1476,6 @@ class private DAgent : DapiDebugAgent {
 
     def addContext(var ctx : Context) : bool {
         //! Registers a new context with the debug agent, sending a thread-started event to the client.
-        // unsafe
-        //     print("dap: add context {intptr(addr(ctx))}")
         let idx = getContextIdx(ctx)
         if (idx >= 0) return false
         unsafe {
@@ -1678,7 +1667,6 @@ class private DAServer : Server {
 
     def reqInitialize(seq : double; command : string; arguments : JsonValue?) {
         //! Handles the DAP initialize request, responding with server capabilities.
-        // var inscope ini <- InitializeRequestArguments(arguments)
         var inscope res = Capabilities(
                                 supportsConfigurationDoneRequest = true,
                                 supportsRestartRequest = false,
@@ -1759,7 +1747,6 @@ class private DAServer : Server {
 
     def reqDisconnect(seq : double; command : string; data : JsonValue?) {
         //! Handles the DAP disconnect request, resuming all threads and clearing breakpoints.
-        // var inscope ini = DisconnectRequest(data)
         sendSuccessResponse(seq, command, null)
         for (ctx in agent.contexts) {
             ctx |> reset_debug_flags()
@@ -2199,7 +2186,6 @@ class private DAServer : Server {
 
     def log(msg : string) {
         //! Logs a message to the debug console output channel.
-        // print("{msg}\n")
         if (is_connected()) {
             sendOutput("console", "{msg}\n")
         }
@@ -2224,8 +2210,6 @@ class private DAServer : Server {
 
     def sendSuccessResponseStr(id : double; command : string; body : string) {
         //! Sends a successful DAP response with a pre-serialized JSON string body.
-        // self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
-        //                         "body"=>body; "command"=>JV(command); "success"=>JV(true)}}), /*log*/true)
         sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", /*log*/true)
     }
 
@@ -2237,8 +2221,7 @@ class private DAServer : Server {
         if (logData) {
             log("<------\n{packStr}")
         }
-        // else
-        //     print("<------\n{packStr}\n")
+        // else print("<------\n{packStr}\n")
         unsafe {
             send(reinterpret<uint8?>(packStr), length(packStr))
             delete data
@@ -2251,8 +2234,7 @@ class private DAServer : Server {
         if (logData) {
             log("<------\n{packStr}")
         }
-        // else
-        //     print("<------\n{packStr}\n")
+        // else print("<------\n{packStr}\n")
         unsafe {
             send(reinterpret<uint8?>(packStr), length(packStr))
         }

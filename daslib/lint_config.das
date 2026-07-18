@@ -80,22 +80,14 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     }
 }
 
-//! Seeds ``disabled_codes`` with the canonical default-off rule set
-//! (currently just STYLE005). Call before ``load_lint_config`` so that
-//! a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
-//! Single source of truth used by the three ``[lint_macro]`` paths,
-//! ``utils/lint/main.das``, and the MCP ``lint`` subtool.
+//! Seeds ``disabled_codes`` with the canonical default-off rule set (currently just STYLE005). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
 def public seed_default_disabled(var disabled_codes : table<string>) : void {
     if (!key_exists(disabled_codes, "STYLE005")) {
         disabled_codes |> insert("STYLE005")
     }
 }
 
-// Process-wide cache of the parsed .lint_config split into "off" and "on"
-// directives. `[lint_macro]` apply() fires once per module in the require
-// chain — without caching the repo's `.lint_config` is re-read+parsed N
-// times per compilation. The file is repo policy and doesn't change
-// mid-compilation, so we parse once and reuse.
+// Process-wide cache of the parsed .lint_config split into "off" and "on" directives. `[lint_macro]` apply() fires once per module in the require chain — without caching the repo's `.lint_config` is re-read+parsed N times per compilation. The file is repo policy and doesn't change mid-compilation, so we parse once and reuse.
 var private _cache_off : table<string>
 var private _cache_on  : table<string>
 var private _cache_loaded = false
@@ -124,13 +116,7 @@ def private ensure_cache_loaded() : void {
     }
 }
 
-//! Macro-side helper: builds the ``disabled_codes`` table the three
-//! ``[lint_macro]`` apply() methods need. Honors the module-local
-//! ``options _enable_default_off_rules = true`` opt-in (skips the
-//! ``seed_default_disabled`` step so default-off rules fire for that
-//! module), then layers cached ``.lint_config`` on top so the repo policy
-//! can still override either direction. Single source so a future
-//! default-off PERF/LINT rule applies uniformly.
+//! Macro-side helper: builds the ``disabled_codes`` table the three ``[lint_macro]`` apply() methods need. Honors the module-local ``options _enable_default_off_rules = true`` opt-in (skips the ``seed_default_disabled`` step so default-off rules fire for that module), then layers cached ``.lint_config`` on top so the repo policy can still override either direction. Single source so a future default-off PERF/LINT rule applies uniformly.
 def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     let force_default_off = prog._options |> find_arg("_enable_default_off_rules") ?as tBool ?? false
     var disabled : table<string>
@@ -147,11 +133,7 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     return <- disabled
 }
 
-//! One structured lint finding — the machine-readable twin of the
-//! ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect``
-//! overloads emit. Produced by the ``*_collect_issues`` overloads in
-//! ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for
-//! consumers that need positions (e.g. the LSP validate subtool).
+//! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).
 struct public LintIssue {
     code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none
     message : string        //!< message text without the position suffix; may be multi-line (instanced-from chains)

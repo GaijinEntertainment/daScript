@@ -92,8 +92,6 @@ struct EcsRequestPos {
 
 def private normalize_file_name(name : string) : string {
     //! Strips directory path, keeping only filename and extension.
-    //! This ensures the same canonical name regardless of working directory,
-    //! which is critical for AOT hash stability.
     let s = replace(name, "\\", "/")
     var lastSlash = -1
     var pos = 0
@@ -168,10 +166,7 @@ def public describe(info : CTypeInfo) {
 }
 
 def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
-    //! Access to component value by name. For example::
-    //!
-    //!     create_entity <| @ ( eid, cmp )
-    //!         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
+    //! Accesses a component value by name.
     let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
     if (!(idx < length(cmp) && cmp[idx].name == name)) {
         cmp |> push(ComponentValue(name = name), idx)
@@ -411,10 +406,7 @@ def private new_entity_id() {
         eid = decsState.entityFreeList[long_length(decsState.entityFreeList) - 1_l]
         decsState.entityFreeList |> pop
     } else {
-        // EntityId.id is uint; cap at UINT_MAX entities to avoid silent wrap to
-        // INVALID_ENTITY_ID. Widening EntityId.id to uint64 is an architectural
-        // followup; for now the panic surfaces the limit loudly instead of
-        // corrupting state.
+        // EntityId.id is uint; cap at UINT_MAX entities to avoid silent wrap to INVALID_ENTITY_ID. Widening EntityId.id to uint64 is an architectural followup; for now the panic surfaces the limit loudly instead of corrupting state.
         let next_id = long_length(decsState.entityLookup)
         if (next_id > MAX_ENTITY_ID) {
             panic("decs: entityLookup reached UINT_MAX entries ({next_id}); EntityId.id (uint) widening is required to allocate more")
@@ -679,10 +671,7 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
     if (binary_search(decsState.ecsQueries[qi].archetypes, aidx - 1)) {
         var arch & = unsafe(decsState.allArchetypes[aidx - 1])
         assert(arch.size > 0_l)
-        // blk takes index:int — public API stability. After the cascade widening
-        // (commit 2), lookup.index can hold int64 values up to UINT_MAX, so the
-        // cast below would silently truncate past INT_MAX. Loudly panic instead;
-        // a long_for_eid_archetype variant with int64 block sig is the followup.
+        // blk takes index:int — public API stability. After the cascade widening (commit 2), lookup.index can hold int64 values up to UINT_MAX, so the cast below would silently truncate past INT_MAX. Loudly panic instead;
         if (lookup.index > int64(INT_MAX)) {
             panic("decs: for_eid_archetype index {lookup.index} exceeds INT_MAX (blk takes int); widening blk to int64 is a follow-up")
         }
@@ -928,19 +917,7 @@ def public create_entity(var blk : lambda<(eid : EntityId; var cmp : ComponentMa
 }
 
 def public create_entities(count : int; blk : block<(eid : EntityId; i : int; var cmp : ComponentMap) : void>) {
-    //! Creates `count` entities in bulk. All entities must have the same archetype
-    //! (same set of components). This is much faster than calling `create_entity` in
-    //! a loop because it does a single archetype lookup and a single resize per
-    //! component array for the entire batch.
-    //!
-    //! Unlike `create_entity`, this is immediate — entities are visible to queries
-    //! right after the call returns (no `commit` needed).
-    //!
-    //! Example::
-    //!
-    //!     create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap)
-    //!         apply_decs_template(cmp, Particle(pos = origin, vel = compute_vel(i)))
-    //!
+    //! Creates `count` entities in bulk. All entities must have the same archetype (same set of components). This is much faster than calling `create_entity` in a loop because it does a single archetype lookup and a single resize per component array for the entire batch.
     if (count <= 0) return
     if (insideQuery != 0) {
         panic("decs: can't call `create_entities` from inside query")
@@ -992,12 +969,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
 
 def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
                                     fill_blk : block<(var arch : Archetype; eidx : int; eid : EntityId; i : int) : void>) {
-    //! Creates `count` entities in bulk with maximum performance. Takes a pre-built
-    //! ComponentMap (used once to establish the archetype shape), then calls `fill_blk`
-    //! for each entity to write directly into archetype storage, bypassing ComponentMap.
-    //!
-    //! Typically called by macro-generated ``create_entities`T`` functions rather than
-    //! directly. See `create_entities` for the simpler ComponentMap-based API.
+    //! Creates `count` entities in bulk with maximum performance. Takes a pre-built ComponentMap (used once to establish the archetype shape), then calls `fill_blk` for each entity to write directly into archetype storage, bypassing ComponentMap.
     if (count <= 0) return
     if (insideQuery != 0) {
         panic("decs: can't call `create_entities_from_cmp` from inside query")
@@ -1024,12 +996,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         }
         let id_base = uint(id_base_long)
         decsState.entityLookup |> resize(id_base_long + int64(count))
-        // After the cascade widening, base + count can exceed INT_MAX, so a
-        // per-iteration int(eidx) cast would silently truncate. Hoist the cap
-        // check before the loop — fill_blk is part of the public API and macro-
-        // generated callers in decs_boost.das emit `eidx : int`; widening blk
-        // to int64 is the followup. Highest eidx is `base + count - 1`; the
-        // boundary case (max eidx == INT_MAX) still succeeds.
+        // After the cascade widening, base + count can exceed INT_MAX, so a per-iteration int(eidx) cast would silently truncate. Hoist the cap check before the loop — fill_blk is part of the public API and macro- generated callers in decs_boost.das emit `eidx : int`; widening blk to int64 is the followup. Highest eidx is `base + count - 1`; the boundary case (max eidx == INT_MAX) still succeeds.
         if (base + int64(count) - 1_l > int64(INT_MAX)) {
             panic("decs: create_entities_from_cmp eidx range [{base} .. {base + int64(count)}) exceeds INT_MAX (fill_blk takes int); widening fill_blk to int64 is a follow-up")
         }
@@ -1096,9 +1063,6 @@ def public long_entity_count() : int64 {
 
 def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT -const -& -# {
     //! Returns a copy of the named component for the given entity.
-    //! If the entity is dead or the component is not found, returns ``defval``.
-    //! The type of the component is inferred from the type of ``defval``.
-    //! Panics if the component exists but its type does not match.
     if (!is_alive(eid)) return defval
     let lookup = decsState.entityLookup[eid.id]
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
@@ -1147,10 +1111,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
         return "{*pTT}"
     }
     cv.info.gc = @@(var src : array<uint8>) : lambda {
-        // the idea with this one is that we make a lambda
-        //  which would capture an array of the right size and type
-        //  which points to the right data
-        //  and when lambda is deleted - we memzero the temp array
+        // the idea with this one is that we make a lambda which would capture an array of the right size and type which points to the right data and when lambda is deleted - we memzero the temp array
         var gc_dummy : array<TT -const -& -#>
         let stride = typeinfo sizeof(type<TT -const -& -#>)
         let size = length(src) / stride

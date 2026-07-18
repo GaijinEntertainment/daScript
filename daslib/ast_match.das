@@ -63,11 +63,7 @@ def qm_run(var expr : Expression?; blk : block<(var arg : Expression?) : QMatchR
 }
 
 def qm_peel_ref2value(var e : Expression?&) : void {
-    //! Strip ``ExprRef2Value`` wrappers from ``e`` in place. The typer inserts
-    //! these post-inference around any read of a reference; they are invisible
-    //! to user-written code and the matcher peels them so a clean pattern
-    //! (``_.X``) matches a wrapped source (``ExprRef2Value(_.X)``) and vice
-    //! versa. Emitted at the top of every ``generate_match`` dispatch.
+    //! Strip ``ExprRef2Value`` wrappers from ``e`` in place. The typer inserts these post-inference around any read of a reference; they are invisible to user-written code and the matcher peels them so a clean pattern (``_.X``) matches a wrapped source (``ExprRef2Value(_.X)``) and vice versa. Emitted at the top of every ``generate_match`` dispatch.
     while (e != null && e is ExprRef2Value) {
         e = (e as ExprRef2Value).subexpr
     }
@@ -302,12 +298,7 @@ def qm_extract_stmts(var blk_expr : Expression?; from_pos : int; to_pos : int; v
 }
 
 def qm_call_name_matches(call : ExprCall?; expected_name : string) : bool {
-    //! Check if a call's name matches, accounting for generic instantiation
-    //! and module qualification. When a generic function is instantiated, the
-    //! call name is mangled (e.g. ``generic_add`123456``) — the ``fromGeneric``
-    //! original name is checked as a fallback. A resolved call may also carry a
-    //! module-qualified name (``math::mad``); an unqualified pattern name
-    //! matches its last ``::`` segment.
+    //! Check if a call's name matches, accounting for generic instantiation and module qualification. When a generic function is instantiated, the call name is mangled (e.g. ``generic_add`123456``) — the ``fromGeneric`` original name is checked as a fallback. A resolved call may also carry a module-qualified name (``math::mad``); an unqualified pattern name matches its last ``::`` segment.
     return (call.name == expected_name ||
         (call.func != null && call.func.fromGeneric != null && call.func.fromGeneric.name == expected_name) ||
         (find(expected_name, "::") < 0 && "{call.name}" |> ends_with("::{expected_name}")))
@@ -511,9 +502,7 @@ def private qm_null_guard(at : LineInfo; actual_var : string) : Expression? {
 
 [macro_function]
 def private next_var(var index : int&) : string {
-    // Generated locals for qmatch pattern-match bind sites. Backtick marks them as
-    // compiler-generated — no collision with user identifiers, and lint.das:152 skips
-    // backtick-bearing names from LINT004's leading-underscore-used check.
+    // Generated locals for qmatch pattern-match bind sites. Backtick marks them as compiler-generated — no collision with user identifiers, and lint.das:152 skips backtick-bearing names from LINT004's leading-underscore-used check.
     let name = "qm`{index}"
     index++
     return name
@@ -522,8 +511,6 @@ def private next_var(var index : int&) : string {
 [macro_function]
 def private qm_skip_field(rtti_name : string; field_name : string) : bool {
     //! Returns true if the field should be skipped during pattern matching.
-    //! Compiler-internal fields are populated during compilation but null/zero
-    //! in raw patterns from qmacro/quote.
 
     // Fields on all expressions: base-class fields + stack/annotation internals
     if (field_name == "_type" || field_name == "flags" || field_name == "genFlags"
@@ -537,12 +524,7 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
         if (field_name == "variable" || field_name == "argumentIndex" || field_name == "pBlock"
             || field_name == "varFlags") return true
     }
-    // ExprField / ExprSafeField / ExprIsVariant / ExprAsVariant / ExprSafeAsVariant —
-    // typer-resolved field metadata. The .name string carries the user-visible field
-    // identifier and is sufficient for matching; fieldIndex / fieldRef / annotation /
-    // derefFlags / fieldFlags are typer caches whose presence diverges between a
-    // qmacro pattern (defaults) and a typed source (resolved indices/refs), so they
-    // would force every qmatch against typed source to fail.
+    // ExprField / ExprSafeField / ExprIsVariant / ExprAsVariant / ExprSafeAsVariant — typer-resolved field metadata. The .name string carries the user-visible field identifier and is sufficient for matching; fieldIndex / fieldRef / annotation / derefFlags / fieldFlags are typer caches whose presence diverges between a qmacro pattern (defaults) and a typed source (resolved indices/refs), so they would force every qmatch against typed source to fail.
     if (rtti_name == "ExprField" || rtti_name == "ExprSafeField"
             || rtti_name == "ExprIsVariant" || rtti_name == "ExprAsVariant"
             || rtti_name == "ExprSafeAsVariant") {
@@ -554,10 +536,7 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
     if (field_name == "func" || field_name == "atEnclosure" || field_name == "stackTop"
         || field_name == "doesNotNeedSp" || field_name == "cmresAlias"
         || field_name == "argumentsFailedToInfer") return true
-    // ExprOp* (and the ExprOp2-derived assignments) inherit ExprCallFunc's call
-    // machinery; their identity is `op` + children. The parser mirrors `op` into
-    // `name`, but macro-SYNTHESIZED nodes (`new ExprOp2(op := "-")`) leave `name`
-    // empty, so comparing it fails every qmatch against macro-built source.
+    // ExprOp* (and the ExprOp2-derived assignments) inherit ExprCallFunc's call machinery; their identity is `op` + children. The parser mirrors `op` into `name`, but macro-SYNTHESIZED nodes (`new ExprOp2(op := "-")`) leave `name` empty, so comparing it fails every qmatch against macro-built source.
     if (rtti_name == "ExprOp1" || rtti_name == "ExprOp2" || rtti_name == "ExprOp3"
             || rtti_name == "ExprCopy" || rtti_name == "ExprMove" || rtti_name == "ExprClone") {
         if (field_name == "name" || field_name == "arguments") return true
@@ -572,8 +551,7 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
 
 [macro_function]
 def private qm_type_guard(at : LineInfo; actual_var : string; var cond : Expression?&) : Expression? {
-    //! Build: if (cond) { return qm_fail_type(expr_var) }
-    //! actual_var is used for error context (the original ExpressionPtr)
+    //! Build: if (cond) { return qm_fail_type(expr_var) } actual_var is used for error context (the original ExpressionPtr)
     var fail = qmacro(qm_fail_type($i(actual_var)))
     return qm_guard(at, cond, fail)
 }
@@ -581,9 +559,6 @@ def private qm_type_guard(at : LineInfo; actual_var : string; var cond : Express
 [macro_function]
 def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var : string; var body : array<Expression?>&; var index : int&; at : LineInfo) {
     //! Generate code to match a TypeDecl at runtime.
-    //! td_var — name of a TypeDeclPtr variable holding the actual type
-    //! expr_var — name of the ExpressionPtr variable for error reporting
-    //! pat_type — compile-time pattern TypeDecl
 
     if (pat_type == null) return
 
@@ -714,11 +689,6 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
 [macro_function]
 def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var : string; ret_field : string; expr_var : string; var body : array<Expression?>&; var index : int&; at : LineInfo) {
     //! Generate code to match argument names, types, and return type.
-    //! target_var — runtime variable with .arguments and return type field
-    //! ret_field — "returnType" for ExprBlock, "result" for Function
-    //! Arguments always match strictly — 0 pattern args means 0 actual args.
-    //! Use $a(var) to capture remaining arguments beyond the fixed ones.
-    //! If pattern has no return type (null), skip return type check.
 
     let n_args = length(pat_block.arguments)
     if (n_args > 0) {
@@ -736,8 +706,7 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
         }
         let n_fixed = has_a_tag ? n_args - 1 : n_args
 
-        // Check argument count (excluding fakeContext/fakeLineInfo)
-        // With $a: at least n_fixed args. Without: exactly n_args.
+        // Check argument count (excluding fakeContext/fakeLineInfo) With $a: at least n_fixed args. Without: exactly n_args.
         if (has_a_tag) {
             var cond = qmacro(qm_count_real_args($i(target_var).arguments) < $v(n_fixed))
             var fail = qmacro(qm_fail_list($i(expr_var)))
@@ -884,9 +853,7 @@ def private const_component_fields(folded_rtti : string) : array<string> {
 // Check if any argument in an ExprCall contains a tag expression.
 [macro_function]
 def private has_tags_in_args(call : ExprCall?) : bool {
-    // Top-level check only — tags nested inside expressions (e.g. 1.0 + $v(x))
-    // would prevent constant folding, so the call stays as ExprCall and hits the
-    // normal matching path instead of reaching here.
+    // Top-level check only — tags nested inside expressions (e.g. 1.0 + $v(x)) would prevent constant folding, so the call stays as ExprCall and hits the normal matching path instead of reaching here.
     for (arg in call.arguments) {
         if (arg != null && arg is ExprTag) return true
     }
@@ -901,8 +868,7 @@ def private qm_const_value_guard(at : LineInfo; cast_var : string; actual_var : 
 
 [macro_function, unused_argument(at)]
 def private generate_synth_component(comp_rtti : string; synth_var : string; cast_var : string; field_name : string; var body : array<Expression?>&; at : LineInfo) {
-    //! Synthesize a ``var synth = new ExprConstXxx(value = cast_var.value.field)``
-    //! so that the component can be fed through generate_match for tag handling.
+    //! Synthesize a ``var synth = new ExprConstXxx(value = cast_var.value.field)`` so that the component can be fed through generate_match for tag handling.
     if (comp_rtti == "ExprConstInt") {
         body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstInt(value = $i(cast_var).value.$f(field_name)); })
     } elif (comp_rtti == "ExprConstUInt") {
@@ -919,9 +885,6 @@ def private generate_synth_component(comp_rtti : string; synth_var : string; cas
 [macro_function]
 def private generate_const_constructor_match(call : ExprCall?; folded_rtti : string; actual_var : string; var body : array<Expression?>&; var index : int&; at : LineInfo) {
     //! Handle constant constructor calls (range, int2, float3, etc.) that may be constant-folded.
-    //! The pattern is an ExprCall like ``range(1, 10)`` but the compiled AST may have
-    //! ``ExprConstRange`` instead. Clone the pattern call expression and compare the folded
-    //! constant's value against it directly — the compiler will fold the clone too.
     body |> push <| qm_rtti_guard(at, actual_var, folded_rtti)
     let cast_var = next_var(index)
     var as_val = make_var_ref(at, actual_var)
@@ -934,8 +897,7 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
         var cond = qmacro($i(cast_var).value != $i(pat_var))
         qm_const_value_guard(at, cast_var, actual_var, cond, body)
     } else {
-        // Slow path: some args have tags ($v, $e, etc.) — synthesize per-component ExprConst
-        // expressions from the folded value and match each arg individually
+        // Slow path: some args have tags ($v, $e, etc.) — synthesize per-component ExprConst expressions from the folded value and match each arg individually
         let comp_rtti = const_component_expr_rtti(folded_rtti)
         var inscope fields <- const_component_fields(folded_rtti)
         for (arg, field_name in call.arguments, fields) {
@@ -998,15 +960,12 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     if (pattern == null) return
 
     // Pattern-side peel: ExprRef2Value is a typer artifact, not user-visible.
-    // Descend into the wrapped expression and discard the wrapper. Recursive
-    // call handles nested wrappers naturally.
     if (pattern is ExprRef2Value) {
         generate_match((pattern as ExprRef2Value).subexpr, actual_var, body, index, at)
         return
     }
 
-    // Source-side peel: emit a runtime call that strips ExprRef2Value from
-    // the actual expression before any RTTI/field guards fire.
+    // Source-side peel: emit a runtime call that strips ExprRef2Value from the actual expression before any RTTI/field guards fire.
     body |> push <| qmacro_expr(${ qm_peel_ref2value($i(actual_var)); })
 
     let rtti = pattern.__rtti
@@ -1024,7 +983,6 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             return
         } elif (tag.name == "v") {
             // $v(var) — extract constant value. Overload resolved by variable type.
-            // Generates: var _qm_r = qm_extract(actual, vname); if (!_qm_r.matched) return _qm_r
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
                 let r_var = next_var(index)
@@ -1041,8 +999,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 if (tag.value != null) {
                     let wrapped = tag.value
                     if (wrapped is ExprLet) {
-                        // var $i(name) = expr — match ExprLet, capture variable name
-                        // Clone the wrapped expression so we don't modify the pattern AST
+                        // var $i(name) = expr — match ExprLet, capture variable name Clone the wrapped expression so we don't modify the pattern AST
                         var wrapped_clone = clone_expression(tag.value)
                         var wrapped_clone_let = wrapped_clone as ExprLet
                         if (!empty(wrapped_clone_let.variables)) {
@@ -1284,8 +1241,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     // ── ExprFor — handle iteratorsTags for $i capture ─────────
     if (pattern is ExprFor) {
         var pat_for = pattern as ExprFor
-        // Process iteratorsTags: clear tagged iterator names (so generic matching skips them)
-        // and record which indices need $i capture
+        // Process iteratorsTags: clear tagged iterator names (so generic matching skips them) and record which indices need $i capture
         var has_tags = false
         for (tag in pat_for.iteratorsTags) {
             if (tag != null) {
@@ -1394,10 +1350,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         return
     }
 
-    // ── ExprCall that might be a constant constructor (range, int2, float3, etc.) ────
-    // The compiler folds these into ExprConst* but raw qmacro output keeps them as ExprCall.
-    // Generate a runtime check: if the actual is the folded form, match as constant;
-    // otherwise match as ExprCall with one-value expansion support.
+    // ── ExprCall that might be a constant constructor (range, int2, float3, etc.) ──── The compiler folds these into ExprConst* but raw qmacro output keeps them as ExprCall.
     if (rtti == "ExprCall") {
         let call = pattern as ExprCall
         let call_name = string(call.name)
@@ -1429,9 +1382,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             }
             let n_pat_args = length(call.arguments)
             if (n_pat_args > 0) {
-                // One-value expansion: range(y) = range(0, y), float2(v) = float2(v, v)
-                // Generate: if actual has 1 arg and pattern has N, apply expansion;
-                // if actual has N args, match directly; otherwise fail.
+                // One-value expansion: range(y) = range(0, y), float2(v) = float2(v, v) Generate: if actual has 1 arg and pattern has N, apply expansion;
                 let n_actual_var = next_var(index)
                 unfolded_body |> push <| qmacro_expr(${ var $i(n_actual_var) = qm_count_real_call_args($i(cast_var).arguments); })
                 let is_one_val = next_var(index)
@@ -1768,8 +1719,7 @@ def private count_fixed_stmts(pat_block : ExprBlock?) : int {
 
 [macro_function]
 def private get_single_fixed_stmt(var pat_block : ExprBlock?) : Expression? {
-    //! If pattern has exactly one non-wildcard statement (possibly surrounded by wildcards),
-    //! return it. Otherwise return null.
+    //! If pattern has exactly one non-wildcard statement (possibly surrounded by wildcards), return it. Otherwise return null.
     for (stmt in pat_block.list) {
         if (empty(get_wildcard_name(stmt))) return stmt
     }
@@ -1779,25 +1729,15 @@ def private get_single_fixed_stmt(var pat_block : ExprBlock?) : Expression? {
 [macro_function]
 def private generate_block_match(var pat_block : ExprBlock?; actual_var : string; var body : array<Expression?>&; var index : int&; at : LineInfo; check_args : bool = true) {
     //! Generate code to match a block's statement list with wildcard support.
-    //! If the optimizer folded a single-statement block into a bare expression,
-    //! and the pattern has exactly one fixed statement (with optional wildcards),
-    //! match the bare expression directly against that statement.
 
     // Check if pattern is a single fixed statement (possibly with wildcards).
-    // If actual is not ExprBlock, try matching the single statement directly.
-    // Skip this optimization if pattern has arguments or return type — those require a real block.
     let has_pat_args = !empty(pat_block.arguments)
     let has_pat_ret = pat_block.returnType != null && pat_block.returnType.baseType != Type.autoinfer && pat_block.returnType.baseType != Type.tVoid
     let n_fixed = count_fixed_stmts(pat_block)
     if (n_fixed == 1 && !has_pat_args && !has_pat_ret) {
         var single_pat = get_single_fixed_stmt(pat_block)
         if (single_pat != null) {
-            // Generate: if (!(actual is ExprBlock) && !(actual is ExprMakeBlock))
-            //              match single_pat against actual directly
-            //           else
-            //              fall through to normal block matching
-            // For simplicity: try block match first. If RTTI fails (not a block),
-            // fall back to direct match. We use a runtime helper for this.
+            // Generate: if (!(actual is ExprBlock) && !(actual is ExprMakeBlock)) match single_pat against actual directly else fall through to normal block matching For simplicity: try block match first. If RTTI fails (not a block), fall back to direct match. We use a runtime helper for this.
             let direct_var = next_var(index)
             body |> push <| qmacro_expr(${ let $i(direct_var) = qm_rtti($i(actual_var)) != "ExprBlock" && qm_rtti($i(actual_var)) != "ExprMakeBlock"; })
             // If it's not a block, match directly
@@ -1850,8 +1790,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     let len_var = next_var(index)
     body |> push <| qmacro_expr(${ let $i(len_var) = length($i(cast_var).list); })
 
-    // Walk through pattern statements
-    // Track pending $b capture: save_var holds start position, b_vname holds user variable name
+    // Walk through pattern statements Track pending $b capture: save_var holds start position, b_vname holds user variable name
     var pending_b_save = ""   // name of the var holding wildcard start position
     var pending_b_vname = ""  // name of the user's $b capture variable
 
@@ -1862,7 +1801,6 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
 
         if (wc_name == "_wildcard") {
             // Zero or more — just skip. The next fixed pattern will scan forward.
-            // Save start position for $b capture
             let b_vname = get_wildcard_b_tag(pat)
             if (!empty(b_vname)) {
                 let save_var = next_var(index)
@@ -1871,8 +1809,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 pending_b_vname = b_vname
             }
             if (pat_idx == pat_len - 1) {
-                // Trailing wildcard — matches rest, done
-                // Emit $b capture: [save_pos, len)
+                // Trailing wildcard — matches rest, done Emit $b capture: [save_pos, len)
                 if (!empty(pending_b_vname)) {
                     body |> push <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(len_var), $i(pending_b_vname)); })
                     pending_b_save = ""
@@ -1933,8 +1870,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             }
             body |> push <| qmacro_expr(${ $i(pos_var) ++; })
         } else {
-            // Fixed statement — must match at current position
-            // Check if the previous statement was a wildcard (need to scan)
+            // Fixed statement — must match at current position Check if the previous statement was a wildcard (need to scan)
             let prev_is_wildcard = pat_idx > 0 && !empty(get_wildcard_name(pat_block.list[pat_idx - 1]))
             let prev_wc = prev_is_wildcard ? get_wildcard_name(pat_block.list[pat_idx - 1]) : ""
 
@@ -1960,8 +1896,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 }
                 var inner_mkblk = new ExprMakeBlock(at = at, _block = inner_blk)
 
-                // Generate: var scan_r = qm_scan(blk_var, pos_var, scan_limit, inner_block)
-                // For _optional, limit scan to pos+2 (try at most positions pos and pos+1)
+                // Generate: var scan_r = qm_scan(blk_var, pos_var, scan_limit, inner_block) For _optional, limit scan to pos+2 (try at most positions pos and pos+1)
                 let scan_r_var = next_var(index)
                 if (prev_wc == "_optional") {
                     let limit_var = next_var(index)
@@ -1982,8 +1917,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                     pending_b_vname = ""
                 }
             } else {
-                // No preceding wildcard — must match at exact position
-                // Emit pending $b capture before this fixed match (for _wildcard1 followed by fixed)
+                // No preceding wildcard — must match at exact position Emit pending $b capture before this fixed match (for _wildcard1 followed by fixed)
                 if (!empty(pending_b_vname)) {
                     body |> push <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(pos_var), $i(pending_b_vname)); })
                     pending_b_save = ""
@@ -2255,10 +2189,7 @@ def peel_lambda_rename_var(expr : Expression?; argName : string) : Expression? {
 
 [clone(expr, replacement)]
 def peel_lambda_replace_var(expr : Expression?; var replacement : Expression?) : Expression? {
-    //! Variant of ``peel_lambda_rename_var`` — substitutes the bound variable with an
-    //! arbitrary expression in the cloned body. ``replaceVariable`` is now peel-aware
-    //! (single unified path strips typer-inserted ``ExprRef2Value`` wrappers when
-    //! present). Falls back to ``invoke(expr, replacement)`` when non-peelable.
+    //! Variant of ``peel_lambda_rename_var`` — substitutes the bound variable with an arbitrary expression in the cloned body. ``replaceVariable`` is now peel-aware (single unified path strips typer-inserted ``ExprRef2Value`` wrappers when present). Falls back to ``invoke(expr, replacement)`` when non-peelable.
     if (expr is ExprMakeBlock) {
         var mblk = expr as ExprMakeBlock
         var blk = mblk._block as ExprBlock
@@ -2319,14 +2250,7 @@ def peel_tuple_field_read(expr : Expression?; bindName : string; fieldIndex : in
 }
 
 def qn(prefix : string; at : LineInfo) : string {
-    //! Build a backtick-quoted qname unique to ``at`` for the given ``prefix``. Use to name
-    //! synthesized locals emitted by macros so multiple expansions in one file don't collide.
-    //! ``at.line`` / ``at.column`` are interpolated via the default ``uint`` formatter (hex), so
-    //! output for ``at.line=42u, at.column=7u`` is ``\`<prefix>\`0x2a\`0x7``.
-    //! Deterministic — distinct ``(prefix, at.line, at.column)`` triples produce distinct names;
-    //! synthesized ``LineInfo()`` (line=0, column=0) produces ``\`<prefix>\`0x0\`0x0`` and WILL
-    //! collide across distinct synth sites with the same prefix. Build a synth-specific name
-    //! yourself if that matters at the call site.
+    //! Build a backtick-quoted qname unique to ``at`` for the given ``prefix``. Use to name synthesized locals emitted by macros so multiple expansions in one file don't collide.
     return "`{prefix}`{at.line}`{at.column}"
 }
 

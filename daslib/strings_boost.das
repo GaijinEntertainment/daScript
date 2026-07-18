@@ -367,9 +367,6 @@ def public is_null_or_whitespace(str : string) : bool {
 
 def public glob_match(pattern, text : string) : bool {
     //! Matches ``text`` against a shell-style glob ``pattern``.
-    //! Supports ``*`` (matches any sequence of characters, including empty)
-    //! and ``?`` (matches exactly one character). All other characters are
-    //! compared literally.  Returns true if the entire ``text`` matches.
     if (empty(pattern)) return empty(text)
     if (empty(text)) {
         // text is empty — only matches if pattern is all *'s

@@ -354,8 +354,7 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
     }
-    // Fail-closed (#3065): never assemble standalone C++ from a partial emit -- abort if
-    // a macro/codegen exception was recorded during the visits above.
+    // Fail-closed (#3065): never assemble standalone C++ from a partial emit -- abort if a macro/codegen exception was recorded during the visits above.
     fail_on_aot_emit_error(program)
 
     write(source, "namespace {program.thisNamespace} \{\n");

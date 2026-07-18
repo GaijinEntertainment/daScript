@@ -277,9 +277,7 @@ class private CseTally : AstVisitor {
     sample : table<string; ExpressionPtr>
     mutableVars : table<string>
     def override preVisitExpression(expr : ExpressionPtr) : void {
-        // ExprRef2Value is describe-transparent: tallying wrapper AND wrappee double-counts every
-        // ref-rooted dup (an array/field read), so its count never drops below 2 after sharing and
-        // the round loop spins. Tally the wrappee only.
+        // ExprRef2Value is describe-transparent: tallying wrapper AND wrappee double-counts every ref-rooted dup (an array/field read), so its count never drops below 2 after sharing and the round loop spins. Tally the wrappee only.
         if (expr is ExprRef2Value) {
             return
         }

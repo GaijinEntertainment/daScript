@@ -617,16 +617,7 @@ class private LerpFuseVisitor : AstVisitor {
     }
 }
 
-// A horizontal-reduce lane that no better fuser already claims: a plain scalar `s` (weight 1) OR a
-// const-weighted scalar `s*c` / `c*s` (weight c). `s` must not be const, a runtime*runtime product (left
-// for mad), or a fuse-pass output call (`mad`/`dot`/`lerp`/`hadd` — already optimally fused, and
-// re-claiming one across re-infer rounds would make the pass non-idempotent). A group of these packs into
-// `hadd(floatN(s))` when all weights are 1, else `dot(floatN(s), floatN(weights))` — the weighted
-// reduction beats the mad-chain at width>=3 (combine + dot = 2 nodes vs the N-node mad-chain). The fuser
-// packs groups of width >=3 by default (width-2 is +1 node on a node-graph backend — pure combine
-// overhead — so a bare pair stays scalar; `options _flatten_hadd_pack_pairs = true` lowers the floor to 2
-// for a SIMD CPU backend). `stripped` = the term carried a `*const`, so its scalar must be cloned (the
-// `*` wrapper drops). The residual oracle counts the same predicate, so it mirrors the fuser exactly.
+// A horizontal-reduce lane that no better fuser already claims: a plain scalar `s` (weight 1) OR a const-weighted scalar `s*c` / `c*s` (weight c). `s` must not be const, a runtime*runtime product (left for mad), or a fuse-pass output call (`mad`/`dot`/`lerp`/`hadd` — already optimally fused, and re-claiming one across re-infer rounds would make the pass non-idempotent). A group of these packs into `hadd(floatN(s))` when all weights are 1, else `dot(floatN(s), floatN(weights))` — the weighted reduction beats the mad-chain at width>=3 (combine + dot = 2 nodes vs the N-node mad-chain). The fuser packs groups of width >=3 by default (width-2 is +1 node on a node-graph backend — pure combine overhead — so a bare pair stays scalar; `options _flatten_hadd_pack_pairs = true` lowers the floor to 2 for a SIMD CPU backend). `stripped` = the term carried a `*const`, so its scalar must be cloned (the `*` wrapper drops). The residual oracle counts the same predicate, so it mirrors the fuser exactly.
 def private reduce_lane(var t : ReTerm; var s : ExpressionPtr&; var w : float&; var stripped : bool&) : bool {   // nolint:LINT014 — `var t` is needed for NON-CONST field access (t.e feeds is_all_const / scalar_float_const), not to write t
     if (t.neg) return false
     var e = t.e
@@ -657,10 +648,6 @@ def private reduce_lane(var t : ReTerm; var s : ExpressionPtr&; var w : float&; 
 }
 
 // ===== producer-vectorization for hadd groups =====
-// When every lane of a hadd group is `g(scalar)` for the same componentwise unary `g`, pull `g` out
-// over the packed args: `sin(a)+sin(b)+sin(c)` -> `hadd(sin(float3(a,b,c)))` (exact, since g is per-lane).
-// That collapses N g-nodes to ONE width-free `g(floatN)` — turning the otherwise node-neutral width-3
-// hadd into a win (−2 nodes), and a bigger win at width-4.
 
 // Componentwise unary float->float builtins (their floatN overload is per-lane). NOT length/normalize/
 // dot/cross (vector->scalar or cross-lane) — vectorizing those would change the value.
@@ -670,9 +657,6 @@ let private ELEMENTWISE_UNARY : table<string> <- {
 }
 
 // If every lane is `g(scalarFloat)` for the SAME whitelisted elementwise-unary g, return g; else "".
-// A module-qualified call (`math::sin`) is skipped: the rewrite re-emits the unqualified simple name,
-// which could resolve to a different overload — or be ambiguous — in a module that relies on the
-// qualifier, so it would not be semantics-preserving (leaf-pack instead, never breaking compiling code).
 def private shared_elementwise_unary(lanes : array<ExpressionPtr>) : string {
     var g = ""
     for (e in lanes) {
@@ -742,17 +726,9 @@ def private make_hadd_arg(var lanes : array<ExpressionPtr>; w : int; at : LineIn
     return gcall
 }
 
-// Pack the independent-scalar reduce lanes of a maximal `+`/`-` chain (see reduce_lane) into width
-// [minWidth..4] groups via plan_groups; null when no group reaches minWidth. The dot fold above only
-// reaches lanes of ONE vector (`v.x + v.y + …`); unrelated scalars (plasma's `v1 + v2 + v3 + v4`) have
-// no shared base, so a combine + reduce is the collapse. Each group emits `hadd(floatN(s))` when all its
-// weights are 1, else `dot(floatN(s), floatN(weights))` (a const-weighted sum like an fBm octave chain).
-// The first sum(groups) lanes (source order) form the groups — the group's first term emits, the rest
-// drop; any sub-minWidth tail stays scalar. A wide sum becomes PARALLEL reduces (9 lanes -> [4,4] + a
-// scalar tail by default, [4,3,2] under the pack-pairs option).
+// Pack the independent-scalar reduce lanes of a maximal `+`/`-` chain (see reduce_lane) into width [minWidth..4] groups via plan_groups; null when no group reaches minWidth. The dot fold above only reaches lanes of ONE vector (`v.x + v.y + …`); unrelated scalars (plasma's `v1 + v2 + v3 + v4`) have no shared base, so a combine + reduce is the collapse. Each group emits `hadd(floatN(s))` when all its weights are 1, else `dot(floatN(s), floatN(weights))` (a const-weighted sum like an fBm octave chain).
 def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>; minWidth : int; mod : Module?) : ExpressionPtr {
-    // collect reduce lanes (scalar + const weight) in source order; a weighted lane emits `dot`, so it
-    // is only a candidate when dot is callable — else it stays for the mad walk (never break a shader)
+    // collect reduce lanes (scalar + const weight) in source order; a weighted lane emits `dot`, so it is only a candidate when dot is callable — else it stays for the mad walk (never break a shader)
     let dotCallable = fuse_callable(mod, "dot", 2)
     var cand : array<int>
     var laneScalar : array<ExpressionPtr>
@@ -870,10 +846,7 @@ def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>;
     return r
 }
 
-// Top-down rewrite mirroring dot_fold_expr: pack each maximal `+`/`-` chain once. A bottom-up visitor
-// would pack an inner sub-chain into a narrow hadd and strand the outer lanes into a second one (e.g.
-// `((a+b)+c)+d` -> hadd2(a,b) + hadd2(c,d) instead of one hadd4), so the walk is top-down — recurse
-// into chain leaves and every other child slot, then fold the maximal chain at this node.
+// Top-down rewrite mirroring dot_fold_expr: pack each maximal `+`/`-` chain once. A bottom-up visitor would pack an inner sub-chain into a narrow hadd and strand the outer lanes into a second one (e.g.
 def private hadd_fold_expr(var e : ExpressionPtr; var changed : bool&; minWidth : int; mod : Module?) : ExpressionPtr {
     if (e == null) return null
     if (e is ExprOp2) {
@@ -919,11 +892,7 @@ def private hadd_fold_stmt(var s : ExpressionPtr; var changed : bool&; minWidth 
     }
 }
 
-// A maximal `+`/`-` chain still carrying ≥3 reduce lanes the fuser should have packed (into hadd or a
-// weighted dot) — the residual twin of the reduce fold, sharing `reduce_lane`. The >=3 gate is
-// mode-agnostic on purpose: the fuser packs width>=3 in BOTH modes (the pack-pairs option only LOWERS
-// the floor to 2), so a >=3-lane survivor is a real miss under either, while a 2-lane chain left scalar
-// by the default is not flagged.
+// A maximal `+`/`-` chain still carrying ≥3 reduce lanes the fuser should have packed (into hadd or a weighted dot) — the residual twin of the reduce fold, sharing `reduce_lane`. The >=3 gate is mode-agnostic on purpose: the fuser packs width>=3 in BOTH modes (the pack-pairs option only LOWERS the floor to 2), so a >=3-lane survivor is a real miss under either, while a 2-lane chain left scalar by the default is not flagged.
 def private has_unfused_hadd(var that : ExprOp2?; dotCallable : bool) : bool {
     if (that == null || !(that.op == "+" || that.op == "-") || expr_bt(that) != Type.tFloat) return false
     var terms : array<ReTerm>
@@ -999,12 +968,7 @@ class public FuseResidualVisitor : AstVisitor {
 }
 
 def public fuse_body(var func : FunctionPtr; no_fast_math : bool = false; hadd_min_width : int = 3) : bool {
-    //! PHASE_FUSED finishing pass: collapse same-vector lane sums into `dot(v, mask)` and independent
-    //! scalar sums into `hadd(floatN(...))` — or `dot(floatN(s), floatN(weights))` when the lanes carry
-    //! const weights (groups of width [hadd_min_width..4] via plan_groups — the default 3 keeps a bare
-    //! pair scalar, 2 packs pairs too), re-pack ctor lane patterns (re-vectorize / shared factor),
-    //! `a*b ± c` into `mad(a,b,c)`, and the expanded lerp shape back into `lerp(a, b, t)`. Caller
-    //! re-infers after each round.
+    //! PHASE_FUSED finishing pass: collapse same-vector lane sums into `dot(v, mask)` and independent scalar sums into `hadd(floatN(...))` — or `dot(floatN(s), floatN(weights))` when the lanes carry const weights (groups of width [hadd_min_width..4] via plan_groups — the default 3 keeps a bare pair scalar, 2 packs pairs too), re-pack ctor lane patterns (re-vectorize / shared factor), `a*b ± c` into `mad(a,b,c)`, and the expanded lerp shape back into `lerp(a, b, t)`. Caller re-infers after each round.
     if (!(func.body is ExprBlock)) return false
     var changed = false
     // lane-dot fold first — the mad walk would otherwise steal a weighted lane (`v.x * w + rest`)
@@ -1032,10 +996,7 @@ def public fuse_body(var func : FunctionPtr; no_fast_math : bool = false; hadd_m
     unsafe {
         delete cv
     }
-    // then horizontal reduce: pack unrelated scalar lanes into hadd(floatN(...)) — or dot(floatN(s),
-    // floatN(weights)) when they carry const weights — in width-[hadd_min_width..4] groups via plan_groups.
-    // A top-down stmt walk (like the dot fold) so each maximal chain packs once. Before the mad walk so a
-    // folded `hadd(...) * c + d` still re-fuses into mad, AND so weighted lanes become dot here not mad.
+    // then horizontal reduce: pack unrelated scalar lanes into hadd(floatN(...)) — or dot(floatN(s), floatN(weights)) when they carry const weights — in width-[hadd_min_width..4] groups via plan_groups.
     if (!no_fast_math && fuse_callable(func._module, "hadd", 1)) {
         var blk = func.body as ExprBlock
         var hchanged = false

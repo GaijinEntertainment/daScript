@@ -155,10 +155,7 @@ def release_main(script : string) {
     _release_spec.main_script = script
 }
 
-//! Entry script for `daspkg release wasm` (the wasm64 build) when it differs
-//! from the native release_main() — e.g. a live_stub variant that drops the
-//! desktop live-reload stack (which can't cross-compile). Falls back to
-//! release_main() when unset.
+//! Entry script for `daspkg release wasm` (the wasm64 build) when it differs from the native release_main() — e.g. a live_stub variant that drops the desktop live-reload stack (which can't cross-compile). Falls back to release_main() when unset.
 def release_wasm_main(script : string) {
     _release_spec.wasm_main_script = script
 }
@@ -168,9 +165,6 @@ def release_include(pattern : string) {
 }
 
 //! Ship starter content only when the destination does not already exist.
-//! Unlike `release_include`, these files are deliberately omitted from the
-//! release manifest, so later releases neither delete nor overwrite the
-//! deployed copy. Use this for editable configs and other user-owned files.
 def release_include_if_missing(pattern : string) {
     _release_spec.include_if_missing_globs |> push(pattern)
 }
@@ -183,13 +177,7 @@ def release_shared_module(name : string) {
     _release_spec.forced_modules |> push(name)
 }
 
-//! Declare a native shared library that must be shipped next to this package's
-//! `.shared_module` in a release bundle. `name` is the platform-specific filename
-//! (e.g. `"glfw3.dll"` on Windows, `"libglfw.so.3.4"` on Linux,
-//! `"libglfw.3.4.dylib"` on macOS). daspkg searches `<das_root>/bin/` on Windows
-//! and `<das_root>/lib/` on POSIX, then copies the file into
-//! `<bundle>/modules/<package>/`. Errors loudly if the file is not found —
-//! authors should guard per-platform with `if (get_platform_name() == "windows")`.
+//! Declare a native shared library that must be shipped next to this package's `.shared_module` in a release bundle. `name` is the platform-specific filename (e.g. `"glfw3.dll"` on Windows, `"libglfw.so.3.4"` on Linux, `"libglfw.3.4.dylib"` on macOS). daspkg searches `<das_root>/bin/` on Windows and `<das_root>/lib/` on POSIX, then copies the file into `<bundle>/modules/<package>/`. Errors loudly if the file is not found — authors should guard per-platform with `if (get_platform_name() == "windows")`.
 def release_include_dll(name : string) {
     _release_spec.native_dlls |> push(name)
 }
@@ -198,21 +186,12 @@ def release_bundle_id(id : string) {
     _release_spec.bundle_id = id
 }
 
-//! Contribute an extra emcc flag to a `daspkg release wasm` link. Declared in a
-//! module's `.das_package` so the flag is added whenever a released app links
-//! that module (e.g. dasGlfw declares `release_emcc_arg("-sUSE_GLFW=3")`).
-//! `-sMEMORY64=1` / `-sFULL_ES3` / WebGL2 flags are release defaults — don't
-//! re-declare them here.
+//! Contribute an extra emcc flag to a `daspkg release wasm` link. Declared in a module's `.das_package` so the flag is added whenever a released app links that module (e.g. dasGlfw declares `release_emcc_arg("-sUSE_GLFW=3")`).
 def release_emcc_arg(arg : string) {
     _release_spec.emcc_args |> push(arg)
 }
 
-//! Declare a file a module needs embedded in the wasm MEMFS for `release wasm`
-//! (emcc `--embed-file src@dst`). `src` is relative to the module dir (this
-//! .das_package's location, like release_main / release_wasm_archive), so it
-//! resolves for an external module under <project>/modules/<dep> too; `dst` is the
-//! absolute MEMFS path the runtime opens at (e.g. dasStbImage embeds its HUD
-//! font at `/modules/dasStbImage/fonts/droidsansmono.ttf`).
+//! Declare a file a module needs embedded in the wasm MEMFS for `release wasm` (emcc `--embed-file src@dst`). `src` is relative to the module dir (this .das_package's location, like release_main / release_wasm_archive), so it resolves for an external module under <project>/modules/<dep> too; `dst` is the absolute MEMFS path the runtime opens at (e.g. dasStbImage embeds its HUD font at `/modules/dasStbImage/fonts/droidsansmono.ttf`).
 def release_embed_file(src, dst : string) {
     _release_spec.embed_paths |> push("{src}@{dst}")
 }
@@ -224,22 +203,12 @@ def release_web_shell(path : string) {
     _release_spec.web_shell = path
 }
 
-//! Declare how to build this module's wasm archives for `daspkg release wasm`, used
-//! when the module is an EXTERNAL package (not part of daslang's in-tree web build, so
-//! `daspkg build --wasm` does not produce its archives). The command runs with the
-//! module directory as the working directory and an emscripten SDK already on PATH;
-//! reference the daslang SDK via `get_das_root()` interpolation (it resolves when the
-//! `.das_package` runs). daspkg invokes it once, on demand, when a released app links
-//! this module and its wasm archive is not already staged. Pair with
-//! release_wasm_archive() to declare the produced files.
+//! Declare how to build this module's wasm archives for `daspkg release wasm`, used when the module is an EXTERNAL package (not part of daslang's in-tree web build, so `daspkg build --wasm` does not produce its archives). The command runs with the module directory as the working directory and an emscripten SDK already on PATH;
 def release_wasm_build(command : string) {
     _release_spec.wasm_build_command = command
 }
 
-//! Declare a wasm archive produced by release_wasm_build() (path relative to the
-//! module directory) to stage into the release's wasm lib dir. Repeatable. The
-//! archive's basename must match the daspkg convention (`liblib<CppModule>.a`, the name
-//! the in-tree web build emits) so the link step resolves it for the shared module.
+//! Declare a wasm archive produced by release_wasm_build() (path relative to the module directory) to stage into the release's wasm lib dir. Repeatable. The archive's basename must match the daspkg convention (`liblib<CppModule>.a`, the name the in-tree web build emits) so the link step resolves it for the shared module.
 def release_wasm_archive(path : string) {
     _release_spec.wasm_archives |> push(path)
 }

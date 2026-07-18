@@ -29,16 +29,12 @@ class private FoldVisitor : AstVisitor {
     noFastMath : bool
     expandLerp : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but
-        // leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold
-        // to one literal via the evaluator; an un-inferred node is skipped (folded next re-infer).
+        // A fully-constant ExprOp2 the typer left unfolded — it folds scalar const arithmetic but leaves vector const (`float3(2)+float3(3)`), what reassoc's gathered groups become. Fold to one literal via the evaluator; an un-inferred node is skipped (folded next re-infer).
         if (is_all_const(that) && eval_to_const_supported(that._type)) {
             var folded = eval_to_const(that)
             if (folded |> is_expr_const()) { changed = true; return folded }
         }
         // Algebraic identities over the scalar + vector (float/int/uint) family, under fast-math.
-        // `*1`/`*-1` return the non-const operand and gate on `same_base_type` (scalar*vector
-        // broadcast must not mistype to scalar); `*0` returns a RESULT-typed zero via zero_const_of.
         match (that.op) {
             if ("*") {
                 if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
@@ -54,17 +50,14 @@ class private FoldVisitor : AstVisitor {
                     var z = zero_const_of(that._type, that.at)
                     if (z != null) { changed = true; return z }
                 }
-                // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a
-                // full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing
-                // the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
+                // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
                 if (!noFastMath || !is_float_valued(that)) {
                     if (ctor_lane_kill(that.left, that.right) || ctor_lane_kill(that.right, that.left)) {
                         changed = true
                         return that
                     }
                 }
-                // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the
-                // splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
+                // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
                 var spm = splat_scalar_arg(that.right)
                 if (spm != null && is_float_vec(expr_bt(that.left))) {
                     changed = true
@@ -86,7 +79,6 @@ class private FoldVisitor : AstVisitor {
                 if (is_zero_const_op(that.right)) { changed = true; return that.left }
                 if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
                 // `x - x → 0` — purity-gated like `*0` (and like it, inf/NaN operands aside:
-                // fast-math charter). Identical describe ⇒ identical purity, so one check.
                 if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
                         (!noFastMath || !is_float_valued(that))) {
                     var z = zero_const_of(that._type, that.at)
@@ -95,7 +87,6 @@ class private FoldVisitor : AstVisitor {
             }
             if ("/") {
                 // `x / C → x * (1/C)` — a mul instead of a div; the reciprocal rounds (fast-math).
-                // Float-family only (int division has no reciprocal); zero lanes keep the div.
                 if (!noFastMath && is_float_valued(that)) {
                     var rec = recip_const(that.right)
                     if (rec != null) {
@@ -103,8 +94,7 @@ class private FoldVisitor : AstVisitor {
                         return new ExprOp2(at = that.at, op := "*", left = that.left, right = rec)
                     }
                 }
-                // splat collapse for division: `v / floatN(s) → v / s`, `floatN(s) / v → s / v` —
-                // both vec÷scalar forms are native das. Bit-exact, never gated.
+                // splat collapse for division: `v / floatN(s) → v / s`, `floatN(s) / v → s / v` — both vec÷scalar forms are native das. Bit-exact, never gated.
                 var spd = splat_scalar_arg(that.right)
                 if (spd != null && is_float_vec(expr_bt(that.left))) {
                     changed = true
@@ -119,8 +109,7 @@ class private FoldVisitor : AstVisitor {
                 }
             }
             if ("&&") {
-                // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is
-                // safe; `x && false` DOES evaluate x, so that drop is gated on purity.
+                // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is safe; `x && false` DOES evaluate x, so that drop is gated on purity.
                 if (is_bool_val(that.left, true)) { changed = true; return that.right }
                 if (is_bool_val(that.right, true)) { changed = true; return that.left }
                 if (is_bool_val(that.left, false)) { changed = true; return that.left }
@@ -137,8 +126,7 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprOp1(var that : ExprOp1?) : ExpressionPtr {
-        // Fold const `!`; else push `!` into the operand via negate_bool (flip a comparison, drop a
-        // double `!`, De-Morgan) — this collapses the `!comparison` the select-fold above emits.
+        // Fold const `!`; else push `!` into the operand via negate_bool (flip a comparison, drop a double `!`, De-Morgan) — this collapses the `!comparison` the select-fold above emits.
         if (that.op == "!") {
             if (is_bool_val(that.subexpr, true)) { changed = true; return new ExprConstBool(at = that.at, value = false) }
             if (is_bool_val(that.subexpr, false)) { changed = true; return new ExprConstBool(at = that.at, value = true) }
@@ -148,14 +136,12 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprOp3(var that : ExprOp3?) : ExpressionPtr {
-        // Post-order: subexpr/arms already folded, so a now-constant condition
-        // collapses to its live arm (the dead arm + condition become unreachable).
+        // Post-order: subexpr/arms already folded, so a now-constant condition collapses to its live arm (the dead arm + condition become unreachable).
         if (that.subexpr is ExprConstBool) {
             changed = true
             return (that.subexpr as ExprConstBool).value ? that.left : that.right
         }
-        // Bool-const arms collapse to the condition: `c ? true : false → c`,
-        // `c ? false : true → !c`. Common after if-conversion of a bool-valued branch.
+        // Bool-const arms collapse to the condition: `c ? true : false → c`, `c ? false : true → !c`. Common after if-conversion of a bool-valued branch.
         if (is_bool_val(that.left, true) && is_bool_val(that.right, false)) {
             changed = true
             return that.subexpr
@@ -165,7 +151,6 @@ class private FoldVisitor : AstVisitor {
             return new ExprOp1(at = that.at, op := "!", subexpr = that.subexpr)
         }
         // Equal arms (`c ? a : a → a`) — e.g. after `acc + 0 → acc` makes both arms `acc`.
-        // Gated on a pure condition (dropping it must not lose a side effect).
         if (describe(that.left) == describe(that.right) && !has_sideeffects(that.subexpr)) {
             changed = true
             return that.left
@@ -173,9 +158,7 @@ class private FoldVisitor : AstVisitor {
         return that
     }
     def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
-        // A fully-constant, side-effect-free call (vector constructor or pure builtin over const
-        // args) folds to one literal. The typer folds const ARITHMETIC but leaves const
-        // CONSTRUCTORS; this collapses them. Post-order, so const-folded args are visible.
+        // A fully-constant, side-effect-free call (vector constructor or pure builtin over const args) folds to one literal. The typer folds const ARITHMETIC but leaves const CONSTRUCTORS; this collapses them. Post-order, so const-folded args are visible.
         if (is_all_const(that)) {
             var folded = eval_to_const(that)
             if (!(folded is ExprCall)) {   // eval_to_const returns the call unchanged on failure
@@ -183,8 +166,7 @@ class private FoldVisitor : AstVisitor {
                 return folded
             }
         }
-        // Lower radians/degrees to their defining `x * K` (bit-exact, K = the builtin at 1.0) so a
-        // backend needs only `mul` and an adjacent const factor merges via reassoc.
+        // Lower radians/degrees to their defining `x * K` (bit-exact, K = the builtin at 1.0) so a backend needs only `mul` and an adjacent const factor merges via reassoc.
         if (that.func != null && that.func.flags.builtIn && length(that.arguments) == 1
                 && is_float_family(expr_bt(that.arguments[0]))) {
             let nm = simple_name("{that.func.name}")
@@ -195,9 +177,7 @@ class private FoldVisitor : AstVisitor {
                     right = new ExprConstFloat(at = that.at, value = k))
             }
         }
-        // DISASSEMBLE mad (and, under `expandLerp`, lerp) into raw arithmetic so the folds,
-        // reassoc and CSE see through them; PHASE_FUSED re-packs survivors. Type-gated to the
-        // das math overload set — a loose DSL-stub instantiation must not expand ill-typed.
+        // DISASSEMBLE mad (and, under `expandLerp`, lerp) into raw arithmetic so the folds, reassoc and CSE see through them; PHASE_FUSED re-packs survivors. Type-gated to the das math overload set — a loose DSL-stub instantiation must not expand ill-typed.
         if (that.func != null && length(that.arguments) == 3) {
             let fname = simple_name("{that.func.name}")
             let ta = expr_bt(that.arguments[0])
@@ -207,8 +187,7 @@ class private FoldVisitor : AstVisitor {
                 var aArg = that.arguments[0]
                 var bArg = that.arguments[1]
                 var tArg = that.arguments[2]
-                // const-selector short-circuits — no expand/re-fuse round trip. They DROP an
-                // argument (`(b-a)*0` would still propagate b's inf/NaN) → fast-math only.
+                // const-selector short-circuits — no expand/re-fuse round trip. They DROP an argument (`(b-a)*0` would still propagate b's inf/NaN) → fast-math only.
                 if (!noFastMath) {
                     if (is_zero_const_op(tArg) && !has_sideeffects(bArg)) { changed = true; return aArg }
                     if (is_one_const_op(tArg) && !has_sideeffects(aArg)) { changed = true; return bArg }
@@ -571,8 +550,7 @@ class private ReassocVisitor : AstVisitor {
     changed : bool
     noFastMath : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        // Both the const-gather and the canonical re-sort rebuild the chain — a float
-        // sum/product picks up a different association order, so floats are fast-math only.
+        // Both the const-gather and the canonical re-sort rebuild the chain — a float sum/product picks up a different association order, so floats are fast-math only.
         if (noFastMath && is_float_valued(that)) {
             return that
         }

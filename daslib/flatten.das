@@ -751,10 +751,7 @@ def public flatten_expand_lerp : bool {
 
 [macro_function]
 def public flatten_hadd_pack_pairs : bool {
-    //! True when the COMPILING module sets `options _flatten_hadd_pack_pairs = true` — pack width-2
-    //! horizontal sums (`a + b`) into `hadd2` too. The default packs width >=3 only: a width-2 pack is
-    //! +1 node on a node-graph backend (a `combine2` with no offsetting add saved), but a win in cycles
-    //! on a SIMD CPU backend. COMPILE-TIME ONLY: patch code reads it once, runtime tools pass their flag.
+    //! True when the COMPILING module sets `options _flatten_hadd_pack_pairs = true` — pack width-2 horizontal sums (`a + b`) into `hadd2` too. The default packs width >=3 only: a width-2 pack is +1 node on a node-graph backend (a `combine2` with no offsetting add saved), but a win in cycles on a SIMD CPU backend. COMPILE-TIME ONLY: patch code reads it once, runtime tools pass their flag.
     return compiling_program()._options |> find_arg("_flatten_hadd_pack_pairs") ?as tBool ?? false
 }
 
@@ -792,10 +789,7 @@ def public flatten_pack(var func : FunctionPtr; no_fast_math : bool = false) : b
 
 [macro_function]
 def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false; hadd_min_width : int = 3) : bool {
-    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into
-    //! `dot(v, mask)`, independent scalar sums into `hadd` (groups of width [hadd_min_width..4]),
-    //! re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape back into lerp.
-    //! Call on the optimized, re-inferred body; repeat until it returns false.
+    //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into `dot(v, mask)`, independent scalar sums into `hadd` (groups of width [hadd_min_width..4]), re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape back into lerp.
     return fuse_body(func, no_fast_math, hadd_min_width)
 }
 
@@ -943,8 +937,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
-        // Lint runs with const-folding off, so `range(N)` isn't an ExprConstRange yet and the twin
-        // is irrelevant to linting; leave it the inert clone from `apply` (mirrors unroll.das).
+        // Lint runs with const-folding off, so `range(N)` isn't an ExprConstRange yet and the twin is irrelevant to linting; leave it the inert clone from `apply` (mirrors unroll.das).
         if (is_in_lint_check()) return true
         let ph = get_flatten_phase(func)
         if (ph == PHASE_DONE) return true
@@ -954,9 +947,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             return false
         }
         if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED && ph != PHASE_FUSED) {
-            // Cycle 1: lower the twin with the std whitelist, then re-infer so
-            // call.func resolves. (Backends call flatten_function directly with
-            // their own primitive set instead of going through this annotation.)
+            // Cycle 1: lower the twin with the std whitelist, then re-infer so call.func resolves. (Backends call flatten_function directly with their own primitive set instead of going through this annotation.)
             var ctx = flatten_function(twin, STD_WHITELIST, get_flatten_max_unroll(func))
             if (!ctx.ok) {
                 errors := ctx.err
@@ -967,18 +958,14 @@ class FlattenAnnotation : AstFunctionAnnotation {
             return true
         }
         if (ph == PHASE_LOWERED || ph == PHASE_FOLDED) {
-            // Cycle 2+: fold the inferred twin (const selects, algebraic identities, pure self-
-            // assigns), re-infer if anything changed. Iterate to a fixpoint — fold and the typer's
-            // re-infer const-fold are mutually-enabling, so one pass isn't enough.
+            // Cycle 2+: fold the inferred twin (const selects, algebraic identities, pure self- assigns), re-infer if anything changed. Iterate to a fixpoint — fold and the typer's re-infer const-fold are mutually-enabling, so one pass isn't enough.
             let folded = flatten_fold(twin, flatten_no_fast_math(), flatten_expand_lerp())
             set_flatten_phase(func, PHASE_FOLDED)
             if (folded) {
                 astChanged = true
                 return true
             }
-            // Fold fixpoint reached → run the optimize pass once on the canonical body: hoist uniform
-            // subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to
-            // type the new lets, then fuse next cycle.
+            // Fold fixpoint reached → run the optimize pass once on the canonical body: hoist uniform subtrees to top-of-body `_preshader_` lets, CSE-dedup repeated subtrees. Re-infer to type the new lets, then fuse next cycle.
             set_flatten_phase(func, PHASE_OPTIMIZED)
             if (flatten_optimize(twin, FLATTEN_BARRIERS, flatten_no_fast_math(), flatten_log_cse())) {
                 astChanged = true
@@ -986,9 +973,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             }
         }
         if (get_flatten_phase(func) == PHASE_OPTIMIZED || get_flatten_phase(func) == PHASE_FUSED) {
-            // Optimize converged → re-pack `a*b ± c` into `mad` and the lerp shape back into
-            // `lerp`, re-inferring to resolve the new calls; iterates (each round strictly
-            // drops a `+`/`-`, so it converges), a clean round falls through to the shape check.
+            // Optimize converged → re-pack `a*b ± c` into `mad` and the lerp shape back into `lerp`, re-inferring to resolve the new calls; iterates (each round strictly drops a `+`/`-`, so it converges), a clean round falls through to the shape check.
             set_flatten_phase(func, PHASE_FUSED)
             if (flatten_fuse(twin, flatten_no_fast_math(), flatten_hadd_pack_pairs() ? 2 : 3)) {
                 astChanged = true

@@ -259,10 +259,7 @@ def RttiValue_nothing {
     return t
 }
 
-//! Returns true when the source line at `at` carries a `// nolint:CODE` (or
-//! `// nolint:CODE1,CODE2,...`) directive listing `code`. Null-safe wrapper
-//! around the C-side scanner; returns false if `at.fileInfo == null` or
-//! `at.line == 0`. Canonical entry point for lint visitors.
+//! Returns true when the source line at `at` carries a `// nolint:CODE` (or `// nolint:CODE1,CODE2,...`) directive listing `code`. Null-safe wrapper around the C-side scanner; returns false if `at.fileInfo == null` or `at.line == 0`. Canonical entry point for lint visitors.
 def public is_lint_suppressed(at : LineInfo; code : string) : bool {
     return false if (at.fileInfo == null || at.line == 0u)
     return rtti_is_nolint_suppressed(at.fileInfo, at.line, code)

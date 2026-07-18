@@ -345,10 +345,7 @@ def private re_char(expr : string; offset : int) : MaybeReNode {
     return maybe(new ReNode(op = ReOp.Char, text = to_char(ch), textLen = 1, at = range(offset, offset + 1)))
 }
 
-// <set-items> ::= <set-item> | <set-item> <set-items>
-// <set-item> ::= <range> | <char>
-// <range> ::= <char> "-" <char>
-// <char> ::= any non metacharacter | "\" metacharacter
+// <set-items> ::= <set-item> | <set-item> <set-items> <set-item> ::= <range> | <char> <range> ::= <char> "-" <char> <char> ::= any non metacharacter | "\" metacharacter
 def private re_set_items(expr : string; offset : int) : MaybeReNode {
     trace("re_set_items", offset)
     if (eos(expr, offset)) return nada()
@@ -623,10 +620,7 @@ def private mk_union(var left, right : ReNode?) : ReNode? {
     }
 }
 
-// <RE> ::= <union> | <simple-RE>
-// <union> ::= <RE> "|" <simple-RE>
-// <simple-RE> ::= <concatenation> | <basic-RE>
-// <concatenation> ::= <simple-RE> <basic-RE>
+// <RE> ::= <union> | <simple-RE> <union> ::= <RE> "|" <simple-RE> <simple-RE> ::= <concatenation> | <basic-RE> <concatenation> ::= <simple-RE> <basic-RE>
 def private  re_re(expr : string; offset : int) : MaybeReNode {
     trace("re_re", offset)
     if (eos(expr, offset)) return nada()
@@ -655,11 +649,7 @@ def private  re_re(expr : string; offset : int) : MaybeReNode {
     return maybe(last)
 }
 
-// <basic-RE> ::= <star> | <plus> | <question> | <repeat> | <elementary-RE>
-// <star> ::= <elementary-RE> "*"
-// <plus> ::= <elementary-RE> "+"
-// <question> ::= <elementary-RE> "?"
-// <repeat> ::= <elementary-RE> "{" <n> "}" | <elementary-RE> "{" <n> "," "}" | <elementary-RE> "{" <n> "," <m> "}"
+// <basic-RE> ::= <star> | <plus> | <question> | <repeat> | <elementary-RE> <star> ::= <elementary-RE> "*" <plus> ::= <elementary-RE> "+" <question> ::= <elementary-RE> "?" <repeat> ::= <elementary-RE> "{" <n> "}" | <elementary-RE> "{" <n> "," "}" | <elementary-RE> "{" <n> "," <m> "}"
 def private re_basic(expr : string; offset : int) : MaybeReNode {
     trace("re_basic", offset)
     if (eos(expr, offset)) return nada()
@@ -1598,9 +1588,6 @@ def is_valid(re : Regex) {
 
 def regex_compile(var re : Regex; expr : string; case_insensitive : bool = false; dot_all : bool = false) : bool {
     //! Compile regular expression.
-    //! When `case_insensitive` is true, matching ignores ASCII case.
-    //! When `dot_all` is true, '.' also matches newline characters.
-    //! Validity of the compiled expression is checked by `is_valid`.
     re.caseInsensitive = case_insensitive
     re.dotAll = dot_all
     re.root = re_parse(expr)
@@ -1761,8 +1748,7 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
 }
 
 def private expand_replacement(regex : Regex; str : string; replacement : string; match_start, match_end : int) : string {
-    //! Expands replacement template with group references: $0 or $& for whole match,
-    //! $1-$9 for numbered groups, ${name} for named groups, $$ for literal $.
+    //! Expands replacement template with group references: $0 or $& for whole match, $1-$9 for numbered groups, ${name} for named groups, $$ for literal $.
     return build_string() $(writer) {
         let rlen = length(replacement)
         peek_data(replacement) $(rdata) {
@@ -1832,9 +1818,6 @@ def private expand_replacement(regex : Regex; str : string; replacement : string
 [unsafe_deref]
 def regex_replace(var regex : Regex; str : string; replacement : string) : string {
     //! Replaces all matches of the regular expression in `str` with `replacement`.
-    //! Supports group references in the replacement string:
-    //! `$0` or `$&` for whole match, `$1`-`$9` for numbered groups,
-    //! `${name}` for named groups, `$$` for literal `$`.
     if (empty(str)) return ""
     unsafe {
         return build_string() $(writer) {

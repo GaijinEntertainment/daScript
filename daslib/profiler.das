@@ -77,12 +77,6 @@ def convert_ns_to_unit(time : int64; to : string) {
 
 def parse_profiler_args() : ProfilerConfig {
     //! Parses daslang profiler command-line flags into a :ref:`struct ProfilerConfig`.
-    //!
-    //! Recognizes ``--das-profiler-log-file <path>``, ``--das-profiler-manual``,
-    //! ``--das-profiler-memory``, ``--das-profiler-time-unit <ns|us|ms|s>``,
-    //! ``--das-profiler-thread-local`` / ``--das-profiler-global``, and
-    //! ``--das-profiler-leaks`` (memory-leak tracking mode, mutually exclusive
-    //! with the performance profiler).
     var cfg = default<ProfilerConfig>
     var force_thread_local = -1
     var args <- get_command_line_arguments()
@@ -141,12 +135,6 @@ def public set_enable_profiler_log(ctxId : uint64, enabled : bool) {
 
 class ProfilerBaseAgent : DapiDebugAgent {
     //! Shared base for the performance and memory-leak profiler agents.
-    //! Owns state and helpers common to both concrete agents: the per-thread
-    //! vs. singleton install mode flag, the per-code-allocator instrumentation
-    //! dedup table, and the :ref:`isProfileable` / :ref:`ensure_instrumented`
-    //! helpers. Subclasses provide their own ``onInstall`` / ``onCreateContext``
-    //! / ``onDestroyContext`` and call ``ensure_instrumented`` from their
-    //! ``onCreateContext``.
     use_thread_local : bool = true
     instrumented : table<uint64>
 
@@ -207,9 +195,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         if (!isProfileable(ctx)) return
         let tid = intptr(unsafe(addr(ctx)))
         events[tid].enabled = !manual
-        // note: silent defaults to false. In manual mode the user flips
-        // `enabled` via set_enable_profiler; the dump on destroy is controlled
-        // separately by set_enable_profiler_log.
+        // note: silent defaults to false. In manual mode the user flips `enabled` via set_enable_profiler; the dump on destroy is controlled separately by set_enable_profiler_log.
         ensure_instrumented(ctx)
     }
     def enable_profiler(ctxId : uint64; enabled : bool) : void {
@@ -420,10 +406,7 @@ struct LeakContext {
 }
 
 class MemoryLeakProfilerAgent : ProfilerBaseAgent {
-    //! Debug agent that tracks live heap allocations and dumps leaks with
-    //! captured daslang call stacks on context destroy. Installed as a
-    //! singleton named ``"memleaks"`` agent so it observes allocations from
-    //! every instrumented context in a single bookkeeping table.
+    //! Debug agent that tracks live heap allocations and dumps leaks with captured daslang call stacks on context destroy. Installed as a singleton named ``"memleaks"`` agent so it observes allocations from every instrumented context in a single bookkeeping table.
     ctxs : table<uint64; LeakContext>
     out : FILE const?
 

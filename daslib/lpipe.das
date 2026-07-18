@@ -59,16 +59,7 @@ def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : Expressi
 
 [call_macro(name="lpipe")]
 class LpipeMacro : AstCallMacro {
-    //! This macro will implement the lpipe function. It allows piping blocks the previous line call. For example::
-    //!
-    //!     def take2(a,b:block)
-    //!         invoke(a)
-    //!         invoke(b)
-    //!     ...
-    //!     take2 <|
-    //!         print("block1\n")
-    //!     lpipe <|    // this block will pipe into take2
-    //!         print("block2\n")
+    //! Implements ``lpipe``, allowing blocks to pipe the previous line's call.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting lpipe(value)")
         var success = false

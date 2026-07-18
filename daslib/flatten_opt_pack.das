@@ -254,8 +254,7 @@ def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : Expres
 
 // Horizontal reduce over `vecName`'s W (2..4) components as a single hmin/hmax call.
 def private hreduce(vecName : string; width : int; op : string; at : LineInfo) : ExpressionPtr {
-    // groups are width 2..4 (caller bails below M=3, plan_groups avoids width-1 tails),
-    // so one horizontal-reduce call (hmin/hmax) replaces the lane-extract + scalar tree.
+    // groups are width 2..4 (caller bails below M=3, plan_groups avoids width-1 tails), so one horizontal-reduce call (hmin/hmax) replaces the lane-extract + scalar tree.
     assert(width >= 2 && width <= 4, "hreduce expects a packed group of width 2..4")
     var call = new ExprCall(at = at, name := "h{op}")
     call.arguments |> push(new ExprVar(at = at, name := vecName))

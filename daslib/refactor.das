@@ -75,8 +75,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
                     } else {
                         writer |> write("; ")
                     }
-                    // access_info_pass_mutable: a callee inside the extracted block demands a
-                    // mutable ref even if it never writes — a const param would not compile
+                    // access_info_pass_mutable: a callee inside the extracted block demands a mutable ref even if it never writes — a const param would not compile
                     let needs_mutable = v.variable.access_flags.access_ref || v.variable.access_info.access_info_pass_mutable
                     if (!v.variable._type.flags.constant && needs_mutable) {
                         writer |> write("var ")

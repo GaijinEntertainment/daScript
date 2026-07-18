@@ -111,10 +111,7 @@ def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; a
 }
 
 def public match_peel_r2v(var e : Expression?) : Expression? {
-    //! Strip post-typer ``ExprRef2Value`` wrappers. The ``match`` macro emits this around the
-    //! source side of AST class patterns so a clean pattern (``ExprField(...)``) matches a
-    //! typer-wrapped source, mirroring ``qmatch``'s transparency rule. ``$v`` captures of
-    //! Expression-typed values go through it too, so they bind the peeled node.
+    //! Strip post-typer ``ExprRef2Value`` wrappers. The ``match`` macro emits this around the source side of AST class patterns so a clean pattern (``ExprField(...)``) matches a typer-wrapped source, mirroring ``qmatch``'s transparency rule. ``$v`` captures of Expression-typed values go through it too, so they bind the peeled node.
     while (e != null && e is ExprRef2Value) {
         e = (e as ExprRef2Value).subexpr
     }
@@ -135,10 +132,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
     // if its a pointer to ast::Expression or such, we need to 'as' cast first
     if (wths.makeType.isHandle && isExpression(wths.makeType)
             && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
-        // Post-typer ExprRef2Value wrappers are invisible (no surface syntax) — peel the source
-        // side before the RTTI guard, mirroring qmatch. An explicit ExprRef2Value(...) pattern
-        // still matches the wrapper itself. `is` on a null AST pointer panics — both arms guard
-        // for null like the pointer-to-structure path below.
+        // Post-typer ExprRef2Value wrappers are invisible (no surface syntax) — peel the source side before the RTTI guard, mirroring qmatch. An explicit ExprRef2Value(...) pattern still matches the wrapper itself. `is` on a null AST pointer panics — both arms guard for null like the pointer-to-structure path below.
         if (wths.makeType.annotation.name != "ExprRef2Value") {
             var peeled = qmacro(match_peel_r2v($e(access)))
             peeled |> force_at(wths.at)
@@ -492,8 +486,7 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
             return false
         }
     }
-    // merge the branch's new captures (toL post-erase holds only those) — the old wholesale
-    // move dropped captures made earlier in the same pattern
+    // merge the branch's new captures (toL post-erase holds only those) — the old wholesale move dropped captures made earlier in the same pattern
     for (k, v in keys(toL.declarations), values(toL.declarations)) {
         to.declarations[k] = v
     }
@@ -673,10 +666,7 @@ class MatchMacro : AstCallMacro {
         return if (length(expr.arguments) != 2)
         assume blk = expr.arguments[1]
         return if (!(blk is ExprMakeBlock))
-        // we mark all if's inside the match to not fold, so that we can fold the match later
-        // Note: must set doNotFold even before blk._type is resolved, otherwise
-        // if(true)/if(false) literal conditions get constant-folded before the
-        // match macro can analyze them as patterns.
+        // we mark all if's inside the match to not fold, so that we can fold the match later Note: must set doNotFold even before blk._type is resolved, otherwise if(true)/if(false) literal conditions get constant-folded before the match macro can analyze them as patterns.
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
@@ -728,8 +718,7 @@ class MatchMacro : AstCallMacro {
                         rules |> replaceVarTag("_") <| clone_expression(access)
                     }
                     if (!multi_match && iff == null && empty(to.conditions)) {
-                        // unconditional tail arm (`_` wildcard): splice the body directly — an
-                        // `if (true)` tail defeats all-paths-return analysis and trips STYLE010
+                        // unconditional tail arm (`_` wildcard): splice the body directly — an `if (true)` tail defeats all-paths-return analysis and trips STYLE010
                         iff = nblk
                     } else {
                         var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))

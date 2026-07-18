@@ -214,9 +214,9 @@ def private fix_path_spelling(p : string) : string {
     var r = p |> replace("\\", "/")
     if (length(r) >= 2) {
         r = r |> modify_data() $(var arr) {
-            let c = uint(arr[0])
-            if (uint(arr[1]) == uint(':') && c >= uint('a') && c <= uint('z')) {
-                arr[0] = uint8(c - uint('a') + uint('A'))
+            let c = int(arr[0])
+            if (int(arr[1]) == ':' && c >= 'a' && c <= 'z') {
+                arr[0] = uint8(c - 'a' + 'A')
             }
         }
     }
@@ -224,10 +224,7 @@ def private fix_path_spelling(p : string) : string {
 }
 
 def private normalize_source_path(p : string) : string {
-    // the same source file may be opened via different spellings at AOT-generation time
-    // and at runtime (slash form, drive-letter case, dasroot-absolute vs repo-relative);
-    // the path is baked into the lowered code as a string constant, so it must hash
-    // identically — canonicalize to dasroot-relative (machine-independent), else absolute
+    // the same source file may be opened via different spellings at AOT-generation time and at runtime (slash form, drive-letter case, dasroot-absolute vs repo-relative);
     var root = fix_path_spelling(get_das_root())
     if (!(root |> ends_with("/"))) {
         root += "/"
@@ -264,9 +261,7 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
     for (idx in range(get_vector_length(field_values, src_tp))) {
         {
             var arg_expr = convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp, idx))), src_tp, at);
-            // retarget the element make-struct to the InitData wrapper type when get_dst_type
-            // substituted one; pointer compare (dst_tp != src_tp) is always true after clone_type,
-            // and writing makeType through a reinterpret of a non-ExprMakeStruct stomps the node
+            // retarget the element make-struct to the InitData wrapper type when get_dst_type substituted one; pointer compare (dst_tp != src_tp) is always true after clone_type, and writing makeType through a reinterpret of a non-ExprMakeStruct stomps the node
             if (dst_tp.baseType != Type.tString && describe(dst_tp) != describe(src_tp) && arg_expr is ExprMakeStruct) {
                 var make_str = unsafe(reinterpret<ExprMakeStruct?>(arg_expr));
                 make_str.makeType = clone_type(dst_tp);
@@ -432,8 +427,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
          return get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
     } elif (tstr == "ast_core::Enumeration") {
          assume pdata = unsafe(reinterpret<Enumeration?>(data));
-         // anonymous module (e.g. the program's main module) can't be found by name at
-         // reconstruction time; the TypeDecl-level alias fallback covers that shape
+         // anonymous module (e.g. the program's main module) can't be found by name at reconstruction time; the TypeDecl-level alias fallback covers that shape
          if (pdata._module == null || empty(pdata._module.name)) return null
          return get_find_in_module_expr("module_find_enumeration", pdata._module.name, pdata.name, at);
     } elif (tstr == "rtti_core::Module") {
@@ -472,9 +466,7 @@ class QuoteConverter : AstVisitor {
     def override visitExprQuote(var expr : ExprQuote?) : Expression? {
         astChanged = true
         var conv = convert_quote_to_expression(expr.arguments[0], expr.at)
-        // wrap the construction in a per-quote generated function and replace the quote with
-        // a call: the (large) construction expression then occupies one non-recursive leaf
-        // frame instead of inflating every caller's frame (fatal in recursive macros)
+        // wrap the construction in a per-quote generated function and replace the quote with a call: the (large) construction expression then occupies one non-recursive leaf frame instead of inflating every caller's frame (fatal in recursive macros)
         var fname = ""
         while (true) {
             fname = "`quote`lowered`{counter}"
@@ -483,9 +475,7 @@ class QuoteConverter : AstVisitor {
         }
         var fn = new Function(at = expr.at, atDecl = expr.at, name := fname,
             flags = FunctionFlags.generated | FunctionFlags.privateFunction)
-        // preserve the raw quote's static type (Expression?) — autoinfer would leak the
-        // concrete node type (e.g. ExprConstInt?) and break consumers that need type
-        // identity, e.g. `cond ? clone_expression(x) : quote(0)`
+        // preserve the raw quote's static type (Expression?) — autoinfer would leak the concrete node type (e.g. ExprConstInt?) and break consumers that need type identity, e.g. `cond ? clone_expression(x) : quote(0)`
         fn.result = expr._type != null ? clone_type(expr._type) : new TypeDecl(baseType = Type.autoinfer)
         var blk = new ExprBlock(at = expr.at)
         emplace_new(blk.list) <| new ExprReturn(at = expr.at, subexpr = conv)
@@ -500,13 +490,6 @@ class QuotePass : AstPassMacro {
     //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
-        // Triggered by the aot_macros policy (`daslang -aot -aot-macros`), the jit_enabled
-        // policy (lowered quotes codegen natively, raw ones can't), or per-module
-        // `options aot_macros` (self-contained tests). Macro-module programs are excluded
-        // from the jit trigger: macro contexts are never JITted (see llvm_macro's
-        // is_compiling_macros skip), and the lowered construction frames can overflow the
-        // macro-context stack at apply time. Raw quotes reaching JIT codegen from such
-        // modules fall back per-function via DisableJitVisitor.
         let lower = (compiling_program().policies.aot_macros
             || (compiling_program().policies.jit_enabled && !prog.flags.needMacroModule)
             || (prog._options |> find_arg("aot_macros") ?as tBool ?? false))

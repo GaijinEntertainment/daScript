@@ -62,12 +62,7 @@ def private md_sep(aligns : array<ColAlign>; width : array<int>) : string {
     }
 }
 
-//! Renders a GitHub-Markdown table from PRE-FORMATTED cells. ``headers`` names the columns, ``aligns``
-//! sets each column's alignment (right ``---:`` / left ``:---``), and ``rows`` holds the already-formatted
-//! cell strings — numbers pre-formatted (e.g. ``"{x:.2f}"``), winners already wrapped via [[md_bold]].
-//! Column widths span the header and every cell (bold ``**`` markers included), so the raw ``.md`` stays
-//! visually aligned for clean diffs while GitHub renders alignment from the separator row. ``aligns`` must
-//! carry one entry per header; a short row pads out with empty cells.
+//! Renders a GitHub-Markdown table from PRE-FORMATTED cells. ``headers`` names the columns, ``aligns`` sets each column's alignment (right ``---:`` / left ``:---``), and ``rows`` holds the already-formatted cell strings — numbers pre-formatted (e.g. ``"{x:.2f}"``), winners already wrapped via [[md_bold]].
 def public render_md_table(headers : array<string>; aligns : array<ColAlign>; rows : array<array<string>>) : string {
     let ncol = length(headers)
     var width : array<int>

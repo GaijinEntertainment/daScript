@@ -52,13 +52,7 @@ struct VarStackEntry {
 }
 
 struct Perf018State {
-    //! PERF018 per-for-loop candidate. Each enclosing `for` pushes one; `matched`
-    //! flips true once we observe `for (i in range(length(V)))` with exactly one
-    //! source and one iter var, where V is a bare Variable. We push a sentinel
-    //! for non-matching loops too so visitExprFor can pop unconditionally and
-    //! iter_var refs across nesting attribute to the right frame.
-    //! `array<T>` requires T trivially-storable, so the owning ExprFor pointer
-    //! lives in a parallel `perf018_for_exprs` array.
+    //! PERF018 per-for-loop candidate. Each enclosing `for` pushes one; `matched` flips true once we observe `for (i in range(length(V)))` with exactly one source and one iter var, where V is a bare Variable. We push a sentinel for non-matching loops too so visitExprFor can pop unconditionally and iter_var refs across nesting attribute to the right frame.
     @do_not_delete iter_var : Variable?
     @do_not_delete arr_var : Variable?
     qualified_count : int
@@ -69,16 +63,7 @@ struct Perf018State {
 }
 
 struct Perf022State {
-    //! PERF022 per-for-loop candidate. Detects 'for (s in A) { B |> push(s) }'
-    //! (push and push_clone; all three pipe/dot/plain-call shapes compiler-fold
-    //! to the same ExprCall). Pushed in preVisitExprFor in lockstep with PERF018.
-    //! `matched` is stamped by preVisitExprForBody when body is a single
-    //! ExprCall of the right shape against the frame's iter_var. We warn at the
-    //! for-loop's `at` (looked up via the parallel `perf022_for_exprs` stack)
-    //! rather than the inner push's `at` — the inner push location dedups
-    //! against PERF006 which also fires at that exact line:col.
-    //! `callee_id`: 1 = push, 2 = push_clone (kept trivial so the struct can live
-    //! in an array). String name is rebuilt at warn time.
+    //! PERF022 per-for-loop candidate. Detects 'for (s in A) { B |> push(s) }' (push and push_clone; all three pipe/dot/plain-call shapes compiler-fold to the same ExprCall). Pushed in preVisitExprFor in lockstep with PERF018.
     @do_not_delete iter_var : Variable?
     callee_id : int
     sources_seen : int
@@ -88,26 +73,14 @@ struct Perf022State {
 }
 
 struct Perf024Candidate {
-    //! PERF024 per-candidate state. One entry per `var X = clone_*(E)` decl
-    //! seen in the current function (any of clone_expression / clone_type /
-    //! clone_function / clone_variable / clone_structure). `safe_uses` counts
-    //! ExprVar refs to X passed directly as an arg at a [clone(...)]-annotated
-    //! position; `disqualified` is set on any other use. Reports the same way
-    //! as PERF023: !disqualified && safe_uses >= 1.
+    //! PERF024 per-candidate state. One entry per `var X = clone_*(E)` decl seen in the current function (any of clone_expression / clone_type / clone_function / clone_variable / clone_structure). `safe_uses` counts ExprVar refs to X passed directly as an arg at a [clone(...)]-annotated position; `disqualified` is set on any other use. Reports the same way as PERF023: !disqualified && safe_uses >= 1.
     @do_not_delete v : Variable?
     safe_uses : int
     disqualified : bool
 }
 
 struct Perf023Candidate {
-    //! PERF023 per-candidate state. One entry per `var X = clone_expression(E)`
-    //! decl seen in the current function. `safe_uses` counts ExprVar refs to X
-    //! whose ancestor chain (within this function) includes an `add_ptr_ref(...)`
-    //! call — the splice-wrapper installed by `apply_qrules` for every `$e(...)`
-    //! tag. `disqualified` is set on any other use (assignment, call arg passed
-    //! to a non-splice consumer, etc.); the pre-clone is then load-bearing. The
-    //! `var` carries the decl `at` directly (v.at), so the warning location is
-    //! derived without storing LineInfo in the array.
+    //! PERF023 per-candidate state. One entry per `var X = clone_expression(E)` decl seen in the current function. `safe_uses` counts ExprVar refs to X whose ancestor chain (within this function) includes an `add_ptr_ref(...)` call — the splice-wrapper installed by `apply_qrules` for every `$e(...)` tag. `disqualified` is set on any other use (assignment, call arg passed to a non-splice consumer, etc.); the pre-clone is then load-bearing. The `var` carries the decl `at` directly (v.at), so the warning location is derived without storing LineInfo in the array.
     @do_not_delete v : Variable?
     safe_uses : int
     disqualified : bool
@@ -158,11 +131,7 @@ class PerfLintVisitor : AstVisitor {
     // lowered to `<- clone_to_move(...)`) — the collapse is `return clone_to_move`,
     // not `return <- expr` (which would move/destroy the source).
     pending_move_is_clone : bool = false
-    // PERF018: per-for-loop index-only candidates; arr_path (string) and the
-    // owning ExprFor (for `.at` at warn time) live in parallel arrays kept in
-    // lockstep with perf018_stack. at_qualifying_pushes records how many
-    // increments each in-flight ExprAt added to in_qualifying_idx so visitExprAt
-    // can undo them.
+    // PERF018: per-for-loop index-only candidates; arr_path (string) and the owning ExprFor (for `.at` at warn time) live in parallel arrays kept in lockstep with perf018_stack. at_qualifying_pushes records how many increments each in-flight ExprAt added to in_qualifying_idx so visitExprAt can undo them.
     perf018_stack : array<Perf018State>
     perf018_paths : array<string>
     @do_not_delete perf018_for_exprs : array<ExprFor?>
@@ -173,20 +142,10 @@ class PerfLintVisitor : AstVisitor {
     // pointer lives in a parallel `perf022_for_exprs` array.
     perf022_stack : array<Perf022State>
     @do_not_delete perf022_for_exprs : array<ExprFor?>
-    // PERF023: per-function candidates for `var X = clone_expression(E)`. Cleared
-    // in preVisitFunction; finalized in visitFunction. `perf023_splice_depth` is
-    // a counter incremented when visiting INTO an `add_ptr_ref(...)` call
-    // (post-expansion form of `$e(...)` splice tags) and decremented on exit; an
-    // ExprVar reference to a candidate that fires while the counter is >0 is a
-    // "safe use" (apply_template will clone the substitution anyway), otherwise
-    // the candidate is disqualified.
+    // PERF023: per-function candidates for `var X = clone_expression(E)`. Cleared in preVisitFunction; finalized in visitFunction. `perf023_splice_depth` is a counter incremented when visiting INTO an `add_ptr_ref(...)` call (post-expansion form of `$e(...)` splice tags) and decremented on exit; an ExprVar reference to a candidate that fires while the counter is >0 is a "safe use" (apply_template will clone the substitution anyway), otherwise the candidate is disqualified.
     perf023_candidates : array<Perf023Candidate>
     perf023_splice_depth : int = 0
-    // PERF024: per-function candidates for `var X = clone_*(E)` whose only
-    // uses are direct args at [clone(...)]-annotated positions. `perf024_skip_iptr`
-    // holds the intptr identity of a Variable that's about to be visited via
-    // a pre-classified annotated-arg position; cleared in preVisitExprVar so
-    // that ExprVar visit doesn't re-classify (would otherwise disqualify).
+    // PERF024: per-function candidates for `var X = clone_*(E)` whose only uses are direct args at [clone(...)]-annotated positions. `perf024_skip_iptr` holds the intptr identity of a Variable that's about to be visited via a pre-classified annotated-arg position; cleared in preVisitExprVar so that ExprVar visit doesn't re-classify (would otherwise disqualify).
     perf024_candidates : array<Perf024Candidate>
     perf024_skip_iptr : uint64 = 0ul
     warning_count : int = 0
@@ -223,8 +182,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
-        // Suppress in templates and inside macro-generated functions —
-        // the user didn't write that code.
+        // Suppress in templates and inside macro-generated functions — the user didn't write that code.
         if (in_template
             || (current_function != null && current_function.flags.generated)) return
         // Deduplicate warnings — same source location reported once, regardless of generic instantiations
@@ -285,7 +243,6 @@ class PerfLintVisitor : AstVisitor {
 
     def is_array_func(expr : ExprCall?; fname : string) : bool {
         // Builtin generics (push, reserve, etc.) have fromGeneric set.
-        // Verify first argument is an array type.
         if (expr.func == null || expr.func.fromGeneric == null
             || expr.func.fromGeneric.name != fname || empty(expr.arguments)) return false
         let arg = expr.arguments[0]
@@ -293,9 +250,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def find_expr_path(var expr : Expression?; var path : string&) : Variable? {
-        //! Walks expression chains (field access, deref, index, etc.) to find the
-        //! root variable, building a path string to distinguish foo.a from foo.b.
-        //! Returns null if the chain can't be resolved (call results, Op3, etc.).
+        //! Walks expression chains (field access, deref, index, etc.) to find the root variable, building a path string to distinguish foo.a from foo.b.
         return null if (expr == null)
         if (expr is ExprVar) {
             var evar = expr as ExprVar
@@ -373,7 +328,6 @@ class PerfLintVisitor : AstVisitor {
         return false if (inner == null || !(inner is ExprCall))
         var call = inner as ExprCall
         // After inference, string() calls may have FakeContext/FakeLineInfo extra args.
-        // Check the function name and first argument type.
         if (empty(call.arguments) || call.name != "string") return false
         var arg = call.arguments[0]
         if (arg._type == null || arg._type.baseType != Type.tHandle) return false
@@ -432,18 +386,14 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def expr_equal_struct(a : Expression? const; b : Expression? const; require_pure : bool = true) : bool {
-        //! Structural equality via describe(). With `require_pure=true` (default),
-        //! returns false when either side has side effects — protects rules that
-        //! suggest collapsing duplicated subexpressions (PERF014/015/016) from
-        //! silently changing evaluation count.
+        //! Structural equality via describe(). With `require_pure=true` (default), returns false when either side has side effects — protects rules that suggest collapsing duplicated subexpressions (PERF014/015/016) from silently changing evaluation count.
         if ((a == null || b == null)
             || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) return false
         return describe(a) == describe(b)
     }
 
     def is_workhorse_numeric(t : TypeDecl?) : bool {
-        //! True if the type is one of the six numeric workhorse scalars (int, uint,
-        //! int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
+        //! True if the type is one of the six numeric workhorse scalars (int, uint, int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
         if (t == null) return false
         let bt = t.baseType
         return (bt == Type.tInt || bt == Type.tUInt
@@ -453,7 +403,6 @@ class PerfLintVisitor : AstVisitor {
 
     def is_collection_length_call(expr : Expression? const) : bool {
         //! True for length(string) / length(das_string) / length(array) / length(table).
-        //! Excludes math::length(float2/3/4) which returns vector magnitude.
         if (expr == null || !(expr is ExprCall)) return false
         let call = expr as ExprCall
         if (call.func == null || call.func.name != "length") return false
@@ -465,8 +414,6 @@ class PerfLintVisitor : AstVisitor {
 
     def unwrap_int_cast(expr : Expression? const) : Expression? const {
         //! If `expr` is `int(x)` (single argument, no fake/context args), return x.
-        //! `int()` after inference is a generic call — fromGeneric.name is "int".
-        //! Peels one ExprRef2Value layer first.
         if (expr == null) return null
         var inner = expr
         if (inner is ExprRef2Value) {
@@ -481,9 +428,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def enum_has_or_operator(t : TypeDecl?) : bool {
-        //! Returns true if any module in the compiling program defines `def operator |(a, b : T) : ...`
-        //! for the enum represented by `t`. Result is cached on perf019_enum_or_probed / _yes by
-        //! intptr(t.enumType) so repeated checks across a large file don't re-walk the function table.
+        //! Returns true if any module in the compiling program defines `def operator |(a, b : T) : ...` for the enum represented by `t`. Result is cached on perf019_enum_or_probed / _yes by intptr(t.enumType) so repeated checks across a large file don't re-walk the function table.
         if (t == null || t.enumType == null) return false
         let key = intptr(t.enumType)
         for (idx in range(length(perf019_enum_or_probed))) {
@@ -509,10 +454,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def inner_type_supports_or(t : TypeDecl?) : bool {
-        //! True if `T | T` resolves: bitfields always; enums only when an
-        //! `operator |` overload exists. Vectors/ints/etc. don't get here —
-        //! the caller restricts to int-cast inputs whose underlying type is
-        //! either bitfield or enum.
+        //! True if `T | T` resolves: bitfields always; enums only when an `operator |` overload exists. Vectors/ints/etc. don't get here — the caller restricts to int-cast inputs whose underlying type is either bitfield or enum.
         if (t == null) return false
         if (t.baseType == Type.tBitfield) return true
         if (t.baseType == Type.tEnumeration) return enum_has_or_operator(t)
@@ -523,10 +465,6 @@ class PerfLintVisitor : AstVisitor {
 
     def perf020_target_basetype(fname : string) : Type {
         //! Map a workhorse cast-function name to the Type it produces.
-        //! Returns Type.none for names that are not in the workhorse-cast set.
-        //! Set: 11 numeric scalars + string + 4 bitfield flavours (15 total).
-        //! Source of truth: ADD_NUMERIC_CASTS / ADD_BITFIELD_CASTS in
-        //! src/builtin/module_builtin.cpp plus das_lexical_cast_* externs.
         if (fname == "int") return Type.tInt
         if (fname == "int8") return Type.tInt8
         if (fname == "int16") return Type.tInt16
@@ -549,8 +487,6 @@ class PerfLintVisitor : AstVisitor {
 
     def is_clone_init_call(expr : Expression const?) : bool {
         //! True when expr is a single-arg call to one of the AST clone primitives.
-        //! Used to seed PERF024 candidates (`var X = clone_*(E)`) and to detect
-        //! Type-A direct-splice form (`func(clone_*(X))`).
         if (expr == null || !(expr is ExprCall)) return false
         let c = expr as ExprCall
         if (length(c.arguments) != 1) return false
@@ -561,8 +497,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def get_clone_param_indices(callee : Function?; var out : array<int>&) : void {
-        //! Fills `out` with the param-index list for any [clone(...)] annotations
-        //! on callee. Caller-owned out array avoids array return ownership.
+        //! Fills `out` with the param-index list for any [clone(...)] annotations on callee. Caller-owned out array avoids array return ownership.
         out |> clear
         if (callee == null) return
         for (ann in callee.annotations) {
@@ -581,15 +516,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF025: redundant string(...) inside string interpolation helpers ---
 
     def perf025_value_kind(arg : Expression const?) : Perf025Kind {
-        //! Classifies a string() cast's value argument by how `"{x}"` (the string
-        //! builder's own conversion) compares to `string(x)`:
-        //!   equivalent   — identical output (drop the cast): signed ints, float,
-        //!                  double, string, das_string.
-        //!   unsigned_hex — decimal vs hex difference (drop, but suggest the ':d'
-        //!                  tag): the four unsigned int widths interpolate as hex.
-        //!   skip         — not flaggable: value-shape-changing conversions
-        //!                  (array<uint8>, uri, text_range, other handled types)
-        //!                  and anything else.
+        //! Classifies a string() cast's value argument by how `"{x}"` (the string builder's own conversion) compares to `string(x)`:
         if (arg == null || arg._type == null) return Perf025Kind.skip
         let bt = arg._type.baseType
         if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
@@ -601,12 +528,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf025_string_call_value(e : Expression const?) : Expression const? {
-        //! If `e` is a `string(value)` cast call, return its value argument
-        //! (arguments[0]). Skips an explicit `string(x, true)` hex request — the
-        //! second argument being a literal `true` means the user wants hex, which
-        //! no longer matches plain interpolation for signed types. The float /
-        //! double / string / das_string overloads have no hex param, so their
-        //! arguments[1] (a FakeContext) is not an ExprConstBool and passes through.
+        //! If `e` is a `string(value)` cast call, return its value argument (arguments[0]). Skips an explicit `string(x, true)` hex request — the second argument being a literal `true` means the user wants hex, which no longer matches plain interpolation for signed types. The float / double / string / das_string overloads have no hex param, so their arguments[1] (a FakeContext) is not an ExprConstBool and passes through.
         if (e == null || !(e is ExprCall)) return null
         let c = e as ExprCall
         if (c.func == null || empty(c.arguments)) return null
@@ -620,11 +542,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf025_unwrap_element(elem : Expression const?) : Expression const? {
-        //! Peels one ExprRef2Value off an interpolation element so a `string(...)`
-        //! call read through a value-context wrapper is still exposed. A format
-        //! spec (`"{x:fmt}"`) lowers to `_::fmt(":fmt", x)`, but `fmt` has no
-        //! string-valued overload, so `string(x)` can never sit under a fmt
-        //! wrapper (it would not compile) — no fmt unwrap is needed.
+        //! Peels one ExprRef2Value off an interpolation element so a `string(...)` call read through a value-context wrapper is still exposed. A format spec (`"{x:fmt}"`) lowers to `_::fmt(":fmt", x)`, but `fmt` has no string-valued overload, so `string(x)` can never sit under a fmt wrapper (it would not compile) — no fmt unwrap is needed.
         var ex = elem
         if (ex != null && ex is ExprRef2Value) {
             ex = (ex as ExprRef2Value.subexpr)
@@ -704,28 +622,17 @@ class PerfLintVisitor : AstVisitor {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth, is_iter = false))
         }
         // PERF023: seed candidate when init is `clone_expression(...)`.
-        // Closure-scoped lets are skipped — `apply_template` rules block IS a
-        // closure (the `(var rules : Template)` block argument), and pre-clones
-        // declared there have different lifetime semantics than parent-scope
-        // ones. We only fire on user-level decls.
         if (in_closure == 0 && v != null && v.init != null && v.init is ExprCall) {
             let initCall = v.init as ExprCall
             if (initCall.name == "clone_expression" && length(initCall.arguments) == 1) {
                 perf023_candidates |> push(Perf023Candidate(v = v, safe_uses = 0, disqualified = false))
             }
         }
-        // PERF024: seed candidate when init is any clone_* primitive. Broader
-        // than PERF023's clone_expression-only seed because the [clone(...)]
-        // contract covers all five AST clone primitives. Same closure-gating
-        // rationale as PERF023.
+        // PERF024: seed candidate when init is any clone_* primitive. Broader than PERF023's clone_expression-only seed because the [clone(...)] contract covers all five AST clone primitives. Same closure-gating rationale as PERF023.
         if (in_closure == 0 && v != null && is_clone_init_call(v.init)) {
             perf024_candidates |> push(Perf024Candidate(v = v, safe_uses = 0, disqualified = false))
         }
         // PERF009: track last move-initialized variable. Two flavors:
-        //   `var x <- expr`  → collapse to `return <- expr`
-        //   `var x := expr`  → compiler-lowered to `<- clone_to_move(...)`; collapse
-        //                      to `return clone_to_move(expr)` (a plain `return <- x`
-        //                      would move/destroy the clone source).
         if (last && v.flags.init_via_move && v.init != null) {
             var dominated_by_clone = false
             var ini = v.init
@@ -844,9 +751,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF018: for (i in range(length(arr))) where i only indexes arr ---
 
     def perf018_push_sentinel(expr : ExprFor?) : void {
-        //! Always pushed in preVisitExprFor — keeps the stack in lockstep with
-        //! for-loop nesting so visitExprFor can pop unconditionally. Matched/
-        //! disqualified status is filled in by the per-source/per-variable hooks.
+        //! Always pushed in preVisitExprFor — keeps the stack in lockstep with for-loop nesting so visitExprFor can pop unconditionally. Matched/ disqualified status is filled in by the per-source/per-variable hooks.
         var state = Perf018State(disqualified = true, matched = false)
         perf018_stack    |> push(state)
         unsafe {
@@ -867,9 +772,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_bare_var_of(var e : ExpressionPtr) : Variable? {
-        //! Returns the underlying Variable if `e` (after one optional Ref2Value
-        //! peel) is a bare ExprVar. Null otherwise — field paths, calls, etc. all
-        //! intentionally disqualify PERF018's arr resolution.
+        //! Returns the underlying Variable if `e` (after one optional Ref2Value peel) is a bare ExprVar. Null otherwise — field paths, calls, etc. all intentionally disqualify PERF018's arr resolution.
         var inner = e
         if (inner is ExprRef2Value) {
             inner = (inner as ExprRef2Value.subexpr)
@@ -880,9 +783,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_record_source(src : ExpressionPtr) : void {
-        //! Called from preVisitExprForSource. Peels `range(length(<bareVar>))`
-        //! (with one optional ExprCast on either layer) and, when matched, stamps
-        //! the candidate's arr_var. Iter var arrives via perf018_record_var.
+        //! Called from preVisitExprForSource. Peels `range(length(<bareVar>))` (with one optional ExprCast on either layer) and, when matched, stamps the candidate's arr_var. Iter var arrives via perf018_record_var.
         if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
@@ -932,8 +833,6 @@ class PerfLintVisitor : AstVisitor {
 
     def perf018_record_var(var v : Variable?) : void {
         //! Called from preVisitExprForVariable. Stamps iter_var on the top frame.
-        //! When a single iter var pairs with a single recognized source, marks
-        //! the candidate matched + un-disqualified.
         if (empty(perf018_stack) || v == null) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
@@ -948,10 +847,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_finalize_on_body() : void {
-        //! Called from preVisitExprForBody — fires once per for, after every
-        //! preVisitExprForSource and preVisitExprForVariable. Flips matched=true
-        //! iff the loop had exactly one source we recognized (arr_var set) and
-        //! exactly one iter var (iter_var set).
+        //! Called from preVisitExprForBody — fires once per for, after every preVisitExprForSource and preVisitExprForVariable. Flips matched=true iff the loop had exactly one source we recognized (arr_var set) and exactly one iter var (iter_var set).
         if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
@@ -964,9 +860,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_at_matches(var at : ExprAt?; frame_idx : int) : bool {
-        //! True when `at.subexpr[at.index]` accesses the frame's arr_var (bare)
-        //! and indexes by the frame's iter_var with no arithmetic. Conservative
-        //! by design — field paths, casts on the subexpr, etc. don't qualify.
+        //! True when `at.subexpr[at.index]` accesses the frame's arr_var (bare) and indexes by the frame's iter_var with no arithmetic. Conservative by design — field paths, casts on the subexpr, etc. don't qualify.
         if (frame_idx < 0 || frame_idx >= length(perf018_stack)) return false
         let state = perf018_stack[frame_idx]
         if (state.disqualified || !state.matched
@@ -1005,8 +899,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_on_var(v : Variable?) : void {
-        //! Called from preVisitExprVar: a bare iter_var reference outside any
-        //! qualifying ExprAt index slot disqualifies the matching frame.
+        //! Called from preVisitExprVar: a bare iter_var reference outside any qualifying ExprAt index slot disqualifies the matching frame.
         if (v == null || empty(perf018_stack) || in_qualifying_idx > 0) return
         let n = length(perf018_stack)
         for (i in range(n)) {
@@ -1021,11 +914,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF022: for (s in A) { B |> push(s) } — recommend bulk *_from ---
 
     def perf022_push_sentinel(expr : ExprFor?) : void {
-        //! Always pushed in preVisitExprFor so the stack stays lock-step with
-        //! for-loop nesting. preVisitExprForBody may flip `matched`; if a
-        //! frame survives to perf022_pop_and_check matched-and-undisqualified,
-        //! we fire at the for-loop's `at` (not the push's, to avoid colliding
-        //! with PERF006 under the same-location dedup in perf_warning).
+        //! Always pushed in preVisitExprFor so the stack stays lock-step with for-loop nesting. preVisitExprForBody may flip `matched`; if a frame survives to perf022_pop_and_check matched-and-undisqualified, we fire at the for-loop's `at` (not the push's, to avoid colliding with PERF006 under the same-location dedup in perf_warning).
         var state : Perf022State
         perf022_stack |> push(state)
         unsafe {
@@ -1041,9 +930,7 @@ class PerfLintVisitor : AstVisitor {
         if (state.sources_seen > 1) {
             state.disqualified = true
         }
-        // PERF022 only suggests push_from / push_clone_from, which take array<T>
-        // or C-array sources. Disqualify range/string/iterator/generator sources
-        // — there is no bulk overload to migrate to in those cases.
+        // PERF022 only suggests push_from / push_clone_from, which take array<T> or C-array sources. Disqualify range/string/iterator/generator sources — there is no bulk overload to migrate to in those cases.
         if (src == null || src._type == null) {
             state.disqualified = true
         } else {
@@ -1071,11 +958,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf022_inspect_body(body : Expression?) : void {
-        //! Called from preVisitExprForBody. Flips `matched` iff the body is
-        //! a single-statement ExprBlock containing exactly one ExprCall to
-        //! push/push_clone with arg[1] = the frame's iter_var. Compiler folds
-        //! 'B |> push(s)', 'B.push(s)', and 'push(B, s)' to the same shape,
-        //! so this single check covers all three call forms.
+        //! Called from preVisitExprForBody. Flips `matched` iff the body is a single-statement ExprBlock containing exactly one ExprCall to push/push_clone with arg[1] = the frame's iter_var. Compiler folds 'B |> push(s)', 'B.push(s)', and 'push(B, s)' to the same shape, so this single check covers all three call forms.
         if (empty(perf022_stack)) return
         let top_idx = length(perf022_stack) - 1
         var state = perf022_stack[top_idx]
@@ -1089,9 +972,6 @@ class PerfLintVisitor : AstVisitor {
             || length((stmt as ExprCall).arguments) != 2) return
         var call = stmt as ExprCall
         // Destination must be `array<T>` — the `*_from` overloads are array-only.
-        // Generic `auto` parameters (e.g. `[expect_any_vector] def clone(var args;
-        // ...)` in builtin.das) where the destination accepts dasvector etc. must
-        // be skipped — no push_from overload exists for them.
         let dest = call.arguments[0]
         if (dest == null || dest._type == null || dest._type.baseType != Type.tArray) return
         var callee_id = 0
@@ -1213,10 +1093,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF008: unnecessary get_ptr() for is/as ---
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
-        // No in_closure check needed — loop_depth doesn't increment inside
-        // closure bodies (see preVisitExprFor/While), so PERF001's loop check
-        // is already correctly scoped. The other rules below are syntactic
-        // patterns that misbehave identically inside or outside closures.
+        // No in_closure check needed — loop_depth doesn't increment inside closure bodies (see preVisitExprFor/While), so PERF001's loop check is already correctly scoped. The other rules below are syntactic patterns that misbehave identically inside or outside closures.
         if (loop_depth > 0 && expr.op == "+=") {
             let v = find_string_var_from_expr(expr.left)
             if (v != null && is_defined_outside_loop(v)) {
@@ -1249,9 +1126,7 @@ class PerfLintVisitor : AstVisitor {
         if (is_get_ptr_vs_null(expr.left, expr.right) || is_get_ptr_vs_null(expr.right, expr.left)) {
             perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at)
         }
-        // PERF013: a += ±1 / a -= ±1 → a++ / a--
-        // Derive the actual delta from (op, RHS) so each branch can suggest the
-        // correct postfix operator. RHS is one of {+1, -1}; op flips the sign.
+        // PERF013: a += ±1 / a -= ±1 → a++ / a-- Derive the actual delta from (op, RHS) so each branch can suggest the correct postfix operator. RHS is one of {+1, -1}; op flips the sign.
         if (expr.op == "+=" || expr.op == "-=") {
             if (expr.left != null && is_workhorse_numeric(expr.left._type)) {
                 let rhs_one = is_const_one(expr.right)
@@ -1269,9 +1144,7 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
-        // PERF014: exact char-class checks. Digit range is a single bounded range
-        // (closed joins with &&, negated complement with ||). Alpha is the both-case
-        // compound (closed = || of two ranges, negated = && of two complements).
+        // PERF014: exact char-class checks. Digit range is a single bounded range (closed joins with &&, negated complement with ||). Alpha is the both-case compound (closed = || of two ranges, negated = && of two complements).
         if (expr.op == "&&") {
             check_perf014_digit(expr, false)
             check_perf014_alpha(expr, true)
@@ -1284,8 +1157,7 @@ class PerfLintVisitor : AstVisitor {
         if (expr.op == "==" || expr.op == "!=" || expr.op == "<" || expr.op == "<=" || expr.op == ">" || expr.op == ">=") {
             check_perf017_length_zero(expr)
         }
-        // PERF019: int(T.a) | int(T.b) collapses to int(T.a | T.b) when T natively
-        // supports `|` (bitfield always; enum only when an `operator |` overload exists).
+        // PERF019: int(T.a) | int(T.b) collapses to int(T.a | T.b) when T natively supports `|` (bitfield always; enum only when an `operator |` overload exists).
         if (expr.op == "|") {
             check_perf019_int_cast_or(expr)
         }
@@ -1321,10 +1193,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF021: cond ? T(a) : T(b) — hoist common workhorse cast out of ternary ---
 
     def cast_call_workhorse_target(e : Expression?; var fname_out : string&) : Type {
-        //! If `e` is a workhorse cast call (after peeling ExprRef2Value), return
-        //! its target Type and write the cast name to `fname_out`. Otherwise
-        //! return Type.none. Accepts any argument count — `string(int)` is bound
-        //! with `value,hex,context,at` (4 daslang args), other casts use 1.
+        //! If `e` is a workhorse cast call (after peeling ExprRef2Value), return its target Type and write the cast name to `fname_out`. Otherwise return Type.none. Accepts any argument count — `string(int)` is bound with `value,hex,context,at` (4 daslang args), other casts use 1.
         var ee = e
         if (ee != null && ee is ExprRef2Value) {
             ee = (ee as ExprRef2Value.subexpr)
@@ -1340,8 +1209,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def cast_call_arg_basetype(e : Expression?) : Type {
-        //! Peel ExprRef2Value, take call.arguments[0], peel ExprRef2Value, return its baseType
-        //! (or Type.none if anything along the chain is null).
+        //! Peel ExprRef2Value, take call.arguments[0], peel ExprRef2Value, return its baseType (or Type.none if anything along the chain is null).
         var ee = e
         if (ee != null && ee is ExprRef2Value) {
             ee = (ee as ExprRef2Value.subexpr)
@@ -1358,12 +1226,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def cast_call_tail_args_equal(le, re : Expression?) : bool {
-        //! Compare arguments[1..] structurally between two cast calls. Skip
-        //! ExprFakeContext / ExprFakeLineInfo (auto-injected by the typer for
-        //! Context*/LineInfoArg* parameters; differ at every call site by
-        //! design). The remaining tail args — e.g. `string(int)`'s `hex` flag —
-        //! must match in count and via expr_equal_struct, otherwise the hoist
-        //! would silently lose semantically-significant arguments.
+        //! Compare arguments[1..] structurally between two cast calls. Skip ExprFakeContext / ExprFakeLineInfo (auto-injected by the typer for Context*/LineInfoArg* parameters; differ at every call site by design). The remaining tail args — e.g. `string(int)`'s `hex` flag — must match in count and via expr_equal_struct, otherwise the hoist would silently lose semantically-significant arguments.
         var lee = le
         var ree = re
         if (lee != null && lee is ExprRef2Value) {
@@ -1403,9 +1266,7 @@ class PerfLintVisitor : AstVisitor {
         let rt = cast_call_workhorse_target(expr.right, rname)
         let la = cast_call_arg_basetype(expr.left)
         let ra = cast_call_arg_basetype(expr.right)
-        // Tail-args must match so the hoisted form preserves semantically-significant
-        // arguments (e.g. `string(int, hex)`'s `hex` flag). Auto-injected
-        // ExprFakeContext / ExprFakeLineInfo are skipped — they differ at every site.
+        // Tail-args must match so the hoisted form preserves semantically-significant arguments (e.g. `string(int, hex)`'s `hex` flag). Auto-injected ExprFakeContext / ExprFakeLineInfo are skipped — they differ at every site.
         if (lt == Type.none || rt == Type.none || lt != rt || lname != rname
             || la == Type.none || la != ra
             || !cast_call_tail_args_equal(expr.left, expr.right)) return
@@ -1415,13 +1276,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF014: exact char-class checks — is_number (digit range) / is_alpha (both-case compound) ---
 
     def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
-        //! Parse `var <op> const` or `const <op> var` where op is `upper_op` or
-        //! `lower_op`. Returns true and fills outputs with: the variable
-        //! expression, the int bound, and whether this leg expresses the upper
-        //! bound of the range on var. `upper_op` is the var-on-left operator that
-        //! marks the upper-bound leg ("<=" closed-in-range, ">" open-out-of-range);
-        //! `lower_op` the lower-bound one (">=" / "<"). Yoda (const-on-left) forms
-        //! flip, so the const-on-left arm tests against `lower_op`.
+        //! Parse `var <op> const` or `const <op> var` where op is `upper_op` or `lower_op`. Returns true and fills outputs with: the variable expression, the int bound, and whether this leg expresses the upper bound of the range on var. `upper_op` is the var-on-left operator that marks the upper-bound leg ("<=" closed-in-range, ">" open-out-of-range);
         if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)
@@ -1443,10 +1298,6 @@ class PerfLintVisitor : AstVisitor {
 
     def parse_bounded_range(expr : ExprOp2?; negated : bool; var v_out : Expression?&; var lo_out : int&; var hi_out : int&) : bool {
         //! Parse a single bounded range on one variable from a two-leg ExprOp2.
-        //! Closed (`negated == false`): `c >= lo && c <= hi` (join `&&`, legs <=/>=).
-        //! Open   (`negated == true`):  `c < lo || c > hi`   (join `||`, legs </>).
-        //! Both legs must constrain the SAME (pure) expression — one upper, one
-        //! lower bound. Fills v_out / lo_out / hi_out; returns true on clean parse.
         if (expr == null || expr.op != (negated ? "||" : "&&")) return false
         let upper_op = negated ? ">" : "<="
         let lower_op = negated ? "<" : ">="
@@ -1470,8 +1321,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf014_digit(expr : ExprOp2?; negated : bool) : void {
-        //! Exact: `c >= '0' && c <= '9'` → is_number(c); the negated De Morgan
-        //! complement `c < '0' || c > '9'` → !is_number(c).
+        //! Exact: `c >= '0' && c <= '9'` → is_number(c); the negated De Morgan complement `c < '0' || c > '9'` → !is_number(c).
         var v : Expression? = null
         var lo = 0
         var hi = 0
@@ -1481,12 +1331,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
-        //! Exact: `('a'..'z') || ('A'..'Z')` → is_alpha(c). Its De Morgan negation
-        //! `(c < 'a' || c > 'z') && (c < 'A' || c > 'Z')` → !is_alpha(c). is_alpha
-        //! is DEFINED as exactly this both-case union, so a single-case range is
-        //! intentionally NOT flagged (no equivalent helper). The top-level join is
-        //! `||` for the closed form / `&&` for the negated form; each child is a
-        //! bounded range of the matching polarity.
+        //! Exact: `('a'..'z') || ('A'..'Z')` → is_alpha(c). Its De Morgan negation `(c < 'a' || c > 'z') && (c < 'A' || c > 'Z')` → !is_alpha(c). is_alpha is DEFINED as exactly this both-case union, so a single-case range is intentionally NOT flagged (no equivalent helper). The top-level join is `||` for the closed form / `&&` for the negated form; each child is a bounded range of the matching polarity.
         if (expr == null || expr.op != (negated ? "&&" : "||")
             || expr.left == null || expr.right == null
             || !(expr.left is ExprOp2) || !(expr.right is ExprOp2)) return
@@ -1529,13 +1374,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf017_length_zero(expr : ExprOp2?) : void {
-        // Skip the canonical implementation of empty() in daslib/builtin.das —
-        // empty(x) is literally `return length(x) == 0`, and the rule's whole job
-        // is to suggest `empty(x)`. Self-flagging the suggestion's own body is
-        // noise. Generic instantiations of empty<T> hit this path with
-        // current_function.fromGeneric pointing at the source `empty`. Both arms
-        // also gate on _module.name == "builtin" so unrelated user methods named
-        // empty() (e.g. delegate.empty(), AOT cache empty()) keep getting linted.
+        // Skip the canonical implementation of empty() in daslib/builtin.das — empty(x) is literally `return length(x) == 0`, and the rule's whole job is to suggest `empty(x)`. Self-flagging the suggestion's own body is noise. Generic instantiations of empty<T> hit this path with current_function.fromGeneric pointing at the source `empty`. Both arms also gate on _module.name == "builtin" so unrelated user methods named empty() (e.g. delegate.empty(), AOT cache empty()) keep getting linted.
         if (current_function != null) {
             let direct_match = (current_function.name == "empty"
                 && current_function._module != null
@@ -1573,11 +1412,7 @@ class PerfLintVisitor : AstVisitor {
                 canon_op = "<="
             }
         }
-        // Map (canon_op, k) → empty / !empty
-        //   k=0: ==, <=             → empty
-        //        !=, >              → !empty
-        //   k=1: <                  → empty   (length < 1 means length == 0)
-        //        >=                 → !empty  (length >= 1 means length > 0)
+        // Map (canon_op, k) → empty / !empty k=0: ==, <=             → empty !=, >              → !empty k=1: <                  → empty   (length < 1 means length == 0) >=                 → !empty  (length >= 1 means length > 0)
         var is_empty_pattern = false
         var is_nonempty_pattern = false
         if (k == 0) {
@@ -1593,8 +1428,7 @@ class PerfLintVisitor : AstVisitor {
                 is_nonempty_pattern = true
             }
         }
-        // Diagnostic uses canon_op so Yoda forms (e.g. `1 <= length(x)`) print
-        // the canonical equivalent (`length(x) >= 1`), matching what we matched.
+        // Diagnostic uses canon_op so Yoda forms (e.g. `1 <= length(x)`) print the canonical equivalent (`length(x) >= 1`), matching what we matched.
         if (is_empty_pattern) {
             perf_warning("PERF017: 'length(x) {canon_op} {k}' — use 'empty(x)' (avoids unnecessary strlen on strings)", expr.at)
         } elif (is_nonempty_pattern) {
@@ -1605,8 +1439,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF015 / PERF016: ternary min/max/abs ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        // PERF021: fires anywhere, including in closures — a redundant per-branch cast
-        // is redundant regardless of where the ternary lives.
+        // PERF021: fires anywhere, including in closures — a redundant per-branch cast is redundant regardless of where the ternary lives.
         check_perf021_ternary_cast_hoist(expr)
         if (in_closure > 0 || expr.op != "?"
             || expr.subexpr == null || !(expr.subexpr is ExprOp2)) return
@@ -1616,8 +1449,7 @@ class PerfLintVisitor : AstVisitor {
             || expr.left == null || expr.right == null) return
         let t_branch = expr.left
         let f_branch = expr.right
-        // PERF016 first — a ternary that matches abs may also superficially match
-        // min/max if x and -x ever describe-equal, but they can't. So order is fine.
+        // PERF016 first — a ternary that matches abs may also superficially match min/max if x and -x ever describe-equal, but they can't. So order is fine.
         if (try_perf016_abs(expr, cmp, t_branch, f_branch, cop)) return
         try_perf015_minmax(expr, cmp, t_branch, f_branch, cop)
     }
@@ -1634,9 +1466,7 @@ class PerfLintVisitor : AstVisitor {
         let same_order = tcl && fcr   // T==L, F==R
         let swap_order = tcr && fcl   // T==R, F==L
         if (!same_order && !swap_order) return false
-        // Mapping
-        //   <  / <=  : T==L,F==R → min;  T==R,F==L → max
-        //   >  / >=  : T==L,F==R → max;  T==R,F==L → min
+        // Mapping <  / <=  : T==L,F==R → min;  T==R,F==L → max >  / >=  : T==L,F==R → max;  T==R,F==L → min
         var is_min = false
         if (cop == "<" || cop == "<=") {
             is_min = same_order
@@ -1672,12 +1502,6 @@ class PerfLintVisitor : AstVisitor {
         }
         if (!ok) return false
         // Determine canonical sign of x in comparison: x < 0 or x > 0 etc.
-        // Reduce to: "is x's value-relation `negative` or `positive`" in the true branch
-        // Forms that produce abs:
-        //   x < 0 → -x  (T branch is -x, x is on left)        — neg_then=true , x_on_left=true , cop in {<, <=}
-        //   x > 0 → x   (T branch is x,  x is on left)        — neg_then=false, x_on_left=true , cop in {>, >=}
-        //   0 > x → -x                                         — neg_then=true , x_on_left=false, cop in {>, >=}
-        //   0 < x → x                                          — neg_then=false, x_on_left=false, cop in {<, <=}
         var is_abs = false
         if (x_on_left) {
             if ((cop == "<" || cop == "<=") && neg_then) {
@@ -1724,13 +1548,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF024: detect args at [clone(...)]-annotated positions ---
 
     def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
-        // Fires once per argument of an ExprCall, in declaration order, BEFORE
-        // the visitor descends into the arg subtree. Used by PERF024:
-        //   Arm A (direct splice): if arg is clone_*(X) at an annotated index → flag.
-        //   Arm B (var-init-only-clone-use): if arg is a bare ExprVar matching a
-        //     candidate, at an annotated index → mark as safe_use and set
-        //     perf024_skip_var so the imminent preVisitExprVar doesn't
-        //     disqualify the candidate.
+        // Fires once per argument of an ExprCall, in declaration order, BEFORE the visitor descends into the arg subtree. Used by PERF024:
         if (expr == null || expr.func == null) return
         var indices : array<int>
         get_clone_param_indices(expr.func, indices)
@@ -1744,9 +1562,7 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         if (arg_index < 0 || !has_value(indices, arg_index)) return
-        // Peel typer-inserted ExprRef2Value wrapper — when the var has reference
-        // type (e.g. `var X = clone_expression(...)`), the typer inserts a
-        // dereference wrapper around uses passed to non-ref params.
+        // Peel typer-inserted ExprRef2Value wrapper — when the var has reference type (e.g. `var X = clone_expression(...)`), the typer inserts a dereference wrapper around uses passed to non-ref params.
         var inner = arg
         if (inner is ExprRef2Value) {
             inner = (inner as ExprRef2Value).subexpr
@@ -1780,11 +1596,7 @@ class PerfLintVisitor : AstVisitor {
         if (expr.func == null) return
         // PERF020: redundant same-type cast — fires anywhere, including in closures
         check_perf020_redundant_cast(expr)
-        // PERF023: track splice-wrapper depth. apply_qrules emits `add_ptr_ref(...)`
-        // around every `$e(...)` tag; matching the function NAME is sufficient
-        // because the templates_boost wrapper is the only producer of that name
-        // and it sits at every $e splice site post-expansion. Must fire BEFORE
-        // the in_closure gate — the rules block is itself a closure.
+        // PERF023: track splice-wrapper depth. apply_qrules emits `add_ptr_ref(...)` around every `$e(...)` tag; matching the function NAME is sufficient because the templates_boost wrapper is the only producer of that name and it sits at every $e splice site post-expansion. Must fire BEFORE the in_closure gate — the rules block is itself a closure.
         if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
             perf023_splice_depth++
         }
@@ -1807,8 +1619,6 @@ class PerfLintVisitor : AstVisitor {
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (expr.func == null) return <- expr
         // PERF023: pop splice-wrapper depth when leaving an add_ptr_ref call.
-        // Symmetric with the preVisitExprCall push above; fires regardless of
-        // closure depth.
         if (expr.name == "add_ptr_ref" && perf023_splice_depth > 0) {
             perf023_splice_depth--
         }
@@ -1927,9 +1737,7 @@ class PerfLintVisitor : AstVisitor {
     // --- Central ExprVar handler (PERF002, PERF004, PERF005) ---
 
     def override preVisitExprVar(expr : ExprVar?) : void {
-        // PERF023: classify this var-ref as safe (inside add_ptr_ref) or
-        // disqualifying. Runs before the in_closure gate because the splice
-        // site lives inside the rules-block closure.
+        // PERF023: classify this var-ref as safe (inside add_ptr_ref) or disqualifying. Runs before the in_closure gate because the splice site lives inside the rules-block closure.
         if (!empty(perf023_candidates)) {
             let vv = expr.variable
             if (vv != null) {
@@ -1945,10 +1753,7 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
-        // PERF024: classify this var-ref as safe (pre-classified in
-        // preVisitExprCallArgument as a direct annotated-arg) or disqualifying.
-        // perf024_skip_iptr is set just-in-time by the call-arg hook and
-        // consumed here. Same closure-skip rationale as PERF023.
+        // PERF024: classify this var-ref as safe (pre-classified in preVisitExprCallArgument as a direct annotated-arg) or disqualifying.
         if (!empty(perf024_candidates)) {
             let vv4 = expr.variable
             if (vv4 != null) {

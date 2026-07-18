@@ -39,12 +39,7 @@ def sql_quote_lit(s : string) : string {
     return "'{escaped}'"
 }
 
-// Schema introspection — surfaced by `column_info(type<T>)` over a
-// `[sql_table]`-tagged struct. The data here is the cross-provider subset:
-// abstract column type, key/null flags, default expression. Provider
-// helpers render the dialect-specific spelling (e.g. `sqlite_sql_type`
-// in `sqlite/sqlite_boost`, `postgres_sql_type` when the second backend
-// lands).
+// Schema introspection — surfaced by `column_info(type<T>)` over a `[sql_table]`-tagged struct. The data here is the cross-provider subset:
 
 enum SqlType {
     Integer            //!< INTEGER (SQLite) / INT (MySQL, MSSQL) / INT4 (PG)

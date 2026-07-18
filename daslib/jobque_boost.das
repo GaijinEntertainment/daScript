@@ -26,20 +26,12 @@ require daslib/templates_boost
 [tag_function(new_job_tag)]
 def new_job(var l : lambda) {
     //! Create a new job.
-    //!     * new context is cloned from the current context.
-    //!     * lambda is cloned to the new context.
-    //!     * new job is added to the job queue.
-    //!     * once new job is invoked, lambda is invoked on the new context on the job thread.
     invoke(l)   // note, this is never called if job-que is there.
 }
 
 [tag_function(new_job_tag)]
 def new_thread(var l : lambda) {
-    //! Create a new thread
-    //!     * new context is cloned from the current context.
-    //!     * lambda is cloned to the new context.
-    //!     * new thread is created.
-    //!     * lambda is invoked on the new context on the new thread.
+    //! Creates a new thread with a cloned context and invokes the cloned lambda on that thread.
     invoke(l)   // note, this is never called if job-que is there
 }
 
@@ -388,9 +380,6 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
 }
 
 //
-// Stream wrappers — cross-context byte pipeline. Bytes are owned C++-side,
-// so either end may free the Stream without coordinating with the other.
-//
 
 require daslib/archive
 
@@ -522,13 +511,7 @@ def done(var status : JobStatus?&) {
 }
 
 def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job_begin : int; job_end : int; var wg : JobStatus?) : void>) {
-    //! Partitions ``[range_begin..range_end)`` into ``num_jobs`` chunks and invokes ``blk`` once per chunk
-    //! on the calling thread with ``(chunk_begin, chunk_end, wg)``. The block is expected to dispatch work
-    //! via ``new_job`` and call ``wg |> notify_and_release`` when each job finishes.
-    //! After dispatch the CALLING thread participates: it pops queued jobs off the fifo and executes
-    //! them inline (same cloned-closure jobs the workers run — full capture semantics) until its own
-    //! wait group is satisfiable, so the dispatching core computes chunks instead of sleeping through
-    //! the fork. Blocks until all notifications are received. Requires ``with_job_que`` context.
+    //! Partitions ``[range_begin..range_end)`` into ``num_jobs`` chunks and invokes ``blk`` once per chunk on the calling thread with ``(chunk_begin, chunk_end, wg)``. The block is expected to dispatch work via ``new_job`` and call ``wg |> notify_and_release`` when each job finishes.
     let total = range_end - range_begin
     if (total <= 0 || num_jobs <= 0) return
     let actual_jobs = min(num_jobs, total)
@@ -577,34 +560,19 @@ class private ParallelForJobMacro : AstFunctionAnnotation {
 
 [tag_function(tag_team_parallel_for), unused_argument(num_jobs)]
 def team_parallel_for(range_begin, range_end : int; num_jobs : int; var l : lambda<(job_begin : int; job_end : int) : void>) {
-    //! Team-mode ``parallel_for`` (see ``set_jobque_team_mode``): partitions ``[range_begin..range_end)``
-    //! into ``num_jobs`` chunks with the same split as ``parallel_for``, but instead of one fifo job per
-    //! chunk the lambda is cloned once per WORKER and the workers self-serve chunk indices off a single
-    //! atomic — no fifo, no wait group; the caller participates and spin-joins. Falls back to one inline
-    //! invoke over the whole range when team mode is off (or the range/pool is trivial).
+    //! Team-mode ``parallel_for`` (see ``set_jobque_team_mode``): partitions ``[range_begin..range_end)`` into ``num_jobs`` chunks with the same split as ``parallel_for``, but instead of one fifo job per chunk the lambda is cloned once per WORKER and the workers self-serve chunk indices off a single atomic — no fifo, no wait group; the caller participates and spin-joins. Falls back to one inline invoke over the whole range when team mode is off (or the range/pool is trivial).
     invoke(l, range_begin, range_end)   // note, this is never called if job-que is there.
 }
 
 [tag_function(tag_team_parallel_for_indexed), unused_argument(num_jobs)]
 def team_parallel_for_indexed(range_begin, range_end : int; num_jobs : int; var l : lambda<(slot : int; job_begin : int; job_end : int) : void>) {
-    //! ``team_parallel_for`` with the claiming worker's slot exposed: the lambda receives
-    //! ``(slot, job_begin, job_end)``. No two in-flight invocations share a slot, so per-slot
-    //! scratch (sized ``get_total_hw_jobs() + 1`` — the caller participates as the last slot)
-    //! needs no locks. Chunk split and self-serve scheduling are identical to
-    //! ``team_parallel_for``; degenerate paths (team mode off, trivial range/pool) run one
-    //! inline invoke over the whole range as slot 0.
+    //! ``team_parallel_for`` with the claiming worker's slot exposed: the lambda receives ``(slot, job_begin, job_end)``. No two in-flight invocations share a slot, so per-slot scratch (sized ``get_total_hw_jobs() + 1`` — the caller participates as the last slot) needs no locks. Chunk split and self-serve scheduling are identical to ``team_parallel_for``; degenerate paths (team mode off, trivial range/pool) run one inline invoke over the whole range as slot 0.
     invoke(l, 0, range_begin, range_end)   // note, this is never called if job-que is there.
 }
 
 [tag_function(tag_team_parallel_stages)]
 def team_parallel_stages(stages : array<int3>; var l : lambda<(stage : int; job_begin : int; job_end : int) : void>) {
-    //! Multi-stage team dispatch: one team rendezvous runs the ``stages`` in order, with a
-    //! worker-side barrier between consecutive stages — stage ``s+1`` may read anything stage ``s``
-    //! wrote. Each stage is ``int3(range_begin, range_end, num_chunks)``; the lambda receives
-    //! ``(stage, job_begin, job_end)`` with the same chunk split as ``team_parallel_for``. The whole
-    //! chain costs ONE publish + ONE join (the lambda is cloned once per worker), so a fused
-    //! matmul→matmul chain pays the dispatch tail once instead of per op. Falls back to running the
-    //! stages sequentially inline when team mode is off (or the pool/ranges are trivial).
+    //! Multi-stage team dispatch: one team rendezvous runs the ``stages`` in order, with a worker-side barrier between consecutive stages — stage ``s+1`` may read anything stage ``s`` wrote. Each stage is ``int3(range_begin, range_end, num_chunks)``; the lambda receives ``(stage, job_begin, job_end)`` with the same chunk split as ``team_parallel_for``. The whole chain costs ONE publish + ONE join (the lambda is cloned once per worker), so a fused matmul→matmul chain pays the dispatch tail once instead of per op. Falls back to running the stages sequentially inline when team mode is off (or the pool/ranges are trivial).
     var idx = 0
     for (s in stages) {
         // empty stage (zero range) is a pure barrier — skip the invoke, matching
@@ -710,21 +678,12 @@ class private TeamParallelForIndexedMacro : TeamParallelForMacro {
 
 def _parallel_for_each(arr : array<auto(TT)>; num_jobs : int; blk : block<(job_begin : int; job_end : int; var wg : JobStatus?) : void>) {
     //! Runtime implementation for ``parallel_for_each``.
-    //! Partitions array indices ``[0..length(arr))`` into ``num_jobs`` chunks and invokes ``blk``
-    //! with ``(chunk_begin_idx, chunk_end_idx, wg)`` on the calling thread.
-    //! The block should dispatch ``new_job`` calls that process ``arr[i]`` for ``i`` in ``[chunk_begin_idx..chunk_end_idx)``,
-    //! then call ``wg |> notify_and_release``.
-    //! Blocks until all jobs finish (the caller executes queued chunks too — see ``_parallel_for``).
-    //! Requires ``with_job_que`` context.
     _parallel_for(0, length(arr), num_jobs, blk)
 }
 
 [tag_function(tag_parallel_for_each)]
 def parallel_for_each(arr : array<auto(TT)>; num_jobs : int; blk : block<(job_begin : int; job_end : int; var wg : JobStatus?) : void>) {
     //! Convenience wrapper around ``parallel_for`` for arrays.
-    //! Partitions array indices ``[0..length(arr))`` into ``num_jobs`` chunks.
-    //! The block body is automatically wrapped in ``new_job``.
-    //! Blocks until all jobs finish. Requires ``with_job_que`` context.
     pass
 }
 
@@ -737,10 +696,6 @@ class private ParallelForEachJobMacro : ParallelForJobMacro {
 
 def _parallel_map(arr : array<auto(TT)>; num_jobs : int; var results_channel : Channel?; blk : block<(job_begin : int; job_end : int; var ch : Channel?; var wg : JobStatus?) : void>) {
     //! Runtime implementation for ``parallel_map``.
-    //! Partitions array indices ``[0..length(arr))`` into ``num_jobs`` chunks and invokes ``blk``
-    //! on the calling thread with ``(chunk_begin_idx, chunk_end_idx, results_channel, wg)``.
-    //! Blocks until all jobs finish. Results are available in ``results_channel`` after this call returns.
-    //! Requires ``with_job_que`` context.
     _parallel_for(0, length(arr), num_jobs) $(job_begin, job_end, wg) {
         invoke(blk, job_begin, job_end, results_channel, wg)
     }
@@ -749,9 +704,6 @@ def _parallel_map(arr : array<auto(TT)>; num_jobs : int; var results_channel : C
 [tag_function(tag_parallel_map)]
 def parallel_map(arr : array<auto(TT)>; num_jobs : int; var results_channel : Channel?; blk : block<(job_begin : int; job_end : int; var ch : Channel?; var wg : JobStatus?) : void>) {
     //! Partitions array indices ``[0..length(arr))`` into ``num_jobs`` chunks.
-    //! The block body is automatically wrapped in ``new_job``.
-    //! Blocks until all jobs finish. Results are available in ``results_channel`` after this call returns.
-    //! Requires ``with_job_que`` context.
     pass
 }
 
@@ -858,11 +810,6 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
     }
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
         //! Implementation details for the capture macro.
-        //! Note: generators are skipped because their ``finally`` section is called on every
-        //! iteration, not just once at destruction. This means ``Channel``, ``JobStatus``,
-        //! ``LockBox``, and ``Stream`` captures inside generators do NOT get automatic release checks.
-        //! Users must manually call ``release`` on captured jobque objects inside generators.
-        // generator gets finally section called every single time. nothing we can do
         if (fun.flags._generator) return
         for (fld in lcs.fields) {
             if (fld._type |> isPtrToJQ("Channel")) {

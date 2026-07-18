@@ -250,8 +250,7 @@ class private LinqFold : AstCallMacro {
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
         var res = try_splice_patterns(prog, call.arguments[0])
         if (res != null) return res
-        // Theme 6 — warn when an adapter source (today: `from_decs_template`) survives every splice arm with a
-        // non-empty chain, so the bridge materializes a temp `res` array before the cascade. Suppress: `options _no_linq_perf_warn = true`.
+        // Theme 6 — warn when an adapter source (today: `from_decs_template`) survives every splice arm with a non-empty chain, so the bridge materializes a temp `res` array before the cascade. Suppress: `options _no_linq_perf_warn = true`.
         if (!(prog._options |> find_arg("_no_linq_perf_warn") ?as tBool ?? false)) {
             var (top, calls) = flatten_linq(call.arguments[0])
             if (!empty(calls) && extract_decs_bridge(top) != null) {
