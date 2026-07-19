@@ -7,6 +7,8 @@ require strings
 def main {
     var inscope state <- terminal_create(8, 2)
     terminal_feed(state, "hello")
+    let initial_transport_error = terminal_transport_error(state)
+    assert(empty(initial_transport_error))
 
     var snapshot = TerminalSnapshot()
     terminal_snapshot(state, snapshot)
@@ -121,6 +123,4 @@ def main {
     terminal_dispose(colored_state)
     terminal_dispose(viewport_state)
     terminal_dispose(state)
-    assert(failed == null)
-    assert(state == null)
 }

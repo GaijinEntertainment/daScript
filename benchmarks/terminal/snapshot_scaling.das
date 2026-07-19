@@ -60,3 +60,15 @@ def terminal_snapshot_scaling(b : B?) {
     run_viewport_case(b, 5000)
     run_viewport_case(b, 10000)
 }
+
+[benchmark]
+def terminal_feed_throughput(b : B?) {
+    let output = make_output(2000)
+    let byte_count = length(output)
+    b |> run("feed/{byte_count}_bytes") {
+        var inscope terminal = terminal_create(COLUMNS, ROWS)
+        terminal_feed(terminal, output)
+        b |> accept(terminal_revision(terminal))
+        terminal_dispose(terminal)
+    }
+}
