@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_arch_qwen2 shared public
 
@@ -26,11 +27,9 @@ def register_arch_qwen2() {
     // audio markers; renders only on audio turns, so text-only qwen2 vocabs never resolve these
     d.chat.audio_pre.parts <- [chat_special("<|audio_bos|>")]
     d.chat.audio_post.parts <- [chat_special("<|audio_eos|>")]
-    // Qwen2.5-Omni's decoder converts as `qwen2vl` — M-RoPE with rope.dimension_sections.
-    // For text + audio input every M-RoPE coordinate equals the linear position (mtmd's
-    // set_position_mrope_1d), which rotates each section by exactly the standard-rope angle,
-    // so the plain qwen2 forward is bit-identical. Vision input (unequal coords) is out of
-    // scope and would need real M-RoPE. (Clone the template BEFORE register_arch moves `d`.)
+    // Qwen2.5-Omni's decoder converts as `qwen2vl` — M-RoPE with rope.dimension_sections; for
+    // text/audio input every M-RoPE coord equals linear position, so it's bit-identical to plain
+    // qwen2 forward (vision is out of scope). (Clone the template BEFORE register_arch moves `d`.)
     var dv = ArchDesc(name = "qwen2vl", configure = @@configure_qwen2)
     dv.blocks = std_blocks()
     dv.chat := d.chat

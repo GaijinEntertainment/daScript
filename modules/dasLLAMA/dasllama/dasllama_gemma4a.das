@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_gemma4a shared public
 

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_metal_llama shared public
 
@@ -95,10 +96,7 @@ def private decode_shape_decline(t : Model) : MetalDecodeDecline {
 // ... plus the decode-specific gates (uniform f16/f32 KV, attention depth, a real session uid)
 [unused_argument(pos)]   // depth retired (M2.4) — pos stays in the gate signature for future clauses
 def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDecline {
-    // the mirror + writeback move raw row bytes, so the session codec must equal the mirror
-    // dtype. Depth is unbounded (M2.4): the chunked/partD attention scans any context — the
-    // remaining capacity limit is the mirror arena (mirror_prepare declines when the session's
-    // slice cannot fit), and the watermark contract re-mirrors if the driver is re-entered
+    // mirror + writeback move raw row bytes, so the session codec must equal the mirror dtype; depth is capacity-bounded by the mirror arena, not gated here
     if (s.kv_dtype_k != s.kv_dtype_v ||
             (s.kv_dtype_k != KVDtype.f16 && s.kv_dtype_k != KVDtype.f32 &&
              s.kv_dtype_k != KVDtype.q8_0 && s.kv_dtype_k != KVDtype.tq4)) {
@@ -136,12 +134,9 @@ def private enc_site_gemv(enc : MetalComputeEncoder?; t : Model; s16 : bool; fmt
     }
 }
 
-// One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs at
-// per-stream x/y offsets (the M2.1 interim — the kq GEMV is ALU-bound, so B separate weight
-// passes match the lcpp kq batch wall exactly while the fused-B lab chase continues). B >= 9:
-// the kq mul_mm twin over the M-padded x panel (bys = the y ROW-STRIDE uniform — u_qkvd for
-// the qkv site's column segments; the gate pins the %64 shapes). Disjoint y rows/columns: the
-// caller's one barrier covers the whole group.
+// One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs (the
+// kq GEMV is ALU-bound, so this matches the lcpp kq batch wall). B >= 9: the kq mul_mm twin over
+// the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
 def private enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                           bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
                           bn, bd, bys, bnr : MetalBuffer?; nrows, mp : int64) {
@@ -151,9 +146,7 @@ def private enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; wo
         enc_kq_gemm_mm_b(enc, fmt, bq, bs, bx, by, uint64(ycol * 4l), bn, bys, mp, rows, n)
         return
     }
-    // B = 2..8: the ext small-batch twins (k4/k5/k6) — one weight pass per R-column group instead
-    // of B per-stream passes (-25..-40% at the 3B sites, gemv lab round 2). The kernel derives
-    // the x column stride from the n uniform — every site passes xstride == n (asserted below).
+    // B = 2..8: the ext small-batch twins — one weight pass per R-column group instead of B per-stream passes (-25..-40% at the 3B sites)
     if (nrows >= 2l && bnr != null) {
         assert(xstride == n)
         enc_kq_mvb(enc, fmt, bq, bs, bx, by, uint64(ycol * 4l), bn, bd, bys, bnr, rows, n, nrows)
@@ -170,17 +163,9 @@ def private enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; wo
 
 // ===== the per-step resource bundle + encode-ahead pipelining =====
 
-// Everything one step's command buffer owns. The encode-ahead rail (g_pre) keeps ONE of these
-// pre-encoded for the predicted next position; the next forward() call pokes the token-dependent
-// bytes (the embed row + that position's rope row — the only inputs unknown at encode time;
-// unified memory reads at execution) and COMMITS. Encode cost thus overlaps the PREVIOUS step's
-// GPU run instead of sitting on the per-token wall (the P1b framing lab's overlap mode,
-// productionized). The cb is deliberately NOT committed at encode time: a committed cb parked
-// across an idle gap (a caller that stops decoding — stream switches, interactive pauses) trips
-// the GPU watchdog, and the OS then ignores the process's submissions ("prior/excessive GPU
-// errors"); an event-parked variant measured ~neutral anyway (Metal defers scheduling until the
-// signal). Spec steps commit at encode by design — they chain the previous cb and finish on
-// their own.
+// Everything one step's command buffer owns. The encode-ahead rail (g_pre) keeps ONE pre-encoded
+// for the predicted next position; forward() pokes the token-dependent bytes (embed row + rope
+// row) and COMMITS — encode cost overlaps the PREVIOUS step's GPU run instead of the per-token wall.
 struct private StepRes {
     valid : bool
     pos : int64
@@ -281,8 +266,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     if (r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4) {
         r.u_nblk = uniform_u32(uint(kv_dim / 32l))
     }
-    // logits-on-GPU (default ON, DASLLAMA_METAL_LOGITS=0 or the setter pins the CPU classifier):
-    // mirrors the prefill gates — q8 untied classifier, no softcap, no suppress pins
+    // logits-on-GPU (default ON, DASLLAMA_METAL_LOGITS=0 pins the CPU classifier) mirrors the prefill gates
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
     // q8 AND K-quant classifiers serve (the kq plane GEMVs — W4); only the tied-fp32 table stays CPU
@@ -291,11 +275,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         empty(t.suppress) && t.wcls_off >= 0l)
     if (r.gpu_logits) {
         r.bxf = pool_acquire(g_pool, g_dev, r.bytes_x)
-        // zero-copy logits: the classifier writes straight into s.logits via the session's
-        // wrapped storage — the pooled staging (+ its landing memcpy) serves as fallback.
-        // Spec-capable models (cls_q8) keep staging TOO: the speculative chain reads previous
-        // logits from a cb that outlives forward(), so it must only ever touch pooled memory
-        // (a GPU tail copy nc -> staging feeds it; see encode_step)
+        // zero-copy logits write straight into s.logits; the pooled staging is fallback (spec-capable models keep staging too — the speculative chain must only ever touch pooled memory)
         r.bnc = nc_logits_for(g_dev, s)
         if (r.bnc == null || t.cls_q8) {
             r.blog = pool_acquire(g_pool, g_dev, r.bytes_log)
@@ -323,10 +303,8 @@ def private poke_step(s : Session; r : StepRes) {
 }
 
 // encode the whole step (prologue rms, n_layers fused blocks, optional GPU classifier) into a
-// fresh command buffer; commit_now submits it (slow + spec paths), otherwise the caller commits
-// after poking the inputs (the encode-ahead rail — see StepRes). A spec step OPENS with argmax
-// over the previous step's logits + the winner's embed gather into r.bx — hazard tracking
-// chains it behind the previous cb, no CPU poke.
+// fresh command buffer; commit_now submits it, otherwise the caller commits after poking the
+// inputs (the encode-ahead rail). A spec step OPENS with argmax + embed gather — no CPU poke.
 def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_blog : MetalBuffer? = null) {
     let c = t.config
     let dim = c.dim
@@ -343,15 +321,11 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
     let f16v = r.kdt == KVDtype.f16
     let scalar_kv = r.kdt == KVDtype.f16 || r.kdt == KVDtype.f32   // block codecs take their own kernels
     let nchunks = (pos + 1l + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
-    // UNRETAINED: skips per-dispatch retain/release of ~2000 resource references at commit +
-    // completion — every referenced object outlives the cb here (resident regions live until
-    // shutdown; pooled buffers are held by StepRes until after the wait, and the pool never
-    // frees recycled buffers before drain)
+    // UNRETAINED: skips per-dispatch retain/release of ~2000 resource refs — everything referenced outlives the cb here
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
     if (r.spec) {
-        // the speculative head: greedy-pick the previous step's logits, gather the winner's
-        // embedding row into r.bx (the cls_q8 linear plane — gated in pre_encode_next)
+        // the speculative head: greedy-pick the previous step's logits, gather the winner's embedding row into r.bx
         unsafe {
             var bembq = upload_region(addr < void? >(t.qblob[t.emb_q8_off]), uint64(c.vocab_size * dim))
             var bembs = upload_scales(t, t.emb_q8_off, c.vocab_size, dim)
@@ -368,10 +342,7 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
     }
     for (l in range64(c.n_layers)) {
         unsafe {
-            // attention: fused QKV GEMV (+rope+store on the s16 path — one dispatch, one
-            // serialization level) -> single-query attention over [0, pos] -> out-proj ->
-            // fused residual add + ffn norm. K-quant sites (formats mix PER TENSOR — Q4_K_M
-            // sends attn_v to Q6_K) split into per-tensor plane GEMVs at q|k|v output offsets.
+            // attention: fused QKV GEMV -> single-query attention -> out-proj -> fused add+norm; K-quant sites (mixed PER TENSOR formats) split into per-tensor plane GEMVs
             let fq = kq_fmt_at(t.wq_fmt, l)
             let fk = kq_fmt_at(t.wk_fmt, l)
             let fv = kq_fmt_at(t.wv_fmt, l)
@@ -446,8 +417,7 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
             if (g_skip != "gemv") {
                 enc_site_gemv(enc, t, r.s16, kq_fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, r.bxb, r.bxb2, r.u_qd, r.u_dim)
             }
-            // ffn: fused add+norm -> fused W1|W3 GEMV -> swiglu -> W2 GEMV -> fused add + the
-            // NEXT layer's attention norm (plain add on the last layer — the final norm follows)
+            // ffn: fused add+norm -> fused W1|W3 GEMV -> swiglu -> W2 GEMV -> fused add + next layer's attention norm
             if (g_skip != "ew") {
                 var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
                 enc_add_rms_site(enc, r.bx, r.bxb2, bw_ffn, r.bxb, r.u_dim, r.u_eps, dim)
@@ -497,9 +467,7 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
         var bcls = r.bnc != null ? r.bnc : r.blog
         enc_site_gemv(enc, t, r.s16, cls_fmt, t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab)
         if (r.bnc != null && r.blog != null) {
-            // spec-capable step: mirror the zero-copy logits into pooled staging — the next
-            // step's speculative argmax reads THAT, never session memory (tracked hazards
-            // order the copy behind the classifier)
+            // spec-capable step: mirror zero-copy logits into pooled staging — the next step's speculative argmax reads that, never session memory
             enc_copy_row(enc, r.bnc, 0ul, r.blog, r.u_vocab, c.vocab_size)
         }
     }
@@ -602,11 +570,9 @@ def private release_step(var r : StepRes) {
     r.valid = false
 }
 
-// Retire the pre-encoded step. A poked-mode pre was never committed — releasing it simply drops
-// the encoded work. A spec pre is already running on stale inputs: wait it out (its mirror-row
-// writes land at/above the watermark — unmirrored territory by contract — and its outputs go to
-// pooled buffers still held here) and SURFACE any execution error: an eaten fault here would
-// poison every later submission ("prior/excessive GPU errors") with no trace of the true site.
+// Retire the pre-encoded step. A poked-mode pre was never committed — releasing it drops the work.
+// A spec pre is already running: wait it out and SURFACE any execution error — an eaten fault here
+// would poison every later submission ("prior/excessive GPU errors") with no trace of the true site.
 def private discard_pre {
     if (!g_pre.valid) {
         return
@@ -623,12 +589,9 @@ def private discard_pre {
     release_step(r)
 }
 
-// Pre-encode the PREDICTED next step (same session, pos + 1) while the current step runs on
-// the GPU. When the greedy-speculation gates pass, the new cb commits AND chains itself: it
-// opens with argmax(previous logits) + the winner's embed gather and needs NO CPU poke at all
-// (the rope row is position-only — built here, bit-identical to forward()'s); otherwise the cb
-// stays uncommitted and the next call pokes + commits. Declines quietly when the next step's
-// gates fail or the mirror would need a rebuild — the slow path serves those.
+// Pre-encode the PREDICTED next step (same session, pos + 1) while the current step runs on the
+// GPU. When speculation gates pass, the cb commits AND chains itself (argmax + embed gather, no
+// CPU poke); otherwise it stays uncommitted. Quietly declines when gates fail — slow path serves those.
 def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog : MetalBuffer?) {
     // quiet non-decline: skipping the pre-encode just means the slow path serves the next step
     if (decode_decline(t, s, npos) != MetalDecodeDecline.none || !key_exists(g_mirrors, s.uid)) {
@@ -642,12 +605,9 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
     var r = acquire_step(t, s, npos, mr.koff, mr.voff, mr.cap_rows)
     if (r.gpu_logits && prev_blog != null && t.cls_q8 && t.config.embed_scale == 1.0 &&
             !has_ple(t.config) && spec_armed()) {
-        // speculative chain: the cb runs the moment the previous one drains — the CPU tail,
-        // sampling, and the next forward() call all overlap GPU execution
+        // speculative chain: the cb runs the moment the previous one drains — CPU tail/sampling/next forward() all overlap GPU execution
         r.spec = true
-        // a spec step is IN FLIGHT after forward() returns — it must NOT touch session memory
-        // (zero-copy would clobber s.logits async, and outlive a deleted session). Staging
-        // only (cls_q8 acquired r.blog); acceptance lands it via the finish_step memcpy.
+        // a spec step is IN FLIGHT after forward() returns — must not touch session memory (staging only; acceptance lands it via finish_step)
         r.bnc = null
         r.btok = pool_acquire(g_pool, g_dev, 64ul)
         build_decode_rope_row(t, npos, g_rope_cos_next, g_rope_sin_next)
@@ -728,10 +688,9 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
     pre_encode_next(t, s, pos + 1l, r.blog)
     let ok = finish_step(t, s, r)
     if (ok && r.spec) {
-        // verify the GPU's greedy pick against the caller's actual token — a miss means this
-        // whole step ran on the wrong embedding: drop the chained pre-step, rerun with the
-        // truth (the garbage KV row sits at/above the rerun's rewound watermark, so the
-        // mirror_prepare re-upload repairs it from the CPU cache)
+        // verify the GPU's greedy pick against the caller's actual token — a miss means this whole
+        // step ran on the wrong embedding: drop the chained pre-step and rerun (the garbage KV row
+        // sits at/above the rewound watermark, so mirror_prepare's re-upload repairs it).
         var tokp = unsafe(reinterpret<uint?>(metal_buffer_contents(r.btok)))
         let picked = int64(unsafe(tokp[0]))
         if (picked != token) {
@@ -756,32 +715,21 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
 // B ~ 5 on every decode site (P1a lab — all sites are big shapes: the QKV concat, wo, w1/w3, w2).
 // DASLLAMA_METAL_BATCH_GEMM_MIN overrides for A/B.
 var private g_bgemm_min = -1l
-// the step splits into DASLLAMA_METAL_BATCH_NCB command buffers committed as encoded (llama.cpp's
-// n_cb shape): the driver's ~3.2ms/step scheduling span (kernelStart..End of a 141-dispatch cb,
-// measured flat across B — the GPU idles through it when a single cb commits after the previous
-// wait) pipelines behind cb k's execution; only cb 1's slice stays exposed. Queue order serializes
-// the pieces, and every encode is token-independent (x is buffer CONTENTS), so nothing races.
-// 1 = the single-cb rail (A/B; exact pre-split behavior).
+// the step splits into DASLLAMA_METAL_BATCH_NCB command buffers (llama.cpp's n_cb shape): the
+// ~3.2ms/step scheduling span pipelines behind cb k's execution instead of idling as one big cb;
+// queue order serializes the pieces, every encode is token-independent. 1 = the single-cb A/B rail.
 var private g_bncb = -1l
-// per-site split-K / 64-wide policy (the GEMM lab: at mp = 32 the batch GEMM is OCCUPANCY-bound
-// — d/32 threadgroups starve the starved sites, and grid.y k-slices fix exactly that: kv sk8
-// +135%, wo sk4 +21%, qkv sk2 +9%, w2 sk8 +33%; w13's 256 tgs are already fat, and the
-// classifier's 4008 prefer the 64-wide tile's per-element ISA edge +7%). DASLLAMA_METAL_BATCH_SK=0
-// pins every site back to the planar 32-wide v2 (the A/B rail — default ON so the parity arms
-// exercise the policy kernels).
+// per-site split-K / 64-wide policy: at mp=32 the batch GEMM is OCCUPANCY-bound (d/32 threadgroups
+// starve small sites) — grid.y k-slices fix it (kv sk8 +135%, wo sk4 +21%, qkv sk2 +9%, w2 sk8 +33%).
+// DASLLAMA_METAL_BATCH_SK=0 pins every site back to the planar 32-wide v2 (the A/B rail).
 var private g_bsk = true
-// DASLLAMA_METAL_BATCH_CONCURRENT: encode the step on a CONCURRENT compute encoder and insert a
-// memory barrier ONLY at a real buffer hazard (RAW/WAR/WAW; read-after-read runs free) — mirrors
-// ggml-metal's range-tracked concurrency. In our FUSED chain the only exploitable overlap is
-// W1 || W3 (both read the ffn-norm output, write disjoint buffers); everything else is a serial
-// RAW chain and still barriers. Default ON: measured +1-2% at every B (3B d512 same-window A/B,
-// parity-clean) — the concurrent encoder pipelines per-dispatch launch overhead across the buffer
-// barriers even on the RAW chain. =0 pins the serial encoder (the A/B rail).
+// DASLLAMA_METAL_BATCH_CONCURRENT: encode on a CONCURRENT compute encoder, barrier only at a real
+// hazard (RAW/WAR/WAW) — the only exploitable overlap in our FUSED chain is W1 || W3. Default ON:
+// measured +1-2% at every B (pipelines launch overhead even on the RAW chain). =0 = serial (A/B).
 var private g_bconcurrent = true
-// DASLLAMA_METAL_BATCH_FUSE: fold the w1 GEMV + w3 GEMV + swiglu triple into one fused dispatch
-// (MetalGemvW13Sw*) on the fixed-B path (B <= 4) — matches the single-stream w13sw fusion, cutting
-// 2 dispatches + their barriers per layer where inter-dispatch bubbles hurt most. Default ON;
-// =0 pins the unfused w1/w3/swiglu triple (the A/B rail).
+// DASLLAMA_METAL_BATCH_FUSE: fold w1 + w3 + swiglu into one fused dispatch on the fixed-B path
+// (B <= 4) — cuts 2 dispatches + their barriers per layer where inter-dispatch bubbles hurt most.
+// Default ON; =0 pins the unfused triple (the A/B rail).
 var private g_bfuse = true
 
 // the mul_mv-shape GEMV (MetalQ8MvB2/B4 — the de-verbatim'd Part-3 winner, in-graph == the lcpp
@@ -802,11 +750,9 @@ def public set_metal_batch_addrms_unfused(v : bool) {
     g_b_addrms_unfused = v
 }
 
-// one-deep encode-ahead for the batch driver (the copy-validated pipe): a step commits BEFORE the
-// previous one is waited on; sessions then hold the PREVIOUS step's logits until the next call or
-// metal_decode_flush. That is exact for fixed-token throughput protocols and WRONG for
-// logit-gated sampling (eval_batch's contract) — so this is OPT-IN, for benches only:
-// DASLLAMA_METAL_BATCH_PIPE=1. Engages only on the gpu-logits path.
+// one-deep encode-ahead for the batch driver: a step commits BEFORE the previous is waited on, so
+// sessions hold the PREVIOUS step's logits until the next call. WRONG for logit-gated sampling
+// (eval_batch's contract) — OPT-IN for benches only: DASLLAMA_METAL_BATCH_PIPE=1, gpu-logits only.
 var private g_b_pipe = false
 // per-step scratch reused across calls (row table image + per-row mirror slices)
 var private g_b_rte : array<uint>
@@ -815,19 +761,14 @@ var private g_b_voffs : array<uint64>
 var private g_b_caps : array<int64>
 var private g_b_ulays : array<MetalBuffer?>   // per-layer uniforms, pooled per step
 
-// the model half is decode_shape_decline; per batch: uniform f16/f32 KV (eval_batch snapshots
-// the dtypes onto ws.scr), every row within the attention depth cap with a real uid, per-row
-// rope rows built, and dim within the add+rms row slabs (the GEMM path caps at 3072, the
-// fixed-B GEMV path at ADD_RMS_MAX_DIM — B >= 5 on a wider model declines)
+// the model half is decode_shape_decline; per batch: uniform f16/f32 KV, every row within the
+// attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
+// slabs (GEMM path caps at 3072, fixed-B GEMV at ADD_RMS_MAX_DIM — B >= 5 on a wider model declines)
 def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : array<Session?>; nrows : int64) : MetalDecodeDecline {
-    // kquant batch: the interim path serves B <= 8 via per-stream plane GEMVs (the fused/GEMM
-    // kq twins are the W4 tail). Each fused site must be format-uniform in CLASS per layer
-    // (all-q8 or all-kq — real K-quant files are; a mixed qkv/w13 site has no batched form),
-    // and B >= 9 declines until the kq GEMM lands.
+    // kquant batch: B <= 8 serves via per-stream plane GEMVs; each fused site must be format-uniform in CLASS per layer, B >= 9 declines until the kq GEMM lands
     if (t.kquant_native) {
         if (nrows > 8l) {
-            // B >= 9 rides the kq mul_mm twins — needs the %64 GEMM shapes (and vocab %64 for
-            // the batched kq classifier on the GPU-logits path)
+            // B >= 9 rides the kq mul_mm twins — needs %64 GEMM shapes (vocab %64 too, for GPU-logits)
             let ck = t.config
             let qdk = ck.n_heads * ck.head_size
             if ((ck.dim % 64l) != 0l || (qdk % 64l) != 0l ||
@@ -870,11 +811,8 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 }
 
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
-//! through ONE weight pass (fixed-B GEMVs to B = 4, the M-pad-32 GEMM above; per-row attention +
-//! rope+store reach each row's KV through the mirror-arena row table). STACK-ONLY contract: on
-//! true every row's KV row is stored (GPU mirror and CPU cache) and ws.scr.x_b holds the final
-//! residuals; the CPU tail (final rms, classifier, scatter, n_past++) stays with the caller.
-//! false = declined — the CPU layer loop recomputes from clean state (x_b written only on ok).
+//! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
+//! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
         discard_pre()
@@ -1013,12 +951,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // dim <= 3072; wider models ride the GEMM's fixed K-tiles at any dim)
     let mv8 = g_bmv8 && g_bmv && nrows > 4l && nrows <= 8l && dim <= 3072l
     let use_gemm = (nrows >= g_bgemm_min || nrows > 4l) && !mv8
-    // the mul_mm rail (opt-in, DASLLAMA_METAL_BATCH_MM=1): the prefill kernel on shared 34B
-    // blobs + raw f32 X (quant tails disappear; every GEMM'd width % 64). MEASURED NEGATIVE at
-    // M-pad-32 (3B d512 -n 32: B=8 145.2 vs GemmB 153.3, B=16 275.7 vs 285.0): mm's 32x64 tile
-    // grids only d/64 threadgroups (48 at d=3072, 16 at kv_dim=1024) — prefill shapes scale the
-    // grid on tokens, batch decode can't; GemmB's 32x32 tile = 2x the occupancy and wins even
-    // with worse per-element ISA. Kept as the A/B rail for bigger-M futures (B > 16 pads to 64).
+    // the mul_mm rail (opt-in, DASLLAMA_METAL_BATCH_MM=1): MEASURED NEGATIVE at M-pad-32 (3B d512
+    // -n 32: B=8 145.2 vs GemmB 153.3) — mm's 32x64 tile grids only d/64 threadgroups vs GemmB's
+    // 32x32 = 2x occupancy. Kept as the A/B rail for bigger-M futures (B > 16 pads to 64).
     let use_mm = (use_gemm && get_env_variable("DASLLAMA_METAL_BATCH_MM") == "1" &&
         (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l)
     let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
@@ -1438,11 +1373,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
             }
         }
-        // zero-copy logits: scatter each staging row into its session's wrapped storage ON the
-        // cb — the landing memcpy for logits disappears (the KV writeback stays). All-or-nothing
-        // per step: one unwrappable session keeps the whole step on the landing scatter. In pipe
-        // mode the in-flight step now writes s.logits ASYNCHRONOUSLY — the pipe stays
-        // fixed-token-only by its existing contract.
+        // zero-copy logits: scatter each staging row straight into its session's wrapped storage —
+        // the landing memcpy disappears. All-or-nothing per step (one unwrappable session keeps the
+        // whole step on the landing scatter); in pipe mode this writes s.logits ASYNCHRONOUSLY.
         nc_all = true
         for (i in range64(nrows)) {
             nc_all &&= nc_logits_for(g_dev, *sessions[i]) != null

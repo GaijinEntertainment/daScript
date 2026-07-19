@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_math_gen shared public
 
@@ -51,65 +52,49 @@ require math
             covers = "dasllama_math;dasllama_math_default;dasllama_quant;dasllama_math_aarch64_neon")]
 struct private DasllamaTuneScope {}
 
-//! The layout companion (the six-function stamp): the repack interleave (mr) the stamped tile
-//! reads. Reference body = the reference tile's grp4; the generator emits the perm's mr and
-//! declines in lockstep with the tile generator (shared perm_declines), so a perm the tile
-//! can't emit keeps the grp4 reference pair on both sides — on every tier, JIT-time declines
-//! included.
+//! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
+//! Reference body = the reference tile's grp4; generator declines in lockstep with the tile
+//! generator, so a perm the tile can't emit keeps the grp4 reference pair on both sides.
 def q8q8_layout_gen() : int {
     return q8q8_repack_type(GEMM_REFERENCE_MR).interleave
 }
 
-//! The wbias companion (slice H): the additive bias baked into the grp<mr> plane's GROUP-row
-//! bytes — 128 for the bias128 vpdpbusd perms (w^0x80, plain-u8 dots, −128·Σx acc-init
-//! correction), 0 otherwise. Reference body = the unbiased grp4 pair; declines in lockstep
-//! via the shared predicate, so plane bytes and kernels can never disagree about the bias.
+//! The wbias companion (slice H): additive bias baked into the grp<mr> plane's GROUP-row bytes —
+//! 128 for bias128 vpdpbusd perms (w^0x80, −128·Σx acc-init correction), 0 otherwise. Reference
+//! body = the unbiased grp4 pair, declining in lockstep so plane bytes and kernels never disagree.
 def q8q8_wbias_gen() : int {
     return q8q8_repack_type(GEMM_REFERENCE_MR).wbias
 }
 
-//! The kgroup companion (slice J): k-bytes per row per interleave group of the stamped plane —
-//! 8 for the smmla perms (row-pair × 8-k MMA operands load straight off the plane), 4 for
-//! every vector-dot perm. Reference body = the kg4 grp4 pair; declines in lockstep via the
-//! shared predicate, so plane byte order and kernels can never disagree about the grouping.
+//! The kgroup companion (slice J): k-bytes per row per interleave group — 8 for smmla perms
+//! (row-pair × 8-k MMA operands), 4 for every vector-dot perm. Reference body = the kg4 grp4
+//! pair, declining in lockstep so plane byte order and kernels never disagree.
 def q8q8_kgroup_gen() : int {
     return q8q8_repack_type(GEMM_REFERENCE_MR).kgroup
 }
 
-//! The tokstep companion (slice I): tokens one stamped tile call covers — 16·nrsplit for the
-//! amx perms (whose TMUL macro also spans tokstep/16 row-groups: amx macros are square in
-//! tile units), 4 for every vector perm. The batch wrapper walks its (token, row-group) space
-//! off it. Reference body = the 4-token contract; declines in lockstep via the shared
-//! predicate, so walk shape and tile can never disagree.
+//! The tokstep companion (slice I): tokens one stamped tile call covers — 16·nrsplit for amx
+//! perms (TMUL macro is square in tile units), 4 for every vector perm; the batch wrapper walks
+//! its (token, row-group) space off it. Reference body = the 4-token contract.
 def q8q8_tokstep_gen() : int {
     return 4
 }
 
 //! The tile-config companion (slice K I1): a latch=1 raw-tile stamp carries no per-call
-//! ldtilecfg and no tilerelease, so the batch wrapper calls this once per dispatch chunk to
-//! load the family's static TMUL palette on the worker thread. Reference body — and the
-//! generated body of every non-latch stamp — is a no-op.
+//! ldtilecfg/tilerelease, so the batch wrapper calls this once per dispatch chunk to load the
+//! family's static TMUL palette. Reference body — and every non-latch stamp — is a no-op.
 def q8q8_amx_cfg_gen() : void {}
 
-//! The witness companion: did the stamped family actually EMIT on this target? Reference body
-//! = false; the generator emits `return true`, declining in lockstep with the whole family
-//! (the one shared predicate) — so true ⟺ every slot below is generated code. Read at backend
-//! SELECTION time only (never [init] — the slice C rule): on x64 a declined stamp keeps the
-//! gen backend unavailable, because the reference bodies there are the NEON functions' scalar
-//! fallbacks — correct, but far slower than the portable backend. On arm64 a declined stamp
-//! still leaves the fast grp4 reference pair, so arm64-gen stays available regardless.
+//! The witness companion: did the stamped family actually EMIT here? true ⟺ every slot below is
+//! generated code. Read at backend SELECTION time only, never [init] (the slice C rule) — a
+//! declined stamp keeps x64-gen unavailable (slow NEON fallback) but arm64-gen stays available.
 def q8q8_family_live() : bool {
     return false
 }
 
-//! The GEMV companion (the nr=1 perm sub-family, slice D): a rows-range core with the mm_rows
-//! slot signature — rows [rb, re) of one region, no internal dispatch, rb/re multiples of the
-//! stamped mr (the mm/group3/groupn wrappers chunk by groups; the mm_rows slot contract is
-//! multiples of 32). The generator emits the grp<mr> single-token k-loop with the group walk
-//! inside (gkstep blocks per iteration — independent sdot chains); the reference body is the
-//! hand laneq rows walk over the grp4 reference layout, declining in lockstep with the tile
-//! and layout via the shared predicate. Not `private`: it IS the mm_rows slot and is called
-//! from inside lifted parallel_for worker lambdas.
+//! The GEMV companion (nr=1 sub-family, slice D): a rows-range core over rows [rb, re) of one
+//! region, no internal dispatch, rb/re multiples of the stamped mr. Reference body = the hand
+//! laneq rows walk over grp4, declining in lockstep with the tile and layout.
 [hint(unsafe_range_check, noalias = wp, noalias = sp, noalias = xqp, noalias = xsp)]
 def q8q8_gemv_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void {
     let nb = n / 32l
@@ -124,13 +109,9 @@ def q8q8_gemv_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : in
     }
 }
 
-//! The mx4 GEMV companion (slice E — the second quant family): the MXFP4·Q8 twin of
-//! q8q8_gemv_gen, rows [rb, re) of one region off the grp<mr>-interleaved nibble/exponent
-//! planes (repack_mx4_grp — the SAME mr as the Q8 layout, one companion for both). The
-//! generator emits the tbl-dequant laneq shape (per block: 4 nibble loads per row quad feed
-//! tbl lo/hi + indexed sdot, e8m0 scale fold in-register); reference body = the hand laneq
-//! mx4 rows walk over the grp4 reference planes, declining in lockstep via the shared
-//! predicate. Not `private`: called from inside lifted parallel_for worker lambdas.
+//! The mx4 GEMV companion (slice E): the MXFP4·Q8 twin of q8q8_gemv_gen, rows [rb, re) of one
+//! region off the grp<mr>-interleaved nibble/exponent planes (repack_mx4_grp — SAME mr as Q8).
+//! Reference body = the hand laneq mx4 rows walk over grp4, declining in lockstep.
 [hint(unsafe_range_check, noalias = wn, noalias = we, noalias = xqp, noalias = xsp)]
 def mx4q8_gemv_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void {
     let nrow = n / 2l
@@ -149,13 +130,9 @@ def mx4q8_gemv_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : 
     }
 }
 
-//! The mx4 TILE companion (the mx4 batch family): 4 tokens x mr rows per call off the
-//! grp<mr>-interleaved nibble/exponent planes — mx4q8_gemv_gen's batch twin, stamped with the
-//! SAME perm (the generated tile dequants each weight block-group once and reuses it across
-//! the 4 activation rows; wn/we arrive pre-offset to the group like the Q8 tile's wg/sg).
-//! Reference body = 4 single-token laneq mx4 dots with the tile's per-block fold order; it
-//! ignores xbsp (the mx4 plane is never biased). Not `private`: called from inside the
-//! lifted parallel_for worker lambdas.
+//! The mx4 TILE companion (mx4 batch family): 4 tokens x mr rows per call off the grp<mr>-
+//! interleaved nibble/exponent planes — mx4q8_gemv_gen's batch twin, dequanting each weight
+//! block-group once and reusing it across the 4 activation rows. Ignores xbsp (mx4 never biased).
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = wn, noalias = we, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def mx4q8_tile_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
     let nb = n / 32l
@@ -175,15 +152,8 @@ def mx4q8_tile_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : 
 }
 
 //! One row's dot off the grp<mr> K-quant planes, scalar — the kq stubs' reference body (runs
-//! only when the stamp declined; production loads never see it) and the tests' repack oracle.
-//! kqg/ksg = the row's GROUP plane bases; r = the row within the group. Block contributions
-//! are computed and summed in the SAME order as the portable disk dots, so it is bit-exact
-//! against them (the integer sub-sums are exact; only the plane layout differs).
-//! ACTIVATION CONTRACT (kq v2, all three formats): Q8_K-form activations — xsp is the
-//! PER-SUPERBLOCK scale plane (n/256 per token), xbsp the per-16 quant sums — with integer
-//! sub-scale / bsums folds and ONE float fold per superblock (the lcpp scheme). k4/k5 fold
-//! u8 sc/mn rows against d/dmin; k6 folds SIGNED per-16 sub-scales against d, the -32 quant
-//! offset riding the bsum accumulator (isum - 32*bsum is exact in int32).
+//! only when the stamp declined) and the tests' repack oracle; bit-exact vs the portable disk
+//! dots. Activations are Q8_K-form: xsp per-superblock scale, xbsp per-16 quant sums.
 def kq_grp_row_dot(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -247,11 +217,9 @@ def kq_grp_row_dot(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : 
     return acc
 }
 
-//! The per-format K-quant layout companions: the plane interleave (mr) each format's stamped
-//! kernels read. Since the kq families tune separately (one [tune] entry per format below),
-//! each format's planes take its OWN winner's mr — k5/k6 tiles measurably prefer grp4 while
-//! the q8 family crowns grp8 (M1, 2026-07-12). Reference bodies = grp4, declining in lockstep
-//! with each family via the shared predicate.
+//! The per-format K-quant layout companions: plane interleave (mr) each format's stamped kernels
+//! read. Each format tunes separately and takes its own winner's mr — k5/k6 tiles prefer grp4
+//! while q8 crowns grp8 (M1, 2026-07-12). Reference bodies = grp4, declining in lockstep.
 def k4q8_layout_gen() : int {
     return q8q8_repack_type(GEMM_REFERENCE_MR).interleave
 }
@@ -287,9 +255,8 @@ def kq_layout_of(fmt : int) : int64 {
 }
 
 //! One row's dot off the grp<mr> q40 planes, scalar — the q40 stubs' reference body and the
-//! tests' repack oracle (kq_grp_row_dot's q40 sibling; the quant plane IS the k4 tiling, only
-//! the scale plane differs: per-block f16 d at [blk][mr f16]). Same float order as dot_q40q8:
-//! per-block fma of float(ilo + ihi − 8·Σa32)·d into facc, per-superblock fma of facc·d8.
+//! tests' repack oracle (kq_grp_row_dot's q40 sibling; quant plane IS the k4 tiling, only the
+//! scale plane differs). Same float fold order as dot_q40q8.
 def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -319,12 +286,9 @@ def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp :
     return acc
 }
 
-//! The K-quant GEMV kernels (kq stage 4): rows [rb, re) of one plane-region pair off the
-//! grp<mr> kq planes (repack_k4/k5/k6_grp — the format's OWN layout companion). The generators
-//! emit the unsigned-quant superblock loop (dasllama_gemm_gen::k*_gemv); reference bodies =
-//! the scalar grp walk above, declining in lockstep via the shared predicate. Companions of
-//! their format's tile family below (one manifest entry per format covers tile+gemv+layout).
-//! Not `private`: they ARE the kq_rows_* slots and are called from inside lifted worker lambdas.
+//! The K-quant GEMV kernels (kq stage 4): rows [rb, re) of one plane-region pair off the grp<mr>
+//! kq planes (each format's OWN layout companion). Reference bodies = the scalar grp walk above,
+//! declining in lockstep. Not `private`: they ARE the kq_rows_* slots.
 [hint(unsafe_range_check, noalias = kqp, noalias = ksp, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def k4q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
     let mr = int64(k4q8_layout_gen())
@@ -373,24 +337,13 @@ def q40q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp 
     }
 }
 
-// The kq tune grids (one [tune] family per format): the kq emitters read only mr/nrsplit (+
-// the x64 dot lattice) off the perm — kstep is pinned 1 internally — so the grid is the
-// (mr, nrsplit) product per ISA tier. nrsplit token-splits the 4-token tile, re-running the
-// expensive kq unpack once per slice, so nrsplit-4 rows (single unpack) lead the tile bench
-// wherever the q-reg budget admits them (mr8 nrsplit4 declines on NEON: 16+8+10 > 32 regs).
-// bias128/smmla/amx rows are deliberately absent — the kq planes are natively unsigned and
-// have no TMUL/MMA form. Fallbacks mirror the q8 per-ISA chain flavors; arm64 lands on the
-// measured M1 tile winner (mr4 — grp4 planes, single-unpack tile).
+// The kq tune grids (one [tune] family per format): kstep pinned 1, grid is (mr, nrsplit) per ISA
+// tier. nrsplit token-splits the 4-token tile; nrsplit-4 (single unpack) wins wherever q-reg
+// budget admits it. bias128/smmla/amx rows are absent — kq planes are natively unsigned.
 
-//! The K-quant TILE kernels (the kq batch family): 4 tokens x mr rows per call — ksg is the
-//! group's scale-plane base; kqg is the group's QUANT panel: k4 the packed grp<mr> plane
-//! itself, k5/k6 the BYTE-EXPANDED scratch the batch cell unpacks once per (group,
-//! token-block) (unpack_kq_panel_grp, qsb 256 — the kqBytes tile form: verbatim wlo/whi
-//! loads, the 5/6-bit deposit amortized over TB tokens instead of the tile's 4).
-//! Activations an [ntok x n] image with per-token scale/bsum rows. One call is bit-exact vs
-//! 4 per-token GEMVs over the same weights. Reference bodies = per-token scalar grp walks
-//! (byte-panel form for k5/k6), declining in lockstep via the shared predicate. Not
-//! `private`: called from lifted worker lambdas.
+//! The K-quant TILE kernels (kq batch family): 4 tokens x mr rows per call — kqg is the group's
+//! QUANT panel (k4 the packed grp<mr> plane; k5/k6 a BYTE-EXPANDED scratch unpacked once per
+//! (group, token-block)). One call is bit-exact vs 4 per-token GEMVs over the same weights.
 [tune_perm(mr = 4), tune_perm(mr = 4, nrsplit = 2), tune_perm(mr = 8, nrsplit = 2),
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"), tune_perm(dot = "maddubs", width = 256, mr = 8, nrsplit = 2, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"), tune_perm(dot = "vpdpbusd", width = 256, mr = 8, nrsplit = 2, requires = "avxvnni|avx512vnni"),
@@ -471,12 +424,9 @@ def q40q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp 
     }
 }
 
-//! The f16-scale GEMV companion (the wscale_f16 rail): q8q8_gemv_gen's twin over the raw
-//! binary16 group-scale plane (Model.qscales16 — the repacked f32 plane, converted in place,
-//! element order preserved). Same rows-range contract; the generated body differs only in the
-//! scale fold's widen (fcvtl/vcvtph2ps). Reference body = the hand laneq f16s rows walk over
-//! the grp4 reference layout, declining in lockstep via the shared predicate. Not `private`:
-//! it IS the mm_rows_s16 slot and is called from inside lifted parallel_for worker lambdas.
+//! The f16-scale GEMV companion (wscale_f16 rail): q8q8_gemv_gen's twin over the raw binary16
+//! group-scale plane. Same rows-range contract; the generated body differs only in the scale
+//! fold's widen (fcvtl/vcvtph2ps). Not `private`: it IS the mm_rows_s16 slot.
 [hint(unsafe_range_check, noalias = wp, noalias = sp, noalias = xqp, noalias = xsp)]
 def q8q8_gemv_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void {
     let nb = n / 32l
@@ -491,11 +441,9 @@ def q8q8_gemv_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp
     }
 }
 
-//! The f16-scale tile companion: q8q8_tile_gen's twin over the binary16 group-scale plane —
-//! same 4-token contract, stamped with the SAME perm (bias128/amx/smmla included; only the
-//! scale-fold load differs). Reference body = 4 single-token laneq f16s dots with the tile's
-//! per-block fold order. Not `private`: called from inside the lifted parallel_for worker
-//! lambdas.
+//! The f16-scale tile companion: q8q8_tile_gen's twin over the binary16 group-scale plane — same
+//! 4-token contract, same stamped perm (bias128/amx/smmla included), only the scale-fold load
+//! differs. Not `private`: called from inside the lifted parallel_for worker lambdas.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def q8q8_tile_s16_gen(var yp : float?; wg : int8 const?; sg : uint16 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
     let nb = n / 32l
@@ -511,20 +459,9 @@ def q8q8_tile_s16_gen(var yp : float?; wg : int8 const?; sg : uint16 const?; xqp
     }
 }
 
-//! The generated tile: mr interleaved rows x 4 tokens (the q8q8_repack_type(mr) layout — see
-//! dasllama_gemm_schema; the stamped mr is what q8q8_layout_gen reports). The reference body —
-//! 4 single-token laneq4 dots with the same per-block fold order as the tile — runs on interp,
-//! AOT, non-arm64 JIT, and whenever the generator declines; it ignores xbsp (the bias128 bsums
-//! plane — only biased stamps read it, and their wrapper always passes one). The dot=/width=
-//! rows are the x64 legs (slice F): they decline on arm64 and light per cpuid tier on x86-64
-//! (avx2 / vnni256 / avx512bw / avx512vnni / avxvnniint8), so ONE grid serves every ISA; the
-//! bias=128 rows (slice H) additionally bake w^0x80 into the plane and drop the sign trick;
-//! the amx pipe=1 row (slice K) defers the TMUL macro's scale fold one k-block behind a
-//! double-buffered C spill so vector ports fold while TMUL crunches.
-//! The trailing suffix rows and the bias-on-maddubs row decline by design everywhere (q-reg
-//! budget, lane structure, a dot with no 128-bit leg, word-saturating biased pair-sums) and
-//! pin the decline rail in test mode. Not `private`: called from inside the lifted
-//! parallel_for worker lambda below.
+//! The generated tile: mr interleaved rows x 4 tokens (the q8q8_repack_type(mr) layout). Reference
+//! body = 4 single-token laneq4 dots, runs on interp/AOT/non-arm64 JIT/generator-declined; ignores
+//! xbsp unless a biased stamp reads it. dot=/width= rows are the x64 legs (slice F), one grid per ISA.
 [tune_perm(kstep = 1), tune_perm(kstep = 2), tune_perm(kstep = 4), tune_perm(kstep = 2, nrsplit = 2),
  tune_perm(kstep = 1, nrsplit = 2), tune_perm(kstep = 4, nrsplit = 2),
  tune_perm(kstep = 1, nrsplit = 2, mr = 8), tune_perm(kstep = 2, nrsplit = 2, mr = 8), tune_perm(kstep = 4, nrsplit = 2, mr = 8),
@@ -582,14 +519,9 @@ def q8q8_tile_gen(var yp : float?; wg : int8 const?; sg : float const?; xqp : in
     }
 }
 
-//! mr-generalized Q8 interleave repack — the q8q8_repack_type(mr) layout for any mr
-//! (mr=4 reproduces the old hand arm64-laneq interleave byte-for-byte). mr-row
-//! groups, kgroup k-bytes per row per group (4 = the dword-group layout every vector-dot
-//! perm reads; 8 = the smmla row-pair layout, slice J), f32 scales interleaved per
-//! block; group bytes biased by wbias (the bias128 vpdpbusd stamps bake w^0x80; tail rows
-//! stay row-major AND unbiased — the sdot4x4 tail path reads them as plain s8). Runs once
-//! per weight tensor at load, on the main context. Public: the probes repack per-variant
-//! copies with an explicit mr/wbias/kgroup.
+//! mr-generalized Q8 interleave repack — the q8q8_repack_type(mr) layout for any mr (mr=4
+//! reproduces the old hand arm64-laneq interleave byte-for-byte). Group bytes biased by wbias
+//! (bias128 stamps bake w^0x80); tail rows stay row-major AND unbiased. Runs once per tensor at load.
 def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : int64 = 0l; kgroup : int64 = 4l) {
     let nb = n / 32l
     let ng = d / mr
@@ -637,20 +569,16 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     delete ts
 }
 
-// the backend repack slot: the layout companion decides the interleave, the wbias companion
-// the plane bias, the kgroup companion the k-byte grouping — so a stamped bias128-mr16 tile
-// gets biased grp16 weights and an smmla stamp gets the kg8 row-pair plane from the same
-// load path that gave the grp4 pair its plain grp4 weights
+// the backend repack slot: layout/wbias/kgroup companions decide interleave, plane bias, and
+// k-byte grouping — so a bias128-mr16 stamp gets biased grp16 weights and an smmla stamp gets
+// the kg8 row-pair plane from the same load path that gives grp4 its plain weights
 def private repack_q8q8_gen(var wp : int8?; var sp : float?; n, d : int64) {
     repack_q8q8_grp(wp, sp, n, d, int64(q8q8_layout_gen()), int64(q8q8_wbias_gen()), int64(q8q8_kgroup_gen()))
 }
 
-//! mr-generalized MXFP4 plane repack (mr=4 reproduces the old hand arm64-laneq mx
-//! interleave byte-for-byte). Nibble bytes interleave [dword-group j][row r][4 bytes]
-//! per block (16*mr bytes per block-group — the layout whose nibble order maps byte-for-byte
-//! onto the grp<mr> Q8 order, see expand_mx4_region_q8), E8M0 scale bytes mr-per-block; tail
-//! rows (d % mr) stay row-major. Public: the probes repack per-variant copies with an
-//! explicit mr.
+//! mr-generalized MXFP4 plane repack (mr=4 reproduces the old hand arm64-laneq mx interleave
+//! byte-for-byte). Nibble layout maps byte-for-byte onto the grp<mr> Q8 order (see
+//! expand_mx4_region_q8); tail rows (d % mr) stay row-major.
 def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
     let nrow = n / 2l    // nibble bytes per row
     let nbb = n / 32l    // blocks per row
@@ -701,16 +629,9 @@ def private repack_mx4_gen(var np : uint8?; var ep : uint8?; n, d : int64) {
     repack_mx4_grp(np, ep, n, d, int64(q8q8_layout_gen()))
 }
 
-// ===== K-quant grp<mr> repacks (kq stage 4) =====
-// The layouts the stamped k4/k5/k6 rows cores read, per superblock per mr-row group (tail rows
-// d % mr stay disk-order at their original offsets — the portable dots serve them):
-//   quants  [blk 0..7][j 0..3][row][4B] — byte t of (blk,j) pairs k = blk*32+j*4+t (LOW nibble)
-//           with k+16 (HIGH), the mx4 pairing (disk pairs sub-blocks 2js/2js+1 instead)
-//   k5 high [blk][j][row] 1B — bit t = weight j*4+t's 5th bit, bit 4+t = the k+16 weight's
-//   k6 high [half][jj 0..7][row][4B] — the disk qh bytes verbatim (bits for all 4 blocks of the
-//           half at uniform shift 2g), only row-interleaved by 4-byte columns
-//   scales  k4/k5 (kq v2, 20B/row) [mr f16 d][mr f16 dmin][blk 0..7][mr u8 sc][blk 0..7][mr u8 mn]
-//           — the 6-bit packing decoded once at repack; k6 [idx 0..15][mr int8 sc][mr f16 d]
+// ===== K-quant grp<mr> repacks (kq stage 4): the layouts the stamped k4/k5/k6 rows cores read,
+// per superblock per mr-row group (tail rows d % mr stay disk-order, served by the portable
+// dots). Quant/high/scale byte layouts differ per format — see repack_k4/k5/k6_grp bodies. =====
 
 // low 4 bits of weight k off a disk-order k4/k5 nibble row (128 bytes per superblock)
 def private k45_nib(rowq : uint8 const?; k : int64) : uint {
@@ -735,10 +656,9 @@ def private k6_nib(rowq : uint8 const?; k : int64) : uint {
     return g < 2l ? b & 15u : b >> 4u
 }
 
-//! mr-generalized K-quant plane repack, one function per format (grp layouts above). Runs once
-//! per kq weight tensor at load, on the main context. Public: probes/tests repack per-variant
-//! copies with an explicit mr. k4/k5 (kq v2) also DECODE the 6-bit scale packing into the u8
-//! sc/mn planes — the padded-disk 20B rows and the decoded 20B/row grp regions share one stride.
+//! mr-generalized K-quant plane repack, one function per format. Runs once per kq weight tensor
+//! at load. k4/k5 (kq v2) also DECODE the 6-bit scale packing into the u8 sc/mn planes — the
+//! padded-disk 20B rows and the decoded 20B/row grp regions share one stride.
 def repack_k4_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 128l
@@ -943,18 +863,9 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
-//! Unpack ONE group's packed grp<mr> k5/k6 quant panel (nsb superblocks x mr rows) into the
-//! BYTE-EXPANDED tile form: per superblock [blk][j][row][4B] full-byte weight k (128*mr), then
-//! the k+16 region at +128*mr — the wlo/whi images the kqBytes tile stamps load verbatim
-//! (qsb 256). The batch cell calls this once per (group, token-block), so the 5/6-bit deposit
-//! amortizes over TB tokens while the DRAM planes keep the packed form the bandwidth-bound
-//! GEMV decode path streams. Public: the tile gates and the tune probe build their byte
-//! fixtures through it.
-// SWAR over uint64 lanes — 16 output bytes per (blk, j, 4-row block) via two word ops (mr is
-// always a multiple of 4). k5 deposit: broadcast each row's high-bit byte across its 4 t-lanes,
-// select bit t per lane (SEL, values ≤ 8), then any-set → 0x10 via the add-carry test
-// ((x + 0x7F) & 0x80 per lane, no lane overflow) shifted to bit 4. k6: the 2-bit tops sit at
-// a uniform shift per block — one shift+mask per word.
+//! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi
+//! kqBytes stamps load verbatim). SWAR over uint64 lanes: k5 deposit uses an add-carry test
+//! ((x+0x7F)&0x80) to fold the high bit; k6 tops sit at a uniform shift per block.
 [hint(unsafe_range_check, noalias = kqg, noalias = dst)]
 def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let LO4 = 0x0F0F0F0F0F0F0F0Ful
@@ -1009,10 +920,9 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
     }
 }
 
-//! kq_grp_row_dot's twin over a BYTE-EXPANDED panel (unpack_kq_panel_grp's output, qsb 256) —
-//! the k5/k6 tile wrappers' reference body. Same integer folds and per-superblock float fold,
-//! so it is bit-exact against the packed-plane dot over the same weights. fmt picks the scale
-//! form only (5 = u8 sc/mn rows + d/dmin, 6 = signed per-16 sub-scales + d).
+//! kq_grp_row_dot's twin over a BYTE-EXPANDED panel (unpack_kq_panel_grp's output) — the k5/k6
+//! tile wrappers' reference body, bit-exact against the packed-plane dot. fmt picks the scale
+//! form only (5 = u8 sc/mn + d/dmin, 6 = signed per-16 sub-scales + d).
 def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -1075,13 +985,9 @@ def private repack_kq_gen(fmt : int; var kq : uint8?; var ks : uint8?; n, d : in
     }
 }
 
-//! Generic grp<mr> single-token dot for the mr != 4 slots and tails: scalar, correct
-//! anywhere, same per-block fold order as the tile (acc int-exact, then f += float(acc) * s *
-//! q per block in bi order). Writes the group's mr outputs for token trow at column col.
-//! wbias un-biases bias128 planes byte-wise (int8(b + 128) — the +128-mod-256 involution,
-//! int-exact, same acc as the plain plane; identity at wbias=0); kgroup selects the plane's
-//! k-byte grouping (4 = dword groups, 8 = the smmla row-pair plane). Public: the parity probe
-//! uses it as the grp<mr> reference when the stamped mr isn't 4.
+//! Generic grp<mr> single-token dot for mr != 4 slots and tails: scalar, correct anywhere, same
+//! per-block fold order as the tile. wbias un-biases bias128 planes byte-wise (identity at
+//! wbias=0); kgroup selects the plane's k-byte grouping (4 = dword, 8 = smmla row-pair).
 def q8q8_token_grp_generic(var yp : float?; wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n, d, col, trow, mr : int64; wbias : int64 = 0l; kgroup : int64 = 4l) {
     let nb = n / 32l
     let wb0 = int(wbias)
@@ -1115,10 +1021,9 @@ def q8q8_token_grp_generic(var yp : float?; wg : int8 const?; sg : float const?;
     }
 }
 
-// One (unit range × token range) cell of the interleaved batch walk — the worker body of the
-// classic 1-D dispatch verbatim (TB blocks outer, groups inner): the 1-D arm calls it once with
-// the full token range, the 2-D grid arm once per cell, so the two arms share one walk and the
-// off-path stays byte-identical.
+// One (unit range x token range) cell of the interleaved batch walk (TB blocks outer, groups
+// inner): the 1-D arm calls it once with the full token range, the 2-D grid arm once per cell,
+// so both arms share one walk and stay byte-identical.
 def private q8q8_batch_cell_gen(var myp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, nb, mr, TB, kg, wbias : int64; ub, ue : int; tb0, te : int64) {
     unsafe {
         var tb = tb0
@@ -1155,14 +1060,9 @@ def private q8q8_batch_cell_gen(var myp : float?; wp : int8 const?; sp : float c
     }
 }
 
-// One (unit range × token range) cell of the amx-shaped walk (slice K I2 — the ts≠4 twin of
-// q8q8_batch_cell_gen): (ts-token × gs-group) macro units over units [ub, ue), tokens
-// [tb0, te). The 1-D arm calls it with the full token range, the 2-D grid once per cell.
-// Interior token cells are whole-macro by construction (whole-ts even division); a ragged
-// block tail rides ONE overlapped macro when the overlap stays inside this cell's token range
-// (the tile zero-inits its own y region — same-thread recompute is idempotent, and the tb0
-// guard keeps the overlap from ever crossing into a concurrent cell's rows), else the vector
-// rows-core per token.
+// One (unit range x token range) cell of the amx-shaped walk (slice K I2 — the ts!=4 twin of
+// q8q8_batch_cell_gen). Interior token cells are whole-macro; a ragged tail rides ONE overlapped
+// macro when it stays inside this cell's range (recompute is idempotent), else vector rows-core.
 def private q8q8_batch_amx_cell_gen(var myp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, nb, mr, TBa, ts, gs : int64; ub, ue : int; tb0, te : int64) {
     unsafe {
         var tb = tb0
@@ -1194,16 +1094,9 @@ def private q8q8_batch_amx_cell_gen(var myp : float?; wp : int8 const?; sp : flo
     }
 }
 
-// The interleaved batch GEMM (grew out of the hand laneq batch kernel, tile swapped for the
-// generated one). Token-blocked: TB tokens outer, groups inner, so the TB×n activation slice
-// stays L2-resident and is reused across this thread's groups instead of re-streaming the whole
-// activation once per group (effective_token_block clamps TB to the per-box L2 budget — above
-// ~L2/n the slice spills and prefill cliffs). Strides come off the layout companion: any
-// stamped mr walks grp<mr> groups and runs its token tail through the generic dot; the tokstep
-// companion picks the walk shape (4-token vector tiles, or the amx macro's ts×gs units). For a
-// bias128 stamp the bsums plane (−128·Σx i32 per (token, block) — the tile's acc-init
-// correction) is built once per call before dispatch: O(ntok·n), noise against the dots'
-// O(ntok·n·d), amortized over every group.
+// The interleaved batch GEMM. Token-blocked: TB tokens outer, groups inner, so the TB×n
+// activation slice stays L2-resident (effective_token_block clamps TB to the per-box L2 budget —
+// above ~L2/n it spills and prefill cliffs). Strides come off the layout/tokstep companions.
 def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -1233,11 +1126,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     let xbsp : int const? = wbias != 0l ? unsafe(addr(bs[0])) : null
     let ts = int64(q8q8_tokstep_gen())   // tokens per tile call (4; 16/32 on amx stamps)
     if (ts != 4l) {
-        // the amx-shaped walk (slice I): one tile call covers ts tokens × gs row-groups, so
-        // the chunk space is gs-group units. Full-macro calls only; the token tail rides ONE
-        // overlapped macro call (the tile zero-inits its own y region, so recomputing covered
-        // tokens is idempotent); a batch shorter than one macro rides the vector rows-core
-        // per token. TB clamps up to one macro (a sub-macro block would overlap every call).
+        // amx-shaped walk (slice I): one tile call covers ts tokens x gs row-groups; a ragged tail rides one overlapped macro (idempotent) or falls back to the vector rows-core.
         let gs = ts / 16l                // row-groups per call — amx macros are square in tile units
         let ngu = ng / gs
         let TBa = max(TB, ts)
@@ -1248,9 +1137,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
                 q8q8_batch_amx_cell_gen(myp, wp, sp, xqp, xsp, xbsp, n, d, nb, mr, TBa, ts, gs, ub, ue, 0l, ntok)
             }
         } else {
-            // the 2-D grid on the amx walk (slice K I2 — 135M qkv = 18 macro units for 48
-            // lanes was twice as starved as the vector walk): one claim per (unit range ×
-            // token range) cell, ROWS-FASTEST decode, token axis in whole ts-token macros
+            // 2-D grid on the amx walk (slice K I2 — 18 macro units for 48 lanes was 2x starved vs 1-D): one claim per (unit x token) cell, rows-fastest decode.
             let ntile = ntok / ts
             let cells = grid.x * grid.y
             maybe_parallel_for(0, cells, cells) $(cb, ce) {
@@ -1267,8 +1154,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
             }
         }
         if (ngu * gs < ng) {
-            // leftover row-groups (ng % gs — dims that are 16- but not 32-multiples): the
-            // vector rows-core per token
+            // leftover row-groups (ng % gs, 16- but not 32-multiple dims): vector rows-core per token
             unsafe {
                 for (tk in range64(ntok)) {
                     q8q8_gemv_gen(myp + tk * d, wp, sp, xqp + tk * n, xsp + tk * nb, n, ngu * gs * mr, ng * mr)
@@ -1282,10 +1168,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
                 q8q8_batch_cell_gen(myp, wp, sp, xqp, xsp, xbsp, n, d, nb, mr, TB, kg, wbias, rb, re, 0l, ntok)
             }
         } else {
-            // the 2-D grid (matmul_grid engaged): one claim per (unit range × token range) cell,
-            // decoded ROWS-FASTEST so concurrent workers share a token block's activation slice
-            // in LLC while streaming disjoint weight rows. Even-division bounds, token axis in
-            // whole ts=4 tiles with the range tail folded into the last cell.
+            // 2-D grid (matmul_grid engaged): rows-fastest decode so concurrent workers share a token block's activation slice in LLC while streaming disjoint weight rows.
             let ntile = ntok / 4l
             let cells = grid.x * grid.y
             maybe_parallel_for(0, cells, cells) $(cb, ce) {
@@ -1313,10 +1196,9 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     delete bs
 }
 
-// mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows
-// core — ONE core call per chunk (the group loop lives inside the generated code). Strides
-// come off the layout companion, so the same wrapper serves both stamped layouts; the row
-// tail (d % mr) stays row-major in the repack and rides sdot4x4.
+// mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows core —
+// ONE core call per chunk. Strides come off the layout companion, so the same wrapper serves
+// both stamped layouts; the row tail (d % mr) stays row-major and rides sdot4x4.
 def private q8q8_kernel_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -1487,10 +1369,9 @@ def private mx4q8_groupn_gen(var yp : float?; wn : uint8 const?; we : uint8 cons
     }
 }
 
-// one (group range x token range) cell of the mx4 batch walk: TB token blocks outer, groups
-// inner, 4-token tile calls + per-token rows-core tails — the q8 batch cell's shape with ts
-// pinned 4 (the mx4 tile is the 4-token vector form on every stamp, like kq; the amx tokstep
-// never applies). The tile dequants each block-group once per 4 tokens straight off the planes.
+// One (group range x token range) cell of the mx4 batch walk: TB token blocks outer, groups
+// inner, 4-token tile calls + per-token rows-core tails (ts pinned 4 — no amx tokstep here).
+// The tile dequants each block-group once per 4 tokens straight off the planes.
 def private mx4q8_batch_cell_gen(var myp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend : int64) {
     unsafe {
         var tb = tb0
@@ -1517,9 +1398,8 @@ def private mx4q8_batch_cell_gen(var myp : float?; wn : uint8 const?; we : uint8
 }
 
 // mx4_batch slot: batched MXFP4·Q8 GEMM straight off the interleaved planes — group chunks
-// parallel, the cell walk above per chunk, row tails (d % mr) row-major per token via
-// dot_mx4q8. No expansion scratch: this retires expand_mx4_region_q8 in grouped MoE prefill
-// on gen boxes (the 3·d·n Q8 round-trip through DRAM was 87% of gpt-oss x64 prefill wall).
+// parallel, cell walk above per chunk. No expansion scratch: retires expand_mx4_region_q8 (the
+// 3·d·n Q8 DRAM round-trip was 87% of gpt-oss x64 prefill wall).
 def private mx4q8_batch_kernel_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let nrow = n / 2l
@@ -1542,11 +1422,9 @@ def private mx4q8_batch_kernel_gen(var yp : float?; wn : uint8 const?; we : uint
     }
 }
 
-// mx4_batch_groupn slot: the fused MoE prefill form (the llama.cpp mul_mat_id shape) — ONE
-// dispatch runs every touched expert's batched GEMM (triple offs (woff, row0, cnt); y token-
-// major over the gathered whole image) through the SAME batch cell walk, region-contiguous
-// group spans; the bias post-adds over the span by the worker that owns it (bit-identical to
-// add-at-store: same add, same chain point). Row tails (d % mr) row-major per (region, token).
+// mx4_batch_groupn slot: the fused MoE prefill form (llama.cpp mul_mat_id shape) — ONE dispatch
+// runs every touched expert's batched GEMM through the SAME batch cell walk; bias post-adds over
+// the span by the worker that owns it (bit-identical to add-at-store).
 def private mx4q8_batch_groupn_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
     let nb = n / 32l
     let nrow = n / 2l
@@ -1631,12 +1509,9 @@ def private kq_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : 
     }
 }
 
-// one (group range x token range) cell of the kq batch walk: TB token blocks outer, groups
-// inner, 4-token tile calls + per-token gemv tails — the q8 batch cell's shape with ts pinned
-// 4 (the kq tile is the 4-token vector form on every stamp; no TMUL kq tile exists, so the
-// amx tokstep never applies). k5/k6 tiles read a BYTE-EXPANDED scratch panel unpacked here
-// once per (group, token-block) — the deposit amortizes over TB tokens while the DRAM planes
-// keep the packed form the gemv tails (and the bandwidth-bound decode path) stream.
+// One (group range x token range) cell of the kq batch walk: TB token blocks outer, groups
+// inner, 4-token tile calls + per-token gemv tails (ts pinned 4 — no TMUL kq tile exists). k5/k6
+// tiles unpack a BYTE-EXPANDED scratch panel once per (group, token-block), amortized over TB.
 def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1700,9 +1575,7 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     let ng = d / mr
     var myp = yp
     let TB = effective_token_block(g_q8_token_block, n)
-    // GEMM shaper, not the GEMV one: a batch row-unit is ntok dots of work, and the GEMV wave
-    // formula (rows/(64·L) waves × L) cancels L out — the 4B w2 GEMM issued a fixed 32 chunks
-    // at BOTH 16 and 32 lanes (1/lane at 32L, zero self-serve slack)
+    // GEMM shaper, not GEMV: a batch row-unit is ntok dots, so the GEMV wave-cancel formula doesn't apply.
     maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
         kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, ub, ue, 0l, ntok)
     }
@@ -1723,11 +1596,9 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     }
 }
 
-// kq_batch_groupn slot: the fused MoE prefill form — ONE dispatch runs every touched expert's
-// batched GEMM (triple offs (woff, row0, cnt); y token-major over the gathered whole image).
-// Region-contiguous group spans through the SAME batch cell walk the per-expert tile uses
-// (kq_batch_cell_gen with the region's token range), so it is bit-exact vs a per-region loop
-// of kq_batch_kernel_gen; row tails (d % mr) disk-order per (region, token).
+// kq_batch_groupn slot: fused MoE prefill form — ONE dispatch runs every touched expert's
+// batched GEMM through the SAME batch cell walk the per-expert tile uses, so it is bit-exact
+// vs a per-region loop of kq_batch_kernel_gen.
 def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1774,10 +1645,9 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     }
 }
 
-// kq_groupn slot: region-list kq GEMV — the kq twin of q8q8_groupn_gen. Region-contiguous
-// group spans through the fmt's rows core (each region offsets the plane bases by its own
-// superblock), row tails (d % mr) disk-order per region like kq_kernel_gen's. Not `private`:
-// the groupn bit-exactness gate in test_kquant drives it directly over per-region grp slices.
+// kq_groupn slot: region-list kq GEMV, the kq twin of q8q8_groupn_gen — region-contiguous group
+// spans through the format's rows core, row tails disk-order per region. Not `private`: the
+// groupn bit-exactness gate in test_kquant drives it directly.
 def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1826,10 +1696,8 @@ def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 co
     }
 }
 
-// ===== f16-scale twins (the wscale_f16 rail): the same slot traversals over the binary16
-// group-scale plane — generated cores via the s16 companions, row-major tails via
-// dot_q8q8_f16s, token tails via the s16 rows core (no laneq fork needed: the generated
-// core covers every stamped layout) =====
+// ===== f16-scale twins (wscale_f16 rail): same slot traversals over the binary16 group-scale
+// plane — generated cores via s16 companions, tails via dot_q8q8_f16s / the s16 rows core =====
 
 def private q8q8_batch_cell_s16_gen(var myp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, te : int64) {
     unsafe {
@@ -2080,15 +1948,9 @@ def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 c
 
 [init]
 def dasllama_math_gen_register() {
-    // Same gate as the laneq backend it superseded; needs_repack keeps it out of auto-select
-    // (direct callers stay on arm64-sdot). Every slot — Q8 and mx4 — reads the STAMPED
-    // layout at runtime (repacks and traversal strides off the layout companion, cores
-    // generated for that mr). The q8_layout field feeds the activation-time cache the mx4
-    // expand's positional map reads; it is evaluated at selection time, never at [init]
-    // ([init]s run before the JIT installs generated code — the slice C mr8 bug). arm64
-    // needs no availability predicate: a declined stamp still leaves the fast grp4
-    // reference pair there (the s16 slots' references are scalar until the neon laneq
-    // f16s twins land — wscale_f16 stays a per-box opt-in meanwhile).
+    // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout
+    // must be evaluated at selection time, not [init] — [init]s run before the JIT installs
+    // generated code (the slice C mr8 bug); arm64 needs no availability predicate.
     if (get_architecture_name() == "arm64" && jit_enabled()) {
         register_kernel_backend(KernelBackend(name = "arm64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,
@@ -2113,12 +1975,9 @@ def dasllama_math_gen_register() {
             q8_layout = @@q8q8_layout_gen, kq_layout = @@kq_layout_fmt_gen, q8_wbias = @@q8q8_wbias_gen,
             q8_kgroup = @@q8q8_kgroup_gen))
     }
-    // The x64 twin (slice F emitters + the witness): the das traversals above are
-    // ISA-agnostic, so the ONLY x64-specific wiring is the availability predicate — the
-    // witness companion is true iff the stamped family actually emitted (a declined stamp's
-    // reference bodies are the NEON functions' scalar fallbacks here, far slower than the
-    // portable backend, so an un-emitted family must never load-select). avx2 is the
-    // family's minimum tier (the maddubs leg).
+    // x64 twin: the ONLY x64-specific wiring is the availability predicate — the witness must
+    // be true only if the family actually emitted (a declined stamp falls back to slow NEON
+    // scalar bodies here). avx2 is the family's minimum tier.
     if (get_architecture_name() == "x86_64" && jit_enabled() && cpu_supports("avx2")) {
         register_kernel_backend(KernelBackend(name = "x64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,

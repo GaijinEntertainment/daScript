@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 //! dasLLAMA — CPU LLM inference over GGUF models, in pure daslang. This module is the public API:
 //! ``load_model`` -> ``create_session`` -> ``encode`` / ``eval`` / ``sample`` (or the one-call
@@ -31,53 +32,37 @@ require dasllama/dasllama_math                 // setup_dasllama_jobque_ (engine
 // ===== Model, session, tokenizer =====
 
 def setup_dasllama_jobque() {
-    //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
-    //! batched dispatch, and the worker spin-before-park window (the tune sidecar's runtime
-    //! ``jobque_spin_us`` tunes the window per box; 0 disables the spin). Call it INSIDE
-    //! ``with_job_que()``, before the first ``generate``/``eval`` — see ``examples/dasLLAMA/run.das``.
+    //! Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts,
+    //! batched dispatch, and the worker spin-before-park window (``jobque_spin_us``; 0 disables).
+    //! Call INSIDE ``with_job_que()``, before the first ``generate``/``eval``.
     setup_dasllama_jobque_()
 }
 
 def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
-    //! Load a model AND its tokenizer from a GGUF file — the one entry point. The architecture and
-    //! tokenizer backend are auto-selected from GGUF metadata; ``mode`` picks the weight quantization
-    //! (``QuantMode.fp32`` = the token-exact reference, ``QuantMode.q8`` = the fast int8 path).
-    //! Q8 loads keep a PREPARED IMAGE next to the gguf (box + knob specific): the first load
-    //! saves it, later loads map it in milliseconds with zero-copy weight planes.
-    //! ``DASLLAMA_IMAGE=0`` disables the cache. Passing a ``.dlim`` path loads that image
-    //! DIRECTLY (no gguf needed — wrong identity panics; there is nothing to regenerate from);
-    //! the image's baked-in quantization applies and ``mode`` is ignored on that path.
+    //! Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are
+    //! auto-selected from GGUF metadata; ``mode`` picks the weight quantization. Q8 loads cache a
+    //! PREPARED IMAGE beside the gguf (box-specific, ``DASLLAMA_IMAGE=0`` disables) for millisecond reloads.
     return <- load_model_cached(path, mode)
 }
 
 def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
-    //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len``. A model serves
-    //! many sessions, each with its own position and cache — one model, many independent conversations.
-    //! On large-context models cap ``model.config.seq_len`` BEFORE creating sessions to bound KV memory.
-    //! ``kv_dtype`` picks this session's KV-cache codec — the ``KVDtype.f16`` default halves the KV
-    //! bytes and speeds up deep-context decode (near-lossless: stores clamp to ±65504; llama.cpp's
-    //! default is F16 too); pass ``KVDtype.f32`` for the bit-exact reference, or ``KVDtype.q8_0``
-    //! (llama.cpp ``-ctk/-ctv q8_0``) to halve the bytes again — block-quantized, near-lossless in
-    //! practice, needs head_size/kv_dim multiples of 32 (checked at create). Per-session state, so
-    //! sessions with different codecs and parallel models never interact.
+    //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len`` — one model,
+    //! many independent conversations. ``kv_dtype`` picks the KV-cache codec: ``f16`` (default,
+    //! near-lossless) halves bytes, ``q8_0`` halves again (needs head_size/kv_dim % 32 == 0).
     return <- create_session_(model, kv_dtype, kv_dtype)
 }
 
 def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
     //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry. Sessions created over it
-    //! (``create_session(model, pool)``) allocate cache pages of ``page_rows`` positions on demand
-    //! instead of the full ``seq_len`` slab up front — KV memory tracks the ACTUAL context, and many
-    //! sessions share one elastic pool. ``kv_dtype`` fixes the codec for every session in the pool.
-    //! Keep the pool alive (and in place) as long as its sessions live; it is plain data — ``delete``
-    //! frees everything at the end.
+    //! allocate cache pages of ``page_rows`` positions on demand instead of the full ``seq_len`` slab
+    //! up front, so many sessions share one elastic pool. Keep the pool alive as long as sessions live.
     return <- create_kv_pool_(model.config, page_rows, kv_dtype, kv_dtype)
 }
 
 def create_session(model : Model; var pool : KVPool) : Session {
     //! Create a session whose KV cache is PAGED out of ``pool`` (see ``create_kv_pool``) — pages
-    //! allocate on demand as the context grows. Call ``release_kv_pages`` when the session is done
-    //! (before ``delete``), or its pages stay checked out of the pool. Everything else — ``eval``,
-    //! ``sample``, ``generate``, ``eval_batch`` — behaves exactly like a flat session.
+    //! allocate on demand as the context grows. Call ``release_kv_pages`` before ``delete``, or its
+    //! pages stay checked out of the pool. Otherwise behaves exactly like a flat session.
     return <- create_session_(model, pool)
 }
 
@@ -90,28 +75,22 @@ def release_kv_pages(var session : Session) {
 
 def create_prefix_cache(max_groups : int64 = 0l) : PrefixCache {
     //! Create a prefix cache for the paged sessions of one ``create_kv_pool`` pool: finished
-    //! streams donate their KV pages (``prefix_insert``) and later requests with the same prompt
-    //! prefix attach them (``prefix_attach``) instead of re-prefilling — the serving win for
-    //! shared system prompts and multi-turn chats. ``max_groups`` caps how many page groups the
-    //! cache retains (LRU-dropped past it); 0 = unbounded. Page hashes route, stored token ids
-    //! verify — a hit attaches only after its tokens compare equal.
+    //! streams donate KV pages (``prefix_insert``), later requests with the same prefix attach them
+    //! (``prefix_attach``) instead of re-prefilling. ``max_groups`` caps retained groups (0 = unbounded).
     return <- create_prefix_cache_(max_groups)
 }
 
 def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Session; prompt : array<int64>) : int64 {
     //! Attach the longest cached prefix of ``prompt`` to a FRESH paged ``session`` of ``pool``:
-    //! matched whole pages join the session's block table (shared, refcounted) and ``n_past``
-    //! advances past them, so the caller prefills only the tail. Returns the matched token count
-    //! — a multiple of the pool's ``page_rows``, capped one token short of the prompt so the tail
-    //! eval always produces the sampling logits.
+    //! matched pages join the session's block table and ``n_past`` advances past them, so the
+    //! caller prefills only the tail. Returns the matched count, capped one token short of the prompt.
     return prefix_attach_(cache, pool, session, prompt)
 }
 
 def prefix_insert(var cache : PrefixCache; var pool : KVPool; session : Session; tokens : array<int64>) {
     //! Donate a finished session's KV pages to the cache. ``tokens`` is the session's full EVALED
-    //! history (prompt + reply + any closing tokens; only the first ``n_past`` count — those rows
-    //! exist); every full page of it not already cached is registered and survives the session's
-    //! ``release_kv_pages``. Call right before releasing.
+    //! history (only the first ``n_past`` rows exist); every full page not already cached is
+    //! registered and survives ``release_kv_pages``. Call right before releasing.
     prefix_insert_(cache, pool, session, tokens)
 }
 
@@ -154,9 +133,8 @@ def eval(model : Model; var session : Session; tokens : array<int64>) {
 
 def eval_embd(model : Model; var session : Session; embd : array<float>; npos : int64) {
     //! ``eval``'s embedding-input twin: prefill ``npos`` pre-built embedding rows (``npos × dim``,
-    //! token-major) at the session's current position and advance it. This is the multimodal splice
-    //! entry — fill text spans with ``embed_text_rows`` and media spans with an encoder tower's
-    //! soft tokens (see ``examples/dasLLAMA/audio.das``). Logits land in ``session.logits``.
+    //! token-major) at the session's current position and advance it — the multimodal splice entry
+    //! (text via ``embed_text_rows``, media via an encoder tower's soft tokens).
     eval_embd_(model, session, embd, npos)
 }
 
@@ -169,21 +147,15 @@ def create_batch_workspace(model : Model) : BatchWorkspace {
 
 def eval_batch(model : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:LINT014 — rows mutate THROUGH the pointers; a const array constifies the pointees
     //! One synchronous batched decode step: row i evals ``tokens[i]`` at ``sessions[i]``'s current
-    //! position, logits land in ``sessions[i].logits``, and each session advances by one — B
-    //! independent conversations through ONE pass of the weights (the weight GEMVs batch into GEMMs;
-    //! attention stays per-session). Sessions must be distinct, same-geometry (one model, equal
-    //! cache sizes, uniform KV dtype; paged sessions must share ONE pool, never mixed with flat
-    //! rows) and each have room for one more position. Ragged batches: pass only the still-active
-    //! sessions — B may shrink between calls. B == 1 and q4 weights delegate to the exact
-    //! per-session ``forward`` path.
+    //! position, advancing each by one — B conversations through ONE pass of the weights (GEMVs
+    //! batch into GEMMs). Sessions must be distinct, same-geometry, one pool if paged.
     eval_batch_(model, ws, sessions, tokens)
 }
 
 def sample(var session : Session; params : SamplingParams) : int64 {
-    //! Sample the next token from ``session.logits`` per ``params``: repetition/presence/frequency
-    //! penalties over the recent window, then temperature + top-k on logits, softmax, top-p / min-p
-    //! on probabilities, and a CDF draw — or greedy argmax when ``params.temp <= 0``.
-    //! ``SamplingParams()`` defaults are greedy.
+    //! Sample the next token from ``session.logits`` per ``params``: penalties, then
+    //! temperature/top-k/top-p/min-p and a CDF draw — or greedy argmax when ``params.temp <= 0``
+    //! (``SamplingParams()`` defaults are greedy).
     return sample_(session, params)
 }
 
@@ -202,10 +174,9 @@ def stats(session : Session) : Stats {
 
 def generate(model : Model; var session : Session; prompt : array<int64>; params : SamplingParams;
              max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
-    //! Stream-generate up to ``max_tokens`` from ``prompt``, invoking the trailing block per token with
-    //! ``(id, piece)``; return ``false`` from the block to stop early (e.g. on a stop token). Prefills
-    //! the prompt in one ``eval``, then samples one token at a time, advancing the session. Returns the
-    //! number of tokens emitted; timing is available afterwards via ``stats``.
+    //! Stream-generate up to ``max_tokens`` from ``prompt``, invoking the trailing block per token
+    //! with ``(id, piece)``; return ``false`` from the block to stop early. Prefills the prompt in
+    //! one ``eval``, then samples one token at a time; returns the number of tokens emitted.
     return generate_(model, session, prompt, params, max_tokens, blk)
 }
 
@@ -222,37 +193,31 @@ def generate_embd(model : Model; var session : Session; embd : array<float>; npo
 
 def embed(model : Model; text : string) : array<float> {
     //! Mean-pooled, L2-normalized sentence embedding of ``text`` (``model.config.dim`` floats): the
-    //! decoder's last-layer hidden state (post-final RMSNorm) averaged over token positions, then
-    //! unit-normalized. One forward over a fresh session per call. A decoder-only model used as an
-    //! embedder yields RAG-grade vectors — good for retrieval / similarity, not a substitute for a
-    //! dedicated embedding model.
+    //! decoder's last-layer hidden state (post-final RMSNorm), averaged then unit-normalized. A
+    //! decoder-only model used this way yields RAG-grade vectors, not a dedicated embedder's.
     return <- embed_(model, text)
 }
 
 // ===== Chat =====
 
 def create_chat(model : Model; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
-    //! Start a conversation over ``model``: resolves the model's chat template (sniffed from the GGUF's
-    //! embedded template, falling back to the arch registry) and creates the session. ``system`` is the
-    //! system prompt (empty = none); ``max_new`` caps each reply. One model can drive many chats.
-    //! ``kv_dtype`` is the session's KV-cache codec (f16 default — see ``create_session``).
+    //! Start a conversation over ``model``: resolves the chat template (GGUF-embedded, falling back
+    //! to the arch registry) and creates the session. ``system`` is the system prompt (empty =
+    //! none); ``max_new`` caps each reply; ``kv_dtype`` is the session's KV-cache codec.
     return <- create_chat_(model, system, max_new, kv_dtype)
 }
 
 def create_chat(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
-    //! Start an AUDIO-CAPABLE conversation: the chat takes ownership of ``tower`` (moved in — load
-    //! one with ``load_audio_tower``) so ``add_user_audio`` can splice audio into its turns. The
-    //! prompt shape around the audio span comes from the model's chat template (qwen2-family audio
-    //! markers, llama-3 bare embeddings, voxtral ``[BEGIN_AUDIO]``). Panics on a mismatched
-    //! decoder/mmproj pair. ``kv_dtype`` is the session's KV-cache codec (f16 default).
+    //! Start an AUDIO-CAPABLE conversation: takes ownership of ``tower`` (moved in — load with
+    //! ``load_audio_tower``) so ``add_user_audio`` can splice audio into its turns. Panics on a
+    //! mismatched decoder/mmproj pair; ``kv_dtype`` is the session's KV-cache codec (f16 default).
     return <- create_chat_(model, tower, system, max_new, kv_dtype)
 }
 
 def create_chat_renderer(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
-    //! ``create_chat``'s RENDER-ONLY twin: resolves the chat template, stop ids, and turn close
-    //! exactly like ``create_chat``, but creates NO KV session — a queued request can render its
-    //! whole prompt (``add_user`` / ``render_assistant`` / ``render_turn`` / ``render_close``)
-    //! holding tokens only, no cache memory. It cannot ``respond``/``eval``.
+    //! ``create_chat``'s RENDER-ONLY twin: resolves the template/stop ids/turn close but creates NO
+    //! KV session — a queued request can render its whole prompt holding tokens only, no cache
+    //! memory. It cannot ``respond``/``eval``.
     return <- create_chat_renderer_(model, system, max_new)
 }
 
@@ -262,19 +227,16 @@ def add_user(var chat : ChatSession; text : string) {
 }
 
 def add_assistant(model : Model; var chat : ChatSession; text : string) {
-    //! Inject a KNOWN assistant reply (no generation): prefill the pending user turn and ``text`` into
-    //! the KV cache, then close the turn — like ``respond`` but with a supplied reply. Replay a prior
-    //! transcript with alternating ``add_user`` / ``add_assistant`` calls, then ``respond`` the final
-    //! turn — the shape a stateless OpenAI-style server needs (the client resends the whole history
-    //! each request). Precondition: a user message is pending (``add_user`` first); a no-op otherwise.
+    //! Inject a KNOWN assistant reply (no generation): prefill the pending user turn and ``text``
+    //! into the KV cache, then close the turn — like ``respond`` but with a supplied reply. The
+    //! shape a stateless server needs to replay history. Precondition: a user message is pending.
     add_assistant_(model, chat, text)
 }
 
 def add_user_audio(var chat : ChatSession; samples : array<float> | #) {
     //! Queue audio (16 kHz mono f32 PCM) for the next ``respond`` — encoded to soft tokens
-    //! immediately, spliced at the head of the turn before any ``add_user`` text. Multiple clips
-    //! concatenate. Needs a chat created with ``create_chat(model, tower)``; call inside
-    //! ``with_job_que()`` (the encoder threads its kernels).
+    //! immediately and spliced at the head of the turn before any ``add_user`` text. Needs a chat
+    //! created with ``create_chat(model, tower)``; call inside ``with_job_que()``.
     add_user_audio_(chat, samples)
 }
 
@@ -292,11 +254,9 @@ def render_turn(model : Model; chat : ChatSession) : array<int64> {
 }
 
 def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {
-    //! ``add_assistant``'s render half: append the exact token stream a known assistant reply
-    //! prefills — the pending user turn, the assistant-open prompt, ``text``, and the turn close —
-    //! to ``out`` WITHOUT running the model, advancing the transcript exactly like ``add_assistant``.
-    //! Replay a stateless request's history on a ``create_chat_renderer`` chat to render its full
-    //! prompt with no KV memory. Precondition: a user message is pending; a no-op otherwise.
+    //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to
+    //! ``out`` WITHOUT running the model, advancing the transcript like ``add_assistant``. Use on a
+    //! ``create_chat_renderer`` chat to replay history with no KV memory. Precondition: user message pending.
     render_assistant_(model, chat, text, out)
 }
 
@@ -307,10 +267,9 @@ def render_close(model : Model; chat : ChatSession) : array<int64> {
 }
 
 def set_tools(var chat : ChatSession; var tools : array<string>) {
-    //! Declare the conversation's tools (verbatim JSON objects, one per tool — the OpenAI
-    //! ``tools[]`` entries, moved in) BEFORE the first turn renders; the system turn then carries
-    //! the family's tool block. Families with no tool format (``tmpl.tool_call_open`` empty)
-    //! ignore them.
+    //! Declare the conversation's tools (verbatim OpenAI ``tools[]`` JSON objects, moved in)
+    //! BEFORE the first turn renders — the system turn carries the family's tool block. Families
+    //! with no tool format (``tmpl.tool_call_open`` empty) ignore them.
     set_tools_(chat, tools)
 }
 
@@ -322,9 +281,8 @@ def add_tool_results(var chat : ChatSession; results : array<string>) {
 
 def set_thinking(var chat : ChatSession; on : bool) {
     //! Toggle reasoning for a hybrid thinking model (Qwen3 family): ``false`` appends the
-    //! template's empty think block to every generation prompt (the Jinja
-    //! ``enable_thinking=false`` form), so the model answers directly. No-op for templates with
-    //! no suppress form or vocabs without the think specials. Default is on.
+    //! template's empty think block so the model answers directly. No-op without a suppress
+    //! form or think specials in the vocab; default is on.
     set_thinking_(chat, on)
 }
 
@@ -336,9 +294,8 @@ def render_assistant_calls(model : Model; var chat : ChatSession; text : string;
 
 def respond(model : Model; var chat : ChatSession; params : SamplingParams;
             blk : block<(piece : string) : bool>) : string {
-    //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
-    //! stream pieces through the trailing block (return ``false`` to stop early) until a stop token or
-    //! the ``max_new`` budget. Terminates the turn in the KV cache and appends both turns to
-    //! ``chat.history``. Returns the full reply text; timing via ``stats(chat.session)``.
+    //! Generate the assistant's reply to the queued user message, streaming pieces through the
+    //! trailing block (return ``false`` to stop early). Terminates the turn in the KV cache and
+    //! appends both turns to ``chat.history``; returns the full reply text.
     return respond_(model, chat, params, blk)
 }

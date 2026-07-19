@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_qwen3a shared public
 
@@ -153,11 +154,9 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
     return <- t
 }
 
-//! Qwen3-ASR's log-mel (WhisperFeatureExtractor with center=True, truncation=False): manual
-//! 200-sample reflection pad both ends, NO 30 s zero tail, log10 with the 2⁻²⁴ floor, then
-//! the whisper-style global max−8 clamp and (x+4)/4 — but the clamp max stays in double (no
-//! float round-trip, unlike the mtmd whisper flavor). n_len is the effective frame count
-//! min((n_padded−400)/160+1, n_in/160+1); mel-major.
+//! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
+//! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike mtmd whisper,
+//! no float round-trip); n_len = min((n_padded−400)/160+1, n_in/160+1), mel-major.
 def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let n_in = int64(length(samples))
     let head = AUDIO_N_FFT / 2l                        // 200 reflection each side

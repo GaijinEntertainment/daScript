@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_chat shared public
 
@@ -27,9 +28,8 @@ struct Message {
 }
 
 //! A chat conversation over a model: the KV-cache session, the resolved chat template, and the
-//! running transcript. A model serves many independent ChatSessions. A session created with an
-//! audio tower (``create_chat(model, tower)``) also owns the tower + encoder scratch and can
-//! take ``add_user_audio`` — the soft tokens splice into the next turn's prefill.
+//! running transcript. A session created with an audio tower (``create_chat(model, tower)``) also
+//! owns the tower + encoder scratch and can take ``add_user_audio``.
 struct ChatSession {
     session : Session = Session()
     tmpl : ChatTemplate = ChatTemplate()
@@ -76,9 +76,8 @@ def private mistral_instruct_template() : ChatTemplate {
 }
 
 // The Mistral v7-tekken template (Voxtral, Mistral-Small-3.x): [INST]content[/INST] with NO
-// spacing, [SYSTEM_PROMPT]…[/SYSTEM_PROMPT] system role. The GGUF stores the template NAME
-// ("mistral-v7-tekken"), not Jinja — detection matches the name. Audio spans open with
-// [BEGIN_AUDIO] and have no closing marker (the mtmd voxtral shape).
+// spacing, [SYSTEM_PROMPT]…[/SYSTEM_PROMPT] system role. Detected BY NAME ("mistral-v7-tekken"),
+// not Jinja. Audio spans open with [BEGIN_AUDIO] and have no closing marker (mtmd voxtral shape).
 def private mistral_v7_tekken_template() : ChatTemplate {
     var ct = ChatTemplate()
     ct.add_bos = true   // <s>
@@ -91,9 +90,8 @@ def private mistral_v7_tekken_template() : ChatTemplate {
 }
 
 // Pick a named template by sniffing the GGUF's embedded Jinja source for each family's distinctive
-// marker — detection only, the Jinja is never executed. This is what resolves fine-tunes and the
-// arch-name collisions (a Mistral GGUF is arch "llama" but spells [INST]). Checked most-specific
-// first: Phi-3's source spells both <|user|> and <|end|>, Zephyr's only <|user|>.
+// marker — detection only, the Jinja is never executed. Resolves fine-tunes and arch-name
+// collisions (a Mistral GGUF is arch "llama" but spells [INST]); checked most-specific first.
 def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
     let src = m.chat_template_str
     if (empty(src)) {
@@ -127,11 +125,9 @@ def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
     return true
 }
 
-//! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template` first
-//! (see detect_chat_template). When the GGUF carries none, fall back to the arch heuristic — GGUF
-//! general.architecture is "llama" for BOTH Llama-3 (byte-level BPE) and Llama-2/TinyLlama
-//! (SentencePiece), so disambiguate by tokenizer backend: BPE => the registry's Llama-3 instruct
-//! template, SPM => Zephyr.
+//! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template`
+//! first, falling back to the arch heuristic. GGUF general.architecture is "llama" for both
+//! Llama-3 (BPE) and Llama-2 (SentencePiece), so the fallback disambiguates by tokenizer backend.
 def chat_template(m : Model) : ChatTemplate {
     var det = ChatTemplate()
     if (detect_chat_template(m, det)) {
@@ -171,12 +167,9 @@ def private render_parts(m : Model; parts : array<ChatPart>; content : string; v
     }
 }
 
-// Split `s` into template parts at every occurrence of a tool marker that resolves in the vocab —
-// HF added-token splitting: vocab markers tokenize as their single ids, the prose around them as
-// text (probe-verified: encode() does NOT match added tokens inline, so a marker left in a text
-// run tokenizes as plain BPE — not what the model saw in training). Markers absent from the
-// vocab stay in the text run, exactly what the family's own tokenizer does (Qwen2.5 has
-// <tool_call> but not <tool_response>; Qwen3 has both).
+// Split `s` into template parts at every tool marker that resolves in the vocab — HF added-token
+// splitting: vocab markers tokenize as their ids, the prose around them as text (encode() does not
+// match added tokens inline). Markers absent from the vocab stay in the text run.
 def private split_on_tool_markers(m : Model; c : ChatSession; s : string; var parts : array<ChatPart>) {
     let markers = fixed_array(c.tmpl.tool_call_open, c.tmpl.tool_call_close,
                               c.tmpl.tool_resp_open, c.tmpl.tool_resp_close)
@@ -278,11 +271,9 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     render_parts(m, c.tmpl.assistant_open.parts, "", out)
 }
 
-// Render an AUDIO turn's prefill as two token spans around the soft-token splice point:
-//   head = [BOS + system] + user parts before the content slot + audio_pre markers
-//   tail = audio_post markers + content + user parts after content + assistant_open
-// Splitting the text run at the audio span matches llama-mtmd-cli exactly — its text chunks
-// break at media boundaries, so BPE merges never cross the audio (session A's gated shape).
+// Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
+// tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
+// BPE merges never cross the audio.
 def private render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
         head |> push(bos_id(m))
@@ -333,10 +324,9 @@ def private consume_pending_(var c : ChatSession) {
     c.pending_is_tool = false
 }
 
-//! `create_chat_`'s RENDER-ONLY twin: resolves the chat template, stop ids, and turn close exactly
-//! like `create_chat_`, but creates NO KV session — a queued request can render its whole prompt
-//! (`add_user_` / `render_assistant_` / `render_turn_` / `render_close_`) holding tokens only, no
-//! cache memory. Do not eval/respond on it.
+//! `create_chat_`'s RENDER-ONLY twin: resolves the chat template, stop ids, and turn close
+//! exactly like `create_chat_`, but creates NO KV session — a queued request can render its
+//! whole prompt holding tokens only, no cache memory. Do not eval/respond on it.
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
     for (sp in c.tmpl.stop) {
@@ -371,10 +361,9 @@ def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l; kv
     return <- c
 }
 
-//! Start an AUDIO-CAPABLE conversation: like create_chat, but the chat takes ownership of an
-//! audio tower (moved in) so ``add_user_audio`` can splice soft tokens into its turns. The
-//! tower must project into the decoder's embedding width (a mismatched decoder/mmproj pair
-//! panics here, not at respond time).
+//! Start an AUDIO-CAPABLE conversation: like create_chat, but takes ownership of an audio tower
+//! (moved in) so ``add_user_audio`` can splice soft tokens into its turns. A mismatched
+//! decoder/mmproj pair panics here, not at respond time.
 def create_chat_(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
     if (tower.proj_dim != model.config.dim) {
         panic("dasLLAMA chat: mmproj projects to {tower.proj_dim} but the decoder is {model.config.dim}-wide — mismatched pair")
@@ -386,9 +375,8 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
 }
 
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
-//! spliced at the head of the next user turn (before its text, wrapped in the template's
-//! audio markers). Composes with add_user in the same turn; multiple clips concatenate.
-//! Call inside with_job_que() — the encoder threads its kernels.
+//! spliced at the head of the next user turn (before its text). Composes with add_user in the
+//! same turn; call inside with_job_que() (the encoder threads its kernels).
 def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     if (c.tower.d_model == 0l) {
         panic("dasLLAMA chat: this chat has no audio tower — create it with create_chat(model, tower)")
@@ -406,10 +394,9 @@ def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     c.n_audio_rows += int64(length(chunks)) * rows
 }
 
-// The empty think block that turns a hybrid thinking model into an instruct model (the Qwen3
-// family's enable_thinking=false). GENERATION prompt only — replayed history turns carry no think
-// blocks, matching the family's Jinja. Skips silently when thinking is on, the template declares
-// no suppress form, or the vocab lacks the think specials (nothing to suppress).
+// The empty think block that turns a hybrid thinking model into an instruct model (Qwen3's
+// enable_thinking=false). GENERATION prompt only — replayed history carries no think blocks.
+// Skips silently when thinking is on or the vocab lacks the think specials.
 def private render_think_suppress(m : Model; c : ChatSession; var out : array<int64>) {
     if (c.enable_thinking || empty(c.tmpl.think_suppress.parts)) {
         return
@@ -440,11 +427,9 @@ def render_close_(m : Model; c : ChatSession) : array<int64> {
     return <- out
 }
 
-//! `add_assistant_`'s render half: append the exact token stream a KNOWN assistant reply prefills —
-//! the pending user turn, the assistant-open prompt, `text`, and the turn close — to `out`, WITHOUT
-//! running the model, advancing the transcript exactly like `add_assistant_`. Replaying a stateless
-//! request's history on a `create_chat_renderer_` chat renders its full prompt while holding NO KV
-//! memory. Precondition: a user message is pending (`add_user_` first); a no-op otherwise.
+//! `add_assistant_`'s render half: appends the exact token stream a KNOWN reply prefills to
+//! `out` WITHOUT running the model, advancing the transcript like `add_assistant_`. Replays a
+//! stateless request's history on a `create_chat_renderer_` chat with no KV memory.
 def render_assistant_(m : Model; var c : ChatSession; text : string; var out : array<int64>) {
     if (!c.has_pending) {
         return
@@ -479,9 +464,8 @@ def set_tools_(var c : ChatSession; var tools : array<string>) {
 }
 
 //! Queue TOOL RESULTS as the next pending turn — the reply to an assistant turn that called
-//! tools. Each result wraps in the family's tool-response markers; consecutive results share one
-//! turn, riding the user turn frames (the ChatML/Hermes convention). Call in place of
-//! ``add_user_``, then respond/render as usual.
+//! tools. Each result wraps in the family's tool-response markers, riding the user turn frames
+//! (ChatML/Hermes convention). Call in place of ``add_user_``, then respond/render as usual.
 def add_tool_results_(var c : ChatSession; results : array<string>) {
     var parts : array<string>
     parts |> reserve(length(results))
@@ -497,9 +481,8 @@ def add_tool_results_(var c : ChatSession; results : array<string>) {
 }
 
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
-//! ``calls`` are the verbatim ``\{"name":…,"arguments":…}`` JSON objects, one per call; ``text``
-//! is any content alongside (empty for a pure tool-call turn). Precondition: a pending user or
-//! tool turn; a no-op otherwise.
+//! ``calls`` are verbatim ``\{"name":…,"arguments":…}`` JSON objects; ``text`` is any content
+//! alongside. Precondition: a pending user or tool turn; a no-op otherwise.
 def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
     if (!c.has_pending) {
         return
@@ -525,11 +508,8 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
 }
 
 //! Inject a KNOWN assistant reply into the conversation WITHOUT generating: prefills the pending
-//! user turn and this assistant text into the KV cache, then closes the turn — exactly what respond
-//! does, but with a given reply instead of a sampled one. Use it to replay a prior transcript before
-//! respond() generates the final turn (e.g. a stateless OpenAI-style request that resends the whole
-//! history). Precondition: a user message is pending (call add_user first); a no-op otherwise. Text
-//! turns only — a pending audio turn is not replayed.
+//! user turn and this text into the KV cache, then closes the turn — like respond() but with a
+//! given reply. Precondition: a user message is pending; text turns only, no pending audio.
 def add_assistant_(m : Model; var c : ChatSession; text : string) {
     if (!c.has_pending) {
         return
@@ -548,10 +528,9 @@ def add_assistant_(m : Model; var c : ChatSession; text : string) {
     c.history |> push(Message(role = Role.assistant, content = text))
 }
 
-//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format) —
-//! the reasoning of prior turns is excluded from chat history per the Qwen3 protocol. Replies that
-//! don't open with `<think>` pass through unchanged; an unterminated block (the token budget ran out
-//! mid-think) strips to empty, since the reasoning never reached an answer.
+//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format).
+//! Replies that don't open with `<think>` pass through unchanged; an unterminated block strips
+//! to empty, since the reasoning never reached an answer.
 def strip_think(reply : string) : string {
     let open = find(reply, "<think>")
     if (open < 0 || !is_null_or_whitespace(slice(reply, 0, open))) {
@@ -562,10 +541,8 @@ def strip_think(reply : string) : string {
 }
 
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
-//! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the budget.
-//! Terminates the turn in the KV cache and appends it to the transcript (with any `<think>` block
-//! stripped — see strip_think). Returns the full reply text, thinking included.
-//! Timing is available afterwards via stats(c.session).
+//! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the
+//! budget. Terminates the turn, strips a `<think>` block (see strip_think), returns the reply.
 def respond_(m : Model; var c : ChatSession; params : SamplingParams;
              blk : block<(piece : string) : bool>) : string {
     if (!c.has_pending && c.n_audio_rows == 0l) {

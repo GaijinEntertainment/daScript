@@ -1,5 +1,6 @@
 options gen2
 options no_aot = true  // macro module — compile-time only, never AOT-compiled (like dasllama_par)
+options _comment_hygiene = true
 
 module dasllama_tune shared public
 
@@ -27,11 +28,7 @@ struct TunePerm {
 }
 
 def private build_grid() : array<TunePerm> {
-    // Full sweep over a single [tune=1] loop: {plain, unroll-only u2/u4/u8} ∪
-    // (width {4,8,16,32} × unroll {1,2,4,8}). The unroll=1 column OMITS unroll_count (TuneHint.unroll=0)
-    // so each `vecW` row is byte-identical to the original hand-written `[vectorize, vectorize_width=W]`
-    // loop — and the DEFAULT_PERM `vec8_u2` is in the grid, so migrated kernels stay bit-identical.
-    // width 4/32 rarely win on M1 (1 NEON reg / reg pressure) but must be present: x64 AVX-512 picks them.
+    // unroll=1 OMITS unroll_count so each row stays byte-identical to the original hand hints (DEFAULT_PERM vec8_u2 included); width 4/32 rarely win on M1 but x64 AVX-512 picks them.
     let WIDTHS = fixed_array(4, 8, 16, 32)
     let UNROLLS = fixed_array(2, 4, 8)   // unroll-only rows; u1 == plain
     var grid : array<TunePerm>
@@ -146,10 +143,9 @@ def private emit_variant(var mod : Module?; tmpl : FunctionPtr; perm : TunePerm;
 
 // ===== the trigger =====
 
-//! `[dasllama_tune]` on any (dummy) struct scans the compiling module for `def template`
-//! functions carrying a `for [tune=N] (...)` loop and emits one clone per grid permutation
-//! (`<name>__<suffix>`), stamping that permutation's hints onto the marked loops. The template
-//! stays the single source of truth; profiling picks the winner (see profile_* harness).
+//! `[dasllama_tune]` on any (dummy) struct scans the module for `def template` functions with
+//! a `for [tune=N] (...)` loop and emits one clone per grid permutation (`<name>__<suffix>`).
+//! The template stays the single source of truth; profiling picks the winner.
 [structure_macro(name="dasllama_tune")]
 class private TuneMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
@@ -204,9 +200,8 @@ def private emit_registry(var mod : Module?; tmpl : FunctionPtr; grid : array<Tu
 }
 
 //! `[dasllama_grid(src="dot_template")]` on any (dummy) struct emits the full grid of
-//! `<src>__<suffix>` variant clones (cross-module: `src` may live in a required module) plus
-//! a `<src>_variants()` fn-ptr registry the profiler harness benches. Replaces the hand-written
-//! per-perm `[tuned]` stubs + `variants()` array.
+//! `<src>__<suffix>` variant clones (cross-module) plus a `<src>_variants()` fn-ptr registry
+//! the profiler harness benches. Replaces hand-written per-perm `[tuned]` stubs + `variants()`.
 [structure_macro(name="dasllama_grid")]
 class private GridMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
@@ -240,11 +235,9 @@ def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentLis
     return "{func.name}_template"     // convention: dot -> dot_template
 }
 
-//! The dasLLAMA tune location — the ONE per-app sidecar (`<app>.tune.json` beside the root
-//! script / binary; `DAS_TUNE_MANIFEST` env overrides): shared by the `[tuned]`
-//! compile-time read, the runtime apply (load_model), the `[tune]` generator winners, and
-//! the tuner harness write. Loop-hint winners live in its `"kernels"` section next to the
-//! generator perms; the knobs live under `"runtime"`.
+//! The ONE per-app tune sidecar (`<app>.tune.json` beside the root script/binary;
+//! `DAS_TUNE_MANIFEST` env overrides) — shared by `[tuned]` compile-time reads, runtime apply,
+//! `[tune]` generator winners, and the tuner harness write. Loop hints live under `"kernels"`, knobs under `"runtime"`.
 def box_profile_path() : string {
     return tune_manifest_path()
 }
@@ -262,11 +255,9 @@ def private config_perm_for(fname : string) : string {
     return tune_manifest_get(fname)
 }
 
-// Perm precedence: explicit `perm=` pin (the profiler's per-variant stubs) >
-// the app sidecar's "kernels" entry (keyed by the emitted function name) > `fallback=`
-// (the kernel's own hand-tuned hints when they aren't the global vec8_u2) >
-// DEFAULT_PERM (the bit-identical fallback when no sidecar exists).
-// (`fallback`, not `default` — `default` is a grammar keyword and won't parse as an arg name.)
+// Perm precedence: explicit `perm=` pin > app sidecar's "kernels" entry > `fallback=`
+// (kernel's own hand hints) > DEFAULT_PERM (bit-identical fallback when no sidecar exists).
+// (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
@@ -295,11 +286,9 @@ def private find_template_function(name : string) : FunctionPtr {
     return found
 }
 
-//! `[tuned]` on an empty-body function clones the body of its source template
-//! (`<name>_template`, or `src="..."`) and stamps the selected permutation's hints onto the
-//! `[tune=N]` loops. The annotated function IS the real symbol — callers are untouched.
-//! Perm precedence: `perm="..."` pin > the app sidecar (see box_profile_path) >
-//! `fallback="..."` (the kernel's own hand hints when they aren't vec8_u2) > vec8_u2.
+//! `[tuned]` on an empty-body function clones its source template (`<name>_template`, or
+//! `src="..."`) and stamps the selected permutation's hints onto `[tune=N]` loops. The annotated
+//! function IS the real symbol. Perm precedence: `perm=` pin > sidecar > `fallback=` > vec8_u2.
 [function_macro(name="tuned")]
 class private TunedMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;

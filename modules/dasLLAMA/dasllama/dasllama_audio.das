@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_audio shared public
 
@@ -84,12 +85,9 @@ def gelu_tanh_lut(var x : array<float> | #; size : int64) {
     gelu_tanh_lut(unsafe(addr(x[0])), size)
 }
 
-// The ACTUAL f16 lookup table (ggml's ggml_table_gelu_f16 shape): the middle branch of
-// gelu_tanh_lut is pure f16-domain — idx = f32_to_f16(v) determines the result exactly —
-// so one 65536-entry table replaces a libm tanh + two f16 round-trips per element.
-// Bit-exact vs the computed form by construction (entries ARE the computed form); the
-// suite proves it exhaustively over all f16 patterns. Built once, on first batch call
-// (main thread, before any dispatch captures the pointer).
+// The f16 lookup table for gelu_tanh_lut's middle branch: pure f16-domain (idx = f32_to_f16(v)),
+// bit-exact vs the computed form by construction; replaces a tanh + two f16 round-trips per element.
+// Built once, on first batch call, main thread — before any dispatch captures the pointer.
 var private g_gelu_lut : array<float>
 
 def private gelu_lut_ensure() {
@@ -99,10 +97,7 @@ def private gelu_lut_ensure() {
     g_gelu_lut |> resize(65536)
     for (h in range(65536)) {
         let xr = f16_to_f32(uint(h))
-        // EVERY finite pattern gets the middle-branch value: an fp32 input just under 10.0
-        // passes the v < 10.0 branch but ROUNDS UP to the f16 pattern of 10.0, so boundary
-        // patterns are reachable — an unbuilt entry there returns 0 where the computed form
-        // returns ~10 (caught by the near-boundary sweep in the exhaustive suite test)
+        // every finite pattern gets a value: fp32 inputs just under 10.0 round up to f16's 10.0 pattern, so boundary entries must be built too
         if ((unsafe(reinterpret<uint>(xr)) & 0x7F800000u) != 0x7F800000u) {   // finite (not inf/nan)
             let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
             g_gelu_lut[h] = f16_to_f32(f32_to_f16(g))
@@ -303,10 +298,9 @@ def fft_pow2_run(n : int64; rev : int const?; tw : float const?; var reim : floa
     }
 }
 
-//! Whisper log-mel spectrogram over the full (padded) input, then split into full 3000-frame
-//! chunks — the mtmd whisper preprocessor end-to-end: pad to ≥31 s, reflect-200 head pad,
-//! 30 s zero tail (+200), Hann-400/hop-160 power spectra, slaney mel (double accumulate,
-//! floor 2⁻²⁴), log10, global max−8 clamp, (x+4)/4. Audio ≤30 s yields exactly one chunk.
+//! Whisper log-mel spectrogram over the full padded input, split into full 3000-frame chunks —
+//! the mtmd whisper preprocessor end-to-end (pad to ≥31 s, reflect-200 head, Hann/hop-160 power
+//! spectra, slaney mel, log10, global max−8 clamp). Audio ≤30 s yields exactly one chunk.
 def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> {
     let n_in = length(samples)
     // mtmd zero-extends short input to chunk+1 seconds BEFORE the stage pads — the head
@@ -413,10 +407,9 @@ struct WhisperMel {
 let private MEL_DFT_N = 400
 let private MEL_DFT_BINS = 201
 
-//! Hoisted whisper-mel tables (build once at model load): Hann-400 window + the DFT twiddle
-//! matrix TRANSPOSED to ``[2·n_bins][n_fft]`` so each spectrum bin is two contiguous ``dot``
-//! rows (the per-frame matvec form in log_mel_whisper). Same table values as
-//! build_dft_twiddles, transposed layout.
+//! Hoisted whisper-mel tables (built once at model load): Hann-400 window + the DFT twiddle
+//! matrix, TRANSPOSED to ``[2·n_bins][n_fft]`` so each spectrum bin is two contiguous ``dot``
+//! rows (log_mel_whisper's per-frame matvec form).
 struct WhisperMelPlan {
     n_fft : int64 = 0l
     hann : array<float>
@@ -461,12 +454,9 @@ def private mel_sized(var a : array<float>; n : int64) {
     a |> resize(int(n))
 }
 
-//! whisper.cpp's ``log_mel_spectrogram`` — DIVERGES from the mtmd flavor above: reflect-200
-//! head from the RAW input (no 31 s pre-extend), 30 s zeros + 200 tail, n_len drops the last
-//! frame, frames past the real audio skip the FFT (every bin = log10(1e-10)), floor 1e-10,
-//! filterbank comes from the model file. Same global max−8 clamp + (x+4)/4. Returning form —
-//! the ``var padded``/``var m`` overload below reuses session scratch (zero per-transcribe
-//! alloc).
+//! whisper.cpp's ``log_mel_spectrogram`` — diverges from the mtmd flavor above: reflect-200 pad
+//! from the RAW input (no 31 s pre-extend), drops the last frame, past-audio frames skip the FFT
+//! (floor 1e-10). Returning form; the ``var padded``/``var m`` overload reuses session scratch.
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : array<float>; n_mel : int64) : WhisperMel {
     var padded : array<float>
     var m = WhisperMel(n_mel = n_mel)
@@ -511,10 +501,8 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
     let log10_e = 0.43429448190325176lf
     let fill = float(log(1e-10lf) * log10_e)
 
-    // per-frame window + DFT matvec (two tuned dots per bin against the transposed twiddle
-    // rows) + mel dot, threaded over frames (independent — bit-exact at any lane count);
-    // scratch is a per-worker stack frame, so a 9-minute clip no longer materializes the
-    // ~170 MB [frames × n_fft] + [frames × 2·n_bins] images the GEMM form needed
+    // Per-frame window+DFT matvec + mel dot, threaded over frames (bit-exact at any lane count);
+    // stack-resident scratch avoids the ~170 MB [frames×n_fft]+[frames×2·n_bins] images the GEMM form needed.
     let n_len = m.n_len
     unsafe {
         let pdd = addr<float const?>(padded[0])
@@ -896,10 +884,9 @@ def private tw_repack(var t : AudioTower; woff, n, d : int64) {
     repack_q8q8_weight(t.qblob, t.qscales, woff, n, d)
 }
 
-//! Quantize the tower's GEMM weights to Q8_0: conv2 + per-layer q/k/v/o + fc1/fc2 + projector
-//! mats. conv1 stays fp32 (its 3·n_mel contraction is not a 32-multiple on 80-mel models).
-//! qblob/qscales mirror fblob offsets; non-GEMM slots (biases, norms, pos rows) are
-//! quantized-but-unread — fblob stays the fp32 truth for them.
+//! Quantizes the tower's GEMM weights to Q8_0 (conv2, per-layer q/k/v/o, fc1/fc2, projector mats).
+//! conv1 stays fp32 (its 3·n_mel contraction isn't a 32-multiple on 80-mel models); non-GEMM slots
+//! are quantized-but-unread — fblob stays the fp32 truth for them.
 def tower_quantize(var t : AudioTower) {
     let total = int64(length(t.fblob)) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
     t.qblob |> resize(int(total))
@@ -975,13 +962,9 @@ def private load_conv_permuted(m : GGUFMeta; bytes : array<uint8> | #; name : st
     }
 }
 
-//! Load an audio mmproj GGUF (projector ``qwen2a`` / ``qwen2.5o`` / ``ultravox`` / ``voxtral``)
-//! into an AudioTower: hparams from the ``clip.audio.*`` keys, every tensor fp32 into the blob
-//! in ``enc_layer_offsets`` order, conv weights permuted for im2col. Vision tensors in a
-//! combined omni mmproj are skipped (the loader only reads ``a.*`` / ``mm.a.*`` names).
-//! Like ``load_model``, keeps a PREPARED IMAGE next to the mmproj (box + knob specific):
-//! the first load saves it, later loads map it in milliseconds with zero-copy planes.
-//! ``DASLLAMA_IMAGE=0`` disables the cache; a ``.dlim`` path loads that image directly.
+//! Loads an audio mmproj GGUF (qwen2a/qwen2.5o/ultravox/voxtral) into an AudioTower, skipping
+//! vision tensors in combined omni mmprojs. Like ``load_model``, caches a box/knob-specific
+//! PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
     let tag = q8 ? "tower-q8" : "tower-f32"
     if (path |> ends_with(".dlim")) {
@@ -1054,8 +1037,7 @@ def private load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
         }
         t.n_ctx = m.tensors[pi].n_elem / d
 
-        // projector shapes from the tensors themselves — clip.audio.projection_dim lies for
-        // ultravox-1b (the GGUF says 4096; mm2 actually projects into the 2048-wide decoder)
+        // shapes come from the tensors, not clip.audio.projection_dim — it lies for ultravox-1b (4096 vs actual 2048)
         var mm1_in = 0l
         if (t.proj_kind != AudioProjKind.qwen2a) {
             mm1_in = d * t.stack_factor
@@ -1203,13 +1185,9 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     return <- s
 }
 
-// Non-causal blocked attention over gemm_f32, flattened over (head × ATTN_ENC_QB query rows)
-// units: stage 1 packs Q/Kᵀ/V per (head × row-block), stage 2 runs score = Q·Kᵀ (scale +
-// full-row softmax), out = P·V, and the token-major scatter for its rows. Head-parallel left
-// lanes idle (tiny: 6 heads on 8 lanes; turbo: 20 = a 17% makespan floor); flattened units
-// self-serve chunk-per-unit, with slot-indexed score scratch (units of one head share the
-// per-head pack regions read-only after stage 1, so only scores need per-slot space).
-// No cache, no mask — every position sees all `tt` positions.
+// Blocked non-causal attention (score=Q·Kᵀ, softmax, out=P·V) flattened over head×row-block units
+// so head-parallel dispatch doesn't waste lanes (6 heads/8 lanes would otherwise idle ~17%).
+// No KV cache, no mask — every position attends to all `tt` positions.
 def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     let d = t.d_model
     let hs = d / t.n_head
@@ -1314,8 +1292,7 @@ def private diff_stage(name : string; x : array<float>; n : int64) {
         var maxi = 0
         unsafe {
             let rp = addr<float?>(bytes[0])
-            // int loop: raw-pointer indexing by int64 is AOT-ambiguous (das_index<T*>::at
-            // only has int32/uint32 overloads); witness stages are far below 2^31 floats
+            // int loop: raw-pointer indexing by int64 is AOT-ambiguous (int32/uint32 overloads only)
             for (i in range(int(n))) {
                 let d = abs(x[i] - rp[i])
                 if (d > maxd) {
@@ -1377,10 +1354,8 @@ def private enc_gelu_batch(t : AudioTower; var x : array<float>; d, npos : int64
     }
 }
 
-//! The shared Whisper-encoder core over one 30 s mel chunk: conv frontend, +pos rows, all
-//! pre-LN transformer blocks. Leaves the residual stream in ``s.x`` (``n_ctx × d_model``);
-//! the model-specific tail (whisper: ln_post; qwen2a: pool → ln_post → projector) is the
-//! caller's.
+//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
+//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
 def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     if (mel.n_len != AUDIO_CHUNK_FRAMES || mel.n_mel != t.n_mel) {
         panic("audio_encode: mel chunk is {mel.n_mel}x{mel.n_len}, want {t.n_mel}x{AUDIO_CHUNK_FRAMES}")
@@ -1533,10 +1508,8 @@ def private rms_rows_blob(var x : array<float>; blob : array<float>; w_off, dim,
     }
 }
 
-//! Run the Whisper encoder + the model's projector tail over one 30 s mel chunk. Output lands
-//! in ``s.out``: ``audio_tokens_per_chunk`` soft tokens × ``proj_dim``. Stacking is a flat
-//! reinterpret of the token-major stream as rows of ``d·stack`` — floor rows, ragged tail
-//! positions dropped (ggml build_stack's view math; zero-padding never reaches the projector).
+//! Runs the Whisper encoder + projector tail over one 30 s mel chunk; soft tokens land in ``s.out``.
+//! Stacking floors rows — ragged tail positions are dropped, not zero-padded (ggml build_stack view math).
 def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
     let tt = t.n_ctx

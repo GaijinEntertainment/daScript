@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_arch_qwen3 shared public
 
@@ -20,11 +21,8 @@ def register_arch_qwen3() {
     d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
     d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
     hermes_tools(d.chat)
-    // Qwen3-ASR's decoder converts as `qwen3vl` — M-RoPE + deepstack. For text + audio input
-    // every M-RoPE coordinate equals the linear position (angles depend only on the coordinate
-    // and the dim's frequency, so ANY section layout degenerates to standard rope), and the
-    // deepstack merge is inactive without vision channels — the plain qwen3 forward is
-    // bit-identical. Audio spans wrap in <|audio_start|>/<|audio_end|> (the qwen3a markers).
+    // Qwen3-ASR's decoder converts as `qwen3vl` — M-RoPE + deepstack; for text/audio input every
+    // M-RoPE coord equals linear position, so it's bit-identical to plain qwen3 forward here.
     // (Clone the template BEFORE register_arch moves `d`.)
     var dv = ArchDesc(name = "qwen3vl", configure = @@configure_qwen3)
     dv.blocks = std_blocks()

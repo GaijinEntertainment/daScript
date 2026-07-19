@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_gguf shared public
 
@@ -118,10 +119,8 @@ struct GGUFTensorInfo {
     shard : int      // which shard's data blob holds this tensor (0 for single-file models)
 }
 
-//! Parsed GGUF metadata: version, alignment, the KV table, the tensor list, and the
-//! absolute byte offset where tensor data begins. For multi-part (split) models the
-//! shard_* arrays hold one entry per mapped shard (see parse_gguf_meta_shards); empty
-//! for a plain single-file parse — tensor reads then resolve within the caller's bytes.
+//! Parsed GGUF metadata: version, alignment, KV table, tensor list, tensor-data offset.
+//! Multi-part (split) models fill shard_* (one entry per mapped shard); empty for single-file.
 struct GGUFMeta {
     version : uint
     alignment : int64
@@ -251,10 +250,9 @@ def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int
     }
 }
 
-//! Expand a model path into its shard list. A llama.cpp split file name
-//! ("<prefix>-00001-of-00003.gguf") yields every sibling shard (normalized from any shard index,
-//! so pointing at shard 2 works); anything else yields just [path]. A missing sibling panics
-//! (the loader must not run on a partial split), or yields [] with `missing_ok` (presence gates).
+//! Expand a model path into its shard list. A llama.cpp split name ("<prefix>-00001-of-00003.gguf")
+//! yields every sibling shard (any shard index normalizes); anything else yields [path]. A missing
+//! sibling panics (partial split must not run), or yields [] with `missing_ok` (presence gates).
 def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     var res : array<string>
     let name = base_name(path)
@@ -552,11 +550,9 @@ def private q4k_scale_min(b : array<uint8> | #; so, j : int64) : int2 {
     return int2(sc, mn)
 }
 
-//! Dequantize one Q4_K superblock (144 bytes at `bo`: fp16 d, fp16 dmin, 12 bytes of 6-bit
-//! sub-scales/mins for 8 sub-blocks of 32, 128 nibble bytes) into dst[doff .. doff+256).
-//! w = (d*sc)*q - (dmin*m) with q the RAW nibble — the min term absorbs the offset. Per 64-weight
-//! chunk the 32 quant bytes carry weights 0..31 in low nibbles, 32..63 in high (ggml order).
-//! Matches llama.cpp dequantize_row_q4_K op-for-op, so the expansion is bit-exact.
+//! Dequantize one Q4_K superblock (144B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
+//! q the RAW nibble (min term absorbs offset); 32 quant bytes carry weights 0..31 low nibble, 32..63
+//! high (ggml order). Matches llama.cpp dequantize_row_q4_K op-for-op — bit-exact.
 def dequant_q4k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo))
     let dmin = f16_to_f32(rd_u16(bytes, bo + 2l))
@@ -580,11 +576,9 @@ def dequant_q4k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
     }
 }
 
-//! Dequantize one Q5_K superblock (176 bytes at `bo`: fp16 d, fp16 dmin, 12 bytes of 6-bit
-//! sub-scales/mins, 32 high-bit bytes qh, 128 nibble bytes qs) into dst[doff .. doff+256).
-//! w = (d*sc)*q - (dmin*m) with q = nibble | (high bit << 4) in 0..31; the high bit for chunk
-//! js lives in bit 2js (low nibbles) / 2js+1 (high nibbles) of qh[l], qh base fixed per
-//! superblock. Matches llama.cpp dequantize_row_q5_K op-for-op.
+//! Dequantize one Q5_K superblock (176B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
+//! q = nibble | (high bit << 4); the high bit for chunk js lives in bit 2js (low)/2js+1 (high) of
+//! qh[l], qh base fixed per superblock. Matches llama.cpp dequantize_row_q5_K op-for-op.
 def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo))
     let dmin = f16_to_f32(rd_u16(bytes, bo + 2l))
@@ -750,15 +744,8 @@ def private dequant_q6k_superblock_p(sp : uint8 const?; bo : int64; var dp : flo
 }
 
 // ===== K-quant native-plane transcode (superblock payloads -> split quant/scale planes) =====
-// Plane layouts (per 256-weight superblock; element offsets are plane-local and superblock-aligned):
-//   k4 quant: 128B nibbles verbatim            k4 scale: [f16 d][f16 dmin][12B 6-bit sc/mn][4B pad] = 20B
-//   k5 quant: [128B nibbles][32B high-bits]    k5 scale: same 20B verbatim block as k4
-//   k6 quant: [128B ql][64B qh]                k6 scale: [16 x int8 sub-scales][f16 d] = 18B
-// All three keep the DISK scale block verbatim (kq v2 — the lcpp fold scheme: integer
-// sub-scale and bsums-x-mins accumulation against per-256 Q8_K activations, one d*d8 float
-// fold per superblock). k4/k5 share the Q4_K scale-block form; their 4B pad brings the stride
-// to 20 so the grp repack can decode the 6-bit packing into [d][dmin][sc u8][mn u8] rows IN
-// PLACE. Every plane dequant is bit-exact vs the DISK dequant (the planes are verbatim).
+// k4/k5/k6 quant+scale plane byte strides below (K4_QSB etc.); scale planes keep the verbatim DISK
+// scale block (kq v2 fold scheme) so every plane dequant is bit-exact vs the disk dequant.
 
 //! Transcode one Q4_K superblock (144 bytes at `bo`) into the k4 planes: nibbles verbatim to
 //! kq[kqo..+128), the disk scale block verbatim to ks[kso..+16) (f16 d, f16 dmin, 12 bytes of
@@ -1271,9 +1258,8 @@ def gguf_tensor_type(m : GGUFMeta; name : string) : int {
 }
 
 //! Transcode a Q8_0 tensor straight from disk into our Q8 layout — no fp32 round-trip. int8 quants
-//! copy verbatim to qdst[qoff..]; the per-block fp16 scale widens to fp32 in sdst[soff..]. Requires
-//! the tensor to be Q8_0 on disk (check gguf_tensor_type first). qoff is the weight-element offset,
-//! soff = qoff / 32. This is the memory-honest load of a pre-quantized GGUF.
+//! copy verbatim to qdst[qoff..]; per-block fp16 scale widens to fp32 in sdst[soff..] (soff = qoff/32).
+//! Requires the tensor to be Q8_0 on disk (check gguf_tensor_type first).
 def gguf_transcode_q8_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
@@ -1372,10 +1358,9 @@ def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : 
     }
 }
 
-//! Transcode a Q4_0 tensor straight from disk into our Q4 layout — no fp32 round-trip. Our Q4 uses
-//! GGML's exact split-half nibble packing, so the 16 packed bytes per block copy verbatim to
-//! qdst[qoff_bytes..] (qoff_bytes = weight-element-offset / 2); the per-block fp16 scale widens to
-//! fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk (check gguf_tensor_type first).
+//! Transcode a Q4_0 tensor straight from disk into our Q4 layout — no fp32 round-trip. GGML's exact
+//! split-half nibble packing copies verbatim to qdst[qoff_bytes..] (= weight-offset/2); per-block
+//! fp16 scale widens to fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk.
 def gguf_transcode_q4_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
@@ -1401,12 +1386,9 @@ def gguf_transcode_q4_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     }
 }
 
-//! Transcode an MXFP4 tensor straight from disk into split native planes — the RAW bits, no dequant
-//! round-trip: the 16 packed-nibble bytes per 32-block copy verbatim to ndst[noff_bytes..]
-//! (noff_bytes = weight-element-offset / 2) and the 1 RAW E8M0 scale byte to edst[eoff..]
-//! (eoff = offset / 32). Exact by construction (vs the old dequant->requantize-to-Q8 path, which
-//! paid an amax error) and reads 17 bytes/block instead of writing 33+. Requires the tensor to be
-//! MXFP4 on disk (check gguf_tensor_type first).
+//! Transcode an MXFP4 tensor straight from disk into split native planes — RAW bits, no dequant
+//! round-trip: 16 packed-nibble bytes/32-block verbatim to ndst[noff_bytes..] (=offset/2), 1 RAW
+//! E8M0 scale byte to edst[eoff..] (=offset/32). Exact vs the old dequant->requantize-to-Q8 path.
 def gguf_transcode_mx4(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var ndst : array<uint8>; var edst : array<uint8>; noff_bytes, eoff, expect_n : int64; src_off : int64 = 0l) {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {

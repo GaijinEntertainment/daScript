@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_arch_qwen3moe shared public
 
@@ -27,11 +28,9 @@ def register_arch_qwen3moe() {
     d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
     d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
     hermes_tools(d.chat)
-    // Qwen3-Omni-30B's thinker converts as `qwen3vlmoe` — qwen3moe + M-RoPE + deepstack. For
-    // text + audio input every M-RoPE coordinate equals the linear position (so any section
-    // layout degenerates to standard rope), and the deepstack merge is inactive without vision
-    // channels — the plain qwen3moe forward is bit-identical. Audio spans wrap in
-    // <|audio_start|>/<|audio_end|> (the qwen3a markers). (Clone the template BEFORE register_arch moves `d`.)
+    // Qwen3-Omni-30B's thinker converts as `qwen3vlmoe` — qwen3moe + M-RoPE + deepstack; for text/audio
+    // input every M-RoPE coord equals linear position, so it's bit-identical to plain qwen3moe here.
+    // (Clone the template BEFORE register_arch moves `d`.)
     var dv = ArchDesc(name = "qwen3vlmoe", configure = @@configure_qwen3moe)
     dv.blocks = moe_blocks()
     dv.chat := d.chat

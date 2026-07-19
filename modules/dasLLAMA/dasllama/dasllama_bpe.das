@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_bpe shared public
 
@@ -19,10 +20,8 @@ struct BpeTokenizer {
     pre : string                      // pre-tokenizer name, e.g. "llama-bpe"
     bos_id : int64
     eos_id : int64
-    // SPM-style BPE (Gemma-4): spaces escape to '▁', ranked merges run over RAW UTF-8 pieces (no
-    // GPT-2 byte alphabet), the pre-split is newline-runs only, unresolved symbols fall back to
-    // <0xXX> byte tokens, and decode unescapes '▁' back to spaces. (No field default — the loader's
-    // zero-init `var tk : BpeTokenizer` must stay legal.)
+    // SPM-style BPE (Gemma-4): raw-UTF-8 merges (no GPT-2 byte alphabet), '▁' space escape,
+    // newline-run pre-split. No field default — zero-init `var tk : BpeTokenizer` must stay legal.
     spm_space : bool
     // whether encode(add_special) prepends BOS — the GGUF add_bos_token key, else a per-pre default
     // mirroring llama.cpp (gpt-4o adds none). Same no-field-default rule as spm_space.
@@ -102,12 +101,8 @@ def init_byte2uni() {
 }
 
 // ===== BPE pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3 / _qwen2 / _qwen35) =====
-// Splits codepoints into word lengths per the regex; classification via the dasllama_unicode
-// tables so the split matches llama.cpp's exactly. llama3 and qwen2 differ in exactly one
-// rule — digit runs: llama3 chunks \p{N}{1,3}, qwen2 emits one digit per token (\p{N}).
-// `group_digits` selects between them (true = llama3, false = qwen2). qwen35 = qwen2 digits
-// plus `marks`: letter runs absorb combining marks ([\p{L}\p{M}]+) and the punctuation class
-// excludes them ([^\s\p{L}\p{M}\p{N}]+); everything else is shared.
+// llama3 chunks digits \p{N}{1,3}, qwen2 emits one digit per token — `group_digits` selects between
+// them; qwen35 = qwen2 digits plus marks absorbed into letter runs ([\p{L}\p{M}]+).
 
 def private tolower_ascii(c : int) : int {
     return (c >= 'A' && c <= 'Z') ? c + 32 : c
@@ -159,8 +154,7 @@ def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = 
             }
         }
 
-        // [^\r\n\p{L}\p{N}]?\p{L}+  (optional non-letter prefix, then letters;
-        // marks widens the run class to [\p{L}\p{M}]+)
+        // [^\r\n\p{L}\p{N}]?\p{L}+ (marks widens run class to [\p{L}\p{M}]+)
         if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
             if (is_lm(cpt, marks) || uLM(cpts, pos + 1, marks)) {
                 pos++
@@ -190,8 +184,7 @@ def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = 
             continue
         }
 
-        // <space>?[^\s\p{L}\p{N}]+[\r\n]*  (optional space, then a non-space/letter/number run;
-        // marks also excludes \p{M} from the run class)
+        // <space>?[^\s\p{L}\p{N}]+[\r\n]* (marks also excludes \p{M} from the run class)
         let probe = (cpt == 32) ? pos + 1 : pos
         if (!(uW(cpts, probe) || uLM(cpts, probe, marks) || uN(cpts, probe))) {
             if (cpt == 32) {
@@ -251,10 +244,9 @@ def private uLo(cpts : array<int>; pos : int) : bool {
     return cpt_is_letter(c) && !(c >= 'A' && c <= 'Z')
 }
 
-// gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3
-// in three rules: contractions attach as SUFFIXES to letter runs (no standalone arm), letter runs
-// are case-structured (optional non-letter prefix + upper* lower+ | upper+ lower*), and punctuation
-// runs may trail '/' along with newlines. Digit chunks ({1,3}) and the whitespace rules match llama3.
+// gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3:
+// contractions suffix letter runs (no standalone arm), letter runs are case-structured
+// (upper* lower+ | upper+ lower*), and punctuation runs may also trail '/'.
 def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
     var offs : array<int>
     let n = length(cpts)
@@ -263,8 +255,7 @@ def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
     while (pos < n) {
         let cpt = cpts[pos]
 
-        // [^\r\n\p{L}\p{N}]?(upper* lower+ | upper+ lower*)(?i:'s|'t|'re|'ve|'m|'ll|'d)? — both
-        // letter alternatives reduce to "an upper-ish run then a lower-ish run, >= 1 letter total"
+        // [^\r\n\p{L}\p{N}]?(upper* lower+ | upper+ lower*) then optional contraction suffix
         if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
             if (cpt_is_letter(cpt) || uL(cpts, pos + 1)) {
                 if (!cpt_is_letter(cpt)) {
@@ -348,14 +339,9 @@ def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
     return <- offs
 }
 
-// tekken pre-split (Mistral/Voxtral). llama.cpp has NO custom splitter for tekken — it runs the
-// generic std::wregex fallback on the case-structured approximation, so the parity target is TRUE
-// ECMAScript alternation semantics, not gpt-4o's merged-run reduction:
-//   [^\r\n\p{L}\p{N}]?(up* lo+ | up+ lo*) | \p{N} | <space>?[^\s\p{L}\p{N}]+[\r\n/]* | <ws rules>
-// where up/lo are the llama.cpp classes (letter minus ASCII a-z / minus A-Z, so non-cased scripts
-// are in BOTH). Alternative order matters: up*lo+ is tried FIRST with greedy backtracking, so a
-// non-cased run followed by ASCII uppercase ("你A") splits "你"|"A" (gpt-4o's reduction would take
-// the whole run). No contraction arm, single-digit \p{N} (qwen2 style), '/' in the punct tail.
+// tekken pre-split (Mistral/Voxtral). llama.cpp has no custom splitter — it runs generic std::wregex
+// TRUE ECMAScript alternation with greedy backtracking (up*lo+ tried first), so "你A" splits "你"|"A"
+// unlike gpt-4o's merged-run reduction. No contraction arm; single-digit \p{N}; '/' in punct tail.
 def private pretok_split_tekken(cpts : array<int>) : array<int> {
     var offs : array<int>
     let n = length(cpts)
@@ -506,10 +492,9 @@ def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<in
     }
 }
 
-// Gemma-4 encode: escape spaces to '▁', split into newline-runs vs rest (llama.cpp's gemma4
-// pre-tokenizer "[^\n]+|[\n]+"), then the same ranked merges — but over raw UTF-8 codepoint
-// pieces. An all-newline run that is itself a vocab token short-circuits the merge loop
-// (llama.cpp's gemma-4 newline fix, PR #21343).
+// Gemma-4 encode: escape spaces to '▁', split newline-runs vs rest (llama4 "[^\n]+|[\n]+"),
+// then ranked merges over raw UTF-8 pieces. An all-newline run that's itself a vocab token
+// short-circuits the merge loop (llama.cpp gemma-4 newline fix).
 def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
     let cpts <- utf8_to_cpts(replace(text, " ", "▁"))

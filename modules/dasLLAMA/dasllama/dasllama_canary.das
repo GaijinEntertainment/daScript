@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_canary shared public
 
@@ -278,9 +279,8 @@ def load_canary_encoder(path : string) : CanaryEncoder {
 
 // ===== mel (frame-major, parakeet flavor) =====
 
-//! Canary's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the bin's STFT window
-//! (centered in the 512 frame), power spectra, mel dot, natural log(sum + 2⁻²⁴), then
-//! per-feature mean/std normalization over the valid frames (Bessel n−1, std + 1e-5); the
+//! Canary's log-mel: preemphasis 0.97, zero center-pad n_fft/2, STFT window, power spectra, mel dot,
+//! log(sum + 2⁻²⁴), then per-feature mean/std norm over valid frames (Bessel n−1, std + 1e-5);
 //! frames past ``valid`` are zeroed (NeMo's seq-len mask). FRAME-major ``[n_len × n_mel]``.
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
     let n_in = int64(length(samples))

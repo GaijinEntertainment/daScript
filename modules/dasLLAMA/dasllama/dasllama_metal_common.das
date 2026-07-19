@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_metal_common shared public
 
@@ -91,11 +92,9 @@ var g_gpu_b_ms = 0.0lf
 var g_sched_b_ms = 0.0lf                     // driver scheduling span (kernelStart..kernelEnd)
 var g_handoff_b_ms = 0.0lf                   // kernelEnd -> GPUStart gap
 
-// per-session logical KV mirror record (see the module header). Mirrors are SLICES of one shared
-// arena buffer (g_arena) so the batched-attention kernel can reach every row's KV through one
-// bind + a per-row element-offset table; the single-stream path binds the same arena at byte
-// offsets. All fields copyable — the slice is returned to the free list (mirror_release) before
-// any table erase.
+// per-session logical KV mirror record (see module header). Mirrors are SLICES of one shared
+// arena buffer (g_arena): the batched kernel reaches every row via a per-row offset table; the
+// single-stream path binds at byte offsets. Fields copyable — slice returns to free list first.
 struct KVMirror {
     uid : uint64
     kdt : KVDtype
@@ -162,11 +161,9 @@ def arena_free_slice(off : uint64; size : uint64) {
     }
 }
 
-//! The KV-mirror cap (M2.7), one knob with two readers: the arena's grow-on-demand CEILING
-//! (256MB start; the value clamps to 64..4096MB there — 4096 is the batch row table's uint32
-//! hard max) and the RAW resident-bytes target for LRU eviction of idle sessions' mirrors
-//! (tiny values are legitimate evict-aggressively policy). Negative restores the env default
-//! (`DASLLAMA_METAL_KV_MIRROR_MB`, else 4096).
+//! The KV-mirror cap (M2.7): the arena's grow-on-demand CEILING (clamps to 64..4096MB) AND the
+//! RAW resident-bytes target for LRU eviction (tiny values = legitimate evict-aggressively policy).
+//! Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`, else 4096).
 def public set_metal_decode_mirror_cap_mb(v : int) {
     g_mirror_cap_mb = v
 }
@@ -221,10 +218,8 @@ def public metal_batch_decode_declines() : table<string; int64> {
 }
 
 // speculative-chain state: the pre-encoded next step may open with GPU argmax + embed gather off
-// the CURRENT step's logits (no CPU poke — the chain never leaves the GPU). A greedy caller
-// never misses (same bytes, same tie-break); forced-token phases (warmup loops, tiny prompts
-// through per-token forward) and non-greedy samplers miss every step, so adaptive mode backs
-// off exponentially (skip 1, 2, 4 … 256 steps) and re-arms fully on any hit.
+// the current step's logits (no CPU poke). A greedy caller never misses; forced/non-greedy
+// samplers miss every step, so adaptive mode backs off exponentially and re-arms on any hit.
 var g_spec_mode = -1        // -1 adaptive (default), 0 off, 1 forced
 var g_spec_cooldown = 0     // adaptive: served steps left before the next attempt
 var g_spec_backoff = 1      // the next cooldown length
@@ -461,13 +456,8 @@ def kq_load_gpu_supported(t : Model) : bool {
 }
 
 // ===== zero-copy logits: bytesNoCopy wrappers over session-owned storage =====
-// The classifier (single-stream) or the copy-row scatter (batch) writes STRAIGHT into
-// s.logits — that row's landing memcpy disappears. The wrapper borrows the session's memory
-// (no deallocator): releasing it never frees anything, a dead session's storage dies with the
-// session, and the flush-before-delete contract keeps in-flight steps off dead sessions.
-// Gated per session on 16KB page alignment + page-rounded capacity (make_run_state reserves
-// it); a null entry caches the decline. The data pointer is revalidated on every lookup — a
-// session whose logits array moved re-registers.
+// Writes land straight into s.logits (no landing memcpy); borrowed, no deallocator. Gated on
+// 16KB page alignment + page-rounded capacity; the pointer is revalidated on every lookup.
 var g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
 
 def nc_logits_for(dev : MetalDevice?; s : Session) : MetalBuffer? {
@@ -537,10 +527,9 @@ def private kq_region(dev : MetalDevice?; src : void?; bytes : uint64) : MetalBu
     return buf
 }
 
-// One kq tensor's GPU-form scale buffer (the gemv lab's layout verdicts): k4/k5 = 16B compact
-// blocks (the production 20B block minus its pad — the 20B stride's varying mod-16 phase defeats
-// the compiler's vector-load merge); k6 = [16B sub-scale blocks][packed f16 d plane] in ONE
-// buffer, the d plane at byte nsb*16 (the kernel binds the buffer twice with offsets).
+// One kq tensor's GPU-form scale buffer: k4/k5 = 16B compact blocks (20B production block minus
+// pad — its varying mod-16 phase defeats vector-load merge); k6 = [16B sub-scale][packed f16 d]
+// in ONE buffer, d plane at byte nsb*16 (kernel binds the buffer twice with offsets).
 def kq_upload_scales(dev : MetalDevice?; t : Model; fmt : KqFmt; off, rows, n : int64) : MetalBuffer? {
     let sb0 = off / 256l
     let nsb = (rows * n) / 256l
@@ -707,9 +696,8 @@ def mirror_defrag(total : uint64) : bool {
 }
 
 // Ensure s.uid's mirror exists, is big enough, and holds logical rows [0, pos) — the watermark
-// contract (module header). Returns (ok, koff, voff, cap_rows) — arena byte offsets; the caller
-// writes row `pos` GPU-side and advances the watermark to pos + 1 only after the step + writeback
-// complete. ok = false ⇒ the arena cannot hold the slice (decline the step to the CPU path).
+// contract (module header). Returns arena byte offsets; caller writes row `pos` GPU-side and
+// advances the watermark only after the step + writeback complete. ok=false ⇒ decline to CPU.
 def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
     let c = t.config
     let kv_dim = layer_kv_dim(c, 0l)
@@ -726,11 +714,9 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
         }
     }
     if (!key_exists(g_mirrors, s.uid)) {
-        // the mirror cap is a CEILING (M2.7): the arena starts small and grows on demand up to
-        // clamp(cap, 64, 4096)MB — 4096MB is a HARD max (the batch row table's uint32 arena
-        // offsets rely on arena size <= 2^32). Growth releases every mirror and reallocates;
-        // the watermark contract re-uploads from the CPU cache, so a rebuild only costs the
-        // next steps' re-mirror. Growth never runs while a batch step holds pinned rows.
+        // the mirror cap is a CEILING (M2.7): grows on demand to clamp(cap, 64, 4096)MB — 4096 is a
+        // HARD max (the batch row table's uint32 arena offsets need arena size <= 2^32). Growth
+        // releases every mirror and rebuilds (re-mirror cost only); never runs while pins are held.
         let ceil_bytes = mirror_ceiling_bytes()
         if (g_arena == null) {
             g_arena_bytes = min(256ul * 1024ul * 1024ul, ceil_bytes)
@@ -932,10 +918,8 @@ var g_lp_vocab = 0l
 var g_lp_rowb = 0l
 var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff stat's anchor
 
-// wait + read back + release the pending step. x_b writes back only on the sync CPU-classifier
-// path (g_lp_xb set): with gpu-logits the caller never reads it, and in pipe mode it would
-// clobber the next step's freshly written embeds. A dispatch error raises g_lp_err (sync callers
-// consume it and rerun on the CPU; a pipelined step is simply lost — logged + counted).
+// wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
+// path (pipe mode skips it — stale). A dispatch error sets g_lp_err (sync reruns on CPU; a pipelined step is lost).
 def finish_pending_step {
     if (!g_lp_active) {
         return
@@ -1060,14 +1044,9 @@ def metal_common_init : bool {
     return true
 }
 
-//! Release the shared state (blob/cat-blob/region caches, mirrors, arena, pools, signs, queue,
-//! device). Callers land in-flight work first (finish_pending_step) and release PSOs before the
-//! device goes (metal_kernels_release) — metal_decode_shutdown is the public rail.
 // ===== the weights-epoch guard =====
-// g_regions / g_cat_blobs / the shared blob cache all key by host address; see weights_epoch's
-// doc for why a model reload makes those keys lie. Drivers call the flush at their entry points
-// when the epoch has moved (after quiescing any in-flight step — its unretained cb may
-// reference cached buffers).
+// g_regions/g_cat_blobs key by host address; a model reload makes those keys lie (see
+// weights_epoch). Drivers flush at entry when the epoch moved, after quiescing in-flight work.
 var g_weight_cache_epoch = -1l
 
 def weight_caches_stale() : bool {
@@ -1213,11 +1192,9 @@ def public metal_blob_regions_release {
     g_repack_us = 0l
 }
 
-//! Resident block_q8_0 blob for one weight region (planar quants + scale plane) — llama.cpp's
-//! mul_mm layout: 34-byte blocks of half scale + 32 int8 quants. One-time CPU repack per region,
-//! cached by the quant base address and SHARED across the prefill and batch-decode drivers.
-//! `s16` reads the plane as raw f16 bits (wscale_f16 models); the f32 -> f16 narrowing is exact
-//! for GGUF-q8_0-sourced weights (the loader widened the file's native f16 scales).
+//! Resident block_q8_0 blob for one weight region — llama.cpp's mul_mm layout (34B blocks: half
+//! scale + 32 int8 quants), cached by quant base address, shared across prefill/batch-decode.
+//! `s16` reads raw f16 bits; f32->f16 narrowing is exact for GGUF-q8_0-sourced weights.
 def public metal_blob_region(dev : MetalDevice?; qsrc, ssrc : void?; rows, k : int64; s16 : bool) : MetalBuffer? {
     // the scale encoding is part of the identity: the same quant region blobbed under f32 vs raw
     // f16 scales must not share a cache slot (the top bit is never set in a user-space address)

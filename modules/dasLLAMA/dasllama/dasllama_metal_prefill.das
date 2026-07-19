@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_metal_prefill shared public
 
@@ -30,8 +31,7 @@ require dasllama/dasllama_metal_common   // decline enums/tables + the shared bl
 
 // One thread per 32-element block of one activation row: amax -> d = amax/127 -> q = round(x*id).
 // Grid covers ntok*(n/32) blocks (uniform nblk guards the ceil-padded dispatch); pad rows of the
-// resident xq/xs image are never written here — the GEMM's C-block row independence keeps stale
-// pad rows out of every live output row.
+// resident xq/xs image are never written here — the GEMM's C-block row independence keeps stale pad rows out.
 class MetalQ8Quant {
     @ssbo @binding = 0 x : array<float>     // [ntok x n] activations
     @ssbo @binding = 1 xq : array<int8>     // [mp x n] quants (live rows only)
@@ -114,12 +114,9 @@ class MetalRmsNorm {
     }
 }
 
-// The production GEMM: 64-output x 32-token C tiles (4 simdgroups, one 16x32 quadrant each,
-// 8 accumulators), W as interleaved 34B q8 blocks (GGUF q8_0's own layout: f16 scale + 32
-// int8 — the scale rides the quants' cacheline), raw f32 activations. Rolled [unroll_full]
-// math over simdgroup-matrix arrays + das-pointer streams: the shapes the ISA rail proved out
-// (static-array/unrolled spellings cost an occupancy tier). Requires out-dim % 64, M padded
-// to 64. Beats the hand-written llama.cpp equivalent 2-3% on M1 Max (see benchmarks/matmul).
+// The production GEMM: 64-output x 32-token C tiles (4 simdgroups, 8 accumulators), W as
+// interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
+// arrays. Requires out-dim % 64, M padded to 64. Beats llama.cpp's equivalent 2-3% on M1 Max.
 class MetalQ8MulMm {
     @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
     @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
@@ -155,9 +152,8 @@ class MetalQ8MulMm {
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
         // device streams walk as REAL das pointers (unsafe(addr()) + bump at the loop tail):
-        // pointer-vs-index register-allocates differently on AGX and the winner is
-        // shape-dependent — both spellings stay writable in plain das; this kernel measured
-        // pointer (llama.cpp's loop reads its scale straight off a carried pointer)
+        // pointer-vs-index register-allocates differently on AGX and is shape-dependent — this
+        // kernel measured pointer (llama.cpp's loop reads its scale straight off a carried pointer)
         let blk0 = (nBase + lr0) * nkb
         var scur = unsafe(addr(wsh[blk0 * 17u]))                    // half scale rides the quants' cacheline
         var qp = unsafe(addr(wqb[blk0 * 34u + 2u + il0 * 16u]))
@@ -210,10 +206,8 @@ class MetalQ8MulMm {
 }
 
 // ===== K-quant mul_mm twins (format-matrix W4 / M2) — MetalQ8MulMm with the A-tile stage
-// swapped to superblock dequant. The 32-elem k-block kb IS sub-block kb%8 of superblock kb/8
-// (256 = 8x32), so each thread's 16-elem half decodes ONE (scale, min) pair; the branch on
-// js < 4 is threadgroup-uniform (js depends only on kb). B staging, simdgroup math and the
-// store tail are byte-identical to the q8 form. Same %64 shape gates, M padded to 32/64.
+// swapped to superblock dequant. The 32-elem k-block kb IS sub-block kb%8 of superblock kb/8,
+// so each thread's 16-elem half decodes ONE (scale, min) pair. Same %64 shape gates, M padded 32/64.
 
 class MetalKqMulMmK4 {
     @ssbo @binding = 0 ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
@@ -514,10 +508,9 @@ class MetalKqMulMmK6 {
     }
 }
 
-// One simdgroup per output row: the classifier GEMV — a dim-long Q8 row dot one f32 vector
-// (the final-normed last position). Bandwidth-bound on the [vocab x dim] weight stream; x stays
-// cache-resident across rows. Lanes stride byte4s within the row; each byte4's int dot rides its
-// block's scale (exact under the unit tests' pow2-scale fills). 128 threads = 4 rows per group.
+// One simdgroup per output row: the classifier GEMV — a dim-long Q8 row dot one f32 vector.
+// Bandwidth-bound on the [vocab x dim] weight stream; x stays cache-resident across rows. Lanes
+// stride byte4s, each byte4's int dot rides its block's scale. 128 threads = 4 rows per group.
 class MetalQ8Gemv {
     @ssbo @binding = 0 wq : array<byte4>    // [d x n] Q8 rows, byte4 view
     @ssbo @binding = 1 ws : array<float>    // [d x n/32] scales
@@ -568,11 +561,9 @@ class MetalQ8Gemv {
     }
 }
 
-// The seed GEMV's f16-SCALE twin (wscale_f16 models — the qscales16 halfword plane, llama.cpp
-// q8_0 byte parity): one simdgroup per output row, lanes stride byte4s, 4 blocks in flight.
-// 1.0625 vs 1.125 bytes/weight — ~5.6% less stream on a bandwidth-bound decode. (A uint4
-// wide-load + shift-unpack variant measured 0.5ms/token SLOWER — the char4 convert path wins
-// on M1; don't re-try without new silicon.)
+// The seed GEMV's f16-SCALE twin (wscale_f16 models — the qscales16 halfword plane): one
+// simdgroup per output row, 4 blocks in flight. 1.0625 vs 1.125 bytes/weight — ~5.6% less stream.
+// (A uint4 wide-load variant measured 0.5ms/token SLOWER on M1 — don't re-try without new silicon.)
 class MetalQ8GemvS16 {
     @ssbo @binding = 0 wq : array<byte4>    // [d x n] Q8 rows, byte4 view
     @ssbo @binding = 1 ws : array<float16>  // [d x n/32] scales, raw binary16
@@ -622,14 +613,8 @@ class MetalQ8GemvS16 {
 }
 
 // ===== K-quant site GEMVs (format-matrix W4) — the gemv-lab winners, productionized =====
-// Owned HERE (the shared-MSL direction — kernels requires prefill and compiles its decode
-// PSOs from these consts; prefill's own classifier PSOs ride the same sources).
-// f32-X single-row weight streams over the DISK-ORDER kq quant planes + the GPU-form scale
-// buffers (kq_upload_scales): k4/k5 read 16B compact scale blocks (one uint4, phase 0 — the
-// production 20B stride defeats the compiler's vector-load merge), k6 reads 16B sub-scale
-// blocks + a trailing packed f16 d plane (bound at byte offset). Geometry all three: 64-thread
-// tg, 2 simdgroups x 2 rows (the lcpp mul_mv shape), grid ceil(d/4). Lab provenance + walls:
-// bench_metal_gemv_kernels (k4_b1c / k5_b2r / k6_b1d).
+// f32-X single-row weight streams over DISK-ORDER kq quant planes + GPU-form scale buffers:
+// k4/k5 read 16B compact scale blocks, k6 reads 16B sub-scale + a trailing packed f16 d plane.
 
 // Q4_K: lane owns 32 elems of every 4th superblock; lcpp's kmask halfword scale decode +
 // nibble-mask acc folds (x16/x256 groups folded by pow2 constants).
@@ -864,14 +849,8 @@ class MetalKqGemvK6 {
 }
 
 // ===== K-quant small-batch mv twins (the kq ext form) — batched decode sites at B = 2..8 =====
-// The gemv-lab ext winners productionized (bench_metal_gemv_kernels k4_ext2/ext4 / k6_ext2/ext4:
-// -25..-40% vs the per-stream B x B1 wall at B=4, -6..-22% at B=2). Shape: one thread per output
-// row (8 K-lanes x 4 rows per simdgroup, 64-thread tg, grid.x = ceil(d/8)); each thread streams
-// chunks tx and tx+8 of every superblock, materializes the 16-elem dequant with d*sc AND dmin*m
-// folded into the registers (no per-column min-side terms), then R column dot-folds off the
-// batch x panel (row stride = ndim, derived in-kernel). y binds at the site's column byte offset;
-// ys = the y ROW stride. grid.y = column groups of R (B = 5..8 -> 2 groups); pad columns compute
-// into discarded accumulators — stores gate on nr, and the mp-padded panel makes the reads safe.
+// The gemv-lab ext winners productionized (-25..-40% vs the per-stream B x B1 wall at B=4). One
+// thread per output row; y binds at the site's column byte offset, grid.y = column groups of R.
 
 class MetalKqMvB2K4 {
     @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
@@ -1167,8 +1146,7 @@ class MetalKqMvB4K6 {
 
 // k5 twins: k4's chunk geometry and kmask scale decode verbatim (q5_K shares the 12-byte scale
 // block) + the qh 5th-bit overlay. The 160B plane rides the SAME uint view (40 uints/blk: qs at
-// 40*blk, qh at 40*blk+32) — 4 hoisted qh uints per superblock, and the overlay bit of a chunk
-// equals its kmask pair index (jl / jl+4), so the baked scale indexing serves the qh shift too.
+// 40*blk, qh at 40*blk+32) — the overlay bit equals its kmask pair index, so scale indexing serves it too.
 class MetalKqMvB2K5 {
     @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
     @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
@@ -1363,17 +1341,9 @@ class MetalRope {
     }
 }
 
-// The dispatch-fusion set (the 21 -> 15 dispatches/layer collapse — ew cost on M1 is launch
-// gaps, not bandwidth):
-//   metal_add_rms_quant  ~ add_inplace? + rmsnorm + quantize_q8_0 in ONE pass — the summed row
-//                          is staged in threadgroup memory (device writeback for the residual
-//                          stream happens alongside), so the normalized values never round-trip
-//                          device memory and the standalone add dispatch disappears. One
-//                          threadgroup per row; dim <= 3072 (the tg stage) gates the fused path.
-//   metal_swiglu_quant   ~ swiglu + quantize_q8_0 per 32-block, silu recomputed on the quant
-//                          pass instead of buffered — the gated activation is dead after the
-//                          quant, so it is never written back at all.
-//   metal_rope_qk        ~ both rope dispatches in one grid (q pairs first, then k).
+// The dispatch-fusion set (21 -> 15 dispatches/layer — ew cost on M1 is launch gaps, not
+// bandwidth): metal_add_rms_quant fuses add+rmsnorm+quantize in one pass (dim <= 3072 gates it);
+// metal_swiglu_quant recomputes silu on the quant pass instead of buffering; metal_rope_qk fuses both rope dispatches.
 class MetalAddRmsQuant {
     @ssbo @binding = 0 x : array<float>     // [nrows x dim] residual stream, updated in place
     @ssbo @binding = 1 r : array<float>     // [nrows x dim] delta to fold in (addv != 0)
@@ -1524,20 +1494,13 @@ class MetalRopeQK {
     }
 }
 
-// Attention runs as a tiled-GEMM trio over a per-head score slab PADDED to 32-row blocks
-// (np32 = ceil32(npos) — sgmat stores are whole 8x8 tiles, so the slab must absorb edge tiles):
-//   metal_attn_qk       S = scale * Q_h . K_hT   (32x32 C blocks, mixed... all-f32 sgmat macs)
-//   metal_attn_softmax  causal in-row softmax: P[0..qi] normalized, P(qi..np32) ZEROED
-//   metal_attn_av       O = P_h . V_h            (the zeroed tail makes full-block macs exact)
-// The naive fused per-row pair this replaced ran at ~80 GMAC/s and owned 44% of the prefill's
-// GPU time (knockout-attributed); the tiled trio is the same math at GEMM rates.
+// Attention runs as a tiled-GEMM trio over a per-head score slab PADDED to 32-row blocks (np32 =
+// ceil32(npos)): metal_attn_qk (S = scale*Q.K^T) -> metal_attn_softmax (causal, zeroes the tail)
+// -> metal_attn_av (O = P.V). Replaces a naive per-row pair that owned 44% of the prefill's GPU time.
 
-// One threadgroup (128 threads = 4 simdgroups) per 32x32 score block (grid: qi-blocks x j-blocks
-// x heads; blocks fully above the causal diagonal exit early — softmax zeroes them). Q staging
-// folds `scale` in; K stages transposed with rows >= npos zeroed (V-GEMM pads can carry NaN and
-// 0*NaN would poison the tile). head_size walks in 64-wide K-SLABS through the statically-sized
-// 32x64 staging tiles (accumulators persist across slabs), so any hs % 8 fits in the same
-// threadgroup footprint — hs 64 (llama-1B) is one slab, 128 (llama-3B) two.
+// One threadgroup (128 threads = 4 simdgroups) per 32x32 score block; blocks fully above the
+// causal diagonal exit early. Q staging folds `scale` in; K stages transposed, rows >= npos
+// zeroed (pads can carry NaN). head_size walks in 64-wide K-SLABS — hs 64 is one slab, 128 two.
 class MetalAttnQK {
     @ssbo @binding = 0 q : array<float>     // [mp x qd], roped
     @ssbo @binding = 1 k : array<float>     // [nk64 x kv_dim], roped (existing rows + the chunk)
@@ -1613,9 +1576,8 @@ class MetalAttnQK {
 }
 
 // One threadgroup (128 threads = 4 simdgroups) per (query row < npos, head): causal in-row
-// softmax over the raw scores — max via a width-32 simd_shuffle_xor butterfly + threadgroup
-// partials, exp and sum likewise; the tail (cnt, np32) is ZEROED so the AV GEMM can run whole
-// blocks. A continuation chunk (M2.5) sees qoff existing keys: cnt = qoff + qi + 1.
+// softmax via a width-32 simd_shuffle_xor butterfly; the tail (cnt, np32) is ZEROED so the AV
+// GEMM can run whole blocks. A continuation chunk sees qoff existing keys: cnt = qoff + qi + 1.
 class MetalAttnSoftmax {
     @ssbo @binding = 0 att : array<float>   // [n_heads x qrows x np32], normalized in place
     @uniform @binding = 1 np32 : uint
@@ -1695,10 +1657,9 @@ class MetalAttnSoftmax {
     }
 }
 
-// One threadgroup (128 threads = 4 simdgroups) per 32x32 output block (grid: qi-blocks x
-// d-blocks(hs/32) x heads): O = P.V walking j in 32-blocks up to the causal limit qi0+32 (P's
-// zeroed tail keeps whole blocks exact). V rows >= npos stage as 0 (GEMM pad rows can carry
-// NaN; P's tail zeros there would still produce 0*NaN). hs % 32 == 0 (the d-block grid).
+// One threadgroup (128 threads = 4 simdgroups) per 32x32 output block: O = P.V walking j in
+// 32-blocks up to the causal limit qi0+32 (P's zeroed tail keeps whole blocks exact). V rows
+// >= npos stage as 0 (pad rows can carry NaN; 0*NaN would still poison). hs % 32 == 0 required.
 class MetalAttnAV {
     @ssbo @binding = 0 att : array<float>   // [n_heads x qrows x np32] normalized P
     @ssbo @binding = 1 v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
@@ -1768,17 +1729,8 @@ class MetalAttnAV {
 }
 
 // The ggml-geometry attention pair (v21 lessons applied to the trio's QK/AV GEMMs — the old
-// 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate and owned 24ms of the 3B window):
-// 32x64 C tiles, tile-major 8x8 shared blocks staged as HALF via vectorized float4 loads (the
-// f32_f32 mul_mm instantiation llama.cpp ships stages half from f32 sources too), 2x4 simdgroup
-// quadrants, rolled [unroll_full] math over matrix arrays. Same buffer contract and oracle as the trio; the trio stays
-// as the DASLLAMA_METAL_ATTN=0 rail (and serves hs % 64 != 0 shapes).
-//
-// QK: S[h] = scale * Q_h . K_h^T — C tile 32 queries x 64 keys, k walks head_size in 32-blocks.
-// K stages TRANSPOSED within 8x8 tiles (v21's A pattern; loads stay contiguous along hs);
-// Q stages rows with scale folded (v21's B pattern). Blocks strictly above the causal diagonal
-// exit early (softmax zeroes them); K pad rows need no guard — their scores land in columns
-// j >= npos, which the causal softmax zeroes for every live row.
+// 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate, owning 24ms of the 3B window).
+// QK: S[h] = scale * Q_h . K_h^T, 32x64 C tiles; DASLLAMA_METAL_ATTN=0 pins the trio (hs % 64 != 0 too).
 class MetalAttnQKMm {
     @ssbo @binding = 0 q : array<float4>    // [mp x qd/4], roped
     @ssbo @binding = 1 k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
@@ -1886,11 +1838,9 @@ class MetalAttnQKMm {
     }
 }
 
-// AV: O_h = P_h . V_h — C tile 32 tokens x 64 V-columns, k walks the (causally limited)
-// position axis in 32-blocks. V stages in its natural (position row, column) orientation into
-// the tile-major A grid — contiguous float4 loads, position rows >= npos ZEROED (the causal
-// softmax zeroes P columns >= npos EXACTLY, and 0 * NaN from a pad V row would poison the
-// tile); P stages rows via float4 loads of the score slab (v21's B pattern).
+// AV: O_h = P_h . V_h — C tile 32 tokens x 64 V-columns, k walks the causally limited position
+// axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (causal
+// softmax zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
 class MetalAttnAVMm {
     @ssbo @binding = 0 att : array<float4>  // [n_heads x qrows x np32/4] normalized P
     @ssbo @binding = 1 v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
@@ -2013,13 +1963,8 @@ class MetalAdd {
 }
 
 // ===== the whole-prefill driver =====
-// Registered as prefill override "metal" (select_prefill_override; env rail DASLLAMA_PIN_PREFILL).
-// One command buffer per prefill: 20 dispatches per layer (norm, requant, 7 GEMMs across the
-// llama block, rope x2, scores, P.V, swiglu, residual adds), default hazard tracking orders them,
-// ONE commit+wait — then the unified-memory readback hands x_b and the per-layer roped-K/raw-V
-// back to the CPU (kv_store_batch keeps the session KV codec CPU-side, so any KV dtype works).
-// Weights ride the same lazy region cache contract as the Phase-5c GEMM donor: uploaded once,
-// keyed by base address, load-once-stable (refilling the same arrays needs metal_prefill_shutdown).
+// Registered as prefill override "metal" (DASLLAMA_PIN_PREFILL). One command buffer per prefill;
+// ONE commit+wait, then unified-memory readback hands x_b + per-layer roped-K/raw-V back to the CPU.
 
 var private g_pf_dev : MetalDevice?
 var private g_pf_queue : MetalCommandQueue?
@@ -2264,9 +2209,7 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     if (key_exists(g_pf_regions, key)) {
         return g_pf_regions[key]
     }
-    // UNTRACKED: weights are GPU-read-only (written once here, before any commit), so they
-    // carry no hazards — keeping ~450 of them tracked made the command-buffer scheduler's
-    // dependency analysis the dominant non-GPU cost (~70ms/prefill on the 3B)
+    // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_pf_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, int(bytes))
@@ -2311,14 +2254,11 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
     if (t.quant != QuantMode.q8) {
         return MetalPrefillDecline.quant_mode
     }
-    // kquant rides the mul_mm path only (the kq mulmm twins dequant superblocks in the A-tile
-    // stage — W4/M2): a run with mm pinned off, or a shape the %64 GEMM gate rejects, has no
-    // kq-capable GEMM and declines
+    // kquant rides the mul_mm path only — mm pinned off or a shape the %64 gate rejects has no kq-capable GEMM and declines
     if (t.kquant_native) {
         let ck = t.config
         let qdk = ck.n_heads * ck.head_size
-        // ... and every fmt needs a GPU kernel: kq_load_gpu_supported rejects the q4_0 QAT
-        // tier (and future formats) instead of letting them dispatch a wrong-layout branch
+        // every fmt needs a GPU kernel: kq_load_gpu_supported rejects formats without one instead of dispatching a wrong-layout branch
         if (g_mm_legacy || get_env_variable("DASLLAMA_METAL_MULMM") == "0" ||
                 (ck.dim % 64l) != 0l || (qdk % 64l) != 0l ||
                 (layer_kv_dim(ck, 0l) % 64l) != 0l || (layer_hidden(t, 0l) % 64l) != 0l ||
@@ -2326,8 +2266,7 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
             return MetalPrefillDecline.kquant_native
         }
     }
-    // wscale_f16 rides the mul_mm path only (blobs read either scale plane; W2): a model the mm
-    // shape gate rejects, or a run with mm pinned off, has no s16-capable GEMM and declines
+    // wscale_f16 rides the mul_mm path only — a model the mm shape gate rejects has no s16-capable GEMM and declines
     if (t.wscale_f16) {
         let c16 = t.config
         let qd16 = c16.n_heads * c16.head_size
@@ -2340,9 +2279,7 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
     if (t.arch != "llama") {
         return MetalPrefillDecline.arch
     }
-    // the GEMM kernel reads ROW-MAJOR Q8 weights — a repack backend's interleaved layout is
-    // unreadable here (the same donor contract as the Phase-5c batch offload: load under
-    // DASLLAMA_PIN_BACKEND=arm64-sdot or another row-major backend)
+    // the GEMM kernel reads ROW-MAJOR Q8 weights — a repack backend's interleaved layout is unreadable here
     if (kernel_backend_needs_repack(active_kernel_backend())) {
         return MetalPrefillDecline.backend_repack
     }
@@ -2642,9 +2579,6 @@ def private pf_enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; 
     metal_dispatch_threadgroups(enc, uint3(uint((total + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
-//! The PrefillOverrideFn: runs the whole llama layer stack GPU-resident. true = done (KV cache
-//! filled, x_b final); false = declined, the caller runs the CPU loop (x_b untouched, so the
-//! fallback recomputes from clean state).
 // the prefill half of the weights-epoch guard (see dasllama_metal_common): flush the module's
 // own address-keyed region cache when a model (re)load may have recycled the addresses
 var private g_pf_cache_epoch = -1l
@@ -2733,9 +2667,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), int(npos * half * 4l))
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
-    // head as f32 (kv_load_row dequants the codec; paged sessions gather through kv_runs; tq4
-    // rows dequant ROTATED and un-rotate per head — the GPU attention runs in the raw basis).
-    // K rows are stored ROPED, so no re-rope; the chunk lands at the start_pos offset below.
+    // head as f32 (paged sessions gather through kv_runs; tq4 rows dequant ROTATED and un-rotate
+    // per head — GPU attention runs in the raw basis). K rows are stored ROPED, so no re-rope.
     if (start_pos > 0l) {
         unsafe {
             let gather_nrun = kv_runs(s, 0l, start_pos, s.kv_runs)
@@ -2784,16 +2717,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_addv0 = pf_uniform_u32(0u)
     var u_addv1 = pf_uniform_u32(1u)
     var u_npairs_all = pf_uniform_u32(uint(npos * (qd + kv_dim) / 2l))
-    // the mul_mm GEMM path (the default): W as resident 34B q8-block blobs (GGUF q8_0's own
-    // layout), raw f32 activations — the X-quant dispatches disappear and the GEMMs run at
-    // mul_mm rate. Needs every GEMM output dim % 64; DASLLAMA_METAL_MULMM=0 (or the setter)
-    // pins the legacy quantized path, which is bit-identical to the CPU forward.
+    // the mul_mm GEMM path (the default): W as resident 34B q8-block blobs, raw f32 activations —
+    // the X-quant dispatches disappear and the GEMMs run at mul_mm rate. Needs every GEMM output
+    // dim % 64; DASLLAMA_METAL_MULMM=0 pins the legacy quantized path (bit-identical to CPU).
     let mm = (!g_mm_legacy && get_env_variable("DASLLAMA_METAL_MULMM") != "0" &&
         (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l)
-    // logits-on-GPU (default ON, DASLLAMA_METAL_LOGITS=0 pins the CPU classifier): the final
-    // rmsnorm on the last position + the classifier GEMV ride the last command buffer, and the
-    // caller's CPU final step is skipped (prefill_override_logits_done). Mirrors the CPU q8
-    // `mm` path only — softcap / suppression / non-q8 classifiers decline to the CPU step.
+    // logits-on-GPU (default ON, DASLLAMA_METAL_LOGITS=0 pins the CPU classifier): final rmsnorm
+    // + classifier GEMV ride the last command buffer, and the caller's CPU final step is skipped
+    // (prefill_override_logits_done). softcap / suppression / non-q8 classifiers decline to CPU.
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
     let gpu_logits = (!g_pf_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_pf_skip) &&
@@ -2814,13 +2745,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var err : string
     var gpu_ms : double
     var encode_ms : double
-    // command-buffer split (DASLLAMA_METAL_NCB chunks): each chunk commits as soon as it is
-    // encoded, so the scheduler analyzes chunk k while chunk k-1 executes — same-queue commit
-    // order plus hazard tracking on the activation buffers keeps cross-chunk ordering. With
-    // DASLLAMA_METAL_UNRETAINED=1 the chunks also skip the per-dispatch resource retain/release
-    // (safe here: pooled buffers release back only after the wait, weight regions are resident).
-    // default = ~4 layers per chunk (3B measured: slack 57ms -> 9ms, +10% pp512; finer splits
-    // are neutral). DASLLAMA_METAL_NCB=1 restores the single-buffer path.
+    // command-buffer split (DASLLAMA_METAL_NCB chunks): each chunk commits as soon as encoded, so
+    // the scheduler analyzes chunk k while chunk k-1 executes. DASLLAMA_METAL_UNRETAINED=1 skips
+    // per-dispatch retain/release too. Default ~4 layers/chunk (3B: slack 57ms -> 9ms, +10% pp512).
     let ncb = clamp(int64(pf_env_int("DASLLAMA_METAL_NCB", int((c.n_layers + 3l) / 4l))), 1l, c.n_layers)
     let unret = get_env_variable("DASLLAMA_METAL_UNRETAINED") == "1"
     let layers_per_cb = (c.n_layers + ncb - 1l) / ncb
@@ -2844,9 +2771,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 var bw_att = pf_upload_region(addr < void? >(t.fblob[t.rms_att_off + l * dim]), uint64(dim * 4l))
                 var bw_ffn = pf_upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
                 // attention: [pending W2 residual +] norm -> [requant ->] Q/K/V -> rope ->
-                // scores+softmax -> P.V -> out-proj (fused path folds each residual add into
-                // the FOLLOWING add+rms+quant; the last layer's pending add lands after the loop;
-                // the lcpp path feeds the normed f32 rows straight to mul_mm — no requant)
+                // scores+softmax -> P.V -> out-proj (fused path folds each residual add into the
+                // FOLLOWING add+rms+quant; the lcpp path feeds normed f32 rows straight to mul_mm)
                 if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (fused) {
                         enc_add_rms_quant(enc, bx, bxb, bw_att, bxq, bxs, u_dim, u_eps, l > 0l ? u_addv1 : u_addv0, npos)
@@ -3035,10 +2961,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         metal_commit(cb)
         cbs |> push(cb)
     }
-    // completion + readback INTERLEAVE: chunks complete in commit order, and each completed
-    // chunk's roped-K/raw-V rows stream into the CPU KV codec while later chunks keep the GPU
-    // busy (unified memory — the memcpy is safe the moment the chunk reports complete). The
-    // residual-stream copy needs the LAST chunk and lands after the loop.
+    // completion + readback INTERLEAVE: chunks complete in commit order, each completed chunk's
+    // roped-K/raw-V rows stream into the CPU KV codec while later chunks keep the GPU busy (safe
+    // the moment a chunk reports complete). The residual-stream copy needs the LAST chunk.
     var ran = true
     var gpu_t0 = 0.0lf
     var gpu_t1 = 0.0lf

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_math_aarch64_neon shared public
 
@@ -103,8 +104,7 @@ def private q8q8_group3_kernel_neon_sdot4x4(var y0p : float?; var y1p : float?; 
     var w0 = y0p
     var w1 = y1p
     var w2 = y2p
-    // oversplit only under team dispatch: ×4 chunks cost the fifo path ~20% on this small mm
-    // (measured 1B mm_qkv 86.6k → 108k us) but win ~19% when workers self-serve them
+    // oversplit ×4 costs the fifo path ~20% but wins ~19% under team dispatch (1B mm_qkv 86.6k->108k us)
     maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * dtot)) $(rb, re) {
         unsafe {
             for (gi in range(rb, re)) {
@@ -140,13 +140,9 @@ def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uin
     return f
 }
 
-//! ARM TBL+SDOT MXFP4·Q8 dot (the NEON body of ggml_vec_dot_mxfp4_q8_0): per 32-block, one v16i8
-//! nibble load feeds two TBL lookups of the doubled-e2m1 LUT (low nibbles = elems 0..15, high =
-//! 16..31), each result SDOTing in-register against the Q8 activation (sdot4_w — no memory
-//! round-trip), the exact int32 block sum flushing through e8m0_half(we) × xs. Same per-block flush
-//! order as dot_mx4q8_scalar. Only the unroll perms genuinely apply (the body is straight-line
-//! tbl16/sdot4_w intrinsics); fallback u2 mirrors ggml's 2-block iteration. Not `private`: called
-//! from inside the lifted parallel_for worker lambdas.
+//! ARM TBL+SDOT MXFP4·Q8 dot (NEON body of ggml_vec_dot_mxfp4_q8_0): one v16i8 nibble load feeds
+//! two TBL lookups (low/high nibbles), each SDOT'd in-register against the Q8 activation, flushed
+//! through e8m0_half(we) × xs. Not `private`: called from lifted parallel_for worker lambdas.
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
 def dot_mx4q8(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
@@ -168,9 +164,8 @@ def mx4q8_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp
 }
 
 // ===== region-list (groupN) kernels — the MoE decode dispatch fuse =====
-// One parallel_for over nregions * d rows (or nregions * d/4 interleaved groups): all k routed
-// experts' gates (or ups, or downs) in ONE fork/join. Per-row math identical to the single-region
-// kernels — bit-exact, only the scheduling changes.
+// One parallel_for over nregions*d rows fans out all routed experts in one fork/join; math is
+// bit-exact vs the single-region kernels, only scheduling differs.
 
 def private q8q8_groupn_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
     let nb = n / 32l
@@ -221,20 +216,12 @@ def mx4q8_groupn_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 cons
 }
 
 // ===== MXFP4 laneq dot (interleaved 4-row groups) — gen composer =====
-// The mx repack (repack_mx4_grp in dasllama_math_gen; mr=4 is the layout this dot
-// reads) interleaves nibble BYTES 4-rows-per-sub-chunk: block bi of a
-// group is 64 bytes at + bi*64, sub-chunk j (j = 0..3) = [r0 nb(4j..4j+3) | r1 | r2 | r3] — so ONE
-// v16i8 load + tbl16_lo/tbl16_hi yields BOTH laneq weight vectors of that sub-chunk (k 4j..4j+3
-// and k 16+4j..19+4j across the 4 rows; a nibble byte x holds elems x low / x+16 high). E8M0
-// scale bytes interleave 4-per-block ([r0e r1e r2e r3e] at + bi*4). Tail rows (d % 4) stay
-// row-major and run the row-major dot_mx4q8. This is the mx4 twin of llama.cpp's block_mxfp4x4
-// repacked GEMV — where its gpt-oss decode number lives.
+// Repack (repack_mx4_grp, mr=4) interleaves nibble bytes 4-rows-per-sub-chunk: one v16i8 load +
+// tbl16_lo/hi yields both laneq vectors per sub-chunk. Tail rows (d % 4) fall back to row-major dot_mx4q8.
 
-//! Interleaved MXFP4·Q8 dot over one 4-row group against one token: per 32-block, 4 nibble loads
-//! feed 8 TBL + 8 indexed SDOT (each tbl result is one laneq weight vector, fed as a VALUE via
-//! sdot4_laneq_w) — accumulator lane L is output row L, flushed through the 4 rows' e8m0_half
-//! scales × the token block scale. No horizontal reduce. Not `private`: called from inside the
-//! lifted parallel_for worker lambdas.
+//! Interleaved MXFP4·Q8 dot over one 4-row group vs one token: 4 nibble loads feed 8 TBL + 8 indexed
+//! SDOT (via sdot4_laneq_w); accumulator lane L is output row L, flushed via e8m0_half scales ×
+//! token block scale, no horizontal reduce. Not `private`: called from lifted worker lambdas.
 [hint(unsafe_range_check, noalias = lut, noalias = wg, noalias = eg, noalias = xq, noalias = xs)]
 def dot_mx4q8_laneq4(lut : int8 const?; wg : uint8 const?; eg : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l
@@ -262,16 +249,12 @@ def dot_mx4q8_laneq4(lut : int8 const?; wg : uint8 const?; eg : uint8 const?; xq
 }
 
 // ===== laneq dots (lane-indexed SDOT over interleaved 4-row groups) — gen composers =====
-// The interleaved layout is produced at load by the gen repack (repack_q8q8_grp in
-// dasllama_math_gen; mr=4 is the layout these dots read) so each accumulator lane is a distinct
-// output row: no per-block horizontal reduce. Group base + block stride match that repack: a
-// 4-row group is 4*n int8, block bi at +bi*128 (32 k's × 4 rows). Tail rows (d % 4) stay
-// row-major and run the sdot4x4 fallback. dasllama_math_gen's mr=4 traversals call these.
+// Repack (repack_q8q8_grp, mr=4) makes each accumulator lane a distinct output row (no horizontal
+// reduce); group = 4*n int8, block bi at +bi*128. Tail rows (d % 4) fall back to row-major sdot4x4.
 
-//! Lane-indexed SDOT over one 4-row interleaved group against one token. 8 sdot4_laneq per 32-block
-//! (two 16-k chunks × lanes 0..3); the int4 accumulator's lane L is output row L, flushed to a float4
-//! with the 4 rows' block scales × the token block scale — no horizontal reduce anywhere. Not `private`:
-//! called from inside the lifted parallel_for worker lambdas.
+//! Lane-indexed SDOT over one 4-row interleaved group vs one token: 8 sdot4_laneq per 32-block,
+//! accumulator lane L is output row L, flushed to a float4 via block scales × token scale — no
+//! horizontal reduce. Not `private`: called from lifted parallel_for worker lambdas.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
 def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l
@@ -297,10 +280,9 @@ def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : 
     return f
 }
 
-//! The wscale_f16 twin of dot_q8q8_laneq4: the group's 4 interleaved block scales are raw
-//! binary16 halfwords, widened in-loop — same fold order, so bit-identical over the widened
-//! plane. The gen backend's s16 reference bodies read this (grp4 = the reference layout).
-//! Not `private`: called from inside the lifted parallel_for worker lambdas.
+//! wscale_f16 twin of dot_q8q8_laneq4: block scales are raw binary16 halfwords widened in-loop —
+//! same fold order, bit-identical over the widened plane. Not `private`: called from lifted
+//! parallel_for worker lambdas.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
 def dot_q8q8_laneq4_f16s(wg : int8 const?; sg : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l
@@ -390,21 +372,15 @@ def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg 
     }
 }
 
-//! 4-row × 4-token tile (the llama.cpp ggml_gemm_q8_0_4x4 structure): one 4-row interleaved group
-//! against 4 tokens at once, 4 independent int4 accumulators (one per token). Per chunk-lane the same
-//! weight v16i8 feeds all 4 tokens — LLVM CSEs it to one load (4× fewer weight loads than 4× laneq4) —
-//! and the 4 independent accumulator chains give the SDOT pipeline the ILP a single chain can't, so it
-//! approaches throughput instead of being latency-bound. Writes 16 outputs token-major into yp. Not
-//! `private`: called from inside the lifted parallel_for worker lambda. t0 % 1, ntok-t0 >= 4 assumed.
-//! Only the unroll perms genuinely apply (the body is straight-line sdot4_laneq intrinsics — a
-//! vectorize perm's hint is simply ignored by LLVM); fallback u2 = the shipped hand hint.
+//! 4-row × 4-token tile (llama.cpp ggml_gemm_q8_0_4x4 structure): shared weight v16i8 per chunk-lane
+//! feeds all 4 tokens (LLVM CSEs to one load, 4x fewer than 4× laneq4); 4 independent accumulators
+//! give SDOT the ILP a single chain can't. Not `private`, t0 % 4 == 0 and ntok-t0 >= 4 assumed.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp), tuned(fallback = "u2")]
 def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; n, d, g, t0 : int64) {}
 
-// Row-range core (mm_rows slot): rows [rb,re) of one region, no dispatch — the fused decode
-// chains thread these from their own stage lambdas. Same dot as the mm kernels. Not `private`:
-// invoked through the kernel pointer from lifted worker lambdas. rb/re are multiples of 32 (the
-// slot contract).
+// Row-range core (mm_rows slot): rows [rb,re) of one region, no dispatch — fused decode chains
+// thread these from their own stage lambdas. Not `private`: invoked through the kernel pointer
+// from lifted worker lambdas. rb/re are multiples of 32 (slot contract).
 def q8q8_rows_kernel_neon_sdot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
     let nb = n / 32l
     unsafe {

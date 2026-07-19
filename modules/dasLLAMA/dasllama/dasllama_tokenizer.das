@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_tokenizer shared public
 
@@ -51,9 +52,8 @@ def load_tokenizer(path : string; vocab_size : int64) : SpmTokenizer {
 }
 
 //! Load a SentencePiece tokenizer from a llama-arch GGUF (vocab/scores live in metadata).
-//! GGUF stores raw SPM pieces with the '▁' (U+2581) space metasymbol; we substitute
-//! '▁' -> space at load so encode/decode below (written for llama2.c's literal-space
-//! convention) work unchanged. BOS=1 / EOS=2 (Llama-2 SPM) match the hardcoded ids there.
+//! GGUF stores raw SPM pieces with the '▁' (U+2581) space metasymbol; substituted to space at load
+//! so encode/decode work unchanged. BOS=1 / EOS=2 (Llama-2 SPM) hardcoded to match.
 def load_tokenizer_gguf(path : string) : SpmTokenizer {
     var tk = SpmTokenizer()
     let f = fopen(path, "rb")

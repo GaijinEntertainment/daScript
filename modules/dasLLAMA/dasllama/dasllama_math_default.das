@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_math_default shared public
 
@@ -61,11 +62,8 @@ def template dot_q8q8_f16s_template(wq : int8 const ?; ws : uint16 const ?; xq :
 def dot_q8q8_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
 // ----- parallel_for dispatch profiler (off by default) -----
-// When on, the batch kernel records each worker's start time (relative to the parallel_for start) into
-// g_pf_ws[rb], then aggregates the first/last worker start and the wall time per call. A large gap
-// between pf-start and last-worker-start = workers trickling in (the job pool waking from sleep), which
-// is the suspected prefill stall. The recorder lives with the portable batch kernel so the A/B harness
-// can pin the portable backend and measure the same parallel_for behavior in one module.
+// Records each worker's start time (rel. to pf-start) into g_pf_ws[rb]; a large first/last-worker gap
+// = workers trickling in (job pool waking from sleep) — the suspected prefill stall.
 var g_pf_prof = false
 var g_pf_ws : array<int64>   // per-call worker start (ns, relative to pf-start), indexed by chunk start row
 var g_pf_first_sum = 0l      // Σ first-worker start (us) over calls
@@ -291,13 +289,8 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
 }
 
 // ===== Native K-quant (Q4_K/Q5_K/Q6_K) dots + rows kernels =====
-// Plane layouts per 256-weight superblock (see dasllama_gguf transcode): k4 quant 128B nibbles +
-// 32B f16 (s, o) pairs per 32-sub-block; k5 [128B nibbles][32B qh] + the same pairs; k6
-// [128B ql][64B qh] + [16 int8 sub-scales][f16 d]. Dot per sub-block: s*(Σ q·a) − o*(Σ a) with
-// UNSIGNED quants — the offset term consumes the per-16 activation sums (xbs) the bs quantizer
-// emits. These read the planes in disk order (no repack), so they are backend-independent:
-// every backend runs them until a generated tier lands. Row strides: quant (n/256)*{128,160,192}
-// bytes, scale (n/256)*{20,20,18} bytes.
+// Plane layouts per 256-weight superblock: k4 128B nibbles+32B f16(s,o); k5 adds 32B qh; k6
+// [128B ql][64B qh]+[16 sub-scales][f16 d]. Dot: s*(Σq·a) − o*(Σa); disk-order — backend-independent.
 
 //! 6-bit sub-scale/min j off a 12-byte packed Q4_K/Q5_K scale block at sp (ggml
 //! get_scale_min_k4, pointer form) — shared by the kq v2 dots, repack and dequants.
@@ -313,9 +306,8 @@ def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
 }
 
 // kq v2 (all three formats): Q8_K-form activations — xsp is the PER-SUPERBLOCK scale plane
-// (n/256 per token); integer sub-scale / bsums-x-mins sums, ONE float fold per superblock
-// (the lcpp scheme). The int sums are exact, so this is bit-exact vs the grp walk regardless
-// of sub-block order.
+// (n/256 per token); integer sub-scale / bsums-x-mins sums fold to ONE float per superblock (lcpp scheme).
+// Int sums are exact, so this is bit-exact vs the grp walk regardless of sub-block order.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def dot_k4q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -438,11 +430,9 @@ def dot_k6q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
     return acc
 }
 
-// q40 (native Q4_0): Q8_K-form activations like the K-quants; w = d·(q − 8) with a PER-32 f16
-// d, so the fold is per BLOCK — facc accumulates float(ilo + ihi − 8·Σa32)·d over the
-// superblock's 8 blocks (Σa32 = the two per-16 bsums), closed by ONE ·d8. Ints exact; the
-// float order (per-block fma into facc, per-superblock fma into acc) is the contract every
-// q40 kernel reproduces.
+// q40 (native Q4_0): w = d·(q − 8) with a PER-32 f16 d, so the fold is per BLOCK — facc
+// accumulates float(ilo+ihi−8·Σa32)·d over the superblock's 8 blocks, closed by ONE ·d8.
+// This per-block/per-superblock fma order is the contract every q40 kernel must reproduce.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def dot_q40q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -525,10 +515,9 @@ def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp :
     }
 }
 
-//! Dequant one row off the grp<mr>-REPACKED K-quant planes (kq stage 4 — the layout
-//! repack_k4/k5/k6_grp writes; see dasllama_math_gen). kqg/ksg = the row's GROUP plane bases
-//! (group g = row/mr at g*mr*(n/256)*{qsb,ssb}); r = row % mr. embed_row's kq_repacked path —
-//! per-token, so scalar is fine.
+//! Dequant one row off the grp<mr>-REPACKED K-quant planes (repack_k4/k5/k6_grp layout).
+//! kqg/ksg = row's GROUP plane base (group g = row/mr); r = row % mr.
+//! embed_row's kq_repacked path — per-token, so scalar is fine.
 def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr, n : int64; var dst : float?) {
     let nsb = n / 256l
     let qsb = kq_qsb(int(fmt))
@@ -619,10 +608,9 @@ def matmul_kq(fmt : int; var y : array<float> | #; kq : array<uint8> | #; ks : a
     }
 }
 
-//! Region-list K-quant GEMV over the DISK-ORDER planes (the groupn twin of matmul_kq, one
-//! flat fork like q8q8_groupn_kernel): `offs` packs (weight, activation) element-offset pairs,
-//! region r's rows land at y[r*d .. r*d+d). One fmt for the whole list — a MoE layer's expert
-//! stack is one tensor. No bias form (the only biased-experts arch, gpt-oss, is mx4).
+//! Region-list K-quant GEMV over DISK-ORDER planes (groupn twin of matmul_kq): `offs` packs
+//! (weight, activation) element-offset pairs; region r's rows land at y[r*d .. r*d+d).
+//! No bias form — the only biased-experts arch (gpt-oss) is mx4.
 def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #; ks : array<uint8> | #; offs : array<int64> | #; nregions : int64; xq : array<int8> | #; xs : array<float> | #; xbs : array<int> | #; n, d : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -658,11 +646,9 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
     }
 }
 
-//! MXFP4·Q8 dot, scalar reference form (mirrors ggml_vec_dot_mxfp4_q8_0's tail loop): per 32-block,
-//! each of the 16 nibble bytes pairs its low nibble with xq[j] and its high nibble with xq[j+16]
-//! through the doubled-e2m1 `lut`, the exact int32 block sum flushing through e8m0_half(we) × xs.
-//! The per-block flush order matches the NEON dot_mx4q8, so the two agree to reassociation. Not
-//! `private`: the reference for the mx4 unit tests and callable from lifted worker lambdas.
+//! MXFP4·Q8 dot, scalar reference form (mirrors ggml_vec_dot_mxfp4_q8_0's tail loop): each nibble
+//! pairs low nibble w/ xq[j], high w/ xq[j+16] via doubled-e2m1 `lut`; flush order matches NEON dot_mx4q8 (agrees to reassociation).
+//! Not `private`: the mx4 unit-test reference, callable from lifted worker lambdas.
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs)]
 def dot_mx4q8_scalar(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
     let nb = n / 32l
@@ -703,10 +689,9 @@ def mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : in
     }
 }
 
-// Portable mx4 batch: rows-outer / tokens-inner over the scalar row dot. NOT flagged
-// mx4_native_batch — in-model grouped prefill keeps the expand-to-Q8 + vectorized Q8 batch path,
-// which beats per-token scalar LUT dots; this form exists as the probe/A-B reference (bit-identical
-// to ntok x mx4q8_kernel).
+// Portable mx4 batch: rows-outer/tokens-inner over the scalar row dot. NOT flagged mx4_native_batch
+// — grouped prefill keeps the expand-to-Q8 + vectorized batch path instead; this is the probe/A-B
+// reference (bit-identical to ntok × mx4q8_kernel).
 def mx4q8_batch_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     var myp = yp

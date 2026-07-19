@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_math_metal shared public
 
@@ -120,10 +121,8 @@ class MetalQ8Gemm {
     }
 }
 
-// The big-grid kernel: 64x64 C block per threadgroup — halves BOTH device re-read directions
-// vs 32x32 and runs 16 macs per 8 tile loads (each simdgroup owns a 32x32 quadrant, 16
-// accumulators); staging is perfectly balanced (every thread stages one A and one B 16-run).
-// Requires d % 64 == 0 and a big enough grid — the driver falls back to MetalQ8Gemm otherwise.
+// 64x64 C block per threadgroup: halves device re-read vs 32x32, 16 macs per 8 tile loads.
+// Requires d % 64 == 0 and a big grid; driver falls back to MetalQ8Gemm otherwise.
 class MetalQ8Gemm64 {
     @ssbo @binding = 0 wq : array<byte4>    // W [d x n] row-major Q8 quants (byte4 view)
     @ssbo @binding = 1 ws : array<float>    // W scales [d x n/32]

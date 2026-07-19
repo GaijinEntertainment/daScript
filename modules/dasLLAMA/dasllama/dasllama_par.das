@@ -1,5 +1,6 @@
 options gen2
 options no_aot = true  // macro module — compile-time only, never AOT-compiled (like jobque_boost)
+options _comment_hygiene = true
 
 module dasllama_par shared public
 
@@ -24,11 +25,9 @@ def maybe_parallel_for(parallel : bool; range_begin, range_end : int; num_jobs :
     //! stub — rewritten by MaybeParallelForMacro into a runtime if/else
 }
 
-//! `maybe_parallel_for(range_begin, range_end, num_jobs) $(rb, re) { ... }` — the
-//! work-proportional form: `num_jobs` is evaluated ONCE; > 1 dispatches exactly like the bool
-//! form's parallel arm, and <= 1 runs the block inline. Pair with the work-aware
-//! matmul_chunks / matmul_chunks_gemv shapers, which return 1 when lanes_for_work says the
-//! matmul isn't worth a dispatch.
+//! `maybe_parallel_for(range_begin, range_end, num_jobs) $(rb, re) { ... }` — work-proportional
+//! form: `num_jobs` evaluated ONCE; > 1 dispatches like the bool form's parallel arm, <= 1 runs inline.
+//! Pair with matmul_chunks / matmul_chunks_gemv shapers (return 1 when not worth a dispatch).
 [tag_function(tag_maybe_parallel_for_nj), unused_argument(range_begin, range_end, num_jobs, blk)]
 def maybe_parallel_for(range_begin, range_end : int; num_jobs : int;
                        blk : block<(rb : int; re : int) : void>) {
@@ -36,13 +35,8 @@ def maybe_parallel_for(range_begin, range_end : int; num_jobs : int;
 }
 
 //! `maybe_parallel_for_indexed(range_begin, range_end, num_jobs) $(slot, rb, re) { ... }` —
-//! slot-indexed dispatch for per-slot scratch: like maybe_parallel_for, but the block also
-//! receives a slot index with the guarantee that no two in-flight invocations share one, so
-//! slot-indexed scratch needs no locks. Size the scratch to `get_dispatch_slot_bound()`.
-//! Team mode: `num_jobs` chunks self-serve as usual and slot is the claiming worker (the
-//! caller is the last slot) — pass a chunk-per-unit `num_jobs` for dynamic balance. Fifo
-//! mode: the range collapses to at most min(num_jobs, pool + 1) contiguous sub-ranges, one
-//! per slot. `num_jobs` <= 1 (or no job que) runs inline as slot 0.
+//! slot-indexed dispatch: block also gets a slot index guaranteed unique across in-flight
+//! invocations (size scratch to `get_dispatch_slot_bound()`); `num_jobs` <= 1 runs inline as slot 0.
 [tag_function(tag_maybe_parallel_for_indexed), unused_argument(range_begin, range_end, num_jobs, blk)]
 def maybe_parallel_for_indexed(range_begin, range_end : int; num_jobs : int;
                                blk : block<(slot : int; rb : int; re : int) : void>) {
@@ -50,11 +44,8 @@ def maybe_parallel_for_indexed(range_begin, range_end : int; num_jobs : int;
 }
 
 // Shared arm bodies — ONE source of truth for both lowerings so the arms can't drift.
-// parallel: team mode on → team_parallel_for (workers self-serve chunks off one atomic, one
-//   lambda clone per worker); off → parallel_for (its macro wraps the body in new_job, one
-//   fifo job per chunk + wait-group notify). inline: invoke the block on the calling thread.
-//   The user block body is instantiated in each arm; only one arm runs.
-// Synthesize the wrapper param names so they can't shadow the user block's own params.
+// parallel: team mode → team_parallel_for (self-serve off one atomic); off → parallel_for (fifo
+// job/chunk + notify). inline: invoke on the calling thread; wrapper names avoid shadowing user params.
 def private mpf_par_arm(beginE, endE, njE, blkE : ExpressionPtr; at : LineInfo) : array<ExpressionPtr> {
     let rbN = make_unique_private_name("mpf_rb", at)
     let reN = make_unique_private_name("mpf_re", at)
@@ -62,10 +53,7 @@ def private mpf_par_arm(beginE, endE, njE, blkE : ExpressionPtr; at : LineInfo) 
     let rbT = make_unique_private_name("mpf_trb", at)
     let reT = make_unique_private_name("mpf_tre", at)
     return <- qmacro_block_to_array() {
-        // num_jobs evaluates ONCE on the taken path: the pass-through counter profiles the
-        // exact value the dispatch receives (callers pass shaper CALLS — a separate
-        // count_parallel_dispatch($e(njE)) statement would run the shaper twice and could
-        // profile a different chunk count than it dispatches)
+        // num_jobs evaluates ONCE — callers pass shaper CALLS, so a separate count call would re-run it and could profile a different value than dispatched
         if (get_jobque_team_mode()) {
             team_parallel_for($e(beginE), $e(endE), count_parallel_dispatch_thru($e(njE))) <| @($i(rbT) : int; $i(reT) : int) {
                 invoke($e(blkE), $i(rbT), $i(reT))
@@ -93,8 +81,7 @@ class private MaybeParallelForMacro : AstFunctionAnnotation {
         let li = call.arguments.length() - 1
         macro_verify(li == 4 && call.arguments[li] is ExprMakeBlock, compiling_program(), call.at,
             "maybe_parallel_for expects (parallel, range_begin, range_end, num_jobs) and a $(rb, re) block")
-        // args: 0=parallel, 1=range_begin, 2=range_end, 3=num_jobs, 4=block.
-        // num_jobs stays lazily evaluated in the parallel arm only (the bool already decided).
+        // num_jobs stays lazily evaluated in the parallel arm only (the bool already decided the arm).
         var parArm <- mpf_par_arm(call.arguments[1], call.arguments[2], call.arguments[3],
             call.arguments[4], call.at)
         var inlArm <- mpf_inline_arm(call.arguments[1], call.arguments[2], call.arguments[4], call.at)
@@ -110,10 +97,9 @@ class private MaybeParallelForMacro : AstFunctionAnnotation {
     }
 }
 
-// Indexed arm bodies. team: team_parallel_for_indexed passes the claiming worker's slot
-// straight through. fifo: no worker identity exists, so the range collapses to at most
-// min(num_jobs, pool + 1) contiguous sub-ranges — the sub-range INDEX is the slot (one fifo
-// job each, so no two in-flight invocations share it). inline: one invoke as slot 0.
+// Indexed arm bodies. team: team_parallel_for_indexed passes the claiming worker's slot straight through.
+// fifo: no worker identity exists, so the range collapses to min(num_jobs, pool+1) sub-ranges —
+// the sub-range INDEX is the slot (one fifo job each). inline: one invoke as slot 0.
 def private mpfi_team_arm(beginE, endE, njE, blkE : ExpressionPtr; at : LineInfo) : array<ExpressionPtr> {
     let slT = make_unique_private_name("mpfi_slot", at)
     let jbT = make_unique_private_name("mpfi_jb", at)
@@ -159,8 +145,7 @@ class private MaybeParallelForIndexedMacro : AstFunctionAnnotation {
         let li = call.arguments.length() - 1
         macro_verify(li == 3 && call.arguments[li] is ExprMakeBlock, compiling_program(), call.at,
             "maybe_parallel_for_indexed expects (range_begin, range_end, num_jobs) and a $(slot, rb, re) block")
-        // args: 0=range_begin, 1=range_end, 2=num_jobs, 3=block.
-        // all three scalars bind ONCE — the arms read them repeatedly (fifo sub-range math)
+        // all three scalars bind ONCE — the arms (fifo sub-range math) read them repeatedly
         let rbN = make_unique_private_name("mpfi_rb0", call.at)
         let reN = make_unique_private_name("mpfi_re0", call.at)
         let njN = make_unique_private_name("mpfi_nj", call.at)
@@ -190,8 +175,7 @@ class private MaybeParallelForNjMacro : AstFunctionAnnotation {
         let li = call.arguments.length() - 1
         macro_verify(li == 3 && call.arguments[li] is ExprMakeBlock, compiling_program(), call.at,
             "maybe_parallel_for expects (range_begin, range_end, num_jobs) and a $(rb, re) block")
-        // args: 0=range_begin, 1=range_end, 2=num_jobs, 3=block.
-        // num_jobs binds ONCE — it both decides the arm and feeds the dispatch.
+        // num_jobs binds ONCE — it both decides which arm runs and feeds the dispatch.
         let njN = make_unique_private_name("mpf_nj", call.at)
         var njRead = qmacro($i(njN))
         var parArm <- mpf_par_arm(call.arguments[0], call.arguments[1], njRead,

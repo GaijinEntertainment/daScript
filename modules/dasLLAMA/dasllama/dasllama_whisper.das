@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_whisper shared public
 
@@ -206,10 +207,9 @@ def private wm_repack(var w : WhisperModel; woff, n, d : int64) {
     repack_q8q8_weight(w.dqblob, w.dqscales, woff, n, d)
 }
 
-//! Quantize the decoder's GEMM weights to Q8_0: the tied token embedding (read as the
-//! [n_vocab × d] logits GEMV weight; embedding-row lookups keep reading fp32 dblob) +
-//! per-layer self/cross q/k/v/o + fc1/fc2. dqblob/dqscales mirror dblob offsets; non-GEMM
-//! slots (pe rows, norms, biases) are quantized-but-unread.
+//! Quantizes the decoder's GEMM weights to Q8_0: tied token embedding (as the [n_vocab × d]
+//! logits GEMV weight; row lookups still read fp32 dblob) + per-layer self/cross q/k/v/o + fc1/fc2.
+//! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.
 def whisper_dec_quantize(var w : WhisperModel) {
     let total = int64(length(w.dblob)) & ~31l
     w.dqblob |> resize(int(total))
@@ -320,11 +320,9 @@ def private wt_read_conv_permuted(recs : table<string; WTensorRec>; b : array<ui
     }
 }
 
-//! Load a whisper.cpp ggml-*.bin model (f32/f16 tensor types; quantized whisper bins are not
-//! supported). Verified against whisper.cpp's whisper_model_load, byte for byte.
-//! Like ``load_model``, keeps a PREPARED IMAGE next to the bin (box + knob specific): the
-//! first load saves it, later loads map it in milliseconds with zero-copy weight planes.
-//! ``DASLLAMA_IMAGE=0`` disables the cache; a ``.dlim`` path loads that image directly.
+//! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against
+//! whisper.cpp's whisper_model_load). Like ``load_model``, caches a box/knob-specific PREPARED
+//! IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
     let tag = q8 ? "whisper-q8" : "whisper-f32"
     if (path |> ends_with(".dlim")) {
@@ -360,8 +358,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
 // the ggml-bin reader proper (see load_whisper_model's doc for the container contract)
 def private load_whisper_model_(path : string; q8 : bool = false) : WhisperModel {
     var w = WhisperModel()
-    // the record walk runs until EOF, so it needs the true byte count — length(bytes) is
-    // int32 and wraps negative on >2 GB bins (large-v3); stat's st_size is 64-bit
+    // record walk needs the true byte count: length(bytes) is int32 and wraps negative on >2 GB bins (large-v3) — stat's st_size is 64-bit
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -763,10 +760,9 @@ def private scale_inplace(var x : array<float>; n : int64; s : float) {
     }
 }
 
-// Self-attention over the K/V caches, causal (row r sees positions 0..p0+r), parallel over
-// heads. Scores need no extra scale — q and k rows were pre-scaled hs^-0.25 (whisper.cpp
-// order). The caches are gemm'd at full Tmax width; softmax is row-length-limited and the
-// tail probabilities are zeroed, so stale columns never contribute.
+// Self-attention over the K/V caches, causal (row r sees positions 0..p0+r), parallel over heads.
+// No extra score scale — q/k rows were pre-scaled hs^-0.25 (whisper.cpp order). Caches gemm at
+// full Tmax width; softmax is row-length-limited, tail probabilities zeroed — stale columns never contribute.
 def private dec_self_attn(w : WhisperModel; var ds : DecoderState; l, n, p0 : int64) {
     let d = w.n_text_state
     let hh = w.n_text_head
@@ -982,9 +978,8 @@ def set_whisper_trace(on : bool) {
     g_whisper_trace = on
 }
 
-//! One transcription segment: [t0, t1] in centiseconds (10 ms mel-frame units), the text,
-//! the raw token ids (timestamp tokens and eot included, whisper.cpp's result_all shape), and
-//! the mean per-token log-probability (greedy plog under the pre-force-ts normalizer) — a
+//! One transcription segment: [t0, t1] centiseconds, text, raw token ids (whisper.cpp's
+//! result_all shape, timestamps+eot included), and mean per-token log-probability — a
 //! confidence signal, more negative = less certain.
 struct TranscribeSegment {
     t0 : int64
@@ -1179,13 +1174,9 @@ def private emit_segment(w : WhisperModel; toks : array<SampledTok>; i0, i1 : in
     blk |> invoke(seg)
 }
 
-// The window loop (whisper_full's single-decoder temp-0 path, no_context): 30 s windows
-// advanced by decoded timestamps (or whole windows when no_timestamps), whisper.cpp's
-// logit-filter suite and segment-splitting rules. The spectrogram is read from ``ds.mel``
-// (the caller just filled it); win/prompt/toks ride the ds scratch — no per-window alloc.
-// Emits segments through ``blk`` as each window completes, offset by ``t_base`` centiseconds;
-// ``complete_only`` stops before a window whose 3000 mel frames aren't all real audio (the
-// drain path). Returns the mel frames consumed (the final seek, clamped to n_len_org).
+// The window loop (whisper_full's single-decoder temp-0 path, no_context): 30 s windows advanced
+// by decoded timestamps, whisper.cpp's logit-filter + segment-splitting rules. Reads ``ds.mel``,
+// scratch rides ``ds`` (no per-window alloc). ``complete_only`` stops before a partial-audio window (drain path).
 def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var ds : DecoderState;
                                    lang_id : int; no_timestamps, translate : bool;
                                    t_base : int64; complete_only : bool;
@@ -1348,11 +1339,9 @@ struct WhisperSession {
 }
 
 def create_session(w : WhisperModel; lang : string = "en") : WhisperSession {
-    //! Create a session (encoder + decoder scratch) for ``w``. ``lang`` is the spoken language
-    //! ("en", "zh", ... — whisper's g_lang codes), or "auto" to detect it from the first
-    //! transcribed audio (multilingual models only; costs one extra encode + prompt decode,
-    //! then sticks for the session's lifetime). Set ``session.translate`` for speech-to-English
-    //! translation, ``session.no_timestamps`` to disable timestamp decoding.
+    //! Creates a session (encoder + decoder scratch) for ``w``. ``lang`` is the spoken language,
+    //! or "auto" to detect it from the first transcribed audio (multilingual only; costs one
+    //! extra encode+decode). Set ``translate``/``no_timestamps`` on the returned session.
     var s = WhisperSession(lang = lang)
     if (lang == "auto") {
         if (!w.multilingual) {
@@ -1439,10 +1428,9 @@ def feed(var s : WhisperSession; samples : array<float> | #) {
 }
 
 def drain(w : WhisperModel; var s : WhisperSession; blk : block<(seg : TranscribeSegment)>) : int {
-    //! Transcribe every COMPLETE 30 s window of the fed stream, invoking the block per segment
-    //! (times are stream-absolute centiseconds). Consumed audio is dropped from the stream;
-    //! anything under a full window stays pending. Returns the segment count — 0 until at
-    //! least 30 s is buffered.
+    //! Transcribes every COMPLETE 30 s window of the fed stream, invoking the block per segment
+    //! (stream-absolute centiseconds). Consumed audio drops from the stream; a sub-window tail
+    //! stays pending. Returns the segment count — 0 until at least 30 s is buffered.
     var count = 0
     // no complete window yet -> nothing will transcribe; hold auto-detect for real audio too
     if (int64(length(s.pending)) < AUDIO_CHUNK_FRAMES * AUDIO_HOP) {

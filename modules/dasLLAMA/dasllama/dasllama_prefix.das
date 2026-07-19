@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_prefix shared public
 
@@ -72,11 +73,9 @@ def create_prefix_cache_(max_groups : int64 = 0l) : PrefixCache {
 //! Pages the cache currently holds (== held pool groups).
 def prefix_held_groups_(cache : PrefixCache) : int64 => int64(length(cache.entries))
 
-//! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``: walks the
-//! prompt page by page (chained hash, then token verification), copies matched groups into the
-//! session's block table (refcnt++), and sets ``n_past`` to the matched length — the caller
-//! prefills only the tail. Returns the matched token count (a multiple of ``page_rows``), capped
-//! at one token short of the prompt so the tail eval always produces the sampling logits.
+//! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``, copying matched
+//! groups into the block table and setting ``n_past`` accordingly; returns the matched count, capped
+//! at one token short of the prompt so the tail eval always produces sampling logits.
 def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
     if (!empty(s.dn_state_prefix)) {
         // hybrid (deltanet): KV pages alone cannot reconstruct recurrent state, so no cached
@@ -133,10 +132,8 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
     cache.n_evicted_pages ++
 }
 
-//! Donate a finished session's pages: registers every full page of ``tokens`` (the session's full
-//! EVALED history — cache rows must exist, so only the first ``n_past`` tokens count) that is not
-//! already cached, bumping the pool refcnt so the pages survive the session's release. Pages past
-//! the budget LRU-drop. Call right before ``release_kv_pages``.
+//! Donate a finished session's pages into the cache, bumping pool refcnt so they survive release;
+//! only tokens up to ``n_past`` are eligible, and pages past the budget LRU-drop. Call right before ``release_kv_pages``.
 def prefix_insert_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>) {
     if (!empty(s.dn_state_prefix)) {
         return   // hybrid (deltanet): pages without recurrent state can never be attached — don't cache

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_quant shared public
 
@@ -81,10 +82,9 @@ def template quantize_q8_0_into_ptr_template(src : float const ?; n : int64; var
         let p4 = reinterpret<float4 const?>(src)
         for (b in range64(nblocks)) {
             let base = b * QK8
-            // hand-vectorized |x| max over the 32-block: LLVM won't auto-vectorize an fmax reduction
-            // without nnan/nsz fast-math we don't emit (the gate hmax documents), so reassociate by
-            // hand — two float4 lanes hide the fmax latency. Bit-exact on finite input (max is
-            // order-free); weights/activations are always finite.
+            // hand-vectorized |x| max: LLVM won't auto-vectorize fmax reduction without nnan/nsz
+            // fast-math we don't emit, so reassociate by hand — two float4 lanes hide fmax latency.
+            // Bit-exact on finite input (max is order-free); weights/activations are always finite.
             let f4 = base / 4l
             var m0 = abs(p4[f4])
             var m1 = abs(p4[f4 + 1l])
@@ -105,17 +105,14 @@ def template quantize_q8_0_into_ptr_template(src : float const ?; n : int64; var
 }
 
 //! Pointer core of quantize_q8_0_into — the batched prefill requant threads over positions in fork
-//! contexts, which can only touch raw addresses. The destinations are `var int8?` / `var float?`,
-//! written directly (a hoisted/captured fork pointer binds straight through). Bit-identical to the
-//! array overload, which forwards here. fallback "plain" keeps the round/store loop unhinted, as
-//! shipped; a box profile can vectorize it (elementwise round+narrow — no reduction, exact).
+//! contexts, which can only touch raw addresses; destinations are `var int8?`/`var float?`, written
+//! directly. Bit-identical to the array overload. fallback "plain" ships unhinted; a box profile can vectorize.
 [hint(noalias = src, noalias = qdst, noalias = sdst), tuned(fallback = "plain")]
 def quantize_q8_0_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; qoff, soff : int64) {}
 
-//! quantize_q8_0_into + per-16 block sums: bdst[boff + i/16] = sum of the 16 int8 quants.
-//! The K-quant dot's offset term is o*(sum of activation quants) per weight sub-block (16 for
-//! Q6_K, pairs of 16 for Q4_K/Q5_K), so the activation quantizer emits the sums in one pass.
-//! Quants and scales are bit-identical to quantize_q8_0_into. n must be a multiple of 32.
+//! quantize_q8_0_into + per-16 block sums: bdst[boff + i/16] = sum of the 16 int8 quants — the
+//! K-quant dot's offset term is o*(sum of activation quants) per weight sub-block, emitted in one pass.
+//! Quants/scales are bit-identical to quantize_q8_0_into. n must be a multiple of 32.
 def quantize_q8_0_bs_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; var bdst : array<int>; qoff, soff, boff : int64) {
     assert(n % QK8 == 0l, "quantize_q8_0_bs_into requires n to be a multiple of 32")
     quantize_q8_0_bs_into_ptr(unsafe(addr(src[0])), n, unsafe(addr(qdst[0])), unsafe(addr(sdst[0])), unsafe(addr(bdst[0])), qoff, soff, boff)
@@ -162,12 +159,9 @@ def template quantize_q8_0_bs_into_ptr_template(src : float const ?; n : int64; 
 [hint(noalias = src, noalias = qdst, noalias = sdst, noalias = bdst), tuned(fallback = "plain")]
 def quantize_q8_0_bs_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; var bdst : int?; qoff, soff, boff : int64) {}
 
-//! Q8_K-form activation quantization (kq v2 — the llama.cpp K-quant dot contract): ONE scale
-//! per 256-element superblock (sdst, soff in superblocks) + plain per-16 quant sums (bdst,
-//! boff in per-16 units, 16 per superblock). The K-quant kernels fold integer sub-scale and
-//! bsums-x-mins sums against these, paying one float fold per superblock instead of one per
-//! 32-block. Quants differ from the Q8_0 form (per-256 divisor) — the two forms are separate
-//! planes, chosen by the consumer weight's format.
+//! Q8_K-form activation quantization (kq v2 — llama.cpp K-quant dot contract): ONE scale per
+//! 256-element superblock (sdst) + per-16 quant sums (bdst, 16/superblock) — lets K-quant kernels
+//! fold sub-scale/bsums-x-mins per superblock instead of per 32-block. Separate plane from Q8_0.
 def quantize_q8_k_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; var bdst : array<int>; qoff, soff, boff : int64) {
     assert(n % 256l == 0l, "quantize_q8_k_into requires n to be a multiple of 256")
     quantize_q8_k_into_ptr(unsafe(addr(src[0])), n, unsafe(addr(qdst[0])), unsafe(addr(sdst[0])), unsafe(addr(bdst[0])), qoff, soff, boff)
@@ -224,12 +218,9 @@ def dequantize_q8_0(qt : Q8Tensor; var dst : array<float> | #) {
     }
 }
 
-//! A Q4_0-quantized tensor in GGML's exact block layout: 32 weights per block as 16 bytes of
-//! split-half packed nibbles plus one scale. Byte j (0..15) holds element j in the low nibble and
-//! element j+16 in the high nibble — so a 16-byte SIMD load masks to elements 0..15 and shifts to
-//! 16..31. Offset-8: w[i] ~= (nibble - 8) * scales[block]. n must be a multiple of 32 (GGML rule).
-//! The scale is fp32 here (GGML stores it fp16 on disk; the GGUF loader transcodes once at load —
-//! it costs nothing in the dequant-in-dot kernel, which reads the same byte layout either way).
+//! A Q4_0-quantized tensor in GGML's exact block layout: 32 weights/block as 16 bytes split-half
+//! packed nibbles (byte j: low nibble = element j, high nibble = element j+16) + one scale.
+//! w[i] ~= (nibble - 8) * scales[block]; scale is fp32 (GGUF loader transcodes fp16 disk once).
 struct Q4Tensor {
     q : array<uint8>
     scales : array<float>

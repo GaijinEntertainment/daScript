@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_asr shared public
 
@@ -56,10 +57,9 @@ struct AsrModel {
     g4a : Gemma4aEncoder = Gemma4aEncoder()  // gemma4a: the Conformer audio encoder + mm embedder
 }
 
-//! One transcription stream over an AsrModel: per-backend scratch plus the shared options.
-//! ``translate``/``no_timestamps`` apply where the backend supports them (see caps);
-//! ``context`` is qwen3a's context-biasing text; ``detected_lang`` is filled after
-//! transcription (whisper: the resolved/auto-detected code; qwen3a: the model's own report).
+//! One transcription stream over an AsrModel: per-backend scratch plus shared options.
+//! ``translate``/``no_timestamps`` apply where supported (see caps); ``context`` is qwen3a's
+//! context-biasing text; ``detected_lang`` fills after (whisper: resolved code; qwen3a: model's own report).
 struct AsrSession {
     w : WhisperSession = WhisperSession()
     qctx : Session = Session()
@@ -125,12 +125,9 @@ def load_asr_model(path : string) : AsrModel {
 }
 
 def load_asr_model(path : string; mmproj : string) : AsrModel {
-    //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end. The
-    //! encoder is sniffed — a GGUF ``qwen3a`` mmproj is the AuT tower shared by Qwen3-ASR (dense
-    //! qwen3 decoder) and Qwen3-Omni-30B (the qwen3vlmoe MoE thinker); a ``gemma4a`` mmproj is the
-    //! Gemma-4 Conformer; a "CNRY" bin is the Canary-Qwen FastConformer encoder + projector
-    //! (LoRA-merged Qwen3-1.7B decoder). The Canary decoder loads fp32 (its parity gate); the
-    //! gemma4a / qwen3a / qwen3omni text decoders load Q8. Context is capped at 8192.
+    //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
+    //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
+    //! bin = Canary-Qwen FastConformer. Canary decoder loads fp32 (parity gate); others load Q8.
     let ef = fopen(mmproj, "rb")
     if (ef == null) {
         panic("dasLLAMA asr: cannot open mmproj '{mmproj}'")
@@ -197,12 +194,9 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     return <- m
 }
 
-//! What this model supports. Whisper: the model's own language set (99, or 100 on the
-//! large-v3 family which adds Cantonese; English-only for *.en models), translation on
-//! multilingual models, segment timestamps. Qwen3-ASR: the model detects and reports the
-//! language itself (``detected_lang``), no timestamps, context biasing via
-//! ``AsrSession.context``.
-// v3 (25 European languages) carries an 8192-piece SPM vocab; v2 (English) 1024
+//! What this model supports: Whisper's own language set (translation, segment timestamps);
+//! Qwen3-ASR self-detects language (no timestamps, context biasing via ``context``).
+// v3 (25-lang) has an 8192-piece SPM vocab; v2 (English) 1024 — pk_is_multilingual's threshold
 def private pk_is_multilingual(m : AsrModel) : bool => m.pk.n_vocab >= 8192l
 
 def caps(m : AsrModel) : AsrCaps {
@@ -391,11 +385,9 @@ def private transcribe_qwen3a(m : AsrModel; var s : AsrSession; samples : array<
     return 1
 }
 
-// Qwen3-Omni-30B audio transcription: the SHARED qwen3a AuT tower encodes the clip; the soft
-// tokens splice into a plain Qwen chatml turn (user: <|audio_start|>[audio]<|audio_end|>Transcribe
-// the audio.), greedy-decoded over the qwen3vlmoe thinker until <|im_end|> (emitted into the ids —
-// the mtmd generate convention). Token-for-token vs llama-mtmd-cli --temp 0 --jinja on the same
-// Q8 thinker + bf16 mmproj. The Instruct thinker is non-thinking, so the turn is a bare user turn.
+// Qwen3-Omni-30B transcription: the SHARED qwen3a AuT tower encodes the clip; soft tokens splice
+// into a plain Qwen chatml turn, greedy-decoded until <|im_end|> (emitted into the ids — mtmd
+// convention). Token-for-token vs llama-mtmd-cli --temp 0 --jinja on the same Q8 thinker + bf16 mmproj.
 def private transcribe_qwen3omni(m : AsrModel; var s : AsrSession; samples : array<float> | #;
                                  blk : block<(seg : TranscribeSegment)>) : int {
     let tp = ref_time_ticks()
@@ -553,11 +545,9 @@ def private transcribe_canary(m : AsrModel; var s : AsrSession; samples : array<
     return 1
 }
 
-// Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, the soft tokens
-// spliced into the gemma-4 channel chat template (system `<|think|>` → user `<|audio>`…`<audio|>`
-// Transcribe → model), greedy decode over the Gemma-4 decoder until `<turn|>`/`<eos>` (which is
-// emitted into the ids). The reasoning `<|channel>thought…<channel|>` prefix is stripped for the
-// returned text. Token-for-token vs llama-mtmd-cli `--temp 0 --jinja`.
+// Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, soft tokens spliced
+// into the gemma-4 chat template, greedy decode until `<turn|>`/`<eos>` (emitted into the ids). The
+// reasoning `<|channel>...<channel|>` prefix is stripped. Token-for-token vs llama-mtmd-cli --temp 0 --jinja.
 def private transcribe_gemma4a(m : AsrModel; var s : AsrSession; samples : array<float> | #;
                                blk : block<(seg : TranscribeSegment)>) : int {
     var tp = ref_time_ticks()

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_arch_qwen35 shared public
 
@@ -17,11 +18,9 @@ def private configure_qwen35(var c : Config) {
     c.post_attn_is_ffn_norm = true
 }
 
-// qwen35moe (Qwen3.6-35B-A3B, Qwen3.5-397B): the same hybrid attention + a routed-experts FFN —
-// softmax top-k with renorm (llama.cpp hardcodes norm_w for this arch; metadata overrides) and
-// the qwen2moe-style sigmoid-gated shared expert (loader-detected via ffn_up_shexp).
-// qwen3next (Qwen3-Next-80B, Qwen3-Coder-Next) is the parent hybrid — identical config, the
-// loader's {arch}. prefix picks up its geometry (48L, 512 experts top-10, plain partial rope).
+// qwen35moe (Qwen3.6-35B-A3B, Qwen3.5-397B): hybrid attention + routed-experts FFN, softmax top-k
+// with renorm + qwen2moe-style sigmoid-gated shared expert (loader-detected via ffn_up_shexp).
+// qwen3next (Qwen3-Next-80B/Coder-Next) is the parent hybrid — same config, geometry via {arch}. prefix.
 def private configure_qwen35moe(var c : Config) {
     configure_qwen35(c)
     c.moe = true

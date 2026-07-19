@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_math_vulkan shared public
 
@@ -100,18 +101,8 @@ def q8_moe_groupn {
 }
 
 // ===== the prefill kernel =====
-// Region-list batched GEMM (the mul_mat_id shape, MoeGpuBatchFn): one workgroup computes a
-// 32-row x 32-col output tile of one region, staging both operand tiles through @workgroup
-// shared memory so weight rows stream from VRAM once per 32 activation rows (a GEMV-style loop
-// would re-stream the whole expert stack once per activation row — ~6GB per dispatch at pp512).
-// K advances 8 blocks (256 weights) per barrier pair — one block per pair serialized the whole
-// kernel on the load->barrier->compute->barrier cadence (2 loads in flight/thread, 128 barriers
-// per 2048-K pass); at 8 deep each thread issues 8+ staging loads back-to-back and barriers drop
-// 8x. Same exact int block dots + fp32 block-order accumulation as the decode kernel. vk_meta:
-// [0]=n [1]=d [2]=nregions [3]=map_off, per region (rel_wblock, row0, cnt, wg_base) quads,
-// then the per-workgroup region map at map_off (workgroup id -> region index — no search).
-// Activations read from device-local scratch (bindings 3/4 rebind) — a host-visible image
-// re-read ~(d/32) times would cross PCIe every pass.
+// 32x32 tiles through shared so weight rows stream once per 32 rows — a GEMV-style loop would
+// re-stream the whole expert stack per row (~6GB/dispatch at pp512). K advances 8 blocks per barrier pair, cutting barrier count 8x.
 
 var @workgroup bt_xw4 : uint4[544]   // x tile: 32 rows x 16 uint4 chunks (8 blocks deep), stride 17
                                      // in v4 units — vectorized so the hot loop issues 1 shared load
@@ -225,21 +216,8 @@ def q8_moe_batch {
 }
 
 // ===== the FFN mid-chain kernels =====
-// ONE fused act+requant step between the gate+up and down GEMMs, so the whole MoE FFN is one
-// submit with a single mid-chain barrier and the hidden activations never cross PCIe. Only the
-// globals a kernel references are emitted into its SPIR-V, so binding 0 doubles as a float view
-// here (vk_upf, the up plane) while the GEMMs see it as uint weights; vk_xq/vk_xs (3/4) are the
-// requant OUTPUT planes in this set. vk_meta (per FFN dispatch): [0] = element count, [1] =
-// gelu flag, [2] = 32-block/superblock count.
-//
-// The act value is recomputed for the quant pass instead of staged (same expression, same f32
-// ops — identical bits both times); vs the old separate act kernel this drops one dispatch, one
-// barrier, and the activated plane's write+re-read. Act formulas mirror the CPU swiglu/geglu
-// cores; exp/tanh precision differs from libm (the parity bar is token-identical, not
-// bit-identical). Requant mirrors quantize_q8_0_into_ptr / quantize_q8_k_into_ptr: per-block
-// |x| amax -> d = amax/127 -> q = round(x/d); GPU round() may split rounding-halfway cases
-// differently — same parity bar. Q8_K block sums are NOT stored — the kq GEMMs recompute them
-// via sdot4 vs 0x01010101 on activation words they load anyway.
+// ONE fused act+requant step between gate+up and down GEMMs — hidden activations never cross PCIe.
+// Binding 0 doubles as a float view here (vk_upf) vs uint weights in the GEMMs — SPIR-V only emits referenced globals.
 
 var @ssbo @binding = 0 vk_upf : array<float>
 
@@ -303,13 +281,8 @@ def q8k_moe_actrq {
 }
 
 // ===== the combine kernel =====
-// Routed weighted-sum reduce on the device: one workgroup per output POSITION sums its k slots'
-// down-GEMM rows (w[p*k+j] * row inv[p*k+j], ascending j — the decode accumulation order),
-// accumulating across chunk dispatches (r0 == 0 starts the sum; a position whose bucket rows
-// span chunks contributes only rows in [r0, r1) per pass). Bindings (comb set): 0 = the
-// accumulated npos x n output (vk_upf view), 3 = the grid -> bucket row map (vk_xq view),
-// 4 = the grid-order routing weights (vk_xs view), 5 = the chunk's down rows (batch y1).
-// ffn_meta words [4..7] = n, k, r0, r1.
+// One workgroup per output POSITION, summing its k slots' down-GEMM rows ascending j (matches
+// the decode accumulation order); r0 == 0 starts the sum, chunk-spanning positions accumulate across dispatches.
 [compute_shader(local_size_x=256, name="moe_combine_spv")]
 def moe_combine {
     let p = gl_WorkGroupID.x
@@ -334,20 +307,8 @@ def moe_combine {
 }
 
 // ===== the deltanet kernels =====
-// The whole recurrent-layer attention core between the qkv/z GEMMs and the out projection:
-// dn_conv (depthwise 4-tap conv + SiLU + per-head q/k L2-norm + q pre-scale, one workgroup per
-// position) and dn_scan (the chunked delta rule — one workgroup per v-head, CS=64 chunks
-// SEQUENTIAL inside the kernel, heads fill the GPU; panels live in DN_WS device scratch, GEMMs
-// stage 16-deep K-tiles through shared, the unit-lower solve runs in a shared 64x64 tile).
-// dn_requant is the plain Q8_0 image builder for the out-proj GEMM (act-free actrq twin).
-// Numerics mirror the CPU chunked path op-for-op; GPU exp/accumulation differs from libm at the
-// ulp class — the DN parity bar is drift-class, not bit-identical (the qwen35 knife-edge).
-//
-// dn meta (vk_meta view, uints): [0]=npos_w (window rows) [1]=cd [2]=kd [3]=di [4]=nvh [5]=nkh
-// [6]=ds [7]=dconv [8]=hist_mode (1 = channel-major host history, 2 = row-major prev-window
-// tail) [9]=slab stride (floats) [10]=o region offset in DN_WS (floats) [11]=beta [12]=g
-// [13]=taps [14]=wnorm [15]=a [16]=dt [17]=hist (float offsets into the smalls plane)
-// [18]=o 32-block count (dn_requant). Smalls floats [0]=eps [1]=qscale.
+// dn_conv (depthwise conv + SiLU + qk L2-norm) then dn_scan (chunked delta rule, CS=64 chunks
+// SEQUENTIAL per v-head). Numerics are drift-class vs the CPU path (the qwen35 knife-edge).
 
 var @ssbo @binding = 1 vk_wsf : array<float>   // float view: the persistent per-head f32 state
 var @ssbo @binding = 3 vk_xqf : array<float>   // float view: the DN_WS panel/o scratch
@@ -422,11 +383,8 @@ var @workgroup st_tm : float[4096]
 var @workgroup st_ta : float[2048]
 var @workgroup st_tb : float[2048]
 
-// C[M x N] (+)= A[M x K] * B[K x N] over DN_WS floats (row-major, explicit leading strides),
-// 16-deep K-tiles staged through shared; every thread owns outputs strided 256, accumulating
-// straight into C (zeroed here first unless accum). K ascending — the CPU dot order. Operand
-// visibility is the CALLER's job (a buffer sync before the call); the trailing sync here makes
-// C available to the next phase's different-thread reads.
+// C[M x N] (+)= A[M x K] * B[K x N] over DN_WS floats. Operand visibility is the CALLER's job
+// (a buffer sync before the call); the trailing sync here makes C available to the next phase.
 def private dn_gemm(cofs, aofs, bofs : uint; mm, kk, nn : uint; lda, ldb, ldc : uint; accum : uint) {
     let tid = gl_LocalInvocationID.x
     var kb = 0u
@@ -703,28 +661,14 @@ def dn_requant {
 }
 
 // ===== the attention kernels =====
-// The full-attention block between the q/k/v GEMMs and the wo projection: at_prep_q/at_prep_k
-// (deinterleave + per-head qk-RMSNorm + partial NEOX rope, one workgroup per position; k lands
-// at ABSOLUTE batch positions so windows accumulate context) and at_attn (flash-style causal
-// attention — one workgroup per (head, 8-query tile), K/V staged through shared in 32-row tiles,
-// online softmax with the probability tile in shared, the sigmoid out-gate folded into the
-// epilogue). Numerics are f32 with per-tile accumulation order — drift-class vs the CPU flash
-// path (the parity bar is token-identical output, not bit-identical logits).
-//
-// at meta (vk_meta view, uints): [0]=rows (window) [1]=w0 (window base position) [2]=qd
-// [3]=kv_dim [4]=hs [5]=half (rot/2) [6]=n_heads [7]=n_kv_heads [8]=kv_mul [9]=flags (bit0
-// gated, bit1 qk-norm) [10]=o region base (0 — dn_requant/q8k_requant read it) [11]=dpl (hs/32,
-// dims per lane) [12]=ctx (w0+rows) [13]=sin row offset [14]=rmsq offset [15]=rmsk offset
-// [16]=cos row offset (float offsets into the smalls plane) [18]=requant block count.
-// Smalls floats: [0]=eps [1]=attention scale.
+// at_prep_q/at_prep_k (deinterleave + qk-RMSNorm + partial rope) then at_attn (flash-style causal
+// attention, online softmax). f32 per-tile accumulation is drift-class vs CPU — parity bar is token-identical output, not bit-identical.
 
 var @workgroup at_row : float[8192]   // one position's projection row (qd <= 8192)
 var @workgroup at_hs : float[64]      // per-head inverse rms (n_heads <= 64)
 
-// deinterleave (gated q), per-head RMSNorm, partial NEOX rope of one projection row — the shared
-// core of at_prep_q/at_prep_k. src rows in vk_y (the GEMM's window output, 2x-wide when a gated
-// q), transformed rows out via vk_upf at (obase + p) * d; a gated q also writes the gate half to
-// vk_xqf. Head square-sums run f32 by one thread per head (the CPU rmsnorm sums f32 too).
+// deinterleave (gated q), per-head RMSNorm, partial NEOX rope — the shared core of at_prep_q/
+// at_prep_k. Head square-sums run f32 by one thread per head (the CPU rmsnorm sums f32 too).
 def private at_prep_core(d, nh, rms_off, obase, qsrc : uint) {
     let p = gl_WorkGroupID.x
     let hs = vk_meta[4u]
@@ -808,12 +752,8 @@ var @workgroup fa_m : float[8]
 var @workgroup fa_l : float[8]
 var @workgroup fa_a : float[8]
 
-// flash-style causal attention: one workgroup per (head, 8-query tile), 256 threads = 8 rows x
-// 32 lanes; lane c owns output dims c + 32*jj (strided — keeps the AV shared reads conflict-free).
-// K tiles of 32 stage into shared, scores + online-softmax update, then the V tile REUSES the
-// same staging and the probability tile drives the AV accumulation. The epilogue divides by the
-// row sum, applies the sigmoid out-gate (gated arches), and writes the o row over the gate row
-// (same element, same thread). Q/K/V read at absolute positions gq = w0 + q0 + r.
+// one workgroup per (head, 8-query tile); lane c owns output dims c + 32*jj (strided — keeps
+// the AV shared reads conflict-free). The V tile REUSES the K tile's staging in shared.
 [compute_shader(local_size_x=256, name="at_attn_spv")]
 def at_attn {
     let rows = vk_meta[0u]
@@ -978,15 +918,8 @@ def q8k_requant {
 }
 
 // ===== the K-quant decode kernels =====
-// Native k4/k5/k6 GEMVs over superblock quant payloads + decoded 20B scale rows, with Q8_K
-// activations (per-256 f32 scales in vk_xs). Same one-subgroup-per-row shape as q8_moe_groupn,
-// but 4 lanes cooperate per 32-block — a lane owns one nibble word pairing weights k / k+16, so
-// both halves land in the SAME block and warp loads stay consecutive. The block dot is exact:
-// nibble-composed quants are in [0, 63], which sdot4 eats as signed bytes; the K-quant min /
-// offset term folds via in-kernel block sums (sdot4 vs 0x01010101 on the activation words the
-// dot already loaded). Scale rows read through the binding-1 UINT view (vk_wsu — the q8 kernels
-// see the same binding as float16), f16 d / dmin decoded by unpackHalf2x16. vk_meta uses
-// SUPERBLOCK units here: [n, d, nrows, 0] then (rel_wsuperblock, xsuperblock) pairs per row.
+// 4 lanes cooperate per 32-block — a lane owns one nibble word pairing weights k / k+16, so both
+// halves land in the SAME block and warp loads stay consecutive; the dot is exact sdot4 over [0,63] quants.
 
 var @ssbo @binding = 1 vk_wsu : array<uint>
 
@@ -1144,17 +1077,8 @@ def kq_moe_gemv_k6 {
 }
 
 // ===== the K-quant batch kernels =====
-// The prefill tile for native k4/k5/k6 stacks — same 32x32 region-list GEMM shape (and meta
-// layout) as q8_moe_batch, but region weight offsets are in SUPERBLOCK units and the staged
-// w tile holds COMPOSED byte quants: the staging thread reads the nibble words (+ qh bits) and
-// writes 8 words per column whose byte lanes are the block's quants in [0, 63] — the compute
-// loop is then the exact q8 tile dot (sdot4 over 8 words), with the K-quant min/offset terms
-// folded per 16-weight half via inline block sums (sdot4 vs 0x01010101 on x words the dot
-// already loads from the tile — 8 threads per row recompute them, cheaper than a staging role
-// on this bandwidth-bound kernel). Per-block scales stage as two decoded floats per column
-// (k4/k5: d*sc and dmin*mn; k6: d*slo and d*shi per 16-half); x scales are Q8_K per-256.
-// K advances one whole superblock (8 blocks) per barrier pair — step index == superblock index,
-// so the per-column scale words are step-local and every staging thread decodes one (col, blk).
+// Same 32x32 region-list GEMM shape as q8_moe_batch; K-quant min/offset terms fold per 16-weight
+// half via inline block sums (cheaper than a staging role on this bandwidth-bound kernel).
 
 var @workgroup bt_wsb : float[256]   // second per-(block, col) scale plane (bt_ws carries the first)
 
@@ -1546,13 +1470,9 @@ def kq_moe_batch_k6 {
 
 // ===== device state (process-lifetime; never finalized by design) =====
 
-let private WEIGHT_CAP = 4_200_000_000l    // default resident-weight cap. The WDDM cliff is TOTAL
-                                           // commit (~6.5GiB of 8GB measured: q8-era K=8 at 4.7GB
-                                           // weights + 1.7GB desktop thrashed nonlinearly), and other
-                                           // processes are INVISIBLE to the Vulkan budget query (NV
-                                           // reports 7.6GB "budget" while nvidia-smi shows 2.6GB in
-                                           // use by others) — so the default stays conservative and
-                                           // DASLLAMA_GPU_VRAM_MB overrides it for bigger cards
+let private WEIGHT_CAP = 4_200_000_000l    // conservative default: WDDM commit cliff hit at ~6.5GiB
+                                           // of 8GB (measured); other processes are invisible to the
+                                           // Vulkan budget query — DASLLAMA_GPU_VRAM_MB overrides for bigger cards
 let private VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
@@ -1583,9 +1503,8 @@ let private STREAM_RESERVE = 1_100_000_000l  // VRAM reserved out of the weight 
                                              // ensure_stream_slots asserts actual <= reserve)
 
 // deltanet chain capacities (npos chunks over DN_WINDOW windows, state carried device-side).
-// DN_SLAB = the per-head scan scratch in floats: 8 CS x ds panels, kq + tm (CS x CS), the state
-// working copy (ds x ds), gcum/egc/kgc/bvec (4 x CS). Maxima match qwen35 (ds 128, 32 v-heads,
-// conv dim 8192, dconv 4) — vk_moe_dn asserts them (the engine arm fail-closes on bigger models)
+// Maxima match qwen35 (ds 128, 32 v-heads, conv dim 8192, dconv 4) — vk_moe_dn asserts them
+// and the engine arm fail-closes on bigger models.
 let private DN_CS = 64l
 let private DN_MAX_DS = 128l
 let private DN_MAX_HEADS = 32l
@@ -1597,10 +1516,8 @@ let private DN_O_OFF = DN_MAX_HEADS * DN_SLAB
 let private DN_WS_BYTES = (DN_O_OFF + DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS) * 4l
 let private DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
 let private DN_META_BYTES = 128l
-// smalls plane float offsets: [eps, qscale] consts, raw beta/g windows, conv taps (cd x dconv),
-// out-norm weights, per-head a/dt, then the conv history (channel-major from the host on window
-// 0, row-major prev-window tail rows device-copied in place for later windows — the per-window
-// smalls re-stage stops SHORT of the hist region so it never clobbers that device-side tail)
+// smalls plane float offsets, ending in the conv history region — the per-window smalls
+// re-stage stops SHORT of it so it never clobbers the device-side prev-window tail
 let private DN_SM_BETA = 16l
 let private DN_SM_G = DN_SM_BETA + DN_WINDOW * DN_MAX_HEADS
 let private DN_SM_TAPS = DN_SM_G + DN_WINDOW * DN_MAX_HEADS
@@ -1611,10 +1528,9 @@ let private DN_SM_HIST = DN_SM_DT + DN_MAX_HEADS
 let private DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + 64l) * 4l
 let private DN_TAIL_BYTES = DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
-// attention chain capacities (npos chunks over AT_WINDOW windows; roped K / raw V persist
-// device-side at ABSOLUTE batch positions across windows, so later windows attend the whole
-// batch — the engine arm gates on start_pos == 0). Maxima cover the qwen3 family (hd 128/256,
-// kv_dim 512, qd 4096) — vk_moe_attn asserts them (fail-closed on bigger geometry).
+// attention chain capacities: roped K / raw V persist device-side at ABSOLUTE batch positions
+// across windows, so later windows attend the whole batch — the engine arm gates on start_pos == 0.
+// Maxima cover the qwen3 family; vk_moe_attn asserts them (fail-closed on bigger geometry).
 let private AT_WINDOW = 512l
 let private AT_CTX = 4_096l
 let private AT_MAX_QD = 8_192l
@@ -1929,10 +1845,7 @@ def private vk_moe_init : bool {
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
     let sg = subgroup_properties(g_gpu.phys).subgroupSize
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
-    // resident-weight cap: the conservative default (see WEIGHT_CAP), an explicit
-    // DASLLAMA_GPU_VRAM_MB override winning outright, and the queried heap budget clamping DOWN
-    // only (trustworthy as an upper bound — small cards; NOT as free-VRAM, see WEIGHT_CAP).
-    // Physical-device-level query — the extension only needs to be advertised, not enabled.
+    // DASLLAMA_GPU_VRAM_MB wins outright; the queried heap budget only clamps DOWN (see WEIGHT_CAP)
     g_gpu.weight_budget = WEIGHT_CAP
     let vram_override = has_env_variable("DASLLAMA_GPU_VRAM_MB")
     if (vram_override) {
@@ -2143,10 +2056,8 @@ def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int
     return true
 }
 
-//! MoeGpuUploadFn: upload one weight stack ([rows x n] at element offset woff) from the
-//! loader's gathered row-major planes. q8 (fmt 0): int8 quants + f16 halfword scales; native
-//! K-quant (fmt = int(KqFmt) k4/k5/k6): superblock quant payloads + decoded 20B scale rows.
-//! stream = pinned host mirror for per-prefill DMA streaming instead of resident VRAM.
+//! MoeGpuUploadFn: upload one weight stack ([rows x n] at element offset woff) from the loader's
+//! gathered row-major planes. stream = pinned host mirror for per-prefill DMA instead of VRAM.
 def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool {
     if (!vk_moe_init()) {
         return false
@@ -2173,9 +2084,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
 }
 
 //! MoeGpuDropFn: roll back the last n uploads (a partial layer triple the budget cut mid-way).
-//! Resident: pop the stacks, free their plane buffers, refund the budget; stream: pop the
-//! pinned mirrors (slot capacity maxima stay — conservatively oversized slots are harmless).
-//! Contract: only freshly-uploaded stacks (no dispatch state yet) may be dropped.
+//! Only freshly-uploaded stacks with no dispatch state yet may be dropped.
 def vk_moe_drop_stacks(n : int; stream : bool) {
     if (stream) {
         for (_i in range(n)) {
@@ -2271,19 +2180,14 @@ def private submit_wait(var raw : VkCommandBuffer) {
     unsafe {
         submit.pCommandBuffers = addr(raw)
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
-        // SPIN the fence, never block: the kernels run tens of µs and a blocking
-        // vkWaitForFences pays 1-2ms of OS wake-up latency PER SUBMIT (measured; the
-        // llama.cpp spin-tail trick, ggml-vulkan.cpp:2316). One busy core while the GPU
-        // runs beats losing the decode budget to sleeps.
+        // spin, never block: vkWaitForFences pays 1-2ms OS wake-up latency per submit (measured)
         while (vkGetFenceStatus(dev_raw(), fence) != VkResult.SUCCESS) {}
         vk_check(vkResetFences(dev_raw(), 1u, addr(fence)), null)
     }
 }
 
-// refresh a stack's mapped GEMV meta from region triples — one entry per ROW (a cnt > 1 region
-// expands, entry index = its row, so kernel output lands row-major): [n, d, nrows, 0,
-// (rel_wblock, xblock)*]. Block units follow the stack's format — 32-weight blocks for q8,
-// 256-weight superblocks for kq; xnb = activation blocks per image row, in the same units
+// refresh a stack's mapped GEMV meta, one entry per ROW (cnt > 1 regions expand so output lands
+// row-major): [n, d, nrows, 0, (rel_wblock, xblock)*], block units per format (32 q8 / 256 kq).
 def private fill_stack_meta_rows(si : int; offs : int64 const?; nregions : int64; n, d, nrows, xnb : int64) {
     assert((4l + nrows * 2l) * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN meta exceeds capacity")
     let unit = g_gpu.stacks[si].fmt != 0 ? 256l : 32l
@@ -2378,8 +2282,7 @@ def private ensure_batch_state {
     g_gpu.batch_cmd = alloc_cmd()
     g_gpu.batch_actrq_set = alloc_desc_set()
     var writes : array<WriteDescriptorSet>
-    // fused act+requant: gate floats at 5, up floats at 0 (vk_upf) -> hq/hs planes at 3/4;
-    // params at 2; 1 unused filler
+    // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
     write_buf_desc(writes, g_gpu.batch_actrq_set, 0u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
     write_buf_desc(writes, g_gpu.batch_actrq_set, 1u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
     write_buf_desc(writes, g_gpu.batch_actrq_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
@@ -2404,8 +2307,7 @@ def private ensure_comb_state {
     g_gpu.comb_y = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.comb_set = alloc_desc_set()
     var writes : array<WriteDescriptorSet>
-    // combine: accumulated output at 0 (vk_upf), params at 2, grid->bucket map at 3 (vk_xq),
-    // routing weights at 4 (vk_xs), the chunk's down rows at 5; 1 unused filler
+    // combine bindings: output@0, params@2, bucket map@3, weights@4, down rows@5; binding 1 unused
     write_buf_desc(writes, g_gpu.comb_set, 0u, g_gpu.comb_y_dev, BATCH_Y_BYTES)
     write_buf_desc(writes, g_gpu.comb_set, 1u, g_gpu.comb_w_dev, COMB_WI_BYTES)
     write_buf_desc(writes, g_gpu.comb_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
@@ -2590,12 +2492,8 @@ def private cmd_copy_at(raw : VkCommandBuffer; src : uint64; src_off : int64; ds
 }
 
 // one reusable cmd buffer, re-recorded per submit — prefill submits are few and multi-ms, so
-// recording cost is noise (unlike decode's per-token pre-recorded buffers). The chain per chunk:
-// meta staging copies, gate+up GEMMs, fused act+requant, down GEMM, then either the gout DMA
-// (comb_npos == 0) or the combine dispatch (comb_npos > 0: the down rows stay device-side and
-// accumulate into comb_y_dev; only the LAST chunk appends the k-fold-smaller combined DMA —
-// the first chunk's head also stages the routing w / inv planes) — one barrier per seam, the
-// hidden planes never leave the device.
+// recording cost is noise. comb_npos > 0: down rows stay device-side, accumulating into comb_y_dev;
+// only the last chunk appends the k-fold-smaller combined DMA. Hidden planes never leave the device.
 def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, nfe, gout_bytes : int64; axq_bytes, axs_bytes : int64;
                                  comb_npos : uint = 0u; comb_first : bool = false; comb_last : bool = false;
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l) {
@@ -2643,16 +2541,13 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     vk_check(vkEndCommandBuffer(raw), null)
 }
 
-// the batch arm: chunked over row windows; gate+up share the gathered image and region row
-// ranges, the down GEMM reads the requantized hidden planes and reuses y1 for its output.
-// npos > 0: the combine kernel folds each chunk's down rows into comb_y_dev (no per-chunk y
-// DMA); the combined npos x n rows read back ONCE after the last chunk
+// batch arm: chunked over row windows, down GEMM reuses y1 for output. npos > 0: the combine
+// kernel folds each chunk's down rows into comb_y_dev, read back once after the last chunk.
 def private vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     let s1 = find_stack(unsafe(offs1[0]), f1)
     let s3 = find_stack(unsafe(offs3[0]), f3)
     let s2 = find_stack(unsafe(offs2[0]), f2)
-    // the chain's activation form is uniform per layer (Q8_0 or Q8_K) — the upload walk only
-    // admits all-q8 or all-kq stack triples, so kq-ness must agree across the three stacks
+    // upload walk only admits all-q8 or all-kq triples, so kq-ness must agree across the three stacks
     let kq = f1 != 0
     assert((f3 != 0) == kq && (f2 != 0) == kq,
         "dasLLAMA vulkan tier: q8/kq mixed stack triple in one FFN chain")
@@ -2794,24 +2689,21 @@ def private ensure_dn_state {
     g_gpu.dn_scan_set = alloc_desc_set()
     g_gpu.dn_rq_set = alloc_desc_set()
     var writes : array<WriteDescriptorSet>
-    // conv: qkv rows in at 5 (vk_y), conv rows out at 0 (vk_upf float view of hq_dev), smalls
-    // at 4, params at 2; 1/3 fillers
+    // conv bindings: qkv@5, conv output@0 (vk_upf view of hq_dev), smalls@4, params@2; 1/3 fillers
     write_buf_desc(writes, g_gpu.dn_conv_set, 0u, g_gpu.hq_dev, BATCH_HQ_BYTES)
     write_buf_desc(writes, g_gpu.dn_conv_set, 1u, g_gpu.dn_meta_dev, DN_META_BYTES)
     write_buf_desc(writes, g_gpu.dn_conv_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
     write_buf_desc(writes, g_gpu.dn_conv_set, 3u, g_gpu.dn_meta_dev, DN_META_BYTES)
     write_buf_desc(writes, g_gpu.dn_conv_set, 4u, g_gpu.dn_smalls_dev, DN_SMALLS_BYTES)
     write_buf_desc(writes, g_gpu.dn_conv_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-    // scan: conv rows at 0, the persistent state at 1 (vk_wsf), slabs + o rows at 3 (vk_xqf),
-    // smalls at 4, z rows at 5 (vk_y = batch y2), params at 2
+    // scan bindings: conv rows@0, state@1, slabs/o@3, smalls@4, z rows@5, params@2
     write_buf_desc(writes, g_gpu.dn_scan_set, 0u, g_gpu.hq_dev, BATCH_HQ_BYTES)
     write_buf_desc(writes, g_gpu.dn_scan_set, 1u, g_gpu.dn_state_dev, DN_STATE_BYTES)
     write_buf_desc(writes, g_gpu.dn_scan_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
     write_buf_desc(writes, g_gpu.dn_scan_set, 3u, g_gpu.dn_ws_dev, DN_WS_BYTES)
     write_buf_desc(writes, g_gpu.dn_scan_set, 4u, g_gpu.dn_smalls_dev, DN_SMALLS_BYTES)
     write_buf_desc(writes, g_gpu.dn_scan_set, 5u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
-    // requant: o rows in at 0 (vk_upf view of DN_WS), quant words out at 3 (hq), scales out at
-    // 4 (hs) — the out-proj GEMM's activation image bindings; params at 2; 1/5 fillers
+    // requant bindings: o rows@0, quant words@3, scales@4 (out-proj activation image), params@2
     write_buf_desc(writes, g_gpu.dn_rq_set, 0u, g_gpu.dn_ws_dev, DN_WS_BYTES)
     write_buf_desc(writes, g_gpu.dn_rq_set, 1u, g_gpu.dn_meta_dev, DN_META_BYTES)
     write_buf_desc(writes, g_gpu.dn_rq_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
@@ -2864,8 +2756,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     cmd_copy_batch_meta(raw, s_z)
     cmd_copy_batch_meta(raw, s_o)
     cmd_copy_whole(raw, g_gpu.dn_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
-    // the per-window smalls re-stage stops SHORT of the hist region — later windows read the
-    // device-copied tail rows there
+    // stops SHORT of the hist region — later windows read the device-copied tail rows there
     cmd_copy_range(raw, g_gpu.dn_smalls.buf, 0l, g_gpu.dn_smalls_dev, 0l, DN_SM_HIST * 4l)
     if (first) {
         cmd_copy_range(raw, g_gpu.dn_smalls.buf, DN_SM_HIST * 4l, g_gpu.dn_smalls_dev, DN_SM_HIST * 4l, cd * taps * 4l)
@@ -2882,9 +2773,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_scan_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.dn_scan_set, uint(nvh))
     comp_barrier(raw)
-    // conv-tail extraction: the last `taps` RAW qkv rows out of y1 before out-proj reuses it —
-    // to the smalls hist region (the next window's conv history) and, on the last window, to the
-    // host (the caller's channel-major history store); the state rides the same transfer window
+    // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     batch_barrier(raw, false)
     if (!last) {
         cmd_copy_range(raw, g_gpu.batch_y1_dev, (rows - taps) * cd * 4l, g_gpu.dn_smalls_dev, DN_SM_HIST * 4l, taps * cd * 4l)
@@ -2904,10 +2793,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
 }
 
 //! MoeGpuDnFn: one recurrent layer's whole deltanet attention block as one submit chain per
-//! DN_WINDOW rows — qkv + z GEMMs off the normed-x Q8_0 image, conv + SiLU + q/k L2-norm, the
-//! chunked delta-rule scan (raw beta/alpha transformed in-kernel), gated out-norm, Q8_0 requant,
-//! out projection. yp gets npos x dim rows; the f32 state round-trips once per call (device-side
-//! between windows); tailp gets the last taps qkv rows for the caller's conv-history store.
+//! DN_WINDOW rows. yp gets npos x dim rows; tailp gets the last taps qkv rows for the caller's history store.
 def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
               xqp : int8 const?; xsp : float const?; bp : float const?; gp : float const?;
               convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
@@ -3003,32 +2889,28 @@ def private ensure_at_state {
     g_gpu.at_attn_set = alloc_desc_set()
     g_gpu.at_rq_set = alloc_desc_set()
     var writes : array<WriteDescriptorSet>
-    // prep-q: q|gate GEMM rows in at 5 (batch y1), q rows out at 0 (vk_upf), gate rows out at 3
-    // (vk_xqf), smalls at 4, params at 2; 1 filler
+    // prep-q bindings: q|gate GEMM rows@5, q out@0, gate out@3, smalls@4, params@2; 1 filler
     write_buf_desc(writes, g_gpu.at_prep_q_set, 0u, g_gpu.at_q_dev, AT_WINDOW * AT_MAX_QD * 4l)
     write_buf_desc(writes, g_gpu.at_prep_q_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_q_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_q_set, 3u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
     write_buf_desc(writes, g_gpu.at_prep_q_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_q_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-    // prep-k: k GEMM rows in at 5 (batch y2), roped k out at 0 at ABSOLUTE positions; the gate
-    // view (3) never fires for a k row — meta filler
+    // prep-k: roped k out@0 lands at ABSOLUTE positions; the gate view@3 never fires for a k row
     write_buf_desc(writes, g_gpu.at_prep_k_set, 0u, g_gpu.at_k_dev, AT_CTX * AT_MAX_KV * 4l)
     write_buf_desc(writes, g_gpu.at_prep_k_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_k_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_k_set, 3u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_k_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
     write_buf_desc(writes, g_gpu.at_prep_k_set, 5u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
-    // attn: q rows at 0 (vk_upf), k rows at 1 (vk_wsf), gate in / o out at 3 (vk_xqf), smalls
-    // at 4, v rows at 5 (vk_y), params at 2
+    // attn bindings: q@0, k@1, gate in/o out@3, smalls@4, v@5, params@2
     write_buf_desc(writes, g_gpu.at_attn_set, 0u, g_gpu.at_q_dev, AT_WINDOW * AT_MAX_QD * 4l)
     write_buf_desc(writes, g_gpu.at_attn_set, 1u, g_gpu.at_k_dev, AT_CTX * AT_MAX_KV * 4l)
     write_buf_desc(writes, g_gpu.at_attn_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_attn_set, 3u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
     write_buf_desc(writes, g_gpu.at_attn_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
     write_buf_desc(writes, g_gpu.at_attn_set, 5u, g_gpu.at_v_dev, AT_CTX * AT_MAX_KV * 4l)
-    // requant: o rows in at 0 (vk_upf view of at_g), quant words out at 3 (hq), scales out at 4
-    // (hs) — the wo GEMM's activation image bindings; params at 2; 1/5 fillers
+    // requant bindings: o rows@0, quant words@3, scales@4 (wo GEMM activation image), params@2
     write_buf_desc(writes, g_gpu.at_rq_set, 0u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
     write_buf_desc(writes, g_gpu.at_rq_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
     write_buf_desc(writes, g_gpu.at_rq_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
@@ -3100,8 +2982,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_bind_dispatch(raw, g_gpu.at_prep_q_set, uint(rows))
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_prep_k_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_prep_k_set, uint(rows))
-    // transfer window: append the raw v rows at their absolute positions, and DMA the window's
-    // roped k / raw v rows to the host (the caller's kv_store_batch source)
+    // transfer window: append raw v at absolute positions, DMA roped k/raw v to host
     batch_barrier(raw, false)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
@@ -3120,12 +3001,9 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     vk_check(vkEndCommandBuffer(raw), null)
 }
 
-//! MoeGpuAttnFn: one full-attention layer's whole softmax attention block as one submit chain
-//! per AT_WINDOW rows — q|gate/k/v GEMMs off the normed-x image, per-head qk-rms + partial NEOX
-//! rope, flash-style causal attention with the sigmoid out-gate folded in, requant (form follows
-//! the wo stack), wo projection. yp gets npos x dim rows; kp/vp the roped-k / raw-v rows for the
-//! caller's cache store. K/V persist device-side at absolute positions, so later windows attend
-//! the whole batch (the engine arm gates on start_pos == 0).
+//! MoeGpuAttnFn: one full-attention layer's whole softmax attention block as one submit chain per
+//! AT_WINDOW rows. yp gets npos x dim rows; kp/vp the roped-k / raw-v rows for the caller's cache store.
+//! K/V persist device-side at absolute positions, so later windows attend the whole batch.
 def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
                 woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
                 xqp : int8 const?; xsp : float const?;
@@ -3233,8 +3111,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         var fc = FfnCmd(cmd = alloc_cmd(), actrq_set = alloc_desc_set(),
                         down_set = alloc_desc_set(), nrows = 0l)
         var writes : array<WriteDescriptorSet>
-        // fused act+requant: gate floats at 5, up floats at 0 (vk_upf) -> hq/hs planes at 3/4;
-        // params at 2; 1 unused filler
+        // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
         write_buf_desc(writes, fc.actrq_set, 0u, g_gpu.stacks[s3].y_dev, Y_BYTES)
         write_buf_desc(writes, fc.actrq_set, 1u, g_gpu.stacks[s1].wsbuf, g_gpu.stacks[s1].wsbytes)
         write_buf_desc(writes, fc.actrq_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
@@ -3288,14 +3165,12 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
 }
 
 def private vk_moe_ffn_gemv(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) {
-    // decode-form only — the combined (npos > 0) contract is a batch-arm feature; vk_moe_ffn
-    // routes combined calls there (nrows = npos*k >= npos >= BATCH_TILE at the engine gate)
+    // decode-form only — vk_moe_ffn routes the combined (npos > 0) contract to the batch arm instead
     let s1 = find_stack(unsafe(offs1[0]), f1)
     let s3 = find_stack(unsafe(offs3[0]), f3)
     let s2 = find_stack(unsafe(offs2[0]), f2)
     assert(nrows * max(nfe, n) * 4l <= Y_BYTES, "dasLLAMA vulkan tier: FFN dispatch exceeds output capacity")
-    // the chain's activation form is uniform per layer (Q8_0 or Q8_K) — the upload walk only
-    // admits all-q8 or all-kq stack triples, so kq-ness must agree across the three stacks
+    // upload walk only admits all-q8 or all-kq triples, so kq-ness must agree across the three stacks
     let kq = f1 != 0
     assert((f3 != 0) == kq && (f2 != 0) == kq,
         "dasLLAMA vulkan tier: q8/kq mixed stack triple in one FFN chain")
@@ -3333,8 +3208,7 @@ def private ensure_stream_slots {
     }
     g_gpu.stream_ready = true
     let slot_bytes = 2l * (g_gpu.stream_max_gu_wq + g_gpu.stream_max_gu_ws) + g_gpu.stream_max_dn_wq + g_gpu.stream_max_dn_ws
-    // the reserve was carved out of the weight budget at init — a lie here silently overcommits
-    // past the WDDM paging cliff
+    // reserve was carved from the weight budget at init — overcommit here silently hits the WDDM paging cliff
     assert(2l * slot_bytes <= STREAM_RESERVE, "dasLLAMA vulkan tier: stream slots exceed STREAM_RESERVE")
     to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill engaged ({length(g_gpu.stream_stacks) / 3} layers, slot {slot_bytes} bytes x 2)\n")
 }
@@ -3347,11 +3221,9 @@ def private rebase_pseudo(si : int; ss : StreamStack const) {
     g_gpu.stacks[si].fmt = ss.fmt
 }
 
-// DMA group g's six planes from the pinned mirrors into slot si. sync submits fenced and
-// waits; async submits UNFENCED — the prefetch rides the GPU-idle window while the CPU runs
-// the next layers' attention, and the next chain submit's transfer->compute barrier orders it
-// (in-order queue). One shared cmd buffer is safe: a fenced chain wait always intervenes
-// between two copy recordings, so the prior copy has retired off the queue.
+// async is UNFENCED — the prefetch rides the GPU-idle window, ordered by the next chain's
+// transfer->compute barrier. One shared cmd buffer is safe: a fenced wait always intervenes
+// between copy recordings, so the prior copy has retired off the queue.
 def private copy_stream_group(si, g : int; sync : bool) {
     let slot = g_gpu.stream_slots[si]
     var raw = g_gpu.stream_cmd
@@ -3380,10 +3252,7 @@ def private copy_stream_group(si, g : int; sync : bool) {
     g_gpu.stream_slots[si].group = g
 }
 
-// run one streamed layer's prefill chain: ensure its planes sit in a slot (cold-copy on a
-// prefetch miss), re-base the slot's pseudo-stacks so the normal batch rail resolves them,
-// dispatch, then fire the next runtime layer's prefetch (group g-1 — the loader walk uploads
-// descending, prefill runs ascending)
+// prefetch miss cold-copies the slot; prefetch of the next group runs descending while prefill runs ascending
 def private vk_moe_ffn_streamed(g : int; var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     assert(nrows >= BATCH_TILE, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
     assert(g_gpu.stream_stacks[g * 3 + 1].fmt == f3 && g_gpu.stream_stacks[g * 3 + 2].fmt == f2,
@@ -3408,15 +3277,9 @@ def private vk_moe_ffn_streamed(g : int; var goutp : float?; offs1 : int64 const
     }
 }
 
-//! MoeGpuFfnFn: the routed experts' whole FFN chain — gate+up region GEMMs, activation,
-//! requant, down GEMM — as device-side submit chains over the resident stacks; the hidden
-//! activations never cross PCIe. offs are region triples sharing row ranges that partition
-//! [0, nrows). npos = 0: gout returns nrows x n floats. npos > 0 (prefill batches): the routed
-//! weighted-sum combine ALSO runs device-side (w/inv per the hook contract) and gout returns
-//! npos x n combined rows — the down rows never cross PCIe. Decode row counts run the GEMV
-//! kernels (pre-recorded per stack triple), batches the tiled-GEMM chunk loop — q8 and native
-//! kq stacks alike, each on its format's kernels. Streamed layers (pinned mirrors) route
-//! through the slot rail; anything else panics (fail-closed — the env gate is the opt-in).
+//! MoeGpuFfnFn: routed experts' whole FFN chain (gate+up GEMMs, activation, requant, down GEMM)
+//! as device-side submit chains over resident stacks — hidden activations, and (npos > 0) the
+//! combined output, never cross PCIe. Streamed layers route through the slot rail; else panics.
 def vk_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     ensure_ffn_state()
     if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
@@ -3512,8 +3375,7 @@ def private vulkan_backend_available : bool {
         return g_vk_available
     }
     g_vk_probed = true
-    // panic-free raw probe: the boost creators (create_instance / select_physical_device)
-    // panic on failure, so drive the two raw calls directly and treat any error as absent
+    // raw calls, not boost creators — those panic on failure instead of reporting absence
     if (volkInitialize() != 0) {
         return false
     }

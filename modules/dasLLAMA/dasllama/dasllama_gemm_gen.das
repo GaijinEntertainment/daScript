@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _comment_hygiene = true
 
 module dasllama_gemm_gen shared private
 
@@ -66,21 +67,18 @@ def private dot_kind(prim : string) : int {
     return DOT_SDOT
 }
 
-// under an amx stamp the VECTOR companions (gemv/mx4 — the tile is the only TMUL slot) ride
-// the busd lattice over the same grp16/kg4 plane: plain sign-trick for the unbiased rows
-// (design fork (a), gemm_generator_plan.md slice I), the BIASED busd lattice for bias=128
-// rows (slice K I3 — bias flows through, killing the fork's gemv penalty). Everything
-// downstream then treats the perm exactly like the matching vpdpbusd row.
+// Under an amx stamp the VECTOR companions (gemv/mx4) ride the busd lattice over the same
+// grp16/kg4 plane: plain sign-trick for unbiased rows, the BIASED busd lattice for bias=128
+// rows. Everything downstream then treats the perm exactly like the matching vpdpbusd row.
 def private companion_perm(p : TilePerm) : TilePerm {
     var cp = p
     if (cp.dotPrim == "amx_int8") { cp.dotPrim = "vpdpbusd" }
     return cp
 }
 
-// the perm's plane kgroup (k-bytes per row per interleave group): smmla reads row-pair × 8-k
-// MMA operands straight off a kg8 plane ([kg8][r][8b], slice J); every vector-dot perm reads
-// the dword-group kg4 plane. Feeds q8q8_repack_type so kernel strides, the kgroup companion
-// and the runtime repack derive from the one schema.
+// The perm's plane kgroup (k-bytes per row per interleave group): smmla reads row-pair × 8-k
+// MMA operands off a kg8 plane; every vector-dot perm reads the dword-group kg4 plane. Feeds
+// q8q8_repack_type so kernel strides and the runtime repack derive from the one schema.
 def private kgroup_of(p : TilePerm) : int => p.dotPrim == "smmla" ? 8 : 4
 
 // the perm vector both generators read off the [llvm_code] annotation args
@@ -121,23 +119,12 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     return p
 }
 
-// the ONE decline predicate all four generators share — the tile and its companions must fall
-// back together on every rail, or repack and kernel desync (the two-function-stamp contract).
-// Rails in order: knob validity, schema, then the per-ISA leg: target arch, width, tier truth
-// (cpuid on host targets, DAS_JIT_X64_FORCE_FEATURES-only on cross triples — the emission
-// rail), row/vector geometry, vreg budget, dot machinery availability (belt).
+// The ONE decline predicate all four generators share — the tile and its companions must
+// fall back together on every rail, or repack and kernel desync (the two-function-stamp
+// contract). Rails: knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
 def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
     if (p.dotPrim == "amx_int8") {
-        // the TMUL leg (slice I): batch tile = 2×2 TDPBSSD macro over the grp16/kg4 plane
-        // (byte-for-byte the TDPBSSD B-tile layout — zero new repack). kstep pinned 1 (Q8's
-        // per-block scale boundary — i32 cannot accumulate across blocks); nrsplit ≙ tiles
-        // per macro side (1 = the probe shape, 2 = the 8-tmm production macro). bias=0 rows
-        // run s8·s8 TDPBSSD over the unbiased plane (companions forced to the sign-trick
-        // busd512 lattice — companion_perm); bias=128 rows (slice K I3) run TDPBSUD (signed
-        // activations × unsigned w^0x80 plane) with the −128·Σx bsum folded in the scale
-        // stage, and their companions ride the BIASED busd512 lattice — one plane, both
-        // slots optimal. The runtime enable is Linux arch_prctl, so a non-linux target
-        // declines the whole family.
+        // the TMUL leg: 2×2 TDPBSSD macro over the grp16/kg4 plane; kstep pinned 1 (Q8's per-block scale boundary); Linux-only (arch_prctl enable)
         if ((p.kstep != 1)
             || (p.nrsplit != 1 && p.nrsplit != 2)
             || (p.gkstep != 1 && p.gkstep != 2 && p.gkstep != 4)
@@ -175,9 +162,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
         var absTypes <- [v64i8]
         return LLVMGetIntrinsicDeclaration(mod, absId, absTypes) == null
     }
-    // bias128 is a vpdpbusd-only knob: u8 = w+128 feeds the dot's unsigned side exactly;
-    // maddubs saturates word pair-sums at biased magnitudes, bssd/sdot are native s8·s8.
-    // pipe/latch are TMUL-only knobs — vector dots have no tile spill or tile config
+    // bias128 is a vpdpbusd-only knob; pipe/latch are TMUL-only — vector dots have no tile spill or config
     if ((p.kstep != 1 && p.kstep != 2 && p.kstep != 4)
         || (p.nrsplit != 2 && p.nrsplit != 4)
         || (p.gkstep != 1 && p.gkstep != 2 && p.gkstep != 4)
@@ -186,11 +171,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
-        // the i8mm MMA leg (slice J): NEON widths, row-quad geometry (the fold transpose and
-        // the gemv kg8→kg4 fixup both work in quads), s8·s8 native (bias128 already declined
-        // above), the SAME q-reg budget space as sdot (w 2mr + acc nrsplit·mr/4 + act
-        // 2·nrsplit + 2 — MMA patches and A pairs land on the same counts), and the i8mm tier
-        // flag (host LLVM features / DAS_JIT_ARM64_FORCE_FEATURES — M1 is dotprod-only)
+        // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
         if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128)
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
@@ -208,8 +189,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
         return LLVMGetIntrinsicDeclaration(mod, tblId, tblTypes) == null
     }
     if (p.dotPrim == "sdot") {
-        // the NEON leg (the M2 shape): 128-bit q-regs, 4-row sdot lane structure, q-reg
-        // budget (weights 2*mr + acc nrsplit*mr/4 + activations 2*nrsplit + 2 scratch)
+        // the NEON leg (M2 shape): 128-bit q-regs, 4-row sdot lane structure, q-reg budget checked below
         if ((!g_target_is_aarch64) || (p.width != 128)
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
@@ -218,14 +198,12 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
         let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.sdot")
         var declTypes <- [gc.jit.types->LLVMInt4Type(), v16i8]
         if (LLVMGetIntrinsicDeclaration(mod, id, declTypes) == null) return true
-        // the mx4 companion's dequant primitive — part of the shared predicate so the mx4
-        // gemv can never fall to its grp4 reference body while the layout stamps another mr
+        // the mx4 companion's dequant primitive — shared so mx4 gemv and layout never desync on mr
         let tblId = LLVMLookupIntrinsicID("llvm.aarch64.neon.tbl1")
         var tblTypes <- [v16i8]
         return LLVMGetIntrinsicDeclaration(mod, tblId, tblTypes) == null
     }
-    // the x64 legs. The mx4 companion's pshufb dequant is implied by the tiers below
-    // (avx2 carries pshuf.b ymm, avx512bw carries pshuf.b.512), so no separate rail.
+    // the x64 legs — the mx4 companion's pshufb dequant is implied by the tiers below, so no separate rail
     if ((p.dotPrim != "maddubs" && p.dotPrim != "vpdpbusd" && p.dotPrim != "vpdpbssd")
         || (!g_target_is_x64)
         || (p.width != 256 && p.width != 512)
@@ -333,18 +311,12 @@ def private ones_i16(te : TileEmit) : LLVMOpaqueValue? {
     return LLVMConstVector(array_data_ptr(elems), uint(te.width / 16))
 }
 
-// one lane-dot: acc += w · (dword-group `lane` of the 16-byte x chunk, splatted across the acc
-// lanes). NEON: the indexed sdot above. x64: a generic lane-splat shuffle (GVN folds the
-// byte-identical re-emission across row vectors, like the NEON form), then the per-ISA chain —
-// vpdpbssd is native s8·s8; vpdpbusd/maddubs run the exact sign-trick chain of the proven
-// dot32/dot64 emitters (llvm_jit_intrin): uwv = |w| hoisted per weight vector by the caller,
-// sx = sign(w) applied to x per dot (VPSIGNB at 256; no 512-bit VPSIGNB, so compare+negate+
-// select there — w==0 lanes keep x, but they multiply |w| = 0 anyway). Same exactness
-// precondition as dot32: x values in [-127, 127] (the Q8 quantizer's range); w may be -128.
+// One lane-dot: acc += w · (dword-group `lane` of the 16-byte x chunk, splatted). NEON: the
+// indexed sdot above. x64: a lane-splat shuffle then the per-ISA chain — vpdpbssd native
+// s8·s8; vpdpbusd/maddubs run the sign-trick chain (x in [-127,127], w may be -128).
 def private dot_lane(var te : TileEmit; var acc, wv, uwv, xv : LLVMOpaqueValue?; lane : int) : LLVMOpaqueValue? {
     if (te.dotKind == DOT_SDOT || te.dotKind == DOT_SMMLA) {
-        // SMMLA reaches here only off the MMA lattice's fallbacks — the gemv single-token
-        // slice and the mx4 companion ride the sdot lattice (i8mm implies dotprod)
+        // SMMLA reaches here only off the MMA lattice's fallbacks — those ride the sdot lattice instead
         return sdot_lane(te, acc, wv, xv, lane)
     }
     let b = te.builder
@@ -357,8 +329,7 @@ def private dot_lane(var te : TileEmit; var acc, wv, uwv, xv : LLVMOpaqueValue?;
         return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
     }
     if (te.bias != 0) {
-        // bias128: the plane bytes ARE the unsigned side (w+128), x rides signed as-is —
-        // no |w|, no sign apply; the −128·Σx correction is the accumulator's init value
+        // bias128: plane bytes ARE the unsigned side (w+128); the −128·Σx correction is the accumulator's init value
         var dargs <- [acc, wv, xb]
         return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
     }
@@ -412,11 +383,9 @@ def private splat_i32(var te : TileEmit; var v : LLVMOpaqueValue?; name : string
     return LLVMBuildShuffleVector(te.builder, te.types, one, one, mask, name)
 }
 
-// the bias128 accumulator init: −128·Σx(block) for one token — the whole exactness
-// correction (init + Σ(w+128)·x = Σw·x, so the scale fold sees the plain-s8 integer).
-// Tile: one load off the bsums plane (splat folds to an embedded-broadcast). GEMV (no
-// plane): concat the block's two 16-byte chunks, one vpdpbusd(0, splat(128u), x) at kernel
-// width (zero-padded at 512 — padded dwords contribute 128·0), reduce, negate, splat.
+// The bias128 accumulator init: −128·Σx(block) for one token — the exactness correction
+// (init + Σ(w+128)·x = Σw·x). Tile: one load off the bsums plane. GEMV (no plane): concat
+// the block's two chunks, one vpdpbusd(0, splat(128u), x), reduce, negate, splat.
 def private bias_acc_init(var te : TileEmit; var bi, xlo, xhi : LLVMOpaqueValue?; tk : int) : LLVMOpaqueValue? {
     let b = te.builder
     var s : LLVMOpaqueValue?
@@ -442,14 +411,9 @@ def private bias_acc_init(var te : TileEmit; var bi, xlo, xhi : LLVMOpaqueValue?
     return LLVMBuildShuffleVector(b, te.types, one, one, mask, "binit{tk}")
 }
 
-// one 32-k block for tokens [tokBase, tokBase+tokCount): 8*rq shared weight vectors x tokens =
-// tokCount*rq*8 lane-dots at full width, then the per-block scale fold f[acc] +=
-// float(a[acc]) * s[qd] * splat(q[i]) — the exact op order of the hand template
-// dot_q8q8_laneq4x4_template, so fast-math contraction sees the same input (and for the sdot
-// mr=4 perm the exact M2 instruction sequence). Accumulator index = token * rq + row-vector;
-// the per-vector splat re-emission is byte-identical, so GVN folds it to one. Weight/scale
-// strides come off te.interleave — the q8q8_repack_type derivation: dword-group kg of block bi
-// holds mr rows x 4 k-bytes, vector qd's vwi8 at bi*mr*32 + kg*4*mr + qd*(width/8).
+// One 32-k block for tokens [tokBase, tokBase+tokCount): 8*rq shared weight vectors x tokens
+// lane-dots at full width, then the per-block scale fold — the exact op order of
+// dot_q8q8_laneq4x4_template, so fast-math contraction sees the same input across emitters.
 def private emit_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
@@ -458,10 +422,7 @@ def private emit_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLV
     var wv : LLVMOpaqueValue? [16]
     var uw : LLVMOpaqueValue? [16]
     if (te.kgroup == 8) {
-        // kg8 plane under the sdot lattice (the smmla stamp's gemv / single-token path): per
-        // (kg8 group, row quad) two row-pair loads + uzp1/uzp2.4s reassemble the two
-        // kg4-shaped weight vectors — [r0 klo, r1 klo, r2 klo, r3 klo] — and the lattice
-        // below is untouched. Only smmla perms stamp kg8, so this path is NEON-width only.
+        // kg8 plane under the sdot lattice: two row-pair loads + uzp1/uzp2.4s reassemble the kg4-shaped weight vectors
         for (g in range(4)) {
             for (qd in range(rq)) {
                 let boff = g * 8 * te.interleave + (2 * qd) * 16
@@ -545,10 +506,9 @@ def private fold_fma(var te : TileEmit; var a, b, c : LLVMOpaqueValue?; name : s
     return LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, name)
 }
 
-// one vnf32 group-scale vector at element index `idx` off `base` — the f32-plane load, or
-// (sgF16) the raw-binary16 plane widened via bitcast-to-half + fpext (fcvtl / vcvtph2ps: the
-// scalar f16_to_f32 JIT lowering, vectorized). Every weight-scale load in the family goes
-// through here, so the two planes differ ONLY in this load and the fold order is shared.
+// One vnf32 group-scale vector at element index `idx` off `base` — the f32-plane load, or
+// (sgF16) the raw-binary16 plane widened via bitcast-to-half + fpext. Every weight-scale
+// load in the family goes through here, so the two planes differ ONLY in this load.
 def private load_scale_vec(var te : TileEmit; var base, idx : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
     let b = te.builder
     if (!te.sgF16) {
@@ -560,10 +520,9 @@ def private load_scale_vec(var te : TileEmit; var base, idx : LLVMOpaqueValue?; 
     return LLVMBuildFPExt(b, LLVMBuildBitCast(b, hv, te.vnf16, ""), te.vnf32, name)
 }
 
-// the per-block Q8 scale fold shared by the sdot/x64 lattice and the smmla MMA form: f[acc] +=
-// float(a[acc]) * s[qd] * splat(q[i]) — the exact op order of the hand template
-// dot_q8q8_laneq4x4_template, so every emitter's fast-math contraction sees the same input and
-// the one grp4 oracle serves all layouts. `a` is token-major (token * rq + row-vector).
+// The per-block Q8 scale fold shared by every lattice: f[acc] += float(a[acc]) * s[qd] *
+// splat(q[i]) — the exact op order of dot_q8q8_laneq4x4_template, so every emitter's
+// fast-math contraction sees the same input. `a` is token-major (token * rq + row-vector).
 def private emit_scale_fold(var te : TileEmit; var bi : LLVMOpaqueValue?; a : LLVMOpaqueValue? [8]; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
@@ -585,14 +544,9 @@ def private emit_scale_fold(var te : TileEmit; var bi : LLVMOpaqueValue?; a : LL
     }
 }
 
-// one 32-k block, SMMLA form (the kg8 plane, slice J): B operands are row-pair × 8-k
-// 16-byte loads straight off the plane (4 k-slices × mr/2 row pairs — the repack did the
-// marshalling); A operands pair tokens (2tp, 2tp+1) per k-slice via zip1/zip2.2d byte
-// shuffles off the same chunk loads as the sdot form (4 per token pair, reused across every
-// row pair); the MMA lattice accumulates 2×2 patches m[tp][rp] = [t0·ra, t0·rb, t1·ra,
-// t1·rb]; then a 2-shuffle i32 transpose per (token pair, row quad) hands token-major
-// accumulators to the SAME per-block scale fold — fold order preserved, one oracle.
-// tokCount is even by construction (nrsplit ∈ {2,4}; single-token slices ride emit_block).
+// One 32-k block, SMMLA form (the kg8 plane): B operands are row-pair × 8-k loads off the
+// plane; A operands pair tokens via zip1/zip2.2d shuffles. The MMA lattice accumulates 2×2
+// patches, then transposes to token-major and hands off to the SAME per-block scale fold.
 def private emit_block_smmla(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq                    // row quads — the transpose/fold granularity
@@ -638,8 +592,7 @@ def private emit_block_smmla(var te : TileEmit; var bi : LLVMOpaqueValue?; var f
             }
         }
     }
-    // transpose the 2×2 patches to token-major row quads: a[2tp][q] = [mA.0, mA.1, mB.0,
-    // mB.1] (uzp1.2d shape), a[2tp+1][q] = [mA.2, mA.3, mB.2, mB.3] (uzp2.2d)
+    // transpose the 2×2 patches to token-major row quads (uzp1.2d / uzp2.2d shapes)
     var a : LLVMOpaqueValue? [8]
     for (tp in range(ntp)) {
         for (q in range(rq)) {
@@ -676,13 +629,9 @@ def private lut_lookup(var te : TileEmit; var idx : LLVMOpaqueValue?; name : str
     return LLVMBuildCall2(te.builder, te.pshuf_ty, te.pshuf_decl, pargs, name)
 }
 
-// one 32-k block, MXFP4 form (mx4 planes): per row vector per dword-group j, ONE vwi8 nibble
-// load feeds LUT-lo (k j*4..j*4+3, the LUT baked as a constant vector) and LUT-hi (k
-// j*4+16..+19) — 4*rq loads + 8*rq lookups replace the Q8 block's 8*rq weight loads; the
-// lane-dot lattice and the per-block fold are the Q8 emitter's, with the scale computed
-// in-register from mr E8M0 bytes: bits = e < 2 ? 0x00200000 << e : (e - 1) << 23 (e8m0_half's
-// exact bit trick, vectorized per row vector; the not-taken shl-by-(e-1) arm at e=0 is poison
-// LLVM's select never selects).
+// One 32-k block, MXFP4 form: per (row vector, dword-group j), ONE nibble load feeds LUT-lo
+// and LUT-hi — 4*rq loads + 8*rq lookups replace the Q8 block's 8*rq weight loads; lane-dot
+// lattice and fold are the Q8 emitter's. Scale computed in-register from E8M0 bytes (e8m0_half's bit trick).
 def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
@@ -742,8 +691,7 @@ def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
         var loBits = LLVMBuildShl(b, splat_i32n(te, int(0x00200000)), e32, "")
         var hiBits = LLVMBuildShl(b, LLVMBuildSub(b, e32, splat_i32n(te, 1), ""), splat_i32n(te, 23), "")
         var bits = LLVMBuildSelect(b, lt2, loBits, hiBits, "")
-        // NOTE: the name is hoisted — a TERNARY string fed straight to a raw extern's
-        // `string implicit` param SIGSEGVs the compiler (issue #3374)
+        // name hoisted: a ternary string fed straight to a raw extern's string param SIGSEGVs the compiler
         let s4name = qd == 0 ? "s4" : "s4{qd}"
         s4[qd] = LLVMBuildBitCast(b, bits, te.vnf32, s4name)
     }
@@ -759,10 +707,9 @@ def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
     }
 }
 
-// one K-quant lane-dot: acc += q · (dword-group `lane` of x, splatted). The quants are UNSIGNED
-// (0..15/31/63) straight off the expand — they ARE the u8 side of vpdpbusd/maddubs (signed x on
-// the other side), and they fit s8 non-negatively for bssd/sdot — so no |w|, no sign apply, no
-// bias plane on any leg. maddubs pair-sums stay exact: 2·63·127 < 32767.
+// One K-quant lane-dot: acc += q · (dword-group `lane` of x, splatted). Quants are UNSIGNED
+// (0..15/31/63) — they ARE the u8 side of vpdpbusd/maddubs, and fit s8 non-negatively for
+// bssd/sdot, so no |w|/sign-apply/bias plane on any leg. maddubs pair-sums stay exact (2·63·127 < 32767).
 def private kq_dot_lane(var te : TileEmit; var acc, qv, xv : LLVMOpaqueValue?; lane : int) : LLVMOpaqueValue? {
     if (te.dotKind == DOT_SDOT || te.dotKind == DOT_SMMLA) {
         return sdot_lane(te, acc, qv, xv, lane)
@@ -783,10 +730,9 @@ def private kq_dot_lane(var te : TileEmit; var acc, qv, xv : LLVMOpaqueValue?; l
     return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
 }
 
-// activation dword BROADCAST FROM MEMORY at BYTE offset (x64 legs): the register-splat form
-// costs a shuffle uop per dot that competes with pmaddubsw on FP1 (Zen2); vpbroadcastd m32
-// folds the splat into the load port instead — llama.cpp's repacked-GEMM transport. Same
-// dword, same value: bit-identical results, only the port mix changes.
+// Activation dword BROADCAST FROM MEMORY at BYTE offset (x64 legs): the register-splat form
+// costs a shuffle uop competing with pmaddubsw on FP1 (Zen2); vpbroadcastd m32 folds the
+// splat into the load port instead — bit-identical results, only the port mix changes.
 def private bcast_dword(var te : TileEmit; var xp, off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
     let b = te.builder
     var p = LLVMBuildGEP2(b, te.types.t_int8, xp, off, name)
@@ -812,11 +758,9 @@ def private kq_dot_mem(var te : TileEmit; var acc, qv, xb : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
 }
 
-// one pmaddubsw into an i16 pair-sum chain (null chain head = the first madd). The K-quant i16
-// lattice: with UNSIGNED quants the pair-sums are bounded (k4 ±3810, k5 ±7874, k6 ±16002), so
-// several 32B dots accumulate EXACTLY in i16 — k4 all 8 of a sub-block (±30480), k5 four
-// (±31496), k6 two (±32004) — before ONE pmaddwd widens the chain. Cuts the maddubs lattice
-// from 3 uops/32B to ~2.1 (k4). Integer totals are identical, so results stay bit-exact.
+// One pmaddubsw into an i16 pair-sum chain (null head = first madd). UNSIGNED-quant pair-sums
+// are bounded (k4 ±3810, k5 ±7874, k6 ±16002), so several 32B dots accumulate EXACTLY in i16
+// before ONE pmaddwd widens — cuts the maddubs lattice from 3 uops/32B to ~2.1 (k4).
 def private madd16_acc(var te : TileEmit; var chain, qv, xb : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let b = te.builder
     var margs <- [qv, xb]
@@ -861,34 +805,9 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
     return LLVMBuildOr(b, w, sel, name)
 }
 
-// One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 4/5/6) for tokens [tokBase,
-// tokBase+tokCount): weight vectors are unpacked ONCE per (sub-block, dword-group) and dotted
-// against every token's lane splat — the weight-stationary form that makes the kq tile stream
-// the planes once per 4-token tile instead of once per position. tokCount = 1 is the GEMV.
-// Per-token fold order is IDENTICAL to the single-token form, so the tile is bit-exact vs
-// per-token GEMVs over the same planes. Plane layouts per superblock per mr-row group (see
-// repack_k4/k5/k6_grp):
-//   k4  quants [blk 0..7][j 0..3][row][4B] — byte t of (blk,j) = nibble pair for k blk*32+j*4+t
-//       (low) / +16 (high), the mx4 pairing; scales [mr f16 d][mr f16 dmin][blk][mr u8 sc]
-//       [blk][mr u8 mn] (the 6-bit packing decoded at repack)
-//   k5  = k4 + high bits [blk][j][row] 1B — bits 0..3 = the 4 low-k weights, 4..7 = high;
-//       same 20B scale rows as k4
-//   k6  = k4-shaped low nibbles + high 2-bit groups [half 0..1][jj 0..7][row][4B] (jj covers the
-//       half's 32 byte columns; block g of the half reads jj=j (lo) / j+4 (hi) at uniform shift
-//       2g); scales [16 x mr int8 sc][mr f16 d] — NATIVE per-16 SIGNED sub-scales
-//   kqBytes (the k5/k6 TILE form) — kqg is a BYTE-EXPANDED scratch panel (unpack_kq_panel_grp:
-//       [blk][j][row][4B] full-byte weight k, then the k+16 region at +128*mr, qsb 256): wlo/whi
-//       load verbatim, zero unpack ALU. The batch cell unpacks it once per (group, token-block),
-//       so the 5/6-bit deposit amortizes over TB tokens instead of the tile's 4 — while the DRAM
-//       planes keep the packed 160/192B form the (bandwidth-bound) GEMV decode path streams
-// kq v2 (all three formats): integer sub-scale and bsums folds against Q8_K-form activations
-// (per-256 scale d8, per-16 bsums) — the lcpp scheme. The nibble walk and token dots are the
-// shared kq lattice; the fold pays ONE float fma pair (k4/k5) or fma (k6) per superblock per
-// (token, row-quad) instead of two float fmas per 32-block: k4/k5 fold each block's int32
-// row-dot as sc·(lo+hi) into iacc and its per-32 activation sum as mn·Σa into bacc (both exact
-// — sc,mn ≤ 63 keep 8-block sums far inside int32), closed by d/dmin (f16 rows) × d8; k6 folds
-// SIGNED per-16 sub-scales as sc0·lo + sc1·hi into iacc and sc0·Σa16lo + sc1·Σa16hi into bacc
-// (|iacc| < 2^28, |32·bacc| < 2^28 — iacc − 32·bacc is exact), closed by d × d8 in one fma.
+// One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 4/5/6): weight vectors unpacked
+// ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
+// bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations (the lcpp scheme).
 def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
@@ -905,13 +824,11 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     var maskHiElems <- [for (i in range(w8)); LLVMConstInt(te.types.t_int8, uint64(16 << (i % 4)), 0)]
     var maskLo = LLVMConstVector(array_data_ptr(maskLoElems), uint(w8))
     var maskHi = LLVMConstVector(array_data_ptr(maskHiElems), uint(w8))
-    // x64 dot kinds take the activation dword straight from memory (vpbroadcastd — see
-    // kq_dot_mem); the NEON sdot lattice keeps its chunk loads + indexed-lane splats
+    // x64 dot kinds take the activation dword straight from memory (vpbroadcastd, see kq_dot_mem); NEON keeps chunk loads
     let memBcast = te.dotKind != DOT_SDOT && te.dotKind != DOT_SMMLA
     let madd16 = memBcast && te.dotKind == DOT_MADDUBS
     var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
-    // weight-side superblock scale rows: k4/k5 f16 d/dmin; k6 its f16 d row (dmin unused).
-    // q40 has none — its per-32 f16 d loads live in the per-block fold below.
+    // weight-side superblock scale rows: k4/k5 f16 d/dmin; k6 f16 d only; q40 has none (per-32 d loads live below)
     var dv : LLVMOpaqueValue? [2]
     var mv : LLVMOpaqueValue? [2]
     if (!q40) {
@@ -949,9 +866,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
             a0[i] = LLVMConstNull(te.vni32)
             a1[i] = LLVMConstNull(te.vni32)
         }
-        // the maddubs i16 lattice (see madd16_acc): k4/k5 run ONE combined lo+hi chain per
-        // (token, qd) flushed per the format's overflow bound; k6 keeps lo/hi chains apart
-        // (its per-16 scales fold them separately)
+        // the maddubs i16 lattice (see madd16_acc): k4/k5 combine lo+hi in one chain; k6 keeps them apart (per-16 scales)
         var p16lo : LLVMOpaqueValue? [8]
         var p16hi : LLVMOpaqueValue? [8]
         for (i in range(tokCount * rq)) {
@@ -960,8 +875,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
         }
         for (j in range(4)) {
             for (qd in range(rq)) {
-                // weight vectors unpacked ONCE, dotted against every token below; a kqBytes
-                // panel (the k5/k6 tile scratch) loads the wlo/whi images verbatim instead
+                // weight vectors unpacked ONCE, dotted against every token below (kqBytes panel loads verbatim instead)
                 var noff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((blk * 16 + j * 4) * mr + qd * w8)), "")
                 var wlo : LLVMOpaqueValue?
                 var whi : LLVMOpaqueValue?
@@ -1017,9 +931,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     }
                 }
             }
-            // i16 chain flushes at the format's overflow bound: k5 after 4 madds (j 1/3),
-            // k6 after 2 madds per chain (j 1/3); k4/q40 (nibbles <= 15) run the full 8 to
-            // the post-loop flush
+            // i16 chain flushes at the format's overflow bound: k5 after 4 madds, k6 after 2; k4/q40 run the full 8
             if (madd16 && (j == 1 || j == 3) && te.kq != 4 && !q40) {
                 for (k in range(tokCount * rq)) {
                     a0[k] = madd16_flush(te, a0[k], p16lo[k])
@@ -1037,10 +949,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 p16lo[k] = null
             }
         }
-        // the integer fold — no float ops per block. k4/k5: iacc += sc·(lo+hi), bacc += mn·Σa32
-        // (u8 zext rows); k6: iacc += sc0·lo + sc1·hi, bacc += sc0·Σa16lo + sc1·Σa16hi (i8 sext).
-        // q40 instead pays its per-block float fma here: facc += float(lo+hi − 8·Σa32)·d(blk)
-        // — the per-32 f16 d admits no cross-block integer fold.
+        // the integer fold — no float ops per block, except q40 (its per-32 f16 d admits no cross-block integer fold)
         var scv : LLVMOpaqueValue? [2]
         var mnv : LLVMOpaqueValue? [2]
         var dvb : LLVMOpaqueValue? [2]
@@ -1096,9 +1005,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
             }
         }
     }
-    // the superblock fold: k4/k5 f += float(iacc)·(d·d8); f -= float(bacc)·(dmin·d8);
-    // k6 f += float(iacc − 32·bacc)·(d·d8) — the −32 quant offset closed in exact int32;
-    // q40 f += facc·d8 (the per-block d already folded above)
+    // superblock fold: k4/k5 iacc·d8 − bacc·dmin·d8; k6 (iacc−32·bacc)·d·d8 exact int32; q40 facc·d8
     for (i in range(tokCount)) {
         let tk = tokBase + i
         var qp = LLVMBuildGEP2(b, te.types.t_float, te.xs[tk], sbi, "qp{tk}")
@@ -1122,10 +1029,9 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     }
 }
 
-// block-emitter dispatch: the slice/loop machinery is quant-agnostic. The MMA form needs a
-// token PAIR — the gemv companion's single-token slices ride the sdot lattice (emit_block's
-// kg8 weight fixup reads the same plane). kq blocks are SUPERBLOCKS (the kq gemv/tile drive
-// emit_slice with nb = n/256).
+// Block-emitter dispatch: the slice/loop machinery is quant-agnostic. The MMA form needs a
+// token PAIR — single-token slices ride the sdot lattice instead. kq blocks are SUPERBLOCKS
+// (the kq gemv/tile drive emit_slice with nb = n/256).
 def private emit_one_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     if (te.kq != 0) {
         emit_block_kqv2(te, bi, f, tokBase, tokCount)
@@ -1161,12 +1067,9 @@ struct private SliceArgs {
     kstep : int
 }
 
-// one accumulator slice: the whole k loop for tokens [tokBase, tokBase+tokCount), then the
-// per-token float-vector stores (one per row vector). `pred` must be terminator-free; returns
-// the slice's merge block (also terminator-free). Main loop runs kstep blocks per iteration;
-// the remainder is a chain of kstep-1 conditional single blocks — for kstep=2 this is head/
-// body/tail_check/tail_body/after, the exact M2 CFG. Accumulator arrays hold tokCount*rq
-// entries (token-major), max 8 under the decline rails.
+// One accumulator slice: the whole k loop for tokens [tokBase, tokBase+tokCount), then the
+// per-token float-vector stores. `pred` must be terminator-free; returns the slice's merge
+// block (also terminator-free). Main loop runs kstep blocks/iteration; remainder is a kstep-1 conditional chain.
 def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpaqueBasicBlock?; tokBase, tokCount : int; sfx : string) : LLVMOpaqueBasicBlock? {
     let b = te.builder
     let K = sa.kstep
@@ -1227,8 +1130,7 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
         LLVMAddIncoming(fPhi[i], bv, bb)
     }
 
-    // remainder chain: check j falls through to `after` when no blocks remain; its tail body
-    // runs one more block. Track per-incoming f values for the merge phis.
+    // remainder chain: check j falls through to `after` when no blocks remain, else tail body runs one more
     var mergeBlocks : array<LLVMOpaqueBasicBlock?>
     var mergeF : array<LLVMOpaqueValue? [8]>
     mergeBlocks |> reserve(K)
@@ -1260,8 +1162,7 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
         }
     }
 
-    // after: merge phis (grouped first — verifier rule), then one float-vector store per token
-    // per row vector (cols g*interleave .. +mr-1 are contiguous floats)
+    // after: merge phis (grouped first — verifier rule), then one float-vector store per token per row vector
     LLVMPositionBuilderAtEnd(b, after)
     var fF : LLVMOpaqueValue? [8]
     for (i in range(nacc)) {
@@ -1295,14 +1196,12 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     te.types = gc.jit.types
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
-    // the mx4/kq planes are kgroup-independent (their own repacks) — under an smmla perm those
-    // companions ride the plain sdot lattice (i8mm implies dotprod)
+    // mx4/kq planes are kgroup-independent — under an smmla perm they ride the plain sdot lattice
     if ((te.mx4 || te.kq != 0) && te.dotKind == DOT_SMMLA) {
         te.dotKind = DOT_SDOT
     }
     te.kgroup = (te.mx4 || te.kq != 0) ? 4 : rt.kgroup
-    // the perm's bias applies to the Q8 weight plane only — the mx4 LUT path and the kq
-    // unsigned-quant planes never see the biased repack
+    // the perm's bias applies to the Q8 weight plane only — mx4/kq planes never see the biased repack
     te.bias = (te.mx4 || te.kq != 0) ? 0 : p.bias
     te.width = (te.dotKind == DOT_SDOT || te.dotKind == DOT_SMMLA) ? 128 : p.width
     te.rv = te.width / 32
@@ -1342,10 +1241,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
         var noTypes : array<LLVMOpaqueType?>
         var b2Types <- [te.vwi8, te.vwi8]
         if (te.dotKind != DOT_VPDPBSSD && te.bias == 0) {
-            // the sign-trick machinery (the proven dot32/dot64 emitter chains): |w| via
-            // generic llvm.abs, sign apply via VPSIGNB at 256 (compare+negate+select at 512
-            // — emitted inline in dot_lane, no decl needed). bias128 needs neither: the
-            // plane bytes are the unsigned side already.
+            // the sign-trick machinery (|w| via llvm.abs, sign apply via VPSIGNB) — bias128 needs neither
             let absId = LLVMLookupIntrinsicID("llvm.abs")
             var absTypes <- [te.vwi8]
             te.abs_decl = LLVMGetIntrinsicDeclaration(mod, absId, absTypes)
@@ -1360,8 +1256,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
             }
         }
         if (te.bias != 0) {
-            // the gemv inline-bsum reduce (the tile reads the bsums plane instead; an
-            // unused declaration is harmless)
+            // the gemv inline-bsum reduce (the tile reads the bsums plane instead)
             let redId = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
             var redTypes <- [te.vni32]
             te.reduce_decl = LLVMGetIntrinsicDeclaration(mod, redId, redTypes)
@@ -1396,8 +1291,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
         }
     }
     if (needMx4) {
-        // the doubled-e2m1 LUT (mxfp4_fill_lut) as a constant vector — no table pointer at
-        // runtime; broadcast per 16-byte lane on x64 (pshufb is per-lane)
+        // the doubled-e2m1 LUT as a constant vector — no runtime table pointer; broadcast per 16-byte lane on x64
         let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
         let lanes = te.dotKind == DOT_SDOT ? 1 : te.width / 128
         var lutElems : array<LLVMOpaqueValue?>
@@ -1412,13 +1306,9 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     return true
 }
 
-// AMX machinery for the TMUL tile: virtual-tile x86_amx values through the .internal
-// intrinsics (non-overloaded) — LLVM's x86 codegen-prep (lower-amx-type + fast tile config)
-// materializes tmm allocation and ldtilecfg itself under +amx-tile,+amx-int8. A latch perm
-// swaps in the RAW immediate-tmm intrinsics instead: fixed register plan, void results, and
-// NO backend config ops — the cfg companion loads the palette per chunk. A bias perm's dot
-// is TDPBSUD (signed A × unsigned biased plane). The fold runs on plain zmm vectors (rv =
-// 16) either way, so splat_f32 and the store shapes are the busd512 tile's.
+// AMX machinery for the TMUL tile: virtual-tile x86_amx values via the .internal intrinsics
+// (LLVM's codegen-prep materializes tmm allocation/ldtilecfg). A latch perm swaps in the
+// RAW immediate-tmm intrinsics instead — fixed register plan, no backend config ops.
 def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm) : bool {
     let raw = p.latch != 0
     te.builder = gc.jit.builder
@@ -1533,17 +1423,9 @@ def private amx_store(var te : TileEmit; nt, r, ts : int; var cd, reg : LLVMOpaq
     LLVMBuildCall2(b, te.tstore_ty, te.tstore_decl, sargs, "")
 }
 
-// The TMUL batch tile (slice I): one call covers 16·nt tokens × nt grp16 row-groups (nt =
-// nrsplit; groups g..g+nt-1, plane offset +16·n each — the batch wrapper walks nt-group units
-// and 16·nt-token steps off the tokstep companion). Per 32-k block: nt B tile loads straight
-// off the grp16 plane (a block's 8 dword-groups ARE the 8×64 TDPBSSD B tile — zero new
-// repack), nt A tile loads straight off the activation rows (stride n), then nt² tilezero →
-// TDPBSSD → tilestored-to-scratch, and the per-block scale fold f32-accumulates INTO yp
-// (per C-tile token row: cvt(v16i32) · ws_vec[block] · splat(xs) — the vector tile's fold
-// order, so the one grp4 oracle serves). yp IS the k-loop accumulator (registers cannot hold
-// 32×32 f32 across blocks): the tile zero-inits its own y region first, which also makes the
-// wrapper's overlapped token-tail recompute idempotent. kstep is pinned 1 — Q8's per-block
-// scale boundary (i32 cannot accumulate across blocks).
+// The TMUL batch tile: one call covers 16·nt tokens × nt grp16 row-groups (nt = nrsplit).
+// Per 32-k block: nt B/A tile loads, nt² tilezero->TDPBSSD->tilestore-to-scratch, then the
+// scale fold f32-accumulates INTO yp — yp IS the k-loop accumulator (no register holds 32×32 f32 across blocks).
 def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
@@ -1583,9 +1465,7 @@ def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : boo
         var trow = ts == 0 ? t0 : LLVMBuildAdd(b, t0, te.types->ConstI64(uint64(ts * 16)), "")
         xbase[ts] = LLVMBuildGEP2(b, te.types.t_int8, xqp, LLVMBuildMul(b, trow, n, ""), "xbase{ts}")
     }
-    // fold bases: y rows start at t0·d + col, xs/xbs rows at t0·nb — the fold walks them with
-    // running pointers (see amx_fold_tile: a precomputed 64/32-entry pointer array is live
-    // across the k-loop and spills). Zero-init walks y with the same running pointer.
+    // fold bases: y rows start at t0·d + col, xs/xbs rows at t0·nb, walked with running pointers (see amx_fold_tile)
     var ybase = LLVMBuildGEP2(b, te.types.t_float, yp, LLVMBuildAdd(b, LLVMBuildMul(b, t0, d, ""), col, ""), "ybase")
     var xsbase = LLVMBuildGEP2(b, te.types.t_float, xsp, LLVMBuildMul(b, t0, nb, ""), "xsbase")
     var xbsbase : LLVMOpaqueValue?
@@ -1648,14 +1528,9 @@ def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : boo
     return true
 }
 
-// fold ONE spilled C tile — tile (r, ts) of k-block `bi`, 16 token rows — into its yp cells:
-// cvt(i32 row)·ws·splat(xs[t][bi]) f32-accumulated onto yp (the serial tile's fold order,
-// so the one grp4 oracle serves both amx structures). A bias perm lands the −128·Σx bsum on
-// the raw i32 rows first (one embedded-broadcast vpaddd per row — "keep tilezero": the
-// correction is fold-stage arithmetic, never an accumulator init). Addressing is RUNNING
-// POINTERS off three live bases (ybase/xsbase/xbsbase + row strides) — the previous
-// precomputed pointer arrays (64 y rows + 32 xs rows) stayed live across the k-loop and
-// spilled: ~140 movq reloads per k-iteration, 28% of the steady loop (2026-07-09 census).
+// Fold ONE spilled C tile into yp: cvt(i32 row)·ws·splat(xs[t][bi]) accumulated (the serial
+// tile's fold order). Addressing uses RUNNING POINTERS, not precomputed arrays — those spilled
+// ~140 movq reloads/k-iteration, 28% of the steady loop (2026-07-09 census).
 def private amx_fold_tile(var te : TileEmit; var region, bi, ws : LLVMOpaqueValue?; r, ts : int;
                           var ybase, d, xsbase, xbsbase, nb : LLVMOpaqueValue?) {
     let b = te.builder
@@ -1694,13 +1569,9 @@ def private amx_fold_tile(var te : TileEmit; var region, bi, ws : LLVMOpaqueValu
     }
 }
 
-// The software-pipelined TMUL batch tile (slice K I4 — lcpp mmq.cpp's double-buffered C):
-// same macro/space contract as emit_amx_tile (tokstep, layout, companions identical), but
-// the per-block scale fold is deferred one k-iteration — block bi's TDPBSSD chain spills
-// into C[cur] while block bi−1's fold reads C[pre], so the vector ports fold while TMUL
-// crunches instead of the whole chain stalling behind every tilestored. Structure: peel
-// block 0 (compute-only into buf0), steady-state loop folds bi−1 between bi's tile ops
-// (buffer swap via phis), exit block folds the final spill (post-swap, cPre holds it).
+// The software-pipelined TMUL batch tile (double-buffered C, lcpp mmq.cpp): same contract as
+// emit_amx_tile, but the per-block scale fold is deferred one k-iteration — block bi's
+// TDPBSSD spills into C[cur] while block bi−1's fold reads C[pre], overlapping TMUL with the vector fold.
 def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
@@ -1742,9 +1613,7 @@ def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : b
         var trow = ts == 0 ? t0 : LLVMBuildAdd(b, t0, te.types->ConstI64(uint64(ts * 16)), "")
         xbase[ts] = LLVMBuildGEP2(b, te.types.t_int8, xqp, LLVMBuildMul(b, trow, n, ""), "xbase{ts}")
     }
-    // fold bases: y rows start at t0·d + col, xs/xbs rows at t0·nb — the fold walks them with
-    // running pointers (see amx_fold_tile: a precomputed 64/32-entry pointer array is live
-    // across the k-loop and spills). Zero-init walks y with the same running pointer.
+    // fold bases: y rows start at t0·d + col, xs/xbs rows at t0·nb, walked with running pointers (see amx_fold_tile)
     var ybase = LLVMBuildGEP2(b, te.types.t_float, yp, LLVMBuildAdd(b, LLVMBuildMul(b, t0, d, ""), col, ""), "ybase")
     var xsbase = LLVMBuildGEP2(b, te.types.t_float, xsp, LLVMBuildMul(b, t0, nb, ""), "xsbase")
     var xbsbase : LLVMOpaqueValue?
@@ -1814,8 +1683,7 @@ def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : b
         var ws = load_scale_vec(te, sg, sidx, "ws{r}")
         for (ts in range(nt)) {
             let idx = r * nt + ts
-            // the deferral: fold tile (r, ts) of block bi−1 from C[pre] before this chain's
-            // dot — vector ports work while the TMUL chain owns block bi
+            // the deferral: fold block bi−1's tile from C[pre] while the TMUL chain owns block bi
             var preReg = idx == 0 ? cPrePhi : LLVMBuildGEP2(b, te.types.t_int8, cPrePhi, te.types->ConstI64(uint64(idx * 1024)), "")
             amx_fold_tile(te, preReg, ii, ws, r, ts, ybase, d, xsbase, xbsbase, nb)
             var cd = amx_dot(te, nt, r, ts, As[ts], Bs[r])
@@ -1834,8 +1702,7 @@ def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : b
     LLVMAddIncoming(cCurPhi, curBodyVals, bodyBlocks)
 
     LLVMPositionBuilderAtEnd(b, after)
-    // final fold: block nb−1's spill — post-swap (and for nb==1, straight off the peel)
-    // cPre holds the last-written buffer
+    // final fold: block nb−1's spill, post-swap — cPre holds the last-written buffer
     var iiF = LLVMBuildSub(b, nb, te.types->ConstI64(1ul), "iif")
     var iiF16 = LLVMBuildMul(b, iiF, te.types->ConstI64(16ul), "iif16")
     for (r in range(nt)) {
@@ -1854,8 +1721,7 @@ def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : b
 // the tile emitter shared by the f32 and f16-scale entries: f16s swaps ONLY the scale-fold
 // load (load_scale_vec) — same lattice, same fold order, same shared decline rails
 def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
-    // decline on a foreign signature, and on every shared rail (perm_declines — the layout
-    // companion declines in lockstep): the reference body compiles instead
+    // decline on a foreign signature or any shared rail — the reference body compiles instead
     if (!is_tile_signature(gc.fn)) return false
     let p = parse_perm(gc)
     if (perm_declines(gc, p)) return false
@@ -1888,8 +1754,7 @@ def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
         te.x[tk] = LLVMBuildGEP2(b, te.types.t_int8, xqp, LLVMBuildMul(b, tRow, n, ""), "x{tk}")
         te.xs[tk] = LLVMBuildGEP2(b, te.types.t_float, xsp, LLVMBuildMul(b, tRow, sa.nb, ""), "xs{tk}")
         if (te.bias != 0) {
-            // the bsums plane (−128·Σx i32 per (token, block)) — the wrapper builds it for
-            // biased stamps; unbiased stamps never touch the parameter
+            // the bsums plane (−128·Σx i32 per token/block) — built by the wrapper for biased stamps only
             te.xbs[tk] = LLVMBuildGEP2(b, te.types.t_int32, xbsp, LLVMBuildMul(b, tRow, sa.nb, ""), "xbs{tk}")
         }
     }
@@ -1916,10 +1781,9 @@ def private is_layout_signature(fn : Function const?) : bool {
     return empty(fn.arguments) && fn.result.baseType == Type.tInt
 }
 
-// the layout half of the two-function stamp: `() : int` returning the perm's repack
-// interleave (mr) — the runtime repack asks it which layout the stamped tile reads. Declines
-// via the SAME perm_declines as tile_gen, so a perm the tile can't emit keeps the grp4
-// reference pair on both sides.
+// The layout companion: `() : int` returning the perm's repack interleave (mr) — the
+// runtime repack asks it which layout the stamped tile reads. Declines via the SAME
+// perm_declines as tile_gen, so both sides fall back together.
 def private layout_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_layout_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -1930,10 +1794,9 @@ def private layout_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// the wbias sixth of the stamp: `() : int` returning the perm's weight-plane bias (128 for
-// the bias128 vpdpbusd perms, 0 otherwise) — the runtime repack and the mx4->Q8 expand ask
-// it how the plane bytes are baked. Declines via the SAME perm_declines: a declined perm
-// keeps the unbiased grp4 reference pair on every side.
+// The wbias companion: `() : int` returning the perm's weight-plane bias (128 for bias128
+// vpdpbusd perms, 0 otherwise) — the runtime repack and mx4->Q8 expand ask it how the plane
+// bytes are baked; declines via the SAME perm_declines.
 def private wbias_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_layout_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -1944,10 +1807,9 @@ def private wbias_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// the kgroup seventh of the stamp (slice J): `() : int` returning the perm's plane kgroup —
-// 8 for smmla perms (row-pair × 8-k layout), 4 for every vector-dot perm. The runtime repack,
-// the token-tail generic and the mx4→Q8 expand map ask it how the plane groups its k-bytes.
-// Declines via the SAME perm_declines: a declined perm keeps the kg4 grp4 reference pair.
+// The kgroup companion: `() : int` returning the perm's plane kgroup — 8 for smmla perms
+// (row-pair × 8-k layout), 4 for every vector-dot perm. The runtime repack and mx4->Q8
+// expand ask it how the plane groups its k-bytes; declines via the SAME perm_declines.
 def private kgroup_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_layout_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -1958,11 +1820,9 @@ def private kgroup_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// the tokstep eighth of the stamp (slice I): `() : int` returning the tokens one tile call
-// covers — 16·nrsplit for the amx perms (whose macro also spans tokstep/16 row-groups: amx
-// macros are square in tile units), 4 for every vector perm. The batch wrapper walks its
-// (token, group) space off it. Declines via the SAME perm_declines: a declined perm keeps
-// the 4-token reference contract.
+// The tokstep companion: `() : int` returning the tokens one tile call covers — 16·nrsplit
+// for amx perms (macros are square in tile units), 4 for every vector perm. The batch
+// wrapper walks its (token, group) space off it; declines via the SAME perm_declines.
 def private tokstep_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_layout_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -1978,13 +1838,9 @@ def private is_witness_signature(fn : Function const?) : bool {
     return empty(fn.arguments) && fn.result.baseType == Type.tBool
 }
 
-// the witness fifth of the stamp: `() : bool` — did the stamped family actually EMIT on this
-// target? Reference body returns false; the generated body is `return true`, and it declines
-// via the SAME perm_declines as everything else — so "witness true" ⟺ "the whole family is
-// generated code". Backend availability reads it at SELECTION time (never [init] — the
-// slice C rule): on x64 a declined stamp must not load-select the gen backend, because the
-// reference bodies there are the NEON functions' scalar fallbacks — correct but far slower
-// than the portable backend.
+// The witness: `() : bool` — did the stamped family actually EMIT on this target? Reference
+// body returns false, generated body returns true, declining via the SAME perm_declines —
+// backend selection reads it at SELECTION time (never [init]), never load-selecting a declined stamp.
 def private witness_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_witness_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -1993,10 +1849,7 @@ def private witness_gen(var gc : LlvmCodeCtx) : bool {
     let b = gc.jit.builder
     LLVMPositionBuilderAtEnd(b, entry)
     if (dot_kind(p.dotPrim) == DOT_AMX) {
-        // TMUL executes only after the per-process XTILEDATA grant, so the enable IS the
-        // witness: syscall(SYS_arch_prctl=158, ARCH_REQ_XCOMP_PERM=0x1023, XFEATURE_XTILEDATA
-        // =18) == 0 via libc's syscall(2) as a JIT-resolved external symbol (glibc exports no
-        // arch_prctl wrapper). Linux-only by construction — perm_declines gated the target OS.
+        // TMUL executes only after the per-process XTILEDATA grant, so the arch_prctl syscall IS the witness
         let mod = LLVMGetGlobalParent(gc.impl)
         var scTy : LLVMOpaqueType?
         var argTypes <- [gc.jit.types.t_int64, gc.jit.types.t_int64, gc.jit.types.t_int64]
@@ -2019,11 +1872,9 @@ def private is_cfg_signature(fn : Function const?) : bool {
     return empty(fn.arguments) && fn.result.baseType == Type.tVoid
 }
 
-// the tile-config companion (slice K I1): `() : void`. For a latch=1 raw-tile perm the body
-// LDTILECFGs the family's static 8-tile palette (C tmm0-3 16×64, A tmm4-5 16×32, B tmm6-7
-// 8×64 — amx_tmm's plan) — those stamps carry no per-call config and no TILERELEASE, so the
-// batch wrapper calls this once per dispatch chunk instead. Every other perm gets a bare
-// `ret void`; declines via the SAME perm_declines keep the no-op das reference body.
+// The tile-config companion: `() : void`. For latch=1 it LDTILECFGs the static 8-tile
+// palette (amx_tmm's plan) — those stamps carry no per-call config/TILERELEASE, so the
+// batch wrapper calls this once per dispatch chunk. Every other perm is a bare `ret void`.
 def private cfg_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_cfg_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -2075,13 +1926,9 @@ def private is_gemv_signature(fn : Function const?) : bool {
     return true
 }
 
-// The GEMV third of the stamp (the nr=1 perm sub-family): a rows-range core with the mm_rows
-// slot signature — rows [rb, re) of one region, rb/re multiples of the perm's mr, the group
-// loop INSIDE the generated function (one call per dispatch chunk). Per group it is
-// emit_slice with a single token and gkstep blocks per K-iteration: emit_block's fresh int
-// accumulators per block are the independent dot chains a serial single-token laneq chain
-// lacks. Declines via the SAME perm_declines as the tile — the reference body (the grp4
-// laneq rows walk) falls back in lockstep with the grp4 reference pair.
+// The GEMV rows-range core: rows [rb, re) of one region, rb/re multiples of the perm's mr,
+// group loop INSIDE the function. Per group it's emit_slice with a single token and gkstep
+// blocks per K-iteration. Declines via the SAME perm_declines as the tile.
 def private gemv_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
     if (!is_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
@@ -2096,8 +1943,7 @@ def private gemv_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
     var ghead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "ghead")
     var gexit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gexit")
 
-    // entry: group range off the row range; d=0/t0=0 turn emit_slice's store offset
-    // (tRow*d + col) into the absolute row g*mr
+    // entry: group range off the row range; d=0/t0=0 turn emit_slice's store offset into the absolute row g*mr
     LLVMPositionBuilderAtEnd(b, entry)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = p.gkstep)
     sa.yp = LLVMGetParam(gc.impl, 0u)
@@ -2117,8 +1963,7 @@ def private gemv_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
     var nonempty = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, g0, g1, "any")
     LLVMBuildCondBr(b, nonempty, ghead, gexit)
 
-    // ghead: group phi + this group's weight/scale bases; the k loop hangs off it as its
-    // per-iteration body (emit_slice re-enters with zeroed accumulators each group)
+    // ghead: group phi + weight/scale bases; emit_slice re-enters with zeroed accumulators each group
     LLVMPositionBuilderAtEnd(b, ghead)
     var gPhi = LLVMBuildPhi(b, te.types.t_int64, "g")
     var gEntryVals <- [g0]
@@ -2148,10 +1993,9 @@ def private gemv_gen(var gc : LlvmCodeCtx) : bool => gemv_gen_impl(gc, false)
 // the wscale_f16 rows-core twin (stamped as a companion with the SAME perm) — see tile_s16_gen
 def private gemv_s16_gen(var gc : LlvmCodeCtx) : bool => gemv_gen_impl(gc, true)
 
-// The MXFP4 quarter of the stamp: the same rows-range GEMV as gemv_gen over the
-// grp<mr>-interleaved nibble/exponent planes — emit_block_mx4 swaps the weight-load stage for
-// LUT dequant (constant LUT; tbl1 on NEON, pshufb on x64) and the scale loads for the
-// in-register e8m0 fold; the loop machinery, gkstep knob, and decline rails are shared.
+// The MXFP4 GEMV: same rows-range walk as gemv_gen over grp<mr>-interleaved nibble/exponent
+// planes — emit_block_mx4 swaps the weight load for LUT dequant (tbl1/pshufb) and the scale
+// load for the in-register e8m0 fold; loop machinery, gkstep, and decline rails are shared.
 def private mx4_gemv_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
@@ -2211,10 +2055,9 @@ def private mx4_gemv_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// The mx4 TILE quarter (the mx4 batch family): tile_gen's 4-token walk over the group-base
-// nibble/exponent planes — emit_block_mx4 dequants each weight block-group ONCE (LUT +
-// in-register e8m0 fold) and reuses it across the 4 activation rows. amx winner perms ride
-// the busd lattice (companion_perm), like every non-TMUL companion.
+// The mx4 TILE: tile_gen's 4-token walk over the group-base nibble/exponent planes —
+// emit_block_mx4 dequants each weight block-group ONCE (LUT + e8m0 fold) and reuses it
+// across the 4 activation rows. amx winner perms ride the busd lattice via companion_perm.
 def private mx4_tile_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
@@ -2269,12 +2112,9 @@ def private is_kq_gemv_signature(fn : Function const?) : bool {
     return true
 }
 
-// The K-quant sixth of the stamp (kq stage 4): rows-range GEMVs over the grp<mr> kq planes —
-// (yp, kq, ks, xq, xs, xbs, n, rb, re), rb/re multiples of mr. Same group walk as gemv_gen but
-// the block unit is a 256-weight SUPERBLOCK (nb = n/256, kstep pinned 1 — 8 sub-block dot
-// chains per unit already feed the ports; gkstep's extra unroll only bloats the body). The
-// unpacks are generic IR and the dots ride the existing lattice via kq_dot_lane, so the family
-// declines via the SAME perm_declines with NO new rails — witness lockstep holds for free.
+// The K-quant rows-range GEMV over the grp<mr> kq planes — same group walk as gemv_gen, but
+// the block unit is a 256-weight SUPERBLOCK (nb = n/256, kstep pinned 1). Unpacks are generic
+// IR riding kq_dot_lane, so it declines via the SAME perm_declines — no new rails.
 def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (!is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
@@ -2289,8 +2129,7 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     var ghead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "ghead")
     var gexit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gexit")
 
-    // entry: group range off the row range; per-row-per-superblock strides are the disk
-    // footprints (the repack only reorders): quants 128/160/192 B, scales 20/20/18 B
+    // entry: group range off the row range; strides are disk footprints (quants 128/160/192B, scales 20/20/18B)
     LLVMPositionBuilderAtEnd(b, entry)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
     sa.yp = LLVMGetParam(gc.impl, 0u)
@@ -2342,15 +2181,9 @@ def private k5_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 5)
 def private k6_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 6)
 def private q40_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 40)
 
-// The K-quant 4-token TILE (the kq batch family — weight-stationary prefill): same 10-arg
-// contract as the q8 tile (yp, kqg, ksg, xq image, xs, xbs, n, d, g, t0 — kqg/ksg are the
-// GROUP plane bases, the batch wrapper offsets per group), driven over SUPERBLOCK units with
-// per-token activation/scale/bsum bases. nrsplit slices bound the accumulator bank exactly
-// like the q8 tile; kstep pinned 1 (8 sub-block chains per unit already feed the ports).
-// emit_block_kqv2 unpacks each weight vector ONCE and dots it against every token — the fold
-// order per token is the GEMV's, so one tile call is bit-exact vs 4 per-token GEMVs. Declines
-// via the SAME perm_declines (generic-IR unpacks — no new rails; amx perms ride the busd
-// lattice via companion_perm, the kq planes have no TMUL form).
+// The K-quant 4-token TILE (weight-stationary prefill): same 10-arg contract as the q8 tile;
+// emit_block_kqv2 unpacks each weight vector ONCE and dots it against every token, bit-exact
+// vs 4 per-token GEMVs. Declines via the SAME perm_declines — no new rails.
 def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
@@ -2377,8 +2210,7 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     sa.g = LLVMGetParam(gc.impl, 8u)
     sa.t0 = LLVMGetParam(gc.impl, 9u)
     sa.nb = LLVMBuildSDiv(b, n, te.types->ConstI64(0x100ul), "nsb")
-    // kq v2 activations are Q8_K-form for all three formats: the scale plane is
-    // PER-SUPERBLOCK (n/256 per token); bsums are per-16.
+    // kq v2 activations are Q8_K-form: scale plane per-superblock (n/256/token), bsums per-16
     var nb16 = LLVMBuildSDiv(b, n, te.types->ConstI64(16ul), "nb16")
     for (tk in range(4)) {
         var tRow = LLVMBuildAdd(b, sa.t0, te.types->ConstI64(uint64(tk)), "")

@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_image shared public
 
@@ -36,9 +37,8 @@ struct ImgSection {
     bytes : uint64
 }
 
-// the box + knob identity an image is valid for; folded into the file name AND the header.
-// It names the exact plane layout, so it must be computed AFTER the same backend select the
-// gguf loader runs at repack time — the entry-time auto default is a different backend.
+// the box + knob identity an image is valid for; folded into filename AND header. Must be computed
+// AFTER the same backend select the gguf loader runs at repack time (entry-time default differs).
 // `tag` distinguishes image kinds sharing one source path (e.g. "tower-f32" vs "tower-q8").
 def image_identity(tag : string = "") : string {
     select_matmul_backend_for_load()
@@ -328,13 +328,9 @@ def private write_plane(f : file; var sections : array<ImgSection>; var cur : ui
     }
 }
 
-//! Serialize a loaded weight-carrying struct as a prepared image: array planes page-aligned
-//! raw (borrowed back at load), everything else archived. Tmp + rename: atomic replace where
-//! rename-over-existing works (POSIX); where it doesn't (Windows) a brief missing-file window
-//! exists and a concurrent reader just regenerates. Returns false on any IO failure. The
-//! caller's module must provide `serialize_image_meta(Archive, T)` for every non-array field
-//! and `image_post_load(T)` for post-read fix-ups (`_::` dispatch — Model's live here,
-//! AudioTower's in dasllama_audio).
+//! Serialize a loaded weight-carrying struct as a prepared image: array planes page-aligned raw
+//! (borrowed back at load), everything else archived. Tmp+rename: atomic on POSIX; on Windows a
+//! brief missing-file window lets a concurrent reader regenerate. Caller supplies `serialize_image_meta`/`image_post_load` (`_::` dispatch).
 def save_image(var t; path : string; tag : string = "") : bool {
     // per-writer tmp name: concurrent savers (parallel test workers on one cache miss) must
     // not clobber each other's half-written file; last atomic rename wins with same content
@@ -460,10 +456,9 @@ def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
     }
 }
 
-//! Map a prepared image and rebuild the struct with zero O(model) work: array plane fields
-//! borrow the mapping (the finalizer forgets + unmaps), the archive blob restores everything
-//! else. false = absent / wrong identity / wrong version — the caller regenerates from gguf.
-//! Same `_::` contract as save_image.
+//! Map a prepared image and rebuild the struct with zero O(model) work: array plane fields borrow
+//! the mapping (finalizer forgets + unmaps), archive blob restores everything else. false = absent /
+//! wrong identity / wrong version — caller regenerates from gguf. Same `_::` contract as save_image.
 def load_image(path : string; var t; tag : string = "") : bool {
     if (!stat(path).is_valid) {
         return false
@@ -611,12 +606,9 @@ def load_model_image(path : string; var t : Model) : bool {
     return true
 }
 
-//! The image-cached model load — ``load_model``'s engine half, public so benches and tools that
-//! can't afford the full dasllama facade ride the same cache. A ``.dlim`` path maps directly
-//! (wrong identity panics — nothing to regenerate from); a q8-mode gguf load maps its prepared
-//! image when one matches, else loads the gguf and saves the image for next time
-//! (``DASLLAMA_IMAGE=0`` disables); anything else takes the plain gguf rail. Call it inside
-//! ``with_job_que()`` — the GPU tier's gather/upload parallelizes over the que at load.
+//! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the
+//! full dasllama facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves
+//! a prepared image (``DASLLAMA_IMAGE=0`` disables); else plain gguf. Call inside ``with_job_que()``.
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     if (path |> ends_with(".dlim")) {
         apply_box_profile_runtime()

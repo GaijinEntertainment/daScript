@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_metal_kernels shared public
 
@@ -21,13 +22,8 @@ require dasllama/dasllama_metal_common
 // ===== the new kernels =====
 
 // One threadgroup per (stream, head), head_size threads — lane owns one V column. Pass 1 scores
-// the context (<= 128 rows — deeper contexts take the chunked twins below) simdgroup-
-// cooperatively: each simdgroup owns row j, its 32 lanes cover a contiguous 64B run of the K row
-// and reduce the dot via shuffles, so every load instruction coalesces (the per-lane-per-row form
-// gathered 32 cache lines 2KB apart per step — measured 27us/layer at depth 24). Pass 2 softmax
-// (simd butterfly + cross-simdgroup partials), pass 3 per-lane V-column accumulate. GQA: head h
-// reads kv head h/kv_mul. The oracle is the CPU decode path itself (tolerance — exp() and
-// accumulation order differ legitimately).
+// the context simdgroup-cooperatively so every K load coalesces (per-lane-per-row form gathered
+// cache lines 2KB apart — measured 27us/layer at depth 24). Pass 2 softmax, pass 3 V-accumulate.
 class MetalSqAttnF16 {
     @ssbo @binding = 0 kc : array<float16>  // this layer's K mirror slab (bound at the layer's byte offset)
     @ssbo @binding = 1 vc : array<float16>
@@ -267,12 +263,9 @@ class MetalSqAttnF32 {
     }
 }
 
-// q8_0-mirror twin — K/V rows are ggml block_q8_0 (34B per 32 elements, {f16 d; int8 qs[32]});
-// the mirror slab binds TWICE (half view: scale of block b at halfword 17*b; byte view: quants
-// at 34*b + 2 — the MetalQ8MulMm dual-view pattern) and dequant rides the stream. Lane sl's epl
-// score elements share one block, so the block scale factors out of the lane dot; the V column
-// walk reads quant + scale off the same 34B block (~one cacheline per row, half the f16 bytes).
-// Lab: benchmarks/attn/bench_metal_sq_attn.das — 1.1-1.7x over the f16 form at d512-2048.
+// q8_0-mirror twin — K/V rows are ggml block_q8_0 (34B/32 elems); the mirror slab binds twice
+// (half view for scale, byte view for quants — the dual-view pattern) and dequant rides the
+// stream. Measured 1.1-1.7x over the f16 form at d512-2048 (benchmarks/attn/bench_metal_sq_attn.das).
 class MetalSqAttnQ8 {
     @ssbo @binding = 0 ksh : array<float16> // K mirror slab, HALF-SCALE view (bound at the layer's byte offset)
     @ssbo @binding = 1 kqb : array<int8>    // the SAME K slab, BYTE view
@@ -406,10 +399,8 @@ class MetalSqAttnQ8 {
     }
 }
 
-// tq4-mirror twin — 18B rotated 4-bit blocks ({f16 d; uint8 qs[16]}, element 2i in the low
-// nibble of byte i); q arrives ROTATED (the rope-store twin rotates it) so the whole attention
-// runs in the rotated basis and yo needs one fwht-unsign pass downstream. Scale at halfword
-// 9*b, nibbles at byte 18*b + 2.
+// tq4-mirror twin — 18B rotated 4-bit blocks; q arrives already rotated (the rope-store twin
+// rotates it), so attention runs in the rotated basis and yo needs one fwht-unsign pass downstream.
 class MetalSqAttnTq4 {
     @ssbo @binding = 0 ksh : array<float16> // K mirror slab, HALF-SCALE view (bound at the layer's byte offset)
     @ssbo @binding = 1 kqb : array<uint8>   // the SAME K slab, BYTE view
@@ -533,13 +524,9 @@ class MetalSqAttnTq4 {
     }
 }
 
-// Chunked split-K twin for deeper contexts (cnt > ATTN_CHUNK_ROWS): grid (stream, head,
-// context-chunk) — each threadgroup owns one 128-row chunk of the context, runs the same
-// score/softmax/V-accumulate over just its rows, and writes an UNNORMALIZED partial (acc[hs] +
-// chunk max + chunk expsum); the tiny comb kernel rescales across chunks. The single-tg kernel
-// above collapses into one serial per-lane loop over the whole context (24 threadgroups on a
-// 32-core GPU — latency-bound, measured 7.5ms/token at depth 512); chunking scales occupancy
-// with depth and divides the serial pass length by nchunks.
+// Chunked split-K twin for deeper contexts (cnt > ATTN_CHUNK_ROWS): each threadgroup owns one
+// 128-row chunk, writes an unnormalized partial (acc[hs] + chunk max + expsum); a comb kernel
+// rescales across chunks. The single-tg form is latency-bound (measured 7.5ms/token at depth 512).
 class MetalSqAttnPartF16 {
     @ssbo @binding = 0 kc : array<float16>
     @ssbo @binding = 1 vc : array<float16>
@@ -1113,12 +1100,9 @@ class MetalSqAttnComb {
     }
 }
 
-// The 2-rows-per-simdgroup fused QKV GEMV + rope + KV-row store (the s16 perf path): element
-// pairs (2r, 2r+1) of the q/k vectors ARE weight rows 2r, 2r+1 of the fused QKV region, so one
-// simdgroup holds a whole rope pair in registers after its two row dots — q pairs rope into the
-// QKV buffer (attention reads them), k pairs rope straight into the mirror K row with the
-// ±65504 clamp, v pairs store raw. Deletes the rope_store dispatch AND its serialization level
-// (range boundaries are pair-aligned: qd and kv_dim are even).
+// Fused QKV GEMV + rope + KV-row store: element pairs (2r, 2r+1) of q/k ARE weight rows 2r, 2r+1
+// of the fused QKV region, so one simdgroup holds a whole rope pair in registers after its two
+// row dots. Deletes the separate rope_store dispatch entirely.
 class MetalQ8GemvQkvRsF16 {
     @ssbo @binding = 0 wq : array<byte4>    // fused QKV rows (concat region)
     @ssbo @binding = 1 ws : array<float16>  // fused scale planes, halfwords
@@ -1395,11 +1379,9 @@ class MetalEmbedQ8S16 {
     }
 }
 
-// Fused residual-add + rmsnorm, one threadgroup per step: x += a in place, then y = rms(x)·w —
-// one dispatch instead of the add + rmsnorm pair (two of these per layer). The added row stages
-// through the threadgroup slab because barrier() is a threadgroup fence only — this dispatch's
-// own device x writes are not ordered for re-reads. dim caps at the slab; wider models take the
-// unfused pair (enc_add_rms_site).
+// Fused residual-add + rmsnorm: x += a in place, then y = rms(x)·w, one dispatch instead of two.
+// The added row stages through the threadgroup slab since barrier() is a threadgroup fence only.
+// dim caps at the slab; wider models take the unfused pair (enc_add_rms_site).
 class MetalAddRms {
     @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
     @ssbo @binding = 1 a : array<float>     // [dim] addend (fully read before y is written — y may alias a)
@@ -1447,11 +1429,9 @@ class MetalAddRms {
     }
 }
 
-// Fused rope + KV-row store, one thread per rotation pair (ntok == 1): q pairs rope in place;
-// k pairs rope straight into the mirror K row (nothing reads the roped k buffer — attention
-// reads the mirror) with cvt_f32_to_f16's exact ±65504 clamp, and the same thread copies its V
-// pair. Replaces the rope_qk + kv_store dispatch pair. The v source binds the same fused QKV
-// buffer at its v byte offset (disjoint from the q/k range).
+// Fused rope + KV-row store, one thread per rotation pair (ntok == 1): q pairs rope in place; k
+// pairs rope straight into the mirror K row (±65504 clamp) and the same thread copies its V pair.
+// Replaces the rope_qk + kv_store dispatch pair.
 class MetalRopeStoreF16 {
     @ssbo @binding = 0 qk : array<float>    // q at [0, qd) roped in place, k at [qd, qd + kvd)
     @ssbo @binding = 1 vs : array<float>    // raw v (the QKV buffer at the v offset)
@@ -1537,12 +1517,9 @@ class MetalRopeStoreF32 {
     }
 }
 
-// q8_0-mirror rope + KV-row store: q pairs rope in place exactly like the f16 form (one thread
-// per pair); K and V rows quantize per 32-block — one thread per block, MetalQ8Quant's shape —
-// with quantize_q8kv_row's exact semantics (d = amax/127 stored f16, quants round with the
-// unrounded f32 1/d), so CPU fallback steps read the same codec the CPU store would have
-// written. K blocks rope their 16 pairs first (rope pairs never straddle a block: head_size %
-// 32 == 0), V blocks copy raw. Grid: npairs_q pair threads + nblk K-block + nblk V-block threads.
+// q8_0-mirror rope + KV-row store: q pairs rope in place; K/V rows quantize per 32-block (one
+// thread per block) matching quantize_q8kv_row's exact semantics, so CPU fallback steps read the
+// same codec. K blocks rope their 16 pairs first; V blocks copy raw.
 class MetalRopeStoreQ8 {
     @ssbo @binding = 0 qk : array<float>    // q at [0, qd) roped in place, k at [qd, qd + kvd)
     @ssbo @binding = 1 vs : array<float>    // raw v (the QKV buffer at the v offset)
@@ -1626,13 +1603,9 @@ class MetalRopeStoreQ8 {
     }
 }
 
-// tq4-mirror rope + KV-row store: ONE THREADGROUP PER HEAD (head_size threads — the FWHT spans
-// the head, so per-pair/per-block threads can't serve it). Q heads rope + rotate in place; K
-// heads rope + rotate + quantize into the mirror row; V heads rotate + quantize. The rotation is
-// the CPU seam's exact fwht_signs_row (signs, butterfly, 1/sqrt(n)); quantize is
-// quantize_tq4kv_row's exact ggml q4_0 semantics — d = SIGNED max / -8 with the CPU's
-// first-index tie-break (the carried (abs, value, lane) shuffle reduction), q = min(15,
-// int(x*id + 8.5)), element 2k in the low nibble. head_size is a power of two by session create.
+// tq4-mirror rope + KV-row store: one threadgroup per head (head_size threads — the FWHT spans
+// the head). Q heads rope + rotate in place; K heads rope + rotate + quantize into the mirror
+// row; V heads rotate + quantize, matching the CPU seam's fwht_signs_row / quantize_tq4kv_row bit-for-bit.
 class MetalRopeStoreTq4 {
     @ssbo @binding = 0 qk : array<float>    // q at [0, qd) ropes + rotates in place, k at [qd, qd + kvd)
     @ssbo @binding = 1 vs : array<float>    // raw v (the QKV buffer at the v offset)
@@ -1759,22 +1732,12 @@ class MetalFwhtUnsign {
 }
 
 // ===== the batched-step kernels (P4) =====
-// One eval_batch step = B independent sessions through one weight pass. The GEMV sites become
-// either fixed-B batched GEMVs (B <= 4 — the P1a lab's winners) or the M-pad-32 GEMM (B >= 5,
-// B-independent cost), and the per-row kernels (attention, rope+store) reach each row's KV slice
-// through the mirror-arena row table: rt[b] = (k base, v base, cap_rows, cnt) in arena ELEMENTS,
-// with the layer index a uniform — per-row capacities differ, so the layer stride is per row.
+// One eval_batch step = B sessions through one weight pass; per-row kernels reach each row's KV
+// slice via row table rt[b] = (k base, v base, cap_rows, cnt) in arena elements.
 
-// Fixed-B batched GEMV twins, X-STAGED (lab round 3, 2026-07-14): the tg's 4 rows all dot the
-// SAME B activation vectors, so a 64-float4-per-stream chunk of the X panel stages in threadgroup
-// memory once per tg (cooperative 128-thread load) and the inner-loop x reads become tgmem hits —
-// the per-lane device x loads were the ALU-bound form's limiter (lab: B=2 +40-88%, B=4 ~2x on
-// every decode shape; per-lane-CONSECUTIVE chunking measured 30-45% WORSE — inter-lane coalescing
-// beats per-lane locality on AGX). W stays strided/coalesced; the strided tail (device x, no
-// barriers) covers n % 256 != 0; row clamps instead of early-returning so barriers stay converged
-// in a partial last tg. Geometry is pinned at 128 threads = 4 rows (the slot math bakes it in).
-// Scales bind through BOTH views (f32 plane / wscale_f16 halfword plane — the same buffer twice,
-// MulMm's dual-view trick); `s16` picks per model.
+// Fixed-B batched GEMV twins, X-STAGED: the tg's 4 rows share one X panel staged in tgmem
+// (cooperative load) instead of per-lane device reads (lab: B=2 +40-88%, B=4 ~2x; per-lane-
+// consecutive chunking measured 30-45% WORSE). Geometry pinned at 128 threads = 4 rows.
 class MetalGemvB2 {
     @ssbo @binding = 0 wq : array<byte4>    // [d x n] Q8 rows, byte4 view
     @ssbo @binding = 1 wsf : array<float>   // [d x n/32] scales, f32 view
@@ -1890,13 +1853,9 @@ class MetalGemvB4 {
     }
 }
 
-// The winning skinny-batch GEMV shape (the Part-3 in-graph verdict: this streamed form beats the
-// x-staged panel kernels ~12% at B <= 4): 64 threads = 2 simdgroups x 2 row-halves; 16 lanes
-// stream ONE output row's interleaved 34B q8 blocks (each lane owns chunk tx%8 of every 2nd
-// block — 4 independent chunk loads per step, the scale rides the quants' cacheline), the batch
-// columns share the dequantized weight stream, shuffle-down folds the 16-lane partials.
-// Requires n % 256 == 0 (the 4-chunk stripe reads unguarded — the same constraint the reference
-// PSO bakes). W = the SAME dual-view blob the prefill mul_mm reads.
+// Skinny-batch GEMV: streamed form beats x-staged panel kernels ~12% at B <= 4. 64 threads = 2
+// simdgroups x 2 row-halves; 16 lanes stream one output row's interleaved 34B q8 blocks, batch
+// columns share the dequantized weight stream. Requires n % 256 == 0 (unguarded 4-chunk stripe).
 class MetalQ8MvB2 {
     @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
@@ -1956,11 +1915,9 @@ class MetalQ8MvB2 {
     }
 }
 
-// the 4-column twin (serves B = 3..4; pad column reads clamp to row 0, stores gate on nrows).
-// The 4-column geometry drops to 8 lanes per output row (4 rows/simdgroup, 8 rows/tg — the
-// reference bakes nxpsg=8 for its 4-column form): with 4 fma chains per weight load the stream
-// needs fewer lanes, and doubling the rows in flight per tg hides the block-load latency instead.
-// Each lane owns chunk tx of EVERY block (8 chunks/block == 8 lanes), hopping 1 block per step.
+// 4-column twin (serves B = 3..4; pad column reads clamp to row 0, stores gate on nrows). Drops
+// to 8 lanes per output row (4 rows/simdgroup, 8 rows/tg): fewer lanes per weight load, more
+// rows in flight hides the block-load latency instead.
 class MetalQ8MvB4 {
     @ssbo @binding = 0 wsh : array<float16>
     @ssbo @binding = 1 wqb : array<int8>
@@ -2027,11 +1984,9 @@ class MetalQ8MvB4 {
     }
 }
 
-// Fused fixed-B W1|W3 GEMV + swiglu (the batch twin of MetalQ8GemvW13Sw): each subgroup owns one
-// hidden row, dots the gate row r AND the up row r+hidden against the shared x panel for every
-// batch row, and writes silu(gate)*up directly — replacing the w1 GEMV + w3 GEMV + swiglu triple
-// with one dispatch. The x panel is staged once and reused for both weight rows. Dual-view scales
-// (s16 uniform picks the halfword plane). B2 form serves B <= 2; B4 serves 3..4.
+// Fused fixed-B W1|W3 GEMV + swiglu (batch twin of MetalQ8GemvW13Sw): each subgroup dots the
+// gate row r AND up row r+hidden, writing silu(gate)*up directly — replaces the w1/w3/swiglu
+// triple with one dispatch. B2 form serves B <= 2; B4 serves 3..4.
 class MetalGemvW13SwB2 {
     @ssbo @binding = 0 wq : array<byte4>    // cat W1|W3 rows, byte4 view
     @ssbo @binding = 1 wsf : array<float>   // scales, f32 view
@@ -2169,13 +2124,9 @@ class MetalGemvW13SwB4 {
     }
 }
 
-// The M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows) — MulMm's staging discipline
-// on the occupancy-friendly 32x32 tile (lab: 110 instr/k-block vs the old 235; 1.16-1.33x on
-// every decode shape). Raw f32 X — the quant tails are gone; dual-view WEIGHT scales (s16 picks).
-// Every thread stages 8 W elems AND 8 X elems (indexes hoisted; device reads + dequant into
-// registers BEFORE the barrier so they fly while the previous math drains); k-major 8x8 W tiles
-// feed the mma straight. Pad token rows carry stale bytes by design: C rows are per-token
-// independent, and pad Y rows are never read back.
+// M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows): MulMm's staging discipline on a
+// 32x32 tile, 110 instr/k-block vs the old 235 (1.16-1.33x on every decode shape). Pad token rows
+// carry stale bytes by design — C rows are per-token independent, pad Y rows are never read back.
 class MetalQ8GemmB {
     @ssbo @binding = 0 wq : array<byte4>    // W [d x n] row-major Q8 quants, byte4 view
     @ssbo @binding = 1 wsf : array<float>   // W scales [d x n/32], f32 view
@@ -2267,12 +2218,9 @@ class MetalQ8GemmB {
     }
 }
 
-// The split-K twin of MetalQ8GemmB (the GEMM lab's per-site verdicts): grid.y gains a k-slice
-// axis — each threadgroup walks nkb/ksplit k-blocks into its own partial-C plane, and the
-// MetalSkReduce pass sums the planes (separate dispatch — no float atomics, deterministic).
-// At M-pad-32 the M axis is one tile, so k-slicing is the only way to grow the grid past d/32
-// threadgroups on the starved sites (qkv, wo, w2). Planes are 32 x d: the driver gates split-K
-// to mp == 32.
+// Split-K twin of MetalQ8GemmB: grid.y gains a k-slice axis, each threadgroup walks its own
+// partial-C plane, and a separate MetalSkReduce dispatch sums them (no float atomics,
+// deterministic). At M-pad-32 this is the only way to grow the grid past d/32 on starved sites.
 class MetalQ8GemmBSk {
     @ssbo @binding = 0 wq : array<byte4>    // W [d x n] row-major Q8 quants, byte4 view
     @ssbo @binding = 1 wsf : array<float>   // W scales [d x n/32], f32 view
@@ -2393,10 +2341,9 @@ class MetalSkReduce {
     }
 }
 
-// The 64-wide twin — the same v2 staging discipline on MulMm's 32(M) x 64(N) tile: half the
-// threadgroups (d/64) at ~29% fewer instructions per element, so it wins exactly where the grid
-// stays fat regardless — the classifier (vocab/64 threadgroups). Each simdgroup owns a 16x32
-// quadrant (2 token x 4 wrow tiles); a thread stages 16 W elems (row x k-half) and 8 X elems.
+// The 64-wide twin of MulMm's 32(M) x 64(N) tile: half the threadgroups (d/64) at ~29% fewer
+// instructions per element — wins where the grid stays fat (e.g. the vocab classifier). Each
+// simdgroup owns a 16x32 quadrant (2 token x 4 wrow tiles).
 class MetalQ8Gemm64B {
     @ssbo @binding = 0 wq : array<byte4>    // W [d x n] row-major Q8 quants, byte4 view
     @ssbo @binding = 1 wsf : array<float>   // W scales [d x n/32], f32 view
@@ -2490,10 +2437,9 @@ class MetalQ8Gemm64B {
     }
 }
 
-// Batched single-query attention, single-tg form: grid (nheads x B) threadgroups — the same
-// simdgroup-cooperative math as MetalSqAttnF16, but each row reads ITS mirror slice through the
-// row table (per-row base + capacity + depth) and its roped q lives in the fused QKV buffer at
-// stride qstride (= qkvd).
+// Batched single-query attention, single-tg form: grid (nheads x B), same simdgroup-cooperative
+// math as MetalSqAttnF16, but each row reads its mirror slice through the row table and its
+// roped q lives in the fused QKV buffer at stride qstride.
 class MetalSqAttnBF16 {
     @ssbo @binding = 0 kc : array<float16>  // the whole mirror arena, f16 view
     @ssbo @binding = 1 vc : array<float16>
@@ -2741,12 +2687,9 @@ class MetalSqAttnBF32 {
     }
 }
 
-// Batched chunked split-K twin: grid (nheads x nchmax x B) — rows shallower than a chunk's start
-// early-out whole-threadgroup (uniform per tg), and the comb below reads each row's own chunk
-// count from the table, so ragged depths share one dispatch.
-// q8_0-mirror batch twin (dual-view block reads — see MetalSqAttnQ8). Its row-table entries
-// carry arena BYTE offsets (the driver fills per dtype); rowb = nblk*34 and every offset is
-// even (16B-aligned slices), so the half-scale view indexes at byte/2 exactly.
+// Batched chunked split-K twin of MetalSqAttnQ8 — grid (nheads x nchmax x B), ragged depths
+// share one dispatch via per-row chunk counts. Row-table entries carry arena BYTE offsets
+// (rowb = nblk*34, always even), so the half-scale view indexes at byte/2 exactly.
 class MetalSqAttnBQ8 {
     @ssbo @binding = 0 ksh : array<float16> // the whole mirror arena, half-scale view
     @ssbo @binding = 1 kqb : array<int8>    // the SAME arena, byte view
@@ -3628,15 +3571,9 @@ class MetalSqAttnCombB {
     }
 }
 
-// Fused single-pass batched attention (the walkthrough kernel-2 winner, <= llama.cpp fa_vec at
-// every depth 512-16K in the lab): ONE simdgroup per (row, head, 32-position slice-group) — a
-// budget of min(ceil(cnt/32), 16) sgs strides the slices; K keeps each position's score in the
-// owning lane's REGISTER (no divergent store), the slice softmax is a register butterfly, V
-// accumulates a half4 column group per lane with the O accumulator in a LANE-PRIVATE tgmem slot
-// (their so4 discipline — zero barriers), and slices merge online (branch-free exp-rescale).
-// hs == 128 only (32 lanes x half4 = one head); grid (nheads, ceil(nsgs/4), rows) HEAD-FASTEST
-// (consecutive tgs share position rows — SLC locality). Entries are (hs+4) floats,
-// float4-aligned, combined by MetalSqAttnCombD.
+// Fused single-pass batched attention: beats llama.cpp fa_vec at every depth 512-16K. One
+// simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
+// accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
 class MetalSqAttnDF16 {
     @ssbo @binding = 0 kc : array<half4>
     @ssbo @binding = 1 vc : array<half4>
@@ -3922,10 +3859,8 @@ class MetalSqAttnCombD {
     }
 }
 
-// Batched fused rope + KV-row store: grid (pairs x B) — row b's q pairs rope in place in ITS
-// fused QKV row (stride qstride), its k pairs rope into ITS mirror row (table base + capacity,
-// depth cnt ⇒ the new row lands at cnt-1) with the ±65504 clamp, v pairs copy alongside. The
-// rope row is row b's own (positions differ across the batch).
+// Batched fused rope + KV-row store: grid (pairs x B) — row b's q pairs rope in place, k pairs
+// rope into its mirror row (±65504 clamp) at depth cnt-1, v pairs copy alongside.
 class MetalRopeStoreBF16 {
     @ssbo @binding = 0 qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
     @ssbo @binding = 1 kd : array<float16>  // the whole mirror arena, f16 view (k dest)
@@ -4027,10 +3962,9 @@ class MetalRopeStoreBF32 {
     }
 }
 
-// q8_0-mirror partD twin (hs == 128 only, the DF16 shape with dual-view block reads): one sg per
-// (row, head, 32-position slice), online slice merge, byte-offset row table. K/V loads are 4
-// scalar int8s + the block scale per position (34B blocks break half4 alignment); the block
-// scale folds into the lane product before the simd_sum.
+// q8_0-mirror partD twin (hs == 128 only, DF16 shape): one sg per (row, head, 32-position
+// slice), online slice merge, byte-offset row table. K/V loads are 4 scalar int8s + block scale
+// per position (34B blocks break half4 alignment); scale folds in before the simd_sum.
 class MetalSqAttnDQ8 {
     @ssbo @binding = 0 ksh : array<float16>
     @ssbo @binding = 1 kqb : array<int8>
@@ -5116,10 +5050,9 @@ def enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba : MetalB
 
 // ===== the batched-step encoders (P4) =====
 
-// fixed-B batched GEMV (the B2 form serves B <= 2, B4 serves 3..4 — pad streams read stale rows,
-// whose outputs are never consumed); the cat regions bind at byte offsets, scales through both
-// views (the s16 uniform picks). Geometry pinned at 4 rows/tg — the x-staged cooperative-load
-// slot math bakes 128 threads in (the g_gemv_rows knob stays single-stream-only).
+// fixed-B batched GEMV: B2 form serves B <= 2, B4 serves 3..4 (pad streams read stale rows,
+// never consumed). Geometry pinned at 4 rows/tg with 128 threads baked in (g_gemv_rows knob
+// stays single-stream-only).
 def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bwq : MetalBuffer?; wqoff : uint64;
                bws : MetalBuffer?; wsoff : uint64; bx, by, bn, bd, bs16 : MetalBuffer?; d : int64) {
     metal_set_pipeline(enc, four ? g_pso_gemv_b4 : g_pso_gemv_b2)
@@ -5261,12 +5194,9 @@ def enc_gemm64_b(enc : MetalComputeEncoder?; bwq : MetalBuffer?; wqoff : uint64;
     metal_dispatch_threadgroups(enc, uint3(uint((mp32 / 32l) * (d / 64l)), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
-// Per-encoder buffer-hazard tracker for the concurrent-encode rail (g_bconcurrent). Each scratch
-// buffer owns one bit; a dispatch declares the buffers it reads (rmask) and writes (wmask). A
-// barrier is inserted iff the dispatch would read a pending write (RAW), or write a pending write
-// (WAW) or a pending read (WAR) — read-after-read runs concurrently. Weights/uniforms are
-// read-only and never tracked (a read of them can never hazard). The tracker resets after each
-// barrier and at every command-buffer boundary (a fresh encoder + queue order already serialize).
+// Per-encoder buffer-hazard tracker for concurrent encoding (g_bconcurrent): each scratch buffer
+// owns a bit; a barrier is inserted iff a dispatch's read hits a pending write (RAW), or its
+// write hits a pending write/read (WAW/WAR) — read-after-read runs concurrently.
 
 def enc_attn_b(enc : MetalComputeEncoder?; f16 : bool; bq, by, brt, blay, bkvd, bnh, bkvm, bhs, bscale, bqs : MetalBuffer?; nrows, nheads, head_size : int64) {
     metal_set_pipeline(enc, f16 ? g_pso_attnb16 : g_pso_attnb32)

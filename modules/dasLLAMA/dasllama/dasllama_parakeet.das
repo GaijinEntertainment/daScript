@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_parakeet shared public
 
@@ -66,10 +67,9 @@ struct private PkLayerOffs {
     nout_b : int64
 }
 
-//! A loaded Parakeet-TDT model: hparams, mel filterbank + STFT window from the file, TDT
-//! durations, SPM vocab, and the weights. An fp32 load keeps every weight in one blob; the
-//! default q8 load transcodes the GEMM regions into qblob/qscales (full-layout offsets)
-//! and blob holds only the fp32-side regions (convs/norms/biases/BN/LSTM/joint aux).
+//! A loaded Parakeet-TDT model: hparams, mel filterbank + STFT window, TDT durations, SPM vocab,
+//! and weights. An fp32 load keeps one blob; the default q8 load transcodes GEMM regions into
+//! qblob/qscales, leaving blob with only the fp32-side regions.
 struct ParakeetModel {
     n_vocab : int64
     n_state : int64
@@ -131,9 +131,7 @@ def private pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
     let d = m.n_state
     let ff = 4l * d
     let dh = d / m.n_head
-    // dual walk: `o` is the full layout — the GEMM offsets (qblob on a q8 load); `a` is the
-    // fp32 walk of m.blob, which the GEMM regions collapse out of on a q8 load (g = 0).
-    // On an fp32 load the two walks are identical.
+    // dual walk: `o` is the full GEMM layout (qblob on a q8 load); `a` is the fp32 walk of m.blob (identical on an fp32 load)
     let g = m.q8 ? 0l : 1l
     var o = m.layers_off + l * m.layer_stride
     var a = m.aux_layers_off + l * m.aux_layer_stride
@@ -231,10 +229,9 @@ struct ParakeetPredState {
     hbuf : array<float>    // scratch [pred_dim]: current layer's h (matmul takes plain arrays)
 }
 
-//! Every hot-path buffer of the parakeet pipeline — mel, conv subsampling, encoder,
-//! requant images, and the TDT decode — so a transcribe allocates NOTHING per call.
-//! Arrays grow reserve-exact when a longer clip arrives and never shrink; a
-//! default-constructed value is ready to use (first call sizes it).
+//! Every hot-path buffer of the parakeet pipeline (mel, conv subsampling, encoder, requant,
+//! TDT decode) so a transcribe allocates NOTHING per call. Arrays grow reserve-exact and never
+//! shrink; a default-constructed value is ready to use.
 struct ParakeetState {
     // mel
     mel : WhisperMel = WhisperMel()
@@ -410,11 +407,9 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
     quantize_q8_0_into(scratch, n, m.qblob, m.qscales, woff, woff / 32l)
 }
 
-//! Load a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
+//! Loads a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
 //! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file
-//! (the ~4x CPU fast path; parakeet_encode switches onto the generated q8q8 kernels) and blob
-//! keeps only the fp32-side regions. The conv im2col stack (k=9 taps), depthwise kernels,
-//! LSTM, and joint_net stay fp32 — they are a few % of encode and off the q8 shapes.
+//! (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
     var m = ParakeetModel()
     m.q8 = q8
@@ -628,11 +623,9 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
 
 // ===== mel (frame-major!) =====
 
-//! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window
-//! (centered inside the 512 frame), power spectra, mel dot (the tuned ``dot`` kernel),
-//! NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization computed over the
-//! valid frames only (Bessel n−1, std + 1e-5) and applied to all. FRAME-major
-//! ``[n_len][n_mel]``.
+//! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
+//! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
+//! valid frames only (Bessel n−1, std + 1e-5), applied to all. FRAME-major ``[n_len][n_mel]``.
 def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : ParakeetState) {
     let n_in = int64(length(samples))
     pk_ensure(st.pre, n_in)
@@ -730,11 +723,9 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 
 // ===== conv subsampling =====
 
-// c0: conv2d k3 s2 p1, cin=1, bias+relu fused. Each output row is 9 scalar-broadcast
-// mads over the contiguous channel axis; w tap-major [9][cout] (repacked at load, 9 KB —
-// L1-resident), OOB taps skipped (exact zeros in the im2col form). Bit-exact vs the old
-// im2col+K9-GEMM+bias+relu chain and 6.5x faster even single-lane (see conv_sub_bench);
-// threads over oy rows (independent — bit-exact at any lane count).
+// c0: conv2d k3 s2 p1, fused bias+relu. w tap-major [9][cout] (repacked at load, L1-resident);
+// bit-exact vs the old im2col+K9-GEMM+bias+relu chain and 6.5x faster even single-lane
+// (conv_sub_bench); threads over oy rows (bit-exact at any lane count).
 def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob : array<float>;
                                  w_off, b_off : int64; iw, ih, cout : int64) {
     let ow = (iw - 1l) / 2l + 1l
@@ -926,12 +917,9 @@ def private pk_bias_relu(var y : array<float>; blob : array<float>; b_off, d, np
 
 // ===== encoder =====
 
-//! FastConformer encoder over the whole mel: conv subsampling to ``[T × n_state]``, then
-//! 24 conformer blocks (macaron FFN halves, rel-pos attention with u/v biases, GLU +
-//! depthwise-conv + inference-BN module, per-layer post norm). Global attention only —
-//! clips past the oracle's 8192-frame local-attention switch panic (see parakeet_plan.md).
-//! Reads the mel from ``st.mel``; the encoder rows (token-major ``[T × n_state]``) are left
-//! in ``st.x``. Returns the frame count.
+//! FastConformer encoder over the whole mel: conv subsampling, then 24 conformer blocks (macaron
+//! FFN, rel-pos attention, GLU+depthwise-conv+BN, post norm) — global attention only, panics past
+//! the oracle's 8192-frame local-attention switch. Reads ``st.mel``, leaves rows in ``st.x``.
 def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     let d = m.n_state
     let nch = m.n_sub_ch
@@ -1111,11 +1099,9 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
                 }
                 asr_prof_add("pk.attn_heads.pos", th)
                 th = ref_time_ticks()
-                // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ (gathered at (T−1)−q+k) +
-                // softmax + P·V_h, threaded over query rows in 4-ROW BLOCKS: gemm_f32's 4×16
-                // tile / scalar-remainder split is row-position-dependent, so 4-aligned chunk
-                // starts keep every row's FMA order identical to the whole-matrix call —
-                // bit-exact at any lane count
+                // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h, threaded in
+                // 4-ROW BLOCKS: gemm_f32's 4×16 tile is row-position-dependent, so 4-aligned chunk
+                // starts keep FMA order bit-exact vs the whole-matrix call at any lane count.
                 let nblk4 = (tt + 3l) / 4l
                 maybe_parallel_for(0, int(nblk4), lanes_for_work(tt * dh * (2l * tt + ww), 0)) $(bb, be) {
                     unsafe {
@@ -1402,10 +1388,9 @@ def set_parakeet_trace(on : bool) {
     g_parakeet_trace = on
 }
 
-//! Greedy TDT decode over the encoder rows in ``st.x`` — whisper.cpp's parakeet_decode
-//! loop, token for token: joint softmax over the full (vocab+blank+durations) row, argmax
-//! token + argmax duration, blank advances time without predicting, non-blank feeds the
-//! LSTM, duration 0 caps at n_max_tokens per frame. Tokens are left in ``st.toks``.
+//! Greedy TDT decode over the encoder rows in ``st.x`` — whisper.cpp's parakeet_decode loop:
+//! joint softmax per frame, argmax token + duration, blank advances time, duration 0 caps at
+//! n_max_tokens/frame. Tokens land in ``st.toks``.
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
     st.toks |> clear()
     let d = m.n_state
@@ -1453,11 +1438,9 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
                 best = i
             }
         }
-        // duration argmax over the fp32 SOFTMAX values, not the raw logits: the oracle's
-        // probs = softmax(logits) in fp32 flushes the durations' ~e⁻¹¹⁰ relative mass to
-        // exactly 0.0 wherever exp(logit − max) underflows, log() turns them into −inf, and
-        // its strict-> argmax over five −infs then defaults to index 0. Analytic logit
-        // comparison would pick the TRUE argmax and diverge — mirror the underflow.
+        // duration argmax over fp32 SOFTMAX values, not raw logits: the oracle's probs flush
+        // durations' ~e⁻¹¹⁰ mass to exactly 0.0 on underflow, so ties default to index 0 —
+        // an analytic logit argmax would diverge from the oracle here.
         var bdur = 0
         var bdp = exp(st.logits[n_tok_logits] - mx)
         for (i in range(1, int(m.n_durations))) {

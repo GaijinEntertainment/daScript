@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 module dasllama_gemm_schema shared public
 
@@ -19,10 +20,9 @@ struct Q8RepackType {
     //! additive bias baked into every GROUP-row weight byte (`w ^ 0x80` when 128 — the
     //! vpdpbusd bias128 perms; 0 = plain s8). Row-major tail rows always stay unbiased.
     wbias : int
-    //! k-bytes per row per interleave group: 4 = the dword-group layout every vector-dot
-    //! perm reads ([kg4][r][4b]); 8 = the smmla row-pair layout ([kg8][r][8b] — a row PAIR's
-    //! 8 k-bytes are one contiguous 16-byte MMA operand, slice J). Tail rows stay row-major
-    //! at any kgroup.
+    //! k-bytes per row per interleave group: 4 = dword-group layout ([kg4][r][4b]); 8 = smmla
+    //! row-pair layout ([kg8][r][8b] — a row PAIR's 8 k-bytes form one 16-byte MMA operand).
+    //! Tail rows stay row-major at any kgroup.
     kgroup : int
 }
 
@@ -33,10 +33,9 @@ def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType
     return Q8RepackType(interleave = mr, f32_scales = true, wbias = wbias, kgroup = kgroup)
 }
 
-//! The mr of the REFERENCE tier's layout (the q8q8_repack_type(4) interleave — the old
-//! hand arm64-laneq layout — that the reference stub bodies read). Non-reference mr runs on the generated pair:
-//! the tile generator emits the grp<mr> kernel and the layout companion reports mr to the
-//! runtime repack — stamped from one manifest entry, declining in lockstep (M4).
+//! The mr of the REFERENCE tier's layout (q8q8_repack_type(4), the old hand arm64-laneq layout
+//! the reference stub bodies read). Non-reference mr runs the generated grp<mr> kernel/layout pair,
+//! stamped from one manifest entry so both decline in lockstep (M4).
 let GEMM_REFERENCE_MR = 4
 
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
