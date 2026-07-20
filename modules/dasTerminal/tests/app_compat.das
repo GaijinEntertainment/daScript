@@ -37,6 +37,7 @@ struct CompatExpectedCheckpoint {
     cursor : TerminalCursor = TerminalCursor()
     alternate_active : bool
     title : string
+    replies : array<uint8>
     cells : array<TerminalCell>
 }
 
@@ -128,7 +129,7 @@ def assert_buffer(buffer : TerminalBufferSnapshot const;
     check(expected_index == length(expected.cells), "{context}: missing terminal cell")
 }
 
-def assert_checkpoint(terminal : Terminal const; expected : CompatExpectedCheckpoint const;
+def assert_checkpoint(var terminal : Terminal; expected : CompatExpectedCheckpoint const;
                       scenario_id : string) {
     var snapshot = TerminalSnapshot()
     terminal_snapshot(terminal, snapshot)
@@ -136,6 +137,19 @@ def assert_checkpoint(terminal : Terminal const; expected : CompatExpectedCheckp
     check(snapshot.alternate_active == expected.alternate_active,
         "{context}: active buffer")
     check(snapshot.title == expected.title, "{context}: title")
+
+    var reply_chunks : array<array<uint8>>
+    terminal_drain_replies_bytes(terminal, reply_chunks)
+    var replies : array<uint8>
+    for (chunk in reply_chunks) {
+        for (byte in chunk) {
+            replies |> push(byte)
+        }
+    }
+    check(length(replies) == length(expected.replies), "{context}: reply byte count")
+    for (index in range(length(replies))) {
+        check(replies[index] == expected.replies[index], "{context}: reply byte {index}")
+    }
     if (expected.alternate_active) {
         assert_buffer(snapshot.alternate, expected, snapshot.columns, snapshot.rows, context)
     } else {

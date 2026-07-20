@@ -27,11 +27,12 @@ oracle or the scenario corpus:
 npm run oracle:update
 ```
 
-The first application-derived cases follow Pi's renderer because its source and
-its own xterm-backed virtual-terminal tests are available. Claude Code streams
-will be captured through a PTY because its implementation is not public. Codex
-and OpenCode cases should likewise be reduced to stable byte fixtures rather
-than adding either application as a test dependency.
+The application-derived cases are reduced to stable byte fixtures; none of the
+applications is a test dependency. Pi cases follow its renderer and its own
+xterm-backed virtual-terminal tests. Codex cases follow its pinned Ratatui
+scrolling-region implementation, and OpenCode cases follow OpenTUI's capability
+probes. The Claude Code case was reduced from a short Windows ConPTY capture of
+version 2.1.215 because its implementation is not public.
 
 ## Deliberately deferred conformance scope
 

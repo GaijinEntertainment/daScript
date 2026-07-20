@@ -19,6 +19,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -232,6 +233,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -296,6 +298,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 1,
@@ -507,6 +510,7 @@
           },
           "alternate_active": false,
           "title": "PowerShell",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -608,6 +612,7 @@
           },
           "alternate_active": true,
           "title": "PowerShell",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -688,6 +693,7 @@
           },
           "alternate_active": false,
           "title": "PowerShell",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -795,6 +801,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -1280,6 +1287,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -1718,6 +1726,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -2162,6 +2171,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -2496,6 +2506,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -2643,6 +2654,7 @@
           },
           "alternate_active": false,
           "title": "",
+          "replies": [],
           "cells": [
             {
               "row": 0,
@@ -2771,6 +2783,2774 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "pi/keyboard-negotiation-fallback",
+      "checkpoints": [
+        {
+          "checkpoint": "negotiated",
+          "screen": [
+            "prefix",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 6
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [
+            27,
+            91,
+            63,
+            49,
+            59,
+            50,
+            99
+          ],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "grapheme": "f",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 4,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 5,
+              "grapheme": "x",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        },
+        {
+          "checkpoint": "fallback-enabled",
+          "screen": [
+            "prefixfallback",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 14
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "grapheme": "f",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 4,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 5,
+              "grapheme": "x",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 6,
+              "grapheme": "f",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 7,
+              "grapheme": "a",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 8,
+              "grapheme": "l",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 9,
+              "grapheme": "l",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 10,
+              "grapheme": "b",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 11,
+              "grapheme": "a",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 12,
+              "grapheme": "c",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 13,
+              "grapheme": "k",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        },
+        {
+          "checkpoint": "stopped",
+          "screen": [
+            "prefixfallback",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 14
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "grapheme": "f",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 4,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 5,
+              "grapheme": "x",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 6,
+              "grapheme": "f",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 7,
+              "grapheme": "a",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 8,
+              "grapheme": "l",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 9,
+              "grapheme": "l",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 10,
+              "grapheme": "b",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 11,
+              "grapheme": "a",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 12,
+              "grapheme": "c",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 13,
+              "grapheme": "k",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "codex/inline-scrolling-regions",
+      "checkpoints": [
+        {
+          "checkpoint": "initial",
+          "screen": [
+            "zero",
+            "one",
+            "two",
+            "view",
+            "prompt"
+          ],
+          "history": [],
+          "cursor": {
+            "row": 4,
+            "column": 6
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "z",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 0,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 1,
+              "grapheme": "n",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 0,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 1,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 0,
+              "grapheme": "v",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 1,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 3,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 3,
+              "grapheme": "m",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 4,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 5,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        },
+        {
+          "checkpoint": "scrolled-up",
+          "screen": [
+            "one",
+            "two",
+            "",
+            "view",
+            "prompt"
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 0
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "n",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 0,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 1,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 0,
+              "grapheme": "v",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 1,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 3,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 3,
+              "grapheme": "m",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 4,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 5,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        },
+        {
+          "checkpoint": "scrolled-down",
+          "screen": [
+            "",
+            "one",
+            "two",
+            "view",
+            "prompt"
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 0
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 1,
+              "column": 0,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 1,
+              "grapheme": "n",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 0,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 1,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 2,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 0,
+              "grapheme": "v",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 1,
+              "grapheme": "i",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 2,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 3,
+              "column": 3,
+              "grapheme": "w",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 3,
+              "grapheme": "m",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 4,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 4,
+              "column": 5,
+              "grapheme": "t",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "opencode/opentui-capability-probes",
+      "checkpoints": [
+        {
+          "checkpoint": "probes-consumed",
+          "screen": [
+            "probe",
+            "",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 5
+          },
+          "alternate_active": false,
+          "title": "",
+          "replies": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "grapheme": "p",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "grapheme": "r",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "grapheme": "b",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 0,
+              "column": 4,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "claude-code/captured-startup-and-teardown",
+      "checkpoints": [
+        {
+          "checkpoint": "initialized",
+          "screen": [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 0
+          },
+          "alternate_active": true,
+          "title": "claude",
+          "replies": [],
+          "cells": []
+        },
+        {
+          "checkpoint": "rendered",
+          "screen": [
+            "",
+            " ▐▛███▜▌   Claude Code v2.1.215",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 1,
+            "column": 31
+          },
+          "alternate_active": true,
+          "title": "✳ Claude Code",
+          "replies": [],
+          "cells": [
+            {
+              "row": 1,
+              "column": 0,
+              "grapheme": " ",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 1,
+              "grapheme": "▐",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 2,
+              "grapheme": "▛",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 3,
+              "grapheme": "█",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 4,
+              "grapheme": "█",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 5,
+              "grapheme": "█",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 6,
+              "grapheme": "▜",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 7,
+              "grapheme": "▌",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 215,
+                "green": 119,
+                "blue": 87
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 11,
+              "grapheme": "C",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 12,
+              "grapheme": "l",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 13,
+              "grapheme": "a",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 14,
+              "grapheme": "u",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 15,
+              "grapheme": "d",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 16,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 17,
+              "grapheme": " ",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 18,
+              "grapheme": "C",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 19,
+              "grapheme": "o",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 20,
+              "grapheme": "d",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 21,
+              "grapheme": "e",
+              "width": 1,
+              "attributes": 1,
+              "foreground": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 23,
+              "grapheme": "v",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 24,
+              "grapheme": "2",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 25,
+              "grapheme": ".",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 26,
+              "grapheme": "1",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 27,
+              "grapheme": ".",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 28,
+              "grapheme": "2",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 29,
+              "grapheme": "1",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            },
+            {
+              "row": 1,
+              "column": 30,
+              "grapheme": "5",
+              "width": 1,
+              "attributes": 0,
+              "foreground": {
+                "kind": "rgb",
+                "index": 0,
+                "red": 153,
+                "green": 153,
+                "blue": 153
+              },
+              "background": {
+                "kind": "default_color",
+                "index": 0,
+                "red": 0,
+                "green": 0,
+                "blue": 0
+              }
+            }
+          ]
+        },
+        {
+          "checkpoint": "restored",
+          "screen": [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "history": [],
+          "cursor": {
+            "row": 0,
+            "column": 0
+          },
+          "alternate_active": false,
+          "title": "✳ Claude Code",
+          "replies": [],
+          "cells": []
         }
       ]
     }

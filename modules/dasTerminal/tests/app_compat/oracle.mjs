@@ -7,6 +7,7 @@ import { corpus } from "./scenario-source.mjs";
 
 const { Terminal } = xtermHeadless;
 const { Unicode11Addon } = unicode11Package;
+const encoder = new TextEncoder();
 
 const root = dirname(fileURLToPath(import.meta.url));
 const streamsPath = join(root, "scenarios.json");
@@ -81,7 +82,7 @@ function normalizedCells(buffer, rows, columns) {
   return result;
 }
 
-function snapshot(terminal, title, checkpoint) {
+function snapshot(terminal, title, checkpoint, replies) {
   const buffer = terminal.buffer.active;
   const screen = [];
   const history = [];
@@ -98,6 +99,7 @@ function snapshot(terminal, title, checkpoint) {
     cursor: { row: buffer.cursorY, column: buffer.cursorX },
     alternate_active: buffer.type === "alternate",
     title,
+    replies,
     cells: normalizedCells(buffer, terminal.rows, terminal.cols)
   };
 }
@@ -112,8 +114,12 @@ async function runScenario(scenario) {
   terminal.loadAddon(new Unicode11Addon());
   terminal.unicode.activeVersion = "11";
   let title = "";
+  const replies = [];
   terminal.onTitleChange(value => {
     title = value;
+  });
+  terminal.onData(value => {
+    replies.push(...encoder.encode(value));
   });
   const checkpoints = [];
   for (const step of scenario.steps) {
@@ -121,7 +127,9 @@ async function runScenario(scenario) {
       await new Promise(resolve => terminal.write(Uint8Array.from(step.feed), resolve));
     }
     if (step.resize) terminal.resize(step.resize.columns, step.resize.rows);
-    if (step.checkpoint) checkpoints.push(snapshot(terminal, title, step.checkpoint));
+    if (step.checkpoint) {
+      checkpoints.push(snapshot(terminal, title, step.checkpoint, replies.splice(0)));
+    }
   }
   terminal.dispose();
   return { id: scenario.id, checkpoints };

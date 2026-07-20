@@ -74,6 +74,8 @@ enum private TerminalParseState {
     osc_escape
     osc_ignore
     osc_ignore_escape
+    control_string
+    control_string_escape
 }
 
 struct public TerminalKeyEvent {
@@ -124,6 +126,7 @@ struct public TerminalModes {
     bracketed_paste : bool
     focus_reporting : bool
     mouse_button_reporting : bool
+    mouse_drag_reporting : bool
     mouse_any_reporting : bool
     sgr_mouse_encoding : bool
 }
@@ -174,6 +177,8 @@ struct private TerminalBuffer {
     saved_cursor : TerminalCursor = TerminalCursor()
     pen : TerminalCell = TerminalCell()
     wrap_pending : bool
+    scroll_top : int
+    scroll_bottom : int
 }
 
 typedef public Pty = smart_ptr<pty_handle>
@@ -233,6 +238,8 @@ def private reset_buffer(var buffer : TerminalBuffer; columns, rows : int) {
     buffer.saved_cursor = TerminalCursor()
     buffer.pen = TerminalCell()
     buffer.wrap_pending = false
+    buffer.scroll_top = 0
+    buffer.scroll_bottom = rows - 1
 }
 
 def private screen_index(buffer : TerminalBuffer const; row : int) : int {
@@ -356,9 +363,11 @@ def private parse_parameters(bytes : array<uint8> const;
     private_marker = 0
     var begin = 0
     if (!empty(bytes) && (bytes[0] == uint8('?') || bytes[0] == uint8('>') ||
-            bytes[0] == uint8('!'))) {
+            bytes[0] == uint8('<') || bytes[0] == uint8('=') || bytes[0] == uint8('!'))) {
         if (bytes[0] == uint8('?')) { private_marker = 0x3f }
         elif (bytes[0] == uint8('>')) { private_marker = 0x3e }
+        elif (bytes[0] == uint8('<')) { private_marker = 0x3c }
+        elif (bytes[0] == uint8('=')) { private_marker = 0x3d }
         else { private_marker = 0x21 }
         begin = 1
     }
@@ -417,6 +426,56 @@ def private scroll_up(terminal : Terminal const; var buffer : TerminalBuffer; no
     buffer.screen[last] <- blank_row(terminal.columns, terminal.rows - 1)
 }
 
+def private scroll_rows_up(terminal : Terminal const; var buffer : TerminalBuffer;
+                           first_, last_, count_ : int; normal : bool) {
+    let first = clamp(first_, 0, terminal.rows - 1)
+    let last = clamp(last_, first, terminal.rows - 1)
+    let count = clamp(count_, 0, last - first + 1)
+    if (count == 0) return
+    if (first == 0 && last == terminal.rows - 1) {
+        for (_ in range(count)) {
+            scroll_up(terminal, buffer, normal)
+        }
+        return
+    }
+    for (row in range(first, last - count + 1)) {
+        let destination = screen_index(buffer, row)
+        let source = screen_index(buffer, row + count)
+        buffer.screen[destination] <- buffer.screen[source]
+    }
+    for (row in range(last - count + 1, last + 1)) {
+        let destination = screen_index(buffer, row)
+        buffer.screen[destination] <- blank_row(terminal.columns, row)
+    }
+}
+
+def private scroll_rows_down(terminal : Terminal const; var buffer : TerminalBuffer;
+                             first_, last_, count_ : int) {
+    let first = clamp(first_, 0, terminal.rows - 1)
+    let last = clamp(last_, first, terminal.rows - 1)
+    let count = clamp(count_, 0, last - first + 1)
+    if (count == 0) return
+    if (first == 0 && last == terminal.rows - 1) {
+        for (_ in range(count)) {
+            buffer.screen_start = (buffer.screen_start + terminal.rows - 1) % terminal.rows
+            let top = screen_index(buffer, 0)
+            buffer.screen[top] <- blank_row(terminal.columns, 0)
+        }
+        return
+    }
+    var row = last
+    while (row >= first + count) {
+        let destination = screen_index(buffer, row)
+        let source = screen_index(buffer, row - count)
+        buffer.screen[destination] <- buffer.screen[source]
+        row--
+    }
+    for (blank in range(first, first + count)) {
+        let destination = screen_index(buffer, blank)
+        buffer.screen[destination] <- blank_row(terminal.columns, blank)
+    }
+}
+
 def private carriage_return(var buffer : TerminalBuffer) {
     buffer.cursor.column = 0
     buffer.wrap_pending = false
@@ -424,18 +483,20 @@ def private carriage_return(var buffer : TerminalBuffer) {
 
 def private line_feed(terminal : Terminal const; var buffer : TerminalBuffer; normal : bool) {
     buffer.wrap_pending = false
-    if (buffer.cursor.row == terminal.rows - 1) scroll_up(terminal, buffer, normal)
-    else buffer.cursor.row++
+    if (buffer.cursor.row == buffer.scroll_bottom) {
+        scroll_rows_up(terminal, buffer, buffer.scroll_top, buffer.scroll_bottom, 1,
+            normal && buffer.scroll_top == 0 && buffer.scroll_bottom == terminal.rows - 1)
+    } elif (buffer.cursor.row < terminal.rows - 1) {
+        buffer.cursor.row++
+    }
 }
 
 def private reverse_index(terminal : Terminal const; var buffer : TerminalBuffer) {
     buffer.wrap_pending = false
-    if (buffer.cursor.row > 0) {
+    if (buffer.cursor.row == buffer.scroll_top) {
+        scroll_rows_down(terminal, buffer, buffer.scroll_top, buffer.scroll_bottom, 1)
+    } elif (buffer.cursor.row > 0) {
         buffer.cursor.row--
-    } else {
-        buffer.screen_start = (buffer.screen_start + terminal.rows - 1) % terminal.rows
-        let first = screen_index(buffer, 0)
-        buffer.screen[first] <- blank_row(terminal.columns, 0)
     }
 }
 
@@ -598,6 +659,7 @@ def private set_private_mode(var terminal : Terminal; mode : int; enabled : bool
         terminal.normal.cursor.visible = enabled
         terminal.alternate.cursor.visible = enabled
     } elif (mode == 1000) { terminal.modes.mouse_button_reporting = enabled }
+    elif (mode == 1002) { terminal.modes.mouse_drag_reporting = enabled }
     elif (mode == 1003) { terminal.modes.mouse_any_reporting = enabled }
     elif (mode == 1004) { terminal.modes.focus_reporting = enabled }
     elif (mode == 1006) { terminal.modes.sgr_mouse_encoding = enabled }
@@ -612,6 +674,8 @@ def private set_private_mode(var terminal : Terminal; mode : int; enabled : bool
             terminal.normal.cursor = terminal.normal.saved_cursor
         }
     } elif (mode == 2004) { terminal.modes.bracketed_paste = enabled }
+    elif (mode == 2026) { }
+    elif (mode == 2031 || mode == 9001) { }
     else {
         let action = enabled ? "set" : "reset"
         record_unknown_text(terminal, "DEC mode {action} {mode}")
@@ -693,9 +757,15 @@ def private process_csi(var terminal : Terminal; final_byte : int) {
     elif (final_byte == 'H' || final_byte == 'f') { set_cursor(terminal, *buffer, parameter_or(parameters, 0, 1) - 1, parameter_or(parameters, 1, 1) - 1) }
     elif (final_byte == 'J') { erase_display(terminal, *buffer, max(0, parameters[0])) }
     elif (final_byte == 'K') { erase_line(terminal, *buffer, max(0, parameters[0])) }
+    elif (final_byte == 'S' && private_marker == 0) {
+        scroll_rows_up(terminal, *buffer, buffer.scroll_top, buffer.scroll_bottom, first, false)
+    }
+    elif (final_byte == 'T' && private_marker == 0) {
+        scroll_rows_down(terminal, *buffer, buffer.scroll_top, buffer.scroll_bottom, first)
+    }
     elif (final_byte == 'X') { erase_cells(terminal, *buffer, first) }
     elif (final_byte == 'd') { set_cursor(terminal, *buffer, first - 1, buffer.cursor.column) }
-    elif (final_byte == 'm') { select_graphic_rendition(*buffer, parameters) }
+    elif (final_byte == 'm' && private_marker == 0) { select_graphic_rendition(*buffer, parameters) }
     elif (final_byte == 'n') {
         if (private_marker == 0 && parameters[0] == 5) { append_reply_text(terminal, "{to_char(27)}[0n") }
         elif (private_marker == 0 && parameters[0] == 6) { append_reply_text(terminal, "{to_char(27)}[{buffer.cursor.row + 1};{buffer.cursor.column + 1}R") }
@@ -703,8 +773,17 @@ def private process_csi(var terminal : Terminal; final_byte : int) {
     } elif (final_byte == 'c') {
         if (private_marker == 0) { append_reply_text(terminal, "{to_char(27)}[?1;2c") }
         else { record_unknown_bytes(terminal, terminal.sequence) }
-    } elif (final_byte == 's') { buffer.saved_cursor = buffer.cursor }
-    elif (final_byte == 'u') { buffer.cursor = buffer.saved_cursor }
+    } elif (final_byte == 's' && private_marker == 0) { buffer.saved_cursor = buffer.cursor }
+    elif (final_byte == 'u' && private_marker == 0) { buffer.cursor = buffer.saved_cursor }
+    elif (final_byte == 'r' && private_marker == 0) {
+        let top = parameter_or(parameters, 0, 1) - 1
+        let bottom = parameter_or(parameters, 1, terminal.rows) - 1
+        if (top >= 0 && bottom < terminal.rows && top < bottom) {
+            buffer.scroll_top = top
+            buffer.scroll_bottom = bottom
+            set_cursor(terminal, *buffer, 0, 0)
+        }
+    }
     elif (final_byte == 'q') {
         if (private_marker == 0) {
             buffer.cursor.style = max(0, parameters[0])
@@ -767,6 +846,8 @@ def private process_escape(var terminal : Terminal; byte : int) {
     } elif (byte == ']') {
         terminal.parse_state = TerminalParseState.osc
         terminal.osc_data |> clear()
+    } elif (byte == 'P' || byte == '_' || byte == '^' || byte == 'X') {
+        terminal.parse_state = TerminalParseState.control_string
     } elif (byte == '7') { buffer.saved_cursor = buffer.cursor }
     elif (byte == '8') { buffer.cursor = buffer.saved_cursor }
     elif (byte == 'D') line_feed(terminal, *buffer, !terminal.alternate_active)
@@ -873,6 +954,11 @@ def private process_byte(var terminal : Terminal; byte : int) {
     } elif (terminal.parse_state == TerminalParseState.osc_ignore_escape) {
         if (byte == '\\') { terminal.parse_state = TerminalParseState.ground }
         elif (byte != 0x1b) { terminal.parse_state = TerminalParseState.osc_ignore }
+    } elif (terminal.parse_state == TerminalParseState.control_string) {
+        if (byte == 0x1b) { terminal.parse_state = TerminalParseState.control_string_escape }
+    } elif (terminal.parse_state == TerminalParseState.control_string_escape) {
+        if (byte == '\\') { terminal.parse_state = TerminalParseState.ground }
+        elif (byte != 0x1b) { terminal.parse_state = TerminalParseState.control_string }
     }
 }
 
@@ -1014,6 +1100,8 @@ def private resize_buffer(var buffer : TerminalBuffer; old_columns, old_rows,
     buffer.saved_cursor.row = min(buffer.saved_cursor.row, rows - 1)
     buffer.saved_cursor.column = min(buffer.saved_cursor.column, columns - 1)
     buffer.wrap_pending = false
+    buffer.scroll_top = 0
+    buffer.scroll_bottom = rows - 1
 }
 
 def public terminal_resize(var terminal : Terminal; columns_, rows_ : int) {
