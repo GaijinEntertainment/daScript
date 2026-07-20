@@ -149,11 +149,11 @@ def main {
     assert(!snapshot.alternate.cursor.visible)
     let alternate_row = row_text(snapshot.alternate, 0, 10)
     let normal_row = row_text(snapshot.normal, 0, 10)
-    assert(alternate_row == "alt")
+    assert(alternate_row == "    alt")
     assert(normal_row == "main")
     var replies : array<string>
     terminal_drain_replies(protocol, replies)
-    assert(length(replies) == 1 && replies[0] == "{esc}[1;4R")
+    assert(length(replies) == 1 && replies[0] == "{esc}[1;8R")
     terminal_drain_replies(protocol, replies)
     assert(empty(replies))
     var events : array<string>

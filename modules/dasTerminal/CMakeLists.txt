@@ -13,6 +13,7 @@ IF ((NOT DAS_TERMINAL_INCLUDED) AND (NOT DAS_TERMINAL_DISABLED))
     ADD_MODULE_DAS(terminal daslib terminal)
     ADD_EXAMPLE_RUN(modules/dasTerminal/tests/snapshot_smoke.das)
     ADD_EXAMPLE_RUN(modules/dasTerminal/tests/terminal_semantics.das)
+    ADD_EXAMPLE_RUN(modules/dasTerminal/tests/app_compat.das)
     ADD_MODULE_LIB(libDasModuleTerminal dasModuleTerminal ${DAS_TERMINAL_MODULE_SRC})
 
     FOREACH(target libDasModuleTerminal dasModuleTerminal)

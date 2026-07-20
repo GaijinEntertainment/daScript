@@ -1,0 +1,13 @@
+{
+  "name": "das-terminal-app-compat-oracle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "oracle:check": "node oracle.mjs --check",
+    "oracle:update": "node oracle.mjs --update"
+  },
+  "devDependencies": {
+    "@xterm/addon-unicode11": "0.8.0",
+    "@xterm/headless": "5.5.0"
+  }
+}

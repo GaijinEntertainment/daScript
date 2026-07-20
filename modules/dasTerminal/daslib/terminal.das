@@ -605,9 +605,7 @@ def private set_private_mode(var terminal : Terminal; mode : int; enabled : bool
         if (enabled && !terminal.alternate_active) {
             terminal.normal.saved_cursor = terminal.normal.cursor
             reset_buffer(terminal.alternate, terminal.columns, terminal.rows)
-            terminal.alternate.cursor.visible = terminal.normal.cursor.visible
-            terminal.alternate.cursor.style = terminal.normal.cursor.style
-            terminal.alternate.cursor.blinking = terminal.normal.cursor.blinking
+            terminal.alternate.cursor = terminal.normal.cursor
             terminal.alternate_active = true
         } elif (!enabled && terminal.alternate_active) {
             terminal.alternate_active = false

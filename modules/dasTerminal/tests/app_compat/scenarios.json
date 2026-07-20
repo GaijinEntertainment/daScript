@@ -1,0 +1,475 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "existing/style-and-wide",
+      "source": "modules/dasTerminal/tests/terminal_semantics.das",
+      "columns": 12,
+      "rows": 3,
+      "steps": [
+        {
+          "feed": [
+            104,
+            101,
+            108,
+            108,
+            111,
+            13,
+            10,
+            27,
+            91,
+            51,
+            49,
+            109,
+            65,
+            27,
+            91,
+            49,
+            109,
+            66,
+            27,
+            91,
+            48,
+            109,
+            32,
+            228,
+            184,
+            173
+          ]
+        },
+        {
+          "checkpoint": "final"
+        }
+      ]
+    },
+    {
+      "id": "existing/scroll-history",
+      "source": "modules/dasTerminal/tests/terminal_semantics.das",
+      "columns": 4,
+      "rows": 2,
+      "steps": [
+        {
+          "feed": [
+            97,
+            13,
+            10,
+            98,
+            13,
+            10,
+            99,
+            13,
+            10,
+            100
+          ]
+        },
+        {
+          "checkpoint": "final"
+        }
+      ]
+    },
+    {
+      "id": "existing/erase-display",
+      "source": "modules/dasTerminal/tests/terminal_semantics.das",
+      "columns": 6,
+      "rows": 3,
+      "steps": [
+        {
+          "feed": [
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            13,
+            10,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            13,
+            10,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            27,
+            91,
+            50,
+            59,
+            51,
+            72,
+            27,
+            91,
+            49,
+            74
+          ]
+        },
+        {
+          "checkpoint": "final"
+        }
+      ]
+    },
+    {
+      "id": "existing/alternate-screen",
+      "source": "modules/dasTerminal/tests/terminal_semantics.das",
+      "columns": 10,
+      "rows": 3,
+      "steps": [
+        {
+          "feed": [
+            109,
+            97,
+            105,
+            110,
+            27,
+            93,
+            50,
+            59,
+            80,
+            111,
+            119,
+            101,
+            114,
+            83,
+            104,
+            101,
+            108,
+            108,
+            7
+          ]
+        },
+        {
+          "checkpoint": "normal"
+        },
+        {
+          "feed": [
+            27,
+            91,
+            63,
+            50,
+            53,
+            108,
+            27,
+            91,
+            63,
+            49,
+            48,
+            52,
+            57,
+            104,
+            97,
+            108,
+            116
+          ]
+        },
+        {
+          "checkpoint": "alternate"
+        },
+        {
+          "feed": [
+            27,
+            91,
+            63,
+            49,
+            48,
+            52,
+            57,
+            108
+          ]
+        },
+        {
+          "checkpoint": "restored"
+        }
+      ]
+    },
+    {
+      "id": "pi/synchronized-full-redraw",
+      "source": "https://github.com/earendil-works/pi/tree/main/packages/tui",
+      "columns": 16,
+      "rows": 4,
+      "steps": [
+        {
+          "feed": [
+            27,
+            91,
+            63,
+            50,
+            48,
+            50,
+            54,
+            104,
+            27,
+            91,
+            50,
+            74,
+            27,
+            91,
+            72,
+            27,
+            91,
+            51,
+            74,
+            83,
+            116,
+            97,
+            116,
+            117,
+            115,
+            13,
+            10,
+            119,
+            111,
+            114,
+            107,
+            105,
+            110,
+            103,
+            32,
+            228,
+            184,
+            173,
+            13,
+            10,
+            27,
+            91,
+            51,
+            50,
+            109,
+            226,
+            156,
+            147,
+            32,
+            114,
+            101,
+            97,
+            100,
+            121,
+            27,
+            91,
+            48,
+            109,
+            27,
+            91,
+            63,
+            50,
+            48,
+            50,
+            54,
+            108
+          ]
+        },
+        {
+          "checkpoint": "final"
+        }
+      ]
+    },
+    {
+      "id": "pi/differential-middle-line",
+      "source": "https://github.com/earendil-works/pi/tree/main/packages/tui",
+      "columns": 18,
+      "rows": 4,
+      "steps": [
+        {
+          "feed": [
+            72,
+            101,
+            97,
+            100,
+            101,
+            114,
+            13,
+            10,
+            111,
+            108,
+            100,
+            32,
+            118,
+            97,
+            108,
+            117,
+            101,
+            13,
+            10,
+            70,
+            111,
+            111,
+            116,
+            101,
+            114
+          ]
+        },
+        {
+          "checkpoint": "initial"
+        },
+        {
+          "feed": [
+            27,
+            91,
+            63,
+            50,
+            48,
+            50,
+            54,
+            104,
+            27,
+            91,
+            49,
+            65,
+            13,
+            27,
+            91,
+            50,
+            75,
+            110,
+            101,
+            119,
+            32,
+            27,
+            91,
+            51,
+            50,
+            109,
+            118,
+            97,
+            108,
+            117,
+            101,
+            27,
+            91,
+            48,
+            109,
+            27,
+            91,
+            49,
+            66,
+            13,
+            27,
+            91,
+            63,
+            50,
+            48,
+            50,
+            54,
+            108
+          ]
+        },
+        {
+          "checkpoint": "updated"
+        }
+      ]
+    },
+    {
+      "id": "pi/shrink-and-clear-tail",
+      "source": "https://github.com/earendil-works/pi/tree/main/packages/tui",
+      "columns": 14,
+      "rows": 5,
+      "steps": [
+        {
+          "feed": [
+            111,
+            110,
+            101,
+            13,
+            10,
+            116,
+            119,
+            111,
+            13,
+            10,
+            116,
+            104,
+            114,
+            101,
+            101,
+            13,
+            10,
+            102,
+            111,
+            117,
+            114
+          ]
+        },
+        {
+          "checkpoint": "initial"
+        },
+        {
+          "feed": [
+            27,
+            91,
+            51,
+            65,
+            13,
+            27,
+            91,
+            50,
+            75,
+            79,
+            78,
+            69,
+            13,
+            10,
+            27,
+            91,
+            50,
+            75,
+            84,
+            87,
+            79,
+            27,
+            91,
+            50,
+            66,
+            13,
+            27,
+            91,
+            50,
+            75,
+            27,
+            91,
+            49,
+            65,
+            13,
+            27,
+            91,
+            50,
+            75
+          ]
+        },
+        {
+          "checkpoint": "shrunk"
+        }
+      ]
+    },
+    {
+      "id": "pi/unicode-cursor-accounting",
+      "source": "https://github.com/earendil-works/pi/tree/main/packages/tui",
+      "columns": 16,
+      "rows": 2,
+      "steps": [
+        {
+          "feed": [
+            65,
+            228,
+            184,
+            173,
+            240,
+            159,
+            153,
+            130,
+            101,
+            204,
+            129
+          ]
+        },
+        {
+          "checkpoint": "final"
+        }
+      ]
+    }
+  ]
+}
