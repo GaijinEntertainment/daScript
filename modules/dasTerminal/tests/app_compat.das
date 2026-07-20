@@ -109,7 +109,8 @@ def assert_buffer(buffer : TerminalBufferSnapshot const;
         check(actual_text == expected.screen[row],
             "{context}: screen row {row}: got '{actual_text}', expected '{expected.screen[row]}'")
     }
-    check(buffer.scrollback_rows == length(expected.history), "{context}: history row count")
+    check(buffer.scrollback_rows == length(expected.history),
+        "{context}: history row count {buffer.scrollback_rows}, expected {length(expected.history)}")
     for (row in range(buffer.scrollback_rows)) {
         check(history_text(buffer, row, columns) == expected.history[row],
             "{context}: history row {row}")
@@ -146,7 +147,8 @@ def assert_checkpoint(var terminal : Terminal; expected : CompatExpectedCheckpoi
             replies |> push(byte)
         }
     }
-    check(length(replies) == length(expected.replies), "{context}: reply byte count")
+    check(length(replies) == length(expected.replies),
+        "{context}: reply byte count {length(replies)}, expected {length(expected.replies)}")
     for (index in range(length(replies))) {
         check(replies[index] == expected.replies[index], "{context}: reply byte {index}")
     }
