@@ -143,9 +143,7 @@ def assert_checkpoint(var terminal : Terminal; expected : CompatExpectedCheckpoi
     terminal_drain_replies_bytes(terminal, reply_chunks)
     var replies : array<uint8>
     for (chunk in reply_chunks) {
-        for (byte in chunk) {
-            replies |> push(byte)
-        }
+        replies |> push_from(chunk)
     }
     check(length(replies) == length(expected.replies),
         "{context}: reply byte count {length(replies)}, expected {length(expected.replies)}")
