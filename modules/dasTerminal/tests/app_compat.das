@@ -150,7 +150,8 @@ def assert_checkpoint(var terminal : Terminal; expected : CompatExpectedCheckpoi
     check(length(replies) == length(expected.replies),
         "{context}: reply byte count {length(replies)}, expected {length(expected.replies)}")
     for (index in range(length(replies))) {
-        check(replies[index] == expected.replies[index], "{context}: reply byte {index}")
+        check(replies[index] == expected.replies[index],
+            "{context}: reply byte {index}: got {replies[index]}, expected {expected.replies[index]}")
     }
     if (expected.alternate_active) {
         assert_buffer(snapshot.alternate, expected, snapshot.columns, snapshot.rows, context)
