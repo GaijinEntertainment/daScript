@@ -391,6 +391,22 @@ def public repository_build_file_diff_argv(worktree_path : string;
     return ""
 }
 
+def public repository_build_worktree_create_argv(source_worktree_path,
+                                                  new_worktree_path,
+                                                  branch, base_ref : string;
+                                                  var argv : array<string>) : string {
+    if (!valid_path(source_worktree_path)) return "source worktree path is required"
+    if (!valid_path(new_worktree_path) || !is_absolute(new_worktree_path)) {
+        return "new worktree path must be absolute"
+    }
+    if (!valid_path(branch)) return "new branch is required"
+    let resolved_base = !empty(base_ref) ? base_ref : "HEAD"
+    if (!valid_path(resolved_base)) return "base ref cannot contain CR/LF"
+    argv <- ["git", "-C", source_worktree_path, "worktree", "add", "-b",
+        branch, "--", new_worktree_path, resolved_base]
+    return ""
+}
+
 def private record_git_failure(var runtime : RepositoryRuntime?;
                                message : string) {
     runtime.snapshot.failure_session_id = runtime.snapshot.task_session_id

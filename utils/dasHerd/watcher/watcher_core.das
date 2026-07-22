@@ -43,6 +43,11 @@ struct public WatcherLaunchRequest {
     target_id : string = "local"
     repository_id : string
     worktree_path : string
+    purpose : string
+    task_context : string
+    agent_url : string
+    agent_token : string
+    agent_skill_path : string
     columns : int = 100
     rows : int = 30
     timeout_ms : int64
@@ -74,6 +79,11 @@ struct public WatcherFocusRange {
 }
 
 struct public WatcherFocusTarget {
+    repository_id : string
+    worktree_path : string
+    comparison : string
+    revision : string
+    role : string
     file_path : string
     whole_file : bool
     ranges : array<WatcherFocusRange>
@@ -95,6 +105,7 @@ struct public WatcherMailboxPostRequest {
     kind : string = "note"
     subject : string
     reply_to : string
+    bundle_id : string
     notify : bool = true
     focus : WatcherFocusSet = WatcherFocusSet()
 }
@@ -113,6 +124,7 @@ struct public WatcherMailboxMessage {
     kind : string
     subject : string
     reply_to : string
+    bundle_id : string
     status : string = "new"
     notified : bool
     notification_error : string
@@ -129,16 +141,65 @@ struct public WatcherMailboxResult {
     error : string
 }
 
+struct public WatcherBundleFile {
+    path : string
+    role : string
+}
+
+struct public WatcherBundleParticipant {
+    repository_id : string
+    worktree_path : string
+    role : string
+    base_revision : string
+    head_revision : string
+    state : string
+    files : array<WatcherBundleFile>
+}
+
+struct public WatcherReviewBundle {
+    id : string
+    session_id : string
+    title : string
+    kind : string = "change"
+    status : string = "draft"
+    summary : string
+    revision : int64
+    updated_ms : int64
+    participants : array<WatcherBundleParticipant>
+    focus : WatcherFocusSet = WatcherFocusSet()
+}
+
+struct public WatcherBundleSyncRequest {
+    session_id : string
+    bundle : WatcherReviewBundle = WatcherReviewBundle()
+}
+
+struct public WatcherBundleResult {
+    ok : bool
+    bundle_id : string
+    revision : int64
+    error : string
+}
+
 struct private WatcherPendingNotification {
     message_id : string
     text : string
 }
 
 struct public WatcherEvent {
+    sequence : int64
+    wall_time_seconds : int64
     session_id : string
     event : string
     elapsed_ms : int64
     detail : string
+    state : string
+    kind : string
+    purpose : string
+    repository_id : string
+    worktree_path : string
+    pid : int
+    controller_id : int
 }
 
 struct public WatcherSessionInfo {
@@ -150,6 +211,9 @@ struct public WatcherSessionInfo {
     target_id : string
     repository_id : string
     worktree_path : string
+    purpose : string
+    task_context : string
+    context_path : string
     state : string
     reason : string
     pid : int = 0
@@ -161,6 +225,7 @@ struct public WatcherSessionInfo {
     rows : int
     revision : int64
     status_revision : int64
+    event_sequence : int64
     controller_id : int
     drained : bool
 }
@@ -198,10 +263,14 @@ class private WatcherSession {
     target_id : string
     repository_id : string
     worktree_path : string
+    purpose : string
+    task_context : string
+    context_path : string
     session_dir : string
     output_path : string
     events_path : string
     mailbox_path : string
+    bundles_path : string
     state : string = "starting"
     reason : string
     pid : int = 0
@@ -218,11 +287,15 @@ class private WatcherSession {
     raw_history : array<uint8>
     raw_history_start : int64
     status_revision : int64
+    event_sequence : int64
     controller_id : int
     drained : bool
     mailbox : array<WatcherMailboxMessage>
     mailbox_revision : int64
     mailbox_file : FILE const? = null
+    bundles : array<WatcherReviewBundle>
+    bundles_revision : int64
+    bundles_file : FILE const? = null
     input_line_bytes : int
     input_escape_state : int
     pending_notifications : array<WatcherPendingNotification>
@@ -242,9 +315,15 @@ class private WatcherSession {
             fclose(mailbox_file)
             mailbox_file = null
         }
+        if (bundles_file != null) {
+            fflush(bundles_file)
+            fclose(bundles_file)
+            bundles_file = null
+        }
         terminal_dispose(terminal)
         delete raw_history
         delete mailbox
+        delete bundles
         delete pending_notifications
     }
 }
@@ -268,6 +347,8 @@ var private g_log_root : string
 var private g_next_session_id = 0
 var private g_next_mailbox_id = 0
 var private g_mailbox_revision : int64
+var private g_next_bundle_id = 0
+var private g_bundle_revision : int64
 
 def private elapsed_ms(session : WatcherSession?) : int64 {
     return get_time_nsec(session.started) / 1000000l
@@ -282,12 +363,24 @@ def private write_text_file(path, body : string) : bool {
     return true
 }
 
-def private append_event(session : WatcherSession?; event, detail : string) {
+def private append_event(var session : WatcherSession?; event, detail : string) {
     if (session.events_file == null) return
-    let line = sprint_json(WatcherEvent(session_id = session.id, event = event,
-        elapsed_ms = elapsed_ms(session), detail = detail), false) + "\n"
+    session.event_sequence++
+    let line = sprint_json(WatcherEvent(sequence = session.event_sequence,
+        wall_time_seconds = int64(get_clock()), session_id = session.id,
+        event = event, elapsed_ms = elapsed_ms(session), detail = detail,
+        state = session.state, kind = session.kind, purpose = session.purpose,
+        repository_id = session.repository_id, worktree_path = session.worktree_path,
+        pid = session.pid, controller_id = session.controller_id), false) + "\n"
     fwrite(session.events_file, line)
     fflush(session.events_file)
+}
+
+def public watcher_record_event(session_id, event, detail : string) : bool {
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null || empty(event)) return false
+    append_event(g_sessions[index], event, detail)
+    return true
 }
 
 def private session_info(session : WatcherSession?) : WatcherSessionInfo {
@@ -295,12 +388,15 @@ def private session_info(session : WatcherSession?) : WatcherSessionInfo {
         cwd = session.cwd, display_name = session.display_name, kind = session.kind,
         target_id = session.target_id, repository_id = session.repository_id,
         worktree_path = session.worktree_path,
+        purpose = session.purpose, task_context = session.task_context,
+        context_path = session.context_path,
         state = session.state, reason = session.reason,
         pid = session.pid, exit_code = session.exit_code,
         elapsed_ms = elapsed_ms(session), output_bytes = session.output_bytes,
         input_bytes = session.input_bytes,
         columns = session.terminal.columns, rows = session.terminal.rows,
         revision = terminal_revision(session.terminal), status_revision = session.status_revision,
+        event_sequence = session.event_sequence,
         controller_id = session.controller_id,
         drained = session.drained)
 }
@@ -361,17 +457,21 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         command_line = visible_command, cwd = request.cwd,
         display_name = request.display_name, kind = request.kind,
         target_id = request.target_id, repository_id = request.repository_id,
-        worktree_path = request.worktree_path,
+        worktree_path = request.worktree_path, purpose = request.purpose,
+        task_context = request.task_context,
         session_dir = session_dir,
         output_path = path_join(session_dir, "output.raw"),
         events_path = path_join(session_dir, "events.jsonl"),
         mailbox_path = path_join(session_dir, "mailbox.jsonl"),
+        bundles_path = path_join(session_dir, "bundles.jsonl"),
         started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms))
+    session.context_path = path_join(session_dir, "context.md")
     session.output_file = fopen(session.output_path, "wb")
     session.events_file = fopen(session.events_path, "wb")
     session.mailbox_file = fopen(session.mailbox_path, "wb")
+    session.bundles_file = fopen(session.bundles_path, "wb")
     if (session.output_file == null || session.events_file == null
-            || session.mailbox_file == null) {
+            || session.mailbox_file == null || session.bundles_file == null) {
         unsafe { delete session }
         return WatcherLaunchResult(error = "could not open session logs")
     }
@@ -380,12 +480,26 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     var inscope persisted_request := request
     persisted_request.columns = columns
     persisted_request.rows = rows
+    persisted_request.agent_token = ""
     if (!write_text_file(path_join(session_dir, "session.json"), sprint_json(persisted_request, true))) {
         unsafe { delete session }
         return WatcherLaunchResult(error = "could not write session metadata")
     }
+    append_event(session, "session_created",
+        "cwd={request.cwd}; display={visible_command}; context={session.context_path}")
 
-    if (!empty(request.argv)) {
+    if (request.kind == "agent-codex") {
+        if (!write_text_file(session.context_path,
+                agent_context_markdown(request, session_id, session.context_path))) {
+            unsafe { delete session }
+            return WatcherLaunchResult(error = "could not write agent session context")
+        }
+        append_event(session, "agent_bootstrap_prepared",
+            "context={session.context_path}; skill={request.agent_skill_path}")
+        var inscope argv <- agent_launch_argv(request, session_id, session.context_path)
+        var inscope launched <- terminal_launch_argv(argv, request.cwd, columns, rows)
+        session.terminal := launched
+    } elif (!empty(request.argv)) {
         var inscope launched <- terminal_launch_argv(request.argv, request.cwd, columns, rows)
         session.terminal := launched
     } else {
@@ -744,6 +858,55 @@ def private input_session(var session : WatcherSession?; text : string; client_i
     return ""
 }
 
+def private powershell_literal(value : string) : string {
+    return "'" + replace(value, "'", "''") + "'"
+}
+
+def private agent_context_markdown(request : WatcherLaunchRequest const;
+                                   session_id, context_path : string) : string {
+    return ("# dasHerd session\n\n" +
+        "Session: `{session_id}`\n\n" +
+        "Purpose: `{request.purpose}`\n\n" +
+        "Origin repository: `{request.repository_id}`\n\n" +
+        "Origin worktree: `{request.worktree_path}`\n\n" +
+        "## Task\n\n{request.task_context}\n\n" +
+        "## Cooperation contract\n\n" +
+        "This is a dasHerd-managed session. Keep the launch worktree as the immutable " +
+        "session origin. Use the dasHerd skill and CLI to read Inbox requests, declare " +
+        "every additional repository/worktree participating in the task, publish exact " +
+        "review focus, and sync the complete review bundle before declaring the work ready. " +
+        "Do not attribute unrelated dirty files to this session.\n\n" +
+        "Skill: `{request.agent_skill_path}`\n\n" +
+        "Context artifact: `{context_path}`\n")
+}
+
+def private agent_launch_argv(request : WatcherLaunchRequest const;
+                              session_id, context_path : string) : array<string> {
+    var command_argv := request.argv
+    if (empty(command_argv)) command_argv |> push("codex")
+    command_argv |> push("Read the dasHerd session context at {context_path} before acting. " +
+        "Use the dasHerd skill for session coordination, then help with the stated debug task.")
+    if (get_platform_name() == "windows") {
+        var command = ("$env:DASHERD_URL = {powershell_literal(request.agent_url)}; " +
+            "$env:DASHERD_TOKEN = {powershell_literal(request.agent_token)}; " +
+            "$env:DASHERD_SESSION_ID = {powershell_literal(session_id)}; " +
+            "$env:DASHERD_SESSION_KIND = {powershell_literal(request.purpose)}; " +
+            "$env:DASHERD_CONTEXT_PATH = {powershell_literal(context_path)}; & ")
+        var quoted : array<string>
+        quoted |> reserve(length(command_argv))
+        for (argument in command_argv) {
+            quoted |> push(powershell_literal(argument))
+        }
+        command += join(quoted, " ") + "; exit $LASTEXITCODE"
+        return <- ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", command]
+    }
+    var result <- ["env", "DASHERD_URL={request.agent_url}",
+        "DASHERD_TOKEN={request.agent_token}", "DASHERD_SESSION_ID={session_id}",
+        "DASHERD_SESSION_KIND={request.purpose}", "DASHERD_CONTEXT_PATH={context_path}"]
+    result |> push_from(command_argv)
+    return <- result
+}
+
 def private observe_input_line(var session : WatcherSession?; text : string) {
     peek_data(text) $(bytes) {
         for (byte_u8 in bytes) {
@@ -829,6 +992,12 @@ def public watcher_notify(session_id : string; text : string;
 def private valid_focus(focus : WatcherFocusSet const) : string {
     for (target in focus.targets) {
         if (empty(target.file_path)) return "focus target file_path is required"
+        if (empty(target.repository_id) && empty(focus.repository_id)) {
+            return "focus target repository_id is required"
+        }
+        if (empty(target.worktree_path) && empty(focus.worktree_path)) {
+            return "focus target worktree_path is required"
+        }
         for (focus_range in target.ranges) {
             if (focus_range.start_byte < 0
                     || focus_range.end_byte <= focus_range.start_byte) {
@@ -837,6 +1006,26 @@ def private valid_focus(focus : WatcherFocusSet const) : string {
         }
     }
     return ""
+}
+
+def public watcher_focus_repository(focus : WatcherFocusSet const;
+                                    target : WatcherFocusTarget const) : string {
+    return !empty(target.repository_id) ? target.repository_id : focus.repository_id
+}
+
+def public watcher_focus_worktree(focus : WatcherFocusSet const;
+                                  target : WatcherFocusTarget const) : string {
+    return !empty(target.worktree_path) ? target.worktree_path : focus.worktree_path
+}
+
+def public watcher_focus_comparison(focus : WatcherFocusSet const;
+                                    target : WatcherFocusTarget const) : string {
+    return !empty(target.comparison) ? target.comparison : focus.comparison
+}
+
+def public watcher_focus_revision(focus : WatcherFocusSet const;
+                                  target : WatcherFocusTarget const) : string {
+    return !empty(target.revision) ? target.revision : focus.revision
 }
 
 def private append_mailbox_record(var session : WatcherSession?;
@@ -872,7 +1061,8 @@ def public watcher_mailbox_post(request : WatcherMailboxPostRequest) : WatcherMa
         id = "hf_{g_next_mailbox_id}", session_id = request.session_id,
         direction = request.direction, sender = sender,
         kind = request.kind, subject = request.subject,
-        reply_to = request.reply_to, created_ms = elapsed_ms(g_sessions[index]),
+        reply_to = request.reply_to, bundle_id = request.bundle_id,
+        created_ms = elapsed_ms(g_sessions[index]),
         revision = g_mailbox_revision, focus := request.focus)
     let message_id = message.id
     let message_revision = message.revision
@@ -976,6 +1166,143 @@ def public watcher_mailbox_json(session_id : string; direction : string = "";
     }
 }
 
+def private valid_bundle(bundle : WatcherReviewBundle const) : string {
+    if (empty(bundle.title)) return "bundle title is required"
+    if (bundle.status != "draft" && bundle.status != "ready"
+            && bundle.status != "published" && bundle.status != "merged"
+            && bundle.status != "complete") {
+        return "bundle status must be draft, ready, published, merged, or complete"
+    }
+    if (empty(bundle.participants)) return "bundle requires at least one participant"
+    for (participant in bundle.participants) {
+        if (empty(participant.repository_id)) return "participant repository_id is required"
+        if (empty(participant.worktree_path)) return "participant worktree_path is required"
+        for (file in participant.files) {
+            if (empty(file.path)) return "participant file path is required"
+        }
+    }
+    let focus_error = valid_focus(bundle.focus)
+    if (!empty(focus_error)) return focus_error
+    for (target in bundle.focus.targets) {
+        let repository_id = watcher_focus_repository(bundle.focus, target)
+        let worktree_path = watcher_focus_worktree(bundle.focus, target)
+        var participant_found = false
+        for (participant in bundle.participants) {
+            if (participant.repository_id == repository_id
+                    && participant.worktree_path == worktree_path) {
+                participant_found = true
+                break
+            }
+        }
+        if (!participant_found) return "focus target is not in a bundle participant"
+    }
+    return ""
+}
+
+def private append_bundle_record(var session : WatcherSession?;
+                                 bundle : WatcherReviewBundle const) {
+    if (session.bundles_file == null) return
+    fwrite(session.bundles_file, sprint_json(bundle, false) + "\n")
+    fflush(session.bundles_file)
+}
+
+def private upsert_bundle_attention(var session : WatcherSession?;
+                                    bundle : WatcherReviewBundle const;
+                                    publish : bool) {
+    for (message_index in range(length(session.mailbox))) {
+        if (session.mailbox[message_index].direction != "outbox"
+                || session.mailbox[message_index].kind != "bundle_focus"
+                || session.mailbox[message_index].bundle_id != bundle.id) continue
+        g_mailbox_revision++
+        session.mailbox[message_index].subject = bundle.title
+        session.mailbox[message_index].focus := bundle.focus
+        if (!publish) {
+            session.mailbox[message_index].status = "completed"
+        }
+        session.mailbox[message_index].revision = g_mailbox_revision
+        session.mailbox_revision = g_mailbox_revision
+        append_mailbox_record(session, session.mailbox[message_index])
+        append_event(session, publish ? "bundle_attention_updated"
+                : "bundle_attention_completed",
+            "bundle={bundle.id}; message={session.mailbox[message_index].id}; " +
+            "targets={length(bundle.focus.targets)}")
+        return
+    }
+    if (!publish || empty(bundle.focus.targets)) return
+    let sender = "agent_session:{session.id}"
+    g_next_mailbox_id++
+    g_mailbox_revision++
+    var message = WatcherMailboxMessage(
+        id = "hf_{g_next_mailbox_id}", session_id = session.id,
+        direction = "outbox", sender = sender, kind = "bundle_focus",
+        subject = bundle.title, bundle_id = bundle.id,
+        created_ms = elapsed_ms(session), revision = g_mailbox_revision,
+        focus := bundle.focus)
+    session.mailbox |> emplace(message)
+    session.mailbox_revision = g_mailbox_revision
+    append_mailbox_record(session, session.mailbox[length(session.mailbox) - 1])
+    append_event(session, "bundle_attention_created",
+        "bundle={bundle.id}; message={session.mailbox[length(session.mailbox) - 1].id}; " +
+        "targets={length(bundle.focus.targets)}")
+}
+
+def public watcher_bundle_session_revision(session_id : string) : int64 {
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null) return -1l
+    return g_sessions[index].bundles_revision
+}
+
+def public watcher_bundle_sync(request : WatcherBundleSyncRequest) : WatcherBundleResult {
+    let index = watcher_find_session(request.session_id)
+    if (index < 0 || g_sessions[index] == null) {
+        return WatcherBundleResult(error = "unknown session")
+    }
+    let validation_error = valid_bundle(request.bundle)
+    if (!empty(validation_error)) return WatcherBundleResult(error = validation_error)
+    var bundle := request.bundle
+    if (empty(bundle.id)) {
+        g_next_bundle_id++
+        bundle.id = "rb_{g_next_bundle_id}"
+    }
+    bundle.session_id = request.session_id
+    g_bundle_revision++
+    bundle.revision = g_bundle_revision
+    bundle.updated_ms = elapsed_ms(g_sessions[index])
+    let bundle_id = bundle.id
+    var replaced = false
+    for (bundle_index in range(length(g_sessions[index].bundles))) {
+        if (g_sessions[index].bundles[bundle_index].id != bundle_id) continue
+        g_sessions[index].bundles[bundle_index] := bundle
+        replaced = true
+        break
+    }
+    if (!replaced) g_sessions[index].bundles |> emplace(bundle)
+    g_sessions[index].bundles_revision = g_bundle_revision
+    var stored_index = 0
+    for (bundle_index in range(length(g_sessions[index].bundles))) {
+        if (g_sessions[index].bundles[bundle_index].id == bundle_id) {
+            stored_index = bundle_index
+            break
+        }
+    }
+    append_bundle_record(g_sessions[index], g_sessions[index].bundles[stored_index])
+    let stored_status = g_sessions[index].bundles[stored_index].status
+    let publish_attention = (stored_status == "ready" || stored_status == "published"
+        || stored_status == "merged" || stored_status == "complete")
+    upsert_bundle_attention(g_sessions[index],
+        g_sessions[index].bundles[stored_index], publish_attention)
+    append_event(g_sessions[index], "bundle_synced",
+        "id={bundle_id}; status={stored_status}; participants={length(g_sessions[index].bundles[stored_index].participants)}")
+    return WatcherBundleResult(ok = true, bundle_id = bundle_id,
+        revision = g_bundle_revision)
+}
+
+def public watcher_bundles_json(session_id : string) : string {
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null) return "[]"
+    return sprint_json(g_sessions[index].bundles, false)
+}
+
 def private resize_session(var session : WatcherSession?; columns, rows, client_id : int) : string {
     if (session.controller_id != 0 && session.controller_id != client_id) return "controller lease is held by another client"
     terminal_resize(session.terminal, clamp(columns, 20, 400), clamp(rows, 5, 512))
@@ -1008,10 +1335,15 @@ def public watcher_terminate(session_id : string; detail : string = "requested")
 }
 
 def private claim_session(var session : WatcherSession?; client_id : int) : bool {
-    if (session.controller_id != 0 && session.controller_id != client_id) return false
-    if (session.controller_id == 0) append_event(session, "controller_claimed", "client={client_id}")
+    if (session.controller_id != 0 && session.controller_id != client_id) {
+        append_event(session, "controller_claim_rejected",
+            "client={client_id}; held_by={session.controller_id}")
+        return false
+    }
+    let newly_claimed = session.controller_id == 0
     session.controller_id = client_id
     session.status_revision++
+    if (newly_claimed) append_event(session, "controller_claimed", "client={client_id}")
     return true
 }
 

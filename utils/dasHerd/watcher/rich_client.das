@@ -73,6 +73,13 @@ struct private WatcherMailboxMessageEnvelope {
     data : array<WatcherMailboxMessage>
 }
 
+struct private WatcherBundlesMessageEnvelope {
+    @rename = "type" _type : string
+    session_id : string
+    revision : int64
+    data : array<WatcherReviewBundle>
+}
+
 struct private WatcherMailboxPostedMessage {
     @rename = "type" _type : string
     message_id : string
@@ -284,6 +291,7 @@ var private g_jobque_owned = false
 var private SESSION_ROW : table<int; ToggleState>
 var private ATTENTION_MESSAGE_ROW : table<int; ToggleState>
 var private ATTENTION_TARGET_ROW : table<int; ToggleState>
+var private BUNDLE_PARTICIPANT_ROW : table<int; ToggleState>
 var private WORKTREE_ROW : table<int; ToggleState>
 var private GIT_FILE_ROW : table<int; ToggleState>
 var private GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
@@ -357,6 +365,7 @@ def private setup_default_layout(dock_id : uint) {
     DockBuilderDockWindow("File Inspector", inspector_id)
     DockBuilderDockWindow("Terminal", terminal_id)
     DockBuilderDockWindow("Settings", activity_id)
+    DockBuilderDockWindow("Session Launcher", activity_id)
     DockBuilderFinish(dock_id)
 }
 
@@ -572,6 +581,8 @@ class private WatcherRichClient : HvWebSocketClient {
     repositories : array<RepositorySnapshot>
     mailbox : array<WatcherMailboxMessage>
     mailbox_revision : int64
+    bundles : array<WatcherReviewBundle>
+    bundles_revision : int64
     agent_mark_revision : int64 = -1l
     agent_mark_files : table<string; bool>
     error : string
@@ -769,6 +780,15 @@ class private WatcherRichClient : HvWebSocketClient {
             } else {
                 error = "invalid mailbox message"
             }
+        } elif (envelope._type == "bundles") {
+            var incoming = WatcherBundlesMessageEnvelope()
+            if (sscan_json(body, incoming)) {
+                delete bundles
+                bundles <- incoming.data
+                bundles_revision = incoming.revision
+            } else {
+                error = "invalid bundles message"
+            }
         } elif (envelope._type == "mailbox_posted") {
             var incoming : WatcherMailboxPostedMessage
             if (sscan_json(body, incoming)) {
@@ -873,6 +893,38 @@ class private WatcherRichClient : HvWebSocketClient {
             "\"timeout_ms\":0,\"display_name\":\"PowerShell\",\"kind\":\"interactive-shell\"," +
             "\"target_id\":\"local\",\"repository_id\":{sprint_json(repository_id, false)}," +
             "\"worktree_path\":{sprint_json(worktree_path, false)}\}")
+    }
+
+    def launch_codex_debug(cwd, repository_id, task_context : string) {
+        if (!connected) {
+            error = "watcher is not connected"
+            return
+        }
+        var argv <- ["codex"]
+        send("\{\"op\":\"launch\",\"argv\":{sprint_json(argv, false)}," +
+            "\"cwd\":{sprint_json(cwd, false)},\"columns\":120,\"rows\":36," +
+            "\"timeout_ms\":0,\"display_name\":\"Codex debug\"," +
+            "\"kind\":\"agent-codex\",\"purpose\":\"debug\"," +
+            "\"task_context\":{sprint_json(task_context, false)}," +
+            "\"target_id\":\"local\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(cwd, false)}\}")
+    }
+
+    def create_worktree_and_launch_codex(source_worktree, repository_id,
+                                         new_worktree_path, branch, base_ref,
+                                         task_context : string) {
+        if (!connected) {
+            error = "watcher is not connected"
+            return
+        }
+        send("\{\"op\":\"launch_agent_worktree\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(source_worktree, false)},\"new_worktree_path\":" +
+            "{sprint_json(new_worktree_path, false)},\"branch\":" +
+            "{sprint_json(branch, false)},\"base_ref\":" +
+            "{sprint_json(base_ref, false)},\"task_context\":" +
+            "{sprint_json(task_context, false)}\}")
     }
 
     def add_repository(path : string) {
@@ -1025,8 +1077,10 @@ class private WatcherRichClient : HvWebSocketClient {
         for (message in mailbox) {
             if (message.direction != "outbox") continue
             for (target in message.focus.targets) {
-                agent_mark_files[agent_mark_key(message.focus.repository_id,
-                    message.focus.worktree_path, target.file_path)] = true
+                agent_mark_files[agent_mark_key(
+                    watcher_focus_repository(message.focus, target),
+                    watcher_focus_worktree(message.focus, target),
+                    target.file_path)] = true
             }
         }
         agent_mark_revision = mailbox_revision
@@ -1109,6 +1163,59 @@ def private selected_session_label() : string {
     return g_client.selected_id
 }
 
+def private draw_selected_session_context() {
+    if (g_client == null || empty(g_client.selected_id)) return
+    for (session in g_client.sessions) {
+        if (session.id != g_client.selected_id) continue
+        let purpose = !empty(session.purpose) ? to_upper(session.purpose) : to_upper(session.kind)
+        text("{purpose}  {session.id}")
+        text_disabled("Origin: {session.worktree_path}")
+        if (!empty(session.task_context)) {
+            text_wrapped((text = session.task_context))
+        }
+        return
+    }
+}
+
+def private select_bundle_participant(participant : WatcherBundleParticipant const) {
+    if (g_client == null) return
+    g_selected_repository_id = participant.repository_id
+    g_selected_worktree_path = participant.worktree_path
+    g_client->refresh_repository(participant.repository_id)
+    g_client->request_repository_review(participant.repository_id,
+        participant.worktree_path)
+    GIT_CHANGELIST_WIN.open = true
+    GIT_CHANGELIST_WIN.pending_raise = true
+    GIT_ACTIVITY_WIN.open = true
+}
+
+def private draw_review_bundles() {
+    text("Review bundles ({g_client != null ? length(g_client.bundles) : 0})")
+    child(REVIEW_BUNDLES_CHILD, (text = "review bundles", size = float2(0.0f, 150.0f),
+            child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
+        if (g_client == null || empty(g_client.bundles)) {
+            text_disabled("The agent has not declared a review bundle yet.")
+            return
+        }
+        var row = 0
+        for (bundle in g_client.bundles) {
+            text("[{to_upper(bundle.status)}] {bundle.title}")
+            if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
+            for (participant in bundle.participants) {
+                let files = length(participant.files)
+                BUNDLE_PARTICIPANT_ROW[row].value = (participant.repository_id
+                    == g_selected_repository_id && participant.worktree_path
+                    == g_selected_worktree_path)
+                if (selectable(BUNDLE_PARTICIPANT_ROW[row],
+                        (text = "  {participant.role}  {participant.worktree_path}  ({files} files)##{bundle.id}:{row}"))) {
+                    select_bundle_participant(participant)
+                }
+                row++
+            }
+        }
+    }
+}
+
 def private pending_attention_count() : int {
     var count = 0
     if (g_client != null) {
@@ -1135,6 +1242,10 @@ def private activate_focus_target(message : WatcherMailboxMessage const;
     if (g_client == null || target_index < 0
             || target_index >= length(message.focus.targets)) return
     let target & = unsafe(message.focus.targets[target_index])
+    let repository_id = watcher_focus_repository(message.focus, target)
+    let worktree_path = watcher_focus_worktree(message.focus, target)
+    let comparison = watcher_focus_comparison(message.focus, target)
+    let revision = watcher_focus_revision(message.focus, target)
     g_active_focus_message = message.id
     g_active_focus_target = target_index
     g_active_focus_range = first_focus_range(target)
@@ -1142,23 +1253,19 @@ def private activate_focus_target(message : WatcherMailboxMessage const;
     g_pending_focus_scroll = true
     g_applied_focus_identity = ""
     let selection_changed = (g_selected_repository_id
-            != message.focus.repository_id
-        || g_selected_worktree_path != message.focus.worktree_path)
-    g_selected_repository_id = message.focus.repository_id
-    g_selected_worktree_path = message.focus.worktree_path
+            != repository_id
+        || g_selected_worktree_path != worktree_path)
+    g_selected_repository_id = repository_id
+    g_selected_worktree_path = worktree_path
     if (message.status == "new") g_client->acknowledge_mailbox(message.id)
     if (selection_changed) {
-        g_client->refresh_repository(message.focus.repository_id)
-        g_client->request_repository_review(message.focus.repository_id,
-            message.focus.worktree_path)
-        g_client->request_repository_history(message.focus.repository_id,
-            message.focus.worktree_path)
-        g_client->request_repository_refs(message.focus.repository_id,
-            message.focus.worktree_path)
+        g_client->refresh_repository(repository_id)
+        g_client->request_repository_review(repository_id, worktree_path)
+        g_client->request_repository_history(repository_id, worktree_path)
+        g_client->request_repository_refs(repository_id, worktree_path)
     }
-    g_client->inspect_file(message.focus.repository_id,
-        message.focus.worktree_path, target.file_path,
-        message.focus.comparison, "full", message.focus.revision)
+    g_client->inspect_file(repository_id, worktree_path, target.file_path,
+        comparison, "full", revision)
     FILE_INSPECTOR_WIN.open = true
     FILE_INSPECTOR_WIN.pending_raise = true
 }
@@ -1194,7 +1301,8 @@ def private draw_session_list() {
         g_client->terminate_selected()
     }
     separator()
-    child(SESSIONS_CHILD, (text = "sessions", size = float2(0.0f, -260.0f),
+    draw_selected_session_context()
+    child(SESSIONS_CHILD, (text = "sessions", size = float2(0.0f, 120.0f),
             child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
         var visible_sessions = 0
         if (g_client != null) {
@@ -1219,6 +1327,8 @@ def private draw_session_list() {
     }
     text_disabled("Exited sessions are retained and hidden by default.")
     separator()
+    draw_review_bundles()
+    separator()
     let attention_count = pending_attention_count()
     text("Attention ({attention_count})")
     text_disabled("Agent notes never navigate until you click them.")
@@ -1239,10 +1349,13 @@ def private draw_session_list() {
                 let selected_message = message.id == g_active_focus_message
                 for (target_index in range(length(message.focus.targets))) {
                     let target & = unsafe(message.focus.targets[target_index])
+                    let target_repository = watcher_focus_repository(message.focus, target)
+                    let repository_hint = (!empty(target.repository_id)
+                        ? "[{target_repository}] " : "")
                     ATTENTION_TARGET_ROW[target_row].value = (selected_message
                         && target_index == g_active_focus_target)
                     if (selectable(ATTENTION_TARGET_ROW[target_row],
-                            (text = "  {target.file_path}##{message.id}:{target_index}"))) {
+                            (text = "  {repository_hint}{target.file_path}##{message.id}:{target_index}"))) {
                         activate_focus_target(message, target_index)
                     }
                     target_row++
@@ -1293,8 +1406,30 @@ def private reset_layout() {
     GIT_ACTIVITY_WIN.open = true
     FILE_INSPECTOR_WIN.open = true
     TERMINAL_WIN.open = true
+    SESSION_LAUNCHER_WIN.open = false
     SETTINGS_WIN.open = false
     DOCK_ROOT.pending_reset = true
+}
+
+def private prepare_debug_launcher() {
+    let suffix = "debug-{ref_time_ticks()}"
+    AGENT_BRANCH.pending_value = "codex/{suffix}"
+    AGENT_BRANCH.has_pending = true
+    AGENT_BASE_REF.pending_value = "HEAD"
+    AGENT_BASE_REF.has_pending = true
+    var checkout = g_selected_worktree_path
+    if (g_client != null) {
+        for (repository in g_client.repositories) {
+            if (repository.record.id == g_selected_repository_id) {
+                checkout = repository.record.checkout_path
+                break
+            }
+        }
+    }
+    AGENT_WORKTREE_PATH.pending_value = path_join(
+        path_join(checkout, ".codex/worktrees"), suffix)
+    AGENT_WORKTREE_PATH.has_pending = true
+    CREATE_DEDICATED_WORKTREE.value = true
 }
 
 def private draw_main_menu() {
@@ -1305,6 +1440,12 @@ def private draw_main_menu() {
             }
         }
         menu(COMMANDS_MENU, (text = "Commands", enabled = true)) {
+            if (menu_label(COMMAND_CODEX_DEBUG,
+                    (text = "Debug with Codex...", enabled = g_client != null
+                        && g_client.connected && !empty(g_selected_worktree_path)))) {
+                prepare_debug_launcher()
+                open_dock_window(SESSION_LAUNCHER_WIN)
+            }
             if (menu_label(COMMAND_POWERSHELL,
                     (text = "PowerShell", enabled = g_client != null && g_client.connected))) {
                 g_client->launch("powershell.exe -NoLogo -NoProfile", g_selected_worktree_path,
@@ -1352,6 +1493,10 @@ def private draw_main_menu() {
             if (menu_label(VIEW_TERMINAL,
                     (text = "Terminal", selected = TERMINAL_WIN.open))) {
                 open_dock_window(TERMINAL_WIN)
+            }
+            if (menu_label(VIEW_SESSION_LAUNCHER,
+                    (text = "Session Launcher", selected = SESSION_LAUNCHER_WIN.open))) {
+                open_dock_window(SESSION_LAUNCHER_WIN)
             }
             separator(VIEW_WINDOWS_SEPARATOR)
             menu_item(SHOW_EXITED, (text = "Show exited sessions"))
@@ -3145,7 +3290,10 @@ def herder_attention_state(_input : JsonValue?) : JsonValue? {
         for (message in g_client.mailbox) {
             if (message.direction != "outbox") continue
             var targets <- [for (target in message.focus.targets);
-                JV((file_path = target.file_path,
+                JV((repository_id = watcher_focus_repository(message.focus, target),
+                    worktree_path = watcher_focus_worktree(message.focus, target),
+                    comparison = watcher_focus_comparison(message.focus, target),
+                    file_path = target.file_path,
                     whole_file = target.whole_file,
                     range_count = length(target.ranges)))]
             messages |> push(JV((id = message.id, sender = message.sender,
@@ -3162,6 +3310,47 @@ def herder_attention_state(_input : JsonValue?) : JsonValue? {
         focus_visible = g_focus_visible,
         last_human_request_id = g_last_human_request,
         messages = messages))
+}
+
+[live_command(description = "Inspect selected dasHerd session origin, purpose, and multi-repository Review Bundles.")]
+def herder_session_state(_input : JsonValue?) : JsonValue? {
+    var session_id, session_state, session_kind, session_purpose : string
+    var task_context, repository_id, worktree_path, context_path : string
+    var bundles : array<JsonValue?>
+    if (g_client != null) {
+        for (session in g_client.sessions) {
+            if (session.id == g_client.selected_id) {
+                session_id = session.id
+                session_state = session.state
+                session_kind = session.kind
+                session_purpose = session.purpose
+                task_context = session.task_context
+                repository_id = session.repository_id
+                worktree_path = session.worktree_path
+                context_path = session.context_path
+                break
+            }
+        }
+        for (bundle in g_client.bundles) {
+            var participants <- [for (participant in bundle.participants);
+                JV((repository_id = participant.repository_id,
+                    worktree_path = participant.worktree_path,
+                    role = participant.role, state = participant.state,
+                    file_count = length(participant.files)))]
+            bundles |> push(JV((id = bundle.id, title = bundle.title,
+                status = bundle.status, revision = bundle.revision,
+                participant_count = length(bundle.participants),
+                focus_target_count = length(bundle.focus.targets),
+                participants = participants)))
+        }
+    }
+    return JV((ok = g_client != null, session_id = session_id,
+        session_state = session_state, session_kind = session_kind,
+        session_purpose = session_purpose, task_context = task_context,
+        repository_id = repository_id, worktree_path = worktree_path,
+        context_path = context_path,
+        bundles_revision = g_client != null ? g_client.bundles_revision : 0l,
+        bundles = bundles))
 }
 
 [live_command(description = "Open one agent Focus Set target at the user's chosen time. Args: message_id, target_index.")]
@@ -3387,7 +3576,11 @@ def private draw_active_focus_overlay(state : TextSourceViewState const;
                 || g_active_focus_target < 0
                 || g_active_focus_target >= length(message.focus.targets)) continue
         let target & = unsafe(message.focus.targets[g_active_focus_target])
-        if (target.file_path == g_inspector.installed_file_path) {
+        if (watcher_focus_repository(message.focus, target)
+                    == g_inspector.installed_repository_id
+                && watcher_focus_worktree(message.focus, target)
+                    == g_inspector.installed_worktree_path
+                && target.file_path == g_inspector.installed_file_path) {
             draw_focus_target_overlay(target, state, document, diff_mapping)
         }
         return
@@ -3409,7 +3602,11 @@ def private apply_active_focus() {
                     || g_active_focus_target < 0
                     || g_active_focus_target >= length(message.focus.targets)) continue
             let target & = unsafe(message.focus.targets[g_active_focus_target])
-            if (target.file_path != g_inspector.installed_file_path) continue
+            if (watcher_focus_repository(message.focus, target)
+                        != g_inspector.installed_repository_id
+                    || watcher_focus_worktree(message.focus, target)
+                        != g_inspector.installed_worktree_path
+                    || target.file_path != g_inspector.installed_file_path) continue
             matched_target = true
             g_inspector.focus_document_valid = true
             if (!empty(target.ranges)) {
@@ -3625,6 +3822,43 @@ def private draw_settings_window() {
     text_disabled("Repository registration and layout settings will be stored here.")
 }
 
+def private draw_session_launcher_window() {
+    text("Codex debug session")
+    text_disabled("The selected worktree becomes the immutable session origin.")
+    separator()
+    text("Repository: {g_selected_repository_id}")
+    text("Selected worktree: {g_selected_worktree_path}")
+    checkbox(CREATE_DEDICATED_WORKTREE, (text = "Create a dedicated worktree"))
+    if (CREATE_DEDICATED_WORKTREE.value) {
+        input_text_growable(AGENT_BRANCH, (text = "New branch"))
+        input_text_growable(AGENT_BASE_REF, (text = "Base ref"))
+        input_text_growable(AGENT_WORKTREE_PATH, (text = "New worktree path"))
+    }
+    text("Debug task")
+    input_text_multiline(AGENT_TASK_CONTEXT,
+        (text = "##debug-task", size = float2(-FLT_MIN, GetTextLineHeight() * 8.0f),
+         flags = ImGuiInputTextFlags.None))
+    if (button(LAUNCH_CODEX_DEBUG,
+            (text = "Launch Codex", enabled = g_client != null
+                && g_client.connected && !empty(g_selected_repository_id)
+                && !empty(g_selected_worktree_path)
+                && (!CREATE_DEDICATED_WORKTREE.value
+                    || (!empty(AGENT_BRANCH.value)
+                        && !empty(AGENT_WORKTREE_PATH.value)))
+                && !empty(AGENT_TASK_CONTEXT.value)))) {
+        if (CREATE_DEDICATED_WORKTREE.value) {
+            g_client->create_worktree_and_launch_codex(g_selected_worktree_path,
+                g_selected_repository_id, AGENT_WORKTREE_PATH.value,
+                AGENT_BRANCH.value, AGENT_BASE_REF.value,
+                AGENT_TASK_CONTEXT.value)
+        } else {
+            g_client->launch_codex_debug(g_selected_worktree_path,
+                g_selected_repository_id, AGENT_TASK_CONTEXT.value)
+        }
+        SESSION_LAUNCHER_WIN.open = false
+    }
+}
+
 def private draw_terminal_window() {
     let io & = unsafe(GetIO())
     if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
@@ -3677,6 +3911,11 @@ def init() {
     inspector_prepare_worker_start(g_prepare_worker)
     g_selected_worktree_path = get_das_root()
     SETTINGS_WIN.open = false
+    AGENT_TASK_CONTEXT.capacity = 16 * 1024
+    AGENT_BRANCH.capacity = 1024
+    AGENT_BASE_REF.capacity = 1024
+    AGENT_WORKTREE_PATH.capacity = 16 * 1024
+    CREATE_DEDICATED_WORKTREE.value = true
     let port = clamp(to_int(option_value("--port=", "9191")), 1024, 65535)
     g_token = option_value("--token=")
     g_url = "ws://127.0.0.1:{port}/ws?token={g_token}"
@@ -3737,6 +3976,10 @@ def update() {
                 flags = ImGuiWindowFlags.None)) {
             draw_settings_window()
         }
+        dock_window(SESSION_LAUNCHER_WIN, (text = "Session Launcher", closable = true,
+                flags = ImGuiWindowFlags.None)) {
+            draw_session_launcher_window()
+        }
     }
     harness_end_frame()
 }
@@ -3750,6 +3993,7 @@ def shutdown() {
         delete g_client.sessions
         delete g_client.repositories
         delete g_client.mailbox
+        delete g_client.bundles
         delete g_client.git_failure_revisions
         delete g_client.agent_mark_files
         unsafe { delete g_client }
