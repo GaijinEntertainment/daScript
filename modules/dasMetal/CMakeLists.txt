@@ -12,6 +12,14 @@ IF (NOT DAS_METAL_DAS_INCLUDED)
     ADD_MODULE_DAS(metal metal msl_shader)
     ADD_MODULE_DAS(metal metal das_metal_boost)
 
+    # AOT-able sources (for test_aot / any consumer); empty when disabled.
+    SET(DASMETAL_AOT_FILES
+        modules/dasMetal/metal/metal_builtins.das
+)
+    # regen inputs for AOT hash freshness (the module's whole .das graph)
+    FILE(GLOB DASMETAL_AOT_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/modules/dasMetal/metal/*.das")
+    SET(DASMETAL_AOT_DEPENDS "${DASMETAL_AOT_DEPENDS}")
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasMetal/metal
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasMetal
         FILES_MATCHING

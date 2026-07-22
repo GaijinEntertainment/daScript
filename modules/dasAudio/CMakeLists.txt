@@ -106,6 +106,29 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	ADD_MODULE_DAS(strudel strudel strudel_player)
 	ADD_MODULE_DAS(strudel strudel strudel_live)
 
+	# AOT-able sources (for test_aot / any consumer AOT-ing dasAudio); empty when disabled.
+	SET(DASAUDIO_AOT_FILES
+		modules/dasAudio/audio/audio_boost.das
+		modules/dasAudio/audio/audio_wav.das
+		modules/dasAudio/audio/audio_record.das
+		modules/dasAudio/strudel/strudel_event.das
+		modules/dasAudio/strudel/strudel_time.das
+		modules/dasAudio/strudel/strudel_pattern.das
+		modules/dasAudio/strudel/strudel_mini.das
+		modules/dasAudio/strudel/strudel_sfxr.das
+		modules/dasAudio/strudel/strudel_modal.das
+		modules/dasAudio/strudel/strudel_sfx.das
+		modules/dasAudio/strudel/strudel_synth.das
+		modules/dasAudio/strudel/strudel_samples.das
+		modules/dasAudio/strudel/strudel_scheduler.das
+		modules/dasAudio/strudel/strudel_sf2.das
+		modules/dasAudio/strudel/strudel_sf2_voice.das
+		modules/dasAudio/strudel/strudel_scales.das
+		modules/dasAudio/strudel/strudel_midi.das
+		modules/dasAudio/strudel/strudel_midi_player.das
+		modules/dasAudio/strudel/strudel_player.das
+)
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasAudio/audio
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasAudio
         FILES_MATCHING

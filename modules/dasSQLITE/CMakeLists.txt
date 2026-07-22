@@ -101,6 +101,13 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
     ADD_MODULE_DAS(sqlite daslib sqlite_linq)
     ADD_MODULE_DAS(sqlite daslib sqlite_migrate)
 
+    # AOT-able sources (for test_aot / any consumer); empty when disabled.
+    SET(DASSQLITE_AOT_FILES
+        modules/dasSQLITE/daslib/sqlite_provider.das
+        modules/dasSQLITE/daslib/sqlite_boost.das
+        modules/dasSQLITE/daslib/sqlite_migrate.das
+)
+
     INSTALL(TARGETS sqlite_shell
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
