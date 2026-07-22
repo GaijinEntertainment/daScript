@@ -37,7 +37,22 @@ bitfield TabOperation {
     erase
 }
 
-class CollectExternVisitor : AstVisitor {
+
+// Get-or-add das_aot_get_func_by_mnh and build a call resolving `mnh` against `ctx_arg` to the host's
+// SimFunction* (void*). Shared by the aot-object register path and the globinit ctor.
+def public build_aot_get_func_by_mnh(b : LLVMBuilderRef; types : PrimitiveTypes?; mnh : uint64; ctx_arg : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let gfType = LLVMFunctionType(types.LLVMVoidPtrType(),
+        fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
+    var gfFn = LLVMGetNamedFunction(g_mod, "das_aot_get_func_by_mnh")
+    if (gfFn == null) {
+        gfFn = LLVMAddFunctionWithType(g_mod, "das_aot_get_func_by_mnh", gfType)
+    }
+    var gf_args = array<LLVMValueRef>(types.ConstI64(mnh), ctx_arg)
+    return LLVMBuildCall2(b, gfType, gfFn, gf_args, "")
+}
+
+
+class public CollectExternVisitor : AstVisitor {
     uid : UidNodes?
 
     // Let's keep order of traversal during initialization.
@@ -66,7 +81,6 @@ class CollectExternVisitor : AstVisitor {
     registered_modules : table<string; bool>
     dynamic_modules : table<string; bool>
     register_mod_type : LLVMOpaqueType?
-    init_fn : LLVMOpaqueValue?
     init_builder : LLVMBuilderRef
 
     reg_extern_fn_type : LLVMOpaqueType?
@@ -84,67 +98,71 @@ class CollectExternVisitor : AstVisitor {
 
     standalone_ctx : LLVMOpaqueValue?
 
+    // The globinit ctor's Context* parameter (set by emit_aot_object_globinit),
+    // used to resolve Func-value globs to the host's SimFunction* at load.
+    aot_ctx_arg : LLVMOpaqueValue?
+    jit_mod : LlvmJitMode
 
-    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
-                             _builder : LLVMBuilderRef,
-                             _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
-                             uids : UidNodes?; register_all : bool) {
-        any_unimplemented = false
-        needs_whole_lib = false
-        uid := uids
-        ctx = _ctx
-        standalone_ctx = standalone_context
-        mod = _mod
-        types = _types
-        builder = _builder
-        register_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(), array<LLVMTypeRef>())
-
-        // Create initialize_modules() function — filled incrementally as we discover needed modules
-        let init_fn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        init_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
+    // Create the initialize_modules() function, position a builder in it, and emit das_ensure_environment
+    // plus the builtin-module registrations (all native modules if register_all, else $ + strings). Returns the builder.
+    def private setup_init_builder(register_all : bool) : LLVMBuilderRef {
+        let init_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
         let init_entry = LLVMAppendBasicBlockInContext(ctx, init_fn, "entry")
-        init_builder = LLVMCreateBuilder()
-        LLVMPositionBuilderAtEnd(init_builder, init_entry)
-        // Always call das_ensure_environment first
+        var ib = LLVMCreateBuilder()
+        LLVMPositionBuilderAtEnd(ib, init_entry)
         let env_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
         var env_fn = LLVMGetNamedFunction(g_mod, "das_ensure_environment")
         if (env_fn == null) {
             env_fn = LLVMAddFunctionWithType(g_mod, "das_ensure_environment", env_type)
         }
-        LLVMBuildCall2(init_builder, env_type, env_fn, array<LLVMValueRef>(), "")
-        // Optionally register ALL builtin native modules (math, fio, dasbind, ...)
-        // so a self-contained compiler-driver exe can recompile arbitrary daslang
-        // at runtime. Referencing this symbol also force-links those modules in.
-        // register_builtin_modules() covers exactly the set below, so mark them as
-        // already-registered to suppress the per-module emission (otherwise each
-        // would be registered twice -> "Module '...' already created").
+        LLVMBuildCall2(ib, env_type, env_fn, array<LLVMValueRef>(), "")
         if (register_all) {
             var reg_all = LLVMGetNamedFunction(g_mod, "jit_register_all_builtin_modules")
             if (reg_all == null) {
                 reg_all = LLVMAddFunctionWithType(g_mod, "jit_register_all_builtin_modules", env_type)
             }
-            LLVMBuildCall2(init_builder, env_type, reg_all, array<LLVMValueRef>(), "")
+            LLVMBuildCall2(ib, env_type, reg_all, array<LLVMValueRef>(), "")
             for (m in fixed_array("$", "math", "strings", "rtti_core", "ast_core", "jit",
                                   "debugapi", "network_core", "uriparser", "jobque",
                                   "fio_core", "dasbind")) {
                 registered_modules[m] = true
             }
         } else {
-            // Always register Module_BuiltIn ($) and Module_Strings (strings) — unless
-            // inject_main's static sweep already emitted the call (the thunks are NOT
-            // idempotent: a second call dies with "Module '$' already created").
+            // Register $ and strings unless inject_main's static sweep already emitted the (non-idempotent) call.
             if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_BuiltIn"))) {
                 g_exe_emitted_reg["jit_register_Module_BuiltIn"] = true
                 var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
-                LLVMBuildCall2(init_builder, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
+                LLVMBuildCall2(ib, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
             }
             registered_modules["$"] = true
             if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_Strings"))) {
                 g_exe_emitted_reg["jit_register_Module_Strings"] = true
                 var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
-                LLVMBuildCall2(init_builder, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
+                LLVMBuildCall2(ib, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
             }
             registered_modules["strings"] = true
+        }
+        return ib
+    }
+
+    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
+                             _builder : LLVMBuilderRef,
+                             _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
+                             uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode) {
+        any_unimplemented = false
+        needs_whole_lib = false
+        uid := uids
+        ctx = _ctx
+        standalone_ctx = standalone_context
+        mod = _mod
+        jit_mod = _jit_mod
+        types = _types
+        builder = _builder
+        register_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(), array<LLVMTypeRef>())
+
+        // Only exe/dll init modules at startup; AOT-object re-resolves globals into the caller's ctor (builder), no init_builder.
+        if (!g_emit_aot_object_globals) {
+            init_builder = setup_init_builder(register_all)
         }
 
         // void * get_jit_table_{at,find,erase} ( int32_t baseType, Context * context, LineInfoArg * at )
@@ -221,6 +239,10 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def register_function(fn : Function?) : LLVMOpaqueValue? {
+        // AOT-into-host: a Func VALUE is the host's SimFunction*, looked up by mnh against the ctor's Context* (works for builtins too).
+        if (jit_mod == LlvmJitMode.LLVM_AOT) {
+            return build_aot_get_func_by_mnh(builder, types, fn.getMangledNameHash, aot_ctx_arg)
+        }
         let fnmna = uid.get_dll_fn_name_ptr(fn)
         let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
         if (fn_publ == null) return null
@@ -262,7 +284,7 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def ensure_module(m : Module?) {
-        if (m == null) return
+        if (g_emit_aot_object_globals || m == null) return  // host already has every module registered
         let mod_name = string(m.name)
         // Dynamic modules register via the runtime load path (skipped here) — except wasm cross-compile, where they're statically linked and must register like any module.
         if (key_exists(registered_modules, mod_name) || (key_exists(dynamic_modules, mod_name) && !g_target_is_wasm)) return
@@ -556,7 +578,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
                                prog : Program?; register_all_modules : bool = false) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
-    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules)
+    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
@@ -1018,14 +1040,19 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         used_modules["rtti_core"] = true
     }
     var has_cpp_modules = false
-    var emitted_reg : table<string; bool>
-    var reg_visited : table<string; bool>
-    for (mod_name in keys(used_modules)) {
-        if (key_exists(dynamic_modules, mod_name)) continue
-        prog |> for_each_module() $(m) {
-            if (m.name != mod_name) return
-            emit_module_registration(m, dynamic_modules, emitted_reg, reg_visited,
-                builder, g_mod, register_mod_type, has_cpp_modules)
+    // register_all_modules already emits jit_register_all_builtin_modules() above (all builtins,
+    // idempotent). The sweep would re-emit an UNGUARDED jit_register_Module_X (REGISTER_MODULE_IN_
+    // NAMESPACE lacks a Module::require guard) -> double-create at startup ("Module '$' already created").
+    if (!register_all_modules) {
+        var emitted_reg : table<string; bool>
+        var reg_visited : table<string; bool>
+        for (mod_name in keys(used_modules)) {
+            if (key_exists(dynamic_modules, mod_name)) continue
+            prog |> for_each_module() $(m) {
+                if (m.name != mod_name) return
+                emit_module_registration(m, dynamic_modules, emitted_reg, reg_visited,
+                    builder, g_mod, register_mod_type, has_cpp_modules)
+            }
         }
     }
 

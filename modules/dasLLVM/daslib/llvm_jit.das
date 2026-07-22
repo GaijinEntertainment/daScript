@@ -73,7 +73,7 @@ struct SLabel {
     blk : LLVMOpaqueBasicBlock?
 }
 
-def set_private_linkage(value : LLVMOpaqueValue?) {
+def public set_private_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMPrivateLinkage)
     LLVMSetUnnamedAddress(value, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr);
 }
@@ -1511,15 +1511,10 @@ class public LlvmJitVisitor : AstVisitor {
             global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.glob())
             if (mode != LlvmJitMode.JIT) {
                 // nolint:STYLE014
-                // For standalone exes the JIT-process address is meaningless
-                // (different ASLR slide in the new process). Leave the global
-                // null at link time; the runtime initialize_modules() walks
-                // every used builtin and overwrites this slot via
-                // jit_initialize_extern_function. Baking the codegen-time
-                // address as a constant initializer would let LLVM
-                // constant-fold loads — observed at top-level `let` initializers
-                // — to the JIT-process immediate, which the standalone exe then
-                // calls and crashes on (dyld loaded the dylib elsewhere).
+                // The JIT-process address is meaningless in the host (different ASLR slide),
+                // and baking it as a const initializer lets LLVM constant-fold loads to that
+                // dead immediate. Leave null + private; a load-time init (initialize_modules
+                // for exe, the globinit ctor for the object) fills it via the runtime accessor.
                 set_private_linkage(global_addr)
                 LLVMSetInitializer(global_addr, LLVMConstPointerNull(nonnull_type))
             } else {
@@ -1527,12 +1522,20 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
             }
         } elif (mode == LlvmJitMode.JIT) {
-            // JIT mode codegen's each function once, so a duplicate name is a real bug. Exe mode
-            // re-codegens the same global-var initializers in init_globals + init_globals_clone, so the
-            // same slot is legitimately re-encountered — reuse silently (idempotent: same name, same slot).
+            // JIT codegens each function once, so a duplicate is a real bug (exe/object modes
+            // legitimately re-encounter a slot via init_globals + init_globals_clone).
             failed("Name duplicate {name.glob()}\n")
         }
         return load_local_const(global_addr, nonnull_type)
+    }
+
+    // emit-object mode: record a cross-module call/ctor target glob (just created
+    // null by save_address_global) so emit_aot_object_globinit fills it with the
+    // host Context's SimFunction* (das_aot_get_func_by_mnh) at load.
+    def aot_record_func_glob(name : DllName; func : Function?) {
+        if (g_emit_aot_object_globals) {
+            g_aot_func_globs |> push((glob = LLVMGetNamedGlobal(g_mod, name.glob()), mnh = func.getMangledNameHash))
+        }
     }
 
     def set_meta_cconv(instr : LLVMOpaqueValue?; conv : string) {
@@ -1709,6 +1712,7 @@ class public LlvmJitVisitor : AstVisitor {
                 if (glob_fn_ptr == null) {
                     var MNH_ADDR = get_function_addr(jit_context, expr.func)
                     glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
+                    aot_record_func_glob(uid.get_dll_fn_name_ptr(expr.func), expr.func)
                 }
                 var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
                 params |> push(glob_fn_ptr)  // mnh
@@ -4249,6 +4253,7 @@ class public LlvmJitVisitor : AstVisitor {
             if (ctor == null) {
                 var MNH_ADDR = get_function_addr(jit_context, expr_func)
                 ctor = save_address_global(name, MNH_ADDR)
+                aot_record_func_glob(name, expr_func)
             }
             var params <- [
                 ctor,  // mnh
@@ -7852,16 +7857,18 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
     return code
 }
 
-// Creates a single global constructor (run at compiled-object startup) for complex global types
-// like fileInfo that can't be const-initialized.
+// Emit the module's load/unload ctors into llvm.global_ctors/dtors: the FileInfo ctor/dtor, plus an
+// optional pre-built pair (the LLVM-AOT self-registration ctor, built by llvm_aot). aot_ctor==null skips it.
 [macro_function]
-def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool) {
-    let ctor_dtor <- [
+def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool; aot_ctor : LLVMOpaqueValue? = null; aot_dtor : LLVMOpaqueValue? = null) {
+    var ctor_dtor <- [
         // FileInfo
         generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode)
     ]
+    if (aot_ctor != null) {
+        ctor_dtor |> push((aot_ctor, aot_dtor))
+    }
     ctor_dtor |> add_ctor_dtor_function(types)
-
     reset_codegen_accumulators()
 }
 

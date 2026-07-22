@@ -1649,6 +1649,7 @@ namespace das
         bool jit_debug_info = false;             // Add debug info to generate binary code
         bool jit_dll_mode = true;                // Create if missing and reuse DLL or JIT compile
         bool jit_exe_mode = false;                // Create executable
+        bool jit_emit_object = false;            // Offline AOT: emit a .o (this module only) + a load ctor registering its functions into the AOT library, for static linking into a host
         bool jit_emit_prologue = false;          // Emit prologue for all functions and blocks
         string jit_output_path;                  // Folder to store compiled dll's. By default it'll be _das_root_/.jitted_scripts
         int32_t jit_opt_level = 3u;              // Opt level for LLVM to codegen and IR optimizations

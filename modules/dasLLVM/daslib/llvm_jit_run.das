@@ -6,6 +6,7 @@ options stack = 4_194_304
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_exe
+require llvm/daslib/llvm_aot
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_intrin
@@ -291,6 +292,12 @@ def reset_jit_globals_after_failure() {
 //! and emit a .dll / .exe / .wasm per the program's jit policies. Returns true.
 [macro_function]
 def public run_jit(prog : Program?; var ctx : Context?) : bool {
+    // AOT-object host binding: compiled jit-aware + policies.aot, so linkCppAot binds each
+    // function from the statically-linked .o (SimNode_Jit) -- no in-memory codegen needed
+    // here. (Emit mode sets jit_emit_object, never aot, so it skips this.)
+    if (prog.policies.aot && !prog.policies.jit_emit_object) {
+        return true
+    }
     var funcs : array<FunctionPtr>
     var disabled : array<FunctionPtr>
     var disableJitVisitor = new DisableJitVisitor()
@@ -314,7 +321,18 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     // the program runs interpreted. Also bypasses the DLL cache probe below, so the
     // generators always run (this is the cross-emission smoke rail).
     let compile_only = cli_opts.compile_only |> unwrap_or(false)
-    let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only
+    // Offline AOT: emit the whole used function set to a .o for static linking, with a
+    // load ctor registering them into the AOT library. Mutually exclusive with dll
+    // mode (no in-memory engine work, no instrument).
+    let emit_aot_object = prog.policies.jit_emit_object
+    // Emit builtin-accessor globals internal + null in object mode (re-resolved by
+    // the emit_aot_object_globinit ctor); reset after this run.
+    g_emit_aot_object_globals = emit_aot_object
+    if (emit_aot_object) {
+        g_aot_func_globs |> clear()
+    }
+    defer() { g_emit_aot_object_globals = false; }
+    let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only && !emit_aot_object
     let opt_level = cli_opts.opt_level |> unwrap_or(prog.policies.jit_opt_level)
     let size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
     // This policy must be set before compilation so stack-frame sizes include the prologue.
@@ -370,13 +388,20 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     if (exe_host_cpu) {
         to_log(LOG_INFO, "LLVM EXE: targeting the current box (CPU + features) — the build carries [llvm_code] kernels\n")
     }
-    init_jit_target_flags(target_triple, !gen_exe || exe_host_cpu)
+    // AOT objects target the host CPU: the .o is statically linked into a binary that runs on this
+    // box (same contract as the JIT), so bake host features — this force-appends +dotprod on aarch64,
+    // without which the dasLLAMA Q8 SDOT kernels have no instruction to select and codegen aborts.
+    let use_host_cpu = emit_aot_object ? true : (!gen_exe || exe_host_cpu)
+    init_jit_target_flags(target_triple, use_host_cpu)
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         prog |> for_each_module() $(mod) {
             mod |> for_each_function("") $(fun) {
                 let rqj = fun.moreFlags.requestJit
                 fun.moreFlags.requestJit = false
-                if (fun.flags.used && (jit_all_functions || rqj)) {
+                // In object mode emit the whole used, non-noAot set (all modules +
+                // per-program generic instantiations), mirroring C++ AOT whole-program
+                // coverage; noAot functions interpret as Program::linkCppAot skips them.
+                if (fun.flags.used && (jit_all_functions || rqj) && (!emit_aot_object || !fun.flags.noAot)) {
                     if (!fun.moreFlags.requestNoJit) {
                         disableJitVisitor.disable = false
                         // if DisableJitVisitor ever grows a preVisitFunction check again, it must
@@ -398,7 +423,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     unsafe {
         delete disableJitVisitor
     }
-    if (!empty(funcs)) {
+    // emit_aot_object always writes an object even with no functions to emit (a fully-no_aot
+    // module): an empty .o with just the fileinfo ctor, so the build always has the file it
+    // expects and those functions interpret at load (as Program::linkCppAot skips them).
+    if (!empty(funcs) || emit_aot_object) {
         let totalTime = ref_time_ticks()
         // Content-address the DLL: distinct (AST + codegen version + opt flags) → distinct files, same
         // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
@@ -411,7 +439,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
         // Pass target_triple so init_jit can pin the module data layout
             // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
             // sizes baked into GEP folding from the very first IR instruction).
-            init_jit(opt_level |> uint, target_triple, !gen_exe || exe_host_cpu)
+            init_jit(opt_level |> uint, target_triple, use_host_cpu)
 
         // "Debug Info Version" gates all !dbg metadata (absent -> silently stripped);
         // "CodeView" flips COFF debug emission from DWARF to CodeView so lld-link
@@ -433,7 +461,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = emit_prologue
         jit_flags.need_di = debug_info
-        let jit_mode = gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT
+        let jit_mode = emit_aot_object ? LlvmJitMode.LLVM_AOT : (gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT)
 
         let attrs = new Attributes(g_ctx)
         var uids = create_uid_nodes(prog, funcs, gen_exe)
@@ -498,14 +526,19 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                 reset_jit_globals_after_failure()
                 panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
             }
-            generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
+            // Offline AOT object: build the self-registration + glob-re-resolution ctors (llvm_aot pass).
+            var aot_ctor : LLVMOpaqueValue? = null
+            var aot_dtor : LLVMOpaqueValue? = null
+            if (emit_aot_object) {
+                var pair = build_llvm_aot_ctors(g_ctx, g_mod, g_prim_t, funcs, uids, prog)
+                aot_ctor = pair._0
+                aot_dtor = pair._1
+            }
+            generate_global_ctors_dtors(g_prim_t, emit_aot_object ? false : !(use_dll || gen_exe), aot_ctor, aot_dtor)
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }
-            // exe_host_cpu was decided up top, before the flag pass — a -exe with only
-            // reference bodies stays generic/redistributable. (JIT always targets the
-            // host — its artifact runs here.)
-            optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, !gen_exe || exe_host_cpu)
+            optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
             if (dump_ir) {
                 // Let's remove unused attributes before we print IR.
                 var pmo = LLVMCreatePassBuilderOptions()
@@ -531,6 +564,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
             }
             if (compile_only) {
                 to_log(LOG_INFO, "LLVM JIT: compile-only — module built, optimized and verified; no artifact written, nothing installed\n")
+            } elif (emit_aot_object) {
+                emit_object_only(g_mod, output_path, use_host_cpu)
             } elif (gen_wasm) {
                 mkdir_rec(dir_name(output_path))
                 // path_to_linker is reused as the optional emcc override
@@ -555,6 +590,20 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                     jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename)
                 }
             }
+        }
+        // Object emission is done; no live engine needed. finalize_jit teardown is skipped on
+        // this early return, so dispose the engine init_jit created (owns g_mod) + the context
+        // here, else LeakSanitizer flags MCJIT::createJIT.
+        if (emit_aot_object) {
+            LLVMDisposeExecutionEngine(g_engine)
+            LLVMContextDispose(g_ctx)
+            g_engine = null
+            g_ctx = null
+            g_mod = null
+            unsafe {
+                delete g_str2v
+            }
+            return true
         }
         if (use_dll) {
             assert(g_dynamic_lib_handle.handle != null)

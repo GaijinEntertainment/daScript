@@ -16,6 +16,7 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
 #include "daScript/simulate/aot_builtin.h"
+#include "daScript/simulate/aot_builtin_rtti.h"       // builtin_getFunctionByMnh
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/hash.h"               // stringLength
@@ -63,6 +64,42 @@ namespace das {
         bool saved_aot = false;
         void * saved_aot_function = nullptr;
     };
+
+    SimNode * makeAotJitNode ( Context & ctx, void * publ ) {
+        return ctx.code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)publ);
+    }
+
+    extern "C" void * das_aot_get_func_by_mnh ( uint64_t mnh, Context * ctx ) {
+        return builtin_getFunctionByMnh(mnh, ctx).PTR;
+    }
+
+    static vector<pair<uint64_t,void*>> & llvmAotEntries() {
+        static vector<pair<uint64_t,void*>> entries;
+        return entries;
+    }
+
+    static vector<void(*)(Context*)> & llvmAotGlobInits() {
+        static vector<void(*)(Context*)> inits;
+        return inits;
+    }
+    static void registerLlvmAotFunctions ( AotLibrary & lib ) {
+        for ( auto & e : llvmAotEntries() ) {
+            lib.emplace(e.first, AotFactory(e.second));
+        }
+    }
+    static AotListBase g_llvmAotList(registerLlvmAotFunctions);
+
+    extern "C" void das_aot_register ( uint64_t aotHash, void * publ ) {
+        llvmAotEntries().emplace_back(aotHash, publ);
+    }
+
+    extern "C" void das_aot_register_globinit ( void (*fn)(Context*) ) {
+        llvmAotGlobInits().push_back(fn);
+    }
+
+    void runLlvmAotGlobInits ( Context & ctx ) {
+        for ( auto fn : llvmAotGlobInits() ) fn(&ctx);
+    }
 
     struct SimNode_JitBlock;
 
@@ -166,6 +203,7 @@ extern "C" {
     }
 
     DAS_API vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
+        if ( !fn ) context->throw_error("jit_call_or_fastcall: null function (unresolved LLVM-AOT call target)");
         if ( fn->jitFunction ) {
             // JIT->JIT direct call: skip the stack push/prologue (JIT'd bodies push their own
             // frame via jit_prologue when they need one) and the virtual SimNode_Jit::eval.
@@ -185,6 +223,7 @@ extern "C" {
     }
 
     DAS_API vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context ) {
+        if ( !fn ) context->throw_error("jit_call_with_cmres: null function (unresolved LLVM-AOT call target)");
         return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
     }
 

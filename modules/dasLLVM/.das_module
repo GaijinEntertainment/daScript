@@ -8,7 +8,7 @@ def initialize(project_path : string) {
         "llvm_boost", "llvm_debug", "llvm_jit", "llvm_targets",
         "llvm_dsl",
         "llvm_jit_intrin", "llvm_jit_common", "llvm_dll_utils",
-        "llvm_exe", "llvm_macro", "llvm_jit_cli", "llvm_jit_run",
+        "llvm_exe", "llvm_macro", "llvm_jit_cli", "llvm_jit_run", "llvm_aot",
         "aarch64_neon", // public NEON-intrinsic header (portable fallbacks + name-based JIT recognition)
         "x64_avx",      // public x86-64-intrinsic header (same contract, x64 mirror)
         "f16_cvt",      // public f16<->f32 convert header (same contract, aarch64 + x64/F16C)

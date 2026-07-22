@@ -80,13 +80,11 @@ SET(AOT_DECS_MODULE_FILES
     tests/decs/test_stages_extra.das
 )
 
-# so AOT them only when HV is enabled.
+# dasLiveHost tests transitively require dashv, so AOT them only when HV is enabled.
 SET(AOT_LIVE_HOST_FILES)
 SET(AOT_LIVE_HOST_MODULE_FILES ${DASLIVEHOST_AOT_FILES})
 IF(NOT DAS_HV_DISABLED)
     FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
-
-    # Live host module files (libraries required by live_host tests)
 ENDIF()
 
 SET(AOT_DASSQLITE_MODULE_FILES ${DASSQLITE_AOT_FILES})
@@ -109,10 +107,9 @@ IF(NOT DAS_SQLITE_DISABLED)
     list(FILTER AOT_SQL_CONFORMANCE_FILES EXCLUDE REGEX "/_")
 ENDIF()
 
-# audio_record is here for AOT-compile coverage of the capture module)
 SET(AOT_STRUDEL_MODULE_FILES ${DASAUDIO_AOT_FILES})
 
-# require dasAudio which may be disabled in CI)
+# audio-independent strudel test always AOT'd; audio-dependent ones need dasAudio (may be off in CI).
 SET(AOT_STRUDEL_FILES
     tests/strudel/test_midi.das
 )
@@ -387,6 +384,7 @@ SET(AOT_LANGUAGE_MODULE_FILES
 # sources, and its dependencies (subset-only rows do not, acc=0).
 set(TEST_AOT_TARGETS "")
 set(TEST_AOT_GENVARS "")
+set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus emits each whole-program, covering its deps
 
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
@@ -411,6 +409,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     endif()
     list(APPEND TEST_AOT_TARGETS test_aot_${_s})
     list(APPEND TEST_AOT_GENVARS ${_u}_AOT_GENERATED_SRC)
+    list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
 set(DAS_AOT_MODULE_SUITES daslib decs language linq macro_boost math quote stbimage)
@@ -497,6 +496,9 @@ foreach(_row IN LISTS DAS_AOT_IRREGULAR)
     if(_acc STREQUAL "1")
         list(APPEND TEST_AOT_TARGETS ${_tgt})
         list(APPEND TEST_AOT_GENVARS ${_gen})
+        if(_flav STREQUAL "reg")
+            list(APPEND TEST_AOT_ALL_DAS ${${_files}})
+        endif()
     endif()
 endforeach()
 
@@ -552,3 +554,39 @@ ADD_DEPENDENCIES(test_aot_subset libDaScriptAot
 target_include_directories(test_aot_subset PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot_subset PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot_subset)
+
+### LLVM-AOT variant of test_aot (LLVM-only). Each .das is compiled by the LLVM backend into a
+### self-registering native .o (das_aot_register load ctor) linked directly into the binary;
+### -use-aot binds each function as a SimNode_Jit via linkCppAot. Opt-in, not in ALL / not in CI.
+if(NOT ${DAS_LLVM_DISABLED})
+    # Corpus: the jit_tests suite -- files that JIT cleanly by construction (the -jit lane's inputs).
+    # Cover exactly what C++ AOT (test_aot) covers — the accumulated TEST_AOT_ALL_DAS (every suite's
+    # test bodies + module libs) — plus the jit_tests corpus, so `run_tests_llvm_aot --test tests/`
+    # binds every function (a miss is a hard error under --use-aot). The JIT backend already compiles
+    # all of tests/ (run_tests_jit is green), so --aot-object emits them too.
+    FILE(GLOB _llvm_aot_jit_tests RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tests/jit_tests/*.das")
+    set(LLVM_AOT_TEST_FILES ${TEST_AOT_ALL_DAS} ${_llvm_aot_jit_tests})
+    list(REMOVE_DUPLICATES LLVM_AOT_TEST_FILES)
+    # _-prefixed helpers and negative/fixture tests.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")
+    # jit_fastpath (is_jit_function/remove_jit semantics) and typeinfo behave differently under
+    # SimNode_Jit binding; llvm_code/compile-only are not object-emitted. Everything else is covered.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(cant_|llvm_tune|llvm_code|llvm_compile_only|dll_cache|jit_fastpath|typeinfo)|_solid\\.das$")
+    # msl/metal exercise 16/8-bit lattice + simdgroup ops the LLVM JIT declines (lattice_fallback in
+    # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "tests/(msl|metal)/")
+
+    add_custom_target(test_llvm_aot_corpus)
+    SET(LLVM_AOT_GENERATED_OBJ)
+    DAS_LLVM_AOT_LIB("${LLVM_AOT_TEST_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
+
+    # Same main.cpp as daslang / test_aot; the .o are pre-built external inputs (EXTERNAL_OBJECT),
+    # so the C++ toolchain links them without recompiling.
+    add_executable(test_llvm_aot EXCLUDE_FROM_ALL ${DAS_DASCRIPT_MAIN_SRC} ${LLVM_AOT_GENERATED_OBJ})
+    TARGET_LINK_LIBRARIES(test_llvm_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+    ADD_DEPENDENCIES(test_llvm_aot libDaScriptAot test_llvm_aot_corpus)
+    target_include_directories(test_llvm_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest)
+    target_compile_definitions(test_llvm_aot PRIVATE DAS_TEST_AOT)
+    SETUP_CPP11(test_llvm_aot)
+    SETUP_LTO(test_llvm_aot)
+endif()

@@ -276,6 +276,60 @@ MACRO(DAS_AOT_LIB input genList mainTarget dasAotTool)
     DAS_AOT_EXT("${input}" ${genList} ${mainTarget} ${dasAotTool} -aotlib)
 ENDMACRO()
 
+# LLVM analog of DAS_AOT_LIB: emit a native .o per .das (this module only) via the LLVM
+# backend instead of the C++ proxy. Linked as external objects, so their load ctors
+# self-register into the AOT library. Needs LLVM (call only under NOT DAS_LLVM_DISABLED).
+MACRO(DAS_LLVM_AOT_LIB input_files genList mainTarget)
+    # The emit-object codegen lives in dasLLVM's daslib (loaded at runtime), so depend
+    # on it too -- ninja re-emits the .o when the codegen changes, not just the binary.
+    file(GLOB _das_llvm_aot_codegen CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/modules/dasLLVM/daslib/*.das)
+    set(all_outputs "")
+    # Emit in batches of 32 files per daslang process: the ~52-file dasLLVM compile-time load
+    # is paid once per batch, not per file (the way run_tests_jit's --batch amortizes it). Any
+    # file in a batch changing re-emits the whole batch; ninja still runs batches in parallel.
+    # MACRO args are text substitutions, not variables -- copy to a real var for list(LENGTH).
+    set(_llvm_aot_inputs ${input_files})
+    list(LENGTH _llvm_aot_inputs _llvm_aot_total)
+    set(_llvm_aot_idx 0)
+    set(_batch_rels "")
+    set(_batch_srcs "")
+    set(_batch_objs "")
+    foreach(input ${_llvm_aot_inputs})
+        math(EXPR _llvm_aot_idx "${_llvm_aot_idx} + 1")
+        get_filename_component(input_src ${input} ABSOLUTE)
+        get_filename_component(input_dir ${input_src} DIRECTORY)
+        get_filename_component(input_name ${input} NAME)
+        set(out_dir ${input_dir}/_llvm_aot_generated)
+        set(out_obj ${out_dir}/${mainTarget}_${input_name}.o)
+        # The compile-time path is baked into hashed constants (same reason as DAS_AOT_EXT),
+        # so spell the input source-root-relative to keep the AOT hash in sync with -use-aot.
+        file(RELATIVE_PATH input_rel ${PROJECT_SOURCE_DIR} ${input_src})
+        file(MAKE_DIRECTORY ${out_dir})
+        list(APPEND all_outputs ${out_obj})
+        list(APPEND ${genList} ${out_obj})
+        set_source_files_properties(${out_obj} PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
+        list(APPEND _batch_rels ${input_rel})
+        list(APPEND _batch_srcs ${input_src})
+        list(APPEND _batch_objs ${out_obj})
+        list(LENGTH _batch_rels _batch_n)
+        if(_batch_n EQUAL 32 OR _llvm_aot_idx EQUAL _llvm_aot_total)
+            ADD_CUSTOM_COMMAND(
+                OUTPUT  ${_batch_objs}
+                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/jit/main.das ${_das_llvm_aot_codegen}
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                COMMENT "LLVM-AOT compiling ${_batch_n} files"
+                COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}
+            )
+            set(_batch_rels "")
+            set(_batch_srcs "")
+            set(_batch_objs "")
+        endif()
+    endforeach()
+    set(custom_name ${mainTarget}_genllvmaot)
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${all_outputs})
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+ENDMACRO()
+
 SET(UNITZE_BUILD_BATCH_SIZE 10)
 
 MACRO(UNITIZE_BUILD input_dir genList)
