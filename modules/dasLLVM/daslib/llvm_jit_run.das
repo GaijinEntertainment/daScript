@@ -432,12 +432,12 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
 
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = emit_prologue
-        jit_flags.gen_exe = gen_exe
         jit_flags.need_di = debug_info
+        let jit_mode = gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT
 
         let attrs = new Attributes(g_ctx)
         var uids = create_uid_nodes(prog, funcs, gen_exe)
-        var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, null, attrs)
+        var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
         ast_gc_guard() {
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
@@ -463,7 +463,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
         var jit_has_externals = false
         if (recompile_prog) {
             for (fun in funcs) {
-                jit_has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags) || jit_has_externals
+                jit_has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || jit_has_externals
                 let fnmna = uids.get_dll_fn_name(fun)
                 var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                 var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())

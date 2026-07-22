@@ -1139,15 +1139,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     {
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = true
-        jit_flags.gen_exe = true
         jit_flags.need_di = false
-        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
+        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE)
         init_glob = pair._0
         init_glob_type = pair._1
         // Clone variant: inits non-shared globals only (a clone is not the shared owner;
         // re-initializing shared globals would corrupt the parent's shared buffer). Used by
         // the clone init script below so a jobque/thread/audio clone matches the interpreter.
-        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, "init_globals_clone", true)
+        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE, "init_globals_clone", true)
         clone_init_glob = cpair._0
     }
 
