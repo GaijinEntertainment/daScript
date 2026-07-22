@@ -53,7 +53,7 @@ Stop polling and surface as soon as: (a) Copilot left new comments (react), (b) 
 If a check goes red:
 1. Identify the failing job: `gh pr checks <PR>` shows the URL; `gh run view <runID> --log-failed` fetches the log.
 2. Apply the same fix policy as Step 2 in `skills/make_pr.md`: own change → fix it; obvious pre-existing → fix it; non-obvious pre-existing → ask the user.
-3. After the fix, **re-run the gates from Step 1-5 in `skills/make_pr.md`** (lint + interpreted + AOT + Sphinx if `//!` or RST touched + format) — don't trust spot-checks. CI failures often come bundled (a missing format triggers a lint, a removed function triggers an AOT hash mismatch).
+3. After the fix, **re-gate to the fix's blast radius** (Section 4, step 3) — compile/format/lint always, plus whatever the change class touches — and let CI re-run the full matrix. A CI failure often comes bundled (a missing format triggers a lint, a removed function triggers an AOT hash mismatch), so read the *whole* failing job log, not just the first error. A red that the local compile/format/lint couldn't have caught (AOT hash, a JIT verifier, a Sphinx warning on untouched files) is exactly what CI is there to catch — fix and push again; don't respond by re-running full preflight every round.
 4. Push the fix. CI re-runs automatically. The push invalidates Copilot-dry state, so go **back into the Copilot loop** (Section 1), re-request Copilot on the fix commit, and don't merge until Copilot is dry again and CI is green. There are no exceptions for trivial or CI-only fixes.
 
 ## 3. Triaging review comments — discuss BEFORE acting
@@ -115,9 +115,16 @@ A rejected comment still gets a reply (one-line reason, evidence if the reviewer
 After greenlight:
 1. Edit the code per the agreed verdicts.
 2. **Watch for contradictory comments.** When fixing a bug, scan inline comments that describe the affected surface — they often need updating in the same pass. (If you forget, the next review round will flag it.)
-3. **Re-run the full gates** from Step 1-5 in `skills/make_pr.md`. Yes, full. CI is unforgiving; every amend goes back through the whole matrix.
+3. **Gate the fix to its blast radius — do NOT re-run full preflight per round.** The branch already passed a full preflight before the PR opened; a review-fix commit is almost always a few localized lines, and **CI runs the whole ~30-min matrix on every push for free** — that is the gate for these commits, not a repeated local matrix. Per round, run only the gates the change can actually break:
+   - **Always:** MCP `compile_check` + `format_file` + `lint` (the CI `extended_checks` gate) on the changed files. These are seconds, and a lint/format miss is the one class CI is unforgiving about.
+   - **Touched a `//!` doc-comment or RST:** the docs gate (step 4 below).
+   - **Touched runtime struct layout / `SimNode_*` / dasLLVM:** a JIT smoke (`skills/make_pr.md` step 2.5).
+   - Everything else — the interpreter/AOT/Sphinx/sequence matrix — **let CI run it.** Re-running it locally per round is the wall-clock waste this note exists to kill (a 5-round babysit = ~100 min of redundant local preflight for changes CI already covers).
+   - **Full preflight only when the fix is genuinely large** — a new module, a broad refactor across many files, a C++/AST-layout change, or anything you'd hesitate to land on CI alone. That is the "changes are massive" exception, not the default.
 4. **`//!` doc-comment changes:** re-run `bin/Release/daslang.exe -documentation doc/reflections/das2rst.das`, delete `doc/sphinx-build`, then run both Sphinx builders. Preflight's docs gate deletes that cache unconditionally so stale doctrees cannot hide warnings. Generated `doc/source/stdlib/generated/*.rst` are gitignored; Sphinx picks them up at build time.
-5. **`git commit --amend --no-edit`** + **`git push --force-with-lease`** (NOT `--force` — protects against racing pushes).
+5. Commit (squashed branch: **`git commit --amend --no-edit`** + **`git push --force-with-lease`**, NOT `--force`; multi-commit branch: a fresh commit + `git push`). **The pre-push hook wants a fresh full-preflight token bound to HEAD, which the skip above won't have minted — `git push --no-verify` is the sanctioned bypass here** (the make_pr rule against silent `--no-verify` is about *hiding* a skipped gate; skipping the per-round full matrix during babysit is deliberate and CI-covered, so it isn't silent). CI still runs the full matrix on the push and gates the merge.
+
+**When CI does go red on a push, that IS the signal the local skip missed something** — fix it, re-gate the same way (compile/format/lint + whatever the fix touches), push, re-request Copilot. The point is to let CI find the rare bundled failure, not to pre-empt every one locally. (Distinguish a real red from an infra one: a runner "shutdown signal" / "operation was canceled" with **no `error:` line** in the build log is a canceled/reclaimed runner, not your code — a fresh push's CI run supersedes it.)
 
 ## 5. Reply to each comment + resolve all threads
 
@@ -178,7 +185,8 @@ Each fix iteration: triage → discuss → fix → gate → amend → force-push
 | Watch PR | `gh pr checks`, `gh api .../comments`, `gh api .../reviews` | Surface as soon as Copilot comments, CI fails, or both CI + Copilot are done |
 | CI fail | `gh pr checks`, `gh run view --log-failed` | Fix own, fix obvious pre-existing, ask about unclear |
 | Triage comments | `gh api .../pulls/<PR>/comments` | **Default reject**; require realistic reachability, scale, and impact. Prose-only round → resolve and land |
-| Re-run gates | Follow Step 1-5 in `skills/make_pr.md` | Full rerun after every amend |
+| Re-gate a fix | compile/format/lint on changed files (+ docs/JIT smoke only if that class was touched) | **Not** full preflight per round — CI runs the matrix on every push. Full preflight only for a massive change |
+| Push a review fix | `git push --no-verify` (multi-commit) / `--force-with-lease --no-verify` (squashed) | Sanctioned skip of the per-round full-preflight token — deliberate + CI-covered, not silent |
 | Amend/push | `git commit --amend --no-edit`, `git push --force-with-lease` | Keep squashed branch squashed |
 | Reply | `mcp__github__add_reply_to_pull_request_comment` | Every addressed comment gets a reply |
 | Resolve | `gh api graphql ... resolveReviewThread` | Every addressed thread gets resolved; paginate and verify unresolved = 0 |
