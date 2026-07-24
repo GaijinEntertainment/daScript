@@ -739,7 +739,12 @@ def private sgmat_zero_fill(sgname : string) : string {
 // float-family (abs also signed-int); min/max take any numeric class. Fastmath is a kernel-level
 // property; single ops stay correctly rounded under MTLMathModeSafe (Phase-4 measured fact).
 let private MSL_MATH_UNARY : table<string> <- {
-    "exp", "log", "sqrt", "rsqrt", "sin", "cos", "tanh", "abs", "saturate", "round"
+    "exp", "log", "exp2", "log2", "sqrt", "rsqrt", "sin", "cos", "tanh", "abs", "saturate", "round"
+}
+
+// daslib/math_bits' same-size bit reinterprets (scalar + 2/3/4-lane) — MSL as_type<T>(x)
+let private MSL_BITCASTS : table<string> <- {
+    "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
 }
 
 // simdgroup intrinsics, the math whitelist, + the ctor/convert/saturating-narrow family are the
@@ -765,6 +770,18 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.math.{cname}.{acls}")
         return "{cname}({v})"
+    }
+    if (key_exists(MSL_BITCASTS, cname)) {
+        if (na != 1) {
+            err(ctx, ec.at, "{cname} takes exactly one argument")
+            return "/*call {cname}*/"
+        }
+        if (reject_cpu_only_width(ctx, ec.at, ec._type)) {
+            return "/*call {cname}*/"
+        }
+        let v = emit_value(ctx, ec.arguments[0])
+        note(ctx, "call.bitcast.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
+        return "as_type<{msl_type_name(ec._type)}>({v})"
     }
     if (cname == "min" || cname == "max") {
         if (na != 2) {
