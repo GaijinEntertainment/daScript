@@ -42,6 +42,89 @@ body, .wy-body-for-nav {
     background: var(--bg-2) !important;
     border-right: 1px solid var(--rule);
 }
+
+/* Desktop/tablet sidebar toggle. sphinx_rtd_theme owns the <=768px off-canvas
+ * menu, so these rules deliberately start at 769px. */
+.forge-sidebar-toggle {
+    display: none;
+}
+
+@media screen and (min-width: 769px) {
+    .wy-nav-side,
+    .wy-nav-content-wrap,
+    .forge-sidebar-toggle {
+        transition:
+            transform 160ms ease,
+            margin-left 160ms ease,
+            left 160ms ease;
+    }
+
+    .forge-sidebar-toggle {
+        align-items: center;
+        background: var(--bg-2);
+        border: 1px solid var(--rule);
+        border-left: 0;
+        border-radius: 0 4px 4px 0;
+        color: var(--fg-dim);
+        display: flex;
+        height: 48px;
+        justify-content: center;
+        left: 300px;
+        padding: 0;
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 28px;
+        z-index: 201;
+    }
+
+    .forge-sidebar-toggle:hover {
+        background: var(--bg-3);
+        color: var(--amber);
+    }
+
+    .forge-sidebar-toggle:focus-visible {
+        color: var(--amber);
+        outline: 2px solid var(--amber);
+        outline-offset: 2px;
+    }
+
+    .forge-sidebar-toggle-label {
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    html.forge-sidebar-collapsed .wy-nav-side {
+        transform: translateX(-100%);
+    }
+
+    html.forge-sidebar-collapsed .wy-nav-content-wrap {
+        margin-left: 0;
+    }
+
+    html.forge-sidebar-collapsed .wy-nav-content {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    html.forge-sidebar-collapsed .forge-sidebar-toggle {
+        left: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wy-nav-side,
+    .wy-nav-content-wrap,
+    .forge-sidebar-toggle {
+        transition: none;
+    }
+}
+
 .wy-side-nav-search {
     background: var(--bg) !important;
     border-bottom: 1px solid var(--rule);
