@@ -85,16 +85,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":846.09481209187834,
-            "stddev":1.9115471839904785
+            "tok_s":819.20553410117259,
+            "stddev":13.841548919677734
           },
           "tg128":{
-            "tok_s":64.679873019014465,
-            "stddev":0.13714444637298584
+            "tok_s":64.715896081636217,
+            "stddev":0.048071339726448059
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -118,12 +118,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":833.97571100000005,
-            "stddev":9.2922290000000007
+            "tok_s":834.32425899999998,
+            "stddev":5.7293409999999998
           },
           "tg128":{
-            "tok_s":54.053446000000001,
-            "stddev":0.055704999999999998
+            "tok_s":54.245122000000002,
+            "stddev":0.033619000000000003
           }
         },
         "source":"official",
@@ -254,16 +254,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":110.72434225638717,
-            "stddev":4.817136287689209
+            "tok_s":143.51014794316262,
+            "stddev":1.8688379526138306
           },
           "tg128":{
-            "tok_s":11.284493705267847,
-            "stddev":0.062646180391311646
+            "tok_s":14.490425807153695,
+            "stddev":0.0076773958280682564
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -287,12 +287,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":121.571046,
-            "stddev":2.0393479999999999
+            "tok_s":129.226133,
+            "stddev":0.067108000000000001
           },
           "tg128":{
-            "tok_s":10.889571999999999,
-            "stddev":0.224522
+            "tok_s":11.926083999999999,
+            "stddev":0.028981
           }
         },
         "source":"official",
@@ -423,16 +423,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":321.41770914604206,
-            "stddev":1.2304389476776123
+            "tok_s":322.18006934471111,
+            "stddev":0.82716661691665649
           },
           "tg128":{
-            "tok_s":33.390656496966784,
-            "stddev":1.4557827711105347
+            "tok_s":33.410355402218116,
+            "stddev":1.4616864919662476
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -456,12 +456,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":309.43194699999998,
-            "stddev":0.108337
+            "tok_s":309.529314,
+            "stddev":0.104888
           },
           "tg128":{
-            "tok_s":28.81306,
-            "stddev":0.0096839999999999999
+            "tok_s":28.825264000000001,
+            "stddev":0.010253
           }
         },
         "source":"official",
@@ -623,12 +623,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":918.75595599999997,
-            "stddev":2.8067190000000002
+            "tok_s":918.459924,
+            "stddev":2.3388990000000001
           },
           "tg128":{
-            "tok_s":52.184500999999997,
-            "stddev":0.023851000000000001
+            "tok_s":52.501099000000004,
+            "stddev":0.022575999999999999
           }
         },
         "source":"official",
@@ -654,16 +654,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":972.20770388981907,
-            "stddev":5.0488319396972656
+            "tok_s":975.31116002164924,
+            "stddev":3.4707350730895996
           },
           "tg128":{
-            "tok_s":52.093658878992663,
-            "stddev":0.021143235266208649
+            "tok_s":52.005009558973953,
+            "stddev":0.034262686967849731
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob"
@@ -761,16 +761,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":946.26051706174314,
-            "stddev":46.200645446777344
+            "tok_s":945.41748437426793,
+            "stddev":46.733753204345703
           },
           "tg128":{
-            "tok_s":88.401682992154946,
-            "stddev":0.080704584717750549
+            "tok_s":88.562698339367302,
+            "stddev":0.38233613967895508
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob"
@@ -794,12 +794,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1032.723344,
-            "stddev":2.7403650000000002
+            "tok_s":1032.8555940000001,
+            "stddev":3.24926
           },
           "tg128":{
-            "tok_s":83.408672999999993,
-            "stddev":0.053394999999999998
+            "tok_s":83.475138000000001,
+            "stddev":0.028147999999999999
           }
         },
         "source":"official",
@@ -825,12 +825,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":119.567953,
-            "stddev":0.23980499999999999
+            "tok_s":114.995718,
+            "stddev":1.0777699999999999
           },
           "tg128":{
-            "tok_s":42.360573000000002,
-            "stddev":0.33512500000000001
+            "tok_s":39.933829000000003,
+            "stddev":0.079131000000000007
           }
         },
         "source":"official",
@@ -930,16 +930,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":847.65629375037111,
-            "stddev":22.900413513183594
+            "tok_s":839.13387512511383,
+            "stddev":21.282266616821289
           },
           "tg128":{
-            "tok_s":86.125298858023967,
-            "stddev":0.1016366258263588
+            "tok_s":86.164890040423458,
+            "stddev":0.10428550839424133
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -963,12 +963,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":845.41891199999998,
-            "stddev":3.4566520000000001
+            "tok_s":846.36055699999997,
+            "stddev":4.1717240000000002
           },
           "tg128":{
-            "tok_s":75.280265999999997,
-            "stddev":0.23565900000000001
+            "tok_s":75.405645000000007,
+            "stddev":0.066177
           }
         },
         "source":"official",
@@ -1099,16 +1099,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":129.5162880551847,
-            "stddev":1.786901593208313
+            "tok_s":129.39743550833799,
+            "stddev":1.3800555467605591
           },
           "tg128":{
-            "tok_s":19.547104181269354,
-            "stddev":0.67338031530380249
+            "tok_s":19.304210236321975,
+            "stddev":0.90736830234527588
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob"
@@ -1132,12 +1132,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":127.86751700000001,
-            "stddev":0.24221000000000001
+            "tok_s":127.63242099999999,
+            "stddev":0.41029900000000002
           },
           "tg128":{
-            "tok_s":16.80686,
-            "stddev":0.0083949999999999997
+            "tok_s":16.810828999999998,
+            "stddev":0.0077850000000000003
           }
         },
         "source":"official",
@@ -1237,16 +1237,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":873.11087616273255,
-            "stddev":57.627704620361328
+            "tok_s":899.61722962438034,
+            "stddev":9.0033988952636719
           },
           "tg128":{
-            "tok_s":58.961947885214272,
-            "stddev":6.6139497756958008
+            "tok_s":61.190055986399486,
+            "stddev":2.7236282825469971
           }
         },
         "source":"official",
-        "sha":"ed13d1814",
+        "sha":"ac877ceec",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob"
@@ -1332,12 +1332,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":814.10834899999998,
-            "stddev":6.7332939999999999
+            "tok_s":817.97967500000004,
+            "stddev":3.7456960000000001
           },
           "tg128":{
-            "tok_s":60.091831999999997,
-            "stddev":0.080373
+            "tok_s":60.043356000000003,
+            "stddev":0.051998999999999997
           }
         },
         "source":"official",
