@@ -688,6 +688,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "eidToInt");
     addExtern<DAS_BIND_FUN(intToEid)>(*this, lib, "EntityId",
         SideEffects::none, "intToEid");
+    addExtern<DAS_BIND_FUN(eidNot)>(*this, lib, "!",
+        SideEffects::none, "eidNot");
     // NativeId - C++-registered distinct type (`distinct NativeId = int` from C++)
     addAnnotation(new DistinctTypeAnnotation("NativeId", makeType<int32_t>(lib), "NativeId"));
     addExtern<DAS_BIND_FUN(nativeIdNext)>(*this, lib, "native_id_next",

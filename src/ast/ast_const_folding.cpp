@@ -838,7 +838,11 @@ namespace das {
                 // !!x → x ; -(-x) → x (bit-exact for FP too: negate is a sign flip)
                 if ( (expr->op=="!" || expr->op=="-") && expr->subexpr->rtti_isOp1() ) {
                     auto inner = static_cast<ExprOp1 *>(expr->subexpr);
-                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags ) {
+                    const bool involutive = inner->subexpr->type &&
+                        ( (expr->op=="!" && inner->subexpr->type->isSimpleType(Type::tBool))
+                       || (expr->op=="-" && inner->subexpr->type->isNumeric()) );
+                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags
+                        && involutive ) {
                         reportFolding();
                         return inner->subexpr;
                     }

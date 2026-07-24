@@ -372,6 +372,10 @@ __forceinline int32_t eidToInt(EntityId id) {
     return id.value;
 }
 
+__forceinline bool eidNot(EntityId id) {
+    return id.value == -1;
+}
+
 // C++-registered distinct type (`distinct NativeId = int` declared from C++ via
 // DistinctTypeAnnotation) - ABI-identical to int32_t, nominal on the das side
 struct NativeId {
