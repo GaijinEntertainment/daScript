@@ -12,6 +12,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <vector>
 #include <unordered_map>
 #include <map>
 
@@ -47,9 +48,11 @@ namespace das {
     static std::atomic<int64_t> g_metalDispatchCalls{0};
 
     // the leak-hunt registry behind the counter: live handle -> "type @ file:line" of the das
-    // creation site. Volume is low (planes at load, cb/encoder per step), so the mutex is noise-free
+    // creation site, one entry PER RETAIN — the same ObjC address can be retained repeatedly
+    // (MTLCreateSystemDefaultDevice returns a singleton), and a plain map would drop tags and
+    // let the report disagree with the counter. Volume is low, the mutex is noise-free.
     static std::mutex g_metalLiveTagsMx;
-    static std::unordered_map<void *, std::string> g_metalLiveTags;
+    static std::unordered_map<void *, std::vector<std::string>> g_metalLiveTags;
 
     static std::string handle_tag ( const char * type, LineInfoArg * at ) {
         if ( !at || !at->fileInfo ) return type;
@@ -69,7 +72,7 @@ namespace das {
         void * h = (__bridge_retained void *) obj;
         {
             std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
-            g_metalLiveTags[h] = tag;
+            g_metalLiveTags[h].push_back(tag);
         }
         return (HandleT *) h;
     }
@@ -84,7 +87,11 @@ namespace das {
         g_metalLiveObjects.fetch_sub(1, std::memory_order_relaxed);
         {
             std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
-            g_metalLiveTags.erase(h);
+            auto it = g_metalLiveTags.find(h);
+            if ( it != g_metalLiveTags.end() ) {
+                it->second.pop_back();
+                if ( it->second.empty() ) g_metalLiveTags.erase(it);
+            }
         }
         id obj = (__bridge_transfer id) h;
         (void) obj;     // ARC releases at scope exit
@@ -557,7 +564,9 @@ namespace das {
         std::map<std::string, int64_t> bySite;
         {
             std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
-            for ( auto & kv : g_metalLiveTags ) bySite[kv.second]++;
+            for ( auto & kv : g_metalLiveTags ) {
+                for ( auto & tag : kv.second ) bySite[tag]++;
+            }
         }
         std::string out;
         for ( auto & kv : bySite ) {
