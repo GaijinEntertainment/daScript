@@ -718,6 +718,299 @@ def private compile_or_die(dev; src, entry : string; fastmath : bool) {
     return pso
 }
 
+// ===== gpt-oss mx4 rate section (reds-dig2) =====
+// The chase convicted the routed mx4 expert GEMVs at 216 wGB/s IN-GRAPH (48% of every decode
+// step) vs the 321 the k4 sibling sustains standalone. Same discriminator as the 26B dig: price
+// the PRODUCTION MetalMoeGemvMx4 at the exact gpt-oss shapes on pipe (no barriers — kernel
+// ceiling) vs serial (barrier per dispatch — the structure tax). pipe ~320 ⇒ structure; pipe
+// ~216 ⇒ the kernel (vtab/etab device-table issue count is the disasm suspect).
+let GE = 32l           // experts
+let GNFE = 2880l       // expert ffn width
+let GDIM = 2880l       // model dim
+let GK = 4l            // experts used per token
+let GLAYERS = 24l
+let GNB_ROW = GDIM / 32l          // mx4 blocks per row
+let GEBLK = GNFE * GNB_ROW        // blocks per expert plane
+
+// ===== the arithmetic-decode variant =====
+// The disasm indicts the tables: 15 device loads per block iteration, 8 of them vtab lookups
+// serialized behind the nibble extracts. This form computes the doubled-e2m1 value in ALU
+// (magnitude = m<2 ? m : (2+(m&1)) << ((m>>1)-1), sign select) — the e8m0 scale keeps its etab
+// lookup (no exp2/bitcast in the MSL whitelist; 2 broadcast loads/block vs vtab's 8 divergent
+// ones). Bindings = the production table's prefix + etab at 14 (extra binds are ignored).
+class LabMoeGemvMx4A {
+    @ssbo @binding = 0 mxu : array<uint>
+    @ssbo @binding = 1 mxe : array<uint8>
+    @ssbo @binding = 2 xf : array<float4>
+    @ssbo @binding = 3 y : array<float>
+    @uniform @binding = 4 ndim : uint
+    @uniform @binding = 5 ddim : uint
+    @ssbo @binding = 6 sel : array<uint>
+    @uniform @binding = 7 eblk : uint
+    @uniform @binding = 8 xs : uint
+    @uniform @binding = 9 ss : uint
+    @uniform @binding = 10 bxs : uint
+    @uniform @binding = 11 bys : uint
+    @ssbo @binding = 14 etab : array<float>   // [256] exact e8m0_half scales (host-built)
+
+    [metal_kernel(name="lab_moe_mx4_a_msl")]
+    def lab_moe_mx4_a {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 32u
+        let slot = gl_WorkGroupID.y
+        let st = gl_WorkGroupID.z
+        let e = sel[st * ss + slot]
+        let eb = e * eblk
+        let xoff = st * bxs + slot * xs
+        let y0 = st * bys + slot * ddim
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        let half = it / 4u
+        let ku = it % 4u
+        let nsh = half * 4u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let xv = xf[(xoff + ib * 32u) / 4u + it]
+            for [unroll_full] (r in range(2)) {
+                let blk = eb + (first_row + uint(r)) * nb + ib
+                let u = mxu[blk * 4u + ku]
+                let n0 = (u >> nsh) & 15u
+                let m0 = n0 & 7u
+                let a0 = float(m0 < 2u ? m0 : (2u + (m0 & 1u)) << ((m0 >> 1u) - 1u))
+                var qx = (n0 < 8u ? a0 : -a0) * xv.x
+                let n1 = (u >> (8u + nsh)) & 15u
+                let m1 = n1 & 7u
+                let a1 = float(m1 < 2u ? m1 : (2u + (m1 & 1u)) << ((m1 >> 1u) - 1u))
+                qx += (n1 < 8u ? a1 : -a1) * xv.y
+                let n2 = (u >> (16u + nsh)) & 15u
+                let m2 = n2 & 7u
+                let a2 = float(m2 < 2u ? m2 : (2u + (m2 & 1u)) << ((m2 >> 1u) - 1u))
+                qx += (n2 < 8u ? a2 : -a2) * xv.z
+                let n3 = (u >> (24u + nsh)) & 15u
+                let m3 = n3 & 7u
+                let a3 = float(m3 < 2u ? m3 : (2u + (m3 & 1u)) << ((m3 >> 1u) - 1u))
+                qx += (n3 < 8u ? a3 : -a3) * xv.w
+                sumf[r] += etab[uint(mxe[blk])] * qx
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let sr = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[y0 + first_row + uint(r)] = sr
+            }
+        }
+    }
+}
+
+// the production host tables, bit-exact (dasllama_metal_kernels.das mx4 install)
+def private build_mx4_tabs(var etab : array<float>; var vtab : array<float>) {
+    etab |> resize(256)
+    for (ei in range(256)) {
+        let bits = ei < 2 ? (0x00200000u << uint(ei)) : (uint(ei - 1) << 23u)
+        etab[ei] = unsafe(reinterpret<float>(bits))
+    }
+    vtab |> resize(16)
+    let mags = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0)
+    for (vi in range(16)) {
+        vtab[vi] = vi < 8 ? mags[vi] : -mags[vi - 8]
+    }
+}
+
+// CPU ref mirroring the kernel's u32 nibble extraction exactly (two quads share one u32,
+// low/high nibble halves) — exact under the lab fill contract (pow2 scales, small-int x)
+def private ref_mx4_row(gq, ge : array<uint8>; gx, etab, vtab : array<float>; plane_blk : int64; row, ndim : int64) : float {
+    let nb = ndim / 32l
+    var acc = 0.0
+    for (ib in range64(nb)) {
+        let blk = plane_blk + row * nb + ib
+        let scale = etab[int(ge[blk])]
+        for (q in range64(8l)) {
+            let b0 = blk * 16l + 4l * (q % 4l)
+            let u = uint(gq[b0]) | (uint(gq[b0 + 1l]) << 8u) | (uint(gq[b0 + 2l]) << 16u) | (uint(gq[b0 + 3l]) << 24u)
+            let nsh = uint(q / 4l) * 4u
+            for (c in range64(4l)) {
+                let nib = int((u >> (uint(c) * 8u + nsh)) & 15u)
+                acc += scale * vtab[nib] * gx[ib * 32l + q * 4l + c]
+            }
+        }
+    }
+    return acc
+}
+
+// production binding table (MetalMoeGemvMx4): single-stream form (ss/bxs/bys = 0), no bias
+def private enc_gmx4(gbufs; pso; enc; l : int64) {
+    metal_set_pipeline(enc, pso)
+    metal_set_buffer(enc, gbufs[0], 0ul, 0)                                  // mxu (uint view)
+    metal_set_buffer(enc, gbufs[1], 0ul, 1)                                  // mxe
+    metal_set_buffer(enc, gbufs[2], 0ul, 2)                                  // x (float4 view)
+    metal_set_buffer(enc, gbufs[3], uint64(l * GK * GNFE * 4l), 3)           // y, per-layer block
+    metal_set_buffer(enc, gbufs[4], 0ul, 4)                                  // ndim
+    metal_set_buffer(enc, gbufs[5], 0ul, 5)                                  // ddim
+    metal_set_buffer(enc, gbufs[6], uint64(l * GK * 4l), 6)                  // sel row
+    metal_set_buffer(enc, gbufs[7], 0ul, 7)                                  // eblk
+    metal_set_buffer(enc, gbufs[8], 0ul, 8)                                  // xs = 0
+    metal_set_buffer(enc, gbufs[8], 0ul, 9)                                  // ss = 0
+    metal_set_buffer(enc, gbufs[8], 0ul, 10)                                 // bxs = 0
+    metal_set_buffer(enc, gbufs[8], 0ul, 11)                                 // bys = 0
+    metal_set_buffer(enc, gbufs[2], 0ul, 12)                                 // wb dummy (hasb = 0)
+    metal_set_buffer(enc, gbufs[8], 0ul, 13)                                 // hasb = 0
+    metal_set_buffer(enc, gbufs[9], 0ul, 14)                                 // etab
+    metal_set_buffer(enc, gbufs[10], 0ul, 15)                                // vtab
+    metal_dispatch_threadgroups(enc, uint3(uint((GNFE + 3l) / 4l), uint(GK), 1u), uint3(64u, 1u, 1u))
+}
+
+def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
+    var pso = compile_or_die(dev, metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath)
+    var pso_a = compile_or_die(dev, lab_moe_mx4_a_msl, lab_moe_mx4_a_msl_entry, lab_moe_mx4_a_msl_fastmath)
+    var etab : array<float>
+    var vtab : array<float>
+    build_mx4_tabs(etab, vtab)
+    let t_fill = ref_time_ticks()
+    var gq : array<uint8>
+    gq |> resize(int(GE * GEBLK * 16l))
+    for (i in range(length(gq))) {
+        gq[i] = uint8((i * 37) % 251)
+    }
+    var ge : array<uint8>
+    ge |> resize(int(GE * GEBLK))
+    for (i in range(length(ge))) {
+        ge[i] = uint8(120 + (i * 13) % 15)   // pow2 scales near 1 — exact-arithmetic contract
+    }
+    var gx : array<float>
+    gx |> resize(int(GDIM))
+    for (i in range64(GDIM)) {
+        gx[i] = float(int((i * 5l) % 13l) - 6)
+    }
+    var gsel : array<uint>
+    gsel |> resize(int(GLAYERS * GK))
+    for (l in range64(GLAYERS)) {
+        for (s in range64(GK)) {
+            gsel[l * GK + s] = uint((l * 13l + s * 7l + 3l) % GE)
+        }
+    }
+    var gselb : array<uint8>
+    gselb |> resize(length(gsel) * 4)
+    unsafe {
+        memcpy(addr < void? >(gselb[0]), addr < void? >(gsel[0]), length(gsel) * 4)
+    }
+    print("gmx4 host fill: {get_time_usec(t_fill) / 1000} ms ({length(gq) / 1048576} + {length(ge) / 1048576} MB planes)\n")
+
+    var gbufs : array<MetalBuffer?>
+    gbufs |> push(upload_bytes(dev, gq))                                        // 0 mxu
+    gbufs |> push(upload_bytes(dev, ge))                                        // 1 mxe
+    gbufs |> push(upload_floats(dev, gx))                                       // 2 x
+    gbufs |> push(metal_new_buffer_untracked(dev, uint64(GLAYERS * GK * GNFE * 4l)))  // 3 y
+    gbufs |> push(upload_u32v(dev, uint(GDIM)))                                 // 4 ndim
+    gbufs |> push(upload_u32v(dev, uint(GNFE)))                                 // 5 ddim
+    gbufs |> push(upload_bytes(dev, gselb))                                     // 6 sel
+    gbufs |> push(upload_u32v(dev, uint(GEBLK)))                                // 7 eblk
+    gbufs |> push(upload_u32v(dev, 0u))                                         // 8 zero
+    gbufs |> push(upload_floats(dev, etab))                                     // 9 etab
+    gbufs |> push(upload_floats(dev, vtab))                                     // 10 vtab
+
+    // correctness: layer 0, all 4 slots x 4 rows vs the CPU ref
+    var t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmx4(gbufs, pso, enc, 0l)
+    }
+    var worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gbufs[3]))
+        for (s in range64(GK)) {
+            for (row in [0l, 1l, 1234l, GNFE - 1l]) {
+                let e = int64(gsel[s])
+                let want_v = ref_mx4_row(gq, ge, gx, etab, vtab, e * GEBLK, row, GDIM)
+                worst = max(worst, abs(y[s * GNFE + row] - want_v) / max(1.0, abs(want_v)))
+            }
+        }
+    }
+    if (worst > 1e-4) {
+        panic("gmx4 correctness: worst rel diff {worst}")
+    }
+    print("gmx4 correctness: worst rel {worst}\n")
+
+    // arithmetic-decode variant, same ref (exact under the fill contract — scales stay normal)
+    t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmx4(gbufs, pso_a, enc, 0l)
+    }
+    worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gbufs[3]))
+        for (s in range64(GK)) {
+            for (row in [0l, 1l, 1234l, GNFE - 1l]) {
+                let e = int64(gsel[s])
+                let want_v = ref_mx4_row(gq, ge, gx, etab, vtab, e * GEBLK, row, GDIM)
+                worst = max(worst, abs(y[s * GNFE + row] - want_v) / max(1.0, abs(want_v)))
+            }
+        }
+    }
+    if (worst > 1e-4) {
+        panic("gmx4_arith correctness: worst rel diff {worst}")
+    }
+    print("gmx4_arith correctness: worst rel {worst}\n")
+
+    // the discriminator: pipe (kernel ceiling) vs serial (per-dispatch barrier tax), and the
+    // arithmetic-decode challenger on the same pipe schedule
+    let bytes_pass = double(GLAYERS * GK * GEBLK * 17l)
+    var garms <- [("gmx4_pipe", false, false), ("gmx4_serial", true, false), ("gmx4_arith", false, true)]
+    var gbest : table<string; double>
+    for (a in garms) {
+        gbest[a._0] = 1e18lf
+    }
+    for (_rd in range(rounds)) {
+        for (a in garms) {
+            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+                continue
+            }
+            let barrier = a._1
+            let use_a = a._2
+            let us = time_arm(queue, true) $(enc : MetalComputeEncoder?) {
+                for (_p in range64(passes)) {
+                    for (l in range64(GLAYERS)) {
+                        enc_gmx4(gbufs, use_a ? pso_a : pso, enc, l)
+                        if (barrier) {
+                            metal_memory_barrier(enc)
+                        }
+                    }
+                }
+            }
+            let per = us / double(passes)
+            if (per < gbest[a._0]) {
+                gbest[a._0] = per
+            }
+        }
+    }
+    print("--- gmx4 (gpt-oss shapes: E={GE} nfe={GNFE} dim={GDIM} k={GK}, {int(bytes_pass) / 1048576} MB routed/pass) ---\n")
+    for (a in garms) {
+        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            continue
+        }
+        let per = gbest[a._0]
+        print("  {a._0}: {per} us/pass  {per / double(GLAYERS)} us/layer  {bytes_pass / per / 1000.0lf} wGB/s\n")
+    }
+
+    delete gq
+    delete ge
+    delete gx
+    delete gsel
+    delete gselb
+    delete etab
+    delete vtab
+    delete garms
+    delete gbest
+    for (b in gbufs) {
+        metal_release(b)
+    }
+    gbufs |> clear()   // handles are metal_release-owned — delete on a ptr array would free pointees
+    unsafe {
+        delete gbufs
+    }
+    metal_release(pso)
+    metal_release(pso_a)
+}
+
 def private main_apple(dummy) {
     let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
     let passes = int64(env_or("DASMETAL_LAB_PASSES", 4))
@@ -1004,6 +1297,8 @@ def private main_apple(dummy) {
     }
     delete sarms
     delete sbest
+
+    run_gmx4_lab(dev, queue, rounds, passes)
 
     delete k4q
     delete k4c
