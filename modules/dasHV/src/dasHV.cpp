@@ -200,6 +200,14 @@ public:
                 (char *)msg.data(), static_cast<int32_t>(msg.size()), opcode);
         }
     }
+    ~WebSocketClient_Adapter() {
+        // Join the loop thread while our members are still alive. Base
+        // destructors run after the derived members are destroyed, so relying
+        // on ~TcpClientTmpl's stop() lets a late onclose/onmessage lambda
+        // push into a freed `que` from the loop thread (observed as an access
+        // violation in hio_close under reload churn).
+        stop(true);
+    }
     void tick() {
         vector<function<void()>> q;
         {
@@ -361,6 +369,10 @@ public:
         };
     }
     ~WebServer_Adapter() {
+        // Same destruction-order guard as the client adapter: stop the server
+        // threads while `que`/locks are still alive, or a late service
+        // callback races our member destruction.
+        stop();
         lock_guard<mutex> cguard(channel_lock);
         for ( auto & kv : channel_handles ) {
             HandleRegistry<hv::WebSocketChannel>::instance().release(kv.second);

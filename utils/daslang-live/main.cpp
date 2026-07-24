@@ -497,13 +497,12 @@ static int run_lifecycle(const string & fn) {
             if (dll_set_is_reload) dll_set_is_reload(true);
 
             // Call [before_reload] functions and shutdown (skip if no context, e.g. initial compile failed)
-            // After exception: skip before_reload (state is corrupted) but still call shutdown
-            // so resources (audio, GL) are properly released before context is destroyed.
+            // Reload teardown always starts from a clean context: restart()
+            // clears any stale exception/stopFlags left by an unchecked eval
+            // (the failed-reload re-init below used to leave them behind), so
+            // before_reload/shutdown never run on a corrupted frame.
             if (ctx) {
-                if (ctx_had_exception) {
-                    // Clear stale exception state so before_reload/shutdown can run
-                    ctx->restart();
-                }
+                ctx->restart();
                 call_annotated_list(ctx, g_annotated.before_reload);
                 if (fnShutdown) {
                     ctx->evalWithCatch(fnShutdown, nullptr);
@@ -543,13 +542,26 @@ static int run_lifecycle(const string & fn) {
                     if (dll_set_last_error) dll_set_last_error(newCr.errors.c_str());
                     if (dll_set_paused) dll_set_paused(true);
                     if (dll_clear_reload_flags) dll_clear_reload_flags();
-                    // Re-init old context if we have one (shutdown was already called)
+                    // Re-init old context if we have one (shutdown was already called).
+                    // Every eval here is exception-checked: leaving a throw
+                    // unrecorded meant the next reload ran teardown on a
+                    // corrupted context ("stack overflow while calling
+                    // __before_reload_live_vars" and the crash that followed).
                     if (ctx && !ctx_had_exception) {
                         if (dll_set_is_reload) dll_set_is_reload(true);
                         ctx->restart();
-                        call_annotated_list(ctx, g_annotated.after_reload);
-                        if (fnInit) {
+                        bool reinit_ok = call_annotated_list(ctx, g_annotated.after_reload);
+                        if (reinit_ok && fnInit) {
                             ctx->evalWithCatch(fnInit, nullptr);
+                            if (auto ex = ctx->getException()) {
+                                tout << "EXCEPTION in init() after failed reload: " << ex
+                                     << " at " << ctx->exceptionAt.describe() << "\n";
+                                reinit_ok = false;
+                            }
+                        }
+                        if (!reinit_ok) {
+                            if (dll_clear_store) dll_clear_store();
+                            ctx_had_exception = true;
                         }
                     }
                     bumpGen();
