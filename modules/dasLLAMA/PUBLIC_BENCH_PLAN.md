@@ -36,9 +36,11 @@ time and never stored.
       "...": "same shape" } ] }
 ```
 
-- `flavor` — das: `tuned` (the only sanctioned mode; the tool auto-tunes first). llama.cpp:
-  `clean-cpu` (no Accelerate/BLAS/Metal — kernel-vs-kernel), `stock` (release defaults, what
-  users actually get), `metal`.
+- `flavor` — das: `tuned` (the only sanctioned mode; the tool auto-tunes first) or `accel`
+  (`--accel`, the +AMX Accelerate tier over the tuned stack). llama.cpp: `clean-cpu` (no
+  Accelerate/BLAS/Metal — kernel-vs-kernel), `stock` (release defaults, what users actually
+  get), `metal`. The stock CPU pass runs `-ngl 0 -nopo 1` — without `-nopo` a stock build
+  op-offloads big-batch host-weight work to Metal, which is not a CPU number.
 - `tune` — the applied kernel winners/fallbacks. Required on das runs: `[tune]` makes two
   identical machines legitimately differ, so a record without the fingerprint is not reproducible.
 - `hardware` — auto-gathered, never typed by the submitter (community submissions depend on this
@@ -90,8 +92,11 @@ The self-defending presentation: every configuration is a row, sorted by speed. 
   `community`), pp512, tg128, horizontal bar scaled to the group's fastest.
 - Sort by tg128 default (perceived speed), toggle pp512.
 - das rows amber, llama.cpp rows gray, group winner bold.
-- Ratio column on das rows: vs the best llama.cpp row of the same backend class (das metal /
-  lcpp metal; das cpu / best lcpp cpu incl. accelerated). >1.0 amber-bold, <1.0 dim.
+- Ratio column on das rows: each das configuration vs its MATCHED llama.cpp build — three
+  like-for-like pairs: `generic neon-64` (das cpu vs clean-cpu, kernel vs kernel), `cpu + AMX`
+  (das `--accel` vs stock `-ngl 0 -nopo 1`, Accelerate both sides / no GPU), `as shipped`
+  (das metal vs stock `-ngl 99`). Never "best on the backend" — a stock `-ngl 0` row with
+  Metal op-offload masquerading as CPU poisoned that derivation. >1.0 amber-bold, <1.0 dim.
 - Row expands to the receipt: full command lines, shas, date, tune fingerprint, hardware.
 - Filter chips: platform, backend.
 

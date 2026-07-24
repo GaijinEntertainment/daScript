@@ -884,7 +884,7 @@ struct BenchTest {
 struct BenchRun {
     engine : string          // "das" | "llama.cpp"
     backend : string         // "cpu" | "metal" | "vulkan"
-    flavor : string          // das: "tuned"; llama.cpp build flavor: "stock" | "clean-cpu"
+    flavor : string          // das: "tuned" | "accel" (+AMX tier); llama.cpp build flavor: "stock" | "clean-cpu"
     box : string
     threads : int
     date : string            // YYYY-MM-DD

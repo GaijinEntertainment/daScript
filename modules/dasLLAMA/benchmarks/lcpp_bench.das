@@ -5,6 +5,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.c
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
+require ?das_accelerate dasllama/dasllama_math_accelerate   // nolint:STYLE030 — the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require daslib/jobque_boost
 require daslib/clargs
@@ -54,6 +55,9 @@ struct Args {
 
     @clarg_doc = "GPU layers, llama-bench spelling: 0 = CPU, anything else = Metal, required (default: 0)"
     ngl : int = 0
+
+    @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier for the das run — the 'cpu + AMX' board row (records flavor 'accel'; CPU only, fails where das_accelerate is not built)"
+    accel : bool
 
     @clarg_short = "o"
     @clarg_doc = "Output format: txt, md (llama-bench-style table), json (public bench records) (default: txt)"
@@ -186,6 +190,18 @@ def main() {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
+    if (cfg.accel && gpu) {
+        print("--accel is a CPU-tier lever — drop it or run with -ngl 0\n")
+        return
+    }
+    if (cfg.accel) {
+        static_if (typeinfo builtin_module_exists(das_accelerate)) {
+            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
+        } else {
+            print("--accel requested but das_accelerate is not built on this platform — no accel row to measure\n")
+            return
+        }
+    }
     if (gpu) {
         set_metal_mode(MetalMode.required)   // before load_model — pins the portable backend, activates the metal overrides
     }
@@ -334,7 +350,7 @@ def main() {
     var dr = BenchRun(
         engine = "das",
         backend = backend,
-        flavor = "tuned",
+        flavor = cfg.accel ? "accel" : "tuned",
         box = box,
         threads = threads,
         date = date,
