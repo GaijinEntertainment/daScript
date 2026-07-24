@@ -99,6 +99,7 @@ JIT all functions - if enabled, JIT will compile all functions in the module.
 JIT debug info - if enabled, JIT will generate debug info for JIT compiled code.
 JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder and load them from there.
 JIT exe mode - if enabled, JIT will generate standalone executable.
+JIT offline AOT object mode - emit a native .o (this module only) with a load constructor registering its functions into the AOT library, for static linking into a host binary.
 JIT will always emit function prologues, which allows call-stack in debuggers.
 JIT output folder (where JIT compiled code will be stored).
 JIT optimization level for compiled code (0-3).

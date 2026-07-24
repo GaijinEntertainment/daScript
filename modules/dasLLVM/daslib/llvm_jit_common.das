@@ -254,8 +254,14 @@ def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : 
 
         let at_ptr_type = LLVMPointerType(at_type, 0u)
         tab_fun = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), fn_name.glob())
-        add_table_linkage(tab_fun)
-        LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
+        if (g_emit_aot_object_globals) {
+            // Per-object internal + null; the globinit ctor re-resolves it at load.
+            LLVMSetLinkage(tab_fun, LLVMLinkage.LLVMInternalLinkage)
+            LLVMSetInitializer(tab_fun, LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u)))
+        } else {
+            add_table_linkage(tab_fun)
+            LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
+        }
     } else {
         // we already created it
         tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name.glob())
@@ -550,6 +556,16 @@ def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?; attr
 }
 
 var g_jit_clopts_parsed = false
+
+// Set while emitting an offline AOT object: builtin-accessor globals are emitted
+// internal + null and re-resolved by the emit_aot_object_globinit load ctor,
+// instead of a baked codegen-process address. run_jit sets/clears it around codegen.
+var public g_emit_aot_object_globals = false
+
+// Emit-object mode: cross-module / non-jit das call + ctor target globs hold a host-
+// meaningless SimFunction*. Recorded here (glob + callee mnh) during codegen; the
+// globinit ctor fills them from the host Context at load. run_jit clears per compile.
+var public g_aot_func_globs : array<tuple<glob : LLVMOpaqueValue?; mnh : uint64>>
 
 // LLVM's unroll / partial-unroll / unroll-and-jam cost-model thresholds are compiled-in cl::opt
 // globals; daslang's JIT path never runs cl::ParseCommandLineOptions, so without these the O3
@@ -920,6 +936,20 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     }
     if (triple_owned_by_llvm) {
         LLVMDisposeMessage(triple_msg)
+    }
+}
+
+// Offline AOT: emit a native object only, no linker step (jit_emit_object path).
+// use_host_cpu=false (default) targets a generic CPU so the .o is portable; true bakes host features.
+def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host_cpu : bool = false) {
+    with_default_target_machine(3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
+        let error : string?
+        let file = add_obj_extension(out_path)
+        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        if (failed != 0) {
+            panic("emit_object_only: LLVMTargetMachineEmitToFile failed for {file}")
+        }
     }
 }
 

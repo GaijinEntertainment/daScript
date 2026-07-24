@@ -37,7 +37,22 @@ bitfield TabOperation {
     erase
 }
 
-class CollectExternVisitor : AstVisitor {
+
+// Get-or-add das_aot_get_func_by_mnh and build a call resolving `mnh` against `ctx_arg` to the host's
+// SimFunction* (void*). Shared by the aot-object register path and the globinit ctor.
+def public build_aot_get_func_by_mnh(b : LLVMBuilderRef; types : PrimitiveTypes?; mnh : uint64; ctx_arg : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let gfType = LLVMFunctionType(types.LLVMVoidPtrType(),
+        fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
+    var gfFn = LLVMGetNamedFunction(g_mod, "das_aot_get_func_by_mnh")
+    if (gfFn == null) {
+        gfFn = LLVMAddFunctionWithType(g_mod, "das_aot_get_func_by_mnh", gfType)
+    }
+    var gf_args = array<LLVMValueRef>(types.ConstI64(mnh), ctx_arg)
+    return LLVMBuildCall2(b, gfType, gfFn, gf_args, "")
+}
+
+
+class public CollectExternVisitor : AstVisitor {
     uid : UidNodes?
 
     // Let's keep order of traversal during initialization.
@@ -66,7 +81,6 @@ class CollectExternVisitor : AstVisitor {
     registered_modules : table<string; bool>
     dynamic_modules : table<string; bool>
     register_mod_type : LLVMOpaqueType?
-    init_fn : LLVMOpaqueValue?
     init_builder : LLVMBuilderRef
 
     reg_extern_fn_type : LLVMOpaqueType?
@@ -84,67 +98,71 @@ class CollectExternVisitor : AstVisitor {
 
     standalone_ctx : LLVMOpaqueValue?
 
+    // The globinit ctor's Context* parameter (set by emit_aot_object_globinit),
+    // used to resolve Func-value globs to the host's SimFunction* at load.
+    aot_ctx_arg : LLVMOpaqueValue?
+    jit_mod : LlvmJitMode
 
-    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
-                             _builder : LLVMBuilderRef,
-                             _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
-                             uids : UidNodes?; register_all : bool) {
-        any_unimplemented = false
-        needs_whole_lib = false
-        uid := uids
-        ctx = _ctx
-        standalone_ctx = standalone_context
-        mod = _mod
-        types = _types
-        builder = _builder
-        register_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(), array<LLVMTypeRef>())
-
-        // Create initialize_modules() function — filled incrementally as we discover needed modules
-        let init_fn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        init_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
+    // Create the initialize_modules() function, position a builder in it, and emit das_ensure_environment
+    // plus the builtin-module registrations (all native modules if register_all, else $ + strings). Returns the builder.
+    def private setup_init_builder(register_all : bool) : LLVMBuilderRef {
+        let init_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
         let init_entry = LLVMAppendBasicBlockInContext(ctx, init_fn, "entry")
-        init_builder = LLVMCreateBuilder()
-        LLVMPositionBuilderAtEnd(init_builder, init_entry)
-        // Always call das_ensure_environment first
+        var ib = LLVMCreateBuilder()
+        LLVMPositionBuilderAtEnd(ib, init_entry)
         let env_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
         var env_fn = LLVMGetNamedFunction(g_mod, "das_ensure_environment")
         if (env_fn == null) {
             env_fn = LLVMAddFunctionWithType(g_mod, "das_ensure_environment", env_type)
         }
-        LLVMBuildCall2(init_builder, env_type, env_fn, array<LLVMValueRef>(), "")
-        // Optionally register ALL builtin native modules (math, fio, dasbind, ...)
-        // so a self-contained compiler-driver exe can recompile arbitrary daslang
-        // at runtime. Referencing this symbol also force-links those modules in.
-        // register_builtin_modules() covers exactly the set below, so mark them as
-        // already-registered to suppress the per-module emission (otherwise each
-        // would be registered twice -> "Module '...' already created").
+        LLVMBuildCall2(ib, env_type, env_fn, array<LLVMValueRef>(), "")
         if (register_all) {
             var reg_all = LLVMGetNamedFunction(g_mod, "jit_register_all_builtin_modules")
             if (reg_all == null) {
                 reg_all = LLVMAddFunctionWithType(g_mod, "jit_register_all_builtin_modules", env_type)
             }
-            LLVMBuildCall2(init_builder, env_type, reg_all, array<LLVMValueRef>(), "")
+            LLVMBuildCall2(ib, env_type, reg_all, array<LLVMValueRef>(), "")
             for (m in fixed_array("$", "math", "strings", "rtti_core", "ast_core", "jit",
                                   "debugapi", "network_core", "uriparser", "jobque",
                                   "fio_core", "dasbind")) {
                 registered_modules[m] = true
             }
         } else {
-            // Always register Module_BuiltIn ($) and Module_Strings (strings) — unless
-            // inject_main's static sweep already emitted the call (the thunks are NOT
-            // idempotent: a second call dies with "Module '$' already created").
+            // Register $ and strings unless inject_main's static sweep already emitted the (non-idempotent) call.
             if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_BuiltIn"))) {
                 g_exe_emitted_reg["jit_register_Module_BuiltIn"] = true
                 var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
-                LLVMBuildCall2(init_builder, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
+                LLVMBuildCall2(ib, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
             }
             registered_modules["$"] = true
             if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_Strings"))) {
                 g_exe_emitted_reg["jit_register_Module_Strings"] = true
                 var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
-                LLVMBuildCall2(init_builder, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
+                LLVMBuildCall2(ib, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
             }
             registered_modules["strings"] = true
+        }
+        return ib
+    }
+
+    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
+                             _builder : LLVMBuilderRef,
+                             _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
+                             uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode) {
+        any_unimplemented = false
+        needs_whole_lib = false
+        uid := uids
+        ctx = _ctx
+        standalone_ctx = standalone_context
+        mod = _mod
+        jit_mod = _jit_mod
+        types = _types
+        builder = _builder
+        register_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(), array<LLVMTypeRef>())
+
+        // Only exe/dll init modules at startup; AOT-object re-resolves globals into the caller's ctor (builder), no init_builder.
+        if (!g_emit_aot_object_globals) {
+            init_builder = setup_init_builder(register_all)
         }
 
         // void * get_jit_table_{at,find,erase} ( int32_t baseType, Context * context, LineInfoArg * at )
@@ -159,15 +177,11 @@ class CollectExternVisitor : AstVisitor {
         tab_find_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_find", reg_extern_tab_type)
         tab_erase_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_table_erase", reg_extern_tab_type)
 
-        // void * get_jit_string_table_at_with_hash ( ) — the string at routes through this
-        // precomputed-hash global (grow fallback), so the standalone exe bakes it. String find is
-        // fully inline (no glob).
+        // String `at` routes through this precomputed-hash global (grow fallback), baked into the exe (find is fully inline).
         reg_extern_tab_wh_type = LLVMFunctionType(types.LLVMVoidPtrType(), [])
         tab_at_wh_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_with_hash", reg_extern_tab_wh_type)
 
-        // String insert-after-packed-miss global (the inline packed string find calls it on a
-        // miss; nullary accessor). Without baking it in the exe, the glob keeps its compile-process
-        // address and faults under ASLR (works on Windows only because the DLL loads at the same base).
+        // String insert-after-packed-miss global (inline packed find calls it on a miss); baked into the exe to survive ASLR.
         tab_at_apm_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_after_packed_miss", reg_extern_tab_wh_type)
 
         trap_typ = LLVMFunctionType(types.t_void, [])
@@ -225,6 +239,10 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def register_function(fn : Function?) : LLVMOpaqueValue? {
+        // AOT-into-host: a Func VALUE is the host's SimFunction*, looked up by mnh against the ctor's Context* (works for builtins too).
+        if (jit_mod == LlvmJitMode.LLVM_AOT) {
+            return build_aot_get_func_by_mnh(builder, types, fn.getMangledNameHash, aot_ctx_arg)
+        }
         let fnmna = uid.get_dll_fn_name_ptr(fn)
         let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
         if (fn_publ == null) return null
@@ -266,15 +284,9 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def ensure_module(m : Module?) {
-        if (m == null) return
+        if (g_emit_aot_object_globals || m == null) return  // host already has every module registered
         let mod_name = string(m.name)
-        // Dynamic (.shared_module) modules are normally registered via the
-        // jit_register_dynamic_module_resolve runtime LOAD path and skipped here.
-        // But the wasm/emscripten cross-compile has no dynamic loading — those
-        // modules' C++ objects are STATICALLY linked into the .wasm, so they must
-        // be registered statically (jit_register_<cppClass>, below) like any other
-        // module. Without this, glfw/opengl/audio link in but never register and
-        // their handled externs fail resolution at runtime.
+        // Dynamic modules register via the runtime load path (skipped here) — except wasm cross-compile, where they're statically linked and must register like any module.
         if (key_exists(registered_modules, mod_name) || (key_exists(dynamic_modules, mod_name) && !g_target_is_wasm)) return
         registered_modules[mod_name] = true
         // First ensure all dependencies of this module are registered
@@ -285,16 +297,11 @@ class CollectExternVisitor : AstVisitor {
         if (empty(cpp_name)) return
         let reg_fn_name = "jit_register_{cpp_name}"
         to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
-        // ast_core / network_core live in the compiler lib, so emitting their
-        // jit_register thunk references compiler-only symbols — the standalone
-        // exe must then link the whole compiler lib. This catches dependency
-        // registrations (here in ensure_module) that the used_modules gate misses.
+        // ast_core / network_core live in the compiler lib, so their jit_register thunk forces a whole-compiler-lib link.
         if (mod_name == "ast_core" || mod_name == "network_core") {
             needs_whole_lib = true
         }
-        // one call per thunk process-wide (not idempotent — "Module already created"), and
-        // get-or-add: re-adding an existing LLVM function name silently RENAMES it
-        // (jit_register_X.NNN) into an undefined symbol at link
+        // One call per thunk process-wide (not idempotent); get-or-add avoids a silent rename to an undefined symbol.
         return if (g_exe_emitted_reg |> key_exists(reg_fn_name))
         g_exe_emitted_reg[reg_fn_name] = true
         var reg_fn = LLVMGetNamedFunction(g_mod, reg_fn_name)
@@ -311,15 +318,9 @@ class CollectExternVisitor : AstVisitor {
             if (FUNC_PTR == null) return
             let name = uid.get_dll_fn_name_ptr(expr.func)
             if (initialize(name)) {
-                // For each used extern builtin function, emit a call to a registration
-                // function that will assign to the global variable pointer to a function
-                // at startup.
+                // Emit a registration call that assigns the global function-pointer at startup.
                 let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
-                // JIT may not emit some globals due to optimizations.
-                // Now we have it only for `count`, see:
-                // d901e741b164f6328660178e8ed3ae406d78c8e1.
-                // Simplest way is to skip global if it wasn't created, which
-                // means it was never accessed.
+                // JIT may skip emitting a global under optimization (seen only for `count`); absent = never accessed, so skip.
                 if (global_var == null) return
                 let mod_name = string(expr.func._module.name)
                 extern_modules[mod_name] = true
@@ -406,8 +407,7 @@ class CollectExternVisitor : AstVisitor {
             }
         } else {
             if (expr.typeexpr.baseType == Type.tFixedArray) {
-                // the handle gate lives on the chain element (the head is tFixedArray);
-                // borrow-walk — this pass runs outside ast_gc_guard, clones would leak
+                // handle gate is on the chain element (head is tFixedArray); borrow-walk (outside ast_gc_guard, clones would leak)
                 var elemT = expr.typeexpr
                 while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
                     elemT = elemT.firstType
@@ -474,8 +474,7 @@ class CollectExternVisitor : AstVisitor {
         let annotationData = (expr._block as ExprBlock).annotationData
         if (annotationData != 0 |> uint64()) {
             add_unimplemented(uid.get_block_ann(expr), expr)
-            // Apparently annotationData cannot be `nonnull` for
-            // regular das program. And this Visitor called only on regular das.
+            // annotationData is never nonnull for a regular das program (this visitor runs only on those).
         }
     }
 
@@ -494,8 +493,7 @@ class CollectExternVisitor : AstVisitor {
     def add_table_at_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
         if (typ == Type.tString) {
-            // string keys route through the precomputed-hash at (see build_table_at); bake that
-            // glob plus its after-packed-miss insert helper
+            // string keys route through the precomputed-hash at (see build_table_at); bake it + its after-packed-miss insert helper
             let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_at_wh_accessor, [], "")
             let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()).glob())
             if (tab_method != null) {
@@ -518,9 +516,7 @@ class CollectExternVisitor : AstVisitor {
 
     def add_table_find_call(index_t : TypeDeclPtr) {
         let typ = get_table_t(index_t)
-        // String + workhorse find are fully inline (no glob to bake). The per-type C++ find glob is
-        // only created when build_table_find_call codegens a non-workhorse find (vectors / structs),
-        // so when GetNamedGlobal misses there is no consumer and nothing to bake.
+        // String + workhorse find are fully inline; the per-type C++ find glob exists only for non-workhorse finds, so a miss = no consumer to bake.
         if (typ == Type.tString) {
             return
         }
@@ -582,16 +578,14 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
                                prog : Program?; register_all_modules : bool = false) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
-    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules)
+    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
             for (fn in funcs) {
                 visit(fn, adapter_resolve)
             }
-            // Register builtins reachable only from top-level `let X = builtin()`
-            // (issue #2582). init_globals must be JIT-compiled first so the
-            // function-pointer globals exist — make_call bails on missing globals.
+            // Register builtins reachable only from top-level `let X = builtin()` (#2582); init_globals must JIT first so the globals exist.
             prog |> for_each_module() $(m) {
                 if (m.moduleFlags.builtIn) return ;
                 m |> for_each_global() $(var glob) {
@@ -601,8 +595,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                 }
             }
         }
-        // Register [pinvoke] and [export] functions in tabMnLookup so they can be
-        // found by name at runtime (e.g. via invoke_in_context).
+        // Register [pinvoke]/[export] functions in tabMnLookup so they're findable by name at runtime.
         for (fn in funcs) {
             if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
                 extern_resolver.uid.reset(fn)
@@ -616,10 +609,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     for (mod_name in keys(extern_resolver.extern_modules)) {
         used_modules[mod_name] = true
     }
-    // Finalize initialize_modules(): emit dynamic modules, native paths, Module::Initialize, ret.
-    // Use the same 3-tier resolve helper as inject_main so a standalone exe doesn't
-    // double-register the same module from two different filesystem paths (the
-    // resolved bundle path here AND a baked absolute somewhere else).
+    // Finalize initialize_modules() via the same 3-tier resolve as inject_main, so a standalone exe doesn't double-register a module from two paths.
     let ib = extern_resolver.init_builder
     let t = extern_resolver.types
     let reg_dyn_mod_type = LLVMFunctionType(t.LLVMVoidPtrType(),
@@ -660,9 +650,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
         }
         LLVMBuildCall2(ib, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
     }
-    // Wasm cross-compile: fill the per-(handled-type, field) offset globals from the
-    // TARGET runtime's annotations, now that the modules (hence their annotations) are
-    // registered. Each access then reads a global instead of a wrong host-baked constant.
+    // Wasm: fill per-(handled-type, field) offset globals from the TARGET runtime's annotations (now registered) — each access reads a global, not a host-baked constant.
     if (!empty(g_handled_field_offset_globals)) {
         var hfo_fn = LLVMGetNamedFunction(g_mod, FN_JIT_GET_HANDLED_FIELD_OFFSET)
         let hfo_type = g_fn_types[FN_JIT_GET_HANDLED_FIELD_OFFSET]
@@ -676,8 +664,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildStore(ib, off_val, glob)
         }
     }
-    // --jit-check-abi: sweep every handled-type the program uses and emit
-    // host-vs-target size + field-offset checks, then a report/kaboom call.
+    // --jit-check-abi: sweep every handled type used, emit host-vs-target size+offset checks, then a report/kaboom call.
     if (g_jit_check_handled_abi) {
         emit_handled_abi_check(ib, prog)
     }
@@ -689,12 +676,9 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     return (any_unimplemented = any_unimp, needs_whole_lib = whole_lib)
 }
 
-// --jit-check-abi: emit, into initialize_modules(), a host-vs-target layout
-// safe-check for every handled type the program references. For each handled
-// (BasicStructure) annotation across all program modules we bake the HOST size +
-// each field's HOST offset into a check call; at runtime those resolve the TARGET
-// runtime annotation and record every divergence, then jit_handled_abi_check_report()
-// dumps them all and aborts. The whole magnitude of the layout disaster in one run.
+// --jit-check-abi: emit into initialize_modules() a host-vs-target layout safe-check for every handled
+// type referenced. Bakes HOST size + field offsets into check calls that resolve the TARGET annotation
+// at runtime, record every divergence, then jit_handled_abi_check_report() dumps them all and aborts.
 def private emit_handled_abi_check(ib : LLVMBuilderRef; prog : Program?) {
     let size_fn = LLVMGetNamedFunction(g_mod, FN_JIT_CHECK_HANDLED_TYPE_SIZE)
     let size_type = g_fn_types[FN_JIT_CHECK_HANDLED_TYPE_SIZE]
@@ -740,11 +724,8 @@ def private compute_modules_relative_suffix(p : string) : string {
     return idx < 0 ? "" : slice(pn, idx + 1)
 }
 
-// Walk up `start_dir` looking for a `.das_package` file. Returns the absolute
-// path to the package (the dir containing `.das_package`) or "" if no ancestor
-// has one within MAX_LEVELS. Bounded so a stray .das at filesystem root doesn't
-// scan the whole tree. Used to identify daspkg-package boundaries among the
-// program's .das modules.
+// Walk up `start_dir` for a `.das_package` file; returns the dir containing it, or "" if none within
+// MAX_LEVELS. Bounded so a stray .das at filesystem root doesn't scan the whole tree.
 let private MAX_DAS_PACKAGE_WALKUP_LEVELS = 8
 
 def private find_enclosing_das_package(start_dir : string) : string {
@@ -788,23 +769,8 @@ struct private ReleaseDeps {
     tune_scopes : array<TuneScopeDep>   //!< daspkg release tunes incomplete scopes, then rebuilds
 }
 
-// If `-list-shared-modules <path>` was passed on the daslang command line,
-// write a JSON `ReleaseDeps` describing what `daspkg release` should ship.
-//
-// Detection walks `program_for_each_module(prog)` and, for each program module:
-//   1) Looks the daslang module name up in `for_each_registered_dynamic_module()`
-//      to find an associated .shared_module dylib. Found → emit a SharedModuleEntry,
-//      deduped by absolute dylib path (one .shared_module can host several
-//      daslang modules, e.g. dasStbImage hosts `stbimage`, `raster`, `stbtruetype`).
-//   2) If `m.fileName` is non-empty AND its directory walks up to a `.das_package`
-//      file (via `find_enclosing_das_package`), emits a DasModuleEntry tagged with
-//      `package_dir`. This filter drops daslib stdlib (no .das_package above) and
-//      SDK-shipped modules under `<das_root>/modules/<X>/` (no .das_package either),
-//      keeping only daspkg-installed deps. The reader (`cmd_release`) further skips
-//      entries whose `package_dir` equals the project root being released.
-// Extract the package directory name from a "modules/<X>/.../foo.shared_module"
-// suffix — used to let `-force-shared-module dasGlfw` match by package name as
-// well as by the daslang-side module name.
+// Extract the package dir name from a "modules/<X>/.../foo.shared_module" suffix, so
+// `-force-shared-module dasGlfw` matches by package name as well as daslang module name.
 def private dylib_package_name(rel : string) : string {
     if (empty(rel)) return ""
     let after_modules = slice(rel, length("modules/"))
@@ -812,20 +778,15 @@ def private dylib_package_name(rel : string) : string {
     return next_slash > 0 ? slice(after_modules, 0, next_slash) : after_modules
 }
 
-// Helper: append `entry` to deps.shared_modules unless its absolute path was
-// already recorded. Deduping by absolute dylib path is necessary because one
-// .shared_module file can host several daslang modules (dasStbImage hosts
-// stbimage, raster, stbtruetype) and each would otherwise produce a duplicate.
+// Append `entry` unless its absolute path was already recorded — one .shared_module can host
+// several daslang modules (dasStbImage: stbimage/raster/stbtruetype), which would otherwise duplicate.
 def private push_shared_unique(entry : SharedModuleEntry; var seen : table<string; bool>; var deps : ReleaseDeps) {
     if (key_exists(seen, entry.abs)) return
     seen[entry.abs] = true
     deps.shared_modules |> push(entry)
 }
 
-// Declarative parsing of daslang's release-deps flags. The fields here are
-// matched against argv directly (clargs auto-derives `--field-name` long
-// flags); unknown flags in argv (every other daslang option) are silently
-// ignored by parse_args.
+// Declarative parse of daslang's release-deps flags; clargs derives --field-name, other argv flags ignored.
 [CommandLineArgs]
 struct private ReleaseDepsArgs {
     @clarg_doc = "Path to write the JSON release-deps file"
@@ -844,9 +805,7 @@ def private write_release_deps(prog : Program?) {
     }
     let cfg <- r |> move_unwrap
     if (empty(cfg.list_shared_modules)) return
-    // Snapshot the dynamic-module registry once; key by daslang-side name, with
-    // a parallel by-package-name lookup so `--force-shared-module dasGlfw` works
-    // alongside `--force-shared-module dasglfw` (the daslang-side name).
+    // Snapshot the dynamic-module registry: by daslang-side name + a parallel by-package-name lookup.
     var by_das : table<string; SharedModuleEntry>
     var by_pkg : table<string; SharedModuleEntry>
     for_each_registered_dynamic_module() $(path, _mod_name, das_name) {
@@ -878,10 +837,7 @@ def private write_release_deps(prog : Program?) {
             }
         }
     }
-    // User-forced (release_shared_module(name) → --force-shared-module <name>).
-    // Match by daslang-side name OR package directory name. Lookup happens here
-    // (in the daslang process compiling the user program) so the registry has
-    // every dylib daslang scanned, not just the ones daspkg itself uses.
+    // User-forced (--force-shared-module): match by daslang-side name OR package dir name.
     for (name in cfg.force_shared_module) {
         if (key_exists(by_das, name)) {
             push_shared_unique(by_das[name], shared_seen, deps)
@@ -891,9 +847,7 @@ def private write_release_deps(prog : Program?) {
             to_log(LOG_WARNING, "LLVM EXE: --force-shared-module `{name}` not registered (typo? not loaded by daslang)\n")
         }
     }
-    // Tune scopes + per-key completeness against the app sidecar: daspkg release reads
-    // this to run the tuners of incomplete scopes and rebuild, so the shipped exe carries
-    // measured winners instead of the generic fallback stamps.
+    // Tune scopes + per-key completeness vs the app sidecar: daspkg release runs incomplete scopes' tuners and rebuilds.
     var tstat <- tune_scopes_status(prog)
     deps.tune_scopes |> reserve(length(tstat))
     for (ts in tstat) {
@@ -913,19 +867,13 @@ def private write_release_deps(prog : Program?) {
     to_log(LOG_INFO, "LLVM EXE: wrote release deps to {dst_path} (shared={length(deps.shared_modules)}, das={length(deps.das_modules)})\n")
 }
 
-// ONE registration call per jit_register_<CppClass> across EVERY emission site (main's
-// static sweep, the extern resolver's ctor, ensure_module): the C++ thunks are NOT
-// idempotent — a second call dies with "Module '<x>' already created" at startup. Reset
-// per codegen run in inject_main.
+// ONE registration call per jit_register_<CppClass> across every emission site — the C++ thunks are
+// NOT idempotent (a second call dies "Module already created"). Reset per codegen run in inject_main.
 var private g_exe_emitted_reg : table<string; bool>
 
-// Emit one static-module registration call, DEPENDENCIES FIRST (a module's C++ init may
-// bind externs typed against a dependency's handled types — das_string, StructInfo, … —
-// so hash-ordered emission startup-crashes with "NEED_MODULE with <type> needs to be
-// before this module binding"). Deduped three ways: reg_visited stops the recursion,
-// g_exe_emitted_reg keeps one CALL per registration fn process-wide (several das modules
-// can share a C++ class, and the resolver's sites emit too), and get-or-add avoids the
-// silent LLVM function RENAME (jit_register_X.NNN — an undefined symbol at link).
+// Emit one static-module registration call, DEPENDENCIES FIRST (a module's C++ init may bind externs
+// typed against a dependency's handled types, so hash-ordered emission startup-crashes). Deduped via
+// reg_visited (recursion), g_exe_emitted_reg (one call process-wide), and get-or-add (avoid LLVM rename).
 def private emit_module_registration(m : Module?; dynamic_modules : table<string; bool>;
                                      var emitted_reg, reg_visited : table<string; bool>;
                                      builder : LLVMBuilderRef; g_mod : LLVMOpaqueModule?;
@@ -936,12 +884,7 @@ def private emit_module_registration(m : Module?; dynamic_modules : table<string
     let mod_name = string(m.name)
     return if (reg_visited |> key_exists(mod_name))
     reg_visited[mod_name] = true
-    // dylibs register via the runtime LOAD path; ast_core / network_core registrations
-    // live in the COMPILER lib (whole-lib link), and jit's ctor hard-requires ast_core
-    // (Module::require("ast_core") -> nullptr assert when ast_core isn't registered) —
-    // this walk is prophylactic ordering, so skip all three here (a program that
-    // genuinely CALLS into them still gets them via ensure_module's used gate +
-    // needs_whole_lib)
+    // dylibs register via the runtime load path; ast_core / network_core / jit are prophylactic-skipped here (a real caller still gets them via ensure_module + needs_whole_lib).
     return if (dynamic_modules |> key_exists(mod_name)
         || mod_name == "ast_core" || mod_name == "network_core" || mod_name == "jit")
     module_for_each_dependency(m) $(var dep : Module?; var _pub : bool) {
@@ -1002,13 +945,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         return (fn = null, link_whole_lib = false)
     }
 
-    // --jit-register-all-modules: compiler-driver exes (e.g. utils/jit) may
-    // recompile targets that require UnitTest at runtime. It's a dynamic module
-    // the -exe target itself doesn't reference, so neither used_modules nor
-    // extern_modules picks it up. Force the registration only in main()'s
-    // dynamic-module loop (below) — NOT via used_modules, otherwise
-    // initialize_modules() emits a second jit_register_dynamic_module_resolve
-    // call → "Module 'UnitTest' already created" at runtime.
+    // --jit-register-all-modules: compiler-driver exes may recompile targets needing UnitTest at
+    // runtime. Force it only in main()'s dynamic-module loop below — NOT via used_modules, else
+    // initialize_modules() emits a second register call ("Module 'UnitTest' already created").
     var force_dynamic_modules : table<string; bool>
     if (register_all_modules) {
         force_dynamic_modules["UnitTest"] = true
@@ -1062,11 +1001,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     let das_ensure_env_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
     var das_ensure_env = LLVMAddFunctionWithType(g_mod, "das_ensure_environment", das_ensure_env_type)
     LLVMBuildCall2(builder, das_ensure_env_type, das_ensure_env, array<LLVMValueRef>(), "")
-    // Dynamic modules (e.g. UnitTest) may declare addBuiltinDependency on math
-    // during ctor, so the math/strings/... bundle must exist before any dynamic
-    // module loads. Emit jit_register_all_builtin_modules here; the duplicate
-    // call from initialize_modules() is a no-op via Module::require guards.
-    // (The symbol lives in the COMPILER lib — this flag implies a whole-lib link.)
+    // Dynamic modules may addBuiltinDependency on math during ctor, so the math/strings bundle must
+    // exist first. The duplicate call from initialize_modules() is a no-op via Module::require guards.
+    // (Symbol is in the COMPILER lib — this flag implies a whole-lib link.)
     if (register_all_modules) {
         var reg_all_main = LLVMGetNamedFunction(g_mod, "jit_register_all_builtin_modules")
         if (reg_all_main == null) {
@@ -1074,13 +1011,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         }
         LLVMBuildCall2(builder, das_ensure_env_type, reg_all_main, array<LLVMValueRef>(), "")
     }
-    // A dynamic module's ctor may bind externs typed against ANY builtin handled type
-    // (das_string, StructInfo, …) — C++-side dependencies the used-functions sweep cannot
-    // see ("NEED_MODULE with <type> needs to be before this module binding" at startup).
-    // So when the program SHIPS a dynamic module, register every builtin C++ module in the
-    // program graph, not just the used set — except the compiler-lib pair (ast_core /
-    // network_core), which force a whole-lib link and stay used-gated. Dynamic-free exes
-    // keep the minimal set.
+    // A dynamic module's ctor may bind externs typed against ANY builtin handled type (C++ deps the
+    // used-functions sweep can't see). So when the program ships a dynamic module, register every
+    // builtin C++ module in the graph — except the compiler-lib pair (ast_core/network_core), used-gated.
     var ships_dynamic = false
     prog |> for_each_module() $(m) {
         if (dynamic_modules |> key_exists("{m.name}")) {
@@ -1090,42 +1023,41 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     if (ships_dynamic) {
         prog |> for_each_module() $(m) {
             let mn = "{m.name}"
-            // dynamic modules stay OUT of used_modules: initialize_modules() would emit a
-            // second jit_register_dynamic_module_resolve → "Module 'X' already created"
-            // (same rule as the --jit-register-all-modules force list above). jit stays
-            // out too — its ctor hard-requires ast_core, which this prophylactic set
-            // deliberately excludes (SIGTRAP "Trying to add nullptr module" on Debug)
+            // dynamic modules stay OUT of used_modules (initialize_modules() would double-register
+            // → "Module 'X' already created"). jit stays out too — its ctor hard-requires ast_core,
+            // which this prophylactic set excludes (SIGTRAP on Debug).
             if (!empty("{m.cppClassName}") && mn != "ast_core" && mn != "network_core"
                     && mn != "jit" && !(dynamic_modules |> key_exists(mn))) {
                 used_modules[mn] = true
             }
         }
     }
-    // `options rtti` makes handled RTTI types (StructInfo & co) reachable through builtin
-    // machinery (sscan_json/sprint_json) with no direct CALL into rtti_core — but a dynamic
-    // module's C++ init typed against them needs Module_Rtti registered FIRST ("NEED_MODULE
-    // with StructInfo needs to be before this module binding"). The used-functions sweep
-    // can't see that, so pull rtti_core in whenever the program compiled with rtti on.
+    // `options rtti` makes handled RTTI types reachable through builtin machinery with no direct
+    // CALL into rtti_core, but a dynamic module's C++ init typed against them needs Module_Rtti
+    // registered first. The sweep can't see that, so pull rtti_core in whenever rtti is on.
     let wants_rtti = ((prog._options |> find_arg("rtti")) ?as tBool ?? false) || prog.policies.rtti
     if (wants_rtti) {
         used_modules["rtti_core"] = true
     }
     var has_cpp_modules = false
-    var emitted_reg : table<string; bool>
-    var reg_visited : table<string; bool>
-    for (mod_name in keys(used_modules)) {
-        if (key_exists(dynamic_modules, mod_name)) continue
-        prog |> for_each_module() $(m) {
-            if (m.name != mod_name) return
-            emit_module_registration(m, dynamic_modules, emitted_reg, reg_visited,
-                builder, g_mod, register_mod_type, has_cpp_modules)
+    // register_all_modules already emits jit_register_all_builtin_modules() above (all builtins,
+    // idempotent). The sweep would re-emit an UNGUARDED jit_register_Module_X (REGISTER_MODULE_IN_
+    // NAMESPACE lacks a Module::require guard) -> double-create at startup ("Module '$' already created").
+    if (!register_all_modules) {
+        var emitted_reg : table<string; bool>
+        var reg_visited : table<string; bool>
+        for (mod_name in keys(used_modules)) {
+            if (key_exists(dynamic_modules, mod_name)) continue
+            prog |> for_each_module() $(m) {
+                if (m.name != mod_name) return
+                emit_module_registration(m, dynamic_modules, emitted_reg, reg_visited,
+                    builder, g_mod, register_mod_type, has_cpp_modules)
+            }
         }
     }
 
-    // Register dynamic modules that were loaded during compilation. The runtime
-    // helper tries <exe_dir>/<rel_path> (daspkg release bundles), then
-    // <das_root>/<rel_path> (SDK install / local dev), then the baked absolute
-    // path (legacy fallback).
+    // Register dynamic modules loaded during compilation. The runtime helper tries <exe_dir>/<rel>
+    // (release bundles), then <das_root>/<rel> (SDK/dev), then the baked absolute path (legacy).
     let reg_dyn_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(),
         fixed_array<LLVMTypeRef>(
             types.LLVMVoidPtrType(), // const char * rel_path
@@ -1234,15 +1166,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     {
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = true
-        jit_flags.gen_exe = true
         jit_flags.need_di = false
-        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
+        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE)
         init_glob = pair._0
         init_glob_type = pair._1
         // Clone variant: inits non-shared globals only (a clone is not the shared owner;
         // re-initializing shared globals would corrupt the parent's shared buffer). Used by
         // the clone init script below so a jobque/thread/audio clone matches the interpreter.
-        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, "init_globals_clone", true)
+        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE, "init_globals_clone", true)
         clone_init_glob = cpair._0
     }
 
@@ -1253,30 +1184,23 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
     var needs_whole_lib = sort_needs_whole_lib
-    // ast_core and network_core live in the compiler lib, so registering them
-    // (jit_register_Module_Ast / _Network) pulls compiler-only symbols — the
-    // standalone exe must then link the whole compiler lib. rtti_core used to
-    // be listed here because it hosted the compile builtins (rtti_builtin_compile
-    // -> parseDaScript); those moved to the ast module, so rtti_core is now
-    // fully self-contained in the runtime lib and no longer needs it.
+    // ast_core / network_core live in the compiler lib, so registering them pulls compiler-only
+    // symbols -> whole-lib link. (rtti_core used to be here but its compile builtins moved to ast,
+    // so it's now self-contained in the runtime lib.)
     for (mod_name in keys(used_modules)) {
         if (mod_name == "ast_core" || mod_name == "network_core") {
             needs_whole_lib = true
             break
         }
     }
-    // jit_register_all_builtin_modules lives in libDaScriptDyn_runtime but calls
-    // register_builtin_modules which only exists in libDaScriptDyn (compiler lib).
-    // Without the compiler lib, the standalone exe link fails with
-    //   "undefined reference to `das::register_builtin_modules()`".
+    // jit_register_all_builtin_modules calls register_builtin_modules, which lives only in the
+    // compiler lib — so this flag forces a whole-lib link (else "undefined reference" at link).
     if (register_all_modules) {
         needs_whole_lib = true
     }
 
-    // When linking whole compiler lib, register fusion engine (needed by simulate).
-    // Skip on wasm: cross-link only sees libDaScript_runtime.a (no
-    // jit_register_fusion symbol), and standalone exes never read the pointers
-    // it sets anyway — ShutdownStandalone passes resetFusion=false, see #2805.
+    // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
+    // cross-link only sees libDaScript_runtime.a (no jit_register_fusion), and exes never read it (#2805).
     if (needs_whole_lib && !g_target_is_wasm) {
         let reg_fusion_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
         let reg_fusion_fn = LLVMAddFunctionWithType(g_mod, "jit_register_fusion", reg_fusion_type)
@@ -1323,13 +1247,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         }
     }
 
-    // Register a combined init script (init_globals + [init] functions) as jitInitScript,
-    // so a CLONED context (jobque worker, thread, dasAudio mixer) re-runs the FULL init —
-    // matching the interpreter's runInitScript (globals then init funcs, context.cpp). The
-    // main context already ran both inline above and never calls jitInitScript, so there is
-    // no double-run. (Previously only init_globals was registered, so [init]-reliant module
-    // state — e.g. dasAudio's limiter, set up by an [init] gated on the audio context — was
-    // never initialized in the clone, producing silent audio in cross-compiled builds.)
+    // Register a combined init script (init_globals + [init] functions) as jitInitScript, so a
+    // CLONED context (jobque worker, thread, dasAudio mixer) re-runs the FULL init like the
+    // interpreter's runInitScript. The main context ran both inline above and never calls it (no double-run).
     {
         let init_script_fn_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))  // Context *
@@ -1364,11 +1284,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             fixed_array(global_context, LLVMBuildPointerCast(builder, init_script_fn, types.LLVMVoidPtrType(), "")), "")
     }
 
-    // Match the interpreter (utils/daScript/main.cpp WebLoop): on wasm, a program
-    // that exports `update` is driven as init() once + update() per browser frame +
-    // shutdown() at the end — the browser cannot block in main()'s while-loop. `main`
-    // stays the desktop driver and is bypassed here. The same .das thus cross-compiles
-    // unchanged for the web, runs interpreted, and runs on desktop.
+    // Match the interpreter's WebLoop: on wasm a program exporting `update` runs as init() once +
+    // update() per browser frame + shutdown() (the browser can't block in main's while-loop). `main`
+    // stays the desktop driver, bypassed here — so the same .das cross-compiles unchanged for web.
     if (g_target_is_wasm) {
         var update_impl = ""
         var update_returns_value = false
@@ -1431,10 +1349,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
 
     let main_ret = LLVMBuildCall2(builder, g_fn_types[start_fn_name], LLVMGetNamedFunction(g_mod, start_fn_name), main_params, "")
-    // Drain debug agents, modules, AOT library, env — same teardown the interpreter
-    // does, minus the handle-leak dump (shipped binaries should be quiet by default).
-    // Without this the static g_DebugAgents map dtor races ref_count_mutex during
-    // __cxa_finalize_ranges (issue #2583).
+    // Drain debug agents, modules, AOT library, env — the interpreter's teardown minus the handle-leak
+    // dump. Without it the static g_DebugAgents map dtor races ref_count_mutex at exit (#2583).
     let shutdown_fn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
     var shutdown_fn = LLVMGetNamedFunction(g_mod, "jit_shutdown")
     if (shutdown_fn == null) {

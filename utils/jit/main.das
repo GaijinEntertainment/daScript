@@ -19,10 +19,18 @@ struct JitToolArgs {
     @clarg_doc = "Emit a standalone executable instead of a shared library"
     exe : bool
 
+    @clarg_name = "aot-object"
+    @clarg_doc = "Emit a native .o (whole used function set) with a load ctor registering its functions into the AOT library, for static linking into a host binary"
+    aot_object : bool
+
     @clarg_short = "o"
     @clarg_name = "output"
     @clarg_doc = "Output path. Empty keeps the default content-hashed .jitted_scripts/<ns>/ naming (dll mode) or appends .exe (exe mode)."
     output : string
+
+    @clarg_name = "aot-object-prefix"
+    @clarg_doc = "Batch --aot-object: derive each input's object as <dir>/_llvm_aot_generated/<prefix>_<name>.o, so one process emits many objects (amortizes the ~52-file dasLLVM compile-time load). Per-input; overrides --output."
+    aot_object_prefix : string
 
     @clarg_name = "exclude"
     @clarg_doc = "Directory name(s) to skip during a recursive walk (matched on the folder's own name, at any depth). Repeatable."
@@ -262,14 +270,22 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                 // can't emit IR for them -> "Failed to get IR for functions ...").
                 cop.aot_module = true
                 cop.threadlock_context = true
-                if (tool.exe) {
+                if (tool.aot_object) {
+                    cop.jit_emit_object = true
+                    cop.jit_dll_mode = false
+                } elif (tool.exe) {
                     cop.jit_exe_mode = true
                     cop.jit_dll_mode = false
                 } else {
                     cop.jit_dll_mode = true
                 }
-                if (!empty(tool.output)) {
-                    cop.jit_output_path := tool.output
+                // Batch object mode derives a per-input path so one process emits many objects;
+                // else use the single --output (dll/exe or one-shot object).
+                let out_path = ((tool.aot_object && !empty(tool.aot_object_prefix))
+                    ? "{dir_name(input)}/_llvm_aot_generated/{tool.aot_object_prefix}_{base_name(input)}"
+                    : tool.output)
+                if (!empty(out_path)) {
+                    cop.jit_output_path := out_path
                 }
                 cop.jit_opt_level = jit.opt_level |> unwrap_or(cop.jit_opt_level)
                 cop.jit_size_level = jit.size_level |> unwrap_or(cop.jit_size_level)
@@ -302,10 +318,10 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                     }
                 }
                 if (success) {
-                    let target = tool.exe ? "executable" : "shared library"
-                    if (!empty(tool.output)) {
-                        let suffix = tool.exe ? ".exe" : ".dll"
-                        to_log(LOG_INFO, "jit: wrote {target} for {input} -> {tool.output}{suffix}\n")
+                    let target = tool.aot_object ? "AOT object" : (tool.exe ? "executable" : "shared library")
+                    if (!empty(out_path)) {
+                        let suffix = tool.aot_object ? ".o" : (tool.exe ? ".exe" : ".dll")
+                        to_log(LOG_INFO, "jit: wrote {target} for {input} -> {out_path}{suffix}\n")
                     } else {
                         to_log(LOG_INFO, "jit: wrote {target} for {input} under .jitted_scripts/{ns}/\n")
                     }

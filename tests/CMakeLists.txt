@@ -84,3 +84,17 @@ if(TARGET test_aot_subset)
         COMMENT "Running tests (AOT, tests/language subset)"
     )
 endif()
+
+# LLVM-AOT (LLVM-backend .o) mirror of run_tests_aot: test bodies bound from the
+# statically-linked self-registering objects and run jitted. Opt-in, not in CI.
+if(TARGET test_llvm_aot)
+    # -jit (fun->hash matches the --aot-object emit) AND --use-aot (linkCppAot binds
+    # the .o as SimNode_Jit; run_jit no-ops). --exclude must match the corpus filter in
+    # tests/aot/CMakeLists.txt: files with no emitted object would miss (a hard error now).
+    add_custom_target(run_tests_llvm_aot
+        COMMAND $<TARGET_FILE:test_llvm_aot> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -jit -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --exclude jit_fastpath --exclude typeinfo --exclude global_variables_solid --exclude llvm_code --exclude llvm_compile_only --exclude llvm_compile_only_client --exclude test_msl_ --exclude test_metal_ --test ${PROJECT_SOURCE_DIR}/tests/
+        DEPENDS test_llvm_aot
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Running tests (LLVM-AOT)"
+    )
+endif()

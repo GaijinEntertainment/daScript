@@ -4140,6 +4140,7 @@ namespace das
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
         bool logIt = options.getBoolOption("log_aot",false);
+        bool isLlvmAot = !aotLib.empty() && aotLib.begin()->second.is_jit;
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         das_hash_map<int,Function *> indexToFunction;
@@ -4152,33 +4153,38 @@ namespace das
             });
         }
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
-            if ( !fnn[fni]->noAot ) {
+            if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
                 fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
         }
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
-            if ( !fnn[fni]->noAot ) {
+            if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
                 uint64_t semHash = getFunctionAotHash(fnn[fni]);
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() ) {
                     fn.code = (it->second)(context);
-                    fn.aot = true;
+                    if ( fn.code->rtti_node_isJit() ) {
+                        fn.jit = true;
+                    } else {
+                        fn.aot = true;
+                        auto fcb = (SimNode_CallBase *) fn.code;
+                        fn.aotFunction = fcb->aotFunction;
+                    }
                     if ( logIt ) logs << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
-                    auto fcb = (SimNode_CallBase *) fn.code;
-                    fn.aotFunction = fcb->aotFunction;
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
                     TextWriter tp;
                     tp << "semantic hash is " << HEX << semHash << DEC << "\n";
                     tp << "did you forget to add this file (or a module it requires) to the AOT build?\n";
-                    tp << "otherwise the AOT-generated C++ is stale; regenerate it and rebuild\n";
+                    tp << "otherwise the AOT artifact (C++ or LLVM object) is stale; regenerate it and rebuild\n";
                     tp << "// " << getAotHashComment(fnn[fni]) << "\n";
                     printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
                     linkError(string(fn.mangledName), tp.str() );
                 }
             }
         }
+        if ( isLlvmAot ) runLlvmAotGlobInits(context);
     }
 }

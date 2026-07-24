@@ -262,6 +262,12 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 
 	ADD_MODULE_DAS(dashv dashv dashv_boost)
 
+	# AOT-able sources (for test_aot / any consumer); empty when disabled. The test-side
+	# fixture (_dashv_test_common) is appended by tests/aot, it is not a module source.
+	SET(DASHV_AOT_FILES
+		modules/dasHV/dashv/dashv_boost.das
+)
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasHV/dashv
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasHV
         FILES_MATCHING

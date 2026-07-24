@@ -24,6 +24,11 @@ IF ((NOT DAS_PUGIXML_INCLUDED) AND ((NOT ${DAS_PUGIXML_DISABLED}) OR (NOT DEFINE
 	ADD_MODULE_CPP(PUGIXML)
 	ADD_MODULE_DAS(pugixml daslib PUGIXML_boost)
 	ADD_MODULE_DAS(pugixml daslib linq_fold_xml)
+
+	# AOT-able sources (for test_aot / any consumer); empty when disabled.
+	SET(DASPUGIXML_AOT_FILES
+		modules/dasPUGIXML/daslib/PUGIXML_boost.das
+)
 	ADD_MODULE_LIB(libDasModulePUGIXML dasModulePUGIXML ${DAS_PUGIXML_MODULE_SRC} ${PUGIXML_SRC})
 	MACRO(SETUP_PUGIXML lib)
 		TARGET_LINK_LIBRARIES(${lib} ${PUGIXML_LIBRARIES})

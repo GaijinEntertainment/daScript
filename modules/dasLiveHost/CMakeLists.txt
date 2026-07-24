@@ -19,6 +19,15 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
     ADD_MODULE_DAS(live live live_api_stdio)
     ADD_MODULE_DAS(live live live_watch)
     ADD_MODULE_DAS(live live decs_live)
+
+    # AOT-able sources (for test_aot / any consumer); empty when disabled.
+    SET(DASLIVEHOST_AOT_FILES
+        modules/dasLiveHost/live/live_commands.das
+        modules/dasLiveHost/live/live_vars.das
+        modules/dasLiveHost/live/live_api.das
+        modules/dasLiveHost/live/live_api_builtins.das
+        modules/dasLiveHost/live/live_api_stdio.das
+)
     ADD_MODULE_LIB(libDasModuleLiveHost dasModuleLiveHost ${DAS_LIVE_HOST_MODULE_SRC})
     SETUP_CPP11(libDasModuleLiveHost)
     SETUP_CPP11(dasModuleLiveHost)
