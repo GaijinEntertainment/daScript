@@ -119,11 +119,15 @@ def dasllama_accelerate_set_f16_strips(v : int64) {
 // accel_sgemm_strips. false = a lane's filter refused (caller falls back; y is fully rewritten
 // by the portable path, so partial writes are harmless).
 def private accel_bnns_strips(var yp : float?; hwp : uint16 const?; hxp : uint16 const?; n, d, ntok : int64) : bool {
+    // flag written through a captured POINTER — lane jobs clone captures, a scalar write is lost
     var bad = 0
-    maybe_parallel_for(0, int(d), g_accel_f16_strips > 0 ? g_accel_f16_strips : accel_strips(d)) $(rb, re) {
-        unsafe {
-            if (accel_bnns_hgemm_nt(int(ntok), re - rb, int(n), hxp, int(n), hwp + int64(rb) * n, int(n), yp + rb, int(d)) != 0) {
-                bad = 1
+    unsafe {
+        var badp = addr(bad)
+        maybe_parallel_for(0, int(d), g_accel_f16_strips > 0 ? g_accel_f16_strips : accel_strips(d)) $(rb, re) {
+            unsafe {
+                if (accel_bnns_hgemm_nt(int(ntok), re - rb, int(n), hxp, int(n), hwp + int64(rb) * n, int(n), yp + rb, int(d)) != 0) {
+                    badp[0] = 1
+                }
             }
         }
     }
