@@ -24,15 +24,27 @@ require daslib/strings_convert
 
 var private g_wf32_scratch : array<float>
 
-def private accel_fp_batch(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool {
-    unsafe {
-        accel_sgemm_nt(int(ntok), int(d), int(n), xp, int(n), wp, int(n), yp, int(d))
+// Strip count for one GEMM: cover both AMX blocks (one per P-cluster) with headroom for load
+// balance, without paying per-call sgemm setup on slivers.
+def private accel_strips(d : int64) : int => int(clamp(d / 256l, 1l, 8l))
+
+// Strip-dispatch a single-threaded sgemm over the jobque: each lane serves rows [rb,re) of W —
+// its own sgemm call on its own core, so both AMX blocks engage with no foreign thread pool.
+def private accel_sgemm_strips(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
+    maybe_parallel_for(0, int(d), accel_strips(d)) $(rb, re) {
+        unsafe {
+            accel_sgemm_nt(int(ntok), re - rb, int(n), xp, int(n), wp + int64(rb) * n, int(n), yp + rb, int(d))
+        }
     }
+}
+
+def private accel_fp_batch(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool {
+    accel_sgemm_strips(yp, wp, xp, n, d, ntok)
     return true
 }
 
 def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
-    // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then one sgemm over all tokens
+    // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
     let total = d * n
     if (int64(length(g_wf32_scratch)) < total) {
         g_wf32_scratch |> resize(int(total))
@@ -46,7 +58,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
                 }
             }
         }
-        accel_sgemm_nt(int(ntok), int(d), int(n), xp, int(n), addr<float const?>(g_wf32_scratch[0]), int(n), yp, int(d))
+        accel_sgemm_strips(yp, addr<float const?>(g_wf32_scratch[0]), xp, n, d, ntok)
     }
     return true
 }

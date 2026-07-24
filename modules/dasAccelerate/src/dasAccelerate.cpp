@@ -36,6 +36,10 @@ namespace das {
 class Module_DasAccelerate : public Module {
 public:
     Module_DasAccelerate() : Module("das_accelerate") {
+        // Accelerate's internal pool deadlocks against a spinning jobque (35B A/B: 60 interleaved
+        // sgemm calls -> constant ~40ms/call starvation). Callers parallelize by strip-dispatching
+        // over the jobque instead; an explicit env still wins (overwrite=0).
+        setenv("VECLIB_MAXIMUM_THREADS", "1", 0);
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         addExtern<DAS_BIND_FUN(accel_sgemm_nt)>(*this, lib, "accel_sgemm_nt",
