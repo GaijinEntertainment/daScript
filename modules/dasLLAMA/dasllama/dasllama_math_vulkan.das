@@ -1465,6 +1465,52 @@ def ar_add_rms_b {
     }
 }
 
+// per-head RMSNorm on q/k between the projections and rope (qk_norm models), one wg per head-row,
+// in place: q rows in vk_upf, k rows in vk_y; weight rows in vk_xqf; eps = vk_xs[0]. meta 0=hs
+// 1=nh 2=nkvh 3=qstride 4=kstride 5=kbase 6=qwoff 7=kwoff; dispatch rows*(nh+nkvh) wgs.
+[compute_shader(local_size_x=256, name="qk_rms_spv")]
+def qk_rms {
+    let hs = vk_meta[0u]
+    let nh = vk_meta[1u]
+    let per = nh + vk_meta[2u]
+    let wid = gl_WorkGroupID.x
+    let r = wid / per
+    let hh = wid % per
+    let is_q = hh < nh
+    let base = is_q ? r * vk_meta[3u] + hh * hs : vk_meta[5u] + r * vk_meta[4u] + (hh - nh) * hs
+    let wbase = is_q ? vk_meta[6u] : vk_meta[7u]
+    let tid = gl_LocalInvocationID.x
+    var ss = 0.0
+    if (tid < hs) {
+        let v = is_q ? vk_upf[base + tid] : vk_y[base + tid]
+        ss = v * v
+    }
+    ss = subgroupAdd(ss)
+    if (gl_SubgroupInvocationID == 0u) {
+        ar_part[gl_SubgroupID] = ss
+    }
+    barrier()
+    if (tid == 0u) {
+        var tot = 0.0
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            tot += ar_part[sgi]
+            sgi++
+        }
+        ar_inv[0u] = 1.0 / sqrt(tot / float(hs) + vk_xs[0u])
+    }
+    barrier()
+    if (tid < hs) {
+        let inv = ar_inv[0u]
+        let w = vk_xqf[wbase + tid]
+        if (is_q) {
+            vk_upf[base + tid] = w * (vk_upf[base + tid] * inv)
+        } else {
+            vk_y[base + tid] = w * (vk_y[base + tid] * inv)
+        }
+    }
+}
+
 // fused rope + KV-row store (decode, one token), f32 mirror. One thread per rotation pair; each
 // owns 2 distinct K + 2 V slots (no packing, no hazard). q roped in vk_y, k roped into vk_wsf, v raw
 // into vk_xqf at absolute pos. meta 0=qd 1=kvd 2=hs 3=half 4=neox 5=kpair0 6=npairs 7=krow_f 8=vrow_f.
@@ -2801,6 +2847,7 @@ struct private GpuState {
     ar_pipeline_b : Pipeline        // prefill: batched add+rmsnorm
     rks_b_pipeline : Pipeline       // prefill: batched rope + KV-store
     da_b_pipeline : Pipeline        // prefill: batched causal attention
+    qkn_pipeline : Pipeline         // resident driver: per-head q/k rmsnorm (qk_norm models), decode + prefill
     staging : HostBuf
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
@@ -3217,6 +3264,8 @@ def private vk_moe_init : bool {
     g_gpu.rks_b_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, rksbshader)
     var dabshader <- create_shader_module(g_gpu.device, da_attn_b_spv)
     g_gpu.da_b_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, dabshader)
+    var qknshader <- create_shader_module(g_gpu.device, qk_rms_spv)
+    g_gpu.qkn_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, qknshader)
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
     g_gpu.fence = boost_value_to_vk(fence)
@@ -3907,6 +3956,7 @@ struct private RLayer {
     // the layer's descriptor sets (built once, referenced every token)
     s_quant_xb : VkDescriptorSet    // dn_requant of the attn-norm activation
     s_q, s_k, s_v : VkDescriptorSet  // q/k/v GEMV
+    s_qkn : VkDescriptorSet         // per-head q/k rmsnorm (qk_norm models only)
     s_rope : VkDescriptorSet
     s_attn : VkDescriptorSet
     s_quant_at : VkDescriptorSet
@@ -3918,7 +3968,7 @@ struct private RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     // per-dispatch metas (host-visible; contents rewritten per token)
-    m_quant_xb, m_q, m_k, m_v, m_rope, m_attn, m_quant_at, m_wo, m_addr_ffn : HostBuf
+    m_quant_xb, m_q, m_k, m_v, m_qkn, m_rope, m_attn, m_quant_at, m_wo, m_addr_ffn : HostBuf
     m_quant_xb2, m_gate, m_up, m_actrq, m_down, m_addr_next : HostBuf
     next_norm_off : int64   // rms_ffn is w_off for addr_ffn; addr_next uses rms_att[l+1] or final
     made : bool
@@ -3928,6 +3978,8 @@ struct private RDec {
     ready : bool
     n_layers, dim, qd, kv_dim, head_size, n_heads, kv_mul, hidden, vocab, seq_cap : int64
     neox : bool
+    qk_norm : bool                // per-head q/k rmsnorm role armed (norms buffer carries the rows)
+    norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -4004,7 +4056,7 @@ def private arena_planes(fmt : int) : tuple<wq : uint64; ws : uint64; wqb : int6
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
-                    neox : bool; eps, scale : float) : bool {
+                    neox : bool; eps, scale : float; qk_norm : bool) : bool {
     if (!vk_moe_init()) {
         return false
     }
@@ -4016,7 +4068,8 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
-                 hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale)
+                 hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,
+                 qk_norm = qk_norm)
     var r & = unsafe(*g_rd)
     let wide = max(max(qd, hidden), dim)
     r.x_dev = make_device_buf(dim * 4l)
@@ -4034,7 +4087,10 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     r.xb2_dev = make_device_buf(dim * 4l)
     r.k_mirror = make_device_buf(n_layers * seq_cap * kv_dim * 4l)
     r.v_mirror = make_device_buf(n_layers * seq_cap * kv_dim * 4l)
-    r.norms_dev = make_device_buf((n_layers * 2l * dim + dim) * 4l)
+    // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final (dim each), then under qk_norm the
+    // per-head rows [rms_q[l], rms_k[l]] x L (head_size each) appended past the fixed layout
+    r.norms_bytes = (n_layers * 2l * dim + dim + (qk_norm ? n_layers * 2l * head_size : 0l)) * 4l
+    r.norms_dev = make_device_buf(r.norms_bytes)
     r.cos_dev = make_device_buf(head_size * 4l)
     r.scal_dev = make_device_buf(64l)
     r.ar_scal_dev = make_device_buf(64l)
@@ -4051,7 +4107,8 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
 }
 
 //! Upload the norm-weight rows once: [rms_att[0], rms_ffn[0], ..., rms_att[L-1], rms_ffn[L-1],
-//! rms_final], dim floats each, exactly the layout the layer w_offs index.
+//! rms_final], dim floats each, exactly the layout the layer w_offs index. Under qk_norm the
+//! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
 def vk_rdec_upload_norms(norms : array<float>) {
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
     upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), int64(length(norms)) * 4l)
@@ -4095,6 +4152,12 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
             pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l)
         L.s_v = rd_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
             pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l)
+        // qk rmsnorm (qk_norm models): q@0 (q_dev), meta@2, norm rows@3, eps@4, k@5 (kv_dev, k at qd)
+        if (g_rd.qk_norm) {
+            L.m_qkn = rd_meta()
+            L.s_qkn = rd_set6(g_rd.q_dev, g_rd.dummy, L.m_qkn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.kv_dev,
+                qd * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, (qd + 2l * kvd) * 4l)
+        }
         // rope+store: kv@0, Kmirror@1, meta@2, Vmirror@3, cossin@4, q@5
         let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
         L.s_rope = rd_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_rope.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
@@ -4110,7 +4173,7 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
             po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l)
         // addrms: x@0 += xb2@1, meta@2, norms@3, scalars@4, xb@5
         L.s_addr_ffn = rd_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, (g_rd.n_layers * 2l * dim + dim) * 4l, 64l, dim * 4l)
+            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
         // quantize xb (post-ffn-norm) -> xq/xs
         L.s_quant_xb2 = rd_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb2.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
             dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l)
@@ -4127,7 +4190,7 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
             p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l)
         // addrms next: x@0 += ffnout@1, norms@3, xb@5
         L.s_addr_next = rd_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, (g_rd.n_layers * 2l * dim + dim) * 4l, 64l, dim * 4l)
+            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
         L.made = true
     }
     g_rd.tok_recorded = false   // the recorded chain references the replaced sets
@@ -4146,7 +4209,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         g_rd.cls_meta_dev = make_device_buf(CLS_META_BYTES)
         // prologue: xb = rms_att[0](x), add off
         g_rd.s_prologue = rd_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, 256l, META_BYTES, (g_rd.n_layers * 2l * dim + dim) * 4l, 64l, dim * 4l)
+            dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
         // quantize final xb
         g_rd.s_quant_final = rd_set6(g_rd.xb_dev, g_rd.dummy, g_rd.m_quant_final.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
             dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l)
@@ -4315,6 +4378,14 @@ def private rd_record_token {
             fill_gemv_meta(L.m_q, dim, qd, 0l, L.bq)
             fill_gemv_meta(L.m_k, dim, kvd, qd, L.bk)             // k at ybase qd in kv_dev
             fill_gemv_meta(L.m_v, dim, kvd, qd + kvd, L.bv)       // v at ybase qd+kvd
+            if (g_rd.qk_norm) {
+                let hs = g_rd.head_size
+                var mn = reinterpret<uint?>(L.m_qkn.mapped)
+                mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
+                mn[3] = uint(qd); mn[4] = 0u; mn[5] = uint(qd)   // one row: k lives at qd in kv_dev
+                mn[6] = uint(nlfin + dim + l * 2l * hs)          // rms_q[l] past the fixed norms layout
+                mn[7] = uint(nlfin + dim + (l * 2l + 1l) * hs)   // rms_k[l]
+            }
             var mr = reinterpret<uint?>(L.m_rope.mapped)
             mr[0] = uint(qd); mr[1] = uint(kvd); mr[2] = uint(g_rd.head_size); mr[3] = uint(g_rd.head_size / 2l)
             mr[4] = g_rd.neox ? 1u : 0u; mr[5] = uint(qd / 2l); mr[6] = uint(qd / 2l + kvd / 2l)
@@ -4349,6 +4420,9 @@ def private rd_record_token {
             rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), [bar = false])
             rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), [bar = false])
             rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd))
+            if (g_rd.qk_norm) {
+                rd_dispatch(raw, g_gpu.qkn_pipeline, L.s_qkn, uint(g_rd.n_heads + kvd / g_rd.head_size))
+            }
             rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)))
             rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads))
             rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 32l + 255l) / 256l))
@@ -4398,9 +4472,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
 
 // ===== the resident prefill driver (batched, npos rows, one submit) =====
 // Batch-kernel twin of vk_rdec_token; only the LAST row's logits are produced (reuses the decode
-// tail). 15 prefill sets/layer + the buffers are built once; metas fill per call (npos varies).
+// tail). PF_ROLES prefill sets/layer + the buffers are built once; metas fill per call (npos varies).
 
-let private PF_ROLES = 15l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next
+let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
 def private pf_bind(idx : int; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64) {
     g_rd.pf_sets[idx] = rd_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5)
@@ -4442,7 +4516,7 @@ def private pf_setup {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
     let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
-    let normbytes = (g_rd.n_layers * 2l * dim + dim) * 4l
+    let normbytes = g_rd.norms_bytes
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
@@ -4490,6 +4564,11 @@ def private pf_setup {
         // 14 addr_next: x += ffnout, xb = rms_att[l+1]|final
         pf_bind(b + 14, g_rd.pf_x, g_rd.pf_ffnout, g_rd.pf_meta[b + 14].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
             np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l)
+        // 15 qk rmsnorm (qk_norm models): q@0 (pf_q), norm rows@3, eps@4, k@5 (pf_kv, k at 0)
+        if (g_rd.qk_norm) {
+            pf_bind(b + 15, g_rd.pf_q, g_rd.dummy, g_rd.pf_meta[b + 15].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_kv,
+                np * qd * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * 2l * kvd * 4l)
+        }
     }
     let bp = int(g_rd.n_layers * PF_ROLES)
     // prologue: xb = rms_att[0](x), add off
@@ -4604,6 +4683,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 invoke(mA, b + 1, dim, qd, L.bq, L.fq)
                 invoke(mA, b + 2, dim, kvd, L.bk, L.fk)
                 invoke(mA, b + 3, dim, kvd, L.bv, L.fv)
+                if (g_rd.qk_norm) {
+                    let hs = g_rd.head_size
+                    var mn = reinterpret<uint?>(g_rd.pf_meta[b + 15].mapped)
+                    mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
+                    mn[3] = uint(qd); mn[4] = uint(kvd); mn[5] = 0u   // k rows at 0 in pf_kv, kvd stride
+                    mn[6] = uint(nlfin + dim + l * 2l * hs)
+                    mn[7] = uint(nlfin + dim + (l * 2l + 1l) * hs)
+                }
                 var mr = reinterpret<uint?>(g_rd.pf_meta[b + 4].mapped)
                 mr[0] = uint(qd); mr[1] = uint(kvd); mr[2] = uint(g_rd.head_size); mr[3] = uint(g_rd.head_size / 2l)
                 mr[4] = g_rd.neox ? 1u : 0u; mr[5] = uint(qd / 2l); mr[6] = uint(pairs)
@@ -4651,6 +4738,10 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 rd_dispatch(raw, q8_batch_pipe(), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0))
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 comp_barrier(raw)
+                if (g_rd.qk_norm) {
+                    rd_dispatch(raw, g_gpu.qkn_pipeline, g_rd.pf_sets[b + 15],
+                        uint(wlen * (g_rd.n_heads + kvd / g_rd.head_size)))
+                }
                 rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg)
                 rd_dispatch(raw, g_gpu.da_b_pipeline, g_rd.pf_sets[b + 5], attnwg)
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l))
@@ -4678,23 +4769,29 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             w0 += wlen
         }
         memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, int(g_rd.vocab * 4l))
-        // per-role GPU aggregation: q0 start, q1 meta, q2 prologue, then 15/layer, final rq, cls —
-        // only when every stamp landed (a >135-layer graph would overflow PFQ_CAP and truncate).
+        // per-role GPU aggregation: q0 start, q1 meta, q2 prologue, then rpl/layer, final rq, cls —
+        // only when every stamp landed (a very deep graph would overflow PFQ_CAP and truncate).
         // Multi-window prompts: the stamps cover the LAST window only (the one with fin_rq + cls).
-        if (vk_prof() && g_pfq_n == 5u + uint(g_rd.n_layers * 15l)) {
-            var role : double[15]
+        let rpl = g_rd.qk_norm ? 16l : 15l
+        if (vk_prof() && g_pfq_n == 5u + uint(g_rd.n_layers * rpl)) {
+            var role : double[16]
             for (l in range64(g_rd.n_layers)) {
-                for (s in range(15)) {
-                    role[s] += pfq_us(uint(3l + l * 15l) + uint(s))
+                for (s in range(int(rpl))) {
+                    role[s] += pfq_us(uint(3l + l * rpl) + uint(s))
                 }
             }
-            let nq = 3u + uint(g_rd.n_layers * 15l)
+            let nq = 3u + uint(g_rd.n_layers * rpl)
             var tot = 0.0lf
-            for (s in range(15)) {
+            for (s in range(int(rpl))) {
                 tot += role[s]
             }
             tot += pfq_us(2u) + pfq_us(nq) + pfq_us(nq + 1u)
-            to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+            // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
+            if (g_rd.qk_norm) {
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+            } else {
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+            }
         }
     }
 }

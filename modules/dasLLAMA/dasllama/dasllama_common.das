@@ -2110,10 +2110,11 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
         return false
     }
     let c = t.config
-    // only the plain llama std shape for now — no bias, no sinks, no qk-norm (qwen3), no shared-KV,
-    // no softcap (gemma), no partial rotary. These decline cleanly and fall back to the CPU loop.
+    // the plain llama std shape + qk-norm (qwen3) — no bias, sinks, gated attention (its wq is
+    // 2x qd rows, and it rode the old qk_norm decline), shared-KV, softcap, or partial rotary.
+    // These decline cleanly and fall back to the CPU loop.
     if (c.attn_qkv_bias || c.attn_out_bias || c.v_norm || c.attn_sinks || c.moe_dense_shexp
-            || c.n_layer_nextn > 0l || c.qk_norm || c.attn_logit_softcap != 0.0
+            || c.n_layer_nextn > 0l || c.q_gated || c.attn_logit_softcap != 0.0
             || c.final_logit_softcap != 0.0 || c.pre_post_norm
             || (c.rope_dim > 0l && c.rope_dim != c.head_size)) {
         return false
@@ -2172,7 +2173,7 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
     let kg = repacked ? active_q8_kgroup() : 4l
     let wb = repacked ? active_q8_wbias() : 0l
     if (!rdec_prepare(c.n_layers, dim, qd, kvd, hs, c.n_heads, hid0, c.vocab_size, seq_cap, neox,
-                      c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)))) {
+                      c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm)) {
         return false
     }
     // place every plane, wire each layer
@@ -2199,9 +2200,10 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
         return false
     }
     rdec_set_cls(bcls, int(cls_fmt))
-    // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final
+    // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
+    // per-head [rms_q[l], rms_k[l]] x L rows (hs floats each) past the fixed layout
     var norms : array<float>
-    norms |> resize(int(c.n_layers * 2l * dim + dim))
+    norms |> resize(int(c.n_layers * 2l * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l)))
     for (l in range64(c.n_layers)) {
         for (i in range64(dim)) {
             norms[int(l * 2l * dim + i)] = t.fblob[t.rms_att_off + l * dim + i]
@@ -2210,6 +2212,15 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
     }
     for (i in range64(dim)) {
         norms[int(c.n_layers * 2l * dim + i)] = t.fblob[t.rms_final_off + i]
+    }
+    if (c.qk_norm) {
+        let qkw = c.n_layers * 2l * dim + dim
+        for (l in range64(c.n_layers)) {
+            for (i in range64(hs)) {
+                norms[int(qkw + l * 2l * hs + i)] = t.fblob[t.rms_q_offs[l] + i]
+                norms[int(qkw + (l * 2l + 1l) * hs + i)] = t.fblob[t.rms_k_offs[l] + i]
+            }
+        }
     }
     rdec_upload_norms(norms)
     delete norms
