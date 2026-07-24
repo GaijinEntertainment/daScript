@@ -10,12 +10,26 @@
 
 using namespace das;
 
+// Accelerate's internal pool starves against the spinning jobque (~50ms/call), and its threading
+// model is PER-THREAD state (thread_api.h: "saved in a thread local variable") — so the pin must
+// happen on every calling lane, not at init. Callers parallelize by strip-dispatching over the
+// jobque instead.
+static thread_local bool t_blas_pinned = false;
+static inline void accel_pin_single_thread() {
+    if (t_blas_pinned) return;
+    t_blas_pinned = true;
+    if (__builtin_available(macOS 15.0, *)) {
+        BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
+    }
+}
+
 // C[m x n] = A[m x k] * B[n x k]^T, row-major — the exact call shape ggml-blas.cpp uses for
 // mul_mat (activations A stay token-major, weights B stay row-major, no pre-transpose).
 static void accel_sgemm_nt(int32_t m, int32_t n, int32_t k,
                            const float * a, int32_t lda,
                            const float * b, int32_t ldb,
                            float * c, int32_t ldc) {
+    accel_pin_single_thread();
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 m, n, k,
                 1.0f, a, lda,
@@ -28,7 +42,18 @@ static void accel_sgemm_nt(int32_t m, int32_t n, int32_t k,
 static void accel_sgemv_n(int32_t n, int32_t k,
                           const float * w, int32_t ldw,
                           const float * x, float * y) {
+    accel_pin_single_thread();
     cblas_sgemv(CblasRowMajor, CblasNoTrans, n, k, 1.0f, w, ldw, x, 1, 0.0f, y, 1);
+}
+
+// Calling thread's effective BLAS threading mode after the pin: 0 = multi, 1 = single,
+// -1 = BLASSetThreading unavailable (pre-macOS-15). Diagnostics for the contention rig.
+static int32_t accel_threading_mode() {
+    accel_pin_single_thread();
+    if (__builtin_available(macOS 15.0, *)) {
+        return (int32_t)BLASGetThreading();
+    }
+    return -1;
 }
 
 namespace das {
@@ -36,9 +61,8 @@ namespace das {
 class Module_DasAccelerate : public Module {
 public:
     Module_DasAccelerate() : Module("das_accelerate") {
-        // Accelerate's internal pool deadlocks against a spinning jobque (35B A/B: 60 interleaved
-        // sgemm calls -> constant ~40ms/call starvation). Callers parallelize by strip-dispatching
-        // over the jobque instead; an explicit env still wins (overwrite=0).
+        // pre-macOS-15 fallback for the per-thread pin above (env read at Accelerate image init,
+        // so this only helps when the module loads before first BLAS use; explicit env still wins)
         setenv("VECLIB_MAXIMUM_THREADS", "1", 0);
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
@@ -48,6 +72,8 @@ public:
         addExtern<DAS_BIND_FUN(accel_sgemv_n)>(*this, lib, "accel_sgemv_n",
             SideEffects::modifyExternal, "accel_sgemv_n")
                 ->args({"n", "k", "w", "ldw", "x", "y"});
+        addExtern<DAS_BIND_FUN(accel_threading_mode)>(*this, lib, "accel_threading_mode",
+            SideEffects::modifyExternal, "accel_threading_mode");
     }
 };
 
