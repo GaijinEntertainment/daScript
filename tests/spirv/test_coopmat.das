@@ -68,6 +68,24 @@ def test_coopmat(t : T?) {
         }
         delete words
     }
+    t |> run("cooperative matrix f16 ACCUMULATOR + coopmatConvert widening (the mul_mm f16acc form)") <| @(t : T?) {
+        var words <- coopmat_f16acc_words()
+        t |> success(count_op(words, SpvOp.TypeCooperativeMatrixKHR) == 4,
+            "four OpTypeCooperativeMatrixKHR (A, B, f16 accumulator, f32 widened)")
+        t |> success(count_op(words, SpvOp.CooperativeMatrixMulAddKHR) == 1,
+            "one OpCooperativeMatrixMulAddKHR (f16 accumulate, no operands mask)")
+        t |> success(count_op(words, SpvOp.FConvert) == 1,
+            "one OpFConvert — the componentwise f16->f32 tile widening")
+        t |> success(count_op(words, SpvOp.CooperativeMatrixStoreKHR) == 1,
+            "one OpCooperativeMatrixStoreKHR (the f32 tile)")
+        let r = validate_spirv(words, "vulkan1.3")
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping (CI enforces)\n")
+        }
+        delete words
+    }
     t |> run("cooperative matrix from @workgroup shared memory (the tiled-GEMM staging path)") <| @(t : T?) {
         var words <- coopmat_sm_words()
         t |> success(count_op(words, SpvOp.CooperativeMatrixLoadKHR) == 2, "two coopmat loads (from shared)")

@@ -482,6 +482,7 @@ def private coopmat_info(t : TypeDecl?) : tuple<ok : bool; is_float : bool; sign
     if (n == "coopmatA_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR))
     if (n == "coopmatB_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR))
     if (n == "coopmatAcc_f32_16x16") return (ok = true, is_float = true, signed = false, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
+    if (n == "coopmatAcc_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
     if (n == "coopmatA_s8_16x32") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 16u, cols = 32u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR))
     if (n == "coopmatB_s8_32x16") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 32u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR))
     if (n == "coopmatAcc_s32_16x16") return (ok = true, is_float = false, signed = true, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
@@ -4230,6 +4231,39 @@ class SpirvEmit : AstVisitor {
             emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixMulAddKHR, ops)
             delete ops
             e2id[k] = res
+            return expr
+        }
+        // coopmatConvert(dst_f32_acc, src_f16_acc): componentwise OpFConvert over the tile — the
+        // f16-accumulate path's widening before an f32 store (llama.cpp's cast-then-coopMatStore)
+        if (name == "coopmatConvert") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatConvert is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 2) {
+                errs |> push("coopmatConvert expects (dst, src)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || !di.is_float || !si.is_float || di.comp_width != 32u || si.comp_width != 16u
+                    || di.use != si.use || di.rows != si.rows || di.cols != si.cols) {
+                errs |> push("coopmatConvert expects (f32 accumulator dst, f16 accumulator src) of one tile shape")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            let vs = coop_local_val(expr.arguments[1])
+            if (dst.id == 0u || dst.pty == 0u || vs == 0u) {
+                errs |> push("coopmatConvert: both arguments must be coopmat locals")
+                return expr
+            }
+            let res = alloc_id(bm)
+            var cops <- [dst.pty, res, vs]
+            emit_n(bm, SEC_FUNCS, SpvOp.FConvert, cops)
+            delete cops
+            var sops <- [dst.id, res]
+            emit_n(bm, SEC_FUNCS, SpvOp.Store, sops)
+            delete sops
             return expr
         }
         // barrier(): control + shared-memory barrier (OpControlBarrier at Workgroup execution+memory

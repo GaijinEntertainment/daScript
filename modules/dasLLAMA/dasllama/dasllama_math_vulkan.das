@@ -2948,6 +2948,15 @@ var private g_gpu : GpuState?
 var private g_init_failed = false
 var private g_vk_prof = false      // DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
 var private g_vk_prof_probed = false
+var private g_vk_dispatches = 0ul
+var private g_vk_submits = 0ul
+
+//! Lifetime vkCmdDispatch calls the tier RECORDS (not executions — a re-submitted pre-recorded
+//! cmd does not advance it). Pair with vk_submit_count for per-step encode-cost deltas.
+def vk_dispatch_count : uint64 => g_vk_dispatches
+
+//! Lifetime queue submissions (real cmds + staging round-trips).
+def vk_submit_count : uint64 => g_vk_submits
 
 def private vk_prof : bool {
     if (!g_vk_prof_probed) {
@@ -3230,6 +3239,7 @@ def private staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
     var regions : array<BufferCopy>
     let rc = BufferCopy(srcOffset = 0ul, dstOffset = uint64(dst_off), size = uint64(bytes))
     regions |> push(rc)
+    g_vk_submits++
     run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
         cmd_copy_buffer(cmd, nonowning_buf(g_gpu.staging.buf), nonowning_buf(dst), regions)
     }
@@ -3536,9 +3546,12 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     let bb = arena_block_bytes(fmt)
     let qbytes = cap_blocks * bb.wq
     let sbytes = cap_blocks * bb.ws
-    // maxStorageBufferRange, not uint32 indexing (that reaches 16GiB), is the real ceiling
-    if (qbytes > 2_147_483_648l || sbytes > 2_147_483_648l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant bytes — over the 2GiB shard cap\n")
+    // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
+    var lp : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
+    let shard_cap = int64(lp.limits.maxStorageBufferRange)
+    if (qbytes > shard_cap || sbytes > shard_cap) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
         return false
     }
     var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
@@ -3943,6 +3956,9 @@ struct private RDec {
     cls_fmt_marker : int
     layers : array<RLayer>
     cmd : VkCommandBuffer
+    tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
+    cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
+    ffn_meta_h : HostBuf          // decode-owned actrq meta source (g_gpu.ffn_meta is shared with the batch rails)
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
     pf_np : int64                 // MAX_NPOS the buffers were sized for
@@ -4025,6 +4041,8 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     r.logits_dev = make_device_buf(vocab * 4l)
     r.dummy = make_device_buf(256l)
     r.x_host = make_host_buf(dim * 4l, false, [cached = true])
+    r.cos_host = make_host_buf(head_size * 4l, false, [cached = true])
+    r.ffn_meta_h = make_host_buf(FFN_META_BYTES, false)
     r.logits_host = make_host_buf(vocab * 4l, false, [cached = true])
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
@@ -4112,6 +4130,7 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
             dim * 4l, dim * 4l, META_BYTES, (g_rd.n_layers * 2l * dim + dim) * 4l, 64l, dim * 4l)
         L.made = true
     }
+    g_rd.tok_recorded = false   // the recorded chain references the replaced sets
 }
 
 //! Register the classifier plane (arena block + format) and build the prologue / final-norm / cls
@@ -4145,6 +4164,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         mp[5] = 0u
         staged_upload(g_rd.cls_meta_dev, 0l, CLS_META_BYTES)
         g_rd.cls_fmt_marker = cls_fmt
+        g_rd.tok_recorded = false   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
     }
 }
@@ -4244,44 +4264,50 @@ def private pfq_us(i : uint) : double {
     }
 }
 
-def private rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint) {
+// bar = false joins the NEXT dispatch into one barrier level — the caller owns the disjointness proof
+def private rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; bar : bool = true) {
     cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, set, groups)
-    comp_barrier(raw)
+    if (bar) {
+        comp_barrier(raw)
+    }
     pfq_ts(raw)
 }
 
 // GEMV dispatch — the per-format kernel selected off the plane format
-def private rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint) {
+def private rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint; bar : bool = true) {
     bind_gemv_pipe(raw, fmt)
     cmd_bind_dispatch(raw, set, groups)
-    comp_barrier(raw)
+    if (bar) {
+        comp_barrier(raw)
+    }
     pfq_ts(raw)
 }
 
-//! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
-//! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one;
-//! K/V for `pos` get stored into the mirror as a side effect.
-def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
-    assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
+// Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
+// per-token state is only x/cos (in-cmd copies) and the rope/attn position words (host-visible)
+def private rd_record_token {
     let dim = g_rd.dim
     let qd = g_rd.qd
     let kvd = g_rd.kv_dim
     let hid = g_rd.hidden
     let nlfin = g_rd.n_layers * 2l * dim   // rms_final offset in the norms buffer (dim units later)
     unsafe {
-        // per-token host state — attn scalars ([0]=scale) and add_rms scalars ([0]=eps, [1]=ascale)
+        // constant scalars — attn ([0]=scale) and add_rms ([0]=eps, [1]=ascale)
         var sp = reinterpret<float?>(g_gpu.staging.mapped)
         sp[0] = g_rd.scale
         staged_upload(g_rd.scal_dev, 0l, 64l)
         sp[0] = g_rd.eps
         sp[1] = 1.0
         staged_upload(g_rd.ar_scal_dev, 0l, 64l)
-        upload_region_at(g_rd.x_dev, 0l, addr<uint8 const?>(x[0]), dim * 4l)
-        upload_region_at(g_rd.cos_dev, 0l, addr<uint8 const?>(cossin[0]), g_rd.head_size * 4l)
-        // fill the FFN act+requant meta once (gelu off; nfe blocks = hidden/32)
-        fill_ffn_meta(hid, hid / 32l, false)
-        // fill all metas
+        // decode-owned actrq meta — the in-cmd copy re-establishes ffn_meta_dev every submit (batch rails share it)
+        var fp = reinterpret<uint?>(g_rd.ffn_meta_h.mapped)
+        fp[0] = uint(hid)
+        fp[1] = 0u
+        fp[2] = uint(hid / 32l)
+        for (i in range(5)) {
+            fp[3 + i] = 0u
+        }
         fill_addrms_meta(g_rd.m_prologue, dim, 0l, false)   // rms_att[0] at offset 0
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
@@ -4292,9 +4318,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
             var mr = reinterpret<uint?>(L.m_rope.mapped)
             mr[0] = uint(qd); mr[1] = uint(kvd); mr[2] = uint(g_rd.head_size); mr[3] = uint(g_rd.head_size / 2l)
             mr[4] = g_rd.neox ? 1u : 0u; mr[5] = uint(qd / 2l); mr[6] = uint(qd / 2l + kvd / 2l)
-            mr[7] = uint(l * g_rd.seq_cap * kvd + pos * kvd); mr[8] = uint(l * g_rd.seq_cap * kvd + pos * kvd)
             var ma = reinterpret<uint?>(L.m_attn.mapped)
-            ma[0] = uint(cnt); ma[2] = uint(kvd); ma[3] = uint(g_rd.head_size); ma[4] = uint(g_rd.kv_mul)
+            ma[2] = uint(kvd); ma[3] = uint(g_rd.head_size); ma[4] = uint(g_rd.kv_mul)
             ma[5] = uint(l * g_rd.seq_cap * kvd); ma[6] = uint(l * g_rd.seq_cap * kvd)
             fill_quant_meta(L.m_quant_at, qd / 32l)
             fill_gemv_meta(L.m_wo, qd, dim, 0l, L.bo)
@@ -4307,20 +4332,22 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
             fill_addrms_meta(L.m_addr_next, dim, nxt, true)
         }
         fill_quant_meta(g_rd.m_quant_final, dim / 32l)
-        // record the whole token
         var raw = g_rd.cmd
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        comp_barrier(raw)
+        cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
+        cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
+        cmd_copy_whole(raw, g_rd.ffn_meta_h.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
+        batch_barrier(raw, true)   // transfer -> compute (a compute-only barrier under-orders these copies)
         rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.s_prologue, 1u)   // xb = rms_att[0](x)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 32l + 255l) / 256l))
-            rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd))
-            rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd))
+            // q|k|v: one level — all read xq/xs; q writes q_dev, k/v disjoint kv_dev ranges
+            rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), [bar = false])
+            rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), [bar = false])
             rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd))
             rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)))
             rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads))
@@ -4328,7 +4355,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
             rd_dispatch_gemv(raw, L.fo, L.s_wo, rd_gemv_wg(dim))
             rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_ffn, 1u)
             rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 32l + 255l) / 256l))
-            rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid))
+            // gate|up: one level — both read xq/xs, write gate_dev / up_dev
+            rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), [bar = false])
             rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid))
             rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 32l + 255l) / 256l))
             rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim))
@@ -4336,9 +4364,34 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
         }
         rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 32l + 255l) / 256l))
         rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab))
+        batch_barrier(raw, false)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
+    }
+    g_rd.tok_recorded = true
+}
+
+//! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
+//! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one; K/V
+//! for `pos` store into the mirror. Recorded once — a step is two memcpys + position words + one submit.
+def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
+    assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
+    if (!g_rd.tok_recorded) {
+        rd_record_token()
+    }
+    let kvd = g_rd.kv_dim
+    unsafe {
+        memcpy(g_rd.x_host.mapped, addr<void? -const>(x[0]), int(g_rd.dim * 4l))
+        memcpy(g_rd.cos_host.mapped, addr<void? -const>(cossin[0]), int(g_rd.head_size * 4l))
+        for (l in range64(g_rd.n_layers)) {
+            var L & = g_rd.layers[l]
+            var mr = reinterpret<uint?>(L.m_rope.mapped)
+            mr[7] = uint(l * g_rd.seq_cap * kvd + pos * kvd)
+            mr[8] = uint(l * g_rd.seq_cap * kvd + pos * kvd)
+            var ma = reinterpret<uint?>(L.m_attn.mapped)
+            ma[0] = uint(cnt)
+        }
+        submit_wait(g_rd.cmd)
         memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, int(g_rd.vocab * 4l))
     }
 }
@@ -4827,6 +4880,7 @@ def private cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet;
     unsafe {
         vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(g_gpu.pipe_layout), 0u, 1u, addr(set_), 0u, null)
     }
+    g_vk_dispatches++
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
@@ -4881,6 +4935,7 @@ def private bind_batch_pipe(raw : VkCommandBuffer; fmt : int) {
 }
 
 def private submit_nowait(var raw : VkCommandBuffer) {
+    g_vk_submits++
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
     let fence = g_gpu.fence
