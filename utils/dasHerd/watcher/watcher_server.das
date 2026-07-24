@@ -637,7 +637,8 @@ class DasHerdWatcherServer : HvWebServer {
             kind = kind, target_id = "local",
             repository_id = incoming.repository_id,
             worktree_path = incoming.worktree_path,
-            columns = 160, rows = 50, timeout_ms = 15000l)
+            columns = 160, rows = 50, timeout_ms = 15000l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS)
         request.argv := argv
         let result = watcher_launch(request)
         client.action_session_id = result.session_id
@@ -763,7 +764,8 @@ class DasHerdWatcherServer : HvWebServer {
             repository_id = incoming.repository_id,
             worktree_path = incoming.new_worktree_path,
             purpose = "debug-setup", task_context = incoming.task_context,
-            columns = 120, rows = 30, timeout_ms = 0l))
+            columns = 120, rows = 30, timeout_ms = 0l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS))
         if (!created.ok) {
             send_error(client.channel, created.error)
             return
@@ -875,7 +877,8 @@ class DasHerdWatcherServer : HvWebServer {
             kind = "git-file-view", target_id = "local",
             repository_id = client.inspection_repository_id,
             worktree_path = client.inspection_worktree_path,
-            columns = 80, rows = 25, timeout_ms = 15000l)
+            columns = 80, rows = 25, timeout_ms = 15000l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS)
         request.argv := argv
         let result = watcher_launch(request)
         client.inspection_phase = "indexed-view"
@@ -937,7 +940,8 @@ class DasHerdWatcherServer : HvWebServer {
             kind = "git-file-diff", target_id = "local",
             repository_id = incoming.repository_id,
             worktree_path = incoming.worktree_path,
-            columns = 80, rows = 25, timeout_ms = 15000l)
+            columns = 80, rows = 25, timeout_ms = 15000l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS)
         request.argv := argv
         let result = watcher_launch(request)
         client.inspection_session_id = result.session_id

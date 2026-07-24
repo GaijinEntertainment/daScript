@@ -14,6 +14,11 @@ require strings public
 require math
 
 let private DEFAULT_DRAIN_QUIET_MS = 250l
+// Structured non-interactive tasks (git observation, capture helpers) parse
+// machine output after exit. Across 1968 logged sessions the pipe outlived the
+// conservative 250ms quiet interval in all but 2; output was always complete
+// at process exit, so a short quiet window only guards ConHost flush latency.
+let public WATCHER_STRUCTURED_DRAIN_QUIET_MS = 40l
 let private MAX_COMMAND_BYTES = 32 * 1024
 let private MAX_INPUT_BYTES = 1024 * 1024
 let private MAX_RAW_HISTORY_BYTES = 8 * 1024 * 1024
@@ -51,6 +56,8 @@ struct public WatcherLaunchRequest {
     columns : int = 100
     rows : int = 30
     timeout_ms : int64
+    // 0 keeps the conservative interactive default (DEFAULT_DRAIN_QUIET_MS).
+    drain_quiet_ms : int64
 }
 
 def public watcher_target_id_or_local(target_id : string) : string {
@@ -287,6 +294,7 @@ class private WatcherSession {
     events_file : FILE const? = null
     started : int64
     timeout_ms : int64
+    drain_quiet_ms : int64
     last_data_ms : int64
     exit_seen_ms : int64 = -1l
     exit_code : int64 = -1l
@@ -480,7 +488,8 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         events_path = path_join(session_dir, "events.jsonl"),
         mailbox_path = path_join(session_dir, "mailbox.jsonl"),
         bundles_path = path_join(session_dir, "bundles.jsonl"),
-        started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms))
+        started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms),
+        drain_quiet_ms = max(0l, request.drain_quiet_ms))
     session.context_path = path_join(session_dir, "context.md")
     session.output_file = fopen(session.output_path, "wb")
     session.events_file = fopen(session.events_path, "wb")
@@ -614,8 +623,12 @@ def public watcher_tick(maximum_bytes_per_session : int = 64 * 1024) {
         enforce_timeout(session, now_ms)
         if (status == TerminalPollStatus.closed) {
             finish_drain(session, "pipe_closed")
-        } elif (session.exit_seen_ms >= 0l && now_ms - session.last_data_ms >= DEFAULT_DRAIN_QUIET_MS) {
-            finish_drain(session, "quiet_interval")
+        } else {
+            let quiet_ms = (session.drain_quiet_ms > 0l
+                ? session.drain_quiet_ms : DEFAULT_DRAIN_QUIET_MS)
+            if (session.exit_seen_ms >= 0l && now_ms - session.last_data_ms >= quiet_ms) {
+                finish_drain(session, "quiet_interval")
+            }
         }
     }
 }
