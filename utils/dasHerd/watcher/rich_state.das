@@ -123,6 +123,16 @@ struct WatcherRawResetMessage {
     offset : int64
 }
 
+struct WatcherWorktreeFilesMessage {
+    @rename = "type" _type : string
+    request_id : int
+    repository_id : string
+    worktree_path : string
+    loading : bool
+    listing : string
+    error : string
+}
+
 struct WatcherTerminalCheckpointMessage {
     @rename = "type" _type : string
     offset : int64
@@ -174,6 +184,7 @@ struct GitInspectorState {
     // State-level code cannot touch UI-module widget globals directly.
     pending_widget_sync : bool
     pending_select_diff_tab : bool
+    pending_select_view_tab : bool
     task_session_id : string
     loading : bool
     status : string
@@ -382,6 +393,13 @@ var g_open_git_windows_pending = false
 var g_dock_reset_pending = false
 var g_show_exited = false
 var g_show_tasks = false
+var g_layout_preset = 0
+// Worktree Files: full project structure of the selected worktree.
+var g_worktree_files : array<string>
+var g_worktree_files_identity = ""
+var g_worktree_files_loading = false
+var g_worktree_files_error = ""
+var g_files_expanded : table<string; bool>
 
 def session_is_task(kind : string) : bool {
     return starts_with(kind, "git-") || kind == "worktree-create"
@@ -585,8 +603,15 @@ def drain_inspector_prepare_events() {
             g_inspector.resolved_language = g_inspector.prepare_language
             g_inspector.pending_widget_sync = true
             if (g_inspector.pending_select_diff) {
-                g_inspector.mode = GitInspectorMode.diff
-                g_inspector.pending_select_diff_tab = true
+                let clean_view = (empty(g_inspector.parsed.hunks)
+                    && !g_inspector.parsed.binary && g_inspector.view_prepared)
+                g_inspector.mode = (clean_view
+                    ? GitInspectorMode.view : GitInspectorMode.diff)
+                if (clean_view) {
+                    g_inspector.pending_select_view_tab = true
+                } else {
+                    g_inspector.pending_select_diff_tab = true
+                }
             }
             g_inspector.pending_select_diff = false
             upload_inspector_preview(

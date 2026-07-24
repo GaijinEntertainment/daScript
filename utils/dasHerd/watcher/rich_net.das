@@ -70,6 +70,7 @@ class WatcherRichClient : HvWebSocketClient {
     list_send_count : int64
     list_send_failure_count : int64
     list_last_result : int
+    worktree_files_request_id : int
 
     def override onOpen {
         connected = true
@@ -100,6 +101,8 @@ class WatcherRichClient : HvWebSocketClient {
         last_review_identity = ""
         last_history_identity = ""
         last_refs_identity = ""
+        g_worktree_files_identity = ""
+        g_worktree_files_loading = false
         if (git_action_loading) {
             git_action_loading = false
             git_action_status = "interrupted"
@@ -263,6 +266,37 @@ class WatcherRichClient : HvWebSocketClient {
             var incoming : WatcherMailboxPostedMessage
             if (sscan_json(body, incoming)) {
                 g_last_human_request = incoming.message_id
+            }
+        } elif (envelope._type == "worktree_files") {
+            var incoming : WatcherWorktreeFilesMessage
+            if (sscan_json(body, incoming)
+                    && incoming.request_id == worktree_files_request_id) {
+                if (!incoming.loading) {
+                    g_worktree_files_loading = false
+                    g_worktree_files_error = incoming.error
+                    if (empty(incoming.error)) {
+                        delete g_worktree_files
+                        peek_data(incoming.listing) $(bytes) {
+                            var start = 0
+                            for (index in range(length(bytes) + 1)) {
+                                let at_end = index == length(bytes)
+                                if (at_end || int(bytes[index]) == '\n') {
+                                    var line_end = index
+                                    if (line_end > start
+                                            && int(bytes[line_end - 1]) == '\r') {
+                                        line_end--
+                                    }
+                                    if (line_end > start) {
+                                        g_worktree_files |> push(slice(
+                                            incoming.listing, start, line_end))
+                                    }
+                                    start = index + 1
+                                }
+                            }
+                        }
+                        sort(g_worktree_files)
+                    }
+                }
             }
         } elif (envelope._type == "file_inspection") {
             var incoming : WatcherFileInspectionMessage
@@ -514,6 +548,33 @@ class WatcherRichClient : HvWebSocketClient {
         send("\{\"op\":\"repository_refs\"," +
             "\"repository_id\":{sprint_json(repository_id, false)}," +
             "\"worktree_path\":{sprint_json(worktree_path, false)}\}")
+    }
+
+    def request_worktree_files(repository_id, worktree_path : string) {
+        if (!connected || empty(repository_id) || empty(worktree_path)) return
+        worktree_files_request_id++
+        g_worktree_files_loading = true
+        g_worktree_files_error = ""
+        g_worktree_files_identity = "{repository_id}\n{worktree_path}"
+        send("\{\"op\":\"worktree_files\"," +
+            "\"request_id\":{worktree_files_request_id}," +
+            "\"repository_id\":{sprint_json(repository_id, false)}," +
+            "\"worktree_path\":{sprint_json(worktree_path, false)}\}")
+    }
+
+    def post_file_focus(repository_id, worktree_path, file_path : string) {
+        if (!connected || empty(selected_id) || empty(file_path)) return
+        let payload = ("\{\"op\":\"mailbox_post\",\"session_id\":" +
+            "{sprint_json(selected_id, false)},\"direction\":\"inbox\"," +
+            "\"sender\":\"human:local\",\"kind\":\"focus_set\"," +
+            "\"subject\":\"Look at this file\",\"notify\":true,\"focus\":\{" +
+            "\"repository_id\":{sprint_json(repository_id, false)}," +
+            "\"worktree_path\":{sprint_json(worktree_path, false)}," +
+            "\"comparison\":\"working\"," +
+            "\"summary\":\"Human-selected file\",\"targets\":[\{" +
+            "\"file_path\":{sprint_json(file_path, false)}," +
+            "\"whole_file\":true,\"ranges\":[]\}]\}\}")
+        send(payload)
     }
 
     def git_file_action(repository_id : string; worktree_path : string;

@@ -31,29 +31,76 @@ require ./rich_inspector_ui.das
 require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
+require ./rich_files_ui.das
 require ./rich_live.das
 
-def setup_default_layout(dock_id : uint) {
+// Session preset: the terminal is the spine; the inspector and Git
+// surfaces share a modest right column (HERDER_UX.md scenarios).
+def private setup_session_layout(dock_id : uint) {
     DockBuilderRemoveNode(dock_id)
     DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
     let viewport = GetMainViewport()
     DockBuilderSetNodeSize(dock_id, viewport.Size)
     var left_id : uint = 0u
+    var center_id : uint = 0u
     var right_id : uint = 0u
-    DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.24f, left_id, right_id)
     var repositories_id : uint = 0u
     var sessions_id : uint = 0u
-    DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.42f,
+    DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.18f, left_id, center_id)
+    DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.45f,
         sessions_id, repositories_id)
-    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
+    DockBuilderSplitNode(center_id, ImGuiDir.Right, 0.32f, right_id, center_id)
     DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
+    DockBuilderDockWindow("Worktree Files", repositories_id)
+    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
+    DockBuilderDockWindow("File Inspector", right_id)
     DockBuilderDockWindow("Git Changelist", right_id)
     DockBuilderDockWindow("Git Activity", right_id)
-    DockBuilderDockWindow("File Inspector", right_id)
     DockBuilderDockWindow("Settings", right_id)
-    DockBuilderDockWindow("Terminal", right_id)
+    DockBuilderDockWindow("Terminal", center_id)
     DockBuilderFinish(dock_id)
     TERMINAL_WIN.pending_raise = true
+}
+
+// Review preset: terminal and inspector side by side, one Git column.
+def private setup_review_layout(dock_id : uint) {
+    DockBuilderRemoveNode(dock_id)
+    DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
+    let viewport = GetMainViewport()
+    DockBuilderSetNodeSize(dock_id, viewport.Size)
+    var left_id : uint = 0u
+    var work_id : uint = 0u
+    var repositories_id : uint = 0u
+    var sessions_id : uint = 0u
+    var git_column_id : uint = 0u
+    var activity_id : uint = 0u
+    var changelist_id : uint = 0u
+    var terminal_id : uint = 0u
+    DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.14f, left_id, work_id)
+    DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.45f,
+        sessions_id, repositories_id)
+    DockBuilderSplitNode(work_id, ImGuiDir.Right, 0.24f, git_column_id, work_id)
+    DockBuilderSplitNode(git_column_id, ImGuiDir.Down, 0.55f,
+        changelist_id, activity_id)
+    DockBuilderSplitNode(work_id, ImGuiDir.Left, 0.40f, terminal_id, work_id)
+    DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
+    DockBuilderDockWindow("Worktree Files", repositories_id)
+    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
+    DockBuilderDockWindow("Git Activity", activity_id)
+    DockBuilderDockWindow("Git Changelist", changelist_id)
+    DockBuilderDockWindow("Terminal", terminal_id)
+    DockBuilderDockWindow("File Inspector", work_id)
+    DockBuilderDockWindow("Settings", work_id)
+    DockBuilderFinish(dock_id)
+    FILE_INSPECTOR_WIN.pending_raise = true
+}
+
+def private setup_layout_preset(dock_id : uint) {
+    if (g_layout_preset == 1) {
+        setup_review_layout(dock_id)
+    } else {
+        setup_session_layout(dock_id)
+    }
 }
 
 var private MENU_ERROR_POPUP : PopupContextItemState
@@ -205,6 +252,10 @@ def draw_main_menu() {
                     (text = "Terminal", selected = TERMINAL_WIN.open))) {
                 open_dock_window(TERMINAL_WIN)
             }
+            if (menu_label(VIEW_WORKTREE_FILES,
+                    (text = "Worktree Files", selected = WORKTREE_FILES_WIN.open))) {
+                open_dock_window(WORKTREE_FILES_WIN)
+            }
             separator(VIEW_WINDOWS_SEPARATOR)
             menu_item(SHOW_EXITED, (text = "Show exited sessions"))
             g_show_exited = SHOW_EXITED.value
@@ -220,6 +271,14 @@ def draw_main_menu() {
                 g_terminal_view.scroll_offset = 0
             }
             separator(VIEW_LAYOUT_SEPARATOR)
+            if (menu_label(VIEW_SESSION_LAYOUT, (text = "Session layout",
+                    selected = g_layout_preset == 0))) {
+                apply_layout_preset(0)
+            }
+            if (menu_label(VIEW_REVIEW_LAYOUT, (text = "Review layout",
+                    selected = g_layout_preset == 1))) {
+                apply_layout_preset(1)
+            }
             if (menu_label(VIEW_RESET_LAYOUT, (text = "Reset layout"))) reset_layout()
         }
         menu(SETTINGS_MENU, (text = "Settings", enabled = true)) {
@@ -294,7 +353,7 @@ def update() {
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
             if (g_layout_force_default) {
-                setup_default_layout(DOCK_ROOT.dock_id)
+                setup_layout_preset(DOCK_ROOT.dock_id)
                 DOCK_ROOT.has_initial_layout = true
                 g_layout_probe_complete = true
                 g_layout_force_default = false
@@ -306,7 +365,7 @@ def update() {
                 if (restored_layout) {
                     DOCK_ROOT.has_initial_layout = true
                 } else {
-                    setup_default_layout(DOCK_ROOT.dock_id)
+                    setup_layout_preset(DOCK_ROOT.dock_id)
                     DOCK_ROOT.has_initial_layout = true
                 }
             } else {
@@ -314,6 +373,7 @@ def update() {
             }
         }
         draw_repositories_dock()
+        draw_worktree_files_dock()
         draw_sessions_dock()
         draw_git_activity_dock()
         draw_git_changelist_dock()

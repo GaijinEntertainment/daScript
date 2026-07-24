@@ -627,7 +627,11 @@ def draw_file_inspector_content() {
         if (g_inspector.pending_select_diff_tab) {
             INSPECTOR_DIFF_TAB.pending_select = true
         }
+        if (g_inspector.pending_select_view_tab) {
+            INSPECTOR_VIEW_TAB.pending_select = true
+        }
         g_inspector.pending_select_diff_tab = false
+        g_inspector.pending_select_view_tab = false
         g_inspector.pending_widget_sync = false
     }
     let io & = unsafe(GetIO())

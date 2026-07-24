@@ -112,6 +112,17 @@ struct public RepositoryGitFileActionMessage {
     error : string
 }
 
+struct public RepositoryWorktreeFilesMessage {
+    @rename = "type"
+    _type : string = "worktree_files"
+    request_id : int
+    repository_id : string
+    worktree_path : string
+    loading : bool
+    listing : string
+    error : string
+}
+
 struct private WatcherTerminalCheckpointMessage {
     @rename = "type"
     _type : string = "terminal_checkpoint"
@@ -171,6 +182,12 @@ class private WatcherClient {
     action : string
     action_session_id : string
     action_delivered : bool = true
+    files_request_id : int
+    files_session_id : string
+    files_artifact_path : string
+    files_repository_id : string
+    files_worktree_path : string
+    files_delivered : bool = true
 }
 
 struct private WatcherOk {
@@ -589,6 +606,106 @@ class DasHerdWatcherServer : HvWebServer {
             self.remember_inspection_artifact(path)
         }
         client.inspection_artifact_path = ""
+    }
+
+    def cleanup_files_artifact(var client : WatcherClient?) {
+        if (client == null || empty(client.files_artifact_path)) return
+        let path = client.files_artifact_path
+        if (fexist(path) && !remove(path)) {
+            self.remember_inspection_artifact(path)
+        }
+        client.files_artifact_path = ""
+    }
+
+    def send_worktree_files(var client : WatcherClient?; loading : bool;
+                            listing : string; error : string = "") {
+        if (client == null) return
+        let message = RepositoryWorktreeFilesMessage(
+            request_id = client.files_request_id,
+            repository_id = client.files_repository_id,
+            worktree_path = client.files_worktree_path,
+            loading = loading, listing = listing, error = error)
+        send(client.channel, sprint_json(message, false),
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
+    def start_worktree_files(var client : WatcherClient?;
+                             incoming : WatcherWsMessage const) {
+        if (client == null || empty(incoming.repository_id)
+                || empty(incoming.worktree_path)) return
+        client.files_request_id = incoming.request_id
+        client.files_repository_id = incoming.repository_id
+        client.files_worktree_path = incoming.worktree_path
+        client.files_session_id = ""
+        self.cleanup_files_artifact(client)
+        let artifact_path = watcher_scratch_artifact_path(
+            "files-{client.id}-{incoming.request_id}.txt")
+        if (empty(artifact_path)) {
+            client.files_delivered = true
+            self.send_worktree_files(client, false, "",
+                "could not allocate the file-listing capture path")
+            return
+        }
+        var inscope listing_argv <- ["git", "-C", incoming.worktree_path,
+            "-c", "core.quotePath=false", "ls-files", "--cached", "--others",
+            "--exclude-standard"]
+        var inscope argv : array<string>
+        let command_error = repository_capture_argv(listing_argv,
+            artifact_path, 0l, argv)
+        if (!empty(command_error)) {
+            client.files_delivered = true
+            self.send_worktree_files(client, false, "", command_error)
+            return
+        }
+        let _pruned = watcher_prune_completed_sessions(
+            "git-ls-files", incoming.repository_id, incoming.worktree_path)
+        var inscope request = WatcherLaunchRequest(
+            cwd = incoming.worktree_path,
+            display_name = "Git files: {incoming.worktree_path}",
+            kind = "git-ls-files", target_id = "local",
+            repository_id = incoming.repository_id,
+            worktree_path = incoming.worktree_path,
+            columns = 80, rows = 25, timeout_ms = 15000l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS)
+        request.argv := argv
+        let result = watcher_launch(request)
+        client.files_session_id = result.session_id
+        client.files_artifact_path = artifact_path
+        if (!result.ok) {
+            client.files_delivered = true
+            self.cleanup_files_artifact(client)
+            self.send_worktree_files(client, false, "", result.error)
+            return
+        }
+        client.files_delivered = false
+        self.send_worktree_files(client, true, "")
+    }
+
+    def poll_worktree_files(var client : WatcherClient?) {
+        if (client == null || client.files_delivered
+                || empty(client.files_session_id)) return
+        var info = WatcherSessionInfo()
+        if (!watcher_get_session_info(client.files_session_id, info)
+                || !info.drained) return
+        client.files_delivered = true
+        var truncated = false
+        let output = watcher_machine_output_text(client.files_session_id, truncated)
+        let _compacted = watcher_compact_session(client.files_session_id, 80, 25)
+        if (info.exit_code != 0l) {
+            self.cleanup_files_artifact(client)
+            self.send_worktree_files(client, false, "",
+                "git ls-files failed: {output}")
+            return
+        }
+        var listing = ""
+        let read_error = repository_read_text_file(
+            client.files_artifact_path, MAX_FILE_PREVIEW_RAW_BYTES, listing)
+        self.cleanup_files_artifact(client)
+        if (!empty(read_error)) {
+            self.send_worktree_files(client, false, "", read_error)
+            return
+        }
+        self.send_worktree_files(client, false, listing)
     }
 
     def send_git_file_action(var client : WatcherClient?; loading : bool;
@@ -1183,6 +1300,7 @@ class DasHerdWatcherServer : HvWebServer {
         let client_id = client.id
         detach(client, "client_closed")
         self.cleanup_inspection_artifact(client)
+        self.cleanup_files_artifact(client)
         self.remember_orphaned_git_action(client)
         clients |> erase(index)
         unsafe { delete client }
@@ -1237,6 +1355,8 @@ class DasHerdWatcherServer : HvWebServer {
             self.start_git_file_action(client, incoming)
         } elif (incoming.op == "file_inspect") {
             self.start_file_inspection(client, incoming)
+        } elif (incoming.op == "worktree_files") {
+            self.start_worktree_files(client, incoming)
         } elif (incoming.op == "mailbox_post") {
             let request = WatcherMailboxPostRequest(
                 session_id = incoming.session_id,
@@ -1399,6 +1519,7 @@ class DasHerdWatcherServer : HvWebServer {
             send_bundles(client)
             self.poll_git_file_action(client)
             self.poll_file_inspection(client)
+            self.poll_worktree_files(client)
         }
     }
 

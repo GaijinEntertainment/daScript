@@ -35,6 +35,7 @@ require ./rich_inspector_ui.das
 require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
+require ./rich_files_ui.das
 
 struct HerderInspectorTextArgs {
     side : string = "view"
@@ -83,8 +84,10 @@ def open_dock_window(var state : DockWindowState) {
     state.pending_raise = true
 }
 
-def reset_layout() {
+def apply_layout_preset(preset : int) {
+    g_layout_preset = preset
     REPOSITORIES_WIN.open = true
+    WORKTREE_FILES_WIN.open = true
     SESSIONS_WIN.open = true
     GIT_CHANGELIST_WIN.open = true
     GIT_ACTIVITY_WIN.open = true
@@ -94,6 +97,10 @@ def reset_layout() {
     g_layout_probe_complete = false
     g_layout_force_default = true
     g_dock_reset_pending = true
+}
+
+def reset_layout() {
+    apply_layout_preset(g_layout_preset)
 }
 
 [live_command(description = "Inspect watcher connectivity and rich-client repository/session counts.")]
