@@ -63,7 +63,9 @@ def private check_fp32(t : T?; ntok : int; expect_exact : bool) {
     }
 }
 
-def private check_bf16(t : T?; ntok : int) {
+// f16_lane routes the accelerate half through the BNNS f16 lane (weights bf16->f16 exact,
+// activations f32->f16 rounded, f32 accumulate) — one x rounding step, so a looser envelope.
+def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     var wbf : array<uint16>
     wbf |> resize(D * N)
     {
@@ -77,10 +79,16 @@ def private check_bf16(t : T?; ntok : int) {
     var x : array<float>
     x |> resize(ntok * N)
     fill01(x, 7u)
+    if (f16_lane && !dasllama_accelerate_set_f16(true)) {
+        to_log(LOG_WARNING, "BNNS probe failed on this OS — f16 lane arm feints\n")
+        t |> success(true)
+        return
+    }
     let r <- ref_and_accel(ntok) $(var y) {
         matmul_bf16_batch(y, wbf, 0l, x, int64(N), int64(D), int64(ntok))
     }
-    t |> success(max_rel_err(r.yref, r.yacc) < 1e-4)
+    dasllama_accelerate_set_f16(false)
+    t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
 }
 
 [test]
@@ -89,11 +97,15 @@ def test_accel_float_batch(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             dasllama_accelerate_set_min_mmac(0l)  // tiny test shapes must engage, not fall through
+            dasllama_accelerate_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
             t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {
                 check_fp32(t, NTOK, false)
             }
             t |> run("bf16 batch vs portable (tolerance)") @(t : T?) {
-                check_bf16(t, NTOK)
+                check_bf16(t, NTOK, false)
+            }
+            t |> run("bf16 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
+                check_bf16(t, NTOK, true)
             }
             t |> run("below-gate ntok falls through bit-exact") @(t : T?) {
                 check_fp32(t, SMALL_NTOK, true)
