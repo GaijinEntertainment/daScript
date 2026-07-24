@@ -1,0 +1,11 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    if (das_is_dll_build()) {
+        // 2-arg form is the silent variant — skips cleanly on non-Apple builds
+        // where dasModuleAccelerate.shared_module does not exist
+        register_dynamic_module("{project_path}/dasModuleAccelerate.shared_module", "Module_DasAccelerate")
+    }
+}

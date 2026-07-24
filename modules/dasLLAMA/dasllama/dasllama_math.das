@@ -902,10 +902,50 @@ def private matmul_batch_core(var yp : float?; wp : float const?; xp : float con
     }
 }
 
+// ===== float-plane batch override (the "+AMX"/accelerate tier) =====
+// fp32/bf16 BATCH slots only (quant stays NEON — crossover verdict in the accelerate driver
+// header). false = fall through to the portable body; off by default (raw tier bit-unchanged).
+typedef FpBatchOverrideFn = function<(var yp : float?; wp : float const?; xp : float const?; n : int64; d : int64; ntok : int64) : bool>
+typedef Bf16BatchOverrideFn = function<(var yp : float?; wp : uint16 const?; xp : float const?; n : int64; d : int64; ntok : int64) : bool>
+
+[unused_argument(yp, wp, xp, n, d, ntok)]
+def private fp_batch_override_unset(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool => false
+
+[unused_argument(yp, wp, xp, n, d, ntok)]
+def private bf16_batch_override_unset(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool => false
+
+var private g_mm_fp_batch_override : FpBatchOverrideFn = @@fp_batch_override_unset
+var private g_mm_bf16_batch_override : Bf16BatchOverrideFn = @@bf16_batch_override_unset
+var private g_fp_override_active = false
+var private g_fp_override_min_ntok = 32l
+
+//! Install the float-plane batch override (the accelerate driver). min_ntok gates the donor to
+//! batch shapes; 1 arms it for decode GEMV too (the M4/M5-SME applicability probe lane).
+def set_float_batch_override(fp : FpBatchOverrideFn; bf16 : Bf16BatchOverrideFn; min_ntok : int64) {
+    g_mm_fp_batch_override = fp
+    g_mm_bf16_batch_override = bf16
+    g_fp_override_min_ntok = min_ntok
+    g_fp_override_active = true
+}
+
+def clear_float_batch_override() {
+    g_mm_fp_batch_override = @@fp_batch_override_unset
+    g_mm_bf16_batch_override = @@bf16_batch_override_unset
+    g_fp_override_active = false
+}
+
+def float_batch_override_active() : bool => g_fp_override_active
+
 //! Blob+offset form of matmul_batch (see the matmul woff overload).
 def matmul_batch(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
     unsafe {
-        matmul_batch_core(addr(y[0]), addr<float const?>(w[woff]), addr<float const?>(x[0]), n, d, ntok)
+        var yp = addr(y[0])
+        let wp = addr<float const?>(w[woff])
+        let xp = addr<float const?>(x[0])
+        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
+            return
+        }
+        matmul_batch_core(yp, wp, xp, n, d, ntok)
     }
 }
 
@@ -917,6 +957,9 @@ def matmul_bf16_batch(var y : array<float>; w : array<uint16>; woff : int64; x :
         var yp = addr(y[0])
         let wp = addr<uint16 const?>(w[woff])
         let xp = addr<float const?>(x[0])
+        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_bf16_batch_override, yp, wp, xp, n, d, ntok)) {
+            return
+        }
         let nch = ntok == 1l ? matmul_chunks_gemv(int(d), 1, n * d) : matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
         maybe_parallel_for(0, int(d), nch) $(rb, re) {
             unsafe {
