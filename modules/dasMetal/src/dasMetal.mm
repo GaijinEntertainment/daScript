@@ -10,6 +10,11 @@
 #import <Foundation/Foundation.h>
 
 #include <atomic>
+#include <mutex>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <map>
 
 #if !__has_feature(objc_arc)
 #error "dasMetal.mm must be compiled with ARC (-fobjc-arc)"
@@ -42,16 +47,52 @@ namespace das {
     // instrument: callers read deltas around a window (never reset; deltas compose across readers)
     static std::atomic<int64_t> g_metalDispatchCalls{0};
 
+    // the leak-hunt registry behind the counter: live handle -> "type @ file:line" of the das
+    // creation site, one entry PER RETAIN — the same ObjC address can be retained repeatedly
+    // (MTLCreateSystemDefaultDevice returns a singleton), and a plain map would drop tags and
+    // let the report disagree with the counter. Volume is low, the mutex is noise-free.
+    static std::mutex g_metalLiveTagsMx;
+    static std::unordered_map<void *, std::vector<std::string>> g_metalLiveTags;
+
+    static std::string handle_tag ( const char * type, LineInfoArg * at ) {
+        if ( !at || !at->fileInfo ) return type;
+        return std::string(type) + " @ " + at->fileInfo->name.c_str() + ":" + std::to_string(at->line);
+    }
+
+    // buffers add their byte size to the tag — pooled buffers all create at ONE das line (the
+    // pool body), so the size bucket is what tells the leaked classes apart
+    static std::string buffer_tag ( uint64_t bytes, LineInfoArg * at ) {
+        return handle_tag(("MetalBuffer[" + std::to_string(bytes) + "]").c_str(), at);
+    }
+
     template <typename HandleT>
-    static HandleT * retain_handle ( id obj ) {
+    static HandleT * retain_handle_tagged ( id obj, const std::string & tag ) {
         if ( obj == nil ) return nullptr;
         g_metalLiveObjects.fetch_add(1, std::memory_order_relaxed);
-        return (HandleT *) (__bridge_retained void *) obj;
+        void * h = (__bridge_retained void *) obj;
+        {
+            std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
+            g_metalLiveTags[h].push_back(tag);
+        }
+        return (HandleT *) h;
+    }
+
+    template <typename HandleT>
+    static HandleT * retain_handle ( id obj, const char * type, LineInfoArg * at ) {
+        return retain_handle_tagged<HandleT>(obj, handle_tag(type, at));
     }
 
     static void release_handle ( void * h ) {
         if ( !h ) return;
         g_metalLiveObjects.fetch_sub(1, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
+            auto it = g_metalLiveTags.find(h);
+            if ( it != g_metalLiveTags.end() ) {
+                it->second.pop_back();
+                if ( it->second.empty() ) g_metalLiveTags.erase(it);
+            }
+        }
         id obj = (__bridge_transfer id) h;
         (void) obj;     // ARC releases at scope exit
     }
@@ -65,7 +106,7 @@ namespace das {
 
     MetalDevice * metal_create_system_default_device () {
         @autoreleasepool {
-            return retain_handle<MetalDevice>(MTLCreateSystemDefaultDevice());
+            return retain_handle<MetalDevice>(MTLCreateSystemDefaultDevice(), "MetalDevice", nullptr);
         }
     }
 
@@ -90,7 +131,7 @@ namespace das {
         if ( !dev ) ctx->throw_error_at(at, "metal_new_command_queue: null device");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalCommandQueue>([d newCommandQueue]);
+            return retain_handle<MetalCommandQueue>([d newCommandQueue], "MetalCommandQueue", at);
         }
     }
 
@@ -123,7 +164,7 @@ namespace das {
                 error = alloc_error_string(err, "unknown MSL compile error", ctx, at);
                 return nullptr;
             }
-            return retain_handle<MetalLibrary>(lib);
+            return retain_handle<MetalLibrary>(lib, "MetalLibrary", at);
         }
     }
 
@@ -134,7 +175,7 @@ namespace das {
             id<MTLLibrary> l = (__bridge id<MTLLibrary>)(void *) lib;
             NSString * nsName = [NSString stringWithUTF8String:name];
             if ( nsName == nil ) ctx->throw_error_at(at, "metal_new_function: entry name is not valid UTF-8");
-            return retain_handle<MetalFunction>([l newFunctionWithName:nsName]);
+            return retain_handle<MetalFunction>([l newFunctionWithName:nsName], "MetalFunction", at);
         }
     }
 
@@ -152,7 +193,7 @@ namespace das {
                 error = alloc_error_string(err, "unknown compute pipeline error", ctx, at);
                 return nullptr;
             }
-            return retain_handle<MetalComputePipeline>(pso);
+            return retain_handle<MetalComputePipeline>(pso, "MetalComputePipeline", at);
         }
     }
 
@@ -176,7 +217,7 @@ namespace das {
         if ( bytes == 0 ) ctx->throw_error_at(at, "metal_new_buffer: zero size");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalBuffer>([d newBufferWithLength:bytes options:MTLResourceStorageModeShared]);
+            return retain_handle_tagged<MetalBuffer>([d newBufferWithLength:bytes options:MTLResourceStorageModeShared], buffer_tag(bytes, at));
         }
     }
 
@@ -188,8 +229,8 @@ namespace das {
         if ( bytes == 0 ) ctx->throw_error_at(at, "metal_new_buffer_untracked: zero size");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalBuffer>([d newBufferWithLength:bytes
-                options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked]);
+            return retain_handle_tagged<MetalBuffer>([d newBufferWithLength:bytes
+                options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked], buffer_tag(bytes, at));
         }
     }
 
@@ -215,7 +256,7 @@ namespace das {
                 options:MTLResourceStorageModeShared
                 deallocator:nil];
             if ( !b ) ctx->throw_error_at(at, "metal_new_buffer_no_copy: wrap failed (%llu bytes)", (unsigned long long)bytes);
-            return retain_handle<MetalBuffer>(b);
+            return retain_handle_tagged<MetalBuffer>(b, buffer_tag(bytes, at));
         }
     }
 
@@ -237,7 +278,7 @@ namespace das {
                 options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked
                 deallocator:nil];
             if ( !b ) ctx->throw_error_at(at, "metal_new_buffer_no_copy_untracked: wrap failed (%llu bytes)", (unsigned long long)bytes);
-            return retain_handle<MetalBuffer>(b);
+            return retain_handle_tagged<MetalBuffer>(b, buffer_tag(bytes, at));
         }
     }
 
@@ -259,7 +300,7 @@ namespace das {
         if ( !queue ) ctx->throw_error_at(at, "metal_new_command_buffer: null command queue");
         @autoreleasepool {
             id<MTLCommandQueue> q = (__bridge id<MTLCommandQueue>)(void *) queue;
-            return retain_handle<MetalCommandBuffer>([q commandBuffer]);
+            return retain_handle<MetalCommandBuffer>([q commandBuffer], "MetalCommandBuffer", at);
         }
     }
 
@@ -269,7 +310,7 @@ namespace das {
         if ( !queue ) ctx->throw_error_at(at, "metal_new_command_buffer_unretained: null command queue");
         @autoreleasepool {
             id<MTLCommandQueue> q = (__bridge id<MTLCommandQueue>)(void *) queue;
-            return retain_handle<MetalCommandBuffer>([q commandBufferWithUnretainedReferences]);
+            return retain_handle<MetalCommandBuffer>([q commandBufferWithUnretainedReferences], "MetalCommandBuffer", at);
         }
     }
 
@@ -277,7 +318,7 @@ namespace das {
         if ( !cb ) ctx->throw_error_at(at, "metal_new_compute_encoder: null command buffer");
         @autoreleasepool {
             id<MTLCommandBuffer> c = (__bridge id<MTLCommandBuffer>)(void *) cb;
-            return retain_handle<MetalComputeEncoder>([c computeCommandEncoder]);
+            return retain_handle<MetalComputeEncoder>([c computeCommandEncoder], "MetalComputeEncoder", at);
         }
     }
 
@@ -288,7 +329,7 @@ namespace das {
         if ( !cb ) ctx->throw_error_at(at, "metal_new_compute_encoder_concurrent: null command buffer");
         @autoreleasepool {
             id<MTLCommandBuffer> c = (__bridge id<MTLCommandBuffer>)(void *) cb;
-            return retain_handle<MetalComputeEncoder>([c computeCommandEncoderWithDispatchType:MTLDispatchTypeConcurrent]);
+            return retain_handle<MetalComputeEncoder>([c computeCommandEncoderWithDispatchType:MTLDispatchTypeConcurrent], "MetalComputeEncoder", at);
         }
     }
 
@@ -307,7 +348,7 @@ namespace das {
         if ( !dev ) ctx->throw_error_at(at, "metal_new_shared_event: null device");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalSharedEvent>([d newSharedEvent]);
+            return retain_handle<MetalSharedEvent>([d newSharedEvent], "MetalSharedEvent", at);
         }
     }
 
@@ -340,7 +381,7 @@ namespace das {
                 NSError * err = nil;
                 id<MTLResidencySet> rset = [d newResidencySetWithDescriptor:desc error:&err];
                 if ( rset == nil ) return nullptr;      // null == "unsupported, skip" on the das side
-                return retain_handle<MetalResidencySet>(rset);
+                return retain_handle<MetalResidencySet>(rset, "MetalResidencySet", at);
             }
         }
 #endif
@@ -517,6 +558,26 @@ namespace das {
         return g_metalLiveObjects.load(std::memory_order_relaxed);
     }
 
+    // the leak-hunt witness: every live handle grouped by "type @ file:line" creation site,
+    // one line per site with a count — empty string when nothing is live
+    char * metal_live_object_report ( Context * ctx, LineInfoArg * at ) {
+        std::map<std::string, int64_t> bySite;
+        {
+            std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
+            for ( auto & kv : g_metalLiveTags ) {
+                for ( auto & tag : kv.second ) bySite[tag]++;
+            }
+        }
+        std::string out;
+        for ( auto & kv : bySite ) {
+            out += kv.first;
+            out += " x";
+            out += std::to_string(kv.second);
+            out += "\n";
+        }
+        return ctx->allocateString(out.c_str(), at);
+    }
+
     int64_t metal_dispatch_call_count () {
         return g_metalDispatchCalls.load(std::memory_order_relaxed);
     }
@@ -690,6 +751,9 @@ namespace das {
 
             addExtern<DAS_BIND_FUN(metal_live_object_count)>(*this, lib, "metal_live_object_count",
                 SideEffects::modifyExternal, "metal_live_object_count");
+            addExtern<DAS_BIND_FUN(metal_live_object_report)>(*this, lib, "metal_live_object_report",
+                SideEffects::modifyExternal, "metal_live_object_report")
+                    ->args({"context", "at"});
             addExtern<DAS_BIND_FUN(metal_dispatch_call_count)>(*this, lib, "metal_dispatch_call_count",
                 SideEffects::modifyExternal, "metal_dispatch_call_count");
         }

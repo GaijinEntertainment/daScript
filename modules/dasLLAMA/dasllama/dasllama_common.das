@@ -235,6 +235,18 @@ def active_prefill_override : string {
     return g_prefill_override_name
 }
 
+//! The GPU-PLE pre-step gate: a prefill override that can ALSO build the E-series PLE side input
+//! on its device registers a probe here. On true, forward_prefill stashes the token rows and skips
+//! the CPU gather+finish; the override consumes the stash (ple_pre_prefill = late-decline fallback).
+typedef PleGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
+var private g_ple_gpu_gate : PleGpuGateFn
+var private g_ple_gpu_gate_set = false
+
+def register_ple_gpu_gate(fn : PleGpuGateFn) {
+    g_ple_gpu_gate = fn
+    g_ple_gpu_gate_set = true
+}
+
 // set by an override that ALSO produced the last position's logits; reset before every invocation
 var private g_prefill_logits_done = false
 
@@ -4520,6 +4532,8 @@ struct Session {
     ple_inp : array<float>      // the built per-(position, layer) side input (npos x n_layers x ple)
     ple_proj : array<float>     // model-proj scratch for the pre-step (npos x n_layers x ple)
     ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
+    ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
+    ple_gpu_pending : bool      // forward_prefill skipped the CPU pre-step — the engaged driver builds it
     // qwen35 deltanet recurrent state (persists across tokens; zeroed at position 0) + scratch.
     // Empty unless config.recr_mask != 0. State is forward-only — dn_pos guards against rewind.
     dn_pos : int64                 // the next position the deltanet stack expects
@@ -8644,8 +8658,9 @@ def private ple_pre_decode(t : Model; var s : Session; token : int64) {
     ple_pre_finish(t, s, s.x, 1l)
 }
 
-// Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
-def private ple_pre_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+//! Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
+//! Public as the late-decline fallback for a driver that claimed the pre-step via the gate.
+def ple_pre_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
         ple_gather_row(t, tokens[p], s.ple_inp, p * all)
@@ -8680,6 +8695,8 @@ def private ple_block_decode(t : Model; var s : Session; l : int64) {
 // Per-layer block (prefill, batched over npos). ple_inp is position-major so the layer-l side vector
 // of position p sits at p*(layers*ple) + l*ple.
 def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int64) {
+    // a broken gate promise would read an empty/stale ple_inp here — fail loud, never mismeasure
+    if (s.ple_gpu_pending) panic("ple_block_prefill: GPU pre-step promised but the CPU body engaged")
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
@@ -11952,7 +11969,15 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
         let ts_ple = ref_time_ticks()
-        ple_pre_prefill(t, s, tokens, npos)
+        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+            s.ple_gpu_tokens |> resize(int(npos))
+            for (p in range64(npos)) {
+                s.ple_gpu_tokens[p] = tokens[p]
+            }
+            s.ple_gpu_pending = true
+        } else {
+            ple_pre_prefill(t, s, tokens, npos)
+        }
         prof_add("ple", ts_ple)
     }
 

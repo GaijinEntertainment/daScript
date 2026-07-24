@@ -1134,7 +1134,17 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
         print("confirm: arm expected stamp '{expected}' but the child stamped '{stamped}' — scoring 0\n")
         return 0.0lf
     }
-    return parse_confirm_pp(outp)
+    let pp = parse_confirm_pp(outp)
+    if (pp <= 0.0lf) {   // surface WHY (a swallowed 'cannot open gguf' once cost a debug round)
+        var lns <- split(outp, "\n")
+        let n = length(lns)
+        print("confirm: arm '{expected}' produced no CONFIRM_PP — child output tail:\n")
+        for (i in range(max(0, n - 6), n)) {
+            if (!empty(lns[i])) print("confirm:   | {lns[i]}\n")
+        }
+        delete lns
+    }
+    return pp
 }
 
 def private write_winner(suffix : string) : bool {

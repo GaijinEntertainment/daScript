@@ -70,8 +70,19 @@ def public run_compute_1d(queue : MetalCommandQueue?; pso : MetalComputePipeline
 def public assert_no_metal_leaks {
     let live = metal_live_object_count()
     if (live != 0l) {
-        panic("metal_live_object_count() == {live} — every handle must be metal_release()d")
+        panic("metal_live_object_count() == {live} — every handle must be metal_release()d\n{metal_live_object_report()}")
     }
+}
+
+//! The failing-gate companion: logs the per-creation-site live-object report when the count is
+//! non-zero, then returns the count — `t |> equal(metal_log_leaks_if_any(), 0l)` keeps a dastest
+//! leak gate one line while a red run names its leaks.
+def public metal_log_leaks_if_any : int64 {
+    let live = metal_live_object_count()
+    if (live != 0l) {
+        to_log(LOG_ERROR, "metal live objects:\n{metal_live_object_report()}")
+    }
+    return live
 }
 
 // ===== host perf plumbing (Phase 5) =====

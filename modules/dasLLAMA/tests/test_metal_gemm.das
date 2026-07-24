@@ -150,7 +150,7 @@ def test_metal_gemm_vs_portable(t : T?) {
             select_kernel_backend(active_kernel_backend())
             set_metal_gemm_min_ntok(32l)
             metal_gemm_shutdown()
-            t |> equal(metal_live_object_count(), 0l)
+            t |> equal(metal_log_leaks_if_any(), 0l)
             delete wq
             delete ws
             delete xq

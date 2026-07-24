@@ -250,6 +250,9 @@ def main() {
                 }
                 let st = row_stat("pp{plen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
+                if (has_env_variable("DASLLAMA_BENCH_VERBOSE")) {
+                    say(fmt, "  reps: {tps}\n")
+                }
                 results |> push(st)
                 delete tps
             }
@@ -266,6 +269,9 @@ def main() {
                 }
                 let st = row_stat("tg{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
+                if (has_env_variable("DASLLAMA_BENCH_VERBOSE")) {
+                    say(fmt, "  reps: {tps}\n")
+                }
                 results |> push(st)
                 delete tps
             }

@@ -276,6 +276,8 @@ latex_elements = {
 \DeclareUnicodeCharacter{21D2}{\ensuremath{\Rightarrow}}
 \DeclareUnicodeCharacter{00D7}{\ensuremath{\times}}
 \DeclareUnicodeCharacter{03C0}{\ensuremath{\pi}}
+\DeclareUnicodeCharacter{03B8}{\ensuremath{\theta}}
+\DeclareUnicodeCharacter{2212}{\ensuremath{-}}
 \DeclareUnicodeCharacter{2248}{\ensuremath{\approx}}
 \DeclareUnicodeCharacter{2208}{\ensuremath{\in}}
 \DeclareUnicodeCharacter{2209}{\ensuremath{\notin}}
