@@ -38,7 +38,20 @@ def private accel_sgemm_strips(var yp : float?; wp : float const?; xp : float co
     }
 }
 
+// Work floor in MMAC: per-call AMX engagement carries a fixed tax, so tiny GEMMs (MoE routers,
+// ~130-180 MMAC — 26B/30B warm A/Bs net-lost engaged) fall through to NEON. Tune-crownable per box.
+var private g_accel_min_mmac = 512l
+
+//! Override the per-call work floor (MMAC) below which fp32 batch calls fall through to NEON.
+//! 0 = engage always (tests / M4-M5 probing).
+def dasllama_accelerate_set_min_mmac(v : int64) {
+    g_accel_min_mmac = max(v, 0l)
+}
+
 def private accel_fp_batch(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool {
+    if (ntok * d * n < g_accel_min_mmac * 1000000l) {
+        return false
+    }
     accel_sgemm_strips(yp, wp, xp, n, d, ntok)
     return true
 }
@@ -74,20 +87,24 @@ def dasllama_accelerate_disable() {
     clear_float_batch_override()
 }
 
+def private env_int64(name : string; def_v : int64; min_v : int64) : int64 {
+    let raw : string = get_env_variable(name)
+    if (empty(raw)) {
+        return def_v
+    }
+    let parsed = try_to_int64(raw)
+    if (parsed._is_ok && parsed._value >= min_v) {
+        return parsed._value
+    }
+    to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
+    return def_v
+}
+
 [init]
 def private dasllama_math_accelerate_init() {
     if (get_env_variable("DASLLAMA_ACCEL") != "1") {
         return
     }
-    var mntok = 32l
-    let mbe : string = get_env_variable("DASLLAMA_ACCEL_MIN_NTOK")
-    if (!empty(mbe)) {
-        let parsed = try_to_int64(mbe)
-        if (parsed._is_ok && parsed._value >= 1l) {
-            mntok = parsed._value
-        } else {
-            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ACCEL_MIN_NTOK `{mbe}` is not a positive integer — keeping {mntok}\n")
-        }
-    }
-    dasllama_accelerate_enable(mntok)
+    g_accel_min_mmac = env_int64("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
+    dasllama_accelerate_enable(env_int64("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
 }

@@ -88,6 +88,7 @@ def test_accel_float_batch(t : T?) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
         with_job_que() {
             setup_dasllama_jobque_()
+            dasllama_accelerate_set_min_mmac(0l)  // tiny test shapes must engage, not fall through
             t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {
                 check_fp32(t, NTOK, false)
             }
