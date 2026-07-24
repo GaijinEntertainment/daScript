@@ -371,8 +371,7 @@ class WatcherRichClient : HvWebSocketClient {
     }
 
     def session_is_interactive(session : WatcherSessionInfo const) : bool {
-        return (!starts_with(session.kind, "git-")
-            && session.kind != "worktree-create")
+        return !session_is_task(session.kind)
     }
 
     def attach_session(session_id : string; follow_origin : bool = true) {

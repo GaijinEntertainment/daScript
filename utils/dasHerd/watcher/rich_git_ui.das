@@ -910,6 +910,10 @@ def draw_git_changelist_window() {
         if (!found) text_disabled("Select a worktree to inspect its changelist")
     }
     separator(GIT_CHANGELIST_STATUS_SEPARATOR)
+    if (status.error || status.busy) {
+        icon(status.error ? "warning" : "clock", GetTextLineHeight())
+        same_line()
+    }
     text_colored(GIT_CHANGELIST_STATUS_TEXT,
         (color = git_status_color(status), text = status.text))
     if (status.error) {
@@ -954,6 +958,10 @@ def draw_git_activity_window() {
         if (!found) text_disabled("Select a worktree to inspect Git activity")
     }
     separator(GIT_ACTIVITY_STATUS_SEPARATOR)
+    if (status.error || status.busy) {
+        icon(status.error ? "warning" : "clock", GetTextLineHeight())
+        same_line()
+    }
     text_colored(GIT_ACTIVITY_STATUS_TEXT,
         (color = git_status_color(status), text = status.text))
     if (status.error) {

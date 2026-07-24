@@ -25,13 +25,6 @@ require ./git_graph_model.das
 require math
 require ./rich_state.das
 require ./rich_net.das
-require ./rich_inspector_ui.das
-
-var CLIENT_ERROR_POPUP : PopupContextItemState
-
-var CLIENT_ERROR_COPY : ToggleState
-
-var CLIENT_ERROR_SEND : ToggleState
 
 def selected_session_label() : string {
     if (g_client == null || empty(g_client.selected_id)) return "No session selected"
@@ -79,12 +72,6 @@ def draw_terminal_window() {
         elif (io.MouseWheel < 0.0f) zoom_by(-5)
     }
     text(SESSION_LABEL, (text = selected_session_label()))
-    if (g_client != null && !empty(g_client.error)) {
-        text_colored(CLIENT_ERROR,
-            (color = float4(1.0f, 0.35f, 0.30f, 1.0f), text = g_client.error))
-        draw_error_context(CLIENT_ERROR_POPUP, CLIENT_ERROR_COPY,
-            CLIENT_ERROR_SEND, "client_error", "Watcher", g_client.error)
-    }
     separator()
     let terminal_style = ImGuiTerminalStyle(
         external_input = true,

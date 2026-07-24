@@ -709,6 +709,10 @@ def draw_file_inspector_window() {
     }
     let status = file_inspector_status()
     separator(INSPECTOR_STATUS_SEPARATOR)
+    if (status.error || status.busy) {
+        icon(status.error ? "warning" : "clock", GetTextLineHeight())
+        same_line()
+    }
     text_colored(INSPECTOR_STATUS_TEXT,
         (color = git_status_color(status), text = status.text))
     if (status.error) {

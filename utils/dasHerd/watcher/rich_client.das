@@ -56,6 +56,93 @@ def setup_default_layout(dock_id : uint) {
     TERMINAL_WIN.pending_raise = true
 }
 
+var private MENU_ERROR_POPUP : PopupContextItemState
+var private MENU_ERROR_COPY : ToggleState
+var private MENU_ERROR_SEND : ToggleState
+
+def private menu_status_busy_count() : int {
+    var count = 0
+    if (g_client != null) {
+        for (repository in g_client.repositories) {
+            if (repository.record.id != g_selected_repository_id) continue
+            if (repository.refreshing) count++
+            for (worktree in repository.worktrees) {
+                if (worktree.path != g_selected_worktree_path) continue
+                if (worktree.review_loading) count++
+                if (worktree.history_loading) count++
+                if (worktree.refs_loading) count++
+            }
+        }
+    }
+    if (g_inspector.loading
+            || g_inspector.prepare.request != InspectorRequestState.idle) count++
+    return count
+}
+
+// The app-chrome notification cluster: connection, background work,
+// Attention, and the latest error live here so async state never renders
+// inside a work surface (HERDER_UX.md notification model).
+def private draw_menu_status_cluster() {
+    let line = GetTextLineHeight()
+    let style & = GetStyle()
+    let full_error = g_client != null ? g_client.error : ""
+    var error_text = full_error
+    if (length(error_text) > 64) {
+        error_text = slice(error_text, 0, 64) + "..."
+    }
+    let attention = pending_attention_count()
+    let busy = menu_status_busy_count()
+    let connected = g_client != null && g_client.connected
+    let conn_label = connected ? "watcher" : "reconnecting"
+    var width = line + style.ItemSpacing.x + CalcTextSize(conn_label).x
+    if (busy > 0) {
+        width += line + CalcTextSize("{busy}").x + style.ItemSpacing.x * 3.0f
+    }
+    if (attention > 0) {
+        width += line + CalcTextSize("{attention}").x + style.ItemSpacing.x * 3.0f
+    }
+    if (!empty(error_text)) {
+        width += line * 2.0f + CalcTextSize(error_text).x + style.ItemSpacing.x * 4.0f
+    }
+    SetCursorPosX(max(GetCursorPosX(),
+        GetWindowWidth() - width - style.WindowPadding.x))
+    if (!empty(error_text)) {
+        icon("warning", line)
+        same_line()
+        text_colored(MENU_STATUS_ERROR,
+            (color = float4(1.0f, 0.35f, 0.30f, 1.0f), text = error_text))
+        set_item_tooltip(MENU_STATUS_ERROR_TIP, (text = full_error))
+        draw_error_context(MENU_ERROR_POPUP, MENU_ERROR_COPY,
+            MENU_ERROR_SEND, "menu_error", "Watcher", full_error)
+        same_line()
+        if (icon_button_draw("##menu-error-dismiss", "close", line)) {
+            g_client.error = ""
+        }
+        same_line()
+    }
+    if (attention > 0) {
+        if (icon_button_draw("##menu-attention", "bell", line)) {
+            open_dock_window(SESSIONS_WIN)
+        }
+        same_line()
+        text(MENU_STATUS_ATTENTION, (text = "{attention}"))
+        set_item_tooltip(MENU_STATUS_ATTENTION_TIP,
+            (text = "Pending agent attention; click the bell to open Sessions"))
+        same_line()
+    }
+    if (busy > 0) {
+        icon("clock", line)
+        same_line()
+        text_disabled(MENU_STATUS_BUSY, (text = "{busy}"))
+        set_item_tooltip(MENU_STATUS_BUSY_TIP,
+            (text = "Background Git work in flight for this worktree"))
+        same_line()
+    }
+    icon(connected ? "link" : "unlink", line)
+    same_line()
+    text_disabled(MENU_STATUS_CONNECTION, (text = conn_label))
+}
+
 def draw_main_menu() {
     main_menu_bar(MAIN_MENU) {
         menu(FILE_MENU, (text = "File", enabled = true)) {
@@ -121,6 +208,8 @@ def draw_main_menu() {
             separator(VIEW_WINDOWS_SEPARATOR)
             menu_item(SHOW_EXITED, (text = "Show exited sessions"))
             g_show_exited = SHOW_EXITED.value
+            menu_item(SHOW_TASKS, (text = "Show watcher task sessions"))
+            g_show_tasks = SHOW_TASKS.value
             separator(VIEW_ZOOM_SEPARATOR)
             if (menu_label(VIEW_ZOOM_IN, (text = "Zoom in", shortcut = "Ctrl++"))) zoom_by(5)
             if (menu_label(VIEW_ZOOM_OUT, (text = "Zoom out", shortcut = "Ctrl+-"))) zoom_by(-5)
@@ -138,6 +227,7 @@ def draw_main_menu() {
                 open_dock_window(SETTINGS_WIN)
             }
         }
+        draw_menu_status_cluster()
     }
 }
 

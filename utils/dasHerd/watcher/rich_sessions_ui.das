@@ -138,13 +138,30 @@ def draw_session_list() {
         if (g_client != null) {
             for (index in range(length(g_client.sessions))) {
                 let session = g_client.sessions[index]
-                if (!g_show_exited && session.state == "exited") continue
+                if ((!g_show_tasks && session_is_task(session.kind))
+                        || (!g_show_exited && session.state == "exited")) continue
                 visible_sessions++
-                let row_text = "[{session.state}] {session.command_line}##{session.id}"
+                var state_glyph = "clock"
+                if (session.state == "running") {
+                    state_glyph = "play"
+                } elif (session.state == "terminating") {
+                    state_glyph = "stop"
+                } elif (session.state == "failed") {
+                    state_glyph = "warning"
+                } elif (session.state == "exited") {
+                    state_glyph = session.exit_code == 0l ? "check" : "warning"
+                }
+                icon(state_glyph, GetTextLineHeight())
+                same_line()
+                let row_text = "{session.command_line}##{session.id}"
                 if (selectable(SESSION_ROW[index], (text = row_text))) {
                     g_client->attach_session(session.id)
                     g_open_terminal_pending = true
                     g_focus_terminal_pending = true
+                }
+                if (IsItemHovered()) {
+                    set_tooltip(SESSION_STATE_TOOLTIP,
+                        "{session.state}  pid {session.pid}  {session.kind}")
                 }
                 SESSION_ROW[index].value = session.id == g_client.selected_id
             }

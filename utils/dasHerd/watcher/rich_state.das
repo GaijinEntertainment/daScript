@@ -381,6 +381,11 @@ var g_open_inspector_pending = false
 var g_open_git_windows_pending = false
 var g_dock_reset_pending = false
 var g_show_exited = false
+var g_show_tasks = false
+
+def session_is_task(kind : string) : bool {
+    return starts_with(kind, "git-") || kind == "worktree-create"
+}
 
 var g_active_focus_message = ""
 
