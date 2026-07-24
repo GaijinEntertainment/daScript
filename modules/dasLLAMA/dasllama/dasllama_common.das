@@ -2056,7 +2056,8 @@ let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mi
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
     let e = get_env_variable("DASLLAMA_GPU_MIN_CTX")
-    return empty(e) ? RDEC_MIN_CTX : max(int64(to_int(e)), 256l)
+    let v = int64(to_int(e))   // non-numeric -> 0 -> treated as unset (keep the default floor)
+    return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
 }
 
 // gather one prepared plane into device-layout bytes and place it in its format's arena; returns

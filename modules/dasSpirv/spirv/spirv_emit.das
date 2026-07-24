@@ -4244,6 +4244,13 @@ class SpirvEmit : AstVisitor {
                 errs |> push("coopmatConvert expects (dst, src)")
                 return expr
             }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || !di.is_float || !si.is_float || di.comp_width != 32u || si.comp_width != 16u
+                    || di.use != si.use || di.rows != si.rows || di.cols != si.cols) {
+                errs |> push("coopmatConvert expects (f32 accumulator dst, f16 accumulator src) of one tile shape")
+                return expr
+            }
             let dst = coop_local_ptr(expr.arguments[0])
             let vs = coop_local_val(expr.arguments[1])
             if (dst.id == 0u || dst.pty == 0u || vs == 0u) {
