@@ -2,6 +2,9 @@ options gen2
 options gc
 options persistent_heap
 options no_unused_function_arguments = false
+// Raw Save/LoadIniSettingsToDisk carry the per-preset layout profiles;
+// the boost surface has no wrapper for them yet.
+options _allow_imgui_legacy = true
 
 require imgui/imgui_harness
 require imgui/imgui_icons
@@ -307,6 +310,10 @@ def init() {
     inspector_prepare_worker_start(g_prepare_worker)
     g_selected_worktree_path = get_das_root()
     SETTINGS_WIN.open = false
+    let layout_choice = fread(layout_choice_path())
+    if (!empty(layout_choice)) {
+        g_layout_preset = clamp(to_int(strip(layout_choice)), 0, 1)
+    }
     let port = clamp(to_int(option_value("--port=", "9191")), 1024, 65535)
     g_token = option_value("--token=")
     g_url = "ws://127.0.0.1:{port}/ws?token={g_token}"
@@ -330,6 +337,35 @@ def update() {
     if (!harness_begin_frame()) return
     service_sha_copy()
     drain_inspector_prepare_events()
+    if (g_layout_switch_pending >= 0) {
+        // Between the native frame gate and NewFrame: settings may only be
+        // loaded while no ImGui frame is active. Switching away snapshots
+        // the current preset's arrangement; switching in restores the
+        // target's own tuned profile, or falls back to its factory builder.
+        let target = g_layout_switch_pending
+        g_layout_switch_pending = -1
+        SaveIniSettingsToDisk(layout_ini_path(g_layout_preset))
+        if (g_layout_factory_reset) {
+            g_layout_factory_reset = false
+            let _removed = remove(layout_ini_path(target))
+        }
+        g_layout_preset = target
+        fopen(layout_choice_path(), "wb") $(choice_file) {
+            if (choice_file != null) {
+                fwrite(choice_file, "{target}")
+            }
+        }
+        if (fexist(layout_ini_path(target))) {
+            LoadIniSettingsFromDisk(layout_ini_path(target))
+            DOCK_ROOT.has_initial_layout = true
+            g_layout_probe_complete = true
+            g_layout_force_default = false
+        } else {
+            g_layout_probe_complete = false
+            g_layout_force_default = true
+            g_dock_reset_pending = true
+        }
+    }
     harness_new_frame()
     g_ui_frame++
     let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
@@ -409,6 +445,7 @@ def shutdown() {
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     terminal_dispose(g_terminal)
     delete g_font_sources
+    SaveIniSettingsToDisk(layout_ini_path(g_layout_preset))
     harness_shutdown()
     if (g_jobque_owned && prepare_stopped) {
         destroy_job_que()

@@ -394,6 +394,21 @@ var g_dock_reset_pending = false
 var g_show_exited = false
 var g_show_tasks = false
 var g_layout_preset = 0
+var g_layout_switch_pending = -1
+var g_layout_factory_reset = false
+
+// Per-preset layout profiles: each preset keeps the user's tuned dock
+// arrangement in its own ini beside the global configuration.
+def layout_ini_path(preset : int) : string {
+    let dir = dir_name(repository_default_config_path())
+    return path_join(dir, preset == 1
+        ? "dasHerd.layout.review.ini" : "dasHerd.layout.session.ini")
+}
+
+def layout_choice_path() : string {
+    return path_join(dir_name(repository_default_config_path()),
+        "dasHerd.layout.current")
+}
 // Worktree Files: full project structure of the selected worktree.
 var g_worktree_files : array<string>
 var g_worktree_files_identity = ""

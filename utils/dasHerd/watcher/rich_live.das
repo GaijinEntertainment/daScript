@@ -85,7 +85,6 @@ def open_dock_window(var state : DockWindowState) {
 }
 
 def apply_layout_preset(preset : int) {
-    g_layout_preset = preset
     REPOSITORIES_WIN.open = true
     WORKTREE_FILES_WIN.open = true
     SESSIONS_WIN.open = true
@@ -94,12 +93,11 @@ def apply_layout_preset(preset : int) {
     FILE_INSPECTOR_WIN.open = true
     TERMINAL_WIN.open = true
     SETTINGS_WIN.open = false
-    g_layout_probe_complete = false
-    g_layout_force_default = true
-    g_dock_reset_pending = true
+    g_layout_switch_pending = preset
 }
 
 def reset_layout() {
+    g_layout_factory_reset = true
     apply_layout_preset(g_layout_preset)
 }
 
@@ -730,4 +728,16 @@ def herder_ui_events(input : JsonValue?) : JsonValue? {
         g_ui_events |> clear()
     }
     return result
+}
+
+struct HerderLayoutArgs {
+    preset : string
+}
+
+[live_command(description = "Switch the dock layout preset. Args: preset (session|review).")]
+def herder_layout(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderLayoutArgs>)
+    let preset = args.preset == "review" ? 1 : 0
+    apply_layout_preset(preset)
+    return JV((ok = true, preset = preset))
 }

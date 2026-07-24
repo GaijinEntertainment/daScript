@@ -111,8 +111,12 @@ The layout serves three scenarios, in frequency order:
    worktrees — the Tree escalation surface per `GIT_TOPOLOGY_PLAN.md`.
    Rare; reached deliberately, never the default.
 
-Two dock presets in the View menu (Reset Layout keeps the Session
-preset; user rearrangements persist as always):
+Two dock presets in the View menu. Each preset is a **profile**: the
+user's rearrangements are snapshotted into that preset's own ini
+(`dasHerd.layout.<name>.ini` beside the global configuration) when
+switching away, and restored when switching back; the factory builder
+runs only when a preset has no saved profile. Reset Layout returns the
+active preset to factory. The last-used preset is restored on startup.
 
 ```text
 Session preset                      Review preset
