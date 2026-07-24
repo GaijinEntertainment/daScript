@@ -3546,13 +3546,12 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     let bb = arena_block_bytes(fmt)
     let qbytes = cap_blocks * bb.wq
     let sbytes = cap_blocks * bb.ws
-    // maxStorageBufferRange, not uint32 indexing (that reaches 16GiB), is the real ceiling — ask
-    // the device (NV/AMD report the full 4GiB, where a 3B's single-format q8 plane fits)
+    // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
     var lp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
     let shard_cap = int64(lp.limits.maxStorageBufferRange)
     if (qbytes > shard_cap || sbytes > shard_cap) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant bytes — over the device's {shard_cap}B storage-range cap\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
         return false
     }
     var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
@@ -4382,8 +4381,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     }
     let kvd = g_rd.kv_dim
     unsafe {
-        memcpy(g_rd.x_host.mapped, reinterpret<void? -const>(addr<uint8 const?>(x[0])), int(g_rd.dim * 4l))
-        memcpy(g_rd.cos_host.mapped, reinterpret<void? -const>(addr<uint8 const?>(cossin[0])), int(g_rd.head_size * 4l))
+        memcpy(g_rd.x_host.mapped, addr<void? -const>(x[0]), int(g_rd.dim * 4l))
+        memcpy(g_rd.cos_host.mapped, addr<void? -const>(cossin[0]), int(g_rd.head_size * 4l))
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             var mr = reinterpret<uint?>(L.m_rope.mapped)
