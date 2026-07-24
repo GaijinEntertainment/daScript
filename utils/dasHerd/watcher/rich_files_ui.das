@@ -23,6 +23,8 @@ var private FILES_ROW : table<int; ToggleState>
 var private FILES_INDENT : table<int; EmptyMarkerState>
 var private FILES_ROW_POPUP : table<int; PopupContextItemState>
 var private FILES_SEND : table<int; ToggleState>
+var private FILES_INDENT_JOIN : table<int; EmptyMarkerState>
+var private FILES_ICON_JOIN : table<int; EmptyMarkerState>
 
 def ensure_worktree_files() {
     if (g_client == null || !g_client.connected
@@ -47,10 +49,10 @@ def private draw_files_row(var row : int&; depth : int; name, path : string;
                            is_folder, expanded : bool) : bool {
     if (depth > 0) {
         dummy(FILES_INDENT[row], (size = float2(float(depth) * 18.0f, 1.0f)))
-        same_line()
+        same_line(FILES_INDENT_JOIN[row])
     }
     icon(is_folder ? "folder" : "edit", GetTextLineHeight() * 0.85f)
-    same_line()
+    same_line(FILES_ICON_JOIN[row])
     let suffix = is_folder ? (expanded ? "/" : "/...") : ""
     FILES_ROW[row].value = (!is_folder
         && g_inspector.file_path == path
