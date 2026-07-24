@@ -18,7 +18,7 @@ static thread_local bool t_blas_pinned = false;
 static inline void accel_pin_single_thread() {
     if (t_blas_pinned) return;
     t_blas_pinned = true;
-    if (__builtin_available(macOS 15.0, *)) {
+    if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, *)) {
         BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
     }
 }
@@ -50,7 +50,7 @@ static void accel_sgemv_n(int32_t n, int32_t k,
 // -1 = BLASSetThreading unavailable (pre-macOS-15). Diagnostics for the contention rig.
 static int32_t accel_threading_mode() {
     accel_pin_single_thread();
-    if (__builtin_available(macOS 15.0, *)) {
+    if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, *)) {
         return (int32_t)BLASGetThreading();
     }
     return -1;

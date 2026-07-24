@@ -35,6 +35,7 @@ option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 option(DAS_METAL_DISABLED "Disable dasMetal (native Metal compute binding, Apple only)" OFF)
+option(DAS_ACCELERATE_DISABLED "Disable dasAccelerate (Accelerate BLAS binding — AMX/SME, Apple only)" OFF)
 option(DAS_CLIPBOARD_DISABLED "Disable dasClipboard (system clipboard transport)" OFF)
 
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" OFF)
