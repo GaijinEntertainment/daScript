@@ -392,18 +392,24 @@ def public repository_build_file_diff_argv(worktree_path : string;
 }
 
 def public repository_build_worktree_create_argv(source_worktree_path,
-                                                  new_worktree_path,
-                                                  branch, base_ref : string;
-                                                  var argv : array<string>) : string {
-    if (!valid_path(source_worktree_path)) return "source worktree path is required"
-    if (!valid_path(new_worktree_path) || !is_absolute(new_worktree_path)) {
+                                                 new_worktree_path,
+                                                 branch, base_ref : string;
+                                                 var argv : array<string>) : string {
+    if (!valid_path(source_worktree_path) || empty(strip(source_worktree_path))) {
+        return "source worktree path is required"
+    }
+    if (!valid_path(new_worktree_path) || empty(strip(new_worktree_path))
+            || !is_absolute(new_worktree_path)) {
         return "new worktree path must be absolute"
     }
     if (!valid_path(branch)) return "new branch is required"
-    let resolved_base = !empty(base_ref) ? base_ref : "HEAD"
-    if (!valid_path(resolved_base)) return "base ref cannot contain CR/LF"
+    let normalized_branch = strip(branch)
+    if (empty(normalized_branch)) return "new branch is required"
+    if (!empty(base_ref) && !valid_path(base_ref)) return "base ref cannot contain CR/LF"
+    let normalized_base = strip(base_ref)
+    let resolved_base = !empty(normalized_base) ? normalized_base : "HEAD"
     argv <- ["git", "-C", source_worktree_path, "worktree", "add", "-b",
-        branch, "--", new_worktree_path, resolved_base]
+        normalized_branch, "--", new_worktree_path, resolved_base]
     return ""
 }
 

@@ -182,6 +182,31 @@ function Read-SharedBytes([string]$Path) {
     }
 }
 
+function Get-ProcessTreeIds([int]$RootProcessId) {
+    $processes = @(Get-CimInstance Win32_Process)
+    $children = @{}
+    foreach ($process in $processes) {
+        $parent = [int]$process.ParentProcessId
+        if (-not $children.ContainsKey($parent)) {
+            $children[$parent] = New-Object Collections.Generic.List[int]
+        }
+        $children[$parent].Add([int]$process.ProcessId)
+    }
+    $result = New-Object Collections.Generic.List[int]
+    $pending = New-Object Collections.Generic.Queue[int]
+    $pending.Enqueue($RootProcessId)
+    while ($pending.Count -gt 0) {
+        $nextProcessId = $pending.Dequeue()
+        $result.Add($nextProcessId)
+        if ($children.ContainsKey($nextProcessId)) {
+            foreach ($childId in $children[$nextProcessId]) {
+                $pending.Enqueue($childId)
+            }
+        }
+    }
+    return @($result)
+}
+
 function Assert-OrderedEvents($Events, [string[]]$RequiredNames, [string]$Context) {
     Assert-Protocol ($Events.Count -gt 0) "$Context has no events"
     for ($index = 0; $index -lt $Events.Count; $index++) {
@@ -272,6 +297,22 @@ try {
     $ws1 = Connect-WebSocket $baseUrl $token
     Assert-Protocol ($ws1 -is [Net.WebSockets.ClientWebSocket]) `
         "websocket helper returned $($ws1.GetType().FullName)"
+    Set-TestStage 'reject-empty-agent-worktree-task'
+    $emptyTaskWorktree = "$agentWorktree-empty-task"
+    Send-WebSocketJson $ws1 @{
+        op = 'launch_agent_worktree'
+        repository_id = $observedA.record.id
+        worktree_path = $repoA
+        new_worktree_path = $emptyTaskWorktree
+        branch = "codex/$runId-empty-task"
+        base_ref = 'HEAD'
+        task_context = " `r`n "
+    }
+    $emptyTaskError = Wait-WebSocketType $ws1 'error' 5000
+    Assert-Protocol ($emptyTaskError.error -eq 'agent task is required') `
+        'blank worktree task did not return the agent-task validation error'
+    Assert-Protocol (-not (Test-Path -LiteralPath $emptyTaskWorktree)) `
+        'blank worktree task mutated Git before validation'
     Set-TestStage 'request-agent-worktree'
     Send-WebSocketJson $ws1 @{
         op = 'launch_agent_worktree'
@@ -294,10 +335,16 @@ try {
     Set-TestStage 'attach-first-controller'
     Send-WebSocketJson $ws1 @{
         op = 'attach'; session_id = $agentLaunch.session_id
-        control = $true; raw = $false
+        control = $true; raw = $true
     }
     $attached1 = Wait-WebSocketType $ws1 'attached'
     Assert-Protocol ([bool]$attached1.controls) 'first client did not receive control'
+    $checkpoint = Wait-WebSocketType $ws1 'terminal_checkpoint'
+    Assert-Protocol ([bool]$checkpoint.ansi) 'raw attach did not receive a terminal checkpoint'
+    Assert-Protocol ([int]$checkpoint.columns -gt 0 -and [int]$checkpoint.rows -gt 0) `
+        'terminal checkpoint did not retain its source geometry'
+    Assert-Protocol ([long]$checkpoint.offset -ge 0) `
+        'terminal checkpoint did not identify the subsequent raw output offset'
 
     Set-TestStage 'reject-second-controller'
     $ws2 = Connect-WebSocket $baseUrl $token
@@ -312,17 +359,14 @@ try {
     Assert-Protocol (-not [bool]$observing2.controls) `
         'second client unexpectedly received control'
 
-    Set-TestStage 'detach-and-reattach'
+    Set-TestStage 'detach-and-claim-without-replay'
     Send-WebSocketJson $ws1 @{ op = 'detach' }
     $detached1 = Wait-WebSocketType $ws1 'detached'
     Assert-Protocol ($detached1.type -eq 'detached') 'first client did not detach'
-    Send-WebSocketJson $ws2 @{
-        op = 'attach'; session_id = $agentLaunch.session_id
-        control = $true; raw = $false
-    }
+    Send-WebSocketJson $ws2 @{ op = 'claim_control' }
     $attached2 = Wait-WebSocketType $ws2 'attached'
     Assert-Protocol ([bool]$attached2.controls) `
-        'observing client could not claim control after detach'
+        'observing client could not claim control after detach without replay'
 
     Set-TestStage 'disconnect-release'
     Close-WebSocket $ws2
@@ -443,9 +487,75 @@ try {
         'bundle JSONL did not retain both declarative snapshots'
 
     Set-TestStage 'terminate-agent'
+    $launchedEvent = @($agentEvents | Where-Object {
+        $_.event -eq 'launched'
+    } | Select-Object -First 1)
+    $launchedPid = [regex]::Match(
+        [string]$launchedEvent[0].detail, '^pid=(\d+)$')
+    Assert-Protocol $launchedPid.Success 'launch event did not retain the root process id'
+    $agentProcessTree = @(Get-ProcessTreeIds ([int]$launchedPid.Groups[1].Value))
+    Assert-Protocol ($agentProcessTree.Count -gt 1) `
+        'fake Codex did not have a descendant process for termination coverage'
     Invoke-Json POST $baseUrl $token '/api/v1/terminate' @{
         session_id = $agentLaunch.session_id
     } | Out-Null
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
+        $remainingProcessTree = @($agentProcessTree | Where-Object {
+            $null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue)
+        })
+        if ($remainingProcessTree.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 50
+    }
+    Assert-Protocol ($remainingProcessTree.Count -eq 0) `
+        "terminate left session process descendants running: $remainingProcessTree"
+
+    Set-TestStage 'launch-agent-in-existing-worktree'
+    Send-WebSocketJson $ws1 @{
+        op = 'launch'
+        argv = @('codex')
+        cwd = $repoB
+        columns = 120
+        rows = 36
+        timeout_ms = 0
+        display_name = 'Codex existing worktree'
+        kind = 'agent-codex'
+        purpose = 'debug'
+        task_context = 'Launch directly in the selected existing worktree.'
+        target_id = 'local'
+        repository_id = $observedB.record.id
+        worktree_path = $repoB
+    }
+    $existingLaunch = Wait-WebSocketType $ws1 'launched' 10000
+    Assert-Protocol ([bool]$existingLaunch.session_id) `
+        'existing-worktree agent session was not launched'
+    $existingDir = Join-Path $watcherSessions $existingLaunch.session_id
+    $existingMetadataPath = Join-Path $existingDir 'session.json'
+    for ($attempt = 0; $attempt -lt 100 -and
+            -not (Test-Path -LiteralPath $existingMetadataPath); $attempt++) {
+        Start-Sleep -Milliseconds 50
+    }
+    Assert-Protocol (Test-Path -LiteralPath $existingMetadataPath) `
+        'existing-worktree session metadata was not persisted'
+    $existingMetadata = Get-Content -LiteralPath $existingMetadataPath -Raw |
+        ConvertFrom-Json
+    Assert-Protocol ($existingMetadata.kind -eq 'agent-codex') `
+        'existing-worktree launch lost its agent kind'
+    Assert-Protocol ($existingMetadata.repository_id -eq $observedB.record.id) `
+        'existing-worktree launch lost its repository identity'
+    Assert-Protocol ([string]::Equals(
+            [IO.Path]::GetFullPath([string]$existingMetadata.worktree_path),
+            [IO.Path]::GetFullPath($repoB),
+            [StringComparison]::OrdinalIgnoreCase)) `
+        'existing-worktree launch lost its exact worktree origin'
+    $existingContextPath = Join-Path $existingDir 'context.md'
+    $existingContext = Get-Content -LiteralPath $existingContextPath -Raw
+    Assert-Protocol ($existingContext.Contains(
+            'Launch directly in the selected existing worktree.')) `
+        'existing-worktree launch lost its task context'
+    Invoke-Json POST $baseUrl $token '/api/v1/terminate' @{
+        session_id = $existingLaunch.session_id
+    } | Out-Null
+
     $success = $true
     Write-Output "PASS watcher protocol integration: $runId"
 } catch {

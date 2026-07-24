@@ -64,6 +64,10 @@ class HvWebSocketClient {
         //! Sends a text message to the server.
         send(client, text)
     }
+    def send_result(text : string) : int {
+        //! Sends a text message and returns the native transport result.
+        return send(client, text)
+    }
     def close : int {
         //! Closes the WebSocket connection. Returns 0 on success.
         return close(client)

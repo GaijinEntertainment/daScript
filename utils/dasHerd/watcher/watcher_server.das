@@ -112,6 +112,15 @@ struct public RepositoryGitFileActionMessage {
     error : string
 }
 
+struct private WatcherTerminalCheckpointMessage {
+    @rename = "type"
+    _type : string = "terminal_checkpoint"
+    offset : int64
+    columns : int
+    rows : int
+    ansi : string
+}
+
 struct private OrphanedGitFileAction {
     session_id : string
     repository_id : string
@@ -523,8 +532,7 @@ class DasHerdWatcherServer : HvWebServer {
     def send_bundles(var client : WatcherClient?; force : bool = false) {
         if (client == null || empty(client.session_id)) return
         let revision = watcher_bundle_session_revision(client.session_id)
-        if (revision < 0l) return
-        if (!force && client.bundles_revision == revision) return
+        if (revision < 0l || (!force && client.bundles_revision == revision)) return
         client.bundles_revision = revision
         send(client.channel, "\{\"type\":\"bundles\",\"session_id\":" +
             "{sprint_json(client.session_id, false)},\"revision\":{revision},\"data\":" +
@@ -731,6 +739,10 @@ class DasHerdWatcherServer : HvWebServer {
     def start_agent_worktree_launch(var client : WatcherClient?;
                                     incoming : WatcherWsMessage const) {
         if (client == null) return
+        if (empty(strip(incoming.task_context))) {
+            send_error(client.channel, "agent task is required")
+            return
+        }
         if (empty(incoming.repository_id) || empty(incoming.worktree_path)
                 || empty(incoming.new_worktree_path) || empty(incoming.branch)) {
             send_error(client.channel,
@@ -1080,6 +1092,22 @@ class DasHerdWatcherServer : HvWebServer {
         }
     }
 
+    def send_terminal_checkpoint(var client : WatcherClient?) {
+        if (client == null || !client.raw || empty(client.session_id)) return
+        let checkpoint <- watcher_terminal_checkpoint(client.session_id)
+        if (!checkpoint.ok) {
+            send_error(client.channel, "unknown session")
+            return
+        }
+        client.raw_offset = checkpoint.output_offset
+        let message = WatcherTerminalCheckpointMessage(
+            offset = checkpoint.output_offset,
+            columns = checkpoint.columns, rows = checkpoint.rows,
+            ansi = checkpoint.ansi)
+        send(client.channel, sprint_json(message, false),
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
     def detach(var client : WatcherClient?; detail : string) {
         if (client == null) return
         let session_id = client.session_id
@@ -1265,9 +1293,30 @@ class DasHerdWatcherServer : HvWebServer {
             send(channel, "\{\"type\":\"attached\",\"session_id\":{sprint_json(client.session_id, false)},\"controls\":{client.controls}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             send_snapshot(client, true)
+            self.send_terminal_checkpoint(client)
             send_raw_output(client)
             self.send_mailbox(client, true)
             self.send_bundles(client, true)
+        } elif (incoming.op == "claim_control") {
+            if (empty(client.session_id)) {
+                send_error(channel, "client is not attached")
+                return
+            }
+            let accepts_input = watcher_accepts_input(client.session_id)
+            if (!accepts_input) {
+                send_error(channel, "session is not running; output is replay-only")
+                return
+            }
+            if (!client.controls) {
+                client.controls = watcher_claim_controller(client.session_id, client.id)
+            }
+            if (!client.controls) {
+                send_error(channel, "controller lease is held by another client")
+                return
+            }
+            send(channel, "\{\"type\":\"attached\",\"session_id\":" +
+                "{sprint_json(client.session_id, false)},\"controls\":true\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
         } elif (incoming.op == "detach") {
             detach(client, "client_detached")
             send(channel, "\{\"type\":\"detached\"\}", ws_opcode.WS_OPCODE_TEXT, true)

@@ -13,7 +13,7 @@ def private run_protocol_test(var output : string&) : int {
     }
     let script = path_join(root,
         "utils/dasHerd/watcher/tests/test_watcher_protocol.ps1")
-    var argv <- ["powershell.exe", "-NoLogo", "-NoProfile",
+    let argv <- ["powershell.exe", "-NoLogo", "-NoProfile",
         "-ExecutionPolicy", "Bypass", "-File", script,
         "-DaslangPath", compiler, "-Root", root]
     return unsafe(popen_argv(argv, 0.0, $(file) {

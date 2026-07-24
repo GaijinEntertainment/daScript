@@ -258,7 +258,7 @@ def private prepare_worker_main(var jobs : Channel?&;
         kind = InspectorPrepareEventKind.ready))
     var stopping = false
     while (!stopping) {
-        jobs |> pop_with_timeout_clone(250) $(first : InspectorPrepareJob#) {
+        jobs |> pop_with_timeout_clone(50) $(first : InspectorPrepareJob#) {
             var job : InspectorPrepareJob
             job := first
 

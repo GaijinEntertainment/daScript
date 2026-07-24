@@ -118,6 +118,7 @@ struct public TerminalBufferSnapshot {
     scrollback : array<TerminalCell>
     scrollback_rows : int
     cursor : TerminalCursor = TerminalCursor()
+    saved_cursor : TerminalCursor = TerminalCursor()
 }
 
 struct public TerminalModes {
@@ -1184,6 +1185,7 @@ def private collect_buffer(buffer : TerminalBuffer const; columns, rows : int;
     }
     snapshot.scrollback_rows = length(buffer.history)
     snapshot.cursor = buffer.cursor
+    snapshot.saved_cursor = buffer.saved_cursor
 }
 
 def public terminal_snapshot(terminal : Terminal const; var snapshot : TerminalSnapshot) {
@@ -1365,6 +1367,175 @@ def private same_color(left, right : TerminalColor const) : bool {
         left.red == right.red && left.green == right.green && left.blue == right.blue)
 }
 
+def private checkpoint_same_style(left, right : TerminalCell const) : bool {
+    return (left.attributes == right.attributes &&
+        same_color(left.foreground, right.foreground) &&
+        same_color(left.background, right.background))
+}
+
+def private checkpoint_write_color(var writer : StringBuilderWriter;
+                                   color : TerminalColor const;
+                                   foreground : bool) {
+    let base = foreground ? 38 : 48
+    if (color.kind == TerminalColorKind.indexed) {
+        writer |> write(";{base};5;{color.index}")
+    } elif (color.kind == TerminalColorKind.rgb) {
+        writer |> write(";{base};2;{color.red};{color.green};{color.blue}")
+    }
+}
+
+def private checkpoint_write_style(var writer : StringBuilderWriter;
+                                   cell : TerminalCell const) {
+    let esc = to_char(27)
+    writer |> write("{esc}[0")
+    if ((cell.attributes & TERMINAL_ATTR_BOLD) != 0) writer |> write(";1")
+    if ((cell.attributes & TERMINAL_ATTR_FAINT) != 0) writer |> write(";2")
+    if ((cell.attributes & TERMINAL_ATTR_ITALIC) != 0) writer |> write(";3")
+    if ((cell.attributes & TERMINAL_ATTR_UNDERLINE) != 0) writer |> write(";4")
+    if ((cell.attributes & TERMINAL_ATTR_BLINK) != 0) writer |> write(";5")
+    if ((cell.attributes & TERMINAL_ATTR_INVERSE) != 0) writer |> write(";7")
+    if ((cell.attributes & TERMINAL_ATTR_HIDDEN) != 0) writer |> write(";8")
+    if ((cell.attributes & TERMINAL_ATTR_STRIKE) != 0) writer |> write(";9")
+    checkpoint_write_color(writer, cell.foreground, true)
+    checkpoint_write_color(writer, cell.background, false)
+    writer |> write("m")
+}
+
+def private checkpoint_write_hyperlink(var writer : StringBuilderWriter;
+                                       hyperlink : string) {
+    let esc = to_char(27)
+    writer |> write("{esc}]8;;{hyperlink}{esc}\\")
+}
+
+def private checkpoint_cell_visible(cell : TerminalCell const) : bool {
+    let has_text = cell.width != 0 && cell.grapheme != "" && cell.grapheme != " "
+    let has_style = (cell.attributes != 0 ||
+        cell.foreground.kind != TerminalColorKind.default_color ||
+        cell.background.kind != TerminalColorKind.default_color)
+    return has_text || has_style || !empty(cell.hyperlink)
+}
+
+def private checkpoint_write_row(var writer : StringBuilderWriter;
+                                 row : TerminalRow const;
+                                 var active_style : TerminalCell;
+                                 var active_hyperlink : string) {
+    var last_column = -1
+    for (column in range(length(row.cells))) {
+        if (checkpoint_cell_visible(row.cells[column])) {
+            last_column = column
+        }
+    }
+    for (column in range(last_column + 1)) {
+        let cell = row.cells[column]
+        if (cell.width == 0) continue
+        if (!checkpoint_same_style(active_style, cell)) {
+            checkpoint_write_style(writer, cell)
+            active_style = cell
+        }
+        if (active_hyperlink != cell.hyperlink) {
+            checkpoint_write_hyperlink(writer, cell.hyperlink)
+            active_hyperlink = cell.hyperlink
+        }
+        writer |> write(empty(cell.grapheme) ? " " : cell.grapheme)
+    }
+}
+
+def private checkpoint_write_buffer(var writer : StringBuilderWriter;
+                                    buffer : TerminalBuffer const;
+                                    include_history : bool;
+                                    var active_style : TerminalCell;
+                                    var active_hyperlink : string) {
+    var line = 0
+    let line_count = (include_history ? length(buffer.history) : 0) + length(buffer.screen)
+    if (include_history) {
+        for (row in range(length(buffer.history))) {
+            if (line > 0) writer |> write("\r\n")
+            checkpoint_write_row(writer, buffer.history[history_index(buffer, row)],
+                active_style, active_hyperlink)
+            line++
+        }
+    }
+    for (row in range(length(buffer.screen))) {
+        if (line > 0) writer |> write("\r\n")
+        checkpoint_write_row(writer, buffer.screen[screen_index(buffer, row)],
+            active_style, active_hyperlink)
+        line++
+    }
+    assert(line == line_count)
+}
+
+def private checkpoint_write_mode(var writer : StringBuilderWriter;
+                                  mode : int; enabled : bool) {
+    let esc = to_char(27)
+    let suffix = enabled ? "h" : "l"
+    writer |> write("{esc}[?{mode}{suffix}")
+}
+
+def private checkpoint_write_cursor_state(var writer : StringBuilderWriter;
+                                          cursor : TerminalCursor const) {
+    let esc = to_char(27)
+    writer |> write("{esc}[{cursor.style}q")
+    checkpoint_write_mode(writer, 25, cursor.visible)
+}
+
+def private checkpoint_restore_buffer_state(var writer : StringBuilderWriter;
+                                            buffer : TerminalBuffer const;
+                                            var active_style : TerminalCell;
+                                            var active_hyperlink : string) {
+    let esc = to_char(27)
+    writer |> write("{esc}[{buffer.scroll_top + 1};{buffer.scroll_bottom + 1}r")
+    writer |> write("{esc}[{buffer.saved_cursor.row + 1};{buffer.saved_cursor.column + 1}H")
+    checkpoint_write_cursor_state(writer, buffer.saved_cursor)
+    writer |> write("{esc}[s")
+    writer |> write("{esc}[{buffer.cursor.row + 1};{buffer.cursor.column + 1}H")
+    checkpoint_write_cursor_state(writer, buffer.cursor)
+    checkpoint_write_style(writer, buffer.pen)
+    active_style = buffer.pen
+    if (active_hyperlink != buffer.pen.hyperlink) {
+        checkpoint_write_hyperlink(writer, buffer.pen.hyperlink)
+        active_hyperlink = buffer.pen.hyperlink
+    }
+}
+
+//! Serializes authoritative terminal state so a fresh emulator can resume without replaying TUI history.
+def public terminal_checkpoint_ansi(terminal : Terminal const) : string {
+    let esc = to_char(27)
+    return build_string() $(var writer) {
+        var active_style = TerminalCell()
+        var active_hyperlink = ""
+        writer |> write("{esc}c{esc}[?7l{esc}[H")
+        checkpoint_write_buffer(writer, terminal.normal, true,
+            active_style, active_hyperlink)
+        checkpoint_restore_buffer_state(writer, terminal.normal,
+            active_style, active_hyperlink)
+        if (terminal.alternate_active) {
+            checkpoint_write_mode(writer, 1049, true)
+            active_style = TerminalCell()
+            active_hyperlink = ""
+            checkpoint_write_mode(writer, 7, false)
+            writer |> write("{esc}[H")
+            checkpoint_write_buffer(writer, terminal.alternate, false,
+                active_style, active_hyperlink)
+            checkpoint_restore_buffer_state(writer, terminal.alternate,
+                active_style, active_hyperlink)
+        }
+        checkpoint_write_mode(writer, 1, terminal.modes.application_cursor_keys)
+        checkpoint_write_mode(writer, 7, terminal.modes.auto_wrap)
+        checkpoint_write_mode(writer, 1000, terminal.modes.mouse_button_reporting)
+        checkpoint_write_mode(writer, 1002, terminal.modes.mouse_drag_reporting)
+        checkpoint_write_mode(writer, 1003, terminal.modes.mouse_any_reporting)
+        checkpoint_write_mode(writer, 1004, terminal.modes.focus_reporting)
+        checkpoint_write_mode(writer, 1006, terminal.modes.sgr_mouse_encoding)
+        checkpoint_write_mode(writer, 2004, terminal.modes.bracketed_paste)
+        let buffer & = terminal.alternate_active ? terminal.alternate : terminal.normal
+        checkpoint_write_cursor_state(writer, buffer.cursor)
+        if (!empty(terminal.title)) writer |> write("{esc}]2;{terminal.title}{esc}\\")
+        if (!empty(terminal.current_directory)) {
+            writer |> write("{esc}]7;{terminal.current_directory}{esc}\\")
+        }
+    }
+}
+
 def private batchable_ascii(cell : TerminalCell const) : bool {
     if (cell.width != 1 || cell.attributes != 0 || cell.hyperlink != "" ||
             length(cell.grapheme) != 1) return false
@@ -1541,6 +1712,7 @@ def public terminal_viewport_snapshot(terminal : Terminal const; scroll_offset :
     snapshot.text_run_projection_us = get_time_usec(runs_started)
     snapshot.buffer.scrollback_rows = history_rows
     snapshot.buffer.cursor = buffer.cursor
+    snapshot.buffer.saved_cursor = buffer.saved_cursor
 }
 
 def public terminal_viewport_snapshot_dispose(var snapshot : TerminalViewportSnapshot) {

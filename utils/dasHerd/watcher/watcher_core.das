@@ -254,6 +254,14 @@ struct public WatcherOutputChunk {
     reset : bool
 }
 
+struct public WatcherTerminalCheckpoint {
+    ok : bool
+    ansi : string
+    output_offset : int64
+    columns : int
+    rows : int
+}
+
 class private WatcherSession {
     id : string
     command_line : string
@@ -425,6 +433,14 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }
+    if (request.kind == "agent-codex") {
+        if (empty(strip(request.task_context))) {
+            return WatcherLaunchResult(error = "agent task is required")
+        }
+        if (length(request.task_context) > MAX_COMMAND_BYTES / 2) {
+            return WatcherLaunchResult(error = "agent task is too large")
+        }
+    }
     if (length(request.command_line) > MAX_COMMAND_BYTES) {
         return WatcherLaunchResult(error = "command_line is too large")
     }
@@ -485,17 +501,21 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         unsafe { delete session }
         return WatcherLaunchResult(error = "could not write session metadata")
     }
-    append_event(session, "session_created",
-        "cwd={request.cwd}; display={visible_command}; context={session.context_path}")
-
+    var session_created_detail = "cwd={request.cwd}; display={visible_command}"
     if (request.kind == "agent-codex") {
         if (!write_text_file(session.context_path,
                 agent_context_markdown(request, session_id, session.context_path))) {
             unsafe { delete session }
             return WatcherLaunchResult(error = "could not write agent session context")
         }
+        session_created_detail += "; context={session.context_path}"
+    }
+    append_event(session, "session_created", session_created_detail)
+
+    if (request.kind == "agent-codex") {
         append_event(session, "agent_bootstrap_prepared",
-            "context={session.context_path}; skill={request.agent_skill_path}")
+            "context={session.context_path}; skill={request.agent_skill_path}; " +
+            "task_bytes={length(request.task_context)}")
         var inscope argv <- agent_launch_argv(request, session_id, session.context_path)
         var inscope launched <- terminal_launch_argv(argv, request.cwd, columns, rows)
         session.terminal := launched
@@ -621,6 +641,19 @@ def public watcher_output_since(session_id : string; requested_offset : int64;
         }
     }
     result.next_offset = offset + count
+    return <- result
+}
+
+def public watcher_terminal_checkpoint(session_id : string) : WatcherTerminalCheckpoint {
+    var result = WatcherTerminalCheckpoint()
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null) return <- result
+    let session = g_sessions[index]
+    result.ansi = terminal_checkpoint_ansi(session.terminal)
+    result.output_offset = session.output_bytes
+    result.columns = session.terminal.columns
+    result.rows = session.terminal.rows
+    result.ok = true
     return <- result
 }
 
@@ -884,8 +917,9 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
                               session_id, context_path : string) : array<string> {
     var command_argv := request.argv
     if (empty(command_argv)) command_argv |> push("codex")
-    command_argv |> push("Read the dasHerd session context at {context_path} before acting. " +
-        "Use the dasHerd skill for session coordination, then help with the stated debug task.")
+    command_argv |> push("Your assigned debug task is:\n\n{request.task_context}\n\n" +
+        "Read the dasHerd session context at {context_path} before acting. " +
+        "Use the dasHerd skill for session coordination, then begin the assigned task.")
     if (get_platform_name() == "windows") {
         var command = ("$env:DASHERD_URL = {powershell_literal(request.agent_url)}; " +
             "$env:DASHERD_TOKEN = {powershell_literal(request.agent_token)}; " +
@@ -1206,9 +1240,16 @@ def private append_bundle_record(var session : WatcherSession?;
     fflush(session.bundles_file)
 }
 
+def private bundle_publishes_attention(bundle : WatcherReviewBundle const) : bool {
+    if (empty(bundle.focus.targets)) return false
+    return (bundle.status == "ready" || bundle.status == "published"
+        || bundle.status == "merged" || bundle.status == "complete"
+    )
+}
+
 def private upsert_bundle_attention(var session : WatcherSession?;
                                     bundle : WatcherReviewBundle const;
-                                    publish : bool) {
+                                    publish, reopen : bool) {
     for (message_index in range(length(session.mailbox))) {
         if (session.mailbox[message_index].direction != "outbox"
                 || session.mailbox[message_index].kind != "bundle_focus"
@@ -1218,6 +1259,8 @@ def private upsert_bundle_attention(var session : WatcherSession?;
         session.mailbox[message_index].focus := bundle.focus
         if (!publish) {
             session.mailbox[message_index].status = "completed"
+        } elif (reopen) {
+            session.mailbox[message_index].status = "new"
         }
         session.mailbox[message_index].revision = g_mailbox_revision
         session.mailbox_revision = g_mailbox_revision
@@ -1270,8 +1313,11 @@ def public watcher_bundle_sync(request : WatcherBundleSyncRequest) : WatcherBund
     bundle.updated_ms = elapsed_ms(g_sessions[index])
     let bundle_id = bundle.id
     var replaced = false
+    var previously_published_attention = false
     for (bundle_index in range(length(g_sessions[index].bundles))) {
         if (g_sessions[index].bundles[bundle_index].id != bundle_id) continue
+        previously_published_attention = bundle_publishes_attention(
+            g_sessions[index].bundles[bundle_index])
         g_sessions[index].bundles[bundle_index] := bundle
         replaced = true
         break
@@ -1287,10 +1333,11 @@ def public watcher_bundle_sync(request : WatcherBundleSyncRequest) : WatcherBund
     }
     append_bundle_record(g_sessions[index], g_sessions[index].bundles[stored_index])
     let stored_status = g_sessions[index].bundles[stored_index].status
-    let publish_attention = (stored_status == "ready" || stored_status == "published"
-        || stored_status == "merged" || stored_status == "complete")
+    let publish_attention = bundle_publishes_attention(
+        g_sessions[index].bundles[stored_index])
     upsert_bundle_attention(g_sessions[index],
-        g_sessions[index].bundles[stored_index], publish_attention)
+        g_sessions[index].bundles[stored_index], publish_attention,
+        publish_attention && !previously_published_attention)
     append_event(g_sessions[index], "bundle_synced",
         "id={bundle_id}; status={stored_status}; participants={length(g_sessions[index].bundles[stored_index].participants)}")
     return WatcherBundleResult(ok = true, bundle_id = bundle_id,
