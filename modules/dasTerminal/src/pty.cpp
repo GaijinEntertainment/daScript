@@ -105,6 +105,7 @@ private:
     HANDLE input_write_ = nullptr;
     HANDLE output_read_ = nullptr;
     HANDLE process_ = nullptr;
+    HANDLE job_ = nullptr;
     uint32_t process_id_ = 0;
 };
 
@@ -155,11 +156,12 @@ std::string buildWindowsCommandLine(const std::vector<std::string> & arguments) 
 
 ConPtyProcess::~ConPtyProcess() {
     closePty();
+    closeHandle(job_);
     closeHandle(process_);
 }
 
 bool ConPtyProcess::launch(const PtyProcessOptions & options, std::string & error) {
-    if (pseudo_console_ || input_write_ || output_read_ || process_) {
+    if (pseudo_console_ || input_write_ || output_read_ || process_ || job_) {
         error = "ConPTY process is already launched";
         return false;
     }
@@ -248,10 +250,34 @@ bool ConPtyProcess::launch(const PtyProcessOptions & options, std::string & erro
     }
     std::vector<wchar_t> mutable_command(command.begin(), command.end());
     mutable_command.push_back(L'\0');
+
+    job_ = CreateJobObjectW(nullptr, nullptr);
+    if (!job_) {
+        error = windowsError("CreateJobObjectW");
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+        closeHandle(input_read);
+        closeHandle(output_write);
+        closePty();
+        return false;
+    }
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits = {};
+    job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (!SetInformationJobObject(
+            job_, JobObjectExtendedLimitInformation, &job_limits,
+            sizeof(job_limits))) {
+        error = windowsError("SetInformationJobObject");
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+        closeHandle(input_read);
+        closeHandle(output_write);
+        closePty();
+        closeHandle(job_);
+        return false;
+    }
+
     PROCESS_INFORMATION process = {};
     const BOOL created = CreateProcessW(
         nullptr, mutable_command.data(), nullptr, nullptr, FALSE,
-        EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+        EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
         nullptr, directory.empty() ? nullptr : directory.c_str(),
         &startup.StartupInfo, &process);
     const DWORD create_error = GetLastError();
@@ -263,8 +289,33 @@ bool ConPtyProcess::launch(const PtyProcessOptions & options, std::string & erro
     if (!created) {
         error = windowsError("CreateProcessW", create_error);
         closePty();
+        closeHandle(job_);
         return false;
     }
+
+    if (!AssignProcessToJobObject(job_, process.hProcess)) {
+        const DWORD assign_error = GetLastError();
+        TerminateProcess(process.hProcess, 1);
+        WaitForSingleObject(process.hProcess, INFINITE);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        closePty();
+        closeHandle(job_);
+        error = windowsError("AssignProcessToJobObject", assign_error);
+        return false;
+    }
+    if (ResumeThread(process.hThread) == static_cast<DWORD>(-1)) {
+        const DWORD resume_error = GetLastError();
+        TerminateJobObject(job_, 1);
+        WaitForSingleObject(process.hProcess, INFINITE);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        closePty();
+        closeHandle(job_);
+        error = windowsError("ResumeThread", resume_error);
+        return false;
+    }
+
     CloseHandle(process.hThread);
     process_ = process.hProcess;
     process_id_ = process.dwProcessId;
@@ -368,11 +419,12 @@ bool ConPtyProcess::wait(
 }
 
 bool ConPtyProcess::terminate(uint32_t exit_code, std::string & error) {
-    if (TerminateProcess(process_, exit_code)) return true;
+    if (job_ && TerminateJobObject(job_, exit_code)) return true;
+    if (!job_ && TerminateProcess(process_, exit_code)) return true;
     const DWORD code = GetLastError();
     if (code == ERROR_ACCESS_DENIED && WaitForSingleObject(process_, 0) == WAIT_OBJECT_0)
         return true;
-    error = windowsError("TerminateProcess", code);
+    error = windowsError(job_ ? "TerminateJobObject" : "TerminateProcess", code);
     return false;
 }
 

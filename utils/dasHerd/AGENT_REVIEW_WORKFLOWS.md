@@ -1,7 +1,7 @@
 # Agent-assisted review workflows
 
-Status: first bidirectional local Review Focus slice implemented; GitHub PR
-surface remains next
+Status: bidirectional local Review Focus and multi-repository debug-session
+foundation implemented; GitHub PR surface remains next
 
 This note records the two agreed product tracks that follow a usable local Git
 inspector. Both tracks will be implemented. The local Review Focus vertical
@@ -40,6 +40,30 @@ disjoint UTF-8 byte ranges, dimmed surrounding text, direct file navigation,
 previous/next target navigation, and a show/hide toggle. A code selection's
 right-click **Look at that** action atomically posts the exact installed
 repository/worktree/comparison/path/range to the selected session Inbox.
+
+The watcher can now create a dedicated branch/worktree in a visible Git task
+session and launch Codex there only after creation succeeds, or launch on an
+explicitly selected existing worktree. It authors a durable `context.md`, injects the watcher route,
+watcher-assigned session ID, purpose, and context path into the process, and
+retains purpose/task/origin in session state. The launch token is deliberately
+removed from persisted `session.json`.
+
+An agent may declaratively sync one logical Review Bundle spanning several
+registered repository/worktree participants. Each participant owns its own
+claimed file set and revision metadata; focus targets may override repository,
+worktree, comparison, and revision per file. A ready bundle is projected to one
+retry-safe Attention item. The Sessions UI shows the debug context, immutable
+origin, bundle status, and every participant; selecting a participant switches
+the ordinary Git surfaces to that exact repository/worktree without changing
+the session origin.
+
+The deterministic multi-repository acceptance scenario launches Codex only
+after its dedicated worktree is observed, keeps that launch worktree as the
+session origin, registers a second repository, and publishes one bundle with
+participants and exact focus in both. It also proves terminal ownership is a
+lease rather than process ownership: a second client can observe while control
+is held, explicit detach hands control over, and an ungraceful socket close
+releases it for the next client without terminating the agent.
 
 Live commands expose Attention state and explicit target opening for semantic
 verification. The next product track is the GitHub PR surface described below;
@@ -431,3 +455,12 @@ for presentation, never the correctness oracle.
   plus one corrective source-range handoff human-to-agent. Arrival is non-modal
   and never changes navigation/focus; the human navigates only by clicking its
   Attention entry.
+- 2026-07-22: Bind a debug session to a watcher-created worktree while allowing
+  the cooperating agent to declare additional repository/worktree participants
+  in one logical Review Bundle. Treat the launch origin as immutable routing
+  identity, not as a limit on the work presented for review.
+- 2026-07-22: Require a real black-box protocol test for the slice: two Git
+  repositories, dedicated worktree and agent bootstrap, explicit detach and
+  reattach, controller contention, disconnect release, declarative bundle
+  replacement, and ordered durable lifecycle logs. Preserve diagnostics only
+  on failure.

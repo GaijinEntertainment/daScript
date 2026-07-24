@@ -24,6 +24,14 @@ reopened from the View menu. Commands > PowerShell launches in the selected
 worktree, attaches with control, and raises the terminal. `--port=9191` is
 available on both processes when the default port is occupied.
 
+Commands > Debug with Codex opens the Session Launcher. It can create a named
+branch and dedicated worktree in a watcher-owned Git terminal, then starts
+Codex there after Git succeeds. The watcher injects the session route and
+writes a durable debug context without persisting the routing token. Sessions
+show their immutable origin and agent-declared multi-repository Review Bundles;
+clicking a participant switches the ordinary Git surfaces to that exact
+worktree.
+
 The watcher prints a token-bearing control-panel URL. Optional arguments after
 `--` are `--port=9191`, `--token=<token>`, `--log-root=<directory>`, and
 `--config=<path>`. The default global configuration is
@@ -86,9 +94,28 @@ Unicode 11 0.8.0, and web-links 0.11.0 addons under `vendor/xterm/`. It works
 offline; the corresponding MIT license files are kept beside the assets.
 
 Session logs are stored under
-`logs/dasHerd/watcher/sessions/<session-id>/`. Closing a client releases its
-controller lease but does not stop its child. Killing the watcher necessarily
-loses its live PTYs; already-flushed logs remain readable.
+`logs/dasHerd/watcher/sessions/<session-id>/`. Each `events.jsonl` record has a
+contiguous per-session sequence, wall and elapsed time, lifecycle event/detail,
+and a snapshot of state, kind, purpose, repository, worktree, PID, and current
+controller. Attach attempts, rejected controller claims, detach reasons,
+disconnect/timeout releases, agent-worktree sequencing, bundle replacement,
+and Attention projection are therefore reconstructible without correlating UI
+screenshots. Closing a client releases its controller lease but does not stop
+its child. Killing the watcher necessarily loses its live PTYs; already-flushed
+logs remain readable.
+
+Run the focused suite from the repository root with:
+
+```powershell
+bin\Release\daslang.exe dastest\dastest.das -- --test utils\dasHerd\watcher\tests
+```
+
+The Windows protocol integration test starts a real watcher and fake Codex,
+creates two temporary Git repositories plus a dedicated worktree, drives HTTP,
+WebSocket attach/detach/contention/disconnect, and syncs a two-repository bundle
+through the real CLI. Its fixtures live under `tmp/dasHerd/` and diagnostics
+under `logs/dasHerd/integration/`; successful runs remove both, while failed
+runs print and preserve their exact directories for postmortem inspection.
 
 The native terminal registers its full `ImGuiTerminalState` with the live-command
 surface. `imgui_snapshot` can therefore read terminal text, selection, geometry,

@@ -135,6 +135,18 @@ def test_watcher_process_lifecycle(t : T?) {
         t |> success(find(string(raw.bytes), "watcher-core-ok") >= 0, "raw PTY history can be replayed")
         let raw_tail <- watcher_output_since(quick.session_id, raw.next_offset)
         t |> equal(length(raw_tail.bytes), 0, "raw replay offset does not duplicate output")
+        let checkpoint <- watcher_terminal_checkpoint(quick.session_id)
+        t |> success(checkpoint.ok, "terminal checkpoint is available for a retained session")
+        t |> equal(checkpoint.output_offset, raw.next_offset,
+            "checkpoint starts subsequent raw delivery at the captured output offset")
+        var inscope restored <- terminal_create(checkpoint.columns, checkpoint.rows)
+        terminal_feed(restored, checkpoint.ansi)
+        var restored_viewport = TerminalViewportSnapshot()
+        terminal_viewport_snapshot(restored, 0, restored_viewport)
+        t |> success(find(restored_viewport.screen_text, "watcher-core-ok") >= 0,
+            "terminal checkpoint reconstructs the authoritative visible screen")
+        terminal_viewport_snapshot_dispose(restored_viewport)
+        terminal_dispose(restored)
         t |> success(fexist(path_join(path_join(path_join(root, "sessions"), quick.session_id), "output.raw")),
             "raw output log exists")
 
@@ -189,12 +201,129 @@ def test_watcher_process_lifecycle(t : T?) {
                 && find(fread(mailbox_log), "acknowledged") >= 0,
             "mailbox create and state records are durable JSONL")
 
+        var first_participant = WatcherBundleParticipant(
+            repository_id = "repo-main", worktree_path = root,
+            role = "implementation", state = "modified")
+        first_participant.files |> push(WatcherBundleFile(
+            path = "src/main.das", role = "primary"))
+        var second_participant = WatcherBundleParticipant(
+            repository_id = "repo-render", worktree_path = path_join(root, "other-worktree"),
+            role = "dependency", state = "modified")
+        second_participant.files |> push(WatcherBundleFile(
+            path = "src/render.das", role = "risk"))
+        var first_bundle_target = WatcherFocusTarget(
+            repository_id = "repo-main", worktree_path = root,
+            comparison = "working", role = "primary", file_path = "src/main.das")
+        first_bundle_target.ranges |> push(WatcherFocusRange(
+            start_byte = 1, end_byte = 8, caption = "main loop"))
+        var second_bundle_target = WatcherFocusTarget(
+            repository_id = "repo-render", worktree_path = path_join(root, "other-worktree"),
+            comparison = "working", role = "risk", file_path = "src/render.das")
+        second_bundle_target.ranges |> push(WatcherFocusRange(
+            start_byte = 4, end_byte = 12, caption = "bug was here"))
+        var bundle = WatcherReviewBundle(id = "bundle-debug",
+            title = "Cross-repository debug fix", kind = "debug", status = "ready",
+            summary = "Two repositories participate in one review unit")
+        bundle.participants |> emplace(first_participant)
+        bundle.participants |> emplace(second_participant)
+        bundle.focus.targets |> emplace(first_bundle_target)
+        bundle.focus.targets |> emplace(second_bundle_target)
+        let bundle_result = watcher_bundle_sync(WatcherBundleSyncRequest(
+            session_id = quick.session_id, bundle := bundle))
+        t |> success(bundle_result.ok, bundle_result.error)
+        t |> equal(bundle_result.bundle_id, "bundle-debug")
+        let bundles_json = watcher_bundles_json(quick.session_id)
+        t |> success(find(bundles_json, "repo-main") >= 0
+                && find(bundles_json, "repo-render") >= 0
+                && find(bundles_json, "bug was here") >= 0,
+            "one durable review bundle spans repositories and exact focus ranges")
+        let bundle_attention = watcher_mailbox_json(quick.session_id, "outbox")
+        t |> success(find(bundle_attention, "\"bundle_id\":\"bundle-debug\"") >= 0
+                && find(bundle_attention, "\"kind\":\"bundle_focus\"") >= 0,
+            "a ready bundle projects one non-modal Attention message")
+        var updated_bundle := bundle
+        updated_bundle.summary = "Updated complete snapshot"
+        let updated_result = watcher_bundle_sync(WatcherBundleSyncRequest(
+            session_id = quick.session_id, bundle := updated_bundle))
+        t |> success(updated_result.ok && updated_result.revision > bundle_result.revision,
+            "bundle sync replaces the same logical bundle with a newer snapshot")
+        let updated_attention = watcher_mailbox_json(quick.session_id, "outbox")
+        let first_bundle_marker = find(updated_attention,
+            "\"bundle_id\":\"bundle-debug\"")
+        t |> success(first_bundle_marker >= 0 && find(updated_attention,
+                "\"bundle_id\":\"bundle-debug\"", first_bundle_marker + 1) < 0,
+            "retry-safe bundle sync updates rather than duplicating Attention")
+        var draft_bundle := updated_bundle
+        draft_bundle.status = "draft"
+        let draft_result = watcher_bundle_sync(WatcherBundleSyncRequest(
+            session_id = quick.session_id, bundle := draft_bundle))
+        t |> success(draft_result.ok
+                && find(watcher_mailbox_json(quick.session_id, "outbox"),
+                    "\"status\":\"completed\"") >= 0,
+            "a draft bundle completes its projected Attention")
+        let republished_result = watcher_bundle_sync(WatcherBundleSyncRequest(
+            session_id = quick.session_id, bundle := updated_bundle))
+        t |> success(republished_result.ok
+                && find(watcher_mailbox_json(quick.session_id, "outbox"),
+                    "\"status\":\"new\"") >= 0,
+            "a draft-to-ready bundle transition reopens its projected Attention")
+        let bundles_log = path_join(path_join(path_join(root, "sessions"),
+            quick.session_id), "bundles.jsonl")
+        t |> success(fexist(bundles_log)
+                && find(fread(bundles_log), "Updated complete snapshot") >= 0,
+            "bundle snapshots are durable JSONL")
+
         let spaced_dir = path_join(root, "argv space")
         var mkdir_error : string
         t |> success(mkdir_rec(spaced_dir, mkdir_error), mkdir_error)
         let echo_script = path_join(spaced_dir, "echo args.ps1")
         t |> success(fwrite(echo_script, "[Console]::Write(($args -join '|'))"),
             "argv echo script is written")
+        let fake_codex_script = path_join(spaced_dir, "fake codex.ps1")
+        t |> success(fwrite(fake_codex_script,
+            "[Console]::Write($env:DASHERD_SESSION_KIND + '|' + $env:DASHERD_SESSION_ID + '|' + $args.Count + '|' + ($args -join ' '))"),
+            "fake Codex entry point is written")
+        var fake_codex_argv <- ["powershell.exe", "-NoLogo", "-NoProfile",
+            "-File", fake_codex_script]
+        let agent = watcher_launch(WatcherLaunchRequest(argv <- fake_codex_argv,
+            cwd = root, display_name = "Codex debug", kind = "agent-codex",
+            purpose = "debug", task_context = "Find the renderer crash",
+            agent_url = "http://127.0.0.1:9191", agent_token = "secret-not-persisted",
+            agent_skill_path = path_join(root, "dasherder.md"),
+            target_id = "local", repository_id = "test-repository",
+            worktree_path = root, columns = 80, rows = 20, timeout_ms = 5000l))
+        t |> success(agent.ok, agent.error)
+        t |> success(wait_for(agent.session_id, "exited", 5000l),
+            "agent bootstrap exits after the fake Codex process")
+        let agent_output = watcher_output_text(agent.session_id)
+        t |> success(find(agent_output, "debug|{agent.session_id}|1") >= 0,
+            "agent process receives purpose, watcher-assigned session id, and context prompt")
+        t |> success(find(agent_output, "Find the renderer crash") >= 0,
+            "agent process receives its assigned task in the initial prompt")
+        let agent_dir = path_join(path_join(root, "sessions"), agent.session_id)
+        let agent_context_path = path_join(agent_dir, "context.md")
+        let agent_context = fread(agent_context_path)
+        let agent_metadata = fread(path_join(agent_dir, "session.json"))
+        let agent_events = fread(path_join(agent_dir, "events.jsonl"))
+        t |> success(find(agent_context, "Find the renderer crash") >= 0
+                && find(agent_context, "immutable session origin") >= 0,
+            "watcher-authored agent context explains the task and cooperation contract")
+        t |> success(find(agent_events, "\"event\":\"session_created\"") >= 0
+                && find(agent_events, "; context=") >= 0
+                && find(agent_events, "context.md") >= 0
+                && fexist(agent_context_path),
+            "agent session creation advertises its durable context artifact")
+        t |> success(find(agent_metadata, "secret-not-persisted") < 0,
+            "session metadata never persists the watcher routing token")
+        var empty_agent_argv <- ["powershell.exe", "-NoLogo", "-NoProfile",
+            "-File", fake_codex_script]
+        let empty_agent = watcher_launch(WatcherLaunchRequest(argv <- empty_agent_argv,
+            cwd = root, display_name = "Empty Codex debug", kind = "agent-codex",
+            purpose = "debug", task_context = " \r\n ",
+            target_id = "local", repository_id = "test-repository",
+            worktree_path = root, columns = 80, rows = 20, timeout_ms = 5000l))
+        t |> success(!empty_agent.ok && empty_agent.error == "agent task is required",
+            "agent launch rejects a blank task before creating a session")
         var structured_argv <- ["powershell.exe", "-NoLogo", "-NoProfile", "-File", echo_script,
             "space value", "quote\"value", "trailing\\"]
         let structured = watcher_launch(WatcherLaunchRequest(argv <- structured_argv,
@@ -205,8 +334,13 @@ def test_watcher_process_lifecycle(t : T?) {
         t |> success(wait_for(structured.session_id, "exited", 5000l),
             "structured argv command exits and drains")
         let structured_snapshot = watcher_snapshot_json(structured.session_id)
+        let structured_events = fread(path_join(path_join(path_join(root, "sessions"),
+            structured.session_id), "events.jsonl"))
         t |> success(find(structured_snapshot, "space value|quote\\\"value|trailing\\\\") >= 0,
             "structured argv preserves spaces, quotes, and trailing backslashes")
+        t |> success(find(structured_events, "\"event\":\"session_created\"") >= 0
+                && find(structured_events, "; context=") < 0,
+            "non-agent session creation does not claim a missing context artifact")
         t |> success(find(structured_snapshot, "\"worktree_path\":") >= 0,
             "session snapshot retains launch worktree association")
         var before_compact = WatcherSessionInfo()
@@ -292,6 +426,16 @@ def test_watcher_process_lifecycle(t : T?) {
         t |> equal(watcher_input(controlled.session_id, "\r", 12), "")
         let controlled_events = fread(path_join(path_join(path_join(root, "sessions"),
             controlled.session_id), "events.jsonl"))
+        t |> success(find(controlled_events, "\"sequence\":1") >= 0
+                && find(controlled_events, "\"wall_time_seconds\":") >= 0
+                && find(controlled_events, "\"state\":") >= 0
+                && find(controlled_events, "\"controller_id\":") >= 0,
+            "every event carries ordered time and reconstructible session/controller context")
+        t |> success(find(controlled_events, "\"event\":\"session_created\"") >= 0
+                && find(controlled_events, "\"event\":\"controller_claimed\"") >= 0
+                && find(controlled_events, "\"event\":\"controller_claim_rejected\"") >= 0
+                && find(controlled_events, "\"event\":\"controller_released\"") >= 0,
+            "controller contention and release are durably auditable")
         t |> success(find(controlled_events, "delivery=deferred") >= 0,
             "a deferred mailbox nudge records its eventual delivery")
         t |> success(find(controlled_events, "terminal_notification_queued") >= 0,

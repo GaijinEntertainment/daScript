@@ -73,6 +73,13 @@ struct private WatcherMailboxMessageEnvelope {
     data : array<WatcherMailboxMessage>
 }
 
+struct private WatcherBundlesMessageEnvelope {
+    @rename = "type" _type : string
+    session_id : string
+    revision : int64
+    data : array<WatcherReviewBundle>
+}
+
 struct private WatcherMailboxPostedMessage {
     @rename = "type" _type : string
     message_id : string
@@ -115,6 +122,14 @@ struct private WatcherGitFileActionMessage {
 struct private WatcherRawResetMessage {
     @rename = "type" _type : string
     offset : int64
+}
+
+struct private WatcherTerminalCheckpointMessage {
+    @rename = "type" _type : string
+    offset : int64
+    columns : int
+    rows : int
+    ansi : string
 }
 
 struct private HerderInspectorTextArgs {
@@ -247,6 +262,12 @@ struct private GitWindowStatus {
     error : bool
 }
 
+struct private AgentLaunchLocation {
+    repository_id : string
+    worktree_path : string
+    display_label : string
+}
+
 var private g_terminal = Terminal()
 var private g_terminal_view = ImGuiTerminalState()
 var private g_terminal_cache = ImGuiTerminalCache()
@@ -259,6 +280,11 @@ var private g_url : string
 var private g_token : string
 var private g_selected_worktree_path : string
 var private g_selected_repository_id : string
+var private g_agent_source_worktree_path : string
+var private g_agent_source_repository_id : string
+var private g_agent_worktree_name : string
+var private g_layout_probe_complete = false
+var private g_layout_force_default = false
 var private g_focus_terminal_pending = false
 var private g_active_focus_message = ""
 var private g_active_focus_target = -1
@@ -284,6 +310,9 @@ var private g_jobque_owned = false
 var private SESSION_ROW : table<int; ToggleState>
 var private ATTENTION_MESSAGE_ROW : table<int; ToggleState>
 var private ATTENTION_TARGET_ROW : table<int; ToggleState>
+var private BUNDLE_ROW : table<int; ToggleState>
+var private BUNDLE_PARTICIPANT_ROW : table<int; ToggleState>
+var private BUNDLE_FILE_ROW : table<int; ToggleState>
 var private WORKTREE_ROW : table<int; ToggleState>
 var private GIT_FILE_ROW : table<int; ToggleState>
 var private GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
@@ -337,27 +366,19 @@ def private setup_default_layout(dock_id : uint) {
     var left_id : uint = 0u
     var right_id : uint = 0u
     DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.24f, left_id, right_id)
-    var upper_id : uint = 0u
-    var terminal_id : uint = 0u
-    DockBuilderSplitNode(right_id, ImGuiDir.Down, 0.34f, terminal_id, upper_id)
-    var git_id : uint = 0u
-    var inspector_id : uint = 0u
-    DockBuilderSplitNode(upper_id, ImGuiDir.Left, 0.34f, git_id, inspector_id)
-    var changelist_id : uint = 0u
-    var activity_id : uint = 0u
-    DockBuilderSplitNode(git_id, ImGuiDir.Up, 0.35f, changelist_id, activity_id)
     var repositories_id : uint = 0u
     var sessions_id : uint = 0u
     DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.42f,
         sessions_id, repositories_id)
     DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
     DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
-    DockBuilderDockWindow("Git Changelist", changelist_id)
-    DockBuilderDockWindow("Git Activity", activity_id)
-    DockBuilderDockWindow("File Inspector", inspector_id)
-    DockBuilderDockWindow("Terminal", terminal_id)
-    DockBuilderDockWindow("Settings", activity_id)
+    DockBuilderDockWindow("Git Changelist", right_id)
+    DockBuilderDockWindow("Git Activity", right_id)
+    DockBuilderDockWindow("File Inspector", right_id)
+    DockBuilderDockWindow("Settings", right_id)
+    DockBuilderDockWindow("Terminal", right_id)
     DockBuilderFinish(dock_id)
+    TERMINAL_WIN.pending_raise = true
 }
 
 def private option_value(prefix : string; fallback : string = "") : string {
@@ -572,12 +593,16 @@ class private WatcherRichClient : HvWebSocketClient {
     repositories : array<RepositorySnapshot>
     mailbox : array<WatcherMailboxMessage>
     mailbox_revision : int64
+    bundles : array<WatcherReviewBundle>
+    bundles_revision : int64
     agent_mark_revision : int64 = -1l
     agent_mark_files : table<string; bool>
     error : string
     last_heartbeat : int64
     last_list : int64
     last_reconnect : int64
+    control_retry_started : int64
+    last_control_retry : int64
     sent_input_bytes : int64
     desired_columns : int
     desired_rows : int
@@ -597,6 +622,13 @@ class private WatcherRichClient : HvWebSocketClient {
     reconnect_attempt_count : int64
     message_count : int64
     repository_message_count : int64
+    heartbeat_send_count : int64
+    heartbeat_send_failure_count : int64
+    heartbeat_last_result : int
+    heartbeat_receive_count : int64
+    list_send_count : int64
+    list_send_failure_count : int64
+    list_last_result : int
 
     def override onOpen {
         connected = true
@@ -620,6 +652,8 @@ class private WatcherRichClient : HvWebSocketClient {
         attached = false
         controls = false
         attached_id = ""
+        control_retry_started = 0l
+        last_control_retry = 0l
         sent_columns = 0
         sent_rows = 0
         last_review_identity = ""
@@ -657,6 +691,8 @@ class private WatcherRichClient : HvWebSocketClient {
             if (sscan_json(body, incoming)) {
                 client_id = incoming.client_id
             }
+        } elif (envelope._type == "heartbeat") {
+            heartbeat_receive_count++
         } elif (envelope._type == "sessions") {
             var incoming : WatcherSessionsMessage
             if (sscan_json(body, incoming)) {
@@ -769,6 +805,15 @@ class private WatcherRichClient : HvWebSocketClient {
             } else {
                 error = "invalid mailbox message"
             }
+        } elif (envelope._type == "bundles") {
+            var incoming = WatcherBundlesMessageEnvelope()
+            if (sscan_json(body, incoming)) {
+                delete bundles
+                bundles <- incoming.data
+                bundles_revision = incoming.revision
+            } else {
+                error = "invalid bundles message"
+            }
         } elif (envelope._type == "mailbox_posted") {
             var incoming : WatcherMailboxPostedMessage
             if (sscan_json(body, incoming)) {
@@ -803,7 +848,17 @@ class private WatcherRichClient : HvWebSocketClient {
                 attached_id = incoming.session_id
                 attached = true
                 controls = incoming.controls
-                g_status = incoming.controls ? "Attached with control" : "Attached read-only"
+                if (incoming.controls) {
+                    control_retry_started = 0l
+                    last_control_retry = 0l
+                    error = ""
+                    g_status = "Attached with control"
+                } else {
+                    if (control_retry_started == 0l) {
+                        control_retry_started = ref_time_ticks()
+                    }
+                    g_status = "Attached read-only; waiting for control"
+                }
                 if (controls) {
                     if (desired_columns <= 0 || desired_rows <= 0) {
                         desired_columns = g_terminal.columns
@@ -816,8 +871,19 @@ class private WatcherRichClient : HvWebSocketClient {
             attached = false
             controls = false
             attached_id = ""
+            control_retry_started = 0l
+            last_control_retry = 0l
             sent_columns = 0
             sent_rows = 0
+        } elif (envelope._type == "terminal_checkpoint") {
+            var incoming : WatcherTerminalCheckpointMessage
+            if (sscan_json(body, incoming)) {
+                reset_terminal(max(1, incoming.columns), max(1, incoming.rows))
+                terminal_feed(g_terminal, incoming.ansi)
+                g_status = "Terminal restored at byte {incoming.offset}"
+            } else {
+                error = "invalid terminal checkpoint"
+            }
         } elif (envelope._type == "raw_reset") {
             var incoming : WatcherRawResetMessage
             if (sscan_json(body, incoming)) {
@@ -828,6 +894,26 @@ class private WatcherRichClient : HvWebSocketClient {
             var incoming : WatcherErrorMessage
             if (sscan_json(body, incoming)) {
                 error = incoming.error
+                if (incoming.error == "controller lease expired"
+                        || incoming.error == "client does not hold the controller lease"
+                        || incoming.error == "controller lease is held by another client") {
+                    controls = false
+                    sent_columns = 0
+                    sent_rows = 0
+                    if (attached && !empty(attached_id)) {
+                        control_retry_started = ref_time_ticks()
+                        last_control_retry = 0l
+                    }
+                } elif (incoming.error == "unknown operation"
+                        && attached && !controls && !empty(attached_id)) {
+                    // Compatibility with a watcher that predates
+                    // `claim_control`: reattach without raw replay or terminal
+                    // reset, then flush the latest measured PTY size when the
+                    // attached response grants control.
+                    send("\{\"op\":\"attach\",\"session_id\":" +
+                        "{sprint_json(attached_id, false)}," +
+                        "\"control\":true,\"raw\":false\}")
+                }
             }
         }
     }
@@ -844,16 +930,36 @@ class private WatcherRichClient : HvWebSocketClient {
         if (!connected || empty(session_id)) return
         var columns = 100
         var rows = 30
+        var origin_repository_id, origin_worktree_path : string
         for (session in sessions) {
             if (session.id == session_id) {
                 columns = max(20, session.columns)
                 rows = max(5, session.rows)
+                origin_repository_id = session.repository_id
+                origin_worktree_path = session.worktree_path
                 break
+            }
+        }
+        if (!empty(origin_repository_id) && !empty(origin_worktree_path)) {
+            let origin_changed = (g_selected_repository_id
+                    != origin_repository_id
+                || g_selected_worktree_path != origin_worktree_path)
+            g_selected_repository_id = origin_repository_id
+            g_selected_worktree_path = origin_worktree_path
+            if (origin_changed) {
+                request_repository_review(
+                    origin_repository_id, origin_worktree_path)
+                request_repository_history(
+                    origin_repository_id, origin_worktree_path)
+                request_repository_refs(
+                    origin_repository_id, origin_worktree_path)
             }
         }
         selected_id = session_id
         attached = false
         controls = false
+        control_retry_started = ref_time_ticks()
+        last_control_retry = 0l
         sent_columns = 0
         sent_rows = 0
         error = ""
@@ -873,6 +979,38 @@ class private WatcherRichClient : HvWebSocketClient {
             "\"timeout_ms\":0,\"display_name\":\"PowerShell\",\"kind\":\"interactive-shell\"," +
             "\"target_id\":\"local\",\"repository_id\":{sprint_json(repository_id, false)}," +
             "\"worktree_path\":{sprint_json(worktree_path, false)}\}")
+    }
+
+    def launch_codex_debug(cwd, repository_id, task_context : string) {
+        if (!connected) {
+            error = "watcher is not connected"
+            return
+        }
+        var argv <- ["codex"]
+        send("\{\"op\":\"launch\",\"argv\":{sprint_json(argv, false)}," +
+            "\"cwd\":{sprint_json(cwd, false)},\"columns\":120,\"rows\":36," +
+            "\"timeout_ms\":0,\"display_name\":\"Codex debug\"," +
+            "\"kind\":\"agent-codex\",\"purpose\":\"debug\"," +
+            "\"task_context\":{sprint_json(task_context, false)}," +
+            "\"target_id\":\"local\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(cwd, false)}\}")
+    }
+
+    def create_worktree_and_launch_codex(source_worktree, repository_id,
+                                         new_worktree_path, branch, base_ref,
+                                         task_context : string) {
+        if (!connected) {
+            error = "watcher is not connected"
+            return
+        }
+        send("\{\"op\":\"launch_agent_worktree\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(source_worktree, false)},\"new_worktree_path\":" +
+            "{sprint_json(new_worktree_path, false)},\"branch\":" +
+            "{sprint_json(branch, false)},\"base_ref\":" +
+            "{sprint_json(base_ref, false)},\"task_context\":" +
+            "{sprint_json(task_context, false)}\}")
     }
 
     def add_repository(path : string) {
@@ -1025,8 +1163,10 @@ class private WatcherRichClient : HvWebSocketClient {
         for (message in mailbox) {
             if (message.direction != "outbox") continue
             for (target in message.focus.targets) {
-                agent_mark_files[agent_mark_key(message.focus.repository_id,
-                    message.focus.worktree_path, target.file_path)] = true
+                agent_mark_files[agent_mark_key(
+                    watcher_focus_repository(message.focus, target),
+                    watcher_focus_worktree(message.focus, target),
+                    target.file_path)] = true
             }
         }
         agent_mark_revision = mailbox_revision
@@ -1083,12 +1223,28 @@ class private WatcherRichClient : HvWebSocketClient {
             return
         }
         if (get_time_nsec(last_heartbeat) / 1000000l >= 1000l) {
-            send("\{\"op\":\"heartbeat\"\}")
+            heartbeat_last_result = send_result("\{\"op\":\"heartbeat\"\}")
+            heartbeat_send_count++
+            if (heartbeat_last_result < 0) heartbeat_send_failure_count++
             last_heartbeat = ref_time_ticks()
+            // libhv accepts the write here but can lose a second write issued
+            // from the same client tick. Serialize maintenance frames.
+            return
         }
         if (get_time_nsec(last_list) / 1000000l >= 1000l) {
-            refresh()
+            list_last_result = send_result("\{\"op\":\"list\"\}")
+            list_send_count++
+            if (list_last_result < 0) list_send_failure_count++
             last_list = ref_time_ticks()
+            return
+        }
+        if (attached && !controls && !empty(attached_id)
+                && control_retry_started != 0l
+                && get_time_nsec(control_retry_started) / 1000000l < 15000l
+                && (last_control_retry == 0l
+                    || get_time_nsec(last_control_retry) / 1000000l >= 500l)) {
+            send("\{\"op\":\"claim_control\"\}")
+            last_control_retry = ref_time_ticks()
         }
     }
 }
@@ -1107,6 +1263,107 @@ def private selected_session_label() : string {
         }
     }
     return g_client.selected_id
+}
+
+def private draw_selected_session_context() {
+    if (g_client == null || empty(g_client.selected_id)) return
+    for (session in g_client.sessions) {
+        if (session.id != g_client.selected_id) continue
+        let purpose = !empty(session.purpose) ? to_upper(session.purpose) : to_upper(session.kind)
+        text("{purpose}  {session.id}")
+        text_disabled("Origin: {session.worktree_path}")
+        if (!empty(session.task_context)) {
+            text_wrapped((text = session.task_context))
+        }
+        return
+    }
+}
+
+def private select_bundle_participant(participant : WatcherBundleParticipant const) {
+    if (g_client == null) return
+    g_selected_repository_id = participant.repository_id
+    g_selected_worktree_path = participant.worktree_path
+    g_client->refresh_repository(participant.repository_id)
+    g_client->request_repository_review(participant.repository_id,
+        participant.worktree_path)
+    GIT_CHANGELIST_WIN.open = true
+    GIT_CHANGELIST_WIN.pending_raise = true
+    GIT_ACTIVITY_WIN.open = true
+}
+
+def private activate_bundle_focus(bundle : WatcherReviewBundle const;
+                                  repository_id : string = "";
+                                  worktree_path : string = "";
+                                  file_path : string = "") : bool {
+    if (g_client == null) return false
+    for (message in g_client.mailbox) {
+        if (message.direction != "outbox" || message.bundle_id != bundle.id) continue
+        for (target_index in range(length(message.focus.targets))) {
+            let target & = unsafe(message.focus.targets[target_index])
+            let target_repository = watcher_focus_repository(message.focus, target)
+            let target_worktree = watcher_focus_worktree(message.focus, target)
+            if (!empty(repository_id) && target_repository != repository_id) continue
+            if (!empty(worktree_path) && target_worktree != worktree_path) continue
+            if (!empty(file_path) && target.file_path != file_path) continue
+            activate_focus_target(message, target_index)
+            return true
+        }
+    }
+    return false
+}
+
+def private draw_review_bundles() {
+    text("Review bundles ({g_client != null ? length(g_client.bundles) : 0})")
+    child(REVIEW_BUNDLES_CHILD, (text = "review bundles", size = float2(0.0f, 150.0f),
+            child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
+        if (g_client == null || empty(g_client.bundles)) {
+            text_disabled("The agent has not declared a review bundle yet.")
+            return
+        }
+        var participant_row = 0
+        var file_row = 0
+        for (bundle_index in range(length(g_client.bundles))) {
+            let bundle & = unsafe(g_client.bundles[bundle_index])
+            BUNDLE_ROW[bundle_index].value = false
+            if (selectable(BUNDLE_ROW[bundle_index],
+                    (text = "[{to_upper(bundle.status)}] {bundle.title}##{bundle.id}"))) {
+                let _ = activate_bundle_focus(bundle)
+            }
+            BUNDLE_ROW[bundle_index].value = false
+            if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
+            for (participant in bundle.participants) {
+                let files = length(participant.files)
+                BUNDLE_PARTICIPANT_ROW[participant_row].value = (participant.repository_id
+                    == g_selected_repository_id && participant.worktree_path
+                    == g_selected_worktree_path)
+                if (selectable(BUNDLE_PARTICIPANT_ROW[participant_row],
+                        (text = "  {participant.role}  {participant.worktree_path}  ({files} files)##{bundle.id}:{participant_row}"))) {
+                    if (!activate_bundle_focus(bundle, participant.repository_id,
+                            participant.worktree_path)) {
+                        select_bundle_participant(participant)
+                    }
+                }
+                participant_row++
+                for (file in participant.files) {
+                    BUNDLE_FILE_ROW[file_row].value = false
+                    if (selectable(BUNDLE_FILE_ROW[file_row],
+                            (text = "      {file.role}  {file.path}##{bundle.id}:file:{file_row}"))) {
+                        if (!activate_bundle_focus(bundle, participant.repository_id,
+                                participant.worktree_path, file.path)) {
+                            select_bundle_participant(participant)
+                            g_client->inspect_file(participant.repository_id,
+                                participant.worktree_path, file.path,
+                                "working", "full", "")
+                            FILE_INSPECTOR_WIN.open = true
+                            FILE_INSPECTOR_WIN.pending_raise = true
+                        }
+                    }
+                    BUNDLE_FILE_ROW[file_row].value = false
+                    file_row++
+                }
+            }
+        }
+    }
 }
 
 def private pending_attention_count() : int {
@@ -1135,6 +1392,10 @@ def private activate_focus_target(message : WatcherMailboxMessage const;
     if (g_client == null || target_index < 0
             || target_index >= length(message.focus.targets)) return
     let target & = unsafe(message.focus.targets[target_index])
+    let repository_id = watcher_focus_repository(message.focus, target)
+    let worktree_path = watcher_focus_worktree(message.focus, target)
+    let comparison = watcher_focus_comparison(message.focus, target)
+    let revision = watcher_focus_revision(message.focus, target)
     g_active_focus_message = message.id
     g_active_focus_target = target_index
     g_active_focus_range = first_focus_range(target)
@@ -1142,23 +1403,19 @@ def private activate_focus_target(message : WatcherMailboxMessage const;
     g_pending_focus_scroll = true
     g_applied_focus_identity = ""
     let selection_changed = (g_selected_repository_id
-            != message.focus.repository_id
-        || g_selected_worktree_path != message.focus.worktree_path)
-    g_selected_repository_id = message.focus.repository_id
-    g_selected_worktree_path = message.focus.worktree_path
+            != repository_id
+        || g_selected_worktree_path != worktree_path)
+    g_selected_repository_id = repository_id
+    g_selected_worktree_path = worktree_path
     if (message.status == "new") g_client->acknowledge_mailbox(message.id)
     if (selection_changed) {
-        g_client->refresh_repository(message.focus.repository_id)
-        g_client->request_repository_review(message.focus.repository_id,
-            message.focus.worktree_path)
-        g_client->request_repository_history(message.focus.repository_id,
-            message.focus.worktree_path)
-        g_client->request_repository_refs(message.focus.repository_id,
-            message.focus.worktree_path)
+        g_client->refresh_repository(repository_id)
+        g_client->request_repository_review(repository_id, worktree_path)
+        g_client->request_repository_history(repository_id, worktree_path)
+        g_client->request_repository_refs(repository_id, worktree_path)
     }
-    g_client->inspect_file(message.focus.repository_id,
-        message.focus.worktree_path, target.file_path,
-        message.focus.comparison, "full", message.focus.revision)
+    g_client->inspect_file(repository_id, worktree_path, target.file_path,
+        comparison, "full", revision)
     FILE_INSPECTOR_WIN.open = true
     FILE_INSPECTOR_WIN.pending_raise = true
 }
@@ -1194,7 +1451,8 @@ def private draw_session_list() {
         g_client->terminate_selected()
     }
     separator()
-    child(SESSIONS_CHILD, (text = "sessions", size = float2(0.0f, -260.0f),
+    draw_selected_session_context()
+    child(SESSIONS_CHILD, (text = "sessions", size = float2(0.0f, 120.0f),
             child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
         var visible_sessions = 0
         if (g_client != null) {
@@ -1219,6 +1477,8 @@ def private draw_session_list() {
     }
     text_disabled("Exited sessions are retained and hidden by default.")
     separator()
+    draw_review_bundles()
+    separator()
     let attention_count = pending_attention_count()
     text("Attention ({attention_count})")
     text_disabled("Agent notes never navigate until you click them.")
@@ -1239,10 +1499,13 @@ def private draw_session_list() {
                 let selected_message = message.id == g_active_focus_message
                 for (target_index in range(length(message.focus.targets))) {
                     let target & = unsafe(message.focus.targets[target_index])
+                    let target_repository = watcher_focus_repository(message.focus, target)
+                    let repository_hint = (!empty(target.repository_id)
+                        ? "[{target_repository}] " : "")
                     ATTENTION_TARGET_ROW[target_row].value = (selected_message
                         && target_index == g_active_focus_target)
                     if (selectable(ATTENTION_TARGET_ROW[target_row],
-                            (text = "  {target.file_path}##{message.id}:{target_index}"))) {
+                            (text = "  {repository_hint}{target.file_path}##{message.id}:{target_index}"))) {
                         activate_focus_target(message, target_index)
                     }
                     target_row++
@@ -1294,7 +1557,80 @@ def private reset_layout() {
     FILE_INSPECTOR_WIN.open = true
     TERMINAL_WIN.open = true
     SETTINGS_WIN.open = false
+    g_layout_probe_complete = false
+    g_layout_force_default = true
     DOCK_ROOT.pending_reset = true
+}
+
+def private agent_repository_checkout(repository_id, fallback : string) : string {
+    if (g_client != null) {
+        for (repository in g_client.repositories) {
+            if (repository.record.id == repository_id) {
+                return repository.record.checkout_path
+            }
+        }
+    }
+    return fallback
+}
+
+def private suggest_agent_worktree_path() {
+    let checkout = agent_repository_checkout(
+        g_agent_source_repository_id, g_agent_source_worktree_path)
+    AGENT_WORKTREE_PATH.pending_value = path_join(
+        path_join(checkout, ".codex/worktrees"), g_agent_worktree_name)
+    AGENT_WORKTREE_PATH.has_pending = true
+}
+
+def private set_agent_launch_source(repository_id, worktree_path : string;
+                                    update_suggestion : bool = false) {
+    g_agent_source_repository_id = repository_id
+    g_agent_source_worktree_path = worktree_path
+    if (update_suggestion) suggest_agent_worktree_path()
+}
+
+def private collect_agent_launch_locations(
+                                           var locations : array<AgentLaunchLocation>&) {
+    delete locations
+    if (g_client == null) return
+    for (repository in g_client.repositories) {
+        for (worktree in repository.worktrees) {
+            let branch = (worktree.detached
+                ? "detached {slice(worktree.head, 0, min(8, length(worktree.head)))}"
+                : worktree.branch)
+            locations |> push(AgentLaunchLocation(
+                repository_id = repository.record.id,
+                worktree_path = worktree.path,
+                display_label = "{repository.record.display_name} | {branch} | {worktree.path}"))
+        }
+    }
+}
+
+def private prepare_debug_launcher() {
+    let suffix = "debug-{ref_time_ticks()}"
+    g_agent_worktree_name = suffix
+    AGENT_BRANCH.pending_value = "codex/{suffix}"
+    AGENT_BRANCH.has_pending = true
+    AGENT_BASE_REF.pending_value = "HEAD"
+    AGENT_BASE_REF.has_pending = true
+    AGENT_TASK_CONTEXT.pending_value = ""
+    AGENT_TASK_CONTEXT.has_pending = true
+    var source_repository_id = g_selected_repository_id
+    var source_worktree_path = g_selected_worktree_path
+    if (g_client != null) {
+        for (session in g_client.sessions) {
+            if (session.id == g_client.selected_id
+                    && !empty(session.repository_id)
+                    && !empty(session.worktree_path)) {
+                source_repository_id = session.repository_id
+                source_worktree_path = session.worktree_path
+                break
+            }
+        }
+    }
+    set_agent_launch_source(source_repository_id, source_worktree_path)
+    suggest_agent_worktree_path()
+    AGENT_SOURCE_WORKTREE.value = -1
+    CREATE_DEDICATED_WORKTREE.value = true
 }
 
 def private draw_main_menu() {
@@ -1305,6 +1641,12 @@ def private draw_main_menu() {
             }
         }
         menu(COMMANDS_MENU, (text = "Commands", enabled = true)) {
+            if (menu_label(COMMAND_CODEX_DEBUG,
+                    (text = "Debug with Codex...", enabled = g_client != null
+                        && g_client.connected && !empty(g_selected_worktree_path)))) {
+                prepare_debug_launcher()
+                open_popup(SESSION_LAUNCHER_DIALOG)
+            }
             if (menu_label(COMMAND_POWERSHELL,
                     (text = "PowerShell", enabled = g_client != null && g_client.connected))) {
                 g_client->launch("powershell.exe -NoLogo -NoProfile", g_selected_worktree_path,
@@ -2644,6 +2986,21 @@ def herder_client_state(_input : JsonValue?) : JsonValue? {
         reconnect_attempt_count = g_client.reconnect_attempt_count,
         message_count = g_client.message_count,
         repository_message_count = g_client.repository_message_count,
+        heartbeat_send_count = g_client.heartbeat_send_count,
+        heartbeat_send_failure_count = g_client.heartbeat_send_failure_count,
+        heartbeat_last_result = g_client.heartbeat_last_result,
+        heartbeat_receive_count = g_client.heartbeat_receive_count,
+        list_send_count = g_client.list_send_count,
+        list_send_failure_count = g_client.list_send_failure_count,
+        list_last_result = g_client.list_last_result,
+        heartbeat_age_ms = get_time_nsec(g_client.last_heartbeat) / 1000000l,
+        list_age_ms = get_time_nsec(g_client.last_list) / 1000000l,
+        attached = g_client.attached,
+        controls = g_client.controls,
+        desired_columns = g_client.desired_columns,
+        desired_rows = g_client.desired_rows,
+        sent_columns = g_client.sent_columns,
+        sent_rows = g_client.sent_rows,
         heap_bytes = int64(heap_bytes_allocated()),
         heap_total_bytes = int64(heap_total_allocated()),
         string_heap_bytes = int64(string_heap_bytes_allocated()),
@@ -3145,7 +3502,10 @@ def herder_attention_state(_input : JsonValue?) : JsonValue? {
         for (message in g_client.mailbox) {
             if (message.direction != "outbox") continue
             var targets <- [for (target in message.focus.targets);
-                JV((file_path = target.file_path,
+                JV((repository_id = watcher_focus_repository(message.focus, target),
+                    worktree_path = watcher_focus_worktree(message.focus, target),
+                    comparison = watcher_focus_comparison(message.focus, target),
+                    file_path = target.file_path,
                     whole_file = target.whole_file,
                     range_count = length(target.ranges)))]
             messages |> push(JV((id = message.id, sender = message.sender,
@@ -3162,6 +3522,47 @@ def herder_attention_state(_input : JsonValue?) : JsonValue? {
         focus_visible = g_focus_visible,
         last_human_request_id = g_last_human_request,
         messages = messages))
+}
+
+[live_command(description = "Inspect selected dasHerd session origin, purpose, and multi-repository Review Bundles.")]
+def herder_session_state(_input : JsonValue?) : JsonValue? {
+    var session_id, session_state, session_kind, session_purpose : string
+    var task_context, repository_id, worktree_path, context_path : string
+    var bundles : array<JsonValue?>
+    if (g_client != null) {
+        for (session in g_client.sessions) {
+            if (session.id == g_client.selected_id) {
+                session_id = session.id
+                session_state = session.state
+                session_kind = session.kind
+                session_purpose = session.purpose
+                task_context = session.task_context
+                repository_id = session.repository_id
+                worktree_path = session.worktree_path
+                context_path = session.context_path
+                break
+            }
+        }
+        for (bundle in g_client.bundles) {
+            var participants <- [for (participant in bundle.participants);
+                JV((repository_id = participant.repository_id,
+                    worktree_path = participant.worktree_path,
+                    role = participant.role, state = participant.state,
+                    file_count = length(participant.files)))]
+            bundles |> push(JV((id = bundle.id, title = bundle.title,
+                status = bundle.status, revision = bundle.revision,
+                participant_count = length(bundle.participants),
+                focus_target_count = length(bundle.focus.targets),
+                participants = participants)))
+        }
+    }
+    return JV((ok = g_client != null, session_id = session_id,
+        session_state = session_state, session_kind = session_kind,
+        session_purpose = session_purpose, task_context = task_context,
+        repository_id = repository_id, worktree_path = worktree_path,
+        context_path = context_path,
+        bundles_revision = g_client != null ? g_client.bundles_revision : 0l,
+        bundles = bundles))
 }
 
 [live_command(description = "Open one agent Focus Set target at the user's chosen time. Args: message_id, target_index.")]
@@ -3387,7 +3788,11 @@ def private draw_active_focus_overlay(state : TextSourceViewState const;
                 || g_active_focus_target < 0
                 || g_active_focus_target >= length(message.focus.targets)) continue
         let target & = unsafe(message.focus.targets[g_active_focus_target])
-        if (target.file_path == g_inspector.installed_file_path) {
+        if (watcher_focus_repository(message.focus, target)
+                    == g_inspector.installed_repository_id
+                && watcher_focus_worktree(message.focus, target)
+                    == g_inspector.installed_worktree_path
+                && target.file_path == g_inspector.installed_file_path) {
             draw_focus_target_overlay(target, state, document, diff_mapping)
         }
         return
@@ -3409,7 +3814,11 @@ def private apply_active_focus() {
                     || g_active_focus_target < 0
                     || g_active_focus_target >= length(message.focus.targets)) continue
             let target & = unsafe(message.focus.targets[g_active_focus_target])
-            if (target.file_path != g_inspector.installed_file_path) continue
+            if (watcher_focus_repository(message.focus, target)
+                        != g_inspector.installed_repository_id
+                    || watcher_focus_worktree(message.focus, target)
+                        != g_inspector.installed_worktree_path
+                    || target.file_path != g_inspector.installed_file_path) continue
             matched_target = true
             g_inspector.focus_document_valid = true
             if (!empty(target.ranges)) {
@@ -3625,6 +4034,74 @@ def private draw_settings_window() {
     text_disabled("Repository registration and layout settings will be stored here.")
 }
 
+def private draw_session_launcher_dialog() {
+    text("Codex debug session")
+    text_disabled("The chosen worktree becomes the immutable session origin.")
+    separator()
+    var inscope locations : array<AgentLaunchLocation>
+    collect_agent_launch_locations(locations)
+    var source_index = -1
+    for (index in range(length(locations))) {
+        if (locations[index].repository_id == g_agent_source_repository_id
+                && locations[index].worktree_path
+                    == g_agent_source_worktree_path) {
+            source_index = index
+            break
+        }
+    }
+    if (source_index < 0 && !empty(locations)) {
+        source_index = 0
+        set_agent_launch_source(locations[0].repository_id,
+            locations[0].worktree_path, true)
+    }
+    AGENT_SOURCE_WORKTREE.value = source_index
+    var source_labels <- [for (location in locations); location.display_label]
+    if (combo(AGENT_SOURCE_WORKTREE,
+            (text = "Start from", items <- source_labels,
+             popup_max_height_in_items = 12))
+            && AGENT_SOURCE_WORKTREE.value >= 0
+            && AGENT_SOURCE_WORKTREE.value < length(locations)) {
+        let selected & = unsafe(locations[AGENT_SOURCE_WORKTREE.value])
+        set_agent_launch_source(selected.repository_id,
+            selected.worktree_path, true)
+    }
+    checkbox(CREATE_DEDICATED_WORKTREE, (text = "Create a dedicated worktree"))
+    if (CREATE_DEDICATED_WORKTREE.value) {
+        input_text_growable(AGENT_BRANCH, (text = "New branch"))
+        input_text_growable(AGENT_BASE_REF, (text = "Base ref"))
+        input_text_growable(AGENT_WORKTREE_PATH, (text = "New worktree path"))
+    }
+    text("Debug task")
+    input_text_multiline(AGENT_TASK_CONTEXT,
+        (text = "##debug-task", size = float2(-FLT_MIN, GetTextLineHeight() * 8.0f),
+         flags = ImGuiInputTextFlags.None))
+    if (button(LAUNCH_CODEX_DEBUG,
+            (text = "Launch Codex", enabled = g_client != null
+                && g_client.connected
+                && !empty(g_agent_source_repository_id)
+                && !empty(g_agent_source_worktree_path)
+                && (!CREATE_DEDICATED_WORKTREE.value
+                    || (!empty(AGENT_BRANCH.value)
+                        && !empty(AGENT_WORKTREE_PATH.value)))
+                && !empty(AGENT_TASK_CONTEXT.value)))) {
+        if (CREATE_DEDICATED_WORKTREE.value) {
+            g_client->create_worktree_and_launch_codex(
+                g_agent_source_worktree_path,
+                g_agent_source_repository_id, AGENT_WORKTREE_PATH.value,
+                AGENT_BRANCH.value, AGENT_BASE_REF.value,
+                AGENT_TASK_CONTEXT.value)
+        } else {
+            g_client->launch_codex_debug(g_agent_source_worktree_path,
+                g_agent_source_repository_id, AGENT_TASK_CONTEXT.value)
+        }
+        close_current_popup(SESSION_LAUNCHER_DIALOG)
+    }
+    same_line()
+    if (button(CANCEL_CODEX_DEBUG, (text = "Cancel"))) {
+        close_current_popup(SESSION_LAUNCHER_DIALOG)
+    }
+}
+
 def private draw_terminal_window() {
     let io & = unsafe(GetIO())
     if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
@@ -3641,6 +4118,7 @@ def private draw_terminal_window() {
     separator()
     let terminal_style = ImGuiTerminalStyle(
         external_input = true,
+        cell_backgrounds = false,
         view_height = max(GetTextLineHeight(),
             GetContentRegionAvail().y - GetFrameHeightWithSpacing()
                 - GetStyle().ItemSpacing.y))
@@ -3677,6 +4155,11 @@ def init() {
     inspector_prepare_worker_start(g_prepare_worker)
     g_selected_worktree_path = get_das_root()
     SETTINGS_WIN.open = false
+    AGENT_TASK_CONTEXT.capacity = 16 * 1024
+    AGENT_BRANCH.capacity = 1024
+    AGENT_BASE_REF.capacity = 1024
+    AGENT_WORKTREE_PATH.capacity = 16 * 1024
+    CREATE_DEDICATED_WORKTREE.value = true
     let port = clamp(to_int(option_value("--port=", "9191")), 1024, 65535)
     g_token = option_value("--token=")
     g_url = "ws://127.0.0.1:{port}/ws?token={g_token}"
@@ -3693,8 +4176,11 @@ def init() {
 
 [export]
 def update() {
-    if (!harness_begin_frame()) return
+    // The native frame gate returns false while the window is minimized.
+    // Keep the transport alive outside that gate so heartbeats, controller
+    // renewal, and queued PTY output continue until the window is restored.
     if (g_client != null) g_client->pump()
+    if (!harness_begin_frame()) return
     service_sha_copy()
     drain_inspector_prepare_events()
     harness_new_frame()
@@ -3702,8 +4188,25 @@ def update() {
     draw_main_menu()
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
-            setup_default_layout(DOCK_ROOT.dock_id)
-            DOCK_ROOT.has_initial_layout = true
+            if (g_layout_force_default) {
+                setup_default_layout(DOCK_ROOT.dock_id)
+                DOCK_ROOT.has_initial_layout = true
+                g_layout_probe_complete = true
+                g_layout_force_default = false
+            } elif (g_layout_probe_complete) {
+                let restored_layout = (REPOSITORIES_WIN.docked ||
+                    SESSIONS_WIN.docked || GIT_ACTIVITY_WIN.docked ||
+                    GIT_CHANGELIST_WIN.docked || FILE_INSPECTOR_WIN.docked ||
+                    TERMINAL_WIN.docked)
+                if (restored_layout) {
+                    DOCK_ROOT.has_initial_layout = true
+                } else {
+                    setup_default_layout(DOCK_ROOT.dock_id)
+                    DOCK_ROOT.has_initial_layout = true
+                }
+            } else {
+                g_layout_probe_complete = true
+            }
         }
         dock_window(REPOSITORIES_WIN, (text = "Repositories & Worktrees", closable = true,
                 flags = ImGuiWindowFlags.None)) {
@@ -3738,6 +4241,17 @@ def update() {
             draw_settings_window()
         }
     }
+    let viewport = GetMainViewport()
+    let center = float2(
+        viewport.Pos.x + viewport.Size.x * 0.5f,
+        viewport.Pos.y + viewport.Size.y * 0.5f)
+    SetNextWindowPos(center, ImGuiCond.Appearing, float2(0.5f, 0.5f))
+    SetNextWindowSize(float2(760.0f, 560.0f), ImGuiCond.Appearing)
+    popup_modal(SESSION_LAUNCHER_DIALOG,
+            (text = "Start Codex debug session", closable = true,
+             flags = ImGuiWindowFlags.None)) {
+        draw_session_launcher_dialog()
+    }
     harness_end_frame()
 }
 
@@ -3750,6 +4264,7 @@ def shutdown() {
         delete g_client.sessions
         delete g_client.repositories
         delete g_client.mailbox
+        delete g_client.bundles
         delete g_client.git_failure_revisions
         delete g_client.agent_mark_files
         unsafe { delete g_client }
@@ -3775,8 +4290,13 @@ def shutdown() {
 def main() {
     init()
     while (!exit_requested()) {
+        let frame_started = ref_time_ticks()
         update()
         harness_maybe_collect_gc()
+        let frame_usec = int64(get_time_usec(frame_started))
+        if (frame_usec < 16000l) {
+            sleep(uint((16000l - frame_usec) / 1000l))
+        }
     }
     shutdown()
 }

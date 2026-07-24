@@ -27,6 +27,8 @@ var private g_log_root : string
 var private g_config_path : string
 var private g_last_memory_log_at = 0l
 var private g_last_gc_at = 0l
+var private g_started_at = 0l
+var private g_exit_after_ms = 0l
 let GC_PRESSURE_MIN_INTERVAL_SECONDS = 10l
 let GC_COMPACT_MIN_INTERVAL_SECONDS = 60l
 
@@ -57,6 +59,7 @@ def private parse_watcher_args() {
     g_log_root = option_value("--log-root=",
         path_join(get_das_root(), "logs/dasHerd/watcher/sessions"))
     g_config_path = option_value("--config=", repository_default_config_path())
+    g_exit_after_ms = max(0l, int64(to_int(option_value("--exit-after-ms=", "0"))))
 }
 
 // Log das-managed memory independently of process RSS. All formatting temporaries die before
@@ -126,6 +129,7 @@ def init() {
     watcher_reset_gc_request()
     g_last_memory_log_at = 0l
     g_last_gc_at = 0l
+    g_started_at = ref_time_ticks()
     let init_error = watcher_init(g_log_root)
     if (!empty(init_error)) {
         print("dasHerd watcher: could not initialize logs: {init_error}\n")
@@ -145,6 +149,8 @@ def init() {
 
     g_server = new DasHerdWatcherServer()
     g_server.token = g_token
+    g_server.agent_url = "http://127.0.0.1:{g_port}"
+    g_server.agent_skill_path = path_join(get_das_root(), "utils/dasHerd/dasherder.md")
     let watcher_dir = get_this_module_dir()
     let vendor_dir = path_join(watcher_dir, "vendor/xterm")
     g_server.control_html = path_join(watcher_dir, "control.html")
@@ -174,6 +180,9 @@ def init() {
     print("  logs:    {g_log_root}\n")
     print("  config:  {g_config_path}\n")
     print("  bind:    127.0.0.1:{g_port}\n")
+    if (g_exit_after_ms > 0l) {
+        print("  lifetime: {g_exit_after_ms} ms (diagnostic)\n")
+    }
 }
 
 [export]
@@ -184,6 +193,11 @@ def update() {
     }
     g_server->tick()
     log_memory_if_due()
+    if (g_exit_after_ms > 0l
+            && get_time_nsec(g_started_at) / 1000000l >= g_exit_after_ms) {
+        print("dasHerd watcher: diagnostic lifetime elapsed\n")
+        request_exit()
+    }
     sleep(2u)
 }
 

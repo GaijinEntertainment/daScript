@@ -42,17 +42,23 @@ $sessionId = Take-Option $items '--session' $env:DASHERD_SESSION_ID
 $sender = Take-Option $items '--sender' ''
 if (-not $sender -and $sessionId) { $sender = "agent_session:$sessionId" }
 
-if ($items.Count -eq 0) { throw 'command required: whoami | inbox | outbox' }
+if ($items.Count -eq 0) { throw 'command required: whoami | inbox | outbox | bundle | repository' }
 $command = $items[0]
 $items.RemoveAt(0)
 
 if ($command -eq 'whoami') {
-    Write-Json ([ordered]@{
+    $identity = [ordered]@{
         sender = $sender
         session_id = $sessionId
         url = $script:BaseUrl
         configured = [bool]($script:Token -and $sessionId)
-    })
+    }
+    if ($identity.configured) {
+        $sessions = @(Invoke-DasHerd GET '/api/v1/sessions')
+        $session = $sessions | Where-Object { $_.id -eq $sessionId } | Select-Object -First 1
+        if ($session) { $identity.session = $session }
+    }
+    Write-Json $identity
     exit 0
 }
 if (-not $script:Token) { throw 'watcher token is required (--token or DASHERD_TOKEN)' }
@@ -84,6 +90,43 @@ if ($command -eq 'inbox') {
     throw "unknown inbox subcommand: $subcommand"
 }
 
+if ($command -eq 'bundle') {
+    if ($subcommand -eq 'list') {
+        Write-JsonList (Invoke-DasHerd GET "/api/v1/bundles?session_id=$([uri]::EscapeDataString($sessionId))")
+        exit 0
+    }
+    if ($subcommand -eq 'sync') {
+        $manifestPath = Take-Option $items '--manifest' ''
+        if (-not $manifestPath) { throw 'bundle sync requires --manifest <path>' }
+        $bundle = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Json (Invoke-DasHerd POST '/api/v1/bundles/sync' ([ordered]@{
+            session_id = $sessionId
+            bundle = $bundle
+        }))
+        exit 0
+    }
+    throw "unknown bundle subcommand: $subcommand"
+}
+
+if ($command -eq 'repository') {
+    if ($subcommand -eq 'list') {
+        Write-JsonList (Invoke-DasHerd GET '/api/v1/repositories')
+        exit 0
+    }
+    if ($subcommand -eq 'add') {
+        $path = Take-Option $items '--path' ''
+        $displayName = Take-Option $items '--name' ''
+        if (-not $path) { throw 'repository add requires --path <checkout-or-worktree>' }
+        Write-Json (Invoke-DasHerd POST '/api/v1/repositories' ([ordered]@{
+            path = [System.IO.Path]::GetFullPath($path)
+            display_name = $displayName
+            target_id = 'local'
+        }))
+        exit 0
+    }
+    throw "unknown repository subcommand: $subcommand"
+}
+
 if ($command -eq 'outbox') {
     if ($subcommand -ne 'send' -and $subcommand -ne 'reply') {
         throw "unknown outbox subcommand: $subcommand"
@@ -96,6 +139,7 @@ if ($command -eq 'outbox') {
     }
     $subject = Take-Option $items '--subject' ''
     $focusPath = Take-Option $items '--focus-json' ''
+    $bundleId = Take-Option $items '--bundle' ''
     if (-not $subject) { throw 'outbox send requires --subject' }
     $focus = [ordered]@{ repository_id = ''; worktree_path = ''; comparison = 'working'; revision = ''; summary = ''; targets = @() }
     if ($focusPath) {
@@ -108,6 +152,7 @@ if ($command -eq 'outbox') {
         kind = 'focus_set'
         subject = $subject
         reply_to = $replyTo
+        bundle_id = $bundleId
         notify = $false
         focus = $focus
     }))

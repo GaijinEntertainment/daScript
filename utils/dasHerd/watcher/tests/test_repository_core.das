@@ -116,6 +116,44 @@ def test_repository_untracked_diff_contract(t : T?) {
         t |> equal(argv[length(argv) - 2], "--file=staged.das")
         t |> equal(argv[length(argv) - 1],
             "--output=D:/Temp/staged-view.raw")
+
+        let absolute_worktree = (get_platform_name() == "windows"
+            ? "D:/Work/trees/debug" : "/tmp/work/trees/debug")
+        var create_argv : array<string>
+        let create_error = repository_build_worktree_create_argv(
+            "D:/Work/main", absolute_worktree, "codex/debug-fix",
+            "origin/main", create_argv)
+        t |> equal(create_error, "")
+        t |> equal(create_argv[0], "git")
+        t |> equal(create_argv[4], "add")
+        t |> equal(create_argv[5], "-b")
+        t |> equal(create_argv[6], "codex/debug-fix")
+        t |> equal(create_argv[7], "--")
+        t |> equal(create_argv[8], absolute_worktree)
+        t |> equal(create_argv[9], "origin/main")
+        let normalized_create_error = repository_build_worktree_create_argv(
+            "D:/Work/main", absolute_worktree, " codex/debug-fix ",
+            " origin/main ", create_argv)
+        t |> equal(normalized_create_error, "")
+        t |> equal(create_argv[6], "codex/debug-fix")
+        t |> equal(create_argv[9], "origin/main")
+        let default_base_error = repository_build_worktree_create_argv(
+            "D:/Work/main", absolute_worktree, "codex/debug-fix",
+            " \r\n ", create_argv)
+        t |> success(!empty(default_base_error),
+            "base refs containing CR/LF remain invalid after whitespace normalization")
+        let blank_base_error = repository_build_worktree_create_argv(
+            "D:/Work/main", absolute_worktree, "codex/debug-fix",
+            "   ", create_argv)
+        t |> equal(blank_base_error, "")
+        t |> equal(create_argv[9], "HEAD",
+            "a whitespace-only optional base ref keeps the default HEAD contract")
+        t |> success(!empty(repository_build_worktree_create_argv(
+            "D:/Work/main", absolute_worktree, "   ", "HEAD",
+            create_argv)), "whitespace-only worktree branches are rejected before Git")
+        t |> success(!empty(repository_build_worktree_create_argv(
+            "D:/Work/main", "relative/tree", "codex/debug-fix", "HEAD",
+            create_argv)), "dedicated worktree creation requires an exact absolute target")
     }
 }
 

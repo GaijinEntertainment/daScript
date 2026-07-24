@@ -41,6 +41,14 @@ def assert_cells_equal(left, right : array<TerminalCell> const) {
     }
 }
 
+def assert_cursors_equal(left, right : TerminalCursor const) {
+    assert(left.row == right.row, "cursor row")
+    assert(left.column == right.column, "cursor column")
+    assert(left.style == right.style, "cursor style")
+    assert(left.visible == right.visible, "cursor visible")
+    assert(left.blinking == right.blinking, "cursor blinking")
+}
+
 def assert_snapshots_equal(left, right : TerminalSnapshot const) {
     assert(left.columns == right.columns && left.rows == right.rows, "geometry")
     assert(left.alternate_active == right.alternate_active, "active buffer")
@@ -48,13 +56,22 @@ def assert_snapshots_equal(left, right : TerminalSnapshot const) {
     assert_cells_equal(left.normal.scrollback, right.normal.scrollback)
     assert_cells_equal(left.alternate.cells, right.alternate.cells)
     assert_cells_equal(left.alternate.scrollback, right.alternate.scrollback)
-    assert(left.normal.cursor.row == right.normal.cursor.row, "cursor row")
-    assert(left.normal.cursor.column == right.normal.cursor.column, "cursor column")
-    assert(left.normal.cursor.visible == right.normal.cursor.visible, "cursor visible")
-    assert(left.normal.cursor.blinking == right.normal.cursor.blinking, "cursor blinking")
+    assert_cursors_equal(left.normal.cursor, right.normal.cursor)
+    assert_cursors_equal(left.normal.saved_cursor, right.normal.saved_cursor)
+    assert_cursors_equal(left.alternate.cursor, right.alternate.cursor)
+    assert_cursors_equal(left.alternate.saved_cursor, right.alternate.saved_cursor)
     assert(left.modes.auto_wrap == right.modes.auto_wrap, "auto wrap")
     assert(left.modes.application_cursor_keys == right.modes.application_cursor_keys, "cursor mode")
     assert(left.modes.bracketed_paste == right.modes.bracketed_paste, "paste mode")
+    assert(left.modes.focus_reporting == right.modes.focus_reporting, "focus mode")
+    assert(left.modes.mouse_button_reporting == right.modes.mouse_button_reporting,
+        "mouse button mode")
+    assert(left.modes.mouse_drag_reporting == right.modes.mouse_drag_reporting,
+        "mouse drag mode")
+    assert(left.modes.mouse_any_reporting == right.modes.mouse_any_reporting,
+        "mouse any mode")
+    assert(left.modes.sgr_mouse_encoding == right.modes.sgr_mouse_encoding,
+        "mouse encoding")
     assert(left.title == right.title, "title")
     assert(left.current_directory == right.current_directory, "cwd")
 }
@@ -245,6 +262,50 @@ def main {
         TerminalKeyEvent(key = TerminalKey.home))
     assert(normal_home == "{esc}[H")
 
+    var inscope checkpoint_source <- terminal_create(9, 3)
+    terminal_feed(checkpoint_source,
+        "{esc}[31mred{esc}[0m\r\nplain\r\n{esc}[4;44mlink{esc}[0m\r\nlast" +
+        "{esc}]2;checkpoint title{esc}\\{esc}]7;file:///checkpoint{esc}\\" +
+        "{esc}[?1h{esc}[?1000h{esc}[?1002h{esc}[?1003h{esc}[?1004h" +
+        "{esc}[?1006h{esc}[?2004h{esc}[2;3r{esc}[2;2H" +
+        "{esc}[5q{esc}[?25l{esc}[s{esc}[2q{esc}[?25h{esc}[3;5H" +
+        "{esc}[38;2;12;34;56m")
+    let checkpoint = terminal_checkpoint_ansi(checkpoint_source)
+    var inscope checkpoint_copy <- terminal_create(9, 3)
+    terminal_feed(checkpoint_copy, checkpoint)
+    var checkpoint_source_snapshot = TerminalSnapshot()
+    var checkpoint_copy_snapshot = TerminalSnapshot()
+    terminal_snapshot(checkpoint_source, checkpoint_source_snapshot)
+    terminal_snapshot(checkpoint_copy, checkpoint_copy_snapshot)
+    assert_snapshots_equal(checkpoint_source_snapshot, checkpoint_copy_snapshot)
+    terminal_feed(checkpoint_source, "Z")
+    terminal_feed(checkpoint_copy, "Z")
+    terminal_snapshot_dispose(checkpoint_source_snapshot)
+    terminal_snapshot_dispose(checkpoint_copy_snapshot)
+    terminal_snapshot(checkpoint_source, checkpoint_source_snapshot)
+    terminal_snapshot(checkpoint_copy, checkpoint_copy_snapshot)
+    assert_snapshots_equal(checkpoint_source_snapshot, checkpoint_copy_snapshot)
+    terminal_snapshot_dispose(checkpoint_source_snapshot)
+    terminal_snapshot_dispose(checkpoint_copy_snapshot)
+
+    terminal_feed(checkpoint_source, "{esc}c")
+    terminal_resize(checkpoint_source, 10, 3)
+    terminal_feed(checkpoint_source,
+        "main{esc}[2;3H{esc}[4q{esc}[?25l{esc}[s{esc}[?1049h" +
+        "{esc}[1;35mALT{esc}[0m{esc}[3;7H{esc}[3q{esc}[?25h{esc}[s" +
+        "{esc}[6q{esc}[2;5H{esc}[?25l")
+    let alternate_checkpoint = terminal_checkpoint_ansi(checkpoint_source)
+    terminal_feed(checkpoint_copy, "{esc}c")
+    terminal_resize(checkpoint_copy, 10, 3)
+    terminal_feed(checkpoint_copy, alternate_checkpoint)
+    terminal_snapshot(checkpoint_source, checkpoint_source_snapshot)
+    terminal_snapshot(checkpoint_copy, checkpoint_copy_snapshot)
+    assert_snapshots_equal(checkpoint_source_snapshot, checkpoint_copy_snapshot)
+    terminal_snapshot_dispose(checkpoint_source_snapshot)
+    terminal_snapshot_dispose(checkpoint_copy_snapshot)
+
+    terminal_dispose(checkpoint_copy)
+    terminal_dispose(checkpoint_source)
     terminal_dispose(application_keys)
     terminal_dispose(reset)
     terminal_dispose(capped)

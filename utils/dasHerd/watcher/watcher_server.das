@@ -48,6 +48,11 @@ struct private WatcherWsMessage {
     repository_id : string
     repository_path : string
     worktree_path : string
+    new_worktree_path : string
+    branch : string
+    base_ref : string
+    purpose : string
+    task_context : string
     file_path : string
     comparison : string
     revision : string
@@ -64,10 +69,12 @@ struct private WatcherWsMessage {
     sender : string = ""
     subject : string
     reply_to : string
+    bundle_id : string
     message_id : string
     status : string
     notify : bool = true
     focus : WatcherFocusSet = WatcherFocusSet()
+    bundle : WatcherReviewBundle = WatcherReviewBundle()
 }
 
 struct public RepositoryFileInspectionMessage {
@@ -105,12 +112,30 @@ struct public RepositoryGitFileActionMessage {
     error : string
 }
 
+struct private WatcherTerminalCheckpointMessage {
+    @rename = "type"
+    _type : string = "terminal_checkpoint"
+    offset : int64
+    columns : int
+    rows : int
+    ansi : string
+}
+
 struct private OrphanedGitFileAction {
     session_id : string
     repository_id : string
     worktree_path : string
     file_path : string
     action : string
+}
+
+struct private PendingAgentWorktreeLaunch {
+    create_session_id : string
+    client_id : int
+    repository_id : string
+    source_worktree_path : string
+    new_worktree_path : string
+    task_context : string
 }
 
 class private WatcherClient {
@@ -125,6 +150,7 @@ class private WatcherClient {
     raw_offset : int64
     repository_revision : int64 = -1l
     mailbox_revision : int64 = -1l
+    bundles_revision : int64 = -1l
     inspection_request_id : int
     inspection_repository_id : string
     inspection_worktree_path : string
@@ -210,6 +236,8 @@ def private query_value(url, key : string) : string {
 
 class DasHerdWatcherServer : HvWebServer {
     token : string
+    agent_url : string
+    agent_skill_path : string
     control_html : string
     xterm_js : string
     xterm_css : string
@@ -219,6 +247,7 @@ class DasHerdWatcherServer : HvWebServer {
     clients : array<WatcherClient?>
     pending_inspection_artifacts : array<string>
     orphaned_git_actions : array<OrphanedGitFileAction>
+    pending_agent_launches : array<PendingAgentWorktreeLaunch>
     next_client_id : int
 
     def authorized(url : string) : bool {
@@ -314,6 +343,18 @@ class DasHerdWatcherServer : HvWebServer {
             return resp |> JSON(watcher_mailbox_json(session_id,
                 direction, message_id), http_status.OK)
         }
+        GET("/api/v1/bundles") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
+            let url = req != null ? string(req.url) : ""
+            let session_id = query_value(url, "session_id")
+            if (empty(session_id)) {
+                return self.respond_error(resp, http_status.BAD_REQUEST, "session_id is required")
+            }
+            if (watcher_find_session(session_id) < 0) {
+                return self.respond_error(resp, http_status.NOT_FOUND, "unknown session")
+            }
+            return resp |> JSON(watcher_bundles_json(session_id), http_status.OK)
+        }
         POST("/api/v1/gc") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
             let coalesced = watcher_request_gc()
@@ -328,6 +369,11 @@ class DasHerdWatcherServer : HvWebServer {
             var inscope launch = WatcherLaunchRequest()
             if (!sscan_json(string(req.body), launch)) {
                 return self.respond_error(resp, http_status.BAD_REQUEST, "invalid launch JSON")
+            }
+            if (launch.kind == "agent-codex") {
+                launch.agent_url = self.agent_url
+                launch.agent_token = self.token
+                launch.agent_skill_path = self.agent_skill_path
             }
             let result = watcher_launch(launch)
             return resp |> JSON(sprint_json(result, false),
@@ -427,6 +473,19 @@ class DasHerdWatcherServer : HvWebServer {
             if (!result.ok) return self.respond_error(resp, http_status.BAD_REQUEST, result.error)
             return resp |> JSON(sprint_json(result, false), http_status.OK)
         }
+        POST("/api/v1/bundles/sync") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
+            if (req == null || length(req.body) > MAX_REQUEST_BODY_BYTES) {
+                return self.respond_error(resp, http_status.BAD_REQUEST, "request body is too large")
+            }
+            var request = WatcherBundleSyncRequest()
+            if (!sscan_json(string(req.body), request)) {
+                return self.respond_error(resp, http_status.BAD_REQUEST, "invalid bundle JSON")
+            }
+            let result = watcher_bundle_sync(request)
+            if (!result.ok) return self.respond_error(resp, http_status.BAD_REQUEST, result.error)
+            return resp |> JSON(sprint_json(result, false), http_status.OK)
+        }
     }
 
     def find_client(channel : WebSocketChannel) : int {
@@ -467,6 +526,17 @@ class DasHerdWatcherServer : HvWebServer {
         send(client.channel, "\{\"type\":\"mailbox\",\"session_id\":" +
             "{sprint_json(client.session_id, false)},\"revision\":{revision},\"data\":" +
             "{watcher_mailbox_json(client.session_id)}\}",
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
+    def send_bundles(var client : WatcherClient?; force : bool = false) {
+        if (client == null || empty(client.session_id)) return
+        let revision = watcher_bundle_session_revision(client.session_id)
+        if (revision < 0l || (!force && client.bundles_revision == revision)) return
+        client.bundles_revision = revision
+        send(client.channel, "\{\"type\":\"bundles\",\"session_id\":" +
+            "{sprint_json(client.session_id, false)},\"revision\":{revision},\"data\":" +
+            "{watcher_bundles_json(client.session_id)}\}",
             ws_opcode.WS_OPCODE_TEXT, true)
     }
 
@@ -663,6 +733,116 @@ class DasHerdWatcherServer : HvWebServer {
             let _review_error = repository_review(
                 action.repository_id, action.worktree_path)
             orphaned_git_actions |> erase(index)
+        }
+    }
+
+    def start_agent_worktree_launch(var client : WatcherClient?;
+                                    incoming : WatcherWsMessage const) {
+        if (client == null) return
+        if (empty(strip(incoming.task_context))) {
+            send_error(client.channel, "agent task is required")
+            return
+        }
+        if (empty(incoming.repository_id) || empty(incoming.worktree_path)
+                || empty(incoming.new_worktree_path) || empty(incoming.branch)) {
+            send_error(client.channel,
+                "repository, source worktree, new worktree path, and branch are required")
+            return
+        }
+        var create_argv : array<string>
+        let command_error = repository_build_worktree_create_argv(
+            incoming.worktree_path, incoming.new_worktree_path,
+            incoming.branch, incoming.base_ref, create_argv)
+        if (!empty(command_error)) {
+            send_error(client.channel, command_error)
+            return
+        }
+        let created = watcher_launch(WatcherLaunchRequest(argv <- create_argv,
+            cwd = incoming.worktree_path, display_name = "Create {incoming.branch}",
+            kind = "worktree-create", target_id = "local",
+            repository_id = incoming.repository_id,
+            worktree_path = incoming.new_worktree_path,
+            purpose = "debug-setup", task_context = incoming.task_context,
+            columns = 120, rows = 30, timeout_ms = 0l))
+        if (!created.ok) {
+            send_error(client.channel, created.error)
+            return
+        }
+        pending_agent_launches |> push(PendingAgentWorktreeLaunch(
+            create_session_id = created.session_id, client_id = client.id,
+            repository_id = incoming.repository_id,
+            source_worktree_path = incoming.worktree_path,
+            new_worktree_path = incoming.new_worktree_path,
+            task_context = incoming.task_context))
+        let _ = watcher_record_event(created.session_id, "agent_worktree_queued",
+            "source={incoming.worktree_path}; target={incoming.new_worktree_path}; " +
+            "branch={incoming.branch}; base={incoming.base_ref}")
+        send(client.channel, "\{\"type\":\"launched\",\"session_id\":" +
+            "{sprint_json(created.session_id, false)}\}",
+            ws_opcode.WS_OPCODE_TEXT, true)
+        send_sessions(client.channel)
+    }
+
+    def poll_agent_worktree_launches() {
+        var index = length(pending_agent_launches) - 1
+        while (index >= 0) {
+            let pending = pending_agent_launches[index]
+            var info = WatcherSessionInfo()
+            if (!watcher_get_session_info(pending.create_session_id, info)
+                    || !info.drained) {
+                index--
+                continue
+            }
+            var client : WatcherClient? = null
+            for (candidate in clients) {
+                if (candidate != null && candidate.id == pending.client_id) {
+                    client = candidate
+                    break
+                }
+            }
+            if (info.exit_code != 0l) {
+                let worktree_failure_logged = watcher_record_event(pending.create_session_id,
+                    "agent_worktree_failed", "exit_code={info.exit_code}")
+                if (client != null) {
+                    send_error(client.channel,
+                        "worktree creation failed; inspect session {pending.create_session_id}")
+                }
+                pending_agent_launches |> erase(index)
+                index--
+                continue
+            }
+            let worktree_created_logged = watcher_record_event(pending.create_session_id,
+                "agent_worktree_created", "target={pending.new_worktree_path}")
+            let repository_refreshed = repository_refresh(pending.repository_id)
+            var agent_argv <- ["codex"]
+            let launched = watcher_launch(WatcherLaunchRequest(argv <- agent_argv,
+                cwd = pending.new_worktree_path, display_name = "Codex debug",
+                kind = "agent-codex", purpose = "debug",
+                task_context = pending.task_context, target_id = "local",
+                repository_id = pending.repository_id,
+                worktree_path = pending.new_worktree_path,
+                agent_url = self.agent_url, agent_token = self.token,
+                agent_skill_path = self.agent_skill_path,
+                columns = 120, rows = 36, timeout_ms = 0l))
+            if (!launched.ok) {
+                let launch_failure_logged = watcher_record_event(pending.create_session_id,
+                    "agent_launch_failed", launched.error)
+            } else {
+                let launch_started_logged = watcher_record_event(pending.create_session_id,
+                    "agent_launch_started", "session={launched.session_id}")
+            }
+            if (client != null) {
+                if (!launched.ok) {
+                    send_error(client.channel, launched.error)
+                } else {
+                    send(client.channel, "\{\"type\":\"launched\",\"session_id\":" +
+                        "{sprint_json(launched.session_id, false)}\}",
+                        ws_opcode.WS_OPCODE_TEXT, true)
+                }
+                send_sessions(client.channel)
+            }
+            pending_agent_launches |> erase(index)
+            index--
         }
     }
 
@@ -912,10 +1092,32 @@ class DasHerdWatcherServer : HvWebServer {
         }
     }
 
+    def send_terminal_checkpoint(var client : WatcherClient?) {
+        if (client == null || !client.raw || empty(client.session_id)) return
+        let checkpoint <- watcher_terminal_checkpoint(client.session_id)
+        if (!checkpoint.ok) {
+            send_error(client.channel, "unknown session")
+            return
+        }
+        client.raw_offset = checkpoint.output_offset
+        let message = WatcherTerminalCheckpointMessage(
+            offset = checkpoint.output_offset,
+            columns = checkpoint.columns, rows = checkpoint.rows,
+            ansi = checkpoint.ansi)
+        send(client.channel, sprint_json(message, false),
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
     def detach(var client : WatcherClient?; detail : string) {
         if (client == null) return
-        if (client.controls && !empty(client.session_id)) {
-            watcher_release_controller(client.session_id, client.id, detail)
+        let session_id = client.session_id
+        let had_control = client.controls
+        if (had_control && !empty(session_id)) {
+            watcher_release_controller(session_id, client.id, detail)
+        }
+        if (!empty(session_id)) {
+            let _ = watcher_record_event(session_id, "client_detached",
+                "client={client.id}; control={had_control}; reason={detail}")
         }
         client.session_id = ""
         client.controls = false
@@ -1009,6 +1211,7 @@ class DasHerdWatcherServer : HvWebServer {
                 kind = incoming.kind,
                 subject = incoming.subject,
                 reply_to = incoming.reply_to,
+                bundle_id = incoming.bundle_id,
                 notify = incoming.notify,
                 focus := incoming.focus)
             var result = watcher_mailbox_post(request)
@@ -1032,6 +1235,17 @@ class DasHerdWatcherServer : HvWebServer {
                 return
             }
             self.send_mailbox(client, true)
+        } elif (incoming.op == "bundle_sync") {
+            let result = watcher_bundle_sync(WatcherBundleSyncRequest(
+                session_id = incoming.session_id, bundle := incoming.bundle))
+            if (!result.ok) {
+                send_error(channel, result.error)
+                return
+            }
+            self.send_bundles(client, true)
+            self.send_mailbox(client, true)
+        } elif (incoming.op == "launch_agent_worktree") {
+            self.start_agent_worktree_launch(client, incoming)
         } elif (incoming.op == "launch") {
             var inscope launch = WatcherLaunchRequest(
                 command_line = incoming.command_line, cwd = incoming.cwd,
@@ -1039,9 +1253,15 @@ class DasHerdWatcherServer : HvWebServer {
                 target_id = watcher_target_id_or_local(incoming.target_id),
                 repository_id = incoming.repository_id,
                 worktree_path = incoming.worktree_path,
+                purpose = incoming.purpose, task_context = incoming.task_context,
                 columns = incoming.columns, rows = incoming.rows,
                 timeout_ms = incoming.timeout_ms)
             launch.argv := incoming.argv
+            if (launch.kind == "agent-codex") {
+                launch.agent_url = self.agent_url
+                launch.agent_token = self.token
+                launch.agent_skill_path = self.agent_skill_path
+            }
             let result = watcher_launch(launch)
             if (!result.ok) {
                 send_error(channel, result.error)
@@ -1061,6 +1281,10 @@ class DasHerdWatcherServer : HvWebServer {
             client.controls = incoming.control && accepts_input && watcher_claim_controller(incoming.session_id, client.id)
             client.raw = incoming.raw
             client.raw_offset = 0l
+            let _ = watcher_record_event(incoming.session_id, "client_attached",
+                "client={client.id}; control_requested={incoming.control}; " +
+                "control_granted={client.controls}; raw={incoming.raw}; " +
+                "accepts_input={accepts_input}")
             if (incoming.control && !accepts_input) {
                 send_error(channel, "session is not running; output is replay-only")
             } elif (incoming.control && !client.controls) {
@@ -1069,8 +1293,30 @@ class DasHerdWatcherServer : HvWebServer {
             send(channel, "\{\"type\":\"attached\",\"session_id\":{sprint_json(client.session_id, false)},\"controls\":{client.controls}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             send_snapshot(client, true)
+            self.send_terminal_checkpoint(client)
             send_raw_output(client)
             self.send_mailbox(client, true)
+            self.send_bundles(client, true)
+        } elif (incoming.op == "claim_control") {
+            if (empty(client.session_id)) {
+                send_error(channel, "client is not attached")
+                return
+            }
+            let accepts_input = watcher_accepts_input(client.session_id)
+            if (!accepts_input) {
+                send_error(channel, "session is not running; output is replay-only")
+                return
+            }
+            if (!client.controls) {
+                client.controls = watcher_claim_controller(client.session_id, client.id)
+            }
+            if (!client.controls) {
+                send_error(channel, "controller lease is held by another client")
+                return
+            }
+            send(channel, "\{\"type\":\"attached\",\"session_id\":" +
+                "{sprint_json(client.session_id, false)},\"controls\":true\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
         } elif (incoming.op == "detach") {
             detach(client, "client_detached")
             send(channel, "\{\"type\":\"detached\"\}", ws_opcode.WS_OPCODE_TEXT, true)
@@ -1103,6 +1349,7 @@ class DasHerdWatcherServer : HvWebServer {
         repository_tick()
         self.retry_inspection_artifact_cleanup()
         self.poll_orphaned_git_actions()
+        self.poll_agent_worktree_launches()
         for (index in range(length(clients))) {
             var client = clients[index]
             if (client == null) continue
@@ -1115,6 +1362,7 @@ class DasHerdWatcherServer : HvWebServer {
             send_raw_output(client)
             send_repositories(client)
             send_mailbox(client)
+            send_bundles(client)
             self.poll_git_file_action(client)
             self.poll_file_inspection(client)
         }
@@ -1137,5 +1385,6 @@ class DasHerdWatcherServer : HvWebServer {
         self.retry_inspection_artifact_cleanup()
         delete pending_inspection_artifacts
         delete orphaned_git_actions
+        delete pending_agent_launches
     }
 }
