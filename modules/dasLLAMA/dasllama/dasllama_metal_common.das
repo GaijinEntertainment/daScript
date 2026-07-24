@@ -672,6 +672,15 @@ def blob_of(dev : MetalDevice?; t : Model; off : int64) : tuple<buf : MetalBuffe
     }
 }
 
+//! The kept-bf16 plane (E-series model_proj) + one tensor's byte offset within it — zero-copy
+//! page wrap on image-mapped models, one-time resident copy otherwise (cached per base).
+def bf16_of(dev : MetalDevice?; t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
+    unsafe {
+        return (buf = plane_buffer(dev, addr < void? >(t.bf16blob[0]), uint64(long_length(t.bf16blob) * 2l), t.image_map != null),
+                boff = uint64(off * 2l))
+    }
+}
+
 //! The native-MXFP4 expert planes (gpt-oss) + one stack's byte offsets within them: nibble
 //! bytes at off/2, E8M0 scale bytes at off/32 (disk order — the mx4_repacked gate keeps the
 //! CPU laneq repack out). Region-relative uint32 indices stay safe per layer stack.

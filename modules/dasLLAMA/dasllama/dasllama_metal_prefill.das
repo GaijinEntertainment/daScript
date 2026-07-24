@@ -172,6 +172,155 @@ class MetalQ8MulMm {
     }
 }
 
+// MetalQ8MulMm with the A stage swapped to native BF16 rows (no dequant: widen = exact bit
+// shift, then RNE to the f16 tile). Serves the E-series per_layer_model_proj GEMM straight off
+// the kept-bf16 blob — no resident f32 copy. Same %64 shape gates, kdim % 32.
+class MetalBf16MulMm {
+    @ssbo @binding = 0 wbh : array<ushort4> // bf16 W rows, ushort4 view (row r elem k at (r*kdim+k)/4)
+    @ssbo @binding = 2 xf : array<float4>   // raw f32 activations, float4 view
+    @ssbo @binding = 3 y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+    @workgroup ta : float16[2048]
+    @workgroup tb : float16[1024]
+
+    [metal_kernel(name="metal_bf16_mulmm_msl")]
+    def metal_bf16_mulmm {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        var va : float16[16]
+        let kdim4 = kdim / 4u
+        let nkb = kdim / 32u
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var wcur = unsafe(addr(wbh[((nBase + lr0) * kdim + il0 * 16u) / 4u]))
+        var xcur = unsafe(addr(xf[(mBase + lr1) * kdim4 + iy / 4u]))
+        var kb = 0u
+        while (kb < nkb) {
+            let b0 = unsafe(xcur[0])
+            let b1 = unsafe(xcur[1])
+            for [unroll_full] (q in range(4)) {
+                let u4 = unsafe(wcur[q])
+                va[q * 4 + 0] = float16(uint_bits_to_float(uint(u4.x) << 16u))
+                va[q * 4 + 1] = float16(uint_bits_to_float(uint(u4.y) << 16u))
+                va[q * 4 + 2] = float16(uint_bits_to_float(uint(u4.z) << 16u))
+                va[q * 4 + 3] = float16(uint_bits_to_float(uint(u4.w) << 16u))
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(ta[aB]))
+            var bcur = unsafe(addr(tb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            wcur = unsafe(wcur + 8)
+            xcur = unsafe(xcur + 8)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u
+        let col0 = nBase + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+        }
+    }
+}
+
+// E-series PLE gather (GPU pre-step, stage 1): dequant token row slices of the Q8_0
+// per_layer_token_embd region straight into the LAYER-major side-input panel, sqrt(ple) folded.
+// One tg per (layer, position) slice; binds ride blob_of's q8 pair at the region base.
+class MetalPleGatherQ8 {
+    @ssbo @binding = 0 wsh : array<float16> // ple_emb q8 region, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 wqb : array<int8>    // the SAME region, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 tok : array<uint>    // [npos] token ids
+    @ssbo @binding = 3 y : array<float>     // [n_layers x npos x ple] layer-major side input
+    @uniform @binding = 4 npos : uint
+    @uniform @binding = 5 ple : uint
+    @uniform @binding = 6 nlayers : uint
+    @uniform @binding = 7 sc0 : float       // sqrt(ple)
+
+    [metal_kernel(name="metal_ple_gather_q8_msl")]
+    def metal_ple_gather_q8 {
+        let l = gl_WorkGroupID.x
+        let p = gl_WorkGroupID.y
+        let i = gl_LocalInvocationID.x      // tg = ple threads (gate: ple % 32 == 0, <= 1024)
+        let el = tok[p] * (nlayers * ple) + l * ple + i
+        let blk = el / 32u
+        let sc = float(wsh[blk * 17u])
+        let q = float(int(wqb[blk * 34u + 2u + (el % 32u)]))
+        y[(l * npos + p) * ple + i] = q * sc * sc0
+    }
+}
+
+// E-series PLE finish (GPU pre-step, stage 2): per (layer, position) ple-slice, mirror of
+// ple_pre_finish's tail — v = proj/sqrt(dim); side = (side + pnorm·(v·rsqrt(mean(v²)+eps)))/sqrt(2),
+// in place on the layer-major panel the gather wrote. proj arrives position-major off the GEMM.
+class MetalPleFinish {
+    @ssbo @binding = 0 proj : array<float>  // [mp x n_layers*ple] position-major model_proj·embd
+    @ssbo @binding = 1 pnorm : array<float> // [ple] proj-norm weight
+    @ssbo @binding = 2 y : array<float>     // [n_layers x npos x ple] side input, in place
+    @uniform @binding = 3 npos : uint
+    @uniform @binding = 4 ple : uint
+    @uniform @binding = 5 nlayers : uint
+    @uniform @binding = 6 inv_sd : float    // 1/sqrt(dim)
+    @uniform @binding = 7 eps : float
+    @uniform @binding = 8 inv_s2 : float    // 1/sqrt(2)
+    @workgroup partial : float[32]
+    @workgroup inv_sh : float
+
+    [metal_kernel(name="metal_ple_finish_msl")]
+    def metal_ple_finish {
+        let l = gl_WorkGroupID.x
+        let p = gl_WorkGroupID.y
+        let i = gl_LocalInvocationID.x      // tg = ple threads (gate: ple % 32 == 0, <= 1024)
+        let v = proj[p * (nlayers * ple) + l * ple + i] * inv_sd
+        let ss = simd_sum(v * v)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (i == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            inv_sh = rsqrt(tot / float(ple) + eps)
+        }
+        barrier()
+        let yi = (l * npos + p) * ple + i
+        y[yi] = (y[yi] + pnorm[i] * (v * inv_sh)) * inv_s2
+    }
+}
+
 // ===== K-quant mul_mm twins (format-matrix W4 / M2) — MetalQ8MulMm with the A-tile stage
 // swapped to superblock dequant. The 32-elem k-block kb IS sub-block kb%8 of superblock kb/8,
 // so each thread's 16-elem half decodes ONE (scale, min) pair. Same %64 shape gates, M padded 32/64.
@@ -4310,6 +4459,9 @@ var private g_pf_pso_copy : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_add : MetalComputePipeline?
 var private g_pf_pso_mm : MetalComputePipeline?    // the production das mul_mm (34B q8 blocks + f32 X)
+var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
+var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
+var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
 var private g_pso_avmm : MetalComputePipeline?
 var private g_pf_pso_gemv : MetalComputePipeline?
@@ -4516,6 +4668,18 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_pso_mm)
         g_pf_pso_mm = null
     }
+    if (g_pf_pso_bf16_mm != null) {
+        metal_release(g_pf_pso_bf16_mm)
+        g_pf_pso_bf16_mm = null
+    }
+    if (g_pf_pso_ple_gather != null) {
+        metal_release(g_pf_pso_ple_gather)
+        g_pf_pso_ple_gather = null
+    }
+    if (g_pf_pso_ple_finish != null) {
+        metal_release(g_pf_pso_ple_finish)
+        g_pf_pso_ple_finish = null
+    }
     for (pso in [g_pso_kq_mm4, g_pso_kq_mm5, g_pso_kq_mm6, g_pf_pso_kq4, g_pf_pso_kq5, g_pf_pso_kq6,
                  g_pf_pso_moe_router, g_pf_pso_moe_router_b, g_pf_pso_moe_select, g_pf_pso_moe_count, g_pf_pso_moe_prefix,
                  g_pf_pso_moe_bucket, g_pf_pso_moe_reduce, g_pf_pso_moe_mm_q8, g_pf_pso_moe_mm_k4,
@@ -4627,6 +4791,9 @@ def private metal_prefill_init : bool {
     g_pf_pso_cat2 = pf_compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_pso_add = pf_compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
     g_pf_pso_mm = pf_compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok)
+    g_pf_pso_bf16_mm = pf_compile_pso(metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, ok)
+    g_pf_pso_ple_gather = pf_compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
+    g_pf_pso_ple_finish = pf_compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
     g_pso_kq_mm4 = pf_compile_pso(metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, ok)
     g_pso_kq_mm5 = pf_compile_pso(metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, ok)
     g_pso_kq_mm6 = pf_compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
@@ -4697,6 +4864,10 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
 // one tensor's slice of the whole-model blob on THIS driver's device (blob_of's pf twin)
 def private pf_blob_of(t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
     return blob_of(g_pf_dev, t, off)
+}
+
+def private pf_bf16_of(t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
+    return bf16_of(g_pf_dev, t, off)
 }
 
 def private pf_uniform_u32(v : uint) : MetalBuffer? {
@@ -5367,6 +5538,21 @@ def private pf_weight_caches_flush_on_reload {
     g_pf_cache_epoch = weights_epoch()
 }
 
+// GPU-PLE gate (register_ple_gpu_gate): true iff THIS window's metal prefill will engage AND
+// the pre-step kernels cover the model — q8 emb table, kept-bf16 model_proj, slice/shape gates.
+def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
+    if (active_prefill_override() != "metal" ||
+            !t.metal_blob || t.ple_emb_fmt != KqFmt.q8 || !t.ple_model_bf16) {
+        return false
+    }
+    let ple = t.config.n_embd_per_layer
+    if (ple % 32l != 0l || ple > 1024l || (t.config.n_layers * ple) % 64l != 0l ||
+            prefill_decline(t, s, npos, start_pos) != MetalPrefillDecline.none) {
+        return false
+    }
+    return metal_prefill_init()
+}
+
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
     pf_weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
@@ -5374,6 +5560,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         why = MetalPrefillDecline.device
     }
     if (why != MetalPrefillDecline.none) {
+        if (s.ple_gpu_pending) {   // the gate promised a device pre-step — build it on CPU first
+            ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
+            s.ple_gpu_pending = false
+        }
         if (why == MetalPrefillDecline.feature) {
             decline(why, metal_missing_needs(t, PF_NEEDS_OK))
         } else {
@@ -5519,22 +5709,38 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // block at one offset); gate outputs pad to mp rows like every GEMM panel
     let plef = has_ple(c)
     let ple_n = c.n_embd_per_layer
+    let ple_all = c.n_layers * ple_n
     let bytes_ple_side = uint64(c.n_layers * npos * ple_n * 4l)
     let bytes_ple_g = uint64(mp * ple_n * 4l)
+    let bytes_ple_proj = uint64(mp * ple_all * 4l)
+    let ple_gpu = plef && s.ple_gpu_pending   // the gate stashed tokens — build the side input on device
     var bple : MetalBuffer?
     var bpleg : MetalBuffer?
+    var bple_proj : MetalBuffer?
+    var bple_tok : MetalBuffer?
     if (plef) {
-        bple = pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_ple_side)
         bpleg = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_g)
-        unsafe {
-            // transpose s.ple_inp (position-major, p*all + l*ple) into layer-major blocks
-            var dst = reinterpret<float?>(metal_buffer_contents(bple))
-            let src = addr < float const? >(s.ple_inp[0])
-            let all = c.n_layers * ple_n
-            for (l in range64(c.n_layers)) {
+        if (ple_gpu) {
+            bple = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_side)
+            bple_proj = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_proj)
+            bple_tok = pool_acquire_untracked(g_pf_upool, g_pf_dev, uint64(npos * 4l))
+            unsafe {
+                var tp = reinterpret<uint?>(metal_buffer_contents(bple_tok))
                 for (p in range64(npos)) {
-                    memcpy(reinterpret<void?>(dst + (l * npos + p) * ple_n),
-                        reinterpret<void const?>(src + p * all + l * ple_n), int(ple_n * 4l))
+                    tp[p] = uint(s.ple_gpu_tokens[p])
+                }
+            }
+        } else {
+            bple = pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_ple_side)
+            unsafe {
+                // transpose s.ple_inp (position-major, p*all + l*ple) into layer-major blocks
+                var dst = reinterpret<float?>(metal_buffer_contents(bple))
+                let src = addr < float const? >(s.ple_inp[0])
+                for (l in range64(c.n_layers)) {
+                    for (p in range64(npos)) {
+                        memcpy(reinterpret<void?>(dst + (l * npos + p) * ple_n),
+                            reinterpret<void const?>(src + p * ple_all + l * ple_n), int(ple_n * 4l))
+                    }
                 }
             }
         }
@@ -5642,6 +5848,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // E-series PLE: gate/proj widths + the per-layer geglu ⊙ span
     var u_ple = plef ? pf_uniform_u32(uint(ple_n)) : null
     var u_ple_tot = plef ? pf_uniform_u32(uint(npos * ple_n)) : null
+    var u_ple_np = ple_gpu ? pf_uniform_u32(uint(npos)) : null
+    var u_ple_nl = ple_gpu ? pf_uniform_u32(uint(c.n_layers)) : null
+    var u_ple_all = ple_gpu ? pf_uniform_u32(uint(ple_all)) : null
+    var u_ple_sc0 = ple_gpu ? pf_uniform_f32(sqrt(float(ple_n))) : null
+    var u_ple_isd = ple_gpu ? pf_uniform_f32(1.0 / sqrt(float(dim))) : null
+    var u_ple_is2 = ple_gpu ? pf_uniform_f32(1.0 / sqrt(2.0)) : null
     // the SLIDING-class uniform twins (hetero models — uniform models leave these null and
     // every layer binds the base set)
     var u_qd_sw = hetero ? pf_uniform_u32(uint(qd_sw)) : null
@@ -5741,6 +5953,46 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 cb = unret ? metal_new_command_buffer_unretained(g_pf_queue) : metal_new_command_buffer(g_pf_queue)
                 enc = metal_new_compute_encoder(cb)
+            }
+            if (l == 0l && ple_gpu) {
+                // PLE pre-step on device (the serial encoder orders the three stages): q8 token-row
+                // gather (layer-major, sqrt(ple) folded) -> bf16 model_proj GEMM off bx -> rms+combine
+                unsafe {
+                    let bemb = pf_blob_of(t, t.ple_emb_off)
+                    metal_set_pipeline(enc, g_pf_pso_ple_gather)
+                    metal_set_buffer(enc, bemb.buf, bemb.boff, 0)
+                    metal_set_buffer(enc, bemb.buf, bemb.boff, 1)
+                    metal_set_buffer(enc, bple_tok, 0ul, 2)
+                    metal_set_buffer(enc, bple, 0ul, 3)
+                    metal_set_buffer(enc, u_ple_np, 0ul, 4)
+                    metal_set_buffer(enc, u_ple, 0ul, 5)
+                    metal_set_buffer(enc, u_ple_nl, 0ul, 6)
+                    metal_set_buffer(enc, u_ple_sc0, 0ul, 7)
+                    metal_dispatch_threadgroups(enc, uint3(uint(c.n_layers), uint(npos), 1u), uint3(uint(ple_n), 1u, 1u))
+                    let bwp = pf_bf16_of(t, t.ple_model_off)
+                    metal_set_pipeline(enc, g_pf_pso_bf16_mm)
+                    metal_set_threadgroup_memory_length(enc, metal_bf16_mulmm_msl_tgmem, 0)
+                    metal_set_buffer(enc, bwp.buf, bwp.boff, 0)
+                    metal_set_buffer(enc, bx, 0ul, 2)
+                    metal_set_buffer(enc, bple_proj, 0ul, 3)
+                    metal_set_buffer(enc, u_dim, 0ul, 4)
+                    metal_set_buffer(enc, u_ple_all, 0ul, 5)
+                    metal_dispatch_threadgroups(enc, uint3(uint(mp / 32l), uint(ple_all / 64l), 1u), uint3(128u, 1u, 1u))
+                    var bw_pn = pf_upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))
+                    metal_set_pipeline(enc, g_pf_pso_ple_finish)
+                    metal_set_threadgroup_memory_length(enc, metal_ple_finish_msl_tgmem, 0)
+                    metal_set_buffer(enc, bple_proj, 0ul, 0)
+                    metal_set_buffer(enc, bw_pn, 0ul, 1)
+                    metal_set_buffer(enc, bple, 0ul, 2)
+                    metal_set_buffer(enc, u_ple_np, 0ul, 3)
+                    metal_set_buffer(enc, u_ple, 0ul, 4)
+                    metal_set_buffer(enc, u_ple_nl, 0ul, 5)
+                    metal_set_buffer(enc, u_ple_isd, 0ul, 6)
+                    metal_set_buffer(enc, u_eps, 0ul, 7)
+                    metal_set_buffer(enc, u_ple_is2, 0ul, 8)
+                    metal_dispatch_threadgroups(enc, uint3(uint(c.n_layers), uint(npos), 1u), uint3(uint(ple_n), 1u, 1u))
+                }
+                s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {
                 // trunk done — save the residual panel (x_b readback + cls read it), then swap
@@ -6382,7 +6634,19 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_pool, bvs[l], bytes_kv_l)
     }
     if (plef) {
-        pool_release(g_pf_upool, bple, bytes_ple_side)
+        if (ple_gpu) {
+            pool_release(g_pf_pool, bple, bytes_ple_side)
+            pool_release(g_pf_pool, bple_proj, bytes_ple_proj)
+            pool_release(g_pf_upool, bple_tok, uint64(npos * 4l))
+            pool_release(g_pf_upool, u_ple_np, 4ul)
+            pool_release(g_pf_upool, u_ple_nl, 4ul)
+            pool_release(g_pf_upool, u_ple_all, 4ul)
+            pool_release(g_pf_upool, u_ple_sc0, 4ul)
+            pool_release(g_pf_upool, u_ple_isd, 4ul)
+            pool_release(g_pf_upool, u_ple_is2, 4ul)
+        } else {
+            pool_release(g_pf_upool, bple, bytes_ple_side)
+        }
         pool_release(g_pf_pool, bpleg, bytes_ple_g)
         pool_release(g_pf_upool, u_ple, 4ul)
         pool_release(g_pf_upool, u_ple_tot, 4ul)
@@ -6483,6 +6747,7 @@ def dasllama_metal_prefill_register() {
     // registered but dormant: only select_prefill_override("metal") (env rail
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
     register_prefill_override("metal", @@metal_prefill_forward)
+    register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
         g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
         to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")
