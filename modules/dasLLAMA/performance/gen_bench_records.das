@@ -137,14 +137,44 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
     if (accel) {
         args |> push("--accel")
     }
-    var out = ""
-    let rc = run_and_capture(args, out)
     var cell : array<BenchModel>
-    if (rc != 0 || !read_bench_records(cellPath, cell)) {
-        let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
-        failed |> push("{file} das {tag}")
-        return
+    for (attempt in range(2)) {
+        var out = ""
+        let rc = run_and_capture(args, out)
+        cell |> clear()
+        if (rc != 0 || !read_bench_records(cellPath, cell)) {
+            let tail = slice(out, max(0, length(out) - 400))
+            to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
+            failed |> push("{file} das {tag}")
+            return
+        }
+        // variance tripwire, self-healing: the FIRST das process on a cold/churned .dlim map
+        // warms across its reps (2026-07-24 35B: 150->198 monotone, mean 177 ± 21, while the
+        // next process reads a flat 212 ± 1.7 — one in-process warmup pass cannot absorb a
+        // 19GB map fighting page-cache eviction). A >3% cv cell is that signature: re-run the
+        // child once — its predecessor just became the warmer — and keep the retry.
+        var worst = 0.0lf
+        for (c in cell) {
+            for (r in c.runs) {
+                if (r.engine != "das") {
+                    continue
+                }
+                for (tv in values(r.tests)) {
+                    if (tv.tok_s > 0.0lf) {
+                        worst = max(worst, tv.stddev / tv.tok_s)
+                    }
+                }
+            }
+        }
+        if (worst <= 0.03lf) {
+            break
+        }
+        if (attempt == 0) {
+            to_log(LOG_WARNING, "gen_bench_records: HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) — cold-map warming suspect, re-running the cell warm\n")
+            settle(cfg)
+        } else {
+            to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) after a warm re-run — keeping it, treat with suspicion\n")
+        }
     }
     absorb_cell(models, cell, store, note)
     remove(cellPath)
