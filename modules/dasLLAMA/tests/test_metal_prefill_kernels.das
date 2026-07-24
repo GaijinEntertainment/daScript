@@ -1179,7 +1179,6 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     var bbys = buf_u32(dev, uint(k * d))
     var bwb = buf_upload(dev, wb)
     var bhasb = buf_u32(dev, bias ? 1u : 0u)
-    var betab = buf_upload(dev, etab)
     var vtf : array<float>
     vtf |> resize(16)
     for (i in range(16)) {
@@ -1188,6 +1187,7 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     var bvt = buf_upload(dev, vtf)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bs, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
@@ -1202,7 +1202,6 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
         metal_set_buffer(enc, bbys, 0ul, 11)
         metal_set_buffer(enc, bwb, 0ul, 12)
         metal_set_buffer(enc, bhasb, 0ul, 13)
-        metal_set_buffer(enc, betab, 0ul, 14)
         metal_set_buffer(enc, bvt, 0ul, 15)
         metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     }
@@ -1222,7 +1221,6 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     metal_release(bbys)
     metal_release(bwb)
     metal_release(bhasb)
-    metal_release(betab)
     metal_release(bvt)
     metal_release(pso)
     delete etab

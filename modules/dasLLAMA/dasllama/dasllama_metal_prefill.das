@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_metal_prefill shared public
 
 require math
+require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
 require strings
 require daslib/fio
 require metal/msl_shader
@@ -1042,7 +1043,7 @@ class MetalMoeGemvK6 {
 // b LOW / b+16 HIGH — the split-half layout) + one E8M0 scale byte; value = doubled-e2m1
 // magnitude x halved scale (2^(e-128)). Optional per-expert bias rows — gpt-oss's biased MoE.
 class MetalMoeGemvMx4 {
-    @ssbo @binding = 0 mxu : array<uint>    // nibble plane, uint view (block at 4*blk; off/2 % 4)
+    @ssbo @binding = 0 mxu2 : array<uint2>  // nibble plane, uint2 view (block at 2*blk; off/2 % 8)
     @ssbo @binding = 1 mxe : array<uint8>   // E8M0 plane, bound at off/32
     @ssbo @binding = 2 xf : array<float4>   // activations, float4 view (xoff always % 4)
     @ssbo @binding = 3 y : array<float>
@@ -1056,16 +1057,19 @@ class MetalMoeGemvMx4 {
     @uniform @binding = 11 bys : uint       // per-stream y stride, elements (0 single)
     @ssbo @binding = 12 wb : array<float>   // [ne x ddim] per-expert bias rows (hasb models)
     @uniform @binding = 13 hasb : uint
-    @ssbo @binding = 14 etab : array<float> // [256] exact e8m0_half scales (host-built)
     @ssbo @binding = 15 vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
+    @workgroup vt : float[32]
 
     [metal_kernel(name="metal_moe_gemv_mx4_msl")]
     def metal_moe_gemv_mx4 {
-        // the q51 GEMV shape (2 rows per sg off one shared float4 x load) — the 1-row scalar-x
-        // form was the gpt-oss 0.40x decode red; the value LUT replaces the per-nibble csel chain
+        // the lcpp mul_mv_mxfp4 shape (moe-lab lcppe rung, 239->301 wGB/s at gpt-oss shapes):
+        // 16 blocks in flight x 2 threads/block, yl[4] float4 x prefetch shared across both rows,
+        // uint2 weight loads, tgmem value LUT, e8m0 scale computed in ALU (no dependent etab load)
         let lane = gl_SubgroupInvocationID
-        let ix = lane / 8u    // 4-way block stride
-        let it = lane % 8u    // 8 threads per block, one float4 (4 elems) each
+        vt[lane] = vtab[lane % 16u]
+        barrier()
+        let ix = lane / 2u   // 16-way block stride
+        let it = lane % 2u   // 2 threads per block, 8 nibble bytes (one uint2) each
         let nb = ndim / 32u
         let slot = gl_WorkGroupID.y
         let st = gl_WorkGroupID.z
@@ -1074,23 +1078,29 @@ class MetalMoeGemvMx4 {
         let xoff = st * bxs + slot * xs
         let y0 = st * bys + slot * ddim
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        let half = it / 4u
-        let ku = it % 4u
-        let nsh = half * 4u
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
-            let xv = xf[(xoff + ib * 32u) / 4u + it]
+            let x4 = (xoff + ib * 32u + it * 8u) / 4u
+            let yl0 = xf[x4]
+            let yl1 = xf[x4 + 4u]
+            let yl2 = xf[x4 + 1u]
+            let yl3 = xf[x4 + 5u]
             for [unroll_full] (r in range(2)) {
                 let blk = eb + (first_row + uint(r)) * nb + ib
-                let u = mxu[blk * 4u + ku]
-                var qx = vtab[(u >> nsh) & 15u] * xv.x
-                qx += vtab[(u >> (8u + nsh)) & 15u] * xv.y
-                qx += vtab[(u >> (16u + nsh)) & 15u] * xv.z
-                qx += vtab[(u >> (24u + nsh)) & 15u] * xv.w
-                sumf[r] += etab[uint(mxe[blk])] * qx
+                let u2 = mxu2[blk * 2u + it]
+                let u0 = u2.x
+                let u1 = u2.y
+                let acc1 = yl0 * float4(vt[u0 & 15u], vt[(u0 >> 8u) & 15u], vt[(u0 >> 16u) & 15u], vt[(u0 >> 24u) & 15u])
+                let acc2 = yl1 * float4(vt[(u0 >> 4u) & 15u], vt[(u0 >> 12u) & 15u], vt[(u0 >> 20u) & 15u], vt[u0 >> 28u])
+                let acc3 = yl2 * float4(vt[u1 & 15u], vt[(u1 >> 8u) & 15u], vt[(u1 >> 16u) & 15u], vt[(u1 >> 24u) & 15u])
+                let acc4 = yl3 * float4(vt[(u1 >> 4u) & 15u], vt[(u1 >> 12u) & 15u], vt[(u1 >> 20u) & 15u], vt[u1 >> 28u])
+                let am = (acc1 + acc3) + (acc2 + acc4)
+                let ex = uint(mxe[blk])
+                let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+                sumf[r] += sc * ((am.x + am.y) + (am.z + am.w))
             }
-            ib += 4u
+            ib += 16u
         }
         for [unroll_full] (r in range(2)) {
             let sr = simd_sum(sumf[r])
@@ -1173,7 +1183,7 @@ class MetalMoeGemvQ51 {
 // Gathered MXFP4 mul_mm — the gathered-GEMM shape with the mx4 A stage: each thread's 16-elem
 // half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Bias rides MetalMoeBiasRows.
 class MetalMoeMulMmMx4 {
-    @ssbo @binding = 0 mxn : array<uint8>
+    @ssbo @binding = 0 mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
     @ssbo @binding = 1 mxe : array<uint8>
     @ssbo @binding = 2 xf : array<float4>
     @ssbo @binding = 3 y : array<float>
@@ -1185,10 +1195,10 @@ class MetalMoeMulMmMx4 {
     @uniform @binding = 9 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 10 nk : uint
     @uniform @binding = 11 gather : uint
-    @ssbo @binding = 12 etab : array<float> // [256] exact e8m0_half scales (host-built)
     @ssbo @binding = 13 vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
+    @workgroup vt : float[32]
 
     [metal_kernel(name="metal_moe_mulmm_mx4_msl")]
     def metal_moe_mulmm_mx4 {
@@ -1200,6 +1210,10 @@ class MetalMoeMulMmMx4 {
         }
         let rbase = basep[e]
         let lid = gl_LocalInvocationID.x
+        if (lid < 32u) {
+            vt[lid] = vtab[lid % 16u]
+        }
+        barrier()
         let sg = gl_SubgroupID
         let nBase = gl_WorkGroupID.y * 64u
         var mc : simdgroup_float8x8[8]
@@ -1230,11 +1244,14 @@ class MetalMoeMulMmMx4 {
             let b0 = unsafe(xcur[0])
             let b1 = unsafe(xcur[1])
             let sc = uint(mxe[blk])
-            let d = etab[sc]   // host-built exact e8m0_half table (incl. the denormal e < 2)
-            let qb = blk * 16u
-            for [unroll_full] (i in range(16)) {
-                let nby = uint(mxn[qb + uint(i)])
-                va[i] = float16(vtab[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
+            let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))   // exact e8m0_half, denormal e < 2 included
+            let u4 = mxq4[blk]
+            for [unroll_full] (w in range(4)) {
+                let uw = w == 0 ? u4.x : (w == 1 ? u4.y : (w == 2 ? u4.z : u4.w))
+                for [unroll_full] (c in range(4)) {
+                    let nby = (uw >> (uint(c) * 8u)) & 255u
+                    va[w * 4 + c] = float16(vt[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
+                }
             }
             barrier()
             for [unroll_full] (i in range(16)) {
@@ -4319,7 +4336,6 @@ var private g_pf_pso_swiglu_oai : MetalComputePipeline?
 var private g_pf_pso_moe_mm_mx4 : MetalComputePipeline?
 var private g_pf_pso_moe_mm_q51 : MetalComputePipeline?
 var private g_pf_pso_moe_bias_rows : MetalComputePipeline?
-var private g_pf_e8m0_tab : MetalBuffer?
 var private g_pf_mx4_vtab : MetalBuffer?
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 var private g_pf_logits_cpu = false            // set_metal_prefill_logits_cpu — the logits A/B rail
@@ -4536,10 +4552,6 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_mx4_vtab)
         g_pf_mx4_vtab = null
     }
-    if (g_pf_e8m0_tab != null) {
-        metal_release(g_pf_e8m0_tab)
-        g_pf_e8m0_tab = null
-    }
     if (g_pso_qkmm != null) {
         metal_release(g_pso_qkmm)
         g_pso_qkmm = null
@@ -4650,13 +4662,6 @@ def private metal_prefill_init : bool {
     g_pf_pso_dn_ba = pf_compile_pso(metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, ok)
     g_pf_pso_sigmul = pf_compile_pso(metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, ok)
     g_pf_pso_axpy_sig = pf_compile_pso(metal_axpy_sig_msl, metal_axpy_sig_msl_entry, metal_axpy_sig_msl_fastmath, ok)
-    g_pf_e8m0_tab = metal_new_buffer(g_pf_dev, 1024ul)
-    unsafe {
-        var ep = reinterpret<uint?>(metal_buffer_contents(g_pf_e8m0_tab))
-        for (ei in range(256)) {
-            ep[ei] = ei < 2 ? (0x00200000u << uint(ei)) : (uint(ei - 1) << 23u)
-        }
-    }
     g_pf_mx4_vtab = metal_new_buffer(g_pf_dev, 64ul)
     unsafe {
         var vp = reinterpret<float?>(metal_buffer_contents(g_pf_mx4_vtab))
@@ -5032,7 +5037,6 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     metal_set_buffer(enc, beblk, 0ul, 9)
     metal_set_buffer(enc, bnk, 0ul, 10)
     metal_set_buffer(enc, bgather, 0ul, 11)
-    metal_set_buffer(enc, g_pf_e8m0_tab, 0ul, 12)
     metal_set_buffer(enc, g_pf_mx4_vtab, 0ul, 13)
     metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
 }

@@ -5861,13 +5861,6 @@ def metal_decode_init : bool {
     g_pso_dn_deint = compile_pso(metal_dn_deint_msl, metal_dn_deint_msl_entry, metal_dn_deint_msl_fastmath, ok)
     g_pso_sigmul = compile_pso(metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, ok)
     g_pso_axpy_sig = compile_pso(metal_axpy_sig_msl, metal_axpy_sig_msl_entry, metal_axpy_sig_msl_fastmath, ok)
-    g_e8m0_tab = metal_new_buffer(g_dev, 1024ul)
-    unsafe {
-        var ep = reinterpret<uint?>(metal_buffer_contents(g_e8m0_tab))
-        for (ei in range(256)) {
-            ep[ei] = ei < 2 ? (0x00200000u << uint(ei)) : (uint(ei - 1) << 23u)
-        }
-    }
     g_mx4_vtab = metal_new_buffer(g_dev, 64ul)
     unsafe {
         var vp = reinterpret<float?>(metal_buffer_contents(g_mx4_vtab))
@@ -6213,6 +6206,7 @@ def enc_moe_gemv_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, k, 
                      bx, by, bn, bd, bsel, beblk, bxs, bss, bbxs, bbys, bwb, bhasb : MetalBuffer?; yoff : uint64 = 0ul) {
     let mp = mx4_of(g_dev, t, stack_off)
     kn_pipeline(enc, g_pso_moe_gemv_mx4)
+    kn_tgmem(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
     kn_buffer(enc, mp.qbuf, mp.qoff, 0)
     kn_buffer(enc, mp.sbuf, mp.soff, 1)
     kn_buffer(enc, bx, 0ul, 2)
@@ -6227,7 +6221,6 @@ def enc_moe_gemv_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, k, 
     kn_buffer(enc, bbys, 0ul, 11)
     kn_buffer(enc, bwb, 0ul, 12)
     kn_buffer(enc, bhasb, 0ul, 13)
-    kn_buffer(enc, g_e8m0_tab, 0ul, 14)
     kn_buffer(enc, g_mx4_vtab, 0ul, 15)
     hz_read(bx)
     hz_read(bsel)
@@ -6938,10 +6931,6 @@ def metal_kernels_release {
     if (g_mx4_vtab != null) {
         metal_release(g_mx4_vtab)
         g_mx4_vtab = null
-    }
-    if (g_e8m0_tab != null) {
-        metal_release(g_e8m0_tab)
-        g_e8m0_tab = null
     }
     if (g_pso_qkvrs16 != null) {
         metal_release(g_pso_qkvrs16)
