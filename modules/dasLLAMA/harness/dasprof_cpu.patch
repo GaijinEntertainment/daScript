@@ -1,0 +1,163 @@
+From 7642f1c11019cefe2ccd7e0c8b22f22d4e57e246 Mon Sep 17 00:00:00 2001
+From: Boris Batkin <bbatkin@gmail.com>
+Date: Fri, 3 Jul 2026 03:15:25 -0700
+Subject: [PATCH] =?UTF-8?q?dasprof:=20per-section=20timing=20+=20chunk-cou?=
+ =?UTF-8?q?nt=20instrumentation=20(thread-0=20wall=20per=20node,=20MUL=5FM?=
+ =?UTF-8?q?ATs=20keyed=20by=20weight=20name,=20nchunk=20from=20ops.cpp=20+?=
+ =?UTF-8?q?=20repack.cpp)=20=E2=80=94=20the=20dasLLAMA=20side-by-side=20pr?=
+ =?UTF-8?q?ofiler?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ ggml/src/ggml-cpu/ggml-cpu.c | 70 ++++++++++++++++++++++++++++++++++++
+ ggml/src/ggml-cpu/ops.cpp    |  3 ++
+ ggml/src/ggml-cpu/repack.cpp |  2 ++
+ 3 files changed, 75 insertions(+)
+
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index eb8341c..214c94a 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -3015,6 +3015,68 @@ static int ggml_cpu_try_fuse_ops(
+     return 0;
+ }
+ 
++// ==== dasllama section profiler (TEMP PATCH — revert after the side-by-side) ====
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++typedef struct { char key[96]; double us; long n; } dasprof_slot_t;
++static dasprof_slot_t dasprof_slots[512];
++static int dasprof_nslots = 0;
++static int dasprof_registered = 0;
++static void dasprof_dump(void) {
++    // insertion-sort by total us desc
++    for (int i = 1; i < dasprof_nslots; i++) {
++        dasprof_slot_t v = dasprof_slots[i];
++        int j = i - 1;
++        while (j >= 0 && dasprof_slots[j].us < v.us) { dasprof_slots[j+1] = dasprof_slots[j]; j--; }
++        dasprof_slots[j+1] = v;
++    }
++    double tot = 0;
++    for (int i = 0; i < dasprof_nslots; i++) tot += dasprof_slots[i].us;
++    fprintf(stderr, "==== ggml section profile (total us | calls | us/call | %%) ====\n");
++    for (int i = 0; i < dasprof_nslots; i++) {
++        fprintf(stderr, "%-44s %12.0f %9ld %10.2f %6.2f%%\n",
++            dasprof_slots[i].key, dasprof_slots[i].us, dasprof_slots[i].n,
++            dasprof_slots[i].us / (double)dasprof_slots[i].n, 100.0 * dasprof_slots[i].us / tot);
++    }
++    fprintf(stderr, "TOTAL %f us\n", tot);
++}
++static void dasprof_add(const char * key, double us) {
++    for (int i = 0; i < dasprof_nslots; i++) {
++        if (strcmp(dasprof_slots[i].key, key) == 0) { dasprof_slots[i].us += us; dasprof_slots[i].n++; return; }
++    }
++    if (dasprof_nslots < 512) {
++        snprintf(dasprof_slots[dasprof_nslots].key, 96, "%s", key);
++        dasprof_slots[dasprof_nslots].us = us;
++        dasprof_slots[dasprof_nslots].n = 1;
++        dasprof_nslots++;
++        if (!dasprof_registered) { dasprof_registered = 1; atexit(dasprof_dump); }
++    }
++}
++static void dasprof_key(const struct ggml_tensor * node, char * out, size_t cap) {
++    const char * base = ggml_op_name(node->op);
++    const char * wname = NULL;
++    if ((node->op == GGML_OP_MUL_MAT || node->op == GGML_OP_MUL_MAT_ID) && node->src[0]) wname = node->src[0]->name;
++    else if (node->op == GGML_OP_MUL && node->src[1]) wname = node->src[1]->name;
++    if (wname && *wname) {
++        const char * q = wname;
++        if (strncmp(q, "blk.", 4) == 0) { q += 4; while (*q && *q != '.') q++; if (*q == '.') q++; }
++        if (strncmp(q, "cache_k", 7) == 0) q = "cache_k";
++        else if (strncmp(q, "cache_v", 7) == 0) q = "cache_v";
++        snprintf(out, cap, "%s:%s", base, q);
++    } else {
++        snprintf(out, cap, "%s", base);
++    }
++}
++// chunk-granularity hook, called from ops.cpp mul_mat/mul_mat_id (thread 0 only)
++void dasprof_count_chunks(const struct ggml_tensor * node, long long nchunk) {
++    char k[96];
++    dasprof_key(node, k, sizeof(k) - 8);
++    strcat(k, ":chunks");
++    dasprof_add(k, (double)nchunk);
++}
++// ==== end dasllama section profiler ====
++
+ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
+     struct ggml_threadpool    * tp    = state->threadpool;
+@@ -3055,6 +3117,8 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+             continue;
+         }
+ 
++        const int64_t dasprof_t0 = (state->ith == 0) ? ggml_time_us() : 0;
++
+         // TODO: move fused-op detection into ggml_graph_plan so fusion decisions are made once at planning time
+         // Try fused ops, fall back to normal compute
+         const int n_fused = ggml_cpu_try_fuse_ops(cgraph, node_n, &params, cplan);
+@@ -3073,6 +3137,12 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+         if (node_n + 1 < cgraph->n_nodes) {
+             ggml_barrier(state->threadpool);
+         }
++
++        if (state->ith == 0) {
++            char dasprof_k[96];
++            dasprof_key(node, dasprof_k, sizeof(dasprof_k));
++            dasprof_add(dasprof_k, (double)(ggml_time_us() - dasprof_t0));
++        }
+     }
+ 
+ #ifdef GGML_USE_OPENMP
+diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
+index 6724686..3ca4138 100644
+--- a/ggml/src/ggml-cpu/ops.cpp
++++ b/ggml/src/ggml-cpu/ops.cpp
+@@ -1,5 +1,6 @@
+ #include "ops.h"
+ 
++extern "C" void dasprof_count_chunks(const struct ggml_tensor * node, long long nchunk);   // dasllama profiler
+ #include "ggml-cpu.h"
+ #include "ggml-impl.h"
+ #include "binary-ops.h"
+@@ -9045,6 +9046,7 @@ static void ggml_compute_forward_flash_attn_ext_f16(
+ 
+         ggml_barrier(params->threadpool);
+ 
++        if (ith == 0) dasprof_count_chunks(dst, (long long)nchunk);   // dasllama profiler
+         const int64_t dr = (nr + nchunk - 1) / nchunk;
+ 
+         static constexpr int64_t Q_TILE_SZ  = ggml_fa_tile_config::Q;
+@@ -10793,6 +10795,7 @@ static void ggml_compute_forward_gated_delta_net_f32(
+ 
+     ggml_barrier(params->threadpool);
+ 
++    if (ith == 0) dasprof_count_chunks(dst, (long long)nchunk);   // dasllama profiler
+     const int64_t dr = (nr + nchunk - 1) / nchunk;
+ 
+     int current_chunk = ith;
+diff --git a/ggml/src/ggml-cpu/repack.cpp b/ggml/src/ggml-cpu/repack.cpp
+index f18758f..56b8222 100644
+--- a/ggml/src/ggml-cpu/repack.cpp
++++ b/ggml/src/ggml-cpu/repack.cpp
+@@ -3,6 +3,7 @@
+ #include "ggml-common.h"
+ #include "ggml-backend-impl.h"
+ 
++extern "C" void dasprof_count_chunks(const struct ggml_tensor * node, long long nchunk);   // dasllama profiler
+ #include "ggml-impl.h"
+ #include "ggml-cpu.h"
+ #include "ggml-cpu-impl.h"
+@@ -4345,6 +4346,7 @@ template <typename BLOC_TYPE, int64_t INTER_SIZE, int64_t NB_COLS, ggml_type PAR
+         nchunk0                  = MIN(nchunk0, max_nchunk);
+ 
+         if (ith == 0) {
++            dasprof_count_chunks(dst, (long long)(nchunk0 * nchunk1));   // dasllama profiler
+             // Every thread starts at ith, so the first unprocessed chunk is nth.  This save a bit of coordination right at the start.
+             ggml_threadpool_chunk_set(params->threadpool, nth);
+         }
+-- 
+2.50.1 (Apple Git-155)
+
