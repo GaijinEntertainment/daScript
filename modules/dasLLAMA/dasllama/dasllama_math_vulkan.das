@@ -3546,9 +3546,13 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     let bb = arena_block_bytes(fmt)
     let qbytes = cap_blocks * bb.wq
     let sbytes = cap_blocks * bb.ws
-    // maxStorageBufferRange, not uint32 indexing (that reaches 16GiB), is the real ceiling
-    if (qbytes > 2_147_483_648l || sbytes > 2_147_483_648l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant bytes — over the 2GiB shard cap\n")
+    // maxStorageBufferRange, not uint32 indexing (that reaches 16GiB), is the real ceiling — ask
+    // the device (NV/AMD report the full 4GiB, where a 3B's single-format q8 plane fits)
+    var lp : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
+    let shard_cap = int64(lp.limits.maxStorageBufferRange)
+    if (qbytes > shard_cap || sbytes > shard_cap) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant bytes — over the device's {shard_cap}B storage-range cap\n")
         return false
     }
     var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,

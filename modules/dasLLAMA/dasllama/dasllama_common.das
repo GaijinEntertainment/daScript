@@ -2052,6 +2052,13 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
 }
 let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mirror at
 
+// the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
+// model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
+def private rdec_min_ctx : int64 {
+    let e = get_env_variable("DASLLAMA_GPU_MIN_CTX")
+    return empty(e) ? RDEC_MIN_CTX : max(int64(to_int(e)), 256l)
+}
+
 // gather one prepared plane into device-layout bytes and place it in its format's arena; returns
 // the arena block index. Same gather the per-op tier uses (moe_gpu_gather_stack / _kq), then place
 // instead of upload_stack.
@@ -2538,7 +2545,7 @@ def moe_gpu_upload_resident(var t : Model) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
             // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
             let fit_ctx = (plan.budget_bytes - plan.weight_bytes) / (plan.kv_bytes / seq_cap)
-            if (fit_ctx >= RDEC_MIN_CTX) {
+            if (fit_ctx >= rdec_min_ctx()) {
                 seq_cap = fit_ctx
                 plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
             }
