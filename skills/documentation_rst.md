@@ -178,6 +178,7 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
    The build must introduce **no new** Sphinx errors or warnings. The final summary line should say `build succeeded.` with no warning count.
 
    Common issues:
+   - **Typographic math characters break the CI PDF build**: pdflatex's typewriter font has no glyph for `−` (U+2212), and `×`/`θ` are equally risky inside inline literals. `sphinx-build -W` (both builders) passes anyway — only CI's "Compile LaTeX document" step fails, and it has no local mirror (preflight SKIPs it without latexmk). Write ASCII math inside ``literals``: `p * theta`, `(p - q)`. Safe-in-prose (proven by green PDF builds): `π`, `≈`, em-dash, curly quotes. (Bitten 2026-07-24, tutorial 00.)
    - **Duplicate label**: Two RST files define the same `.. _label:` — rename one
    - **Unknown target**: `:ref:\`label\`` points to a nonexistent label — check spelling
    - **Malformed table**: Grid/simple table column widths don't align — see RST table rules below

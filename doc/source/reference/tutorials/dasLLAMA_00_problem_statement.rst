@@ -328,11 +328,11 @@ score.
 Look at one pair — say floats 0 and 1. The query has an arrow there, and
 the cached key has its own arrow there; their dot product is one bracket
 of the score. Both arrows were turned by RoPE: the query sits at position
-``p``, so its arrow was turned ``p`` steps of the pair's angle ``θ``; the
+``p``, so its arrow was turned ``p`` steps of the pair's angle ``theta``; the
 key came from position ``q``, so its arrow was turned ``q`` steps. A dot
 product only cares about lengths and the angle between the arrows — and
 rotation kept the lengths. The angle between them is now exactly their
-distance apart: ``(p − q) × θ``. A key right behind the query was turned
+distance apart: ``(p - q) * theta``. A key right behind the query was turned
 almost as far — small gap between the arrows. A key from long ago lags
 far behind — big gap. The absolute positions cancel: "three tokens ago"
 means the same gap at position 10 and at position 210.
