@@ -805,6 +805,74 @@ class LabMoeGemvMx4A {
     }
 }
 
+// ===== the tgmem-LUT variant (the lcpp shape) =====
+// llama.cpp's kernel_mul_mv_mxfp4_f32 copies its 16-value LUT into THREADGROUP memory at kernel
+// start (one load + one barrier) and the hot loop reads tgmem — zero device loads per lookup.
+// Same change here, production kernel otherwise untouched: the 8 vtab device loads per block
+// iteration become tgmem reads. etab stays a device table (2 broadcast loads/block, secondary).
+class LabMoeGemvMx4T {
+    @ssbo @binding = 0 mxu : array<uint>
+    @ssbo @binding = 1 mxe : array<uint8>
+    @ssbo @binding = 2 xf : array<float4>
+    @ssbo @binding = 3 y : array<float>
+    @uniform @binding = 4 ndim : uint
+    @uniform @binding = 5 ddim : uint
+    @ssbo @binding = 6 sel : array<uint>
+    @uniform @binding = 7 eblk : uint
+    @uniform @binding = 8 xs : uint
+    @uniform @binding = 9 ss : uint
+    @uniform @binding = 10 bxs : uint
+    @uniform @binding = 11 bys : uint
+    @ssbo @binding = 14 etab : array<float>   // [256] exact e8m0_half scales (host-built)
+    @ssbo @binding = 15 vtab : array<float>   // [16] signed doubled-e2m1 values (host-built)
+    @workgroup vt : float[16]   // etab stays a device table: its reads are same-address
+                                // broadcasts (uniform path) — the tgmem copy REGRESSED (253 vs 260)
+
+    [metal_kernel(name="lab_moe_mx4_t_msl")]
+    def lab_moe_mx4_t {
+        let lane = gl_SubgroupInvocationID
+        let tid = gl_SubgroupID * 32u + lane
+        if (tid < 16u) {
+            vt[tid] = vtab[tid]
+        }
+        barrier()
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 32u
+        let slot = gl_WorkGroupID.y
+        let st = gl_WorkGroupID.z
+        let e = sel[st * ss + slot]
+        let eb = e * eblk
+        let xoff = st * bxs + slot * xs
+        let y0 = st * bys + slot * ddim
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        let half = it / 4u
+        let ku = it % 4u
+        let nsh = half * 4u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let xv = xf[(xoff + ib * 32u) / 4u + it]
+            for [unroll_full] (r in range(2)) {
+                let blk = eb + (first_row + uint(r)) * nb + ib
+                let u = mxu[blk * 4u + ku]
+                var qx = vt[(u >> nsh) & 15u] * xv.x
+                qx += vt[(u >> (8u + nsh)) & 15u] * xv.y
+                qx += vt[(u >> (16u + nsh)) & 15u] * xv.z
+                qx += vt[(u >> (24u + nsh)) & 15u] * xv.w
+                sumf[r] += etab[uint(mxe[blk])] * qx
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let sr = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[y0 + first_row + uint(r)] = sr
+            }
+        }
+    }
+}
+
 // the production host tables, bit-exact (dasllama_metal_kernels.das mx4 install)
 def private build_mx4_tabs(var etab : array<float>; var vtab : array<float>) {
     etab |> resize(256)
@@ -859,12 +927,23 @@ def private enc_gmx4(gbufs; pso; enc; l : int64) {
     metal_set_buffer(enc, gbufs[8], 0ul, 13)                                 // hasb = 0
     metal_set_buffer(enc, gbufs[9], 0ul, 14)                                 // etab
     metal_set_buffer(enc, gbufs[10], 0ul, 15)                                // vtab
+    metal_set_threadgroup_memory_length(enc, 64ul, 0)                        // tgv's 16-float LUT (@workgroup = dynamic shmem)
     metal_dispatch_threadgroups(enc, uint3(uint((GNFE + 3l) / 4l), uint(GK), 1u), uint3(64u, 1u, 1u))
 }
 
 def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
+    // applegpu disasm rail: DASMETAL_LAB_DUMP_MSL=<dir> writes the gmx4 kernel sources and exits
+    if (has_env_variable("DASMETAL_LAB_DUMP_MSL")) {
+        let dd = get_env_variable("DASMETAL_LAB_DUMP_MSL")
+        fwrite("{dd}/gmx4_prod.metal", metal_moe_gemv_mx4_msl)
+        fwrite("{dd}/gmx4_arith.metal", lab_moe_mx4_a_msl)
+        fwrite("{dd}/gmx4_tgv.metal", lab_moe_mx4_t_msl)
+        print("gmx4 MSL dumped to {dd}\n")
+        return
+    }
     var pso = compile_or_die(dev, metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath)
     var pso_a = compile_or_die(dev, lab_moe_mx4_a_msl, lab_moe_mx4_a_msl_entry, lab_moe_mx4_a_msl_fastmath)
+    var pso_t = compile_or_die(dev, lab_moe_mx4_t_msl, lab_moe_mx4_t_msl_entry, lab_moe_mx4_t_msl_fastmath)
     var etab : array<float>
     var vtab : array<float>
     build_mx4_tabs(etab, vtab)
@@ -951,10 +1030,30 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     }
     print("gmx4_arith correctness: worst rel {worst}\n")
 
+    // tgmem-LUT variant, same ref
+    t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmx4(gbufs, pso_t, enc, 0l)
+    }
+    worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gbufs[3]))
+        for (s in range64(GK)) {
+            for (row in [0l, 1l, 1234l, GNFE - 1l]) {
+                let e = int64(gsel[s])
+                let want_v = ref_mx4_row(gq, ge, gx, etab, vtab, e * GEBLK, row, GDIM)
+                worst = max(worst, abs(y[s * GNFE + row] - want_v) / max(1.0, abs(want_v)))
+            }
+        }
+    }
+    if (worst > 1e-4) {
+        panic("gmx4_tgv correctness: worst rel diff {worst}")
+    }
+    print("gmx4_tgv correctness: worst rel {worst}\n")
+
     // the discriminator: pipe (kernel ceiling) vs serial (per-dispatch barrier tax), and the
     // arithmetic-decode challenger on the same pipe schedule
     let bytes_pass = double(GLAYERS * GK * GEBLK * 17l)
-    var garms <- [("gmx4_pipe", false, false), ("gmx4_serial", true, false), ("gmx4_arith", false, true)]
+    var garms <- [("gmx4_pipe", 0, false), ("gmx4_serial", 0, true), ("gmx4_arith", 1, false), ("gmx4_tgv", 2, false)]
     var gbest : table<string; double>
     for (a in garms) {
         gbest[a._0] = 1e18lf
@@ -964,12 +1063,12 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
             if (!want("DASMETAL_LAB_ARMS", a._0)) {
                 continue
             }
-            let barrier = a._1
-            let use_a = a._2
+            let kind = a._1
+            let barrier = a._2
             let us = time_arm(queue, true) $(enc : MetalComputeEncoder?) {
                 for (_p in range64(passes)) {
                     for (l in range64(GLAYERS)) {
-                        enc_gmx4(gbufs, use_a ? pso_a : pso, enc, l)
+                        enc_gmx4(gbufs, kind == 1 ? pso_a : (kind == 2 ? pso_t : pso), enc, l)
                         if (barrier) {
                             metal_memory_barrier(enc)
                         }
@@ -1009,6 +1108,7 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     }
     metal_release(pso)
     metal_release(pso_a)
+    metal_release(pso_t)
 }
 
 def private main_apple(dummy) {
