@@ -921,13 +921,30 @@ class DasHerdWatcherServer : HvWebServer {
         client.inspection_patch = ""
         client.inspection_delivered = true
 
-        var inscope argv : array<string>
+        var inscope diff_argv : array<string>
         var expected_exit_code = 0l
-        let command_error = repository_file_diff_argv(
+        var command_error = repository_file_diff_argv(
             incoming.repository_id, incoming.worktree_path,
             incoming.file_path, incoming.comparison,
-            argv, expected_exit_code, client.inspection_diff_context,
+            diff_argv, expected_exit_code, client.inspection_diff_context,
             client.inspection_revision)
+        if (!empty(command_error)) {
+            self.send_file_inspection(client, false, "", command_error)
+            return
+        }
+        // The patch travels through a byte-exact file capture, never through
+        // the task PTY: ConPTY wraps long diff lines at the terminal width and
+        // the wrapped tails would parse as phantom context lines.
+        let artifact_path = watcher_scratch_artifact_path(
+            "diff-{client.id}-{incoming.request_id}.patch")
+        if (empty(artifact_path)) {
+            self.send_file_inspection(client, false, "",
+                "could not allocate the diff capture path")
+            return
+        }
+        var inscope argv : array<string>
+        command_error = repository_capture_argv(diff_argv, artifact_path,
+            expected_exit_code, argv)
         if (!empty(command_error)) {
             self.send_file_inspection(client, false, "", command_error)
             return
@@ -945,8 +962,10 @@ class DasHerdWatcherServer : HvWebServer {
         request.argv := argv
         let result = watcher_launch(request)
         client.inspection_session_id = result.session_id
-        client.inspection_expected_exit_code = expected_exit_code
+        client.inspection_artifact_path = artifact_path
+        client.inspection_expected_exit_code = 0l
         if (!result.ok) {
+            self.cleanup_inspection_artifact(client)
             self.send_file_inspection(client, false, "", result.error)
             return
         }
@@ -1012,28 +1031,39 @@ class DasHerdWatcherServer : HvWebServer {
         }
         client.inspection_delivered = true
         if (truncated) {
+            self.cleanup_inspection_artifact(client)
             self.send_file_inspection(client, false, "",
                 "diff exceeded the retained machine-output limit")
         } elif (info.exit_code != client.inspection_expected_exit_code) {
+            self.cleanup_inspection_artifact(client)
             self.send_file_inspection(client, false, "",
-                "git diff exited with {info.exit_code}: {output}")
+                "git diff failed: {output}")
         } else {
+            var patch = ""
+            let patch_error = repository_read_text_file(
+                client.inspection_artifact_path,
+                MAX_FILE_PREVIEW_RAW_BYTES, patch)
+            self.cleanup_inspection_artifact(client)
+            if (!empty(patch_error)) {
+                self.send_file_inspection(client, false, "", patch_error)
+                return
+            }
             if (client.inspection_comparison == "staged"
                     || client.inspection_comparison == "pr"
                     || client.inspection_comparison == "commit") {
-                if (git_patch_result_is_deleted(output)) {
-                    self.send_file_inspection(client, false, output, "",
+                if (git_patch_result_is_deleted(patch)) {
+                    self.send_file_inspection(client, false, patch, "",
                         "", "", "", 0, true)
                     return
                 }
-                self.start_indexed_file_view(client, output)
+                self.start_indexed_file_view(client, patch)
                 return
             }
             var view_text = ""
             var view_base64 = ""
             var view_byte_count = 0
             if (client.inspection_comparison == "working") {
-                let binary = git_patch_is_binary(output)
+                let binary = git_patch_is_binary(patch)
                 var view_error = ""
                 if (binary) {
                     var inscope bytes : array<uint8>
@@ -1056,11 +1086,11 @@ class DasHerdWatcherServer : HvWebServer {
                         MAX_FILE_PREVIEW_RAW_BYTES, view_text)
                 }
                 if (!empty(view_error)) {
-                    self.send_file_inspection(client, false, output, view_error)
+                    self.send_file_inspection(client, false, patch, view_error)
                     return
                 }
             }
-            self.send_file_inspection(client, false, output, "", view_text,
+            self.send_file_inspection(client, false, patch, "", view_text,
                 "", view_base64, view_byte_count, true)
         }
     }

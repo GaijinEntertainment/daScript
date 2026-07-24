@@ -877,6 +877,17 @@ def public watcher_session_artifact_path(session_id : string; name : string) : s
     return path_join(g_sessions[index].session_dir, name)
 }
 
+// A capture path that exists before its producing task session does.
+def public watcher_scratch_artifact_path(name : string) : string {
+    if (empty(g_log_root) || empty(name) || name == "." || name == ".."
+            || find(name, "/") >= 0 || find(name, "\\") >= 0
+            || find(name, ":") >= 0) return ""
+    let scratch_dir = path_join(g_log_root, "_capture")
+    var mkdir_error : string
+    if (!mkdir_rec(scratch_dir, mkdir_error)) return ""
+    return path_join(scratch_dir, name)
+}
+
 def public watcher_prune_completed_sessions(kind : string;
                                             repository_id : string;
                                             worktree_path : string) : int {

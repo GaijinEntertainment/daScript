@@ -825,6 +825,22 @@ def public repository_working_file_bytes(repository_id : string;
     return read_error
 }
 
+def public repository_capture_argv(command_argv : array<string>;
+                                   output_path : string;
+                                   expected_exit_code : int64;
+                                   var argv : array<string>&) : string {
+    delete argv
+    if (empty(command_argv)) return "capture command is required"
+    if (empty(output_path)) return "capture output path is required"
+    let helper = path_join(get_das_root(),
+        "utils/dasHerd/watcher/git_pipe_capture.das")
+    var inscope command <- [get_das_exe(), helper, "--",
+        "--output={output_path}", "--expect-exit={expected_exit_code}", "--argv"]
+    command |> push_from(command_argv)
+    argv <- command
+    return ""
+}
+
 def public repository_staged_file_view_argv(worktree_path : string;
                                             file_path : string;
                                             output_path : string;
