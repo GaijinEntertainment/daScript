@@ -154,12 +154,16 @@ class WatcherRichClient : HvWebSocketClient {
                     attached = false
                     controls = false
                 }
+                // Automatic attaches never target watcher plumbing tasks and
+                // never re-aim the Git surfaces: only an explicit user attach
+                // follows the session's origin worktree.
                 if (!attached && !empty(selected_id)) {
-                    attach_session(selected_id)
+                    attach_session(selected_id, false)
                 } elif (empty(selected_id)) {
                     for (session in sessions) {
-                        if (session.state == "running") {
-                            attach_session(session.id)
+                        if (session.state == "running"
+                                && session_is_interactive(session)) {
+                            attach_session(session.id, false)
                             break
                         }
                     }
@@ -366,7 +370,12 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def attach_session(session_id : string) {
+    def session_is_interactive(session : WatcherSessionInfo const) : bool {
+        return (!starts_with(session.kind, "git-")
+            && session.kind != "worktree-create")
+    }
+
+    def attach_session(session_id : string; follow_origin : bool = true) {
         if (!connected || empty(session_id)) return
         var columns = 100
         var rows = 30
@@ -380,7 +389,7 @@ class WatcherRichClient : HvWebSocketClient {
                 break
             }
         }
-        if (!empty(origin_repository_id) && !empty(origin_worktree_path)) {
+        if (follow_origin && !empty(origin_repository_id) && !empty(origin_worktree_path)) {
             let origin_changed = (g_selected_repository_id
                     != origin_repository_id
                 || g_selected_worktree_path != origin_worktree_path)
