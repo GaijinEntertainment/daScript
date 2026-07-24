@@ -172,6 +172,7 @@ html_css_files = [
 html_js_files = [
     'https://cdn.jsdelivr.net/npm/@docsearch/js@3',
     'docsearch.js',
+    'sidebar.js',
 ]
 
 # sphinx-sitemap: emit doc/sitemap.xml so the Algolia crawler can discover the

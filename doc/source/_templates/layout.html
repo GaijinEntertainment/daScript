@@ -1,5 +1,19 @@
 {%- extends "!layout.html" %}
 
+{# Desktop/tablet navigation toggle. The RTD theme supplies its own off-canvas
+   hamburger below 769px; this control is hidden there. sidebar.js adds the
+   controlled navigation id and keeps the accessible label/state in sync. #}
+{%- block extrabody %}
+  {{ super() }}
+  <button type="button"
+          class="forge-sidebar-toggle"
+          aria-controls="forge-site-navigation"
+          aria-expanded="true">
+    <i class="fa fa-chevron-left" aria-hidden="true"></i>
+    <span class="forge-sidebar-toggle-label">Hide navigation</span>
+  </button>
+{%- endblock %}
+
 {# Override sphinx_rtd_theme's sidebar brand so the logo links to the
    daslang.io home page instead of pathto(_root_doc). Mirrors the upstream
    block at sphinx_rtd_theme/layout.html sidebartitle, with the <a href>
