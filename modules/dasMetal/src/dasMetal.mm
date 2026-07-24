@@ -55,16 +55,27 @@ namespace das {
         return std::string(type) + " @ " + at->fileInfo->name.c_str() + ":" + std::to_string(at->line);
     }
 
+    // buffers add their byte size to the tag — pooled buffers all create at ONE das line (the
+    // pool body), so the size bucket is what tells the leaked classes apart
+    static std::string buffer_tag ( uint64_t bytes, LineInfoArg * at ) {
+        return handle_tag(("MetalBuffer[" + std::to_string(bytes) + "]").c_str(), at);
+    }
+
     template <typename HandleT>
-    static HandleT * retain_handle ( id obj, const char * type, LineInfoArg * at ) {
+    static HandleT * retain_handle_tagged ( id obj, const std::string & tag ) {
         if ( obj == nil ) return nullptr;
         g_metalLiveObjects.fetch_add(1, std::memory_order_relaxed);
         void * h = (__bridge_retained void *) obj;
         {
             std::lock_guard<std::mutex> guard(g_metalLiveTagsMx);
-            g_metalLiveTags[h] = handle_tag(type, at);
+            g_metalLiveTags[h] = tag;
         }
         return (HandleT *) h;
+    }
+
+    template <typename HandleT>
+    static HandleT * retain_handle ( id obj, const char * type, LineInfoArg * at ) {
+        return retain_handle_tagged<HandleT>(obj, handle_tag(type, at));
     }
 
     static void release_handle ( void * h ) {
@@ -198,7 +209,7 @@ namespace das {
         if ( bytes == 0 ) ctx->throw_error_at(at, "metal_new_buffer: zero size");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalBuffer>([d newBufferWithLength:bytes options:MTLResourceStorageModeShared], "MetalBuffer", at);
+            return retain_handle_tagged<MetalBuffer>([d newBufferWithLength:bytes options:MTLResourceStorageModeShared], buffer_tag(bytes, at));
         }
     }
 
@@ -210,8 +221,8 @@ namespace das {
         if ( bytes == 0 ) ctx->throw_error_at(at, "metal_new_buffer_untracked: zero size");
         @autoreleasepool {
             id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;
-            return retain_handle<MetalBuffer>([d newBufferWithLength:bytes
-                options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked], "MetalBuffer", at);
+            return retain_handle_tagged<MetalBuffer>([d newBufferWithLength:bytes
+                options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked], buffer_tag(bytes, at));
         }
     }
 
@@ -237,7 +248,7 @@ namespace das {
                 options:MTLResourceStorageModeShared
                 deallocator:nil];
             if ( !b ) ctx->throw_error_at(at, "metal_new_buffer_no_copy: wrap failed (%llu bytes)", (unsigned long long)bytes);
-            return retain_handle<MetalBuffer>(b, "MetalBuffer", at);
+            return retain_handle_tagged<MetalBuffer>(b, buffer_tag(bytes, at));
         }
     }
 
@@ -259,7 +270,7 @@ namespace das {
                 options:MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked
                 deallocator:nil];
             if ( !b ) ctx->throw_error_at(at, "metal_new_buffer_no_copy_untracked: wrap failed (%llu bytes)", (unsigned long long)bytes);
-            return retain_handle<MetalBuffer>(b, "MetalBuffer", at);
+            return retain_handle_tagged<MetalBuffer>(b, buffer_tag(bytes, at));
         }
     }
 
