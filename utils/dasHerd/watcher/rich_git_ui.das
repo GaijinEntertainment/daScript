@@ -128,6 +128,7 @@ def draw_repositories_window() {
                 let dirty_label = dirty > 0 ? "  *{dirty}" : ""
                 let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
                 if (selectable(WORKTREE_ROW[row], (text = row_label))) {
+                    ui_event("worktree-row-click {worktree.path}")
                     g_selected_repository_id = repository.record.id
                     g_selected_worktree_path = worktree.path
                     g_client->refresh_repository(repository.record.id)
@@ -188,6 +189,7 @@ def draw_git_file_group(repository : RepositorySnapshot const;
             repository.record.id, worktree.path, file.path)
         if (selectable(GIT_FILE_ROW[file_row],
                 (text = "{file.code}  {display_path}{old_label}##{comparison}:{file.path}"))) {
+            ui_event("status-file-click {comparison}:{file.path}")
             if (g_client != null) {
                 g_client->inspect_file(repository.record.id, worktree.path,
                     file.path, comparison)
@@ -321,6 +323,7 @@ def draw_pr_included_files(repository : RepositorySnapshot const;
             g_client->git_file_action(repository.record.id,
                 worktree.path, file.path, "unstage")
         } elif (selected) {
+            ui_event("pr-file-click {file.path}")
             if (g_client != null) {
                 g_client->inspect_file(repository.record.id, worktree.path,
                     file.path, "pr")
@@ -369,6 +372,7 @@ def draw_pr_not_included_files(repository : RepositorySnapshot const;
             g_client->git_file_action(repository.record.id,
                 worktree.path, file.path, "stage")
         } elif (selected && g_client != null) {
+            ui_event("working-file-click {file.path}")
             g_client->inspect_file(repository.record.id, worktree.path,
                 file.path, "working")
             FILE_INSPECTOR_WIN.open = true
@@ -502,6 +506,7 @@ def draw_commit_files(repository : RepositorySnapshot const;
             file.path, file.added_lines, file.deleted_lines,
             file.stats_known, file.binary, false, "", "", ignored_action)
         if (selected && g_client != null) {
+            ui_event("commit-file-click {file.path}")
             g_client->inspect_file(repository.record.id, worktree.path,
                 file.path, "commit", "compact", file.commit_hash)
             FILE_INSPECTOR_WIN.open = true
@@ -559,6 +564,7 @@ def draw_history_commits(repository : RepositorySnapshot const;
                     (color = float4(0.64f, 0.70f, 0.80f, 1.0f),
                     text = commit.author))
                 if (selected && g_client != null && commit.hash != selected_commit) {
+                    ui_event("history-commit-click {commit.short_hash}")
                     request_commit_files(repository, worktree, commit.hash)
                 }
             }
@@ -722,6 +728,7 @@ def draw_tree_commits(repository : RepositorySnapshot const;
                             size = ref_size))
                     }
                     if (ref_clicked && !empty(node.primary_ref)) {
+                        ui_event("tree-ref-click {node.primary_ref}")
                         g_tree_focus_ref = node.primary_ref
                         g_tree_model_identity = ""
                     }
@@ -736,6 +743,7 @@ def draw_tree_commits(repository : RepositorySnapshot const;
                     text = commit.author))
                 if (selected && g_client != null
                         && commit.hash != selected_commit) {
+                    ui_event("tree-commit-click {commit.short_hash}")
                     request_commit_files(repository, worktree, commit.hash)
                 }
                 table_set_column_index(3)

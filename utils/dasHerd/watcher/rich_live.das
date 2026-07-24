@@ -713,3 +713,14 @@ def draw_settings_dock() {
         draw_settings_window()
     }
 }
+
+[live_command(description = "Dump recent UI selection-trigger events. Args: clear.")]
+def herder_ui_events(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderPerfArgs>)
+    var events := g_ui_events
+    var result = JV((ok = true, frame = g_ui_frame, events = events))
+    if (args.clear) {
+        g_ui_events |> clear()
+    }
+    return result
+}

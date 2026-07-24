@@ -182,6 +182,14 @@ def update() {
     service_sha_copy()
     drain_inspector_prepare_events()
     harness_new_frame()
+    g_ui_frame++
+    let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
+        "tree={GIT_TREE_TAB.selected} diff={INSPECTOR_DIFF_TAB.selected} " +
+        "view={INSPECTOR_VIEW_TAB.selected} wt={g_selected_worktree_path}")
+    if (tab_signature != g_ui_tab_signature) {
+        ui_event("state-change {tab_signature}")
+        g_ui_tab_signature = tab_signature
+    }
     GetStyle().FontScaleMain = float(g_zoom_percent) / 100.0f
     if (g_open_terminal_pending) {
         g_open_terminal_pending = false

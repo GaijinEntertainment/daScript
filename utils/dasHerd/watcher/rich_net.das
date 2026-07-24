@@ -193,6 +193,7 @@ class WatcherRichClient : HvWebSocketClient {
                     }
                 }
                 if (!selection_found && !empty(repositories)) {
+                    ui_event("selection-fixup {repositories[0].record.id}")
                     g_selected_repository_id = repositories[0].record.id
                     if (!empty(repositories[0].worktrees)) {
                         g_selected_worktree_path = repositories[0].worktrees[0].path
@@ -394,6 +395,7 @@ class WatcherRichClient : HvWebSocketClient {
                     origin_repository_id, origin_worktree_path)
             }
         }
+        ui_event("attach-session {session_id} origin={origin_worktree_path}")
         selected_id = session_id
         attached = false
         controls = false

@@ -324,6 +324,21 @@ def perf_observe_repositories(repositories : array<RepositorySnapshot> const) {
     }
 }
 
+// UI trigger forensics: every selection-changing event records who fired it,
+// on which frame, and where the mouse was. Read via herder_ui_events.
+var g_ui_events : array<string>
+var g_ui_frame = 0
+var g_ui_tab_signature = ""
+
+def ui_event(tag : string) {
+    let mouse = GetMousePos()
+    g_ui_events |> push("frame={g_ui_frame} mouse=({int(mouse.x)},{int(mouse.y)}) " +
+        "down={IsMouseDown(ImGuiMouseButton.Left)} {tag}")
+    if (length(g_ui_events) > 96) {
+        g_ui_events |> erase(0, length(g_ui_events) - 96)
+    }
+}
+
 var g_terminal = Terminal()
 
 var g_terminal_view = ImGuiTerminalState()
@@ -585,6 +600,7 @@ def begin_file_inspection(repository_id, worktree_path, file_path,
                           comparison, diff_context : string;
                           git_revision : string = "") {
     let same_identity = g_inspector.repository_id == repository_id && g_inspector.worktree_path == worktree_path && g_inspector.file_path == file_path && g_inspector.comparison == comparison && g_inspector.git_revision == git_revision
+    ui_event("inspect {comparison}:{file_path}")
     let retained_content = g_inspector.prepare.has_retained_content
     g_inspector.request_id++
     g_inspector.repository_id = repository_id

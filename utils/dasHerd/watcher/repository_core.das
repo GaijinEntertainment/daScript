@@ -191,6 +191,7 @@ class private RepositoryRuntime {
     refs_session_id : string
     refs_pending_path : string
     refs_worktree_path : string
+    pending_refresh_files : array<GitFileState>
     pending_history_commits : array<GitCommitState>
     pending_graph_rows : array<GitGraphRowState>
     pending_commit_files : array<GitCommitFileState>
@@ -206,6 +207,7 @@ class private RepositoryRuntime {
         delete snapshot.refs
         delete pending_review_commits
         delete pending_review_files
+        delete pending_refresh_files
         delete pending_history_commits
         delete pending_graph_rows
         delete pending_commit_files
@@ -1859,7 +1861,6 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
         repository_prune_removed_worktree_data(runtime.snapshot, worktrees)
         delete runtime.snapshot.worktrees
         runtime.snapshot.worktrees <- worktrees
-        runtime.snapshot.files |> clear()
         if (runtime.snapshot.record.checkout_path != main_path) {
             let old_default_name = base_name(runtime.snapshot.record.checkout_path)
             runtime.snapshot.record.checkout_path = main_path
@@ -1875,12 +1876,25 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
         return
     }
     if (runtime.refresh_phase == 2) {
-        repository_parse_status(output, runtime.snapshot.worktrees[runtime.worktree_index], runtime.snapshot.files)
+        runtime.pending_refresh_files |> clear()
+        repository_parse_status(output, runtime.snapshot.worktrees[runtime.worktree_index], runtime.pending_refresh_files)
         launch_working_stats(runtime)
         return
     }
+    // Swap this worktree's file rows atomically only after its status and
+    // numstat pair completes, so a refresh never blanks the changelist.
     let stats_path = runtime.snapshot.worktrees[runtime.worktree_index].path
-    repository_apply_working_numstat(output, stats_path, runtime.snapshot.files)
+    repository_apply_working_numstat(output, stats_path, runtime.pending_refresh_files)
+    var file_index = 0
+    while (file_index < length(runtime.snapshot.files)) {
+        if (runtime.snapshot.files[file_index].worktree_path == stats_path) {
+            runtime.snapshot.files |> erase(file_index)
+        } else {
+            file_index++
+        }
+    }
+    runtime.snapshot.files |> push_from(runtime.pending_refresh_files)
+    runtime.pending_refresh_files |> clear()
     runtime.worktree_index++
     if (runtime.worktree_index < length(runtime.snapshot.worktrees)) {
         let _next_status_started = launch_status(runtime)
