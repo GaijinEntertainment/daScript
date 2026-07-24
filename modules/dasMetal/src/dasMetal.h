@@ -92,5 +92,6 @@ namespace das {
     DAS_MOD_API void metal_release_residency_set ( MetalResidencySet * h );
 
     DAS_MOD_API int64_t metal_live_object_count ();
+    DAS_MOD_API char * metal_live_object_report ( Context * ctx, LineInfoArg * at );
     DAS_MOD_API int64_t metal_dispatch_call_count ();
 }

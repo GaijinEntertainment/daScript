@@ -503,7 +503,7 @@ def test_metal_prefill_kernels(t : T?) {
 
                 metal_release(queue)
             }
-            t |> equal(metal_live_object_count(), 0l)
+            t |> equal(metal_log_leaks_if_any(), 0l)
         } else {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }

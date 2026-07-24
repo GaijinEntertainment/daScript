@@ -340,7 +340,7 @@ def test_metal_prefill_parity(t : T?) {
 
             metal_prefill_shutdown()
             metal_decode_shutdown()   // the kq uploads + the quantized-KV arm's decode steps live in the decode driver's caches
-            t |> equal(metal_live_object_count(), 0l)
+            t |> equal(metal_log_leaks_if_any(), 0l)
             delete tr
             delete trg
         } else {
