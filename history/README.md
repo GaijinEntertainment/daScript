@@ -12,7 +12,9 @@ Process and criteria: `skills/doc_archiving.md`.
 - `ci/` — process/coverage analyses (the local-vs-CI coverage gap plan; its stage 4 lives
   on as the nightly daspkg-index cron)
 - `dasLLAMA/` — closed dasLLAMA arc docs (superseded hand-written AVX tier matrix, EPYC
-  fleet measurements, the model-expansion wave plan)
+  fleet measurements, the model-expansion wave plan); `dasLLAMA/benchmarks/` — retired
+  model-speed bench scripts, all superseded by the one bench
+  (`modules/dasLLAMA/benchmarks/lcpp_bench.das`, 2026-07-25 unification)
 - `dasSQLITE/` — the typed-SQL API rework corpus (`API_*.md`, `TUTORIALS.md`, the
   `tutorial-mockup/` design artifacts); the living contract stays at
   `modules/dasSQLITE/PROVIDER_CONTRACT.md`
@@ -86,3 +88,13 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-07-24 `benchmarks/sql/M4_DECS_EXPANSION.md` → `history/linq_fold/M4_DECS_EXPANSION.md` — M4 DECS expansion plan (shipped 0.6.3)
 - 2026-07-24 `benchmarks/sql/linq_fold_chain_audit.md` → `history/linq_fold/linq_fold_chain_audit.md` — linq_fold chain audit (shipped 0.6.3)
 - 2026-07-24 `benchmarks/sql/sqlite_linq_gaps.md` → `history/linq_fold/sqlite_linq_gaps.md` — closed SQLite-linq gap audit (shipped 0.6.3)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/perf.das` -> `history/dasLLAMA/benchmarks/perf.das` - CPU-era end-to-end perf bench (superseded by lcpp_bench)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/prefill_perf.das` -> `history/dasLLAMA/benchmarks/prefill_perf.das` - prefill-phase bench (superseded by lcpp_bench pp reps)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/llama3_perf.das` -> `history/dasLLAMA/benchmarks/llama3_perf.das` - decode-table bench (superseded by lcpp_bench tg reps)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/batch_decode_perf.das` -> `history/dasLLAMA/benchmarks/batch_decode_perf.das` - batch-decode speed bench (decode arc shipped)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/decode_real_bench.das` -> `history/dasLLAMA/benchmarks/decode_real_bench.das` - real-prompt decode bench (decode arc shipped)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/decode_prof.das` -> `history/dasLLAMA/benchmarks/decode_prof.das` - decode per-phase profiler driver (GPU_PROF env + lcpp_bench covers it)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/decode_metal_chase.das` -> `history/dasLLAMA/benchmarks/decode_metal_chase.das` - Metal decode chase instrument (arc shipped)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/prefill_metal_chase.das` -> `history/dasLLAMA/benchmarks/prefill_metal_chase.das` - Metal prefill chase instrument (arc shipped)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/bench_metal_framing.das` -> `history/dasLLAMA/benchmarks/bench_metal_framing.das` - Metal framing-overhead bench (arc shipped)
+- 2026-07-25 `modules/dasLLAMA/benchmarks/gguf_perf.das` -> `history/dasLLAMA/benchmarks/gguf_perf.das` - gguf load-time bench (the .dlim rail made it moot)

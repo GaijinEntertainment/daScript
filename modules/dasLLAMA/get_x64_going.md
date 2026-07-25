@@ -53,7 +53,7 @@ on the same box:
 
 ```
 bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/matmul/bench_gemm_iso.das
-bin/daslang -jit modules/dasLLAMA/benchmarks/prefill_perf.das -- <model.gguf>
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <model.gguf> -p 512 -n 128 -r 5
 llama-bench -m <model> -p 512,1024,2048 -n 0 -t <threads>    # CPU-only build
 ```
 

@@ -99,8 +99,8 @@ stale — every reader treats it as absent, and the next tuner write resets it.
    across independent runs. Don't bake in a win you can't reproduce three times.
 5. **Isolated-kernel parity ≠ in-pipeline parity.** The M1 GEMM benched at parity isolated
    (ntok=512, cache-resident) while trailing 18% in-pipeline (ntok=2048, DRAM-bound). Always
-   confirm kernel wins end-to-end (`prefill_perf.das`), and profile per-op before believing a
-   bottleneck story (see the ggml patch below).
+   confirm kernel wins end-to-end (`benchmarks/lcpp_bench.das`), and profile per-op before
+   believing a bottleneck story (see the ggml patch below).
 6. **Quiet machine for absolute numbers** — no remote-desktop/streaming session, cool box.
    CPU wall-clock is immune to GPU theft but not to CPU theft or thermal throttling.
 
@@ -216,15 +216,16 @@ bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmar
 Production `matmul_q8q8_batch` on the real Llama shapes (qo 2048×2048, w13 2048×5632,
 w2 5632×2048, cls 2048×32000) at ntok=512, threaded, GMAC/s aggregate + per-core, both
 backend tiers. Sweep threads via `DAS_JOBQUE_THREADS=1,2,4,...`. Retarget the shape table for
-other models. This is the kernel scoreboard; `prefill_perf.das` is the end-to-end truth.
+other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the end-to-end truth.
 
 ## Tool 4 — per-op profiling (ours and theirs)
 
 - **Ours:** `forward_profile_report()` buckets (embed / rope_build / rope / kv_store / attn /
   mm_qkv / mm_wo / mm_ffn / mm_moe / act / gate / final...) — decode and prefill feed the same
   accumulator, so reset the window around whichever phase you're measuring
-  (`benchmarks/prefill_perf.das` drives the prefill paths; `llama3_perf.das` resets before its
-  timed decode window and reports after — the decode table). Caveat: `mm_gemm`/`mm_requant`
+  (`benchmarks/lcpp_bench.das` drives both: its pp reps exercise the prefill paths and its tg
+  reps the decode path; archived single-phase drivers live in `history/dasLLAMA/benchmarks/`).
+  Caveat: `mm_gemm`/`mm_requant`
   are inner-leaf timers of the batched matmuls and double-count against the `mm_*` site
   buckets — compare within a tier, don't sum across tiers.
 - **Theirs (the recipe that found the M1 gap, now shipped):** `harness/ggml_op_profile.patch` —
@@ -270,8 +271,8 @@ other models. This is the kernel scoreboard; `prefill_perf.das` is the end-to-en
 3. If a token-blocked (repack) kernel exists: `tune_tb.das` raw curve → hand-edit
    `runtime.q8_l2_budget` under the cliff; leave `q8_token_block` at 128 unless the curve
    says otherwise.
-4. `prefill_perf.das` + `llama-bench` head-to-head; if a gap remains, per-op profile both
-   sides (Tool 4) before touching any kernel.
+4. `benchmarks/lcpp_bench.das --ref <llama-bench>` head-to-head (same shapes, one run); if a
+   gap remains, per-op profile both sides (Tool 4) before touching any kernel.
 
 **When to stop:** GEMM at isolated parity with llama.cpp is the floor, not a lever; ≤2-3%
 candidates are noise; on M1 the campaign ended at ~100-108% of llama.cpp prefill with the
