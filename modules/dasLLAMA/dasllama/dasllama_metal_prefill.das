@@ -4531,6 +4531,42 @@ def public set_metal_prefill_mulmm_legacy(v : bool) {
     g_mm_legacy = v
 }
 
+//! The prefill knockout rail as an in-process setter (timing attribution — served output is
+//! GARBAGE while non-empty): the `DASLLAMA_METAL_PREFILL_SKIP` families above; `""` restores
+//! full math. Switchable between measurement windows, same contract as `set_metal_decode_skip`.
+def public set_metal_prefill_skip(v : string) {
+    g_pf_skip = v
+}
+
+// cumulative per-stage prefill wall since load/reset — the pp chase harness's numbers rail
+var private g_pf_stage_prefills = 0l
+var private g_pf_stage_setup_us = 0l
+var private g_pf_stage_encwait_us = 0l
+var private g_pf_stage_encode_ms = 0.0lf
+var private g_pf_stage_gpu_ms = 0.0lf
+var private g_pf_stage_rb_us = 0l
+
+//! Zero the cumulative prefill stage timers + the served-prefill counter — windows a chase run's
+//! stage stats to one measurement loop (mirrors `metal_decode_stage_reset`).
+def public metal_prefill_stage_reset {
+    g_pf_stage_prefills = 0l
+    g_pf_stage_setup_us = 0l
+    g_pf_stage_encwait_us = 0l
+    g_pf_stage_encode_ms = 0.0lf
+    g_pf_stage_gpu_ms = 0.0lf
+    g_pf_stage_rb_us = 0l
+}
+
+//! Cumulative per-stage prefill wall since load/reset — (prefills served, CPU setup us, encode us,
+//! commit+wait us minus encode, GPU-timestamp us within the window, kv+readback us). Mirrors
+//! `metal_decode_stage_stats`.
+def public metal_prefill_stage_stats() : tuple<prefills : int64; setup_us : int64; encode_us : int64; wait_us : int64; gpu_us : double; readback_us : int64> {
+    let enc_us = int64(g_pf_stage_encode_ms * 1000.0lf)
+    return (prefills = g_pf_stage_prefills, setup_us = g_pf_stage_setup_us,
+        encode_us = enc_us, wait_us = g_pf_stage_encwait_us - enc_us,
+        gpu_us = g_pf_stage_gpu_ms * 1000.0lf, readback_us = g_pf_stage_rb_us)
+}
+
 //! (gpu prefills served, declines to the CPU path) since load — diagnostics / tests. The decline
 //! machinery lives in dasllama_metal_common (W1 split), so the count reads from there.
 def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
@@ -6736,6 +6772,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_flcap, 4ul)
     }
     if (ok) {
+        g_pf_stage_prefills++
+        g_pf_stage_setup_us += int64(setup_us)
+        g_pf_stage_encwait_us += int64(encwait_us)
+        g_pf_stage_encode_ms += encode_ms
+        g_pf_stage_gpu_ms += gpu_ms
+        g_pf_stage_rb_us += readback_us
         let total_us = get_time_usec(ts_all)
         to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}\n")
     }
