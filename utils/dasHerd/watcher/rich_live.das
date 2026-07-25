@@ -36,7 +36,6 @@ require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
 require ./rich_launcher_ui.das
-require ./rich_files_ui.das
 
 struct HerderInspectorTextArgs {
     side : string = "view"
@@ -87,7 +86,6 @@ def open_dock_window(var state : DockWindowState) {
 
 def apply_layout_preset(preset : int) {
     REPOSITORIES_WIN.open = true
-    WORKTREE_FILES_WIN.open = true
     SESSIONS_WIN.open = true
     GIT_CHANGELIST_WIN.open = true
     GIT_ACTIVITY_WIN.open = true
@@ -434,7 +432,7 @@ def herder_git_clipboard_state(_input : JsonValue?) : JsonValue? {
         matches = read_status == ClipboardStatus.ok && copied_text == expected))
 }
 
-[live_command(description = "Switch Git Status perspective. Args: perspective = pr | history | tree.")]
+[live_command(description = "Switch Git Status perspective. Args: perspective = pr | history | tree | project.")]
 def herder_git_perspective(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<HerderGitPerspectiveArgs>)
     let perspective = to_lower(args.perspective)
@@ -450,13 +448,26 @@ def herder_git_perspective(input : JsonValue?) : JsonValue? {
             g_client->request_repository_history(g_selected_repository_id,
                 g_selected_worktree_path, "__all__")
         }
+    } elif (perspective == "project") {
+        GIT_PROJECT_TAB.pending_select = true
     } else {
-        return JV((ok = false, error = "perspective must be pr, history, or tree"))
+        return JV((ok = false, error = "perspective must be pr, history, tree, or project"))
     }
     GIT_CHANGELIST_WIN.open = true
     GIT_ACTIVITY_WIN.open = true
     GIT_ACTIVITY_WIN.pending_raise = true
     return JV((ok = true, perspective = perspective))
+}
+
+[live_command(description = "Inspect the Git Activity Project tab file-tree state.")]
+def herder_project_state(_input : JsonValue?) : JsonValue? {
+    return JV((ok = empty(g_worktree_files_error),
+        selected = GIT_PROJECT_TAB.selected,
+        loading = g_worktree_files_loading,
+        error = g_worktree_files_error,
+        file_count = length(g_worktree_files),
+        identity = g_worktree_files_identity,
+        expanded_count = length(g_files_expanded)))
 }
 
 [live_command(description = "Stage or unstage one observed worktree file. Args: repository_id, worktree_path, file_path, action.")]

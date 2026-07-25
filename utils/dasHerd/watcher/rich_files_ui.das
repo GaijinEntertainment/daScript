@@ -75,21 +75,17 @@ def private draw_files_row(var row : int&; depth : int; name, path : string;
     return clicked
 }
 
-def draw_worktree_files_window() {
+def draw_project_files() {
     ensure_worktree_files()
-    if (icon_button_draw("##wt-files-refresh", "refresh", GetTextLineHeight())) {
+    if (icon_button(FILES_REFRESH, (glyph = "refresh",
+            tip = "Re-read the worktree file list",
+            size = GetTextLineHeight()))) {
         g_worktree_files_identity = ""
     }
     same_line()
     text_disabled(FILES_SUMMARY, (text = g_worktree_files_loading
         ? "Reading file list..."
         : "{length(g_worktree_files)} files  {base_name(g_selected_worktree_path)}"))
-    if (!empty(g_worktree_files_error)) {
-        icon("warning", GetTextLineHeight())
-        same_line()
-        text_colored(FILES_ERROR, (color = float4(1.0f, 0.35f, 0.30f, 1.0f),
-            text = g_worktree_files_error))
-    }
     separator()
     child(FILES_TREE_CHILD, (text = "worktree files", size = float2(0.0f, 0.0f),
             child_flags = ImGuiChildFlags.None,
@@ -147,12 +143,5 @@ def draw_worktree_files_window() {
         if (count == 0 && !g_worktree_files_loading) {
             text_disabled("Select a worktree to browse its files")
         }
-    }
-}
-
-def draw_worktree_files_dock() {
-    dock_window(WORKTREE_FILES_WIN.PUBLIC, (text = "Worktree Files", closable = true,
-            flags = ImGuiWindowFlags.None)) {
-        draw_worktree_files_window()
     }
 }

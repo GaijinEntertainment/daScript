@@ -54,6 +54,8 @@ var HERD_MENU_RENAME : table<int; ToggleState>
 
 var HERD_MENU_CLOSE : table<int; ToggleState>
 
+var HERD_RELAUNCH_BUTTON : table<int; ClickState>
+
 var g_herd_rename_id : string
 
 var ATTENTION_MESSAGE_ROW : table<int; ToggleState>
@@ -193,8 +195,11 @@ def draw_herd_cards() {
         let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
         HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
             && record.pty_session_id == g_client.selected_id)
+        // AllowOverlap or the row swallows clicks aimed at the relaunch
+        // icon button drawn over its right-hand side.
         if (selectable(HERD_CARD_ROW[index],
-                (text = "{record.name}{unread_hint}##herd:{record.id}"))) {
+                (text = "{record.name}{unread_hint}##herd:{record.id}",
+                 flags = ImGuiSelectableFlags.AllowOverlap))) {
             attach_herd_card(record)
         }
         if (IsItemHovered()) {
@@ -230,7 +235,8 @@ def draw_herd_cards() {
         }
         if (record.state == "exited") {
             same_line(HERD_ACTION_JOIN[index])
-            if (icon_button_draw("##herd-relaunch:{record.id}", "refresh", line)) {
+            if (icon_button(HERD_RELAUNCH_BUTTON[index], (glyph = "refresh",
+                    tip = "Relaunch this session", size = line))) {
                 g_client->request_herd_relaunch(record.id)
             }
         }
@@ -268,11 +274,16 @@ def draw_herd_rename_popup() {
 def draw_session_list() {
     let connection = g_client != null && g_client.connected ? "connected" : "disconnected"
     text("Watcher: {connection}")
-    if (small_button(REFRESH_SESSIONS, (text = "Refresh")) && g_client != null) {
+    same_line()
+    if (icon_button(REFRESH_SESSIONS, (glyph = "refresh",
+            tip = "Refresh the session list",
+            size = GetTextLineHeight())) && g_client != null) {
         g_client->refresh()
     }
     same_line()
-    if (small_button(TERMINATE_SESSION, (text = "Terminate")) && g_client != null) {
+    if (icon_button(TERMINATE_SESSION, (glyph = "stop",
+            tip = "Terminate the attached session",
+            size = GetTextLineHeight())) && g_client != null) {
         g_client->terminate_selected()
     }
     separator()

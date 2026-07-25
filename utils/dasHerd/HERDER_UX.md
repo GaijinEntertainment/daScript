@@ -63,10 +63,13 @@ From the `imgui_icons` set (amber, tooltip mandatory):
 | Copy SHA (existing) | `duplicate` |
 | Stage / unstage (existing) | `check` / `minus` |
 | Focus visible / hidden (existing) | `visible` / `hidden` |
+| Repository header | `folder` |
+| Add repository | `add` |
+| Relaunch session | `refresh` |
 
 Planned next: worktree dirty markers (dot + count as text is fine),
-branch glyph (`merge`) on ref labels, `folder` on repository headers,
-`gear` for Settings, `search` where search lands.
+branch glyph (`merge`) on ref labels, `gear` for Settings, `search`
+where search lands.
 
 ## Busy and progress language
 
@@ -121,19 +124,22 @@ active preset to factory. The last-used preset is restored on startup.
 ```text
 Session preset                      Review preset
 +--------+------------------+----+  +------+-----------+----------+---------+
-| Repos/ |                  | FI |  | Rail |  Terminal | File     | Change- |
-| Files  |    Terminal      | +  |  |      |           | Inspector| list +  |
+| Repos  |                  | FI |  | Rail |  Terminal | File     | Change- |
+|        |    Terminal      | +  |  |      |           | Inspector| list +  |
 +--------+                  | CL |  |      |           | (Diff/   | Activity|
 | Sess/  |                  |    |  |      |           |  View)   |         |
 | Attn   |                  |    |  |      |           |          |         |
 +--------+------------------+----+  +------+-----------+----------+---------+
 ```
 
-- **Worktree Files** is the full project-structure view (folders +
-  every tracked and untracked-but-not-ignored file of the selected
-  worktree), not just changed files. Click opens the file in the
-  inspector (clean files open straight in View); right-click sends a
-  whole-file focus to the session agent. It docks with Repositories.
+- **Project** is the full project-structure view (folders + every
+  tracked and untracked-but-not-ignored file of the selected worktree),
+  not just changed files. It lives as the fourth Git Activity
+  perspective (PR / History / Tree / Project) — project structure is a
+  Git perspective, not a separate window, and it shares the selection
+  and inspector flow. Click opens the file in the inspector (clean
+  files open straight in View); right-click sends a whole-file focus to
+  the session agent.
 - Changelist and Activity share one column in Review; in Session they
   tab behind the inspector.
 - The terminal file-link handoff (agent links `path:line` in terminal
@@ -165,9 +171,10 @@ Discussion status: PROPOSED
 1. Notification chrome + status glyphs + sessions/tasks split +
    session-state glyphs. (implemented with this doc)
 2. Layout redo per the settled section above; icon adoption on rows and
-   action buttons (refresh/terminate/add).
-3. Launcher pane; context-menu sweep; per-stream elapsed telemetry in
-   status lines.
+   action buttons (refresh/terminate/add). (implemented; Project moved
+   into Git Activity 2026-07-25)
+3. Launcher pane (implemented as the dockable New Session pane);
+   context-menu sweep; per-stream elapsed telemetry in status lines.
 
 ## Decision log
 
@@ -179,3 +186,8 @@ Discussion status: PROPOSED
 - 2026-07-24: One app-chrome notification cluster in the menu bar;
   per-window status lines keep surface-local state; the Attention panel
   remains agent-handoff-only.
+- 2026-07-25: Worktree Files stopped being its own dock window and
+  became the Project perspective inside Git Activity — project
+  structure is a Git perspective sharing the selection and inspector
+  flow, and its busy/error state reports through the Git Activity
+  status line like every other perspective.

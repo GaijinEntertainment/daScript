@@ -35,7 +35,6 @@ require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
 require ./rich_launcher_ui.das
-require ./rich_files_ui.das
 require ./rich_live.das
 
 // Session preset: the terminal is the spine; the inspector and Git
@@ -55,7 +54,6 @@ def private setup_session_layout(dock_id : uint) {
         sessions_id, repositories_id)
     DockBuilderSplitNode(center_id, ImGuiDir.Right, 0.32f, right_id, center_id)
     DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
-    DockBuilderDockWindow("Worktree Files", repositories_id)
     DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
     DockBuilderDockWindow("File Inspector", right_id)
     DockBuilderDockWindow("Git Changelist", right_id)
@@ -88,7 +86,6 @@ def private setup_review_layout(dock_id : uint) {
         changelist_id, activity_id)
     DockBuilderSplitNode(work_id, ImGuiDir.Left, 0.40f, terminal_id, work_id)
     DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
-    DockBuilderDockWindow("Worktree Files", repositories_id)
     DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
     DockBuilderDockWindow("Git Activity", activity_id)
     DockBuilderDockWindow("Git Changelist", changelist_id)
@@ -256,10 +253,6 @@ def draw_main_menu() {
                     (text = "Terminal", selected = TERMINAL_WIN.open))) {
                 open_dock_window(TERMINAL_WIN)
             }
-            if (menu_label(VIEW_WORKTREE_FILES,
-                    (text = "Worktree Files", selected = WORKTREE_FILES_WIN.open))) {
-                open_dock_window(WORKTREE_FILES_WIN)
-            }
             if (menu_label(VIEW_LAUNCHER,
                     (text = "New Session", selected = LAUNCHER_WIN.open))) {
                 open_dock_window(LAUNCHER_WIN)
@@ -375,7 +368,8 @@ def update() {
     harness_new_frame()
     g_ui_frame++
     let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
-        "tree={GIT_TREE_TAB.selected} diff={INSPECTOR_DIFF_TAB.selected} " +
+        "tree={GIT_TREE_TAB.selected} proj={GIT_PROJECT_TAB.selected} " +
+        "diff={INSPECTOR_DIFF_TAB.selected} " +
         "view={INSPECTOR_VIEW_TAB.selected} wt={g_selected_worktree_path}")
     if (tab_signature != g_ui_tab_signature) {
         ui_event("state-change {tab_signature}")
@@ -415,7 +409,6 @@ def update() {
             }
         }
         draw_repositories_dock()
-        draw_worktree_files_dock()
         draw_sessions_dock()
         draw_git_activity_dock()
         draw_git_changelist_dock()

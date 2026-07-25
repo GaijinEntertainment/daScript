@@ -423,7 +423,7 @@ def layout_choice_path() : string {
     return path_join(dir_name(repository_default_config_path()),
         "dasHerd.layout.current")
 }
-// Worktree Files: full project structure of the selected worktree.
+// Project tab: full project structure of the selected worktree.
 var g_worktree_files : array<string>
 var g_worktree_files_identity = ""
 var g_worktree_files_loading = false

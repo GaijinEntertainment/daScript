@@ -28,10 +28,13 @@ require strings
 require ./rich_state.das
 require ./rich_net.das
 require ./rich_inspector_ui.das
+require ./rich_files_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
 var WORKTREE_CONFLICT_JOIN : table<int; EmptyMarkerState>
+
+var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
 var GIT_FILE_ROW : table<int; ToggleState>
 
@@ -100,7 +103,9 @@ def draw_repositories_window() {
     separator()
     input_text_growable(ADD_REPOSITORY_PATH, (text = "Repository checkout"))
     same_line()
-    if (button(ADD_REPOSITORY, (text = "Add")) && g_client != null) {
+    if (icon_button(ADD_REPOSITORY, (glyph = "add",
+            tip = "Add the repository checkout to the watcher",
+            size = GetTextLineHeight())) && g_client != null) {
         g_client->add_repository(ADD_REPOSITORY_PATH.value)
     }
     separator()
@@ -109,6 +114,8 @@ def draw_repositories_window() {
     if (g_client != null) {
         for (repository in g_client.repositories) {
             let refreshing = repository.refreshing ? "  refreshing..." : ""
+            icon("folder", GetTextLineHeight())
+            same_line(REPOSITORY_FOLDER_JOIN[repository_row])
             text(REPOSITORY_TITLE[repository_row],
                 (text = "{repository.record.display_name}  [Local]{refreshing}"))
             if (!empty(repository.error)) {
@@ -824,6 +831,15 @@ def git_activity_status(repository : RepositorySnapshot const;
         }
         return GitWindowStatus(text = "COMMITS ON {worktree.history_ref}  {git_history_commit_count(repository, worktree)}")
     }
+    if (GIT_PROJECT_TAB.selected) {
+        if (!empty(g_worktree_files_error)) {
+            return GitWindowStatus(text = g_worktree_files_error, error = true)
+        }
+        if (g_worktree_files_loading) {
+            return GitWindowStatus(text = "Reading file list...", busy = true)
+        }
+        return GitWindowStatus(text = "PROJECT FILES  {length(g_worktree_files)}")
+    }
     if (!empty(worktree.review_error)) {
         return GitWindowStatus(text = worktree.review_error, error = true)
     }
@@ -892,8 +908,10 @@ def draw_git_changelist_window() {
                     let title = worktree.is_main ? "MAIN - {worktree.branch}" : worktree.branch
                     text(GIT_TITLE, (text = title))
                     same_line()
-                    if (small_button(REFRESH_GIT, (text = "Refresh",
-                        enabled = !repository.refreshing))) {
+                    if (icon_button(REFRESH_GIT, (glyph = "refresh",
+                            tip = "Refresh the worktree status and PR review",
+                            size = GetTextLineHeight()))
+                            && !repository.refreshing) {
                         g_client->refresh_repository(repository.record.id)
                         g_client->request_repository_review(
                             repository.record.id, worktree.path)
@@ -955,6 +973,10 @@ def draw_git_activity_window() {
                         tab_item(GIT_TREE_TAB.PUBLIC, (text = "Tree", closable = false,
                             flags = ImGuiTabItemFlags.None)) {
                             draw_tree_review(repository, worktree)
+                        }
+                        tab_item(GIT_PROJECT_TAB.PUBLIC, (text = "Project", closable = false,
+                            flags = ImGuiTabItemFlags.None)) {
+                            draw_project_files()
                         }
                     }
                     status = git_activity_status(repository, worktree)
