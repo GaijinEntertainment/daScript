@@ -259,10 +259,23 @@ def _python_launcher() -> str:
     return sys.executable
 
 
+def _daslang_binary(repo_root: str) -> str:
+    """The tree's own built daslang binary (cross-tree guard: a worktree's
+    .mcp.json must point at that worktree's binary)."""
+    exe = ".exe" if IS_WINDOWS else ""
+    for rel in ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang"):
+        cand = os.path.join(repo_root, rel + exe)
+        if os.path.exists(cand):
+            return cand.replace(os.sep, "/")
+    return os.path.join(repo_root, "bin", "daslang" + exe).replace(os.sep, "/")
+
+
 def write_mcp_json(repo_root: str) -> bool:
     """Set mcpServers.daslang to spawn this supervisor over stdio, preserving
-    every other server (github, …). Atomic; never clobbers an unparseable file.
-    Returns True if the file was (re)written, False if left untouched."""
+    every other server (github, …). Also wires mcpServers.dasherd at the
+    dasHerd coordination shim when the tree ships it. Atomic; never clobbers
+    an unparseable file. Returns True if the file was (re)written, False if
+    left untouched."""
     path = os.path.join(repo_root, ".mcp.json")
     data = {"mcpServers": {}}
     if os.path.exists(path):
@@ -287,6 +300,13 @@ def write_mcp_json(repo_root: str) -> bool:
     if isinstance(prev, dict) and "defer_loading" in prev:
         entry["defer_loading"] = prev["defer_loading"]
     servers["daslang"] = entry
+    if os.path.exists(os.path.join(repo_root, "utils", "dasHerd", "mcp_main.das")):
+        prev_herd = servers.get("dasherd", {})
+        herd_entry = {"command": _daslang_binary(repo_root),
+                      "args": ["utils/dasHerd/mcp_main.das"]}
+        if isinstance(prev_herd, dict) and "defer_loading" in prev_herd:
+            herd_entry["defer_loading"] = prev_herd["defer_loading"]
+        servers["dasherd"] = herd_entry
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

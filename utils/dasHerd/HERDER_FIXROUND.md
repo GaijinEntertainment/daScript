@@ -96,7 +96,15 @@ P0 — broken core flows:
   wants the live screen), and the attached session can change between
   input calls — herder_terminal_input should grow an optional
   expected-session guard.
-- 17 agent unaware of dasherder (whole handoff surface untestable)
+- DONE 17 agent awareness (2026-07-25, four slices): per-profile
+  intro_lines (opt-in first-prompt injection); marker-guarded
+  CLAUDE.local.md drop + per-worktree git exclude at agent launch;
+  dasherder row in the CLAUDE.md skill table; dasherd MCP shim
+  (utils/dasHerd/mcp_main.das — whoami/inbox/outbox/bundle/repository
+  tools over the watcher HTTP API, wired into .mcp.json by the
+  supervisor's emit-config; CLI stays as human/fallback). Env scrub +
+  transcript persistence landed earlier with 4b. Codex rides MCP —
+  no AGENTS.md shadow (tracked-file checkout collision).
 - 4a terminal colors (blocked on 30b tooling)
 
 P1 — tooling bugs by the parity rule (agent-blindness is a defect):
