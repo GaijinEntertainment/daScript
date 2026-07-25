@@ -6124,6 +6124,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let ncb = clamp(int64(pf_env_int("DASLLAMA_METAL_NCB", int((n_enc_layers + 3l) / 4l))), 1l, n_enc_layers)
     let unret = get_env_variable("DASLLAMA_METAL_UNRETAINED") == "1"
     let layers_per_cb = (n_enc_layers + ncb - 1l) / ncb
+    // the capture rail (sched-unification P1b): kn_* record each chunk as a step graph, flushed
+    // per chunk with the hz oracle deriving barriers. DASLLAMA_METAL_PF_CAPTURE=0 = direct encode.
+    let cap = get_env_variable("DASLLAMA_METAL_PF_CAPTURE") != "0"
     var cbs : array<MetalCommandBuffer?>
     cbs |> reserve(int(ncb))
     var cb : MetalCommandBuffer?
@@ -6133,6 +6136,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         for (l in range64(n_enc_layers)) {
             if (l % layers_per_cb == 0l) {
                 if (enc != null) {
+                    if (cap) {
+                        graph_flush(enc)
+                    }
                     metal_end_encoding(enc)
                     metal_release(enc)
                     metal_commit(cb)
@@ -6140,6 +6146,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 cb = unret ? metal_new_command_buffer_unretained(g_pf_queue) : metal_new_command_buffer(g_pf_queue)
                 enc = metal_new_compute_encoder(cb)
+                if (cap) {
+                    gr_arm(true)
+                }
             }
             if (l == 0l && ple_gpu) {
                 // PLE pre-step on device (the serial encoder orders the three stages): q8 token-row
@@ -6672,6 +6681,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     kn_dispatch(enc, uint3(uint((nsupp + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
                 }
             }
+        }
+        if (cap) {
+            graph_flush(enc)
         }
         metal_end_encoding(enc)
         metal_release(enc)
