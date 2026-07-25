@@ -195,6 +195,77 @@ def herder_herd_state(_input : JsonValue?) : JsonValue? {
     return result
 }
 
+struct HerderAttachSessionArgs {
+    session_id : string
+    herd_id : string
+}
+
+[live_command(description = "Attach the terminal to a session. Args: session_id (PTY id) or herd_id (durable session).")]
+def herder_attach_session(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderAttachSessionArgs>)
+    var target = args.session_id
+    if (empty(target) && !empty(args.herd_id)) {
+        for (record in g_client.herd_sessions) {
+            if (record.id == args.herd_id) {
+                target = record.pty_session_id
+                break
+            }
+        }
+    }
+    if (empty(target)) {
+        return JV((ok = false, error = "pass session_id or herd_id of a session with a PTY"))
+    }
+    ui_event("live-attach-session {target}")
+    g_client->attach_session(target)
+    g_open_terminal_pending = true
+    return JV((ok = true, session_id = target))
+}
+
+struct HerderTerminalInputArgs {
+    text : string
+    submit : bool
+}
+
+[live_command(description = "Type into the attached session's terminal. Args: text, submit (true appends Enter). Requires the controller lease.")]
+def herder_terminal_input(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    if (!g_client.attached) {
+        return JV((ok = false, error = "no session attached; herder_attach_session first"))
+    }
+    if (!g_client.controls) {
+        return JV((ok = false, error = "controller lease not held yet; retry shortly"))
+    }
+    let args = from_JV(input, type<HerderTerminalInputArgs>)
+    let payload = args.submit ? "{args.text}\r" : args.text
+    if (empty(payload)) return JV((ok = false, error = "nothing to send"))
+    g_client->send_input(payload)
+    return JV((ok = true, bytes = length(payload),
+        session_id = g_client.selected_id))
+}
+
+[live_command(description = "Read the attached terminal screen text and viewport state.")]
+def herder_terminal_state(_input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "client is unavailable"))
+    return JV((ok = g_client.attached,
+        attached = g_client.attached,
+        controls = g_client.controls,
+        session_id = g_client.selected_id,
+        columns = g_terminal_view.columns,
+        rows = g_terminal_view.rows,
+        cursor_row = g_terminal_view.cursor_row,
+        cursor_column = g_terminal_view.cursor_column,
+        scroll_offset = g_terminal_view.scroll_offset,
+        scrollback_rows = g_terminal_view.scrollback_rows,
+        content_revision = g_terminal_view.content_revision,
+        zoom_percent = g_zoom_percent,
+        screen_text = g_terminal_view.screen_text))
+}
+
 [live_command(description = "Select a worktree for Git review. Args: repository_id, worktree_path.")]
 def herder_git_select_worktree(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {

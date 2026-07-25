@@ -56,6 +56,8 @@ var HERD_MENU_CLOSE : table<int; ToggleState>
 
 var HERD_RELAUNCH_BUTTON : table<int; ClickState>
 
+var SESSION_STATE_JOIN : table<int; EmptyMarkerState>
+
 var g_herd_rename_id : string
 
 var ATTENTION_MESSAGE_ROW : table<int; ToggleState>
@@ -310,7 +312,7 @@ def draw_session_list() {
                     state_glyph = session.exit_code == 0l ? "check" : "warning"
                 }
                 icon(state_glyph, GetTextLineHeight())
-                same_line()
+                same_line(SESSION_STATE_JOIN[index])
                 let row_text = "{session.command_line}##{session.id}"
                 if (selectable(SESSION_ROW[index], (text = row_text))) {
                     g_client->attach_session(session.id)

@@ -1,0 +1,151 @@
+# dasHerd fix round — play-session triage (2026-07-25)
+
+Source: Boris's first real play session (31 notes) + parity audit #1.
+Rule of the round: obvious fixes land without discussion; everything
+else gets a decision here first. Standing practice adopted the same day:
+screenshot vs live-inspection parity — anything visible but not
+inspectable, or editable but not commandable, is a bug (the app is as
+much for the agent as for the human).
+
+## Raw notes (numbering shared with the session)
+
+1. Sessions & Activity: no "New session" icon in the panel.
+2. Worktree right-click: no context menu; expected "New session" with
+   that worktree preselected (when not already claimed).
+3. New Session launcher must be a MODAL DIALOG, not dockable; rest of
+   the UI disabled while open. (Reverses the dockable-launcher call.)
+4. Agent session launch: (a) terminal colors wrong; (b) env leak —
+   child Claude Code inherits CLAUDE_CODE_CHILD_SESSION → transcript
+   saving off → Relaunch/`--continue` broken.
+5. Launch button doesn't close the launcher.
+6. Changelist per-row action icons: no tooltip on hover.
+7. Session appears twice (herd card + raw PTY row) — reads as duplicate.
+8. Terminal has no scrollback access. (Parity audit: `scrollback_rows`
+   is 0 — no retained scrollback data either; data + UI fix.)
+9. Git surfaces don't aim at the attached session's worktree
+   ("select a worktree" despite known origin).
+10. Mixed path separators in herd records (`D:/...\.codex/...`) —
+    string identity matches (aim, conflicts, joins) silently fail.
+    Investigated live: agent work was in the right worktree all along;
+    surfaces were aimed elsewhere + PR tab counts commits only.
+11. Launcher: chose an EXISTING worktree, a new one was created —
+    "Create a dedicated worktree" default-on makes "Start from" mean
+    "base for new", not "run here". Semantics must be explicit.
+12. Ctrl+wheel zoom is global; should zoom the view under the cursor.
+13. File Inspector missing search; audit every view for search.
+14. Inspector Diff/View mode must stick across file selections.
+15. "Previous/next change" are text buttons — icons; audit the rest.
+16. Project view → real file browser: distinct colors
+    (folder/file/hidden), explicit sort modes with cycle, dirty
+    propagation up folders, table with toggleable size/date columns,
+    name filter with include-subfolders checkbox (default on).
+17. Launched agent unaware of dasHerd/dasherder skills.
+18. Repositories & Worktrees readability: colored path/branch
+    components, actively-used markers, worktree ↔ session navigation.
+19. Sessions panel: Attention/Bundles belong under each session as
+    subtree children; zero-count sections don't render.
+20. Typed-token color language (SHA, PID, path, branch) — one scheme,
+    applied everywhere.
+21. PR view shows its base (merge-base commit) as a disabled row even
+    with zero outgoing commits; hint at uncommitted Changelist work.
+22. Active perspective indication too subtle; History needs a visible
+    branch/base delimiter.
+23. Settings: separate tabs from the start; command pattern with
+    editable keyboard shortcuts first.
+24. Settings stays a dock tab; zoom is PER WINDOW and persisted;
+    settings write-through on every change.
+25. Multiple terminals (or instant switching with preserved state) —
+    scenario 1 is several agents at once.
+26. "Agent needs me": surface blocked-at-prompt / waiting-for-input on
+    cards, not just explicit Attention.
+27. Destructive actions (Terminate, Close session) need confirmation.
+28. Error history surface (latest-only chrome loses dismissed errors).
+29. Cards show output age, not just registry age.
+30. Parity audit #1: (a) selectable rows carry no label text in
+    snapshots — dasImgui fix; (b) terminal colors not inspectable
+    (need cell attributes); (c) scrollback_rows exposed = good, value 0
+    = bug; (d) no attach-session / terminal-input semantic rails;
+    zoom % not in state.
+31. The agent (Claude) talks to sessions through the terminal: type,
+    submit, read. Acceptance test after next restart — PowerShell
+    first, then a live agent session.
+
+## Wave 0 — rails first (enables everything else, incl. testing 31)
+
+- 30a: selectable/selectable_label snapshot payload gains its label
+  text (dasImgui boost; benefits every app).
+- DONE 30d: `herder_attach_session` (by PTY or herd id),
+  `herder_terminal_input` (text + submit, lease-checked),
+  `herder_terminal_state` (screen text, cursor, scroll, zoom).
+- 30b: terminal cell-attribute/palette inspection (prerequisite for
+  diagnosing 4a).
+- 31 acceptance test: DONE for PowerShell (echo round-trip through the
+  three commands, no UI choreography); agent-session leg pending.
+
+Findings while landing Wave 0:
+- 32. Sessions-list loop crash (FIXED): bare `same_line()` inside the
+  per-session row loop — single-global widget renders once per frame —
+  crashed update() the first time TWO interactive sessions were
+  visible at once. Latent since the state-glyph slice; the multi-agent
+  scenario would have hit it immediately.
+- 33. Minimized window starves the agent: the harness frame gate stops
+  ImGui frames, so imgui_click/screenshot silently do nothing while
+  WS-level rails keep working. Either keep rendering agent-facing
+  frames while minimized, or route everything the agent needs through
+  frame-independent semantic commands (the direction 30d already
+  takes).
+
+## Wave 1 — obvious fixes, no discussion
+
+- 4b env sanitization: strip CLAUDE_CODE_* child markers; set
+  CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 for agent profiles.
+- 10 path canonicalization: one spelling (forward slashes) at every
+  boundary (launcher suggestions, registry, announce), via fio helpers.
+- 5 launch closes launcher; 1 new-session icon button in Sessions;
+  2 worktree right-click → New Session preselected.
+- 6 changelist row tooltip bug; 14 inspector mode stickiness;
+  15 prev/next → icon buttons.
+- 21 PR base row + "N uncommitted changes in Changelist" status hint.
+
+## Wave 2 — foundation (discuss shape, then build)
+
+- 23/24 command pattern: every menu/shortcut action becomes a named
+  command; Settings tabs (General / Shortcuts / Appearance); editable
+  bindings; write-through persistence; per-window zoom stored there.
+- 12 wheel-zoom scoping rides on per-window zoom.
+
+## Wave 3 — surface reworks (each needs a short design pass)
+
+- 3+11+5 launcher: modal dialog, explicit run-here vs create-new,
+  claimed-worktree awareness (ties to conflict advisory).
+- 7+19+26+28+29 sessions panel: session subtree (terminal link,
+  attention, bundles, errors as children), no zero-count sections,
+  needs-me + output-age signals (watcher activity telemetry).
+- 8+4a terminal: watcher-side scrollback retention → client viewport,
+  wheel scroll, then the color/palette fix (after 30b makes it
+  provable). Search lands here too (13).
+- 16 project view table; 18 repositories readability; 20 token color
+  language (one shared palette module feeds 16/18/20/22).
+- 9 auto-aim policy: empty selection may aim at attach origin;
+  explicit selection stays sacred.
+- 27 destructive confirmations.
+
+## Wave 4 — structural
+
+- 25 multiple terminals.
+- 17 agent awareness of dasherder (CONTEXT_PATH surfacing into the
+  agent's instruction set) — unlocks real Attention/Bundle testing.
+
+## Icon-set expansion (dasImgui, consult Claude Design)
+
+Existing set covers refresh/stop/add/folder/search/gear/prev/next.
+Likely new needs: file glyph (vs folder), dirty badge/dot, sort-mode
+cycle, filter, confirm/danger, collapse/expand-all, send/submit.
+Run the proposed additions past Claude Design (daslang.io Forge design
+system) before drawing them; regen the icon catalog after.
+
+## Sequencing (settled 2026-07-25)
+
+No intermediate PR — no users yet. The whole fix round (Waves 0-4)
+lands on this branch, then one PR for historical record, then the big
+review happens on that PR.
