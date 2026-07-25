@@ -210,8 +210,15 @@ session.
 - 8+4a terminal: watcher-side scrollback retention → client viewport,
   wheel scroll, then the color/palette fix (after 30b makes it
   provable). Search lands here too (13).
-- 16 project view table; 18 repositories readability; 20 token color
-  language (one shared palette module feeds 16/18/20/22).
+- DONE 16 project view (2026-07-25): cached tree model; folder/file/
+  hidden color tiers; dirty * propagating up folders from repository
+  status; four sort modes cycling on a header button (stat-backed
+  Largest/Newest aggregate up folders); persisted size/modified
+  columns; name filter + include-subfolders flat results. Verified
+  live: 8439-file model, 21 dirty nodes on exactly the changed chains,
+  filter and sort driven through the rails.
+- 18 repositories readability; 20 token color language (one shared
+  palette module feeds 18/20/22).
 - 9 auto-aim policy: empty selection may aim at attach origin;
   explicit selection stays sacred.
 - 27 destructive confirmations.
