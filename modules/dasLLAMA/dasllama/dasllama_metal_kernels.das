@@ -1,6 +1,5 @@
 options gen2
 options _comment_hygiene = true
-options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P3): the batch-rail kernel families (MvB/GemmB/SqAttnB/RopeStoreB/AddRmsB) declare @role there
 
 module dasllama_metal_kernels shared public
 
@@ -2558,10 +2557,10 @@ class MetalFwhtUnsign {
 // (cooperative load) instead of per-lane device reads (lab: B=2 +40-88%, B=4 ~2x; per-lane-
 // consecutive chunking measured 30-45% WORSE). Geometry pinned at 128 threads = 4 rows.
 class MetalGemvB2 {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 x : array<float4>    // [B x n] f32 rows, float4 view
-    @ssbo @binding = 4 y : array<float>     // [B x d]
+    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x n] f32 rows, float4 view
+    @ssbo @binding = 4 @role = "write" y : array<float>     // [B x d]
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense)
@@ -2616,10 +2615,10 @@ class MetalGemvB2 {
 }
 
 class MetalGemvB4 {
-    @ssbo @binding = 0 wqb : array<int8>
-    @ssbo @binding = 2 wsh : array<float16>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wqb : array<int8>
+    @ssbo @binding = 2 @role = "weight" wsh : array<float16>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense)
@@ -2680,10 +2679,10 @@ class MetalGemvB4 {
 // simdgroups x 2 row-halves; 16 lanes stream one output row's interleaved 34B q8 blocks, batch
 // columns share the dequantized weight stream. Requires n % 256 == 0 (unguarded 4-chunk stripe).
 class MetalQ8MvB2 {
-    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 x : array<float4>    // [B rows x xs4 float4-stride] f32 rows
-    @ssbo @binding = 3 y : array<float>     // [B x ddim]
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "read" x : array<float4>    // [B rows x xs4 float4-stride] f32 rows
+    @ssbo @binding = 3 @role = "write" y : array<float>     // [B x ddim]
     @uniform @binding = 4 ndim : uint
     @uniform @binding = 5 ddim : uint
     @uniform @binding = 6 xs4 : uint        // x row stride in float4s (ndim/4 = dense)
@@ -2744,10 +2743,10 @@ class MetalQ8MvB2 {
 // to 8 lanes per output row (4 rows/simdgroup, 8 rows/tg): fewer lanes per weight load, more
 // rows in flight hides the block-load latency instead.
 class MetalQ8MvB4 {
-    @ssbo @binding = 0 wsh : array<float16>
-    @ssbo @binding = 1 wqb : array<int8>
-    @ssbo @binding = 2 x : array<float4>
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16>
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>
+    @ssbo @binding = 2 @role = "read" x : array<float4>
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 ndim : uint
     @uniform @binding = 5 ddim : uint
     @uniform @binding = 6 nrows : uint
@@ -2814,14 +2813,14 @@ class MetalQ8MvB4 {
 // gate row r AND up row r+hidden, writing silu(gate)*up directly — replaces the w1/w3/swiglu
 // triple with one dispatch. B2 form serves B <= 2; B4 serves 3..4.
 class MetalGemvW13SwB2 {
-    @ssbo @binding = 0 wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
-    @ssbo @binding = 2 wsh1 : array<float16>   // ... half-scale view
-    @ssbo @binding = 3 x : array<float4>    // [B x ndim] f32 rows, float4 view
-    @ssbo @binding = 4 y : array<float>     // [B x hidden] silu(gate)*up
+    @ssbo @binding = 0 @role = "weight" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
+    @ssbo @binding = 2 @role = "weight" wsh1 : array<float16>   // ... half-scale view
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x ndim] f32 rows, float4 view
+    @ssbo @binding = 4 @role = "write" y : array<float>     // [B x hidden] silu(gate)*up
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 hidden : uint     // output rows
-    @ssbo @binding = 8 wqb3 : array<int8>   // w3 blob views
-    @ssbo @binding = 9 wsh3 : array<float16>
+    @ssbo @binding = 8 @role = "weight" wqb3 : array<int8>   // w3 blob views
+    @ssbo @binding = 9 @role = "weight" wsh3 : array<float16>
     @workgroup txp : float4[128]            // [2 streams x 64 float4] X panel chunk
 
     [metal_kernel(name="metal_gemv_w13sw_b2_msl")]
@@ -2881,14 +2880,14 @@ class MetalGemvW13SwB2 {
 }
 
 class MetalGemvW13SwB4 {
-    @ssbo @binding = 0 wqb1 : array<int8>
-    @ssbo @binding = 2 wsh1 : array<float16>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wqb1 : array<int8>
+    @ssbo @binding = 2 @role = "weight" wsh1 : array<float16>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 hidden : uint
-    @ssbo @binding = 8 wqb3 : array<int8>
-    @ssbo @binding = 9 wsh3 : array<float16>
+    @ssbo @binding = 8 @role = "weight" wqb3 : array<int8>
+    @ssbo @binding = 9 @role = "weight" wsh3 : array<float16>
     @workgroup txp : float4[256]            // [4 streams x 64 float4] X panel chunk
 
     [metal_kernel(name="metal_gemv_w13sw_b4_msl")]
@@ -2954,10 +2953,10 @@ class MetalGemvW13SwB4 {
 // 32x32 tile, 110 instr/k-block vs the old 235 (1.16-1.33x on every decode shape). Pad token rows
 // carry stale bytes by design — C rows are per-token independent, pad Y rows are never read back.
 class MetalQ8GemmB {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
-    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
+    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
+    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
     @uniform @binding = 5 kdim : uint       // n (K)
     @uniform @binding = 6 ndim : uint       // d (N)
     @uniform @binding = 7 ys : uint         // y TOKEN-row stride (== ndim dense; qkvd at the
@@ -3046,10 +3045,10 @@ class MetalQ8GemmB {
 // partial-C plane, and a separate MetalSkReduce dispatch sums them (no float atomics,
 // deterministic). At M-pad-32 this is the only way to grow the grid past d/32 on starved sites.
 class MetalQ8GemmBSk {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 x : array<float4>    // X [32 x n] f32 rows
-    @ssbo @binding = 4 part : array<float>  // [ksplit x 32 x d] partial-C planes
+    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [32 x n] f32 rows
+    @ssbo @binding = 4 @role = "write" part : array<float>  // [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 kdim : uint       // n (K)
     @uniform @binding = 6 ndim : uint       // d (N)
     @uniform @binding = 8 ksplit : uint
@@ -3140,8 +3139,8 @@ class MetalQ8GemmBSk {
 // the split-K reduce: y = sum of the ksplit partial planes (one thread per output element);
 // total = 32 * d is both the element count and the plane stride
 class MetalSkReduce {
-    @ssbo @binding = 0 part : array<float>
-    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 0 @role = "read" part : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
     @uniform @binding = 2 total : uint
     @uniform @binding = 3 ksplit : uint
 
@@ -3165,10 +3164,10 @@ class MetalSkReduce {
 // instructions per element — wins where the grid stays fat (e.g. the vocab classifier). Each
 // simdgroup owns a 16x32 quadrant (2 token x 4 wrow tiles).
 class MetalQ8Gemm64B {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
-    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
+    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
+    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
     @uniform @binding = 5 kdim : uint       // n (K)
     @uniform @binding = 6 ndim : uint       // d (N)
     @workgroup tw : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, (k row, wrow col)
@@ -3253,11 +3252,11 @@ class MetalQ8Gemm64B {
 // math as MetalSqAttnF16, but each row reads its mirror slice through the row table and its
 // roped q lives in the fused QKV buffer at stride qstride.
 class MetalSqAttnBF16 {
-    @ssbo @binding = 0 kc : array<float16>  // the whole mirror arena, f16 view
-    @ssbo @binding = 1 vc : array<float16>
-    @ssbo @binding = 2 q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
-    @ssbo @binding = 3 yo : array<float>    // [B x nheads*hs] attention out
-    @ssbo @binding = 4 rt : array<uint4>    // per-row (k base, v base, cap_rows, cnt) — arena elems
+    @ssbo @binding = 0 @role = "read" kc : array<float16>  // the whole mirror arena, f16 view
+    @ssbo @binding = 1 @role = "read" vc : array<float16>
+    @ssbo @binding = 2 @role = "read" q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
+    @ssbo @binding = 3 @role = "write" yo : array<float>    // [B x nheads*hs] attention out
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>    // per-row (k base, v base, cap_rows, cnt) — arena elems
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -3266,7 +3265,7 @@ class MetalSqAttnBF16 {
     @uniform @binding = 10 scale : float
     @uniform @binding = 11 qstride : uint
     @uniform @binding = 12 softcap : float
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
     @workgroup scores : float[128]
     @workgroup red : float[16]
@@ -3425,11 +3424,11 @@ class MetalSqAttnBF16 {
 
 // f32-mirror twin.
 class MetalSqAttnBF32 {
-    @ssbo @binding = 0 kc : array<float>
-    @ssbo @binding = 1 vc : array<float>
-    @ssbo @binding = 2 q : array<float>
-    @ssbo @binding = 3 yo : array<float>
-    @ssbo @binding = 4 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" kc : array<float>
+    @ssbo @binding = 1 @role = "read" vc : array<float>
+    @ssbo @binding = 2 @role = "read" q : array<float>
+    @ssbo @binding = 3 @role = "write" yo : array<float>
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -3438,7 +3437,7 @@ class MetalSqAttnBF32 {
     @uniform @binding = 10 scale : float
     @uniform @binding = 11 qstride : uint
     @uniform @binding = 12 softcap : float
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
     @workgroup scores : float[128]
     @workgroup red : float[16]
@@ -3599,13 +3598,13 @@ class MetalSqAttnBF32 {
 // share one dispatch via per-row chunk counts. Row-table entries carry arena BYTE offsets
 // (rowb = nblk*34, always even), so the half-scale view indexes at byte/2 exactly.
 class MetalSqAttnBQ8 {
-    @ssbo @binding = 0 ksh : array<float16> // the whole mirror arena, half-scale view
-    @ssbo @binding = 1 kqb : array<int8>    // the SAME arena, byte view
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<int8>
-    @ssbo @binding = 4 q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
-    @ssbo @binding = 5 yo : array<float>    // [B x nheads*hs] attention out
-    @ssbo @binding = 6 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "read" ksh : array<float16> // the whole mirror arena, half-scale view
+    @ssbo @binding = 1 @role = "read" kqb : array<int8>    // the SAME arena, byte view
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<int8>
+    @ssbo @binding = 4 @role = "read" q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
+    @ssbo @binding = 5 @role = "write" yo : array<float>    // [B x nheads*hs] attention out
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint       // blocks per row = kv_dim / 32
     @uniform @binding = 9 nheads : uint
@@ -3614,7 +3613,7 @@ class MetalSqAttnBQ8 {
     @uniform @binding = 12 scale : float
     @uniform @binding = 13 qstride : uint
     @uniform @binding = 14 softcap : float
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
     @workgroup scores : float[128]
     @workgroup red : float[16]
@@ -3787,13 +3786,13 @@ class MetalSqAttnBQ8 {
 // tq4-mirror batch twin (nibble reads over the byte-offset row table — see MetalSqAttnBQ8/Tq4;
 // rowb = nblk*18).
 class MetalSqAttnBTq4 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 kqb : array<uint8>
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<uint8>
-    @ssbo @binding = 4 q : array<float>     // [B x qstride] roped + rotated queries
-    @ssbo @binding = 5 yo : array<float>    // [B x nheads*hs] attention out (rotated basis)
-    @ssbo @binding = 6 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "read" ksh : array<float16>
+    @ssbo @binding = 1 @role = "read" kqb : array<uint8>
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<uint8>
+    @ssbo @binding = 4 @role = "read" q : array<float>     // [B x qstride] roped + rotated queries
+    @ssbo @binding = 5 @role = "write" yo : array<float>    // [B x nheads*hs] attention out (rotated basis)
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint
     @uniform @binding = 9 nheads : uint
@@ -3802,7 +3801,7 @@ class MetalSqAttnBTq4 {
     @uniform @binding = 12 scale : float
     @uniform @binding = 13 qstride : uint
     @uniform @binding = 14 softcap : float
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
     @workgroup scores : float[128]
     @workgroup red : float[16]
@@ -3968,11 +3967,11 @@ class MetalSqAttnBTq4 {
 }
 
 class MetalSqAttnPartBF16 {
-    @ssbo @binding = 0 kc : array<float16>
-    @ssbo @binding = 1 vc : array<float16>
-    @ssbo @binding = 2 q : array<float>
-    @ssbo @binding = 3 part : array<float>  // [B x nheads x nchmax x (hs+2)]
-    @ssbo @binding = 4 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" kc : array<float16>
+    @ssbo @binding = 1 @role = "read" vc : array<float16>
+    @ssbo @binding = 2 @role = "read" q : array<float>
+    @ssbo @binding = 3 @role = "write" part : array<float>  // [B x nheads x nchmax x (hs+2)]
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -4162,11 +4161,11 @@ class MetalSqAttnPartBF16 {
 
 // f32-mirror twin.
 class MetalSqAttnPartBF32 {
-    @ssbo @binding = 0 kc : array<float>
-    @ssbo @binding = 1 vc : array<float>
-    @ssbo @binding = 2 q : array<float>
-    @ssbo @binding = 3 part : array<float>
-    @ssbo @binding = 4 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" kc : array<float>
+    @ssbo @binding = 1 @role = "read" vc : array<float>
+    @ssbo @binding = 2 @role = "read" q : array<float>
+    @ssbo @binding = 3 @role = "write" part : array<float>
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -4357,13 +4356,13 @@ class MetalSqAttnPartBF32 {
 // q8_0-mirror batched chunked twin — byte-offset row table + dual-view block reads; partials
 // stay f32, so MetalSqAttnCombB serves this form unchanged.
 class MetalSqAttnPartBQ8 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 kqb : array<int8>
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<int8>
-    @ssbo @binding = 4 q : array<float>
-    @ssbo @binding = 5 part : array<float>  // [B x nheads x nchmax x (hs+2)]
-    @ssbo @binding = 6 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "read" ksh : array<float16>
+    @ssbo @binding = 1 @role = "read" kqb : array<int8>
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<int8>
+    @ssbo @binding = 4 @role = "read" q : array<float>
+    @ssbo @binding = 5 @role = "write" part : array<float>  // [B x nheads x nchmax x (hs+2)]
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint
     @uniform @binding = 9 nheads : uint
@@ -4566,13 +4565,13 @@ class MetalSqAttnPartBQ8 {
 
 // tq4-mirror batched chunked twin — byte-offset row table + nibble reads; partials stay f32.
 class MetalSqAttnPartBTq4 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 kqb : array<uint8>
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<uint8>
-    @ssbo @binding = 4 q : array<float>
-    @ssbo @binding = 5 part : array<float>  // [B x nheads x nchmax x (hs+2)]
-    @ssbo @binding = 6 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" ksh : array<float16>
+    @ssbo @binding = 1 @role = "read" kqb : array<uint8>
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<uint8>
+    @ssbo @binding = 4 @role = "read" q : array<float>
+    @ssbo @binding = 5 @role = "write" part : array<float>  // [B x nheads x nchmax x (hs+2)]
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint
     @uniform @binding = 9 nheads : uint
@@ -4771,14 +4770,14 @@ class MetalSqAttnPartBTq4 {
 // Batched cross-chunk combine: grid (nheads x B) — each row combines its OWN chunk count
 // (from the table), holes past a shallow row's last chunk are never read.
 class MetalSqAttnCombB {
-    @ssbo @binding = 0 part : array<float>
-    @ssbo @binding = 1 yo : array<float>
-    @ssbo @binding = 2 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" part : array<float>
+    @ssbo @binding = 1 @role = "write" yo : array<float>
+    @ssbo @binding = 2 @role = "read" rt : array<uint4>
     @uniform @binding = 3 nchmax : uint
     @uniform @binding = 4 nheads : uint
     @uniform @binding = 5 hs : uint
     @uniform @binding = 6 window : uint     // > 0 = sliding span — this row's below-window chunks are unwritten
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
 
     [metal_kernel(name="metal_sq_attn_comb_b_msl")]
@@ -4822,11 +4821,11 @@ class MetalSqAttnCombB {
 // simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
 // accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
 class MetalSqAttnDF16 {
-    @ssbo @binding = 0 kc : array<half4>
-    @ssbo @binding = 1 vc : array<half4>
-    @ssbo @binding = 2 q : array<float4>
-    @ssbo @binding = 3 part : array<float>
-    @ssbo @binding = 4 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" kc : array<half4>
+    @ssbo @binding = 1 @role = "read" vc : array<half4>
+    @ssbo @binding = 2 @role = "read" q : array<float4>
+    @ssbo @binding = 3 @role = "write" part : array<float>
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -4933,11 +4932,11 @@ class MetalSqAttnDF16 {
 
 // f32-mirror twin — float4 view, no conversion.
 class MetalSqAttnDF32 {
-    @ssbo @binding = 0 kc : array<float4>
-    @ssbo @binding = 1 vc : array<float4>
-    @ssbo @binding = 2 q : array<float4>
-    @ssbo @binding = 3 part : array<float>
-    @ssbo @binding = 4 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" kc : array<float4>
+    @ssbo @binding = 1 @role = "read" vc : array<float4>
+    @ssbo @binding = 2 @role = "read" q : array<float4>
+    @ssbo @binding = 3 @role = "write" part : array<float>
+    @ssbo @binding = 4 @role = "read" rt : array<uint4>
     @uniform @binding = 5 lay : uint
     @uniform @binding = 6 kv_dim : uint
     @uniform @binding = 7 nheads : uint
@@ -5044,9 +5043,9 @@ class MetalSqAttnDF32 {
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
 class MetalSqAttnCombD {
-    @ssbo @binding = 0 part : array<float4>
-    @ssbo @binding = 1 yo : array<float>
-    @ssbo @binding = 2 rt : array<uint4>
+    @ssbo @binding = 0 @role = "read" part : array<float4>
+    @ssbo @binding = 1 @role = "write" yo : array<float>
+    @ssbo @binding = 2 @role = "read" rt : array<uint4>
     @uniform @binding = 3 nchmax : uint
     @uniform @binding = 4 nheads : uint
     @uniform @binding = 5 hs : uint
@@ -5109,12 +5108,12 @@ class MetalSqAttnCombD {
 // Batched fused rope + KV-row store: grid (pairs x B) — row b's q pairs rope in place, k pairs
 // rope into its mirror row (±65504 clamp) at depth cnt-1, v pairs copy alongside.
 class MetalRopeStoreBF16 {
-    @ssbo @binding = 0 qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
-    @ssbo @binding = 1 kd : array<float16>  // the whole mirror arena, f16 view (k dest)
-    @ssbo @binding = 2 vd : array<float16>
-    @ssbo @binding = 3 tcos : array<float>  // [B x head_size/2] per-row rope rows
-    @ssbo @binding = 4 tsin : array<float>
-    @ssbo @binding = 5 rt : array<uint4>
+    @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
+    @ssbo @binding = 1 @role = "write" kd : array<float16>  // the whole mirror arena, f16 view (k dest)
+    @ssbo @binding = 2 @role = "write" vd : array<float16>
+    @ssbo @binding = 3 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
+    @ssbo @binding = 4 @role = "weight" tsin : array<float>
+    @ssbo @binding = 5 @role = "read" rt : array<uint4>
     @uniform @binding = 6 lay : uint
     @uniform @binding = 7 kv_dim : uint
     @uniform @binding = 8 qd : uint
@@ -5123,7 +5122,7 @@ class MetalRopeStoreBF16 {
     @uniform @binding = 11 npairs : uint    // + kvd/2 — grid guard
     @uniform @binding = 12 qstride : uint
     @uniform @binding = 13 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 14 bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @ssbo @binding = 14 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 15 has_bias : uint
     @uniform @binding = 16 rot : uint       // partial rotary width; == head_size for full
 
@@ -5172,12 +5171,12 @@ class MetalRopeStoreBF16 {
 
 // f32-mirror twin — straight stores, no clamp.
 class MetalRopeStoreBF32 {
-    @ssbo @binding = 0 qk : array<float>
-    @ssbo @binding = 1 kd : array<float>
-    @ssbo @binding = 2 vd : array<float>
-    @ssbo @binding = 3 tcos : array<float>
-    @ssbo @binding = 4 tsin : array<float>
-    @ssbo @binding = 5 rt : array<uint4>
+    @ssbo @binding = 0 @role = "readwrite" qk : array<float>
+    @ssbo @binding = 1 @role = "write" kd : array<float>
+    @ssbo @binding = 2 @role = "write" vd : array<float>
+    @ssbo @binding = 3 @role = "weight" tcos : array<float>
+    @ssbo @binding = 4 @role = "weight" tsin : array<float>
+    @ssbo @binding = 5 @role = "read" rt : array<uint4>
     @uniform @binding = 6 lay : uint
     @uniform @binding = 7 kv_dim : uint
     @uniform @binding = 8 qd : uint
@@ -5186,7 +5185,7 @@ class MetalRopeStoreBF32 {
     @uniform @binding = 11 npairs : uint
     @uniform @binding = 12 qstride : uint
     @uniform @binding = 13 neox : uint
-    @ssbo @binding = 14 bias : array<float>
+    @ssbo @binding = 14 @role = "weight" bias : array<float>
     @uniform @binding = 15 has_bias : uint
     @uniform @binding = 16 rot : uint       // partial rotary width; == head_size for full
 
@@ -5233,13 +5232,13 @@ class MetalRopeStoreBF32 {
 // slice), online slice merge, byte-offset row table. K/V loads are 4 scalar int8s + block scale
 // per position (34B blocks break half4 alignment); scale folds in before the simd_sum.
 class MetalSqAttnDQ8 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 kqb : array<int8>
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<int8>
-    @ssbo @binding = 4 q : array<float4>
-    @ssbo @binding = 5 part : array<float>
-    @ssbo @binding = 6 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "read" ksh : array<float16>
+    @ssbo @binding = 1 @role = "read" kqb : array<int8>
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<int8>
+    @ssbo @binding = 4 @role = "read" q : array<float4>
+    @ssbo @binding = 5 @role = "write" part : array<float>
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint
     @uniform @binding = 9 nheads : uint
@@ -5358,14 +5357,14 @@ class MetalSqAttnDQ8 {
 // q8_0-mirror batched rope + KV-row store: the RopeStoreQ8 shape with the byte-offset row table
 // (grid y = batch row; the new KV row lands at cnt-1). Same quantize_q8kv_row semantics.
 class MetalRopeStoreBQ8 {
-    @ssbo @binding = 0 qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
-    @ssbo @binding = 1 ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
-    @ssbo @binding = 2 kqb : array<int8>    // the SAME arena, byte view
-    @ssbo @binding = 3 vsh : array<float16>
-    @ssbo @binding = 4 vqb : array<int8>
-    @ssbo @binding = 5 tcos : array<float>  // [B x head_size/2] per-row rope rows
-    @ssbo @binding = 6 tsin : array<float>
-    @ssbo @binding = 7 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
+    @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
+    @ssbo @binding = 2 @role = "write" kqb : array<int8>    // the SAME arena, byte view
+    @ssbo @binding = 3 @role = "write" vsh : array<float16>
+    @ssbo @binding = 4 @role = "write" vqb : array<int8>
+    @ssbo @binding = 5 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
+    @ssbo @binding = 6 @role = "weight" tsin : array<float>
+    @ssbo @binding = 7 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 8 lay : uint
     @uniform @binding = 9 nblk : uint       // kv_dim/32 — K blocks (V adds the same again)
     @uniform @binding = 10 qd : uint
@@ -5373,7 +5372,7 @@ class MetalRopeStoreBQ8 {
     @uniform @binding = 12 npairs_q : uint  // qd/2 — the q-rope half of the grid
     @uniform @binding = 13 qstride : uint
     @uniform @binding = 14 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 15 bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @ssbo @binding = 15 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 16 has_bias : uint
 
     [metal_kernel(name="metal_rope_store_b_q8_msl")]
@@ -5475,13 +5474,13 @@ class MetalRopeStoreBQ8 {
 // tq4-mirror partD twin (hs == 128, the DQ8 shape with nibble reads: lane's 4 elements = 2
 // nibble bytes of block sl/8).
 class MetalSqAttnDTq4 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 kqb : array<uint8>
-    @ssbo @binding = 2 vsh : array<float16>
-    @ssbo @binding = 3 vqb : array<uint8>
-    @ssbo @binding = 4 q : array<float4>
-    @ssbo @binding = 5 part : array<float>
-    @ssbo @binding = 6 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "read" ksh : array<float16>
+    @ssbo @binding = 1 @role = "read" kqb : array<uint8>
+    @ssbo @binding = 2 @role = "read" vsh : array<float16>
+    @ssbo @binding = 3 @role = "read" vqb : array<uint8>
+    @ssbo @binding = 4 @role = "read" q : array<float4>
+    @ssbo @binding = 5 @role = "write" part : array<float>
+    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 lay : uint
     @uniform @binding = 8 nblk : uint
     @uniform @binding = 9 nheads : uint
@@ -5612,15 +5611,15 @@ class MetalSqAttnDTq4 {
 // tq4-mirror batched rope + KV-row store: the RopeStoreTq4 shape (threadgroup per head) with the
 // byte-offset row table — grid (heads, batch rows); the new KV row lands at cnt-1.
 class MetalRopeStoreBTq4 {
-    @ssbo @binding = 0 qk : array<float>    // [B x qstride] fused QKV rows — q ropes + rotates in place
-    @ssbo @binding = 1 ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
-    @ssbo @binding = 2 kqb : array<uint8>   // the SAME arena, byte view
-    @ssbo @binding = 3 vsh : array<float16>
-    @ssbo @binding = 4 vqb : array<uint8>
-    @ssbo @binding = 5 tcos : array<float>  // [B x head_size/2] per-row rope rows
-    @ssbo @binding = 6 tsin : array<float>
-    @ssbo @binding = 7 signs : array<float>
-    @ssbo @binding = 8 rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes + rotates in place
+    @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
+    @ssbo @binding = 2 @role = "write" kqb : array<uint8>   // the SAME arena, byte view
+    @ssbo @binding = 3 @role = "write" vsh : array<float16>
+    @ssbo @binding = 4 @role = "write" vqb : array<uint8>
+    @ssbo @binding = 5 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
+    @ssbo @binding = 6 @role = "weight" tsin : array<float>
+    @ssbo @binding = 7 @role = "weight" signs : array<float>
+    @ssbo @binding = 8 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 9 lay : uint
     @uniform @binding = 10 qd : uint
     @uniform @binding = 11 head_size : uint
@@ -5628,7 +5627,7 @@ class MetalRopeStoreBTq4 {
     @uniform @binding = 13 kv_mul : uint
     @uniform @binding = 14 qstride : uint
     @uniform @binding = 15 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 16 bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @ssbo @binding = 16 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 17 has_bias : uint
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
@@ -5723,10 +5722,10 @@ class MetalRopeStoreBTq4 {
 // x += a in place, y = rms(x)·w. Same tgmem row slab — dim caps at ADD_RMS_MAX_DIM (the batch
 // driver pairs enc_ew2-add + enc_rms_b past the slab, mirroring enc_add_rms_site).
 class MetalAddRmsB {
-    @ssbo @binding = 0 x : array<float>     // [B x dim] residual stream, add target
-    @ssbo @binding = 1 a : array<float>     // [B x dim] addend
-    @ssbo @binding = 2 w : array<float>     // [dim] norm weight
-    @ssbo @binding = 3 y : array<float>     // [B x dim] normed out (y may alias a)
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>     // [B x dim] residual stream, add target
+    @ssbo @binding = 1 @role = "read" a : array<float>     // [B x dim] addend
+    @ssbo @binding = 2 @role = "weight" w : array<float>     // [dim] norm weight
+    @ssbo @binding = 3 @role = "write" y : array<float>     // [B x dim] normed out (y may alias a)
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 eps : float
     @uniform @binding = 6 ascale : float    // (x + a) * ascale — gemma4 layer_out_scale scales

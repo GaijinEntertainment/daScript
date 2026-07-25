@@ -1,6 +1,5 @@
 options gen2
 options _comment_hygiene = true
-options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P1/P2): drops when the encode loop is on the capture rail
 
 module dasllama_metal_prefill shared public
 
@@ -86,10 +85,10 @@ class MetalRmsNorm {
 // interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
 // arrays. Requires out-dim % 64, M padded to 64. Beats llama.cpp's equivalent 2-3% on M1 Max.
 class MetalQ8MulMm {
-    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
-    @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
-    @ssbo @binding = 2 xf : array<float4>   // raw f32 activations, float4 view
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // raw f32 activations, float4 view
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
     @workgroup ta : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, each tile (k row, wrow col)
@@ -177,9 +176,9 @@ class MetalQ8MulMm {
 // shift, then RNE to the f16 tile). Serves the E-series per_layer_model_proj GEMM straight off
 // the kept-bf16 blob — no resident f32 copy. Same %64 shape gates, kdim % 32.
 class MetalBf16MulMm {
-    @ssbo @binding = 0 wbh : array<ushort4> // bf16 W rows, ushort4 view (row r elem k at (r*kdim+k)/4)
-    @ssbo @binding = 2 xf : array<float4>   // raw f32 activations, float4 view
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wbh : array<ushort4> // bf16 W rows, ushort4 view (row r elem k at (r*kdim+k)/4)
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // raw f32 activations, float4 view
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
     @workgroup ta : float16[2048]
@@ -258,10 +257,10 @@ class MetalBf16MulMm {
 // per_layer_token_embd region straight into the LAYER-major side-input panel, sqrt(ple) folded.
 // One tg per (layer, position) slice; binds ride blob_of's q8 pair at the region base.
 class MetalPleGatherQ8 {
-    @ssbo @binding = 0 wsh : array<float16> // ple_emb q8 region, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 wqb : array<int8>    // the SAME region, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 tok : array<uint>    // [npos] token ids
-    @ssbo @binding = 3 y : array<float>     // [n_layers x npos x ple] layer-major side input
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // ple_emb q8 region, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME region, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "read" tok : array<uint>    // [npos] token ids
+    @ssbo @binding = 3 @role = "write" y : array<float>     // [n_layers x npos x ple] layer-major side input
     @uniform @binding = 4 npos : uint
     @uniform @binding = 5 ple : uint
     @uniform @binding = 6 nlayers : uint
@@ -284,9 +283,9 @@ class MetalPleGatherQ8 {
 // ple_pre_finish's tail — v = proj/sqrt(dim); side = (side + pnorm·(v·rsqrt(mean(v²)+eps)))/sqrt(2),
 // in place on the layer-major panel the gather wrote. proj arrives position-major off the GEMM.
 class MetalPleFinish {
-    @ssbo @binding = 0 proj : array<float>  // [mp x n_layers*ple] position-major model_proj·embd
-    @ssbo @binding = 1 pnorm : array<float> // [ple] proj-norm weight
-    @ssbo @binding = 2 y : array<float>     // [n_layers x npos x ple] side input, in place
+    @ssbo @binding = 0 @role = "read" proj : array<float>  // [mp x n_layers*ple] position-major model_proj·embd
+    @ssbo @binding = 1 @role = "weight" pnorm : array<float> // [ple] proj-norm weight
+    @ssbo @binding = 2 @role = "readwrite" y : array<float>     // [n_layers x npos x ple] side input, in place
     @uniform @binding = 3 npos : uint
     @uniform @binding = 4 ple : uint
     @uniform @binding = 5 nlayers : uint
@@ -327,11 +326,11 @@ class MetalPleFinish {
 // so each thread's 16-elem half decodes ONE (scale, min) pair. Same %64 shape gates, M padded 32/64.
 
 class MetalKqMulMmK4 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @workgroup ta : float16[2048]
@@ -426,11 +425,11 @@ class MetalKqMulMmK4 {
 }
 
 class MetalKqMulMmK5 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B compact scale blocks (the Q4_K form)
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>    // k5 quant plane, uint view (qs at 40*blk, qh at 40*blk+32)
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks (the Q4_K form)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 quant plane, uint view (qs at 40*blk, qh at 40*blk+32)
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @workgroup ta : float16[2048]
@@ -527,11 +526,11 @@ class MetalKqMulMmK5 {
 }
 
 class MetalKqMulMmK6 {
-    @ssbo @binding = 0 kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 ksc : array<uint4>   // 16B sub-scale blocks (16 int8 at blk), same buffer at 0
-    @ssbo @binding = 2 kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" ksc : array<uint4>   // 16B sub-scale blocks (16 int8 at blk), same buffer at 0
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @workgroup ta : float16[2048]
@@ -682,13 +681,13 @@ class MetalMoeRouter {
 // weight load — slab SLC traffic /8 (the prefill router's entire cost); tails clamp, stores gate.
 // Per-lane k stride and per-position dot order match MetalMoeRouter, so logits stay bit-identical.
 class MetalMoeRouterB {
-    @ssbo @binding = 0 w : array<float4>    // [ne x dim] router weights, float4 view
-    @ssbo @binding = 1 x : array<float4>    // [streams x dim] activations, float4 view
-    @ssbo @binding = 2 y : array<float>     // [streams x ne] logits out
+    @ssbo @binding = 0 @role = "weight" w : array<float4>    // [ne x dim] router weights, float4 view
+    @ssbo @binding = 1 @role = "read" x : array<float4>    // [streams x dim] activations, float4 view
+    @ssbo @binding = 2 @role = "write" y : array<float>     // [streams x ne] logits out
     @uniform @binding = 3 ndim : uint       // dim (% 32)
     @uniform @binding = 4 ddim : uint       // ne
     @uniform @binding = 5 xs : uint         // per-stream x stride, elements
-    @ssbo @binding = 6 rb : array<float>    // [ne] router bias row (hasb models — gpt-oss)
+    @ssbo @binding = 6 @role = "weight" rb : array<float>    // [ne] router bias row (hasb models — gpt-oss)
     @uniform @binding = 7 hasb : uint
     @uniform @binding = 8 ns : uint         // stream count (npos)
 
@@ -844,13 +843,13 @@ class MetalMoeSelect {
 // the blob binds at the layer's expert STACK base, the kernel adds sel[slot] * eblk to the
 // block index, reads x at slot * xs (0 = shared activation), writes y at slot * ddim.
 class MetalMoeGemvQ8 {
-    @ssbo @binding = 0 wsh : array<float16> // the expert stack's blob slice, half-scale view
-    @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view
-    @ssbo @binding = 2 x : array<float4>
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // the expert stack's blob slice, half-scale view
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
+    @ssbo @binding = 2 @role = "read" x : array<float4>
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 ndim : uint
     @uniform @binding = 5 ddim : uint
-    @ssbo @binding = 6 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 7 eblk : uint       // 34B blocks per expert plane (ege / 32)
     @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
@@ -912,14 +911,14 @@ class MetalMoeGemvQ8 {
 // x rides a float4 view: the 32-scalar-x-load form was load-issue-bound at the routed expert
 // shapes (nfe-row planes) — the vector view is 2.25x there (lab: bench_metal_moe_lab, 142→321 wGB/s).
 class MetalMoeGemvK4 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 x4 : array<float4>   // activations, float4 view (every x stride is % 4)
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @ssbo @binding = 7 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
     @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
@@ -1025,14 +1024,14 @@ class MetalMoeGemvK4 {
 
 // Expert-indexed Q5_K GEMV — MetalKqGemvK5's dot with the expert superblock shift.
 class MetalMoeGemvK5 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @ssbo @binding = 7 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
     @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
@@ -1115,14 +1114,14 @@ class MetalMoeGemvK5 {
 // Expert-indexed Q6_K GEMV — MetalKqGemvK6's dot; the expert shift covers sub-scales AND the
 // trailing f16 d plane (both indexed by the same region-relative superblock).
 class MetalMoeGemvK6 {
-    @ssbo @binding = 0 kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @ssbo @binding = 7 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
     @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
@@ -1193,21 +1192,21 @@ class MetalMoeGemvK6 {
 // b LOW / b+16 HIGH — the split-half layout) + one E8M0 scale byte; value = doubled-e2m1
 // magnitude x halved scale (2^(e-128)). Optional per-expert bias rows — gpt-oss's biased MoE.
 class MetalMoeGemvMx4 {
-    @ssbo @binding = 0 mxu2 : array<uint2>  // nibble plane, uint2 view (block at 2*blk; off/2 % 8)
-    @ssbo @binding = 1 mxe : array<uint8>   // E8M0 plane, bound at off/32
-    @ssbo @binding = 2 xf : array<float4>   // activations, float4 view (xoff always % 4)
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" mxu2 : array<uint2>  // nibble plane, uint2 view (block at 2*blk; off/2 % 8)
+    @ssbo @binding = 1 @role = "weight" mxe : array<uint8>   // E8M0 plane, bound at off/32
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 ndim : uint
     @uniform @binding = 5 ddim : uint
-    @ssbo @binding = 6 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 7 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
     @uniform @binding = 10 bxs : uint       // per-stream x stride, elements (0 single)
     @uniform @binding = 11 bys : uint       // per-stream y stride, elements (0 single)
-    @ssbo @binding = 12 wb : array<float>   // [ne x ddim] per-expert bias rows (hasb models)
+    @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ddim] per-expert bias rows (hasb models)
     @uniform @binding = 13 hasb : uint
-    @ssbo @binding = 15 vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
+    @ssbo @binding = 15 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
     @workgroup vt : float[32]
 
     [metal_kernel(name="metal_moe_gemv_mx4_msl")]
@@ -1269,13 +1268,13 @@ class MetalMoeGemvMx4 {
 // k/k+16 split-half pairing + the qh u32; 4B scales = f16 d, m). value = d*q + m with
 // q = nibble | qh_bit << 4, folded as acc += d*Σ(q·x) + m*Σx per block (f32 activations).
 class MetalMoeGemvQ51 {
-    @ssbo @binding = 0 wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
-    @ssbo @binding = 1 wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
-    @ssbo @binding = 2 xf : array<float4>   // activations, float4 view (xoff always % 4)
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
+    @ssbo @binding = 1 @role = "weight" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 ndim : uint
     @uniform @binding = 5 ddim : uint
-    @ssbo @binding = 6 sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @uniform @binding = 7 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
     @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
@@ -1333,19 +1332,19 @@ class MetalMoeGemvQ51 {
 // Gathered MXFP4 mul_mm — the gathered-GEMM shape with the mx4 A stage: each thread's 16-elem
 // half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Bias rides MetalMoeBiasRows.
 class MetalMoeMulMmMx4 {
-    @ssbo @binding = 0 mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
-    @ssbo @binding = 1 mxe : array<uint8>
-    @ssbo @binding = 2 xf : array<float4>
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
+    @ssbo @binding = 1 @role = "weight" mxe : array<uint8>
+    @ssbo @binding = 2 @role = "read" xf : array<float4>
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @ssbo @binding = 6 cnt : array<uint>
-    @ssbo @binding = 7 basep : array<uint>
-    @ssbo @binding = 8 bkt : array<uint>
+    @ssbo @binding = 6 @role = "read" cnt : array<uint>
+    @ssbo @binding = 7 @role = "read" basep : array<uint>
+    @ssbo @binding = 8 @role = "read" bkt : array<uint>
     @uniform @binding = 9 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 10 nk : uint
     @uniform @binding = 11 gather : uint
-    @ssbo @binding = 13 vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
+    @ssbo @binding = 13 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
     @workgroup vt : float[32]
@@ -1439,10 +1438,10 @@ class MetalMoeMulMmMx4 {
 // gpt-oss expert bias over the padded bucket rows (grid (cols, rows, experts)): rows past the
 // expert's live count exit — ggml_add_id order (bias precedes the routing-weight reduce).
 class MetalMoeBiasRows {
-    @ssbo @binding = 0 y : array<float>     // [padded rows x d] bucket-ordered panel
-    @ssbo @binding = 1 wb : array<float>    // [ne x d] this layer's per-expert bias rows
-    @ssbo @binding = 2 cnt : array<uint>
-    @ssbo @binding = 3 basep : array<uint>
+    @ssbo @binding = 0 @role = "readwrite" y : array<float>     // [padded rows x d] bucket-ordered panel
+    @ssbo @binding = 1 @role = "weight" wb : array<float>    // [ne x d] this layer's per-expert bias rows
+    @ssbo @binding = 2 @role = "read" cnt : array<uint>
+    @ssbo @binding = 3 @role = "read" basep : array<uint>
     @uniform @binding = 4 d : uint
 
     [metal_kernel(name="metal_moe_bias_rows_msl")]
@@ -1494,8 +1493,8 @@ class MetalMoeCombine {
 // g = (x / (1 + exp(-1.702 x))) * (y + 1) — the clamps and the +1 are trained weights' contract.
 // float4 lanes, per-element math identical to the scalar form it replaced (bit-exact).
 class MetalSwigluOai {
-    @ssbo @binding = 0 g : array<float4>
-    @ssbo @binding = 1 u : array<float4>
+    @ssbo @binding = 0 @role = "readwrite" g : array<float4>
+    @ssbo @binding = 1 @role = "read" u : array<float4>
     @uniform @binding = 2 total : uint      // scalar element count
 
     [metal_kernel(name="metal_swiglu_oai_msl")]
@@ -1594,8 +1593,8 @@ class MetalMoeWScale {
 // thread-0 serial walk in row order = the CPU moe_bkt order); buckets PAD to 32-row tiles.
 
 class MetalMoeCount {
-    @ssbo @binding = 0 seli : array<uint>   // [npos x 2k] selection rows (idx section)
-    @ssbo @binding = 1 cnt : array<uint>    // [ne] out
+    @ssbo @binding = 0 @role = "read" seli : array<uint>   // [npos x 2k] selection rows (idx section)
+    @ssbo @binding = 1 @role = "write" cnt : array<uint>    // [ne] out
     @uniform @binding = 2 total : uint      // npos * k entries
     @uniform @binding = 3 nk : uint
 
@@ -1623,8 +1622,8 @@ class MetalMoeCount {
 }
 
 class MetalMoePrefix {
-    @ssbo @binding = 0 cnt : array<uint>
-    @ssbo @binding = 1 basep : array<uint>  // [ne] exclusive prefix over the PADDED counts
+    @ssbo @binding = 0 @role = "read" cnt : array<uint>
+    @ssbo @binding = 1 @role = "write" basep : array<uint>  // [ne] exclusive prefix over the PADDED counts
     @uniform @binding = 2 ne : uint
 
     [metal_kernel(name="metal_moe_prefix_msl")]
@@ -1643,10 +1642,10 @@ class MetalMoePrefix {
 }
 
 class MetalMoeBucket {
-    @ssbo @binding = 0 seli : array<uint>
-    @ssbo @binding = 1 basep : array<uint>
-    @ssbo @binding = 2 bkt : array<uint>    // [padded rows] bucket -> entry (row*k + slot)
-    @ssbo @binding = 3 inv : array<uint>    // [npos*k] entry -> padded bucket row
+    @ssbo @binding = 0 @role = "read" seli : array<uint>
+    @ssbo @binding = 1 @role = "read" basep : array<uint>
+    @ssbo @binding = 2 @role = "write" bkt : array<uint>    // [padded rows] bucket -> entry (row*k + slot)
+    @ssbo @binding = 3 @role = "write" inv : array<uint>    // [npos*k] entry -> padded bucket row
     @uniform @binding = 4 total : uint
     @uniform @binding = 5 nk : uint
 
@@ -1692,10 +1691,10 @@ class MetalMoeBucket {
 // the ordered weighted reduce: per (position, dim slice), the k slots in slot order via inv —
 // bit-stable vs the CPU park-and-accumulate; pad bucket rows are never referenced
 class MetalMoeReduce {
-    @ssbo @binding = 0 dn : array<float>    // [padded rows x dim] bucket-ordered down outputs
-    @ssbo @binding = 1 selw : array<float>  // selection rows, float view (w of row r at r*2k + k)
-    @ssbo @binding = 2 inv : array<uint>
-    @ssbo @binding = 3 y : array<float>     // [npos x dim]
+    @ssbo @binding = 0 @role = "read" dn : array<float>    // [padded rows x dim] bucket-ordered down outputs
+    @ssbo @binding = 1 @role = "read" selw : array<float>  // selection rows, float view (w of row r at r*2k + k)
+    @ssbo @binding = 2 @role = "read" inv : array<uint>
+    @ssbo @binding = 3 @role = "write" y : array<float>     // [npos x dim]
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 nk : uint
 
@@ -1720,15 +1719,15 @@ class MetalMoeReduce {
 // via bkt (gather=1: src row = entry/k; gather=0: contiguous bucket rows — the down site),
 // C tiles land at the expert's padded bucket rows; tiles past the padded count exit.
 class MetalMoeMulMmQ8 {
-    @ssbo @binding = 0 wsh : array<float16> // the expert STACK's blob slice, half-scale view
-    @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view
-    @ssbo @binding = 2 xf : array<float4>
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // the expert STACK's blob slice, half-scale view
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
+    @ssbo @binding = 2 @role = "read" xf : array<float4>
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @ssbo @binding = 6 cnt : array<uint>
-    @ssbo @binding = 7 basep : array<uint>
-    @ssbo @binding = 8 bkt : array<uint>
+    @ssbo @binding = 6 @role = "read" cnt : array<uint>
+    @ssbo @binding = 7 @role = "read" basep : array<uint>
+    @ssbo @binding = 8 @role = "read" bkt : array<uint>
     @uniform @binding = 9 eblk : uint       // 34B blocks per expert plane (ege / 32)
     @uniform @binding = 10 nk : uint
     @uniform @binding = 11 gather : uint    // 1 = bkt-indirect X (gate/up), 0 = contiguous (down)
@@ -1816,16 +1815,16 @@ class MetalMoeMulMmQ8 {
 
 // Gathered Q4_K mul_mm — MetalKqMulMmK4's A stage with the expert superblock shift.
 class MetalMoeMulMmK4 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @ssbo @binding = 7 cnt : array<uint>
-    @ssbo @binding = 8 basep : array<uint>
-    @ssbo @binding = 9 bkt : array<uint>
+    @ssbo @binding = 7 @role = "read" cnt : array<uint>
+    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    @ssbo @binding = 9 @role = "read" bkt : array<uint>
     @uniform @binding = 10 esb : uint       // superblocks per expert plane (ege / 256)
     @uniform @binding = 11 nk : uint
     @uniform @binding = 12 gather : uint
@@ -1932,16 +1931,16 @@ class MetalMoeMulMmK4 {
 
 // Gathered Q5_K mul_mm — MetalKqMulMmK5's A stage with the expert superblock shift.
 class MetalMoeMulMmK5 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @ssbo @binding = 7 cnt : array<uint>
-    @ssbo @binding = 8 basep : array<uint>
-    @ssbo @binding = 9 bkt : array<uint>
+    @ssbo @binding = 7 @role = "read" cnt : array<uint>
+    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    @ssbo @binding = 9 @role = "read" bkt : array<uint>
     @uniform @binding = 10 esb : uint
     @uniform @binding = 11 nk : uint
     @uniform @binding = 12 gather : uint
@@ -2051,15 +2050,15 @@ class MetalMoeMulMmK5 {
 // Gathered Q5_1 mul_mm — the k5 skeleton with the per-32 A stage: each thread's 16-elem half is
 // one nibble half of the 32-block (il0), value = d*q + m folded into the f16 A tile.
 class MetalMoeMulMmQ51 {
-    @ssbo @binding = 0 wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
-    @ssbo @binding = 1 wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
-    @ssbo @binding = 2 xf : array<float4>
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
+    @ssbo @binding = 1 @role = "weight" wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
+    @ssbo @binding = 2 @role = "read" xf : array<float4>
+    @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @ssbo @binding = 6 cnt : array<uint>
-    @ssbo @binding = 7 basep : array<uint>
-    @ssbo @binding = 8 bkt : array<uint>
+    @ssbo @binding = 6 @role = "read" cnt : array<uint>
+    @ssbo @binding = 7 @role = "read" basep : array<uint>
+    @ssbo @binding = 8 @role = "read" bkt : array<uint>
     @uniform @binding = 9 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 10 nk : uint
     @uniform @binding = 11 gather : uint
@@ -2154,16 +2153,16 @@ class MetalMoeMulMmQ51 {
 
 // Gathered Q6_K mul_mm — MetalKqMulMmK6's A stage with the expert superblock shift.
 class MetalMoeMulMmK6 {
-    @ssbo @binding = 0 kdh : array<float16>
-    @ssbo @binding = 1 ksc : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 xf : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ksc : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @ssbo @binding = 7 cnt : array<uint>
-    @ssbo @binding = 8 basep : array<uint>
-    @ssbo @binding = 9 bkt : array<uint>
+    @ssbo @binding = 7 @role = "read" cnt : array<uint>
+    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    @ssbo @binding = 9 @role = "read" bkt : array<uint>
     @uniform @binding = 10 esb : uint
     @uniform @binding = 11 nk : uint
     @uniform @binding = 12 gather : uint
@@ -2342,11 +2341,11 @@ class MetalQ8Gemv {
 // Q4_K: lane owns 32 elems of every 4th superblock; lcpp's kmask halfword scale decode +
 // nibble-mask acc folds (x16/x256 groups folded by pow2 constants).
 class MetalKqGemvK4 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -2429,11 +2428,11 @@ class MetalKqGemvK4 {
 // Q5_K: int-composed q5 (nibble | qh bit << 4) — one fma per element; same kmask scale decode.
 // The quant plane is [qs 128][qh 32] per superblock, read through the byte view.
 class MetalKqGemvK5 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -2509,11 +2508,11 @@ class MetalKqGemvK5 {
 // map, qh via mask-selects. Wins at n < 3072 at EVERY d (-9..-11% vs b2r) and the small-d kv
 // shape (b2r under-occupied); b2r keeps n >= 3072. enc_kq_gemv picks per site.
 class MetalKqGemvK5C {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -2594,11 +2593,11 @@ class MetalKqGemvK5C {
 // Q6_K: 6-bit q = nibble | 2 qh bits, minus 32; per-16-element SIGNED sub-scales as 4 scattered
 // byte loads (the uint4+select form costs 2 resident simdgroups); d off the trailing f16 plane.
 class MetalKqGemvK6 {
-    @ssbo @binding = 0 kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 x : array<float>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -2662,11 +2661,11 @@ class MetalKqGemvK6 {
 // thread per output row; y binds at the site's column byte offset, grid.y = column groups of R.
 
 class MetalKqMvB2K4 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y row stride, elements
@@ -2735,11 +2734,11 @@ class MetalKqMvB2K4 {
 }
 
 class MetalKqMvB4K4 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -2809,11 +2808,11 @@ class MetalKqMvB4K4 {
 }
 
 class MetalKqMvB2K6 {
-    @ssbo @binding = 0 kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -2882,11 +2881,11 @@ class MetalKqMvB2K6 {
 }
 
 class MetalKqMvB4K6 {
-    @ssbo @binding = 0 kdh : array<float16>
-    @ssbo @binding = 1 kscb : array<uint8>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -2957,11 +2956,11 @@ class MetalKqMvB4K6 {
 // block) + the qh 5th-bit overlay. The 160B plane rides the SAME uint view (40 uints/blk: qs at
 // 40*blk, qh at 40*blk+32) — the overlay bit equals its kmask pair index, so scale indexing serves it too.
 class MetalKqMvB2K5 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y row stride, elements
@@ -3037,11 +3036,11 @@ class MetalKqMvB2K5 {
 }
 
 class MetalKqMvB4K5 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -3122,11 +3121,11 @@ class MetalKqMvB4K5 {
 // A/B decides, DASLLAMA_METAL_KQ_B8=0 falls back). REQUIRES mp == 8 (nlive >= 5): stage reads all 8 rows, stores gate on nr.
 
 class MetalKqMvB8K4 {
-    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y row stride, elements
@@ -3203,11 +3202,11 @@ class MetalKqMvB8K4 {
 }
 
 class MetalKqMvB8K5 {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -3290,11 +3289,11 @@ class MetalKqMvB8K5 {
 }
 
 class MetalKqMvB8K6 {
-    @ssbo @binding = 0 kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
+    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint
@@ -3371,9 +3370,9 @@ class MetalKqMvB8K6 {
 // mode uniform, matching rope_scaled_tab / rope_scaled_neox_tab exactly via the position's
 // precomputed table row. One kernel serves q (n = qd) and k (n = kv_dim) as two dispatches.
 class MetalRope {
-    @ssbo @binding = 0 v : array<float>     // [ntok x n], roped in place
-    @ssbo @binding = 1 tcos : array<float>  // [ntok x head_size/2]
-    @ssbo @binding = 2 tsin : array<float>
+    @ssbo @binding = 0 @role = "readwrite" v : array<float>     // [ntok x n], roped in place
+    @ssbo @binding = 1 @role = "weight" tcos : array<float>  // [ntok x head_size/2]
+    @ssbo @binding = 2 @role = "weight" tsin : array<float>
     @uniform @binding = 3 n : uint          // row width (qd or kv_dim), % head_size
     @uniform @binding = 4 head_size : uint
     @uniform @binding = 5 npairs : uint     // ntok * n/2 — grid guard
@@ -3410,8 +3409,8 @@ class MetalRope {
 // Additive per-row bias (x[r*n + i] += b[i]) — the QKV bias epilogue for the prefill panels
 // (decode folds it into rope-store; prefill is GEMM-bound, so a plain elementwise pass is free).
 class MetalAddBiasRows {
-    @ssbo @binding = 0 x : array<float>     // [nrows x n], updated in place (bound at the panel offset)
-    @ssbo @binding = 1 b : array<float>     // [n]
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>     // [nrows x n], updated in place (bound at the panel offset)
+    @ssbo @binding = 1 @role = "weight" b : array<float>     // [n]
     @uniform @binding = 2 n : uint
     @uniform @binding = 3 total : uint      // nrows * n — grid guard
 
@@ -3479,9 +3478,9 @@ class MetalQkNorm {
 // causal diagonal exit early. Q staging folds `scale` in; K stages transposed, rows >= npos
 // zeroed (pads can carry NaN). head_size walks in 64-wide K-SLABS — hs 64 is one slab, 128 two.
 class MetalAttnQK {
-    @ssbo @binding = 0 q : array<float>     // [mp x qd], roped
-    @ssbo @binding = 1 k : array<float>     // [nk64 x kv_dim], roped (existing rows + the chunk)
-    @ssbo @binding = 2 att : array<float>   // [n_heads x qrows x np32] raw scores out
+    @ssbo @binding = 0 @role = "read" q : array<float>     // [mp x qd], roped
+    @ssbo @binding = 1 @role = "read" k : array<float>     // [nk64 x kv_dim], roped (existing rows + the chunk)
+    @ssbo @binding = 2 @role = "write" att : array<float>   // [n_heads x qrows x np32] raw scores out
     @uniform @binding = 3 qd : uint
     @uniform @binding = 4 kv_dim : uint
     @uniform @binding = 5 head_size : uint
@@ -3560,13 +3559,13 @@ class MetalAttnQK {
 // softmax via a width-32 simd_shuffle_xor butterfly; the tail (cnt, np32) is ZEROED so the AV
 // GEMM can run whole blocks. A continuation chunk sees qoff existing keys: cnt = qoff + qi + 1.
 class MetalAttnSoftmax {
-    @ssbo @binding = 0 att : array<float>   // [n_heads x qrows x np32], normalized in place
+    @ssbo @binding = 0 @role = "readwrite" att : array<float>   // [n_heads x qrows x np32], normalized in place
     @uniform @binding = 1 np32 : uint
     @uniform @binding = 2 qoff : uint       // the chunk's first GLOBAL position (0 = fresh start)
     @uniform @binding = 3 qrows : uint      // padded query rows — the slab's row extent
     @uniform @binding = 4 window : uint     // > 0 = sliding span: keys < cnt - window are masked
     @uniform @binding = 5 softcap : float   // > 0 = attention-logit soft cap (gemma2)
-    @ssbo @binding = 20 sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @uniform @binding = 21 hass : uint
     @workgroup red : float[4]               // one per simdgroup
     @workgroup bcast : float
@@ -3660,9 +3659,9 @@ class MetalAttnSoftmax {
 // 32-blocks up to the causal limit qi0+32 (P's zeroed tail keeps whole blocks exact). V rows
 // >= npos stage as 0 (pad rows can carry NaN; 0*NaN would still poison). hs % 32 == 0 required.
 class MetalAttnAV {
-    @ssbo @binding = 0 att : array<float>   // [n_heads x qrows x np32] normalized P
-    @ssbo @binding = 1 v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
-    @ssbo @binding = 2 xb : array<float>    // [mp x qd] attention output
+    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] normalized P
+    @ssbo @binding = 1 @role = "read" v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
+    @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 qd : uint
     @uniform @binding = 4 kv_dim : uint
     @uniform @binding = 5 head_size : uint
@@ -3731,9 +3730,9 @@ class MetalAttnAV {
 // 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate, owning 24ms of the 3B window).
 // QK: S[h] = scale * Q_h . K_h^T, 32x64 C tiles; DASLLAMA_METAL_ATTN=0 pins the trio (hs % 64 != 0 too).
 class MetalAttnQKMm {
-    @ssbo @binding = 0 q : array<float4>    // [mp x qd/4], roped
-    @ssbo @binding = 1 k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
-    @ssbo @binding = 2 att : array<float>   // [n_heads x qrows x np32] raw scores out
+    @ssbo @binding = 0 @role = "read" q : array<float4>    // [mp x qd/4], roped
+    @ssbo @binding = 1 @role = "read" k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
+    @ssbo @binding = 2 @role = "write" att : array<float>   // [n_heads x qrows x np32] raw scores out
     @uniform @binding = 3 qd : uint
     @uniform @binding = 4 kv_dim : uint
     @uniform @binding = 5 head_size : uint
@@ -3844,9 +3843,9 @@ class MetalAttnQKMm {
 // axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (causal
 // softmax zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
 class MetalAttnAVMm {
-    @ssbo @binding = 0 att : array<float4>  // [n_heads x qrows x np32/4] normalized P
-    @ssbo @binding = 1 v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
-    @ssbo @binding = 2 xb : array<float>    // [mp x qd] attention output
+    @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] normalized P
+    @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
+    @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 qd : uint
     @uniform @binding = 4 kv_dim : uint
     @uniform @binding = 5 head_size : uint
@@ -3933,8 +3932,8 @@ class MetalAttnAVMm {
 // Fused SwiGLU gate, one thread per element: g = silu(g) * u — swiglu exactly (the CPU side's
 // exp4 polynomial vs the GPU exp differ inside the shared tolerance envelope).
 class MetalSwiglu {
-    @ssbo @binding = 0 g : array<float>     // [ntok x hidden] W1 gate, in place
-    @ssbo @binding = 1 u : array<float>     // [ntok x hidden] W3 up
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // [ntok x hidden] W1 gate, in place
+    @ssbo @binding = 1 @role = "read" u : array<float>     // [ntok x hidden] W3 up
     @uniform @binding = 2 total : uint      // ntok * hidden — grid guard
 
     [metal_kernel(name="metal_swiglu_msl")]
@@ -3952,8 +3951,8 @@ class MetalSwiglu {
 // 0.5*v*(1+tanh(sqrt(2/pi)*(v + 0.044715*v^3)))); GPU tanh vs the CPU exp identity differ inside
 // the shared tolerance envelope, same as swiglu's exp.
 class MetalGeglu {
-    @ssbo @binding = 0 g : array<float>     // [ntok x hidden] W1 gate, in place
-    @ssbo @binding = 1 u : array<float>     // [ntok x hidden] W3 up
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // [ntok x hidden] W1 gate, in place
+    @ssbo @binding = 1 @role = "read" u : array<float>     // [ntok x hidden] W3 up
     @uniform @binding = 2 total : uint      // ntok * hidden — grid guard
 
     [metal_kernel(name="metal_geglu_msl")]
@@ -3972,8 +3971,8 @@ class MetalGeglu {
 
 // Residual add, one thread per element: x += y (add_inplace).
 class MetalAdd {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "read" y : array<float>
     @uniform @binding = 2 total : uint      // grid guard
     @uniform @binding = 3 ascale : float    // (x + y) * ascale — gemma4 layer_out_scale scales
                                             // the WHOLE layer output; every other site binds 1.0
@@ -3992,8 +3991,8 @@ class MetalAdd {
 // layers reuse the pre-norm/pre-rope K projection as V (mm_qkv's copy half; the ones-plane
 // norm follows when v_norm is on — bit-identical to the CPU's fused copy+norm).
 class MetalPfCopy {
-    @ssbo @binding = 0 y : array<float>
-    @ssbo @binding = 1 x : array<float>
+    @ssbo @binding = 0 @role = "write" y : array<float>
+    @ssbo @binding = 1 @role = "read" x : array<float>
     @uniform @binding = 2 total : uint      // grid guard
 
     [metal_kernel(name="metal_pf_copy_msl")]
@@ -4009,9 +4008,9 @@ class MetalPfCopy {
 // Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input — the draft-warm
 // cat rows [enorm(embed) ; hnorm(hidden)]; one thread per source element.
 class MetalPfCat2 {
-    @ssbo @binding = 0 y : array<float>
-    @ssbo @binding = 1 a : array<float>
-    @ssbo @binding = 2 b : array<float>
+    @ssbo @binding = 0 @role = "write" y : array<float>
+    @ssbo @binding = 1 @role = "read" a : array<float>
+    @ssbo @binding = 2 @role = "read" b : array<float>
     @uniform @binding = 3 d : uint
     @uniform @binding = 4 total : uint      // grid guard: npos * d
 
@@ -4320,8 +4319,8 @@ class MetalDnDeint {
 // Per-head sigmoid output gate (sigmoid_gate): x ⊙ σ(g) in place — the gated-attention
 // epilogue between the attention output and the out projection.
 class MetalSigmul {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 g : array<float>
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "read" g : array<float>
     @uniform @binding = 2 total : uint      // grid guard
 
     [metal_kernel(name="metal_sigmul_msl")]
@@ -4357,10 +4356,10 @@ class MetalAxpySig {
 // Batched narrow q8 GEMV for the β/α projections (d = dt_rank, 16..64 — under every GEMM
 // N tile): one simdgroup per (output row, position), the MetalQ8Gemv stream walk per row.
 class MetalDnBa {
-    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 x : array<float4>    // [npos x n] f32 rows, float4 view
-    @ssbo @binding = 3 y : array<float>     // [npos x d]
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "read" x : array<float4>    // [npos x n] f32 rows, float4 view
+    @ssbo @binding = 3 @role = "write" y : array<float>     // [npos x d]
     @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
     @uniform @binding = 5 ddim : uint       // d (output rows per position)
 
@@ -6124,8 +6123,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let ncb = clamp(int64(pf_env_int("DASLLAMA_METAL_NCB", int((n_enc_layers + 3l) / 4l))), 1l, n_enc_layers)
     let unret = get_env_variable("DASLLAMA_METAL_UNRETAINED") == "1"
     let layers_per_cb = (n_enc_layers + ncb - 1l) / ncb
-    // the capture rail (sched-unification P1b): kn_* record each chunk as a step graph, flushed
-    // per chunk with the hz oracle deriving barriers. DASLLAMA_METAL_PF_CAPTURE=0 = direct encode.
+    // the capture rail: kn_* record each chunk as a step graph, graph_flush_sched replays on a
+    // CONCURRENT encoder (auto-schedule + hz barriers at real hazards). DASLLAMA_METAL_SCHED=0
+    // keeps capture order; DASLLAMA_METAL_PF_CAPTURE=0 = the direct serial-encode rollback.
     let cap = get_env_variable("DASLLAMA_METAL_PF_CAPTURE") != "0"
     var cbs : array<MetalCommandBuffer?>
     cbs |> reserve(int(ncb))
@@ -6137,7 +6137,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             if (l % layers_per_cb == 0l) {
                 if (enc != null) {
                     if (cap) {
-                        graph_flush(enc)
+                        graph_flush_sched(enc)
                     }
                     metal_end_encoding(enc)
                     metal_release(enc)
@@ -6145,7 +6145,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     cbs |> push(cb)
                 }
                 cb = unret ? metal_new_command_buffer_unretained(g_pf_queue) : metal_new_command_buffer(g_pf_queue)
-                enc = metal_new_compute_encoder(cb)
+                enc = cap ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
                 if (cap) {
                     gr_arm(true)
                 }
@@ -6683,7 +6683,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             }
         }
         if (cap) {
-            graph_flush(enc)
+            graph_flush_sched(enc)
         }
         metal_end_encoding(enc)
         metal_release(enc)
