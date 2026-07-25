@@ -1,6 +1,6 @@
 options gen2
 options _comment_hygiene = true
-options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P4): the batch GEMM donor's single dispatch moves onto the rail there
+options _metal_manual_dispatch = true   // PERMANENT opt-out: single-dispatch synchronous donor BELOW the engine-graph layer (kn_*/hz live in dasllama_metal_common, which requires dasllama_common -> this module — a cycle). No graph, no intra-encoder hazard surface. Moving kn_* into das_metal_boost would lift this.
 
 module dasllama_math_metal shared public
 

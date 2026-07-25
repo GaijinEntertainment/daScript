@@ -6020,6 +6020,9 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
     kn_buffer(enc, bys, 0ul, 7)
     kn_buffer(enc, bnr, 0ul, 8)
     let gcols = (two || b8) ? 1l : (nlive + 3l) / 4l
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((rows + 7l) / 8l), uint(gcols), 1u), uint3(64u, 1u, 1u))
 }
 
@@ -6043,6 +6046,9 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
     kn_buffer(enc, by, yoff, 4)
     kn_buffer(enc, bk, 0ul, 5)
     kn_buffer(enc, bn, 0ul, 6)
+    hz_read(bx)
+    hz_write(by, yoff, uint64(mp * rows * 4l))
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(mp / 32l), uint(rows / 64l), 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6335,6 +6341,9 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
     kn_buffer(enc, bn, 0ul, 5)
     kn_buffer(enc, bd, 0ul, 6)
     kn_buffer(enc, bys, 0ul, 7)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((d + 3l) / 4l), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6360,6 +6369,9 @@ def enc_mv_b(enc : MetalComputeEncoder?; four : bool; bwblob : MetalBuffer?; wbo
         kn_buffer(enc, bys, 0ul, 7)
     }
     // b2 = 4 rows/tg (16 lanes/row); b4 = 8 rows/tg (8 lanes/row)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(four ? (d + 7l) / 8l : (d + 3l) / 4l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
@@ -6393,6 +6405,9 @@ def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?;
     kn_buffer(enc, by, 0ul, 4)
     kn_buffer(enc, bn, 0ul, 5)
     kn_buffer(enc, bhid, 0ul, 6)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((hidden + 3l) / 4l), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6409,6 +6424,9 @@ def enc_gemm_mm_b(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uin
     kn_buffer(enc, by, yoff, 3)
     kn_buffer(enc, bk, 0ul, 4)
     kn_buffer(enc, bn, 0ul, 5)
+    hz_read(bx)
+    hz_write(by, yoff, uint64(mp * d * 4l))
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(mp / 32l), uint(d / 64l), 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6424,6 +6442,9 @@ def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, bk, 0ul, 5)
     kn_buffer(enc, bn, 0ul, 6)
     kn_buffer(enc, bys, 0ul, 7)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((mp32 / 32l) * (d / 32l)), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6441,6 +6462,9 @@ def enc_gemm_sk_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, bk, 0ul, 5)
     kn_buffer(enc, bn, 0ul, 6)
     kn_buffer(enc, bsk, 0ul, 8)
+    hz_read(bx)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(d / 32l), uint(nsk), 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6450,6 +6474,9 @@ def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by, btot, bsk : MetalBuff
     kn_buffer(enc, by, 0ul, 1)
     kn_buffer(enc, btot, 0ul, 2)
     kn_buffer(enc, bsk, 0ul, 3)
+    hz_read(bpart)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((total + 127l) / 128l), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6464,6 +6491,9 @@ def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, by, 0ul, 4)
     kn_buffer(enc, bk, 0ul, 5)
     kn_buffer(enc, bn, 0ul, 6)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((mp32 / 32l) * (d / 64l)), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
@@ -6489,6 +6519,10 @@ def enc_attn_b(enc : MetalComputeEncoder?; f16 : bool; bq, by, brt, blay, bkvd, 
     kn_buffer(enc, bcap, 0ul, 12)
     kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
     kn_buffer(enc, bhass != null ? bhass : g_zero, 0ul, 21)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6510,6 +6544,10 @@ def enc_attn_part_b(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt, blay
     kn_buffer(enc, bnch, 0ul, 12)
     kn_buffer(enc, bcap, 0ul, 13)
     kn_buffer(enc, bwin, 0ul, 14)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6534,6 +6572,10 @@ def enc_attn_b_tq4(enc : MetalComputeEncoder?; bq, by, brt, blay, bnblk, bnh, bk
     kn_buffer(enc, bcap, 0ul, 14)
     kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
     kn_buffer(enc, bhass != null ? bhass : g_zero, 0ul, 21)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6557,6 +6599,10 @@ def enc_attn_part_b_tq4(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk,
     kn_buffer(enc, bnch, 0ul, 14)
     kn_buffer(enc, bcap, 0ul, 15)
     kn_buffer(enc, bwin, 0ul, 16)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6579,6 +6625,10 @@ def enc_attn_d_tq4(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh,
     kn_buffer(enc, bqs, 0ul, 13)
     kn_buffer(enc, bnsg, 0ul, 14)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
 }
 
@@ -6604,6 +6654,10 @@ def enc_attn_b_q8(enc : MetalComputeEncoder?; bq, by, brt, blay, bnblk, bnh, bkv
     kn_buffer(enc, bcap, 0ul, 14)
     kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
     kn_buffer(enc, bhass != null ? bhass : g_zero, 0ul, 21)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6627,6 +6681,10 @@ def enc_attn_part_b_q8(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, 
     kn_buffer(enc, bnch, 0ul, 14)
     kn_buffer(enc, bcap, 0ul, 15)
     kn_buffer(enc, bwin, 0ul, 16)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6649,6 +6707,10 @@ def enc_attn_d_q8(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh, 
     kn_buffer(enc, bqs, 0ul, 13)
     kn_buffer(enc, bnsg, 0ul, 14)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
 }
 
@@ -6663,6 +6725,9 @@ def enc_attn_comb_b(enc : MetalComputeEncoder?; bpart, by, brt, bnch, bnh, bhs, 
     kn_buffer(enc, bwin, 0ul, 6)
     kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
     kn_buffer(enc, bhass != null ? bhass : g_zero, 0ul, 21)
+    hz_read(bpart)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6683,6 +6748,10 @@ def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt, blay, bkv
     kn_buffer(enc, bqs, 0ul, 11)
     kn_buffer(enc, bnsg, 0ul, 12)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
+    hz_read(g_arena)
+    hz_read(bq)
+    hz_write(bpart)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
 }
 
@@ -6695,6 +6764,9 @@ def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt, bnsg, bnh, bhs :
     kn_buffer(enc, bnsg, 0ul, 3)
     kn_buffer(enc, bnh, 0ul, 4)
     kn_buffer(enc, bhs, 0ul, 5)
+    hz_read(bpart)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads), uint(nrows), 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6717,6 +6789,9 @@ def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, b
     kn_buffer(enc, bbias, 0ul, 14)
     kn_buffer(enc, bhasb, 0ul, 15)
     kn_buffer(enc, brot != null ? brot : bhs, 0ul, 16)   // rot defaults to head_size (full rope)
+    hz_write(bqkv)
+    hz_write(g_arena)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((npairs + 63l) / 64l), uint(nrows), 1u), uint3(64u, 1u, 1u))
 }
 
@@ -6742,6 +6817,9 @@ def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay
     kn_buffer(enc, bneox, 0ul, 15)
     kn_buffer(enc, bbias, 0ul, 16)
     kn_buffer(enc, bhasb, 0ul, 17)
+    hz_write(bqkv)
+    hz_write(g_arena)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(ntg), uint(nrows), 1u), uint3(uint(head_size), 1u, 1u))
 }
 
@@ -6766,6 +6844,9 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay,
     kn_buffer(enc, bneox, 0ul, 14)
     kn_buffer(enc, bbias, 0ul, 15)
     kn_buffer(enc, bhasb, 0ul, 16)
+    hz_write(bqkv)
+    hz_write(g_arena)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint((nthreads + 63l) / 64l), uint(nrows), 1u), uint3(64u, 1u, 1u))
 }
 
@@ -6779,6 +6860,10 @@ def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : Metal
     kn_buffer(enc, bdim, 0ul, 4)
     kn_buffer(enc, beps, 0ul, 5)
     kn_buffer(enc, bascale != null ? bascale : g_one, 0ul, 6)   // the add's ascale slot
+    hz_read(ba)
+    hz_write(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
 }
 
@@ -6791,6 +6876,9 @@ def enc_rms_b(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBuffer?;
     kn_buffer(enc, by, 0ul, 2)
     kn_buffer(enc, bdim, 0ul, 3)
     kn_buffer(enc, beps, 0ul, 4)
+    hz_read(bx)
+    hz_write(by)
+    hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
 }
 

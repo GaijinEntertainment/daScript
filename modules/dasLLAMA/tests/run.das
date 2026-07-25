@@ -118,8 +118,10 @@ def main() : int {
         return 2
     }
     let tmp = empty(get_env_variable("TMPDIR")) ? "/tmp" : get_env_variable("TMPDIR")
-    // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent
-    var envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1"
+    // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
+    // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
+    // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
+    var envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1"
     if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
         envs = "{envs} DASLLAMA_TEST_FAMILY='{cfg.family}'"
     }
