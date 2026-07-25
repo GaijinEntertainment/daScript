@@ -595,6 +595,151 @@ def q8_moe_batch_mm {
     }
 }
 
+// The aligned L twin: staging guards + edge branch removed — the guards serialize the unrolled
+// staging loads (14.5 -> 31.2 TF on the gate shape), and even a never-taken guarded path costs
+// ~20%, so like lcpp's _aligned pipelines this is its own pipeline (d + every cnt 128-multiples).
+
+var @workgroup cma_a : uint[2560]     // A tile: 128 weight rows x one block (32 K) as f16 pairs
+var @workgroup cma_b : uint[2560]     // B tile: 128 token rows x one block
+
+[compute_shader(local_size_x=128, name="q8_moe_batch_mm_a_spv")]
+def q8_moe_batch_mm_a {
+    let n = vk_meta[0u]
+    let d = vk_meta[1u]
+    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
+    let rb = 4u + rid * 4u
+    let wblk0 = vk_meta[rb]
+    let row0 = vk_meta[rb + 1u]
+    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let wtiles = (d + 127u) / 128u
+    let xt = tix / wtiles             // token (B) tile
+    let wt = tix % wtiles             // weight (A) tile
+    let gm0 = wt * 128u
+    let gn0 = xt * 128u
+    let nbb = n / 32u
+    let tid = gl_LocalInvocationID.x
+    let warp_r = gl_SubgroupID % 2u   // which 64-row half of the A tile
+    let warp_c = gl_SubgroupID / 2u   // which 64-col half of the B tile
+    let lw = tid % 8u                 // which packed word (4 qs) of the staged row's block
+    let lr0 = tid / 8u                // staging row base 0..15
+    var acc00 : coopmatAcc_f16_16x16
+    var acc01 : coopmatAcc_f16_16x16
+    var acc02 : coopmatAcc_f16_16x16
+    var acc03 : coopmatAcc_f16_16x16
+    var acc10 : coopmatAcc_f16_16x16
+    var acc11 : coopmatAcc_f16_16x16
+    var acc12 : coopmatAcc_f16_16x16
+    var acc13 : coopmatAcc_f16_16x16
+    var acc20 : coopmatAcc_f16_16x16
+    var acc21 : coopmatAcc_f16_16x16
+    var acc22 : coopmatAcc_f16_16x16
+    var acc23 : coopmatAcc_f16_16x16
+    var acc30 : coopmatAcc_f16_16x16
+    var acc31 : coopmatAcc_f16_16x16
+    var acc32 : coopmatAcc_f16_16x16
+    var acc33 : coopmatAcc_f16_16x16
+    var kb = 0u
+    while (kb < nbb) {
+        for [unroll] (p in range(8)) {   // stage A: 128 weight rows x 1 block, unguarded
+            let row = lr0 + uint(p) * 16u
+            let ib = wblk0 + (gm0 + row) * nbb + kb
+            let v = float4(int4(unpack8(int(vk_wq[ib * 8u + lw])))) * float(vk_ws[ib])
+            let o = row * CML_SST + lw * 2u
+            cma_a[o] = packHalf2x16(v.xy)
+            cma_a[o + 1u] = packHalf2x16(v.zw)
+        }
+        for [unroll] (p in range(8)) {   // stage B: 128 token rows x 1 block, unguarded
+            let row = lr0 + uint(p) * 16u
+            let ib = (row0 + gn0 + row) * nbb + kb
+            let v = float4(int4(unpack8(int(vk_xq[ib * 8u + lw])))) * vk_xs[ib]
+            let o = row * CML_SST + lw * 2u
+            cma_b[o] = packHalf2x16(v.xy)
+            cma_b[o + 1u] = packHalf2x16(v.zw)
+        }
+        barrier()
+        for [unroll] (ks in range(2)) {   // 2 K-subtiles x (4 A rows x 4 B cols), their MMA order
+            let k8 = uint(ks) * 8u
+            var ca : coopmatA_f16_16x16
+            var cb : coopmatB_f16_16x16
+            coopmatLoad(ca, cma_a, int((warp_r * 64u) * CML_SST + k8), int(CML_SST), 0)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+            acc00 = coopmatMulAdd(ca, cb, acc00)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+            acc01 = coopmatMulAdd(ca, cb, acc01)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+            acc02 = coopmatMulAdd(ca, cb, acc02)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+            acc03 = coopmatMulAdd(ca, cb, acc03)
+            coopmatLoad(ca, cma_a, int((warp_r * 64u + 16u) * CML_SST + k8), int(CML_SST), 0)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+            acc10 = coopmatMulAdd(ca, cb, acc10)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+            acc11 = coopmatMulAdd(ca, cb, acc11)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+            acc12 = coopmatMulAdd(ca, cb, acc12)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+            acc13 = coopmatMulAdd(ca, cb, acc13)
+            coopmatLoad(ca, cma_a, int((warp_r * 64u + 32u) * CML_SST + k8), int(CML_SST), 0)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+            acc20 = coopmatMulAdd(ca, cb, acc20)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+            acc21 = coopmatMulAdd(ca, cb, acc21)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+            acc22 = coopmatMulAdd(ca, cb, acc22)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+            acc23 = coopmatMulAdd(ca, cb, acc23)
+            coopmatLoad(ca, cma_a, int((warp_r * 64u + 48u) * CML_SST + k8), int(CML_SST), 0)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+            acc30 = coopmatMulAdd(ca, cb, acc30)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+            acc31 = coopmatMulAdd(ca, cb, acc31)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+            acc32 = coopmatMulAdd(ca, cb, acc32)
+            coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+            acc33 = coopmatMulAdd(ca, cb, acc33)
+        }
+        barrier()
+        kb++
+    }
+    // stores: y[(row0 + token) * d + wrow] — fragment weight-dim contiguous = column-major, stride d
+    let dr = gm0 + warp_r * 64u
+    let dc = gn0 + warp_c * 64u
+    var accw : coopmatAcc_f32_16x16
+    let yb = (row0 + dc) * d + dr
+    coopmatConvert(accw, acc00)
+    coopmatStore(accw, vk_y, int(yb), int(d), 1)
+    coopmatConvert(accw, acc01)
+    coopmatStore(accw, vk_y, int(yb + 16u * d), int(d), 1)
+    coopmatConvert(accw, acc02)
+    coopmatStore(accw, vk_y, int(yb + 32u * d), int(d), 1)
+    coopmatConvert(accw, acc03)
+    coopmatStore(accw, vk_y, int(yb + 48u * d), int(d), 1)
+    coopmatConvert(accw, acc10)
+    coopmatStore(accw, vk_y, int(yb + 16u), int(d), 1)
+    coopmatConvert(accw, acc11)
+    coopmatStore(accw, vk_y, int(yb + 16u * d + 16u), int(d), 1)
+    coopmatConvert(accw, acc12)
+    coopmatStore(accw, vk_y, int(yb + 32u * d + 16u), int(d), 1)
+    coopmatConvert(accw, acc13)
+    coopmatStore(accw, vk_y, int(yb + 48u * d + 16u), int(d), 1)
+    coopmatConvert(accw, acc20)
+    coopmatStore(accw, vk_y, int(yb + 32u), int(d), 1)
+    coopmatConvert(accw, acc21)
+    coopmatStore(accw, vk_y, int(yb + 16u * d + 32u), int(d), 1)
+    coopmatConvert(accw, acc22)
+    coopmatStore(accw, vk_y, int(yb + 32u * d + 32u), int(d), 1)
+    coopmatConvert(accw, acc23)
+    coopmatStore(accw, vk_y, int(yb + 48u * d + 32u), int(d), 1)
+    coopmatConvert(accw, acc30)
+    coopmatStore(accw, vk_y, int(yb + 48u), int(d), 1)
+    coopmatConvert(accw, acc31)
+    coopmatStore(accw, vk_y, int(yb + 16u * d + 48u), int(d), 1)
+    coopmatConvert(accw, acc32)
+    coopmatStore(accw, vk_y, int(yb + 32u * d + 48u), int(d), 1)
+    coopmatConvert(accw, acc33)
+    coopmatStore(accw, vk_y, int(yb + 48u * d + 48u), int(d), 1)
+}
+
 // The mul_mm M-tile twin (64x64, lcpp's cm1 m-warptile): the L scheme at half edge — 4 warps 2x2
 // over the tile, 2x2 fragments each, 12.3KB shared. Routed in by q8_batch_tile_for when cnt or d
 // <= 64: the L tile pads every such dispatch to 128 B-columns (MoE regions run ~32 rows).
@@ -2979,6 +3124,14 @@ def private q8_batch_tile_for(d, cnt : int64) : int64 {
     }
     return d <= 64l || cnt < MM_SMALL_CNT ? mm_small_tile() : 128l
 }
+
+// aligned-L eligibility: every tile interior (d and cnt both 128-multiples) — the guard-free
+// pipeline. Pure in (d, cnt, mode) like the tile router, so pipe pick and meta fill agree.
+def private q8_batch_aligned(d, cnt : int64) : bool
+    => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
+
+def private q8_batch_pipe_for(d, cnt : int64) : Pipeline
+    => q8_batch_pipe(q8_batch_tile_for(d, cnt), q8_batch_aligned(d, cnt))
 let private BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let private BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
 let private BATCH_HS_BYTES = 8_388_608l    // ... its scale plane
@@ -3085,6 +3238,7 @@ struct private VkStack {
     batch_y : uint64         // which shared y plane batch_set binds (role-fixed per stack)
     batch_xq : uint64        // which activation-quant plane it binds (gate/up: gathered x; down: hq)
     batch_tile : int64       // the tile edge the last fill_batch_meta routed — the bind must match
+    batch_aligned : bool     // ... and whether that fill qualified for the guard-free aligned-L pipe
     batch_made : bool
     // classifier dispatch state (lazy — set up on the first cls GEMV against this stack)
     cls_set : VkDescriptorSet
@@ -3184,6 +3338,7 @@ struct private GpuState {
     batch_coopmat_q40 : Pipeline  // prefill Q4_0 GEMM on tensor cores, f16-dequant (COOPMAT=f16, fmt 4)
     batch_coopmat_mm : Pipeline   // prefill Q8_0 GEMM, the mul_mm 128x128 L-tile (DASLLAMA_COOPMAT=mm)
     batch_coopmat_mm_m : Pipeline // ... its 64x64 M-tile twin, routed in for small-cnt dispatches
+    batch_coopmat_mm_a : Pipeline // ... the aligned-L twin (no staging guards/edge path — 2.2x the L rate)
     actrq_pipeline : Pipeline   // fused act(g)*u + q8_0 requant of the hidden rows
     gemv_k4 : Pipeline          // native K-quant GEMVs (per-format decode kernels)
     gemv_k5 : Pipeline
@@ -3587,6 +3742,8 @@ def private vk_moe_init : bool {
         g_gpu.batch_coopmat_mm <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader)
         var cmmmshader_m <- create_shader_module(g_gpu.device, q8_moe_batch_mm_m_spv)
         g_gpu.batch_coopmat_mm_m <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader_m)
+        var cmmmshader_a <- create_shader_module(g_gpu.device, q8_moe_batch_mm_a_spv)
+        g_gpu.batch_coopmat_mm_a <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader_a)
     }
     var ashader <- create_shader_module(g_gpu.device, q8_moe_actrq_spv)
     g_gpu.actrq_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, ashader)
@@ -5193,9 +5350,9 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(qd, wlen)), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h, VHZ_XQ, VHZ_Q)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(kvd, wlen)), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h, VHZ_XQ, VHZ_KVK)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(kvd, wlen)), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h, VHZ_XQ, VHZ_VST)
+                rd_dispatch(raw, q8_batch_pipe_for(qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h, VHZ_XQ, VHZ_Q)
+                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h, VHZ_XQ, VHZ_KVK)
+                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h, VHZ_XQ, VHZ_VST)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 if (g_rd.qk_norm) {
@@ -5206,14 +5363,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     h, VHZ_Q | VHZ_KVK | VHZ_KVV | VHZ_COS, VHZ_Q | VHZ_KVK | VHZ_MIR)
                 rd_dispatch(raw, g_gpu.da_b_pipeline, g_rd.pf_sets[b + 5], attnwg, h, VHZ_Q | VHZ_MIR, VHZ_ATT)
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l), h, VHZ_ATT, VHZ_AQ)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(dim, wlen)), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h, VHZ_AQ, VHZ_XB2)
+                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h, VHZ_AQ, VHZ_XB2)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h, VHZ_X | VHZ_XB2, VHZ_X | VHZ_XB)
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(hid, wlen)), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h, VHZ_XQ, VHZ_GATE)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(hid, wlen)), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h, VHZ_XQ, VHZ_UP)
+                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h, VHZ_XQ, VHZ_GATE)
+                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h, VHZ_XQ, VHZ_UP)
                 rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 32l + 255l) / 256l),
                     h, VHZ_GATE | VHZ_UP | VHZ_META, VHZ_HQ)
-                rd_dispatch(raw, q8_batch_pipe(q8_batch_tile_for(dim, wlen)), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h, VHZ_HQ, VHZ_FFO)
+                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h, VHZ_HQ, VHZ_FFO)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h, VHZ_X | VHZ_FFO, VHZ_X | VHZ_XB)
             }
             if (last) {
@@ -5367,7 +5524,7 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe(q8_batch_tile_for(d, npos)), VkPipelineBindPoint.COMPUTE)
+        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe_for(d, npos), VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.arenas[fmt].batch_set, groups)
         batch_barrier(raw, false)
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
@@ -5466,7 +5623,7 @@ def private bind_gemv_pipe(raw : VkCommandBuffer; fmt : int) {
 
 // The Q8_0 prefill batch pipeline, switched to the tensor-core coopmat variant when DASLLAMA_COOPMAT
 // selected one (weak alias — g_gpu owns). `tile` = the edge the caller's meta used; picks L vs M in mm mode.
-def private q8_batch_pipe(tile : int64) : Pipeline {
+def private q8_batch_pipe(tile : int64; aligned : bool = false) : Pipeline {
     if (g_gpu.coopmat_mode == 1) {
         return weak_copy(g_gpu.batch_coopmat_f16)
     } elif (g_gpu.coopmat_mode == 2) {
@@ -5482,14 +5639,19 @@ def private q8_batch_pipe(tile : int64) : Pipeline {
             }
             return weak_copy(g_gpu.batch_coopmat_mm_m)
         }
-        return weak_copy(g_gpu.batch_coopmat_mm)
+        return weak_copy(aligned ? g_gpu.batch_coopmat_mm_a : g_gpu.batch_coopmat_mm)
     }
     return weak_copy(g_gpu.batch_pipeline)
 }
 
-def private bind_batch_pipe(raw : VkCommandBuffer; fmt : int; tile : int64) {
+// two stacks share one bound pipeline only when the whole choice agrees (fmt + tile + aligned)
+def private same_batch_pipe(a, b : int) : bool
+    => (g_gpu.stacks[a].fmt == g_gpu.stacks[b].fmt && g_gpu.stacks[a].batch_tile == g_gpu.stacks[b].batch_tile
+        && g_gpu.stacks[a].batch_aligned == g_gpu.stacks[b].batch_aligned)
+
+def private bind_batch_pipe(raw : VkCommandBuffer; fmt : int; tile : int64; aligned : bool = false) {
     if (fmt == 0) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe(tile), VkPipelineBindPoint.COMPUTE)
+        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe(tile, aligned), VkPipelineBindPoint.COMPUTE)
     } elif (fmt == 1) {
         cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_k4, VkPipelineBindPoint.COMPUTE)
     } elif (fmt == 2) {
@@ -5760,17 +5922,20 @@ def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, 
         var mp = reinterpret<uint?>(g_gpu.stacks[si].batch_meta.mapped)
         var nrc = 0l
         var nrows = 0l
+        var all128 = true   // every active region's cnt a 128-multiple -> aligned-L eligible
         for (r in range64(nregions)) {
             let b0 = max(offs[r * 3l + 1l], r0)
             let b1 = min(offs[r * 3l + 1l] + offs[r * 3l + 2l], r1)
             if (b1 > b0) {
                 nrc++
                 nrows += b1 - b0
+                all128 = all128 && (b1 - b0) % 128l == 0l
             }
         }
         // route the tile on the AVERAGE rows per active region — one pipeline serves the dispatch
         let tile = g_gpu.stacks[si].fmt == 0 ? q8_batch_tile_for(d, nrc > 0l ? nrows / nrc : r1 - r0) : BATCH_TILE
         g_gpu.stacks[si].batch_tile = tile
+        g_gpu.stacks[si].batch_aligned = g_gpu.stacks[si].fmt == 0 && tile == 128l && d % 128l == 0l && all128
         let wtiles = (d + tile - 1l) / tile
         let wg_bound = ((r1 - r0 + tile - 1l) / tile + nrc) * wtiles
         assert((4l + nrc * 4l + wg_bound) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: batch meta exceeds capacity")
@@ -5865,10 +6030,10 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
         cmd_copy_at(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, comb_wi_bytes)
     }
     batch_barrier(raw, true)
-    bind_batch_pipe(raw, g_gpu.stacks[s1].fmt, g_gpu.stacks[s1].batch_tile)
+    bind_batch_pipe(raw, g_gpu.stacks[s1].fmt, g_gpu.stacks[s1].batch_tile, g_gpu.stacks[s1].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s1].batch_set, nwg_gu)
-    if (g_gpu.stacks[s3].fmt != g_gpu.stacks[s1].fmt) {
-        bind_batch_pipe(raw, g_gpu.stacks[s3].fmt, g_gpu.stacks[s3].batch_tile)
+    if (!same_batch_pipe(s3, s1)) {
+        bind_batch_pipe(raw, g_gpu.stacks[s3].fmt, g_gpu.stacks[s3].batch_tile, g_gpu.stacks[s3].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s3].batch_set, nwg_gu)
     comp_barrier(raw)
@@ -5877,7 +6042,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
     comp_barrier(raw)
-    bind_batch_pipe(raw, g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile)
+    bind_batch_pipe(raw, g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile, g_gpu.stacks[s2].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s2].batch_set, nwg_dn)
     if (comb_npos > 0u) {
         comp_barrier(raw)
@@ -5972,7 +6137,7 @@ def private record_dense_cmd(si : int; nwg : uint; y_bytes : int64; axq_bytes, a
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
     cmd_copy_batch_meta(raw, si)
     batch_barrier(raw, true)
-    bind_batch_pipe(raw, g_gpu.stacks[si].fmt, g_gpu.stacks[si].batch_tile)
+    bind_batch_pipe(raw, g_gpu.stacks[si].fmt, g_gpu.stacks[si].batch_tile, g_gpu.stacks[si].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[si].batch_set, nwg)
     batch_barrier(raw, false)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, y_bytes)
@@ -6121,8 +6286,11 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     }
     batch_barrier(raw, true)
     pfq_ts(raw)   // q1: uploads
-    bind_batch_pipe(raw, 0, g_gpu.stacks[s_qkv].batch_tile)
+    bind_batch_pipe(raw, 0, g_gpu.stacks[s_qkv].batch_tile, g_gpu.stacks[s_qkv].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_qkv].batch_set, nwg_qkv)
+    if (!same_batch_pipe(s_z, s_qkv)) {
+        bind_batch_pipe(raw, 0, g_gpu.stacks[s_z].batch_tile, g_gpu.stacks[s_z].batch_aligned)
+    }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_z].batch_set, nwg_z)
     comp_barrier(raw)
     pfq_ts(raw)   // q2: qkv+z GEMMs
@@ -6152,7 +6320,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     cmd_bind_dispatch(raw, g_gpu.dn_rq_set, uint((rows * di / 32l + 255l) / 256l))
     comp_barrier(raw)
     pfq_ts(raw)   // q7: o requant
-    bind_batch_pipe(raw, 0, g_gpu.stacks[s_o].batch_tile)
+    bind_batch_pipe(raw, 0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_out)
     batch_barrier(raw, false)
     pfq_ts(raw)   // q8: out GEMM
@@ -6568,14 +6736,14 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_whole(raw, g_gpu.at_meta.buf, g_gpu.at_meta_dev, AT_META_BYTES)
     cmd_copy_range(raw, g_gpu.at_smalls.buf, 0l, g_gpu.at_smalls_dev, 0l, sm_bytes)
     batch_barrier(raw, true)
-    bind_batch_pipe(raw, g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile)
+    bind_batch_pipe(raw, g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile, g_gpu.stacks[s_q].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_q].batch_set, nwg_q)
-    if (g_gpu.stacks[s_k].fmt != g_gpu.stacks[s_q].fmt) {
-        bind_batch_pipe(raw, g_gpu.stacks[s_k].fmt, g_gpu.stacks[s_k].batch_tile)
+    if (!same_batch_pipe(s_k, s_q)) {
+        bind_batch_pipe(raw, g_gpu.stacks[s_k].fmt, g_gpu.stacks[s_k].batch_tile, g_gpu.stacks[s_k].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_k].batch_set, nwg_k)
-    if (g_gpu.stacks[s_v].fmt != g_gpu.stacks[s_k].fmt) {
-        bind_batch_pipe(raw, g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile)
+    if (!same_batch_pipe(s_v, s_k)) {
+        bind_batch_pipe(raw, g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile, g_gpu.stacks[s_v].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_v].batch_set, nwg_v)
     comp_barrier(raw)
@@ -6595,7 +6763,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_bind_pipeline(vk_value_to_boost(raw), o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 256l : 32l) + 255l) / 256l))
     comp_barrier(raw)
-    bind_batch_pipe(raw, g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile)
+    bind_batch_pipe(raw, g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_o)
     batch_barrier(raw, false)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
