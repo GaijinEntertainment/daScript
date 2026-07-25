@@ -227,9 +227,10 @@ def herder_attach_session(input : JsonValue?) : JsonValue? {
 struct HerderTerminalInputArgs {
     text : string
     submit : bool
+    expect_session : string
 }
 
-[live_command(description = "Type into the attached session's terminal. Args: text, submit (true appends Enter). Requires the controller lease.")]
+[live_command(description = "Type into the attached session's terminal. Args: text, submit (true appends Enter), optional expect_session (reject if another session is attached). Requires the controller lease.")]
 def herder_terminal_input(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {
         return JV((ok = false, error = "watcher is not connected"))
@@ -241,6 +242,10 @@ def herder_terminal_input(input : JsonValue?) : JsonValue? {
         return JV((ok = false, error = "controller lease not held yet; retry shortly"))
     }
     let args = from_JV(input, type<HerderTerminalInputArgs>)
+    if (!empty(args.expect_session) && args.expect_session != g_client.selected_id) {
+        return JV((ok = false, error = "attached session is {g_client.selected_id}, " +
+            "expected {args.expect_session}"))
+    }
     let payload = args.submit ? "{args.text}\r" : args.text
     if (empty(payload)) return JV((ok = false, error = "nothing to send"))
     g_client->send_input(payload)

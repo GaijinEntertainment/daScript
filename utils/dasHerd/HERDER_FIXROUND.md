@@ -82,7 +82,19 @@ P0 — broken core flows:
 - 34 launcher race: Launch clicked before the repository list arrives
   is a silent no-op (button silently disabled; no feedback) — same
   family as 11: the launcher lies about what it will do
-- 8 scrollback: emulator retains ZERO rows (data loss, not just UI)
+- 8 scrollback — INVESTIGATED, decomposed (2026-07-25): the emulator
+  retains history fine (probe: 200 lines → scrollback_rows 136) and
+  the wheel already scrolls it (verified scroll_offset 0→15→0). Two
+  real items remain: (a) DISCOVERABILITY — no scrollbar, so scrolling
+  looks impossible (P2, add the scrollbar); (b) agent TUIs like Claude
+  Code repaint in place, so terminal-level history is legitimately
+  empty there — transcript scrolling belongs to the TUI itself; a
+  watcher-ring history view is the eventual answer if we want one.
+  Rail nuance found on the way: herder_terminal_state.screen_text is
+  the live bottom screen regardless of scroll_offset (fine — the agent
+  wants the live screen), and the attached session can change between
+  input calls — herder_terminal_input should grow an optional
+  expected-session guard.
 - 17 agent unaware of dasherder (whole handoff surface untestable)
 - 4a terminal colors (blocked on 30b tooling)
 
@@ -90,6 +102,15 @@ P1 — tooling bugs by the parity rule (agent-blindness is a defect):
 - 30a selectable rows carry no label text in snapshots
 - 30b terminal cell attributes not inspectable
 - 33 minimized window starves UI-level agent driving
+- 35 no human/agent UI input arbitration: while the agent drives
+  synthetically, human clicks still partially react (real and synth
+  input MERGE unless set_user_control(false) explicitly detaches the
+  GLFW callbacks — nothing in dasHerd manages that today, and OS
+  window chrome is never suppressible from ImGui anyway). Fix shape:
+  an explicit UI input lease mirroring the terminal controller lease —
+  agent driving detaches real input + shows a visible "agent driving"
+  banner with a human takeover gesture; semantic rails (Wave 0)
+  sidestep the race entirely and stay the preferred path.
 
 P2 — small defects:
 - 5 launch doesn't close launcher; 6 changelist row tooltips dead;
