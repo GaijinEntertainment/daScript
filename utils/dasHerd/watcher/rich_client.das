@@ -29,6 +29,7 @@ require ./inspection_worker.das
 require math
 require strings
 require ./rich_state.das
+require ./rich_commands.das
 require ./rich_net.das
 require ./rich_inspector_ui.das
 require ./rich_git_ui.das
@@ -208,6 +209,83 @@ def private draw_menu_status_cluster() {
     text_disabled(MENU_STATUS_CONNECTION, (text = conn_label))
 }
 
+def private command_new_session() {
+    return if (g_client == null || !g_client.connected || empty(g_selected_worktree_path))
+    prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
+    open_dock_window(LAUNCHER_WIN)
+}
+
+def private command_powershell() {
+    return if (g_client == null || !g_client.connected)
+    g_client->launch("powershell.exe -NoLogo -NoProfile", g_selected_worktree_path,
+        g_selected_repository_id, g_selected_worktree_path)
+}
+
+// ImGuiKey_0..9 sit immediately before ImGuiKey_A; the "0".."9" enum entries
+// are not spellable as identifiers.
+def private digit_key(digit : int) : ImGuiKey {
+    return unsafe(reinterpret<ImGuiKey>(int(ImGuiKey.A) - 10 + digit))
+}
+
+// One registration per user-triggerable action (note 23): menus, chords, the
+// Shortcuts editor, and the herder_command rail all dispatch through these ids.
+def private register_commands() {
+    register_herd_command("session.new", "Session", "New Session...",
+        command_binding("session.new", ImGuiKey.N, primary = true, shift = true),
+        @@command_new_session)
+    register_herd_command("session.powershell", "Session", "PowerShell here",
+        command_binding("session.powershell", ImGuiKey.P, primary = true, shift = true),
+        @@command_powershell)
+    register_herd_command("view.repositories", "View", "Repositories & Worktrees",
+        CommandBinding(), @@() { open_dock_window(REPOSITORIES_WIN); })
+    register_herd_command("view.sessions", "View", "Sessions & Activity",
+        command_binding("view.sessions", ImGuiKey.S, primary = true, shift = true),
+        @@() { open_dock_window(SESSIONS_WIN); })
+    register_herd_command("view.git_changelist", "View", "Git Changelist",
+        CommandBinding(), @@() { open_dock_window(GIT_CHANGELIST_WIN); })
+    register_herd_command("view.git_activity", "View", "Git Activity",
+        CommandBinding(), @@() { open_dock_window(GIT_ACTIVITY_WIN); })
+    register_herd_command("view.file_inspector", "View", "File Inspector",
+        CommandBinding(), @@() { open_dock_window(FILE_INSPECTOR_WIN); })
+    register_herd_command("view.terminal", "View", "Terminal",
+        command_binding("view.terminal", ImGuiKey.T, primary = true, shift = true),
+        @@() { open_dock_window(TERMINAL_WIN); })
+    register_herd_command("view.launcher", "View", "New Session window",
+        CommandBinding(), @@() { open_dock_window(LAUNCHER_WIN); })
+    register_herd_command("view.settings", "View", "Settings",
+        command_binding("view.settings", ImGuiKey.Comma, primary = true),
+        @@() { open_dock_window(SETTINGS_WIN); })
+    register_herd_command("view.scroll_terminal_bottom", "View",
+        "Scroll terminal to bottom",
+        command_binding("view.scroll_terminal_bottom", ImGuiKey.End, primary = true),
+        @@() { g_terminal_view.scroll_offset = 0; })
+    register_herd_command("zoom.in", "Zoom", "Zoom in",
+        command_binding("zoom.in", ImGuiKey.Equal, primary = true),
+        @@() { zoom_by(5); })
+    register_herd_command("zoom.out", "Zoom", "Zoom out",
+        command_binding("zoom.out", ImGuiKey.Minus, primary = true),
+        @@() { zoom_by(-5); })
+    register_herd_command("zoom.reset", "Zoom", "Reset zoom",
+        command_binding("zoom.reset", digit_key(0), primary = true),
+        @@() { set_ui_zoom(100); })
+    register_herd_command("layout.session", "Layout", "Session layout",
+        command_binding("layout.session", digit_key(1), primary = true, shift = true),
+        @@() { apply_layout_preset(0); })
+    register_herd_command("layout.review", "Layout", "Review layout",
+        command_binding("layout.review", digit_key(2), primary = true, shift = true),
+        @@() { apply_layout_preset(1); })
+    register_herd_command("layout.reset", "Layout", "Reset layout",
+        CommandBinding(), @@() { reset_layout(); })
+    register_herd_command("terminal.copy", "Terminal", "Copy selection",
+        CommandBinding(), @@() { copy_terminal_selection(); })
+    register_herd_command("terminal.paste", "Terminal", "Paste clipboard",
+        CommandBinding(), @@() { paste_terminal_clipboard(); })
+    register_herd_command("terminal.select_all", "Terminal", "Select all",
+        CommandBinding(), @@() { imgui_terminal_select_all(g_terminal, g_terminal_view); })
+    register_herd_command("terminal.clear_selection", "Terminal", "Clear selection",
+        CommandBinding(), @@() { imgui_terminal_clear_selection(g_terminal_view); })
+}
+
 def draw_main_menu() {
     main_menu_bar(MAIN_MENU) {
         menu(FILE_MENU, (text = "File", enabled = true)) {
@@ -217,62 +295,74 @@ def draw_main_menu() {
         }
         menu(COMMANDS_MENU, (text = "Commands", enabled = true)) {
             if (menu_label(COMMAND_NEW_SESSION,
-                    (text = "New Session...", enabled = g_client != null
+                    (text = "New Session...", shortcut = herd_command_shortcut("session.new"),
+                        enabled = g_client != null
                         && g_client.connected && !empty(g_selected_worktree_path)))) {
-                prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
-                open_dock_window(LAUNCHER_WIN)
+                let _ = run_herd_command("session.new")
             }
             if (menu_label(COMMAND_POWERSHELL,
-                    (text = "PowerShell", enabled = g_client != null && g_client.connected))) {
-                g_client->launch("powershell.exe -NoLogo -NoProfile", g_selected_worktree_path,
-                    g_selected_repository_id, g_selected_worktree_path)
+                    (text = "PowerShell", shortcut = herd_command_shortcut("session.powershell"),
+                        enabled = g_client != null && g_client.connected))) {
+                let _ = run_herd_command("session.powershell")
             }
         }
         menu(EDIT_MENU, (text = "Edit", enabled = true)) {
-            if (menu_label(EDIT_COPY, (text = "Copy", shortcut = "Ctrl+C",
-                    enabled = g_terminal_view.selection_active))) copy_terminal_selection()
-            if (menu_label(EDIT_PASTE, (text = "Paste", shortcut = "Ctrl+V"))) {
-                paste_terminal_clipboard()
+            if (menu_label(EDIT_COPY, (text = "Copy", shortcut = herd_command_shortcut("terminal.copy"),
+                    enabled = g_terminal_view.selection_active))) {
+                let _ = run_herd_command("terminal.copy")
+            }
+            if (menu_label(EDIT_PASTE, (text = "Paste",
+                    shortcut = herd_command_shortcut("terminal.paste")))) {
+                let _ = run_herd_command("terminal.paste")
             }
             separator(EDIT_SELECTION_SEPARATOR)
-            if (menu_label(EDIT_SELECT_ALL, (text = "Select all"))) {
-                imgui_terminal_select_all(g_terminal, g_terminal_view)
+            if (menu_label(EDIT_SELECT_ALL, (text = "Select all",
+                    shortcut = herd_command_shortcut("terminal.select_all")))) {
+                let _ = run_herd_command("terminal.select_all")
             }
             if (menu_label(EDIT_CLEAR_SELECTION,
-                    (text = "Clear selection", enabled = g_terminal_view.selection_active))) {
-                imgui_terminal_clear_selection(g_terminal_view)
+                    (text = "Clear selection", shortcut = herd_command_shortcut("terminal.clear_selection"),
+                        enabled = g_terminal_view.selection_active))) {
+                let _ = run_herd_command("terminal.clear_selection")
             }
         }
         menu(VIEW_MENU, (text = "View", enabled = true)) {
             if (menu_label(VIEW_REPOSITORIES,
-                    (text = "Repositories & Worktrees", selected = REPOSITORIES_WIN.open))) {
-                open_dock_window(REPOSITORIES_WIN)
+                    (text = "Repositories & Worktrees", selected = REPOSITORIES_WIN.open,
+                        shortcut = herd_command_shortcut("view.repositories")))) {
+                let _ = run_herd_command("view.repositories")
             }
             if (menu_label(VIEW_SESSIONS,
                     (text = pending_attention_count() > 0
                         ? "Sessions & Activity  [{pending_attention_count()}]"
-                        : "Sessions & Activity", selected = SESSIONS_WIN.open))) {
-                open_dock_window(SESSIONS_WIN)
+                        : "Sessions & Activity", selected = SESSIONS_WIN.open,
+                        shortcut = herd_command_shortcut("view.sessions")))) {
+                let _ = run_herd_command("view.sessions")
             }
             if (menu_label(VIEW_GIT_CHANGELIST,
-                    (text = "Git Changelist", selected = GIT_CHANGELIST_WIN.open))) {
-                open_dock_window(GIT_CHANGELIST_WIN)
+                    (text = "Git Changelist", selected = GIT_CHANGELIST_WIN.open,
+                        shortcut = herd_command_shortcut("view.git_changelist")))) {
+                let _ = run_herd_command("view.git_changelist")
             }
             if (menu_label(VIEW_GIT_ACTIVITY,
-                    (text = "Git Activity", selected = GIT_ACTIVITY_WIN.open))) {
-                open_dock_window(GIT_ACTIVITY_WIN)
+                    (text = "Git Activity", selected = GIT_ACTIVITY_WIN.open,
+                        shortcut = herd_command_shortcut("view.git_activity")))) {
+                let _ = run_herd_command("view.git_activity")
             }
             if (menu_label(VIEW_FILE_INSPECTOR,
-                    (text = "File Inspector", selected = FILE_INSPECTOR_WIN.open))) {
-                open_dock_window(FILE_INSPECTOR_WIN)
+                    (text = "File Inspector", selected = FILE_INSPECTOR_WIN.open,
+                        shortcut = herd_command_shortcut("view.file_inspector")))) {
+                let _ = run_herd_command("view.file_inspector")
             }
             if (menu_label(VIEW_TERMINAL,
-                    (text = "Terminal", selected = TERMINAL_WIN.open))) {
-                open_dock_window(TERMINAL_WIN)
+                    (text = "Terminal", selected = TERMINAL_WIN.open,
+                        shortcut = herd_command_shortcut("view.terminal")))) {
+                let _ = run_herd_command("view.terminal")
             }
             if (menu_label(VIEW_LAUNCHER,
-                    (text = "New Session", selected = LAUNCHER_WIN.open))) {
-                open_dock_window(LAUNCHER_WIN)
+                    (text = "New Session", selected = LAUNCHER_WIN.open,
+                        shortcut = herd_command_shortcut("view.launcher")))) {
+                let _ = run_herd_command("view.launcher")
             }
             separator(VIEW_WINDOWS_SEPARATOR)
             // g_show_* are authoritative (the Settings tab writes them too):
@@ -292,28 +382,42 @@ def draw_main_menu() {
                 settings_save()
             }
             separator(VIEW_ZOOM_SEPARATOR)
-            if (menu_label(VIEW_ZOOM_IN, (text = "Zoom in", shortcut = "Ctrl++"))) zoom_by(5)
-            if (menu_label(VIEW_ZOOM_OUT, (text = "Zoom out", shortcut = "Ctrl+-"))) zoom_by(-5)
-            if (menu_label(VIEW_ZOOM_RESET, (text = "Reset zoom", shortcut = "Ctrl+0"))) {
-                set_ui_zoom(100)
+            if (menu_label(VIEW_ZOOM_IN, (text = "Zoom in",
+                    shortcut = herd_command_shortcut("zoom.in")))) {
+                let _ = run_herd_command("zoom.in")
             }
-            if (menu_label(VIEW_SCROLL_BOTTOM, (text = "Scroll terminal to bottom"))) {
-                g_terminal_view.scroll_offset = 0
+            if (menu_label(VIEW_ZOOM_OUT, (text = "Zoom out",
+                    shortcut = herd_command_shortcut("zoom.out")))) {
+                let _ = run_herd_command("zoom.out")
+            }
+            if (menu_label(VIEW_ZOOM_RESET, (text = "Reset zoom",
+                    shortcut = herd_command_shortcut("zoom.reset")))) {
+                let _ = run_herd_command("zoom.reset")
+            }
+            if (menu_label(VIEW_SCROLL_BOTTOM, (text = "Scroll terminal to bottom",
+                    shortcut = herd_command_shortcut("view.scroll_terminal_bottom")))) {
+                let _ = run_herd_command("view.scroll_terminal_bottom")
             }
             separator(VIEW_LAYOUT_SEPARATOR)
             if (menu_label(VIEW_SESSION_LAYOUT, (text = "Session layout",
-                    selected = g_layout_preset == 0))) {
-                apply_layout_preset(0)
+                    selected = g_layout_preset == 0,
+                    shortcut = herd_command_shortcut("layout.session")))) {
+                let _ = run_herd_command("layout.session")
             }
             if (menu_label(VIEW_REVIEW_LAYOUT, (text = "Review layout",
-                    selected = g_layout_preset == 1))) {
-                apply_layout_preset(1)
+                    selected = g_layout_preset == 1,
+                    shortcut = herd_command_shortcut("layout.review")))) {
+                let _ = run_herd_command("layout.review")
             }
-            if (menu_label(VIEW_RESET_LAYOUT, (text = "Reset layout"))) reset_layout()
+            if (menu_label(VIEW_RESET_LAYOUT, (text = "Reset layout",
+                    shortcut = herd_command_shortcut("layout.reset")))) {
+                let _ = run_herd_command("layout.reset")
+            }
         }
         menu(SETTINGS_MENU, (text = "Settings", enabled = true)) {
-            if (menu_label(OPEN_SETTINGS, (text = "Open Settings"))) {
-                open_dock_window(SETTINGS_WIN)
+            if (menu_label(OPEN_SETTINGS, (text = "Open Settings",
+                    shortcut = herd_command_shortcut("view.settings")))) {
+                let _ = run_herd_command("view.settings")
             }
         }
         draw_menu_status_cluster()
@@ -340,6 +444,8 @@ def init() {
     g_selected_worktree_path = get_das_root()
     SETTINGS_WIN.open = false
     settings_load()
+    register_commands()
+    herd_commands_ready()
     SHOW_EXITED.value = g_show_exited
     SHOW_TASKS.value = g_show_tasks
     let port = clamp(to_int(option_value("--port=", "9191")), 1024, 65535)
@@ -413,6 +519,7 @@ def update() {
             g_click_events_seen++
         }
     }
+    herd_commands_poll()
     let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
         "tree={GIT_TREE_TAB.selected} proj={GIT_PROJECT_TAB.selected} " +
         "diff={INSPECTOR_DIFF_TAB.selected} " +
@@ -464,11 +571,13 @@ def update() {
         draw_settings_dock()
     }
     draw_herd_rename_popup()
+    herd_commands_drain()
     harness_end_frame()
 }
 
 [export]
 def shutdown() {
+    herd_commands_dispose()
     let prepare_stopped = inspector_prepare_worker_shutdown(g_prepare_worker)
     if (g_client != null) {
         g_client->close()

@@ -187,8 +187,25 @@ Findings while landing Wave 0:
   work window — Ctrl+wheel adjusts only the hovered window, persists in
   window_zoom, composes with the base zoom via with_font. Terminal
   keeps its explicit buttons on the base zoom pending a renderer pass.
-- REMAINING: command pattern (named commands as the single dispatch) +
-  editable shortcuts + Settings > Shortcuts tab.
+- DONE command pattern + editable shortcuts (2026-07-25): built on
+  imgui/imgui_commands (the existing dasImgui registry — ImGui-routed
+  Shortcut() chords, macOS primary/secondary, invocation queue,
+  bindings file with overlay-on-defaults load) instead of a bespoke
+  table. rich_commands.das is a thin adapter: id -> action table,
+  herd_commands_poll/drain in the frame loop, write-through save on
+  any binding edit (dasHerd-bindings.json). 21 commands registered
+  (Session/View/Zoom/Layout/Terminal); menus route through
+  run_herd_command and display live chords; Settings > Shortcuts tab
+  lists all commands with click-to-capture, clear, conflict warnings,
+  and Restore defaults; rails: herder_commands_state / herder_command
+  / herder_set_shortcut. Chord polling is gated off while the terminal
+  is focused or a text field owns typing (chords are PTY bytes there).
+  Live-verified: synthetic Ctrl+Shift+2 fired layout.review through
+  real ImGui routing and persisted; rail set/clear round-tripped the
+  bindings file. Pending re-verify (window was minimized, note 33):
+  the tab's click-to-capture flow and menu hint rendering.
+  imgui_commands change (dasImgui): capture_binding renamed public
+  command_capture_tick so custom binding UIs can drive capture.
 
 ## Bug-queue status (2026-07-25, end of first burn-down)
 

@@ -29,6 +29,7 @@ require ./git_graph_model.das
 require ./file_inspection.das
 require strings
 require ./rich_state.das
+require ./rich_commands.das
 require ./rich_net.das
 require ./rich_focus.das
 require ./rich_inspector_ui.das
@@ -141,6 +142,48 @@ def herder_client_state(_input : JsonValue?) : JsonValue? {
 def herder_reset_layout(_input : JsonValue?) : JsonValue? {
     reset_layout()
     return JV((ok = true))
+}
+
+struct HerderCommandArgs {
+    id : string
+}
+
+struct HerderSetShortcutArgs {
+    id : string
+    chord : string
+}
+
+[live_command(description = "List registered named commands with categories and current/conflicting shortcuts.")]
+def herder_commands_state(_input : JsonValue?) : JsonValue? {
+    var rows <- [for (definition in g_command_registry.definitions);
+        JV((id = definition.id, category = definition.category,
+            title = definition.title,
+            chord = command_shortcut_text(g_command_registry, definition.id),
+            conflict = herd_command_conflict(definition.id)))]
+    return JV((ok = true, count = length(g_command_registry.definitions),
+        config_path = g_command_registry.config_path,
+        status = g_command_registry.status, commands = rows))
+}
+
+[live_command(description = "Queue a named command by id — the same dispatch menus and shortcuts use; it executes this frame. Args: id.")]
+def herder_command(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderCommandArgs>)
+    if (run_herd_command(args.id, CommandSource.live_api)) {
+        return JV((ok = true, id = args.id))
+    }
+    return JV((ok = false, error = "unknown or disabled command {args.id}"))
+}
+
+[live_command(description = "Assign or clear a command shortcut (empty chord unbinds); persists immediately. Chord spelling matches herder_commands_state, e.g. Ctrl+Shift+N. Args: id, chord.")]
+def herder_set_shortcut(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderSetShortcutArgs>)
+    let result = herd_command_set_shortcut(args.id, args.chord)
+    if (result.ok) {
+        return JV((ok = true, id = args.id,
+            chord = herd_command_shortcut(args.id),
+            conflict = herd_command_conflict(args.id)))
+    }
+    return JV((ok = false, error = result.message))
 }
 
 [live_command(description = "Inspect input ownership: the @live user-control lock, synth cursor/key state, io cursor, and real wheel/click counters.")]
@@ -1006,6 +1049,71 @@ def herder_attention_open(input : JsonValue?) : JsonValue? {
     return JV((ok = false, error = "unknown attention message"))
 }
 
+var SHORTCUT_CATEGORY : table<int; NarrativeState>
+
+var SHORTCUT_TITLE : table<int; NarrativeState>
+
+var SHORTCUT_TITLE_JOIN : table<int; EmptyMarkerState>
+
+var SHORTCUT_EDIT : table<int; ClickState>
+
+var SHORTCUT_CLEAR_JOIN : table<int; EmptyMarkerState>
+
+var SHORTCUT_CLEAR : table<int; ClickState>
+
+var SHORTCUT_CONFLICT_JOIN : table<int; EmptyMarkerState>
+
+var SHORTCUT_CONFLICT : table<int; NarrativeState>
+
+def private draw_shortcuts_tab() {
+    if (!empty(g_command_registry.capture_command_id)) {
+        text_colored(SHORTCUT_CAPTURE_TEXT,
+            (color = float4(0.97f, 0.76f, 0.28f, 1.0f),
+                text = "Press the new shortcut (Escape cancels)"))
+    } elif (!empty(g_command_registry.status)) {
+        text_disabled(SHORTCUT_STATUS_TEXT, (text = g_command_registry.status))
+    } else {
+        text_disabled(SHORTCUT_HINT_TEXT,
+            (text = "Click a binding to change it; changes save immediately"))
+    }
+    if (small_button(SHORTCUT_RESET_ALL, (text = "Restore defaults"))) {
+        command_reset_bindings(g_command_registry)
+    }
+    separator(SHORTCUT_HEADER_SEPARATOR)
+    var category = ""
+    for (index, definition in count(), g_command_registry.definitions) {
+        if (definition.category != category) {
+            category = definition.category
+            text(SHORTCUT_CATEGORY[index], (text = category))
+        }
+        text_disabled(SHORTCUT_TITLE[index], (text = "    {definition.title}"))
+        same_line(SHORTCUT_TITLE_JOIN[index])
+        let current = command_shortcut_text(g_command_registry, definition.id)
+        let armed = g_command_registry.capture_command_id == definition.id
+        var chord_text : string = "press keys..."
+        if (!armed) {
+            chord_text = empty(current) ? "unbound" : current
+        }
+        if (small_button(SHORTCUT_EDIT[index], (text = "{chord_text}##sc{index}"))) {
+            g_command_registry.capture_command_id = definition.id
+            g_command_registry.status = ""
+        }
+        if (!empty(current) && !armed) {
+            same_line(SHORTCUT_CLEAR_JOIN[index])
+            if (small_button(SHORTCUT_CLEAR[index], (text = "clear##rs{index}"))) {
+                command_clear_binding(g_command_registry, definition.id, definition.scope)
+            }
+            let conflict = herd_command_conflict(definition.id)
+            if (!empty(conflict)) {
+                same_line(SHORTCUT_CONFLICT_JOIN[index])
+                text_colored(SHORTCUT_CONFLICT[index],
+                    (color = float4(1.0f, 0.45f, 0.25f, 1.0f),
+                        text = "conflicts with {conflict}"))
+            }
+        }
+    }
+}
+
 def draw_settings_window() {
     tab_bar(SETTINGS_TABS, (text = "Settings sections", flags = ImGuiTabBarFlags.None)) {
         tab_item(SETTINGS_GENERAL_TAB, (text = "General", closable = false,
@@ -1031,6 +1139,10 @@ def draw_settings_window() {
             separator(SETTINGS_GENERAL_SEPARATOR)
             text_disabled(SETTINGS_PATH_TEXT,
                 (text = "Saved immediately to {settings_path()}"))
+        }
+        tab_item(SETTINGS_SHORTCUTS_TAB, (text = "Shortcuts", closable = false,
+                flags = ImGuiTabItemFlags.None)) {
+            draw_shortcuts_tab()
         }
     }
 }
