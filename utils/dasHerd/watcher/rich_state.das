@@ -470,6 +470,13 @@ def settings_load() {
     g_show_exited = g_ui_settings.show_exited
     g_show_tasks = g_ui_settings.show_tasks
 }
+// Deferred terminal submit: Ink-based TUIs (Claude Code) treat an Enter that
+// arrives in the same paste window as the text as part of the paste. The say
+// rails send the text, stamp this deadline, and the frame loop sends the
+// lone \r once ~200ms have passed.
+var g_submit_stamp : int64
+var g_submit_session : string
+
 // Launch debounce: a click stamps the herd revision; the button stays
 // disabled until the watcher's herd broadcast bumps it (or a timeout passes),
 // so duplicate/replayed clicks cannot create duplicate sessions.

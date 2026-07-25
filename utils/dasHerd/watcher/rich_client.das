@@ -346,6 +346,15 @@ def update() {
     // Keep the transport alive outside that gate so heartbeats, controller
     // renewal, and queued PTY output continue until the window is restored.
     if (g_client != null) g_client->pump()
+    if (g_submit_stamp != 0l
+            && get_time_nsec(g_submit_stamp) / 1000000l >= 200l) {
+        if (g_client != null && g_client.controls
+                && g_client.selected_id == g_submit_session) {
+            g_client->send_input("\r")
+        }
+        g_submit_stamp = 0l
+        g_submit_session = ""
+    }
     if (!harness_begin_frame()) return
     service_sha_copy()
     drain_inspector_prepare_events()

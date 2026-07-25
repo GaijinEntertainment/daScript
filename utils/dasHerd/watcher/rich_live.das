@@ -258,15 +258,143 @@ def herder_terminal_input(input : JsonValue?) : JsonValue? {
         return JV((ok = false, error = "attached session is {g_client.selected_id}, " +
             "expected {args.expect_session}"))
     }
-    let payload = args.submit ? "{args.text}\r" : args.text
-    if (empty(payload)) return JV((ok = false, error = "nothing to send"))
-    g_client->send_input(payload)
-    return JV((ok = true, bytes = length(payload),
+    if (empty(args.text) && !args.submit) {
+        return JV((ok = false, error = "nothing to send"))
+    }
+    // The Enter must arrive OUTSIDE the text's paste window or Ink-based TUIs
+    // (Claude Code) keep it as part of the paste: text now, \r deferred ~200ms
+    // via the frame loop. A lone submit (empty text) sends immediately.
+    if (!empty(args.text)) {
+        g_client->send_input(args.text)
+        if (args.submit) {
+            g_submit_stamp = ref_time_ticks()
+            g_submit_session = g_client.selected_id
+        }
+    } elif (args.submit) {
+        g_client->send_input("\r")
+    }
+    return JV((ok = true, bytes = length(args.text) + (args.submit ? 1 : 0),
         session_id = g_client.selected_id))
 }
 
 struct HerderTerminalStateArgs {
     ansi : bool
+}
+
+var private g_say_baseline : array<string>
+var private g_say_revision = 0
+
+struct HerderSessionKeyArgs {
+    key : string
+}
+
+def private control_key_bytes(name : string) : string {
+    let esc = to_char(27)
+    if (name == "enter") return "\r"
+    if (name == "escape" || name == "esc") return esc
+    if (name == "ctrl-c") return to_char(3)
+    if (name == "ctrl-d") return to_char(4)
+    if (name == "tab") return "\t"
+    if (name == "shift-tab") return "{esc}[Z"
+    if (name == "up") return "{esc}[A"
+    if (name == "down") return "{esc}[B"
+    if (name == "right") return "{esc}[C"
+    if (name == "left") return "{esc}[D"
+    if (name == "backspace") return to_char(127)
+    return ""
+}
+
+[live_command(description = "Send a control key to the attached session. Args: key = enter | escape | ctrl-c | ctrl-d | tab | shift-tab | up | down | left | right | backspace. escape interrupts a running agent.")]
+def herder_session_key(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    if (!g_client.attached) {
+        return JV((ok = false, error = "no session attached"))
+    }
+    if (!g_client.controls) {
+        return JV((ok = false, error = "controller lease not held yet; retry shortly"))
+    }
+    let args = from_JV(input, type<HerderSessionKeyArgs>)
+    let bytes = control_key_bytes(to_lower(strip(args.key)))
+    if (empty(bytes)) {
+        return JV((ok = false, error = "unknown key '{args.key}'"))
+    }
+    g_client->send_input(bytes)
+    return JV((ok = true, key = to_lower(strip(args.key)),
+        session_id = g_client.selected_id))
+}
+
+struct HerderSayArgs {
+    text : string
+    herd_id : string
+    session_id : string
+}
+
+[live_command(description = "Say something to a session (text then Enter as separate writes) and mark the reply baseline. Args: text; optional herd_id or session_id attaches first — an attach returns attach_pending=true, retry once the controller lease arrives.")]
+def herder_session_say(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderSayArgs>)
+    var target = args.session_id
+    if (empty(target) && !empty(args.herd_id)) {
+        for (record in g_client.herd_sessions) {
+            if (record.id == args.herd_id) {
+                target = record.pty_session_id
+                break
+            }
+        }
+    }
+    if (!empty(target) && target != g_client.selected_id) {
+        ui_event("live-attach-session {target}")
+        g_client->attach_session(target)
+        g_open_terminal_pending = true
+        return JV((ok = false, attach_pending = true,
+            error = "attached {target}; retry say once the controller lease arrives"))
+    }
+    if (!g_client.attached) {
+        return JV((ok = false, error = "no session attached; pass herd_id or session_id"))
+    }
+    if (!g_client.controls) {
+        return JV((ok = false, error = "controller lease not held yet; retry shortly"))
+    }
+    if (empty(args.text)) return JV((ok = false, error = "text is required"))
+    delete g_say_baseline
+    g_say_baseline <- split(g_terminal_view.screen_text, "\n")
+    g_say_revision = g_terminal_view.content_revision
+    g_client->send_input(args.text)
+    g_submit_stamp = ref_time_ticks()
+    g_submit_session = g_client.selected_id
+    return JV((ok = true, session_id = g_client.selected_id,
+        baseline_revision = g_say_revision))
+}
+
+[live_command(description = "Read what the attached session said since the last herder_session_say: changed flag, the new lines (line diff vs the say-time screen), and the full screen text.")]
+def herder_session_reply(_input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "client is unavailable"))
+    let revision = g_terminal_view.content_revision
+    var inscope current <- split(g_terminal_view.screen_text, "\n")
+    var inscope seen : table<string; int>
+    for (line in g_say_baseline) {
+        seen[line]++
+    }
+    var new_lines : array<JsonValue?>
+    for (line in current) {
+        if (empty(strip(line))) continue
+        if ((seen?[line] ?? 0) > 0) {
+            seen[line]--
+            continue
+        }
+        new_lines |> push(JV(line))
+    }
+    return JV((ok = g_client.attached,
+        session_id = g_client.selected_id,
+        changed = revision != g_say_revision,
+        revision = revision,
+        baseline_revision = g_say_revision,
+        new_lines = new_lines,
+        screen_text = g_terminal_view.screen_text))
 }
 
 [live_command(description = "Read the attached terminal screen text and viewport state. Args: ansi (true adds the checkpoint ANSI with full SGR colors for attribute inspection).")]
