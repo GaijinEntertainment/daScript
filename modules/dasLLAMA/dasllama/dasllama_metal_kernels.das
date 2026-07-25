@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P3): the batch-rail kernel families (MvB/GemmB/SqAttnB/RopeStoreB/AddRmsB) declare @role there
 
 module dasllama_metal_kernels shared public
 

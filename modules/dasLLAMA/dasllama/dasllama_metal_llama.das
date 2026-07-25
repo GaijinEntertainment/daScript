@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P3/P4): batch HazTrack retirement + the MTP draft step move onto the capture rail there
 
 module dasllama_metal_llama shared public
 

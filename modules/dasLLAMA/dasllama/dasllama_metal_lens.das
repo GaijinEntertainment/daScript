@@ -376,3 +376,54 @@ class MetalDispatch : AstStructureAnnotation {
         return true
     }
 }
+
+// ===== the manual-dispatch census (the scheduling-unification ratchet) =====
+// Fires once per module in the require chain; engine metal modules only (dasllama*metal*).
+// Two checks, one migration opt-out (`options _metal_manual_dispatch = true` — loud,
+// module-local, reviewed; end state = the kn_* replay engine alone):
+//   1. no direct metal_dispatch_threadgroups — every dispatch goes through the capture rail
+//   2. every @ssbo field on every structure carries a @role — closes the un-lensed escape
+//      of the strictness ratchet (runtime STRICT covers only rail-side dispatches)
+
+class private MetalCensusVisitor : AstVisitor {
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        if ("{expr.name}" |> ends_with("metal_dispatch_threadgroups")) {
+            macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module — dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
+        }
+    }
+}
+
+[lint_macro]
+class MetalManualDispatchCensus : AstPassMacro {
+    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+        let mname = "{mod.name}"
+        return true if (!(mname |> starts_with("dasllama")) || find(mname, "metal") < 0
+            || (prog._options |> find_arg("_metal_manual_dispatch") ?as tBool ?? false))
+        var v = new MetalCensusVisitor()
+        make_visitor(*v) $(adapter) {
+            for_each_function(mod, "") $(var fn) {
+                visit(fn, adapter)
+            }
+        }
+        unsafe {
+            delete v
+        }
+        for_each_structure(mod) $(var st) {
+            for (field in st.fields) {
+                var is_ssbo = false
+                var has_role = false
+                for (annDecl in field.annotation) {
+                    if (annDecl.name == "ssbo") {
+                        is_ssbo = true
+                    } elif (annDecl.name == "role") {
+                        has_role = true
+                    }
+                }
+                if (is_ssbo && !has_role) {
+                    macro_error(prog, st.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — the scheduling rail needs every buffer's hazard intent declared")
+                }
+            }
+        }
+        return true
+    }
+}

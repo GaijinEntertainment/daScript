@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P1/P2): drops when the encode loop is on the capture rail
 
 module dasllama_metal_prefill shared public
 

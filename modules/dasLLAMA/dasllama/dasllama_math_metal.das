@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _metal_manual_dispatch = true   // MIGRATION opt-out (sched-unification P4): the batch GEMM donor's single dispatch moves onto the rail there
 
 module dasllama_math_metal shared public
 
