@@ -1562,6 +1562,7 @@ let GM_UG1 = 14     // gather = 1
 let GM_UNTOK = 15
 let GM_VT = 16      // prod doubled-e2m1 LUT
 let GM_LVT = 17     // lcpp halved LUT
+let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
 
 def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_pipeline(enc, pso)
@@ -1578,7 +1579,9 @@ def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_buffer(enc, gb[GM_UEBLK], 0ul, 9)
     metal_set_buffer(enc, gb[GM_UNK], 0ul, 10)
     metal_set_buffer(enc, gb[GM_UG1], 0ul, 11)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wb slot — never read at hasb=0, any float buffer satisfies binding validation
     metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
+    metal_set_buffer(enc, gb[GM_U0], 0ul, 14)
     metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
 }
 
@@ -1750,6 +1753,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     gb |> push(upload_u32v(dev, uint(GNTOK)))                                  // GM_UNTOK
     gb |> push(upload_floats(dev, vtab))                                       // GM_VT
     gb |> push(upload_floats(dev, lvt))                                        // GM_LVT
+    gb |> push(upload_u32v(dev, 0u))                                           // GM_U0
 
     check_gmm4(queue, gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, "gmm4_prod", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
     check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
