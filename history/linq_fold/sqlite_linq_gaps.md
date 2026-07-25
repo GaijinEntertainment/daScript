@@ -77,7 +77,7 @@ correct, runtime path deferred to chunk N+3.
 
 ### `COUNT(DISTINCT computed-expr)`
 
-Bench: [`chained_select_collapse`](chained_select_collapse.das).
+Bench: `chained_select_collapse`.
 
 `distinct() |> count()` after a `_select` rejects today because it needs
 `COUNT(DISTINCT <expr>)` (DISTINCT *inside* the aggregate), which
@@ -88,7 +88,7 @@ Deferred to the aggregate-distinct follow-up.
 
 ### ~~`_select` after `_join`~~ — closed (into-projection `m1`)
 
-Bench: [`join_select`](join_select.das).
+Bench: `join_select`.
 
 A standalone `_select` after `_join` still rejects bare `_` (only the
 `into` lambda's parameter names are valid receivers), but the comparable
@@ -98,9 +98,7 @@ SQL inlines the projection into the `into` lambda
 
 ### ~~`LIMIT` before an aggregate~~ — closed (inner-subquery wrap)
 
-Benches: [`take_count_filtered`](take_count_filtered.das),
-[`take_sum_aggregate`](take_sum_aggregate.das),
-[`take_where_count`](take_where_count.das).
+Benches: `take_count_filtered`, `take_sum_aggregate`, `take_where_count`.
 
 `take(n)`/`skip(n)` before an aggregate now wraps the pre-aggregate chain
 into an inner subquery so the LIMIT applies pre-aggregate
@@ -138,10 +136,8 @@ projection truncates at n=100k, ~1e11 ≫ int32). This lit the
 
 ### `zip` family — positional, not relational
 
-Benches: [`zip_count_pred`](zip_count_pred.das) (degenerate `m1` added),
-[`zip_dot_product`](zip_dot_product.das),
-[`zip_dot_product_3arg`](zip_dot_product_3arg.das),
-[`zip_reverse_to_array`](zip_reverse_to_array.das).
+Benches: `zip_count_pred` (degenerate `m1` added), `zip_dot_product`,
+`zip_dot_product_3arg`, `zip_reverse_to_array`.
 
 `zip(a, b)` pairs elements by position across two unrelated sequences;
 SQL has no positional pairing (joins are key-based). The decs/SQL lanes
@@ -155,13 +151,13 @@ int32). The dot-product **sum** lanes (`zip_dot_product` /
 
 ### `decs_count_bare_pred` — decs-specific Theme 4 root-cause fix
 
-Bench: [`decs_count_bare_pred`](decs_count_bare_pred.das).
+Bench: `decs_count_bare_pred`.
 
 Covers a Theme 4 fix specific to the decs lane (bare
 `from_decs_template(...).count(P)` with no upstream where/select
 previously bailed because `forExpr.iteratorVariables` was unpopulated).
 Array-side bare `count(P)` was always reachable;
-SQL `count(P)` is covered by [`count_aggregate`](count_aggregate.das)
+SQL `count(P)` is covered by `count_aggregate`
 with a where shape. The `—` Array and SQL cells aren't gaps — this bench
 is decs-only by design.
 
@@ -171,7 +167,7 @@ is decs-only by design.
 
 ### `reverse_distinct_by` decs
 
-Bench: [`reverse_distinct_by`](reverse_distinct_by.das).
+Bench: `reverse_distinct_by`.
 
 The Theme 8 2a splice arm (R-2a, backward index walk `arr[length-1-k]`) requires
 `array_source` — forward-only archetype walks have no random-index analog. **Closed

@@ -360,7 +360,7 @@ if ($e(whereCond)) {
 
 ### plan_group_by
 
-Recognized chain: `src |> group_by[_lazy](key) |> select(group_proj) [|> {to_array, count}]?`. Avoids bucket-array materialization entirely by emitting `table<unique_key; tuple<KT; AccT>>` updated per element. The `select(group_proj)` body is recognized via `is_bucket_reducer_call` ([linq_fold.das:1666](daslib/linq_fold.das#L1666)); recognized shapes are:
+Recognized chain: `src |> group_by[_lazy](key) |> select(group_proj) [|> {to_array, count}]?`. Avoids bucket-array materialization entirely by emitting `table<unique_key; tuple<KT; AccT>>` updated per element. The `select(group_proj)` body is recognized via `is_bucket_reducer_call` ([linq_fold.das:1666](../../daslib/linq_fold.das#L1666)); recognized shapes are:
 
 | `group_proj` body shape | Acc | Per-element update |
 |---|---|---|
@@ -388,7 +388,7 @@ Bails to tier 2 cascade on: inner-select-sum (`_._1 |> select(<inner>) |> sum` �
 
 **`groupby_count` win**: plain LINQ materializes per-bucket arrays then counts each. The splice keeps only `table<brand → int>` updated per element with `entry._1++`. The result-build loop iterates `values(tab)` (5 entries) — total work is one source pass + 5 emplaces vs tier 2's per-bucket array allocation+push+length-call. Result beats SQL by 4.3× because no engine round-trip overhead.
 
-**`reverse_take` regression vs m3** (originally 34 vs 22 ns/op, closed in PR-C — see "backward index loop" section below): both variants materialize the full source into a buffer (the iterator-form `reverse()` in [linq.das:234](daslib/linq.das#L234) does it via `generator capture` + per-yield indexing; the splice did it via `push_clone` in the prefilter loop). The cost difference was the second pass: m3's generator yields `buffer[len-i-1]` lazily, so `take(TAKE_N)` only triggered N yields; the splice instead called `reverse_inplace(buf)` (full O(length) swap) and then `resize(N)`. PR-C detects `reverse |> take(N)` on array-typed sources at macro time and emits a backward index loop bounded to `[max(0, len-N), len)`, visiting only the last N indices — m3f now lands at ~0 ns/op for TAKE_N=10 at 100K. \* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index.
+**`reverse_take` regression vs m3** (originally 34 vs 22 ns/op, closed in PR-C — see "backward index loop" section below): both variants materialize the full source into a buffer (the iterator-form `reverse()` in [linq.das:234](../../daslib/linq.das#L234) does it via `generator capture` + per-yield indexing; the splice did it via `push_clone` in the prefilter loop). The cost difference was the second pass: m3's generator yields `buffer[len-i-1]` lazily, so `take(TAKE_N)` only triggered N yields; the splice instead called `reverse_inplace(buf)` (full O(length) swap) and then `resize(N)`. PR-C detects `reverse |> take(N)` on array-typed sources at macro time and emits a backward index loop bounded to `[max(0, len-N), len)`, visiting only the last N indices — m3f now lands at ~0 ns/op for TAKE_N=10 at 100K. \* m1 SQL: `ORDER BY id DESC LIMIT 10` collapses to 0 ns/op via index.
 
 **`groupby_sum` unchanged**: the benchmark uses `g._1 |> _select($(c : Car) => c.price) |> _sum()` — an inner-select-sum chain. The G4 recognizer covers bare `_._1 |> sum` but doesn't yet inline the inner projection into the `+=` site. Falls back to tier 2 array-shape (correct but slow). Deferred to follow-up (~80 LOC; see plan).
 

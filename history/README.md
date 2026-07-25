@@ -29,21 +29,60 @@ listed in the log below — search it first when hunting for a doc.
 
 ## Archive log
 
-2026-07-24:
-
-- `FIXED_ARRAY_REWORK.md` → `history/compiler/` — the tFixedArray structural-type rework plan (shipped 0.6.3)
-- `ANNOTATION_INFO_REWORK.md` → `history/compiler/` — rtti self-contained annotation-info rework
-- `QUOTE_LOWERING.md` → `history/compiler/` — quote/qmacro lowering under AOT + JIT
-- `COVERAGE_GAP.md` → `history/ci/` — local-vs-CI coverage gap analysis (stage 4 lives on as the nightly daspkg-index cron)
-- `examples/flatten/scalar_packing/PLAN.md`, `FINDINGS.md` → `history/examples/scalar_packing/` — scalar-packing loop re-roll design + findings
-- `examples/daStrudel/sfx_lab/PLAN.md`, `NOTES_drum_session.md`, `research/metric_design.md`, `research/seeding_from_analysis.md` → `history/examples/sfx_lab/` — SFX-lab plan, drum-session notes, fit-metric research
-- `examples/games/sequence/PLAN.md` → `history/examples/sequence/` — sequence board-game live-coding plan
-- `examples/telegram/dictation/CADMUS_PLAN.md` → `history/examples/dictation/` — Cadmus assistant product decisions
-- `tests/REVIEW.md` → `history/tests/` — daScriptTest-migration review checklist
-- `modules/dasSQLITE/API_REWORK.md`, `API_MISSING.md`, `API_CHECKED.md`, `API_MIGRATION.md`, `TUTORIALS.md` → `history/dasSQLITE/` — the typed-SQL API rework corpus (design record, deferred-feature list, equivalence-harness plan, migration design, tutorial coverage)
-- `modules/dasSQLITE/tutorial-mockup/` → `history/dasSQLITE/tutorial-mockup/` — pre-implementation tutorial design artifacts (all features since shipped)
-- `modules/dasSpirv/PHASE6_VISITOR_PORT.md`, `PHASE7_TEXTURES.md`, `PHASE8_LANGUAGE.md`, `PHASE9_TUTORIALS.md` → `history/dasSpirv/` — completed phase working plans (content captured in MASTERPLAN.md)
-- `modules/dasLLAMA/avx_kernel_matrix.md` → `history/dasLLAMA/` — hand-written AVX tier matrix (superseded by the generated `[tune]` GEMM family)
-- `modules/dasLLAMA/epyc9654_measurements.md` → `history/dasLLAMA/` — EPYC 9654 campaign measurements
-- `modules/dasLLAMA/model_expansion_plan.md` → `history/dasLLAMA/` — model-expansion wave plan (waves shipped 0.6.4)
-- `benchmarks/sql/LINQ.md`, `LINQ_TO_DECS.md`, `LINQ_TO_TABLE.md`, `M4_DECS_EXPANSION.md`, `linq_fold_chain_audit.md`, `sqlite_linq_gaps.md` → `history/linq_fold/` — linq_fold arc plans and closed-out audits (shipped 0.6.3)
+- 2026-07-24 `FIXED_ARRAY_REWORK.md` → `history/compiler/FIXED_ARRAY_REWORK.md` — the tFixedArray structural-type rework plan (shipped 0.6.3)
+- 2026-07-24 `ANNOTATION_INFO_REWORK.md` → `history/compiler/ANNOTATION_INFO_REWORK.md` — rtti self-contained annotation-info rework
+- 2026-07-24 `QUOTE_LOWERING.md` → `history/compiler/QUOTE_LOWERING.md` — quote/qmacro lowering under AOT + JIT
+- 2026-07-24 `COVERAGE_GAP.md` → `history/ci/COVERAGE_GAP.md` — local-vs-CI coverage gap analysis (stage 4 lives on as the nightly daspkg-index cron)
+- 2026-07-24 `examples/flatten/scalar_packing/PLAN.md` → `history/examples/scalar_packing/PLAN.md` — scalar-packing loop re-roll design
+- 2026-07-24 `examples/flatten/scalar_packing/FINDINGS.md` → `history/examples/scalar_packing/FINDINGS.md` — scalar-packing re-roll findings
+- 2026-07-24 `examples/daStrudel/sfx_lab/PLAN.md` → `history/examples/sfx_lab/PLAN.md` — SFX-lab implementation plan
+- 2026-07-24 `examples/daStrudel/sfx_lab/NOTES_drum_session.md` → `history/examples/sfx_lab/NOTES_drum_session.md` — SFX-lab drum-session notes
+- 2026-07-24 `examples/daStrudel/sfx_lab/research/metric_design.md` → `history/examples/sfx_lab/research/metric_design.md` — SFX-lab fit-metric design
+- 2026-07-24 `examples/daStrudel/sfx_lab/research/seeding_from_analysis.md` → `history/examples/sfx_lab/research/seeding_from_analysis.md` — SFX-lab analysis-seeding research
+- 2026-07-24 `examples/games/sequence/PLAN.md` → `history/examples/sequence/PLAN.md` — sequence board-game live-coding plan
+- 2026-07-24 `examples/telegram/dictation/CADMUS_PLAN.md` → `history/examples/dictation/CADMUS_PLAN.md` — Cadmus assistant product decisions
+- 2026-07-24 `tests/REVIEW.md` → `history/tests/REVIEW.md` — daScriptTest-migration review checklist
+- 2026-07-24 `modules/dasSQLITE/API_REWORK.md` → `history/dasSQLITE/API_REWORK.md` — typed-SQL API rework design record
+- 2026-07-24 `modules/dasSQLITE/API_MISSING.md` → `history/dasSQLITE/API_MISSING.md` — typed-SQL deferred-feature list
+- 2026-07-24 `modules/dasSQLITE/API_CHECKED.md` → `history/dasSQLITE/API_CHECKED.md` — typed-SQL equivalence-harness plan
+- 2026-07-24 `modules/dasSQLITE/API_MIGRATION.md` → `history/dasSQLITE/API_MIGRATION.md` — typed-SQL migration design
+- 2026-07-24 `modules/dasSQLITE/TUTORIALS.md` → `history/dasSQLITE/TUTORIALS.md` — typed-SQL tutorial coverage plan
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/01-version.das.mockup` → `history/dasSQLITE/tutorial-mockup/01-version.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/02-insert_data.das.mockup` → `history/dasSQLITE/tutorial-mockup/02-insert_data.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/03-last_row_id.das.mockup` → `history/dasSQLITE/tutorial-mockup/03-last_row_id.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/04-select_all.das.mockup` → `history/dasSQLITE/tutorial-mockup/04-select_all.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/05-parametrized.das.mockup` → `history/dasSQLITE/tutorial-mockup/05-parametrized.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/14-transaction.das.mockup` → `history/dasSQLITE/tutorial-mockup/14-transaction.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/15-update.das.mockup` → `history/dasSQLITE/tutorial-mockup/15-update.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/16-delete.das.mockup` → `history/dasSQLITE/tutorial-mockup/16-delete.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/17-upsert.das.mockup` → `history/dasSQLITE/tutorial-mockup/17-upsert.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/19-group_by.das.mockup` → `history/dasSQLITE/tutorial-mockup/19-group_by.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/23-joins.das.mockup` → `history/dasSQLITE/tutorial-mockup/23-joins.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/24-subqueries.das.mockup` → `history/dasSQLITE/tutorial-mockup/24-subqueries.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/25-null_handling.das.mockup` → `history/dasSQLITE/tutorial-mockup/25-null_handling.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/26-foreign_keys.das.mockup` → `history/dasSQLITE/tutorial-mockup/26-foreign_keys.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/27-indexes.das.mockup` → `history/dasSQLITE/tutorial-mockup/27-indexes.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/28-defaults_computed.das.mockup` → `history/dasSQLITE/tutorial-mockup/28-defaults_computed.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/29-custom_types.das.mockup` → `history/dasSQLITE/tutorial-mockup/29-custom_types.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/30-migrations.das.mockup` → `history/dasSQLITE/tutorial-mockup/30-migrations.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/31-views.das.mockup` → `history/dasSQLITE/tutorial-mockup/31-views.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/32-sql_functions.das.mockup` → `history/dasSQLITE/tutorial-mockup/32-sql_functions.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/33-pragma.das.mockup` → `history/dasSQLITE/tutorial-mockup/33-pragma.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/34-backup_vacuum.das.mockup` → `history/dasSQLITE/tutorial-mockup/34-backup_vacuum.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/36-attach.das.mockup` → `history/dasSQLITE/tutorial-mockup/36-attach.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/37-json.das.mockup` → `history/dasSQLITE/tutorial-mockup/37-json.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/39-fts5.das.mockup` → `history/dasSQLITE/tutorial-mockup/39-fts5.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSQLITE/tutorial-mockup/_error_handling.das.mockup` → `history/dasSQLITE/tutorial-mockup/_error_handling.das.mockup` — pre-implementation tutorial design artifact
+- 2026-07-24 `modules/dasSpirv/PHASE6_VISITOR_PORT.md` → `history/dasSpirv/PHASE6_VISITOR_PORT.md` — completed phase working plan (content captured in MASTERPLAN.md)
+- 2026-07-24 `modules/dasSpirv/PHASE7_TEXTURES.md` → `history/dasSpirv/PHASE7_TEXTURES.md` — completed phase working plan (content captured in MASTERPLAN.md)
+- 2026-07-24 `modules/dasSpirv/PHASE8_LANGUAGE.md` → `history/dasSpirv/PHASE8_LANGUAGE.md` — completed phase working plan (content captured in MASTERPLAN.md)
+- 2026-07-24 `modules/dasSpirv/PHASE9_TUTORIALS.md` → `history/dasSpirv/PHASE9_TUTORIALS.md` — completed phase working plan (content captured in MASTERPLAN.md)
+- 2026-07-24 `modules/dasLLAMA/avx_kernel_matrix.md` → `history/dasLLAMA/avx_kernel_matrix.md` — hand-written AVX tier matrix (superseded by the generated `[tune]` GEMM family)
+- 2026-07-24 `modules/dasLLAMA/epyc9654_measurements.md` → `history/dasLLAMA/epyc9654_measurements.md` — EPYC 9654 campaign measurements
+- 2026-07-24 `modules/dasLLAMA/model_expansion_plan.md` → `history/dasLLAMA/model_expansion_plan.md` — model-expansion wave plan (waves shipped 0.6.4)
+- 2026-07-24 `benchmarks/sql/LINQ.md` → `history/linq_fold/LINQ.md` — linq_fold arc plan (shipped 0.6.3)
+- 2026-07-24 `benchmarks/sql/LINQ_TO_DECS.md` → `history/linq_fold/LINQ_TO_DECS.md` — linq-to-DECS plan (shipped 0.6.3)
+- 2026-07-24 `benchmarks/sql/LINQ_TO_TABLE.md` → `history/linq_fold/LINQ_TO_TABLE.md` — linq-to-table plan (shipped 0.6.3)
+- 2026-07-24 `benchmarks/sql/M4_DECS_EXPANSION.md` → `history/linq_fold/M4_DECS_EXPANSION.md` — M4 DECS expansion plan (shipped 0.6.3)
+- 2026-07-24 `benchmarks/sql/linq_fold_chain_audit.md` → `history/linq_fold/linq_fold_chain_audit.md` — linq_fold chain audit (shipped 0.6.3)
+- 2026-07-24 `benchmarks/sql/sqlite_linq_gaps.md` → `history/linq_fold/sqlite_linq_gaps.md` — closed SQLite-linq gap audit (shipped 0.6.3)

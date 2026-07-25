@@ -60,7 +60,7 @@ author = u'Boris Batkin @* Anton Yudintsev'
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
-# The short X.Y version.
+# The documentation version. This project carries the full X.Y.Z here.
 version = u'0.6.4'
 # The full version, including alpha/beta/rc tags.
 release = u'0.6.4'

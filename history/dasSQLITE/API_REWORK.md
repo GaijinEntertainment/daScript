@@ -5507,7 +5507,7 @@ note both gaps closed.
 
 ### Surface in this PR
 
-Closes 4 SQL gap cells from [`benchmarks/sql/sqlite_linq_gaps.md`](../../benchmarks/sql/sqlite_linq_gaps.md)'s
+Closes 4 SQL gap cells from [`history/linq_fold/sqlite_linq_gaps.md`](../linq_fold/sqlite_linq_gaps.md)'s
 "window-function lowerings" group — turns out 3 of them are bare-aggregate composition,
 not window functions (the gaps doc's ROW_NUMBER prescription was conservative). The
 4th (`groupby_first`) is a genuine new arm but reuses the bare-aggregate machinery.
@@ -5574,7 +5574,7 @@ All 4 m1 lanes backfilled in `benchmarks/sql/{distinct_by_order_take,distinct_by
 
 ### Surface in this PR
 
-Closes 2 SQL bench cells from [`benchmarks/sql/sqlite_linq_gaps.md`](../../benchmarks/sql/sqlite_linq_gaps.md)'s "`_group_by` after `_join`" section. After this PR, every chain operator that references a column reads the join's `into`-projection alias through a single registry — fields named in the `into` lambda's named tuple (`(Brand = c.brand, Price = c.price)`) become first-class names for subsequent `_group_by` / `_having` / `_order_by` / aggregate / computed-key operations:
+Closes 2 SQL bench cells from [`history/linq_fold/sqlite_linq_gaps.md`](../linq_fold/sqlite_linq_gaps.md)'s "`_group_by` after `_join`" section. After this PR, every chain operator that references a column reads the join's `into`-projection alias through a single registry — fields named in the `into` lambda's named tuple (`(Brand = c.brand, Price = c.price)`) become first-class names for subsequent `_group_by` / `_having` / `_order_by` / aggregate / computed-key operations:
 
 - `_join(...) |> _group_by(_.Brand) |> _select((Brand=_._0, N=_._1|>count()))` lowers to `SELECT ("t0"."brand"), COUNT(*) FROM "Cars" AS "t0" INNER JOIN ... GROUP BY ("t0"."brand")`.
 - `_join(...) |> _group_by(_.Brand) |> _select((Brand=_._0, Total=_._1|>_select(_.Price)|>sum()))` lowers to `... SUM("t0"."price") ... GROUP BY ("t0"."brand")`.
