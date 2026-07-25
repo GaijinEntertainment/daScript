@@ -5,7 +5,66 @@
       {
         "engine":"das",
         "backend":"vulkan",
-        "flavor":"resident mm, budget 6000, ReBAR on",
+        "flavor":"resident mm, budget 6000, ReBAR direct uploads, vec4 gemv + merged kv",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-25",
+        "cmd":"DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=6000 DASLLAMA_COOPMAT=mm bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:\\Work\\llama.cpp\\models\\Qwen3-4B-Instruct-2507-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"NVIDIA GeForce RTX 5060 Ti 16GB (driver 610.74)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":3896.82,
+            "stddev":16.69
+          },
+          "tg128":{
+            "tok_s":70.05,
+            "stddev":0.05
+          }
+        },
+        "sha":"5b4bc1b3f",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; resident vulkan graph (prefill + decode)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"full offload, KHR coopmat (GGML_VK_DISABLE_COOPMAT2=1 control arm)",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-25",
+        "cmd":"GGML_VK_DISABLE_COOPMAT2=1 D:\\Work\\llama.cpp\\build-vulkan\\bin\\Release\\llama-bench.exe -m D:\\Work\\llama.cpp\\models\\Qwen3-4B-Instruct-2507-Q8_0.gguf",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"NVIDIA GeForce RTX 5060 Ti 16GB (driver 610.74)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":3790.89,
+            "stddev":12.73
+          },
+          "tg128":{
+            "tok_s":78.16,
+            "stddev":0.08
+          }
+        },
+        "source":"official",
+        "sha":"fdb1db877",
+        "exec_fmt":"native gguf; Vulkan coopmat shaders (KHR coopmat, f16acc)"
+      },
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"resident mm, budget 6000, ReBAR on (pre-lever baseline)",
         "box":"zen2",
         "threads":16,
         "date":"2026-07-25",
