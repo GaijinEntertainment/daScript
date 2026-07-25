@@ -2288,6 +2288,197 @@ def da_attn_b {
     }
 }
 
+// hs=128 flash-attention twin of da_attn_b (coopmat devices): QK^T on f16 MMAs (hoisted q frags),
+// shuffle-reduced online softmax, register-tiled PV over the f16 V tile. Same meta contract;
+// parity bar is IDS (f16 staging + different reduce order). Measured 5.0x da_attn_b (3060 Ti).
+
+var @workgroup fb_q : uint[2048]
+var @workgroup fb_kv : uint[2048]
+var @workgroup fb_p : float[1024]
+var @workgroup fb_m : float[32]
+var @workgroup fb_l : float[32]
+var @workgroup fb_a : float[32]
+
+[compute_shader(local_size_x=128, name="da_attn_b_h128_spv")]
+def da_attn_b_h128 {
+    let npos = vk_meta[0u]
+    let nh = vk_meta[1u]
+    let kvd = vk_meta[2u]
+    let kv_mul = vk_meta[4u]
+    let kbase = vk_meta[5u]
+    let vbase = vk_meta[6u]
+    let w0 = vk_meta[7u]
+    let scale = vk_xs[0u]
+    let qd = nh * 128u
+    let qtiles = (npos + 31u) / 32u
+    let h = gl_WorkGroupID.x / qtiles
+    let q0 = (gl_WorkGroupID.x % qtiles) * 32u
+    let tid = gl_LocalInvocationID.x
+    let warp = tid / 32u
+    let kvh = h / kv_mul
+    var i = tid
+    while (i < 2048u) {   // stage the 32-row q tile once, f32 -> f16 pairs
+        let qr = q0 + i / 64u
+        let jp = (i % 64u) * 2u
+        if (qr < npos) {
+            let src = qr * qd + h * 128u + jp
+            fb_q[i] = packHalf2x16(float2(vk_upf[src], vk_upf[src + 1u]))
+        } else {
+            fb_q[i] = 0u
+        }
+        i += 128u
+    }
+    if (tid < 32u) {
+        fb_m[tid] = -3.0e38
+        fb_l[tid] = 0.0
+    }
+    var o : float[32]   // 2 rows x 16 cols per thread
+    for (z in range(32)) {
+        o[z] = 0.0
+    }
+    let orow0 = (tid / 8u) * 2u
+    let oe = (tid % 8u) * 16u
+    let srow = tid / 4u
+    let cb = (tid % 4u) * 8u
+    let lane4 = tid % 4u
+    barrier()
+    // my S block's q fragments — invariant across the whole K loop
+    let br = warp / 2u
+    let bc = warp % 2u
+    var qa0 : coopmatA_f16_16x16
+    var qa1 : coopmatA_f16_16x16
+    var qa2 : coopmatA_f16_16x16
+    var qa3 : coopmatA_f16_16x16
+    var qa4 : coopmatA_f16_16x16
+    var qa5 : coopmatA_f16_16x16
+    var qa6 : coopmatA_f16_16x16
+    var qa7 : coopmatA_f16_16x16
+    coopmatLoad(qa0, fb_q, int(br * 16u) * 64, 64, 0)
+    coopmatLoad(qa1, fb_q, int(br * 16u) * 64 + 8, 64, 0)
+    coopmatLoad(qa2, fb_q, int(br * 16u) * 64 + 16, 64, 0)
+    coopmatLoad(qa3, fb_q, int(br * 16u) * 64 + 24, 64, 0)
+    coopmatLoad(qa4, fb_q, int(br * 16u) * 64 + 32, 64, 0)
+    coopmatLoad(qa5, fb_q, int(br * 16u) * 64 + 40, 64, 0)
+    coopmatLoad(qa6, fb_q, int(br * 16u) * 64 + 48, 64, 0)
+    coopmatLoad(qa7, fb_q, int(br * 16u) * 64 + 56, 64, 0)
+    let kend = w0 + min(q0 + 32u, npos)
+    var k0 = 0u
+    while (k0 < kend) {
+        i = tid
+        while (i < 2048u) {   // K tile, f16 pairs
+            let kr = k0 + i / 64u
+            let jp = (i % 64u) * 2u
+            if (kr < kend) {
+                let src = kbase + kr * kvd + kvh * 128u + jp
+                fb_kv[i] = packHalf2x16(float2(vk_wsf[src], vk_wsf[src + 1u]))
+            } else {
+                fb_kv[i] = 0u
+            }
+            i += 128u
+        }
+        barrier()
+        var acc : coopmatAcc_f32_16x16
+        var kb : coopmatB_f16_16x16
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64, 64, 1)
+        acc = coopmatMulAdd(qa0, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 8, 64, 1)
+        acc = coopmatMulAdd(qa1, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 16, 64, 1)
+        acc = coopmatMulAdd(qa2, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 24, 64, 1)
+        acc = coopmatMulAdd(qa3, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 32, 64, 1)
+        acc = coopmatMulAdd(qa4, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 40, 64, 1)
+        acc = coopmatMulAdd(qa5, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 48, 64, 1)
+        acc = coopmatMulAdd(qa6, kb, acc)
+        coopmatLoad(kb, fb_kv, int(bc * 16u) * 64 + 56, 64, 1)
+        acc = coopmatMulAdd(qa7, kb, acc)
+        coopmatStore(acc, fb_p, int(br * 16u) * 32 + int(bc * 16u), 32, 0)
+        barrier()
+        // online softmax: 4 threads/row (8 cols each), shuffle-reduced within the aligned quad
+        let gq = w0 + q0 + srow
+        let m_old = fb_m[srow]
+        var mloc = -3.0e38
+        for [unroll] (j in range(8)) {
+            let idx = srow * 32u + cb + uint(j)
+            let gk = k0 + cb + uint(j)
+            let s = (gk <= gq && q0 + srow < npos && gk < kend) ? fb_p[idx] * scale : -3.0e38
+            fb_p[idx] = s
+            mloc = max(mloc, s)
+        }
+        mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
+        mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
+        let mt = max(m_old, mloc)
+        var lloc = 0.0
+        for [unroll] (j in range(8)) {
+            let idx = srow * 32u + cb + uint(j)
+            let e = exp(fb_p[idx] - mt)
+            fb_p[idx] = e
+            lloc += e
+        }
+        lloc += subgroupShuffleXor(lloc, 1u)
+        lloc += subgroupShuffleXor(lloc, 2u)
+        if (lane4 == 0u) {
+            let alpha = exp(m_old - mt)
+            fb_l[srow] = fb_l[srow] * alpha + lloc
+            fb_m[srow] = mt
+            fb_a[srow] = alpha
+        }
+        barrier()
+        i = tid
+        while (i < 2048u) {   // V tile reuses the K staging
+            let kr = k0 + i / 64u
+            let jp = (i % 64u) * 2u
+            if (kr < kend) {
+                let src = vbase + kr * kvd + kvh * 128u + jp
+                fb_kv[i] = packHalf2x16(float2(vk_xqf[src], vk_xqf[src + 1u]))
+            } else {
+                fb_kv[i] = 0u
+            }
+            i += 128u
+        }
+        barrier()
+        let av0 = fb_a[orow0]
+        let av1 = fb_a[orow0 + 1u]
+        for (z in range(16)) {
+            o[z] *= av0
+            o[16 + z] *= av1
+        }
+        var c2 = 0u
+        while (c2 < 32u) {
+            let pw0 = fb_p[orow0 * 32u + c2]
+            let pw1 = fb_p[(orow0 + 1u) * 32u + c2]
+            let vb = c2 * 64u + oe / 2u
+            for [unroll] (zp in range(8)) {
+                let pair = unpackHalf2x16(fb_kv[vb + uint(zp)])
+                o[zp * 2] += pw0 * pair.x
+                o[zp * 2 + 1] += pw0 * pair.y
+                o[16 + zp * 2] += pw1 * pair.x
+                o[16 + zp * 2 + 1] += pw1 * pair.y
+            }
+            c2++
+        }
+        barrier()
+        k0 += 32u
+    }
+    if (q0 + orow0 < npos) {
+        let inv0 = 1.0 / fb_l[orow0]
+        let ob0 = (q0 + orow0) * qd + h * 128u + oe
+        for (z in range(16)) {
+            vk_y[ob0 + uint(z)] = o[z] * inv0
+        }
+    }
+    if (q0 + orow0 + 1u < npos) {
+        let inv1 = 1.0 / fb_l[orow0 + 1u]
+        let ob1 = (q0 + orow0 + 1u) * qd + h * 128u + oe
+        for (z in range(16)) {
+            vk_y[ob1 + uint(z)] = o[16 + z] * inv1
+        }
+    }
+}
+
 // batched rope + KV-store (prefill, npos positions). q roped in place (vk_upf); k/v ride vk_y (k at
 // 0, v at voff); roped k -> vk_wsf, raw v -> vk_xqf at absolute pos. cos/sin per pos in vk_xs.
 // meta 0=qd 1=kvd 2=hs 3=half 4=neox 5=kpair0 6=pairs/pos 7=layerbase 9=npos 10=pos0 11=voff
@@ -3367,7 +3558,8 @@ struct private GpuState {
     da_pipeline : Pipeline          // resident driver: decode attention over the f32 KV mirror
     ar_pipeline_b : Pipeline        // prefill: batched add+rmsnorm
     rks_b_pipeline : Pipeline       // prefill: batched rope + KV-store
-    da_b_pipeline : Pipeline        // prefill: batched causal attention
+    da_b_pipeline : Pipeline        // prefill: batched causal attention (generic hs)
+    da_b128_pipeline : Pipeline     // prefill: the hs=128 coopmat flash-attention twin (coopmat devices)
     qkn_pipeline : Pipeline         // resident driver: per-head q/k rmsnorm (qk_norm models), decode + prefill
     staging : HostBuf
     fence : VkFence          // the one reusable submit fence (reset after every wait)
@@ -3643,7 +3835,7 @@ def private vk_moe_init : bool {
         return false
     }
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
-    // coopmat device features are only requested when a DASLLAMA_COOPMAT mode is actually selected
+    // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.coopmat_mode = 0
     if (g_gpu.has_coopmat) {
@@ -3656,10 +3848,12 @@ def private vk_moe_init : bool {
             g_gpu.coopmat_mode = 3
         }
     }
-    if (g_gpu.coopmat_mode != 0) {
+    if (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam)
-        let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles\n")
+        if (g_gpu.coopmat_mode != 0) {
+            let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles\n")
+        }
     } else {
         g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
     }
@@ -3767,6 +3961,9 @@ def private vk_moe_init : bool {
     g_gpu.ar_pipeline_b <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)
     g_gpu.rks_b_pipeline <- make_kernel_pipe("rope_kv_store_b", rope_kv_store_b_spv)
     g_gpu.da_b_pipeline <- make_kernel_pipe("da_attn_b", da_attn_b_spv)
+    if (g_gpu.has_coopmat) {
+        g_gpu.da_b128_pipeline <- make_kernel_pipe("da_attn_b_h128", da_attn_b_h128_spv)
+    }
     g_gpu.qkn_pipeline <- make_kernel_pipe("qk_rms", qk_rms_spv)
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
@@ -5047,6 +5244,15 @@ def private vhz_trace : bool {
     return g_vhz_trace != 0
 }
 
+var private g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b (flash-attn bisect hatch)
+
+def private vk_fa_on : bool {
+    if (g_vk_fa < 0) {
+        g_vk_fa = get_env_variable("DASLLAMA_VK_FA") == "0" ? 0 : 1
+    }
+    return g_vk_fa != 0
+}
+
 // the per-node gate: barrier iff this node's declared masks conflict with the pending set
 def private vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer : bool = false) {
     h.disp++
@@ -5503,7 +5709,8 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
             pfq_ts(raw)   // q1: meta copy
             let ropewg = uint((wlen * pairs + int64(WG_X) - 1l) / int64(WG_X))
-            let attnwg = uint(g_rd.n_heads * ((wlen + 7l) / 8l))
+            let fa128 = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
+            let attnwg = uint(fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l))
             rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
@@ -5518,7 +5725,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                         uint(wlen * (g_rd.n_heads + kvd / g_rd.head_size)), h)
                 }
                 rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg, h)
-                rd_dispatch(raw, g_gpu.da_b_pipeline, g_rd.pf_sets[b + 5], attnwg, h)
+                rd_dispatch(raw, weak_copy(fa128 ? g_gpu.da_b128_pipeline : g_gpu.da_b_pipeline), g_rd.pf_sets[b + 5], attnwg, h)
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h)
