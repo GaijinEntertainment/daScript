@@ -519,6 +519,15 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(name, false)}\}")
     }
 
+    def request_herd_add_satellite(herd_session_id, repository_id,
+                                   worktree_path : string) {
+        if (!connected || empty(herd_session_id) || empty(worktree_path)) return
+        send("\{\"op\":\"herd_add_satellite\",\"herd_session_id\":" +
+            "{sprint_json(herd_session_id, false)},\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)}\}")
+    }
+
     def create_worktree_and_launch_agent(source_worktree, repository_id,
                                          new_worktree_path, branch, base_ref,
                                          task_context, profile_id, name,
@@ -735,6 +744,27 @@ class WatcherRichClient : HvWebSocketClient {
         refresh_agent_marks()
         return key_exists(agent_mark_files,
             agent_mark_key(repository_id, worktree_path, file_path))
+    }
+
+    // Advisory-conflict view of one worktree: attended by 2+ non-closed
+    // durable sessions (as primary or satellite).
+    def herd_worktree_conflicted(path : string) : bool {
+        let canonical = herd_canonical_worktree(path)
+        var count = 0
+        for (record in herd_sessions) {
+            if (record.state == "closed") continue
+            if (herd_canonical_worktree(record.worktree_path) == canonical) {
+                count++
+                continue
+            }
+            for (entry in record.satellites) {
+                if (herd_canonical_worktree(entry.worktree_path) == canonical) {
+                    count++
+                    break
+                }
+            }
+        }
+        return count > 1
     }
 
     def send_input(text : string) {

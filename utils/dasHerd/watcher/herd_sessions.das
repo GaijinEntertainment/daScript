@@ -54,6 +54,9 @@ struct public HerdSession {
     // Unread agent->human mailbox messages on the linked PTY; live UI state,
     // refreshed every tick and not meaningful across restarts.
     unread_outbox : int
+    // Advisory: another non-closed session attends one of this session's
+    // worktrees. Recomputed every tick, never enforced.
+    conflicted : bool
     columns : int = 120
     rows : int = 36
 }
@@ -88,6 +91,42 @@ var private g_next_herd_id = 0
 var private g_herd_revision : int64
 
 def private wall_seconds : int64 => int64(get_clock())
+
+def public herd_canonical_worktree(path : string) : string {
+    let full = get_full_file_name(path)
+    return get_platform_name() == "windows" ? to_lower(full) : full
+}
+
+def private refresh_conflicts : bool {
+    var inscope counts : table<string; int>
+    for (record in g_herd) {
+        if (record.state == "closed") continue
+        counts[herd_canonical_worktree(record.worktree_path)]++
+        for (entry in record.satellites) {
+            counts[herd_canonical_worktree(entry.worktree_path)]++
+        }
+    }
+    var changed = false
+    for (record in g_herd) {
+        var flagged = false
+        if (record.state != "closed") {
+            flagged = counts[herd_canonical_worktree(record.worktree_path)] > 1
+            if (!flagged) {
+                for (entry in record.satellites) {
+                    if (counts[herd_canonical_worktree(entry.worktree_path)] > 1) {
+                        flagged = true
+                        break
+                    }
+                }
+            }
+        }
+        if (flagged != record.conflicted) {
+            record.conflicted = flagged
+            changed = true
+        }
+    }
+    return changed
+}
 
 def private default_profiles : array<HerdProfile> {
     var result : array<HerdProfile>
@@ -362,6 +401,9 @@ def public herd_tick() {
             save_dirty = true
         }
     }
+    if (refresh_conflicts()) {
+        revision_dirty = true
+    }
     if (save_dirty) {
         let _ = save_registry()
     }
@@ -399,9 +441,10 @@ def public herd_add_satellite(herd_id, repository_id, worktree_path, added_by : 
     let index = herd_find(herd_id)
     if (index < 0) return "unknown herd session"
     if (empty(worktree_path)) return "worktree path is required"
-    if (g_herd[index].worktree_path == worktree_path) return ""
+    let canonical = herd_canonical_worktree(worktree_path)
+    if (herd_canonical_worktree(g_herd[index].worktree_path) == canonical) return ""
     for (entry in g_herd[index].satellites) {
-        if (entry.worktree_path == worktree_path) return ""
+        if (herd_canonical_worktree(entry.worktree_path) == canonical) return ""
     }
     g_herd[index].satellites |> push(HerdWorkspaceEntry(repository_id = repository_id,
         worktree_path = worktree_path, added_by = added_by))

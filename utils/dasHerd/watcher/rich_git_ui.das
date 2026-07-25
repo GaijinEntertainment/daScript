@@ -31,6 +31,8 @@ require ./rich_inspector_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
+var WORKTREE_CONFLICT_JOIN : table<int; EmptyMarkerState>
+
 var GIT_FILE_ROW : table<int; ToggleState>
 
 var GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
@@ -126,6 +128,10 @@ def draw_repositories_window() {
                 let prefix = worktree.is_main ? "MAIN  " : "      "
                 let dirty = worktree.staged + worktree.unstaged + worktree.untracked + worktree.conflicted
                 let dirty_label = dirty > 0 ? "  *{dirty}" : ""
+                if (g_client->herd_worktree_conflicted(worktree.path)) {
+                    icon("warning", GetTextLineHeight())
+                    same_line(WORKTREE_CONFLICT_JOIN[row])
+                }
                 let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
                 if (selectable(WORKTREE_ROW[row], (text = row_label))) {
                     ui_event("worktree-row-click {worktree.path}")

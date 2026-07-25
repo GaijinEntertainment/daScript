@@ -422,7 +422,20 @@ class DasHerdWatcherServer : HvWebServer {
                 return self.respond_error(resp, http_status.BAD_REQUEST, "invalid repository JSON")
             }
             let error = repository_add(request)
-            if (!empty(error)) return self.respond_error(resp, http_status.CONFLICT, error)
+            // An announce for an already-registered repository is a success:
+            // the point is attaching it to the session's workspace.
+            let announced = !empty(request.herd_session_id)
+            if (!empty(error) && !(announced && error == "repository is already registered")) {
+                return self.respond_error(resp, http_status.CONFLICT, error)
+            }
+            if (announced) {
+                let satellite_error = herd_add_satellite(request.herd_session_id,
+                    repository_id_for_path(request.path),
+                    get_full_file_name(request.path), "agent")
+                if (!empty(satellite_error)) {
+                    return self.respond_error(resp, http_status.CONFLICT, satellite_error)
+                }
+            }
             return resp |> JSON(sprint_json(WatcherOk(), false), http_status.CREATED)
         }
         POST("/api/v1/repositories/refresh") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -1550,6 +1563,14 @@ class DasHerdWatcherServer : HvWebServer {
             let rename_error = herd_rename(incoming.herd_session_id, incoming.name)
             if (!empty(rename_error)) {
                 send_error(channel, rename_error)
+                return
+            }
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_add_satellite") {
+            let satellite_error = herd_add_satellite(incoming.herd_session_id,
+                incoming.repository_id, incoming.worktree_path, "user")
+            if (!empty(satellite_error)) {
+                send_error(channel, satellite_error)
                 return
             }
             send_herd_sessions(client, true)

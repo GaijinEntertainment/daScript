@@ -38,6 +38,10 @@ var HERD_ICON_JOIN : table<int; EmptyMarkerState>
 
 var HERD_STATE_JOIN : table<int; EmptyMarkerState>
 
+var HERD_CONFLICT_JOIN : table<int; EmptyMarkerState>
+
+var HERD_MENU_ADD_SATELLITE : table<int; ToggleState>
+
 var HERD_ACTION_JOIN : table<int; EmptyMarkerState>
 
 var HERD_CARD_DETAIL : table<int; NarrativeState>
@@ -182,12 +186,22 @@ def draw_herd_cards() {
         }
         icon(state_glyph, line)
         same_line(HERD_STATE_JOIN[index])
+        if (record.conflicted) {
+            icon("warning", line)
+            same_line(HERD_CONFLICT_JOIN[index])
+        }
         let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
         HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
             && record.pty_session_id == g_client.selected_id)
         if (selectable(HERD_CARD_ROW[index],
                 (text = "{record.name}{unread_hint}##herd:{record.id}"))) {
             attach_herd_card(record)
+        }
+        if (IsItemHovered()) {
+            let conflict_hint = (record.conflicted
+                ? "  |  another session attends this worktree" : "")
+            set_tooltip(HERD_CARD_TOOLTIP,
+                "{record.state}  {record.worktree_path}{conflict_hint}")
         }
         popup_context_item(HERD_CARD_POPUP[index],
                 (str_id = "herdcard:{record.id}",
@@ -202,6 +216,12 @@ def draw_herd_cards() {
                 HERD_RENAME_INPUT.pending_value = record.name
                 HERD_RENAME_INPUT.has_pending = true
                 open_popup(HERD_RENAME_DIALOG)
+            }
+            if (menu_item(HERD_MENU_ADD_SATELLITE[index],
+                    (text = "Add selected worktree", shortcut = "",
+                     enabled = !empty(g_selected_worktree_path)))) {
+                g_client->request_herd_add_satellite(record.id,
+                    g_selected_repository_id, g_selected_worktree_path)
             }
             if (menu_item(HERD_MENU_CLOSE[index], (text = "Close session",
                     shortcut = "", enabled = true))) {

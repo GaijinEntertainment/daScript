@@ -121,6 +121,7 @@ if ($command -eq 'repository') {
             path = [System.IO.Path]::GetFullPath($path)
             display_name = $displayName
             target_id = 'local'
+            herd_session_id = "$env:DASHERD_HERD_SESSION_ID"
         }))
         exit 0
     }

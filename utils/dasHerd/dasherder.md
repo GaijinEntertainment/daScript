@@ -10,8 +10,8 @@ worktrees may participate, but declare them in the active review bundle. Do not
 infer ownership from dirty files and do not include unrelated pre-existing work.
 
 The watcher injects `DASHERD_URL`, `DASHERD_TOKEN`, `DASHERD_SESSION_ID`,
-`DASHERD_SESSION_KIND`, and `DASHERD_CONTEXT_PATH`. Read the context artifact
-first. Run the repository-owned CLI from any participating worktree by using its
+`DASHERD_SESSION_KIND`, `DASHERD_HERD_SESSION_ID`, and `DASHERD_CONTEXT_PATH`.
+Read the context artifact first. Run the repository-owned CLI from any participating worktree by using its
 absolute path when necessary:
 
 ```powershell
@@ -117,6 +117,12 @@ powershell.exe -NoProfile -File <origin>/utils/dasHerd/dasherd.ps1 repository ad
 Use the exact `repository_id` and observed `worktrees[].path` returned by
 `repository list`. If a worktree is not observed yet, register/refresh it and do
 not substitute a similarly named checkout.
+
+`repository add` is also the workspace announce: run it the moment the task
+starts touching an additional repository, checkout, or worktree. The CLI sends
+`DASHERD_HERD_SESSION_ID` with the request, so the watcher attaches the path to
+this session's durable workspace and the human sees it on the session card. An
+already-registered repository is a successful announce, not an error.
 
 ## Human requests and replies
 

@@ -144,6 +144,9 @@ struct public RepositoryAddRequest {
     path : string
     display_name : string
     target_id : string = "local"
+    // When set, the watcher also attaches the path to this durable session's
+    // workspace (agent announce / user add); repository_core itself ignores it.
+    herd_session_id : string
 }
 
 struct public RepositoryRefreshRequest {
@@ -244,6 +247,10 @@ def private normalized_path(path : string) : string {
 def private repository_id(target_id, path : string) : string {
     let identity_path = get_platform_name() == "windows" ? to_lower(path) : path
     return "{target_id}:{identity_path}"
+}
+
+def public repository_id_for_path(path : string) : string {
+    return repository_id("local", normalized_path(path))
 }
 
 def public repository_valid_relative_file_path(path : string) : bool {

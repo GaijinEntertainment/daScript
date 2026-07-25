@@ -118,6 +118,39 @@ def test_herd_registry(t : T?) {
         t |> equal(pty_to_terminate, "pty_fake_2")
         t |> success(herd_get(herd_id, record) && record.state == "closed",
             "closing is an explicit user act")
+
+        let first_id = herd_create(HerdCreateRequest(name = "conflict a",
+            profile_id = "shell", worktree_path = root), error)
+        t |> success(!empty(first_id), error)
+        herd_tick()
+        t |> success(herd_get(first_id, record) && !record.conflicted,
+            "a lone session is never conflicted")
+        let second_id = herd_create(HerdCreateRequest(name = "conflict b",
+            profile_id = "shell", worktree_path = root), error)
+        t |> success(!empty(second_id), error)
+        herd_tick()
+        t |> success(herd_get(first_id, record) && record.conflicted,
+            "two sessions on one worktree both flag the advisory conflict")
+        t |> success(herd_get(second_id, record) && record.conflicted,
+            "the second session is flagged too")
+        var other_dir_error : string
+        let other_dir = path_join(root, "elsewhere")
+        t |> success(mkdir_rec(other_dir, other_dir_error), other_dir_error)
+        let third_id = herd_create(HerdCreateRequest(name = "conflict c",
+            profile_id = "shell", worktree_path = other_dir), error)
+        t |> success(!empty(third_id), error)
+        herd_tick()
+        t |> success(herd_get(third_id, record) && !record.conflicted,
+            "a different worktree stays unflagged")
+        t |> equal(herd_add_satellite(third_id, "repo", root, "agent"), "")
+        herd_tick()
+        t |> success(herd_get(third_id, record) && record.conflicted,
+            "a satellite on a contested worktree flags the session")
+        t |> equal(herd_close(second_id, pty_to_terminate), "")
+        t |> equal(herd_close(third_id, pty_to_terminate), "")
+        herd_tick()
+        t |> success(herd_get(first_id, record) && !record.conflicted,
+            "closing the other attendees clears the advisory flag")
         herd_shutdown()
     }
 }
