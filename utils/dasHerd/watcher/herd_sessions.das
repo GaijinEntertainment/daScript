@@ -97,6 +97,12 @@ def public herd_canonical_worktree(path : string) : string {
     return get_platform_name() == "windows" ? to_lower(full) : full
 }
 
+def public herd_display_worktree(path : string) : string {
+    //! One stored spelling — forward slashes, matching git output — so plain
+    //! string comparisons against observer worktree paths hold everywhere.
+    return replace(path, "\\", "/")
+}
+
 def private refresh_conflicts : bool {
     var inscope counts : table<string; int>
     for (record in g_herd) {
@@ -197,6 +203,7 @@ def public herd_init(registry_path, profiles_path : string) : string {
     g_next_herd_id = file.next_id
     // The watcher owns every PTY, so none of them survived the restart.
     var orphaned = 0
+    var healed = 0
     for (record in file.sessions) {
         if (record.state == "running") {
             record.state = "exited"
@@ -204,9 +211,22 @@ def public herd_init(registry_path, profiles_path : string) : string {
             record.updated_wall_s = wall_seconds()
             orphaned++
         }
+        // Heal records saved before path spellings were canonicalized.
+        let display_path = herd_display_worktree(record.worktree_path)
+        if (display_path != record.worktree_path) {
+            record.worktree_path = display_path
+            healed++
+        }
+        for (entry in record.satellites) {
+            let entry_path = herd_display_worktree(entry.worktree_path)
+            if (entry_path != entry.worktree_path) {
+                entry.worktree_path = entry_path
+                healed++
+            }
+        }
     }
     g_herd <- file.sessions
-    return orphaned > 0 ? save_registry() : ""
+    return (orphaned > 0 || healed > 0) ? save_registry() : ""
 }
 
 def public herd_shutdown() {
@@ -275,18 +295,19 @@ def public herd_create(request : HerdCreateRequest; var error : string&) : strin
         error = "unknown profile '{request.profile_id}'"
         return ""
     }
-    let worktree_status = stat(request.worktree_path)
+    let worktree_path = herd_display_worktree(request.worktree_path)
+    let worktree_status = stat(worktree_path)
     if (!worktree_status.is_valid || !worktree_status.is_dir) {
-        error = "session worktree does not exist: {request.worktree_path}"
+        error = "session worktree does not exist: {worktree_path}"
         return ""
     }
     g_next_herd_id++
     let now = wall_seconds()
     var record = HerdSession(id = "h{ref_time_ticks()}_{g_next_herd_id}",
-        name = !empty(strip(request.name)) ? request.name : base_name(request.worktree_path),
+        name = !empty(strip(request.name)) ? request.name : base_name(worktree_path),
         host = watcher_target_id_or_local(request.host),
         profile_id = request.profile_id, workflow = request.workflow,
-        repository_id = request.repository_id, worktree_path = request.worktree_path,
+        repository_id = request.repository_id, worktree_path = worktree_path,
         task_context = request.task_context,
         reason = "never_launched", created_wall_s = now, updated_wall_s = now,
         columns = clamp(request.columns, 20, 400), rows = clamp(request.rows, 5, 512))
@@ -441,13 +462,14 @@ def public herd_add_satellite(herd_id, repository_id, worktree_path, added_by : 
     let index = herd_find(herd_id)
     if (index < 0) return "unknown herd session"
     if (empty(worktree_path)) return "worktree path is required"
-    let canonical = herd_canonical_worktree(worktree_path)
+    let display_path = herd_display_worktree(worktree_path)
+    let canonical = herd_canonical_worktree(display_path)
     if (herd_canonical_worktree(g_herd[index].worktree_path) == canonical) return ""
     for (entry in g_herd[index].satellites) {
         if (herd_canonical_worktree(entry.worktree_path) == canonical) return ""
     }
     g_herd[index].satellites |> push(HerdWorkspaceEntry(repository_id = repository_id,
-        worktree_path = worktree_path, added_by = added_by))
+        worktree_path = display_path, added_by = added_by))
     g_herd[index].updated_wall_s = wall_seconds()
     g_herd_revision++
     return save_registry()

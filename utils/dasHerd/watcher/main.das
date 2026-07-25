@@ -115,11 +115,25 @@ def private maybe_collect_gc() {
         "string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
 }
 
+// Children inherit the watcher's environment. When the watcher itself was
+// started from a Claude Code session, the inherited child-session markers make
+// every launched agent disable transcript persistence — which silently breaks
+// Relaunch (`claude --continue` has nothing to continue). Scrub the markers
+// once at startup; force persistence too since POSIX setenv cannot remove.
+def private sanitize_child_environment() {
+    for (marker in fixed_array("CLAUDE_CODE_CHILD_SESSION", "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT")) {
+        set_env_variable(marker, "")
+    }
+    set_env_variable("CLAUDE_CODE_FORCE_SESSION_PERSISTENCE", "1")
+}
+
 [export]
 def init() {
     if (!g_args_parsed) {
         parse_watcher_args()
     }
+    sanitize_child_environment()
     if (g_server != null || g_watcher_initialized) {
         print("dasHerd watcher: init called while already initialized\n")
         g_exit_code = 1

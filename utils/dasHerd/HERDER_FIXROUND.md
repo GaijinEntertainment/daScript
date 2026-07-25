@@ -70,6 +70,36 @@ much for the agent as for the human).
     submit, read. Acceptance test after next restart — PowerShell
     first, then a live agent session.
 
+## Priority (settled 2026-07-25: bugs over everything)
+
+Defects first — anything broken, silently wrong, or lying to the user
+or the agent lands before any feature, polish, or redesign work.
+
+P0 — broken core flows:
+- 4b env leak (kills `claude --continue` for every launched agent)
+- 10 path-separator identity mismatches (conflicts/aim/joins dead)
+- 11 launcher ignores "run in existing worktree" intent
+- 34 launcher race: Launch clicked before the repository list arrives
+  is a silent no-op (button silently disabled; no feedback) — same
+  family as 11: the launcher lies about what it will do
+- 8 scrollback: emulator retains ZERO rows (data loss, not just UI)
+- 17 agent unaware of dasherder (whole handoff surface untestable)
+- 4a terminal colors (blocked on 30b tooling)
+
+P1 — tooling bugs by the parity rule (agent-blindness is a defect):
+- 30a selectable rows carry no label text in snapshots
+- 30b terminal cell attributes not inspectable
+- 33 minimized window starves UI-level agent driving
+
+P2 — small defects:
+- 5 launch doesn't close launcher; 6 changelist row tooltips dead;
+  14 inspector mode resets; 7 double-listed session; 9 aim policy
+  (needs its one-paragraph design decision)
+
+Features, foundation (command pattern/settings), and surface redesigns
+queue strictly behind these — the wave structure below survives as the
+build order within what remains.
+
 ## Wave 0 — rails first (enables everything else, incl. testing 31)
 
 - 30a: selectable/selectable_label snapshot payload gains its label

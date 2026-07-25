@@ -73,6 +73,8 @@ def test_herd_registry(t : T?) {
         t |> equal(record.name, base_name(root))
         t |> equal(record.state, "exited")
         t |> equal(record.reason, "never_launched")
+        t |> equal(record.worktree_path, herd_display_worktree(root),
+            "records store the canonical forward-slash spelling")
 
         t |> success(!empty(herd_rename(herd_id, " ")),
             "rename rejects a blank name")
@@ -90,7 +92,7 @@ def test_herd_registry(t : T?) {
             "token", "skill.md", launch, error), error)
         t |> equal(launch.argv[0], "claude")
         t |> equal(launch.kind, "agent-claude")
-        t |> equal(launch.cwd, root)
+        t |> equal(launch.cwd, herd_display_worktree(root))
         t |> equal(launch.herd_session_id, herd_id)
         t |> equal(launch.agent_url, "http://127.0.0.1:9191")
         t |> success(!launch.resume, "the first launch is not a resume")

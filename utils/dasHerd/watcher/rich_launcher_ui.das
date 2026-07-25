@@ -72,8 +72,8 @@ def private suggest_from_name() {
     LAUNCHER_BRANCH.has_pending = true
     let checkout = agent_repository_checkout(
         g_agent_source_repository_id, g_agent_source_worktree_path)
-    LAUNCHER_WORKTREE_PATH.pending_value = path_join(
-        path_join(checkout, ".codex/worktrees"), slug)
+    LAUNCHER_WORKTREE_PATH.pending_value = herd_display_worktree(path_join(
+        path_join(checkout, ".codex/worktrees"), slug))
     LAUNCHER_WORKTREE_PATH.has_pending = true
 }
 
