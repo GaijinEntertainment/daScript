@@ -4883,6 +4883,24 @@ let private VHZ_META = 0x8000u    // ffn_meta_dev
 let private VHZ_LOG = 0x10000u    // logits
 let private VHZ_COS = 0x20000u    // rope cos/sin rows
 
+// batch/hybrid-tier region bits — a separate namespace over the same rail (each recorder's VkHaz
+// is private to its cmd buffer, so the two families never meet in one pending set)
+let private VHB_ACT = 0x1u        // batch_xq/batch_xs activation staging
+let private VHB_META = 0x2u       // stack batch metas + the chain's params (ffn/dn/at meta)
+let private VHB_Y1 = 0x4u         // batch_y1 (gate / qkv / q|gate / down / wo out)
+let private VHB_Y2 = 0x8u         // batch_y2 (up / z / k out)
+let private VHB_HQ = 0x10u        // hq+hs requant image
+let private VHB_COMB = 0x20u      // combine weight/bucket planes
+let private VHB_CY = 0x40u        // combine accumulator
+let private VHB_SM = 0x80u        // smalls image (dn/at)
+let private VHB_ST = 0x100u       // dn recurrent state
+let private VHB_WS = 0x200u       // dn slabs/o scratch
+let private VHB_ATQ = 0x400u      // at deinterleaved q rows
+let private VHB_ATG = 0x800u      // at gate/o rows
+let private VHB_ATK = 0x1000u     // at roped-k panel
+let private VHB_ATV = 0x2000u     // at v panel (absolute positions)
+let private VHB_VRAW = 0x4000u    // at raw-v window
+
 struct private VkHaz {
     w : uint            // bits with a pending (unbarriered) write
     r : uint            // bits with a pending read
@@ -6020,41 +6038,50 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    // one declaration per same-region copy GROUP — per-copy would fake WAW on the shared bit
+    vhz_dep(raw, h, 0u, VHB_ACT, true)
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    vhz_dep(raw, h, 0u, VHB_META, true)
     cmd_copy_batch_meta(raw, s1)
     cmd_copy_batch_meta(raw, s3)
     cmd_copy_batch_meta(raw, s2)
     cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
     if (comb_npos > 0u && comb_first) {
+        vhz_dep(raw, h, 0u, VHB_COMB, true)
         cmd_copy_whole(raw, g_gpu.comb_stage.buf, g_gpu.comb_w_dev, comb_wi_bytes)
         cmd_copy_at(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, comb_wi_bytes)
     }
-    batch_barrier(raw, true)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, g_gpu.stacks[s1].fmt, g_gpu.stacks[s1].batch_tile, g_gpu.stacks[s1].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s1].batch_set, nwg_gu)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
     if (!same_batch_pipe(s3, s1)) {
         bind_batch_pipe(raw, g_gpu.stacks[s3].fmt, g_gpu.stacks[s3].batch_tile, g_gpu.stacks[s3].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s3].batch_set, nwg_gu)
-    comp_barrier(raw)
     // the requant form follows the DOWN stack — its GEMM is the consumer of hq/hs
     let dkq = g_gpu.stacks[s2].fmt != 0
+    vhz_dep(raw, h, VHB_Y1 | VHB_Y2 | VHB_META, VHB_HQ)
     cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile, g_gpu.stacks[s2].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s2].batch_set, nwg_dn)
     if (comb_npos > 0u) {
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHB_Y1 | VHB_COMB | VHB_CY | VHB_META, VHB_CY)
         cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.comb_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.comb_set, comb_npos)
         if (comb_last) {
-            batch_barrier(raw, false)
+            vhz_dep(raw, h, VHB_CY, 0u, true)
             cmd_copy_whole(raw, g_gpu.comb_y_dev, g_gpu.comb_y.buf, comb_y_bytes)
         }
     } else {
-        batch_barrier(raw, false)
+        vhz_dep(raw, h, VHB_Y1, 0u, true)
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, gout_bytes)
+    }
+    if (vk_prof()) {
+        to_log(LOG_INFO, "vk_ffnb hz: {h.disp} nodes, {h.barriers} barriers\n")
     }
     vk_check(vkEndCommandBuffer(raw), null)
 }
@@ -6134,12 +6161,15 @@ def private record_dense_cmd(si : int; nwg : uint; y_bytes : int64; axq_bytes, a
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHB_ACT, true)
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    vhz_dep(raw, h, 0u, VHB_META, true)
     cmd_copy_batch_meta(raw, si)
-    batch_barrier(raw, true)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, g_gpu.stacks[si].fmt, g_gpu.stacks[si].batch_tile, g_gpu.stacks[si].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[si].batch_set, nwg)
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, y_bytes)
     vk_check(vkEndCommandBuffer(raw), null)
 }
@@ -6271,61 +6301,71 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
     pfq_begin(raw)
     pfq_ts(raw)   // q0: submit start
+    vhz_dep(raw, h, 0u, VHB_ACT, true)
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    vhz_dep(raw, h, 0u, VHB_META, true)
     cmd_copy_batch_meta(raw, s_qkv)
     cmd_copy_batch_meta(raw, s_z)
     cmd_copy_batch_meta(raw, s_o)
     cmd_copy_whole(raw, g_gpu.dn_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
     // stops SHORT of the hist region — later windows read the device-copied tail rows there
+    vhz_dep(raw, h, 0u, VHB_SM, true)
     cmd_copy_range(raw, g_gpu.dn_smalls.buf, 0l, g_gpu.dn_smalls_dev, 0l, DN_SM_HIST * 4l)
     if (first) {
         cmd_copy_range(raw, g_gpu.dn_smalls.buf, DN_SM_HIST * 4l, g_gpu.dn_smalls_dev, DN_SM_HIST * 4l, cd * taps * 4l)
+        vhz_dep(raw, h, 0u, VHB_ST, true)
         cmd_copy_whole(raw, g_gpu.dn_state_stage.buf, g_gpu.dn_state_dev, nvh * ds * ds * 4l)
     }
-    batch_barrier(raw, true)
     pfq_ts(raw)   // q1: uploads
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, 0, g_gpu.stacks[s_qkv].batch_tile, g_gpu.stacks[s_qkv].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_qkv].batch_set, nwg_qkv)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
     if (!same_batch_pipe(s_z, s_qkv)) {
         bind_batch_pipe(raw, 0, g_gpu.stacks[s_z].batch_tile, g_gpu.stacks[s_z].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_z].batch_set, nwg_z)
-    comp_barrier(raw)
     pfq_ts(raw)   // q2: qkv+z GEMMs
+    vhz_dep(raw, h, VHB_Y1 | VHB_SM | VHB_META, VHB_HQ)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_conv_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.dn_conv_set, uint(rows))
-    comp_barrier(raw)
     pfq_ts(raw)   // q3: conv
+    vhz_dep(raw, h, VHB_HQ | VHB_Y2 | VHB_SM | VHB_ST | VHB_META, VHB_ST | VHB_WS)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_scan_p1_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.dn_scan_set, uint(nvh * ((rows + DN_CS - 1l) / DN_CS)))
-    comp_barrier(raw)
     pfq_ts(raw)   // q4: scan phase 1
+    vhz_dep(raw, h, VHB_HQ | VHB_Y2 | VHB_SM | VHB_ST | VHB_WS | VHB_META, VHB_ST | VHB_WS)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_scan_p2_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.dn_scan_set, uint(nvh))
-    comp_barrier(raw)
     pfq_ts(raw)   // q5: scan phase 2
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
-    batch_barrier(raw, false)
     if (!last) {
+        vhz_dep(raw, h, VHB_Y1, VHB_SM, true)
         cmd_copy_range(raw, g_gpu.batch_y1_dev, (rows - taps) * cd * 4l, g_gpu.dn_smalls_dev, DN_SM_HIST * 4l, taps * cd * 4l)
     } else {
+        vhz_dep(raw, h, VHB_Y1, 0u, true)
         cmd_copy_range(raw, g_gpu.batch_y1_dev, (rows - taps) * cd * 4l, g_gpu.dn_tail_host.buf, 0l, taps * cd * 4l)
+        vhz_dep(raw, h, VHB_ST, 0u, true)
         cmd_copy_whole(raw, g_gpu.dn_state_dev, g_gpu.dn_state_host.buf, nvh * ds * ds * 4l)
     }
-    batch_barrier(raw, true)
     pfq_ts(raw)   // q6: tail copies
+    vhz_dep(raw, h, VHB_WS | VHB_META, VHB_HQ)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_rq_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.dn_rq_set, uint((rows * di / 32l + 255l) / 256l))
-    comp_barrier(raw)
     pfq_ts(raw)   // q7: o requant
+    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, 0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_out)
-    batch_barrier(raw, false)
     pfq_ts(raw)   // q8: out GEMM
+    vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
     pfq_end(raw)
+    if (vk_prof()) {
+        to_log(LOG_INFO, "vk_dn hz: {h.disp} nodes, {h.barriers} barriers\n")
+    }
     vk_check(vkEndCommandBuffer(raw), null)
 }
 
@@ -6728,45 +6768,57 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHB_ACT, true)
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    vhz_dep(raw, h, 0u, VHB_META, true)
     cmd_copy_batch_meta(raw, s_q)
     cmd_copy_batch_meta(raw, s_k)
     cmd_copy_batch_meta(raw, s_v)
     cmd_copy_batch_meta(raw, s_o)
     cmd_copy_whole(raw, g_gpu.at_meta.buf, g_gpu.at_meta_dev, AT_META_BYTES)
+    vhz_dep(raw, h, 0u, VHB_SM, true)
     cmd_copy_range(raw, g_gpu.at_smalls.buf, 0l, g_gpu.at_smalls_dev, 0l, sm_bytes)
-    batch_barrier(raw, true)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile, g_gpu.stacks[s_q].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_q].batch_set, nwg_q)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
     if (!same_batch_pipe(s_k, s_q)) {
         bind_batch_pipe(raw, g_gpu.stacks[s_k].fmt, g_gpu.stacks[s_k].batch_tile, g_gpu.stacks[s_k].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_k].batch_set, nwg_k)
+    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_VRAW)
     if (!same_batch_pipe(s_v, s_k)) {
         bind_batch_pipe(raw, g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile, g_gpu.stacks[s_v].batch_aligned)
     }
     cmd_bind_dispatch(raw, g_gpu.stacks[s_v].batch_set, nwg_v)
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHB_Y1 | VHB_SM | VHB_META, VHB_ATQ | VHB_ATG)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_prep_q_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_prep_q_set, uint(rows))
+    vhz_dep(raw, h, VHB_Y2 | VHB_SM | VHB_META, VHB_ATK)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_prep_k_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_prep_k_set, uint(rows))
     // transfer window: append raw v at absolute positions, DMA roped k/raw v to host
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
+    vhz_dep(raw, h, VHB_ATK, 0u, true)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
+    vhz_dep(raw, h, VHB_VRAW, 0u, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_kv_host.buf, AT_WINDOW * AT_MAX_KV * 4l, rows * kv_dim * 4l)
-    batch_barrier(raw, true)
+    vhz_dep(raw, h, VHB_ATQ | VHB_ATK | VHB_ATV | VHB_ATG | VHB_SM | VHB_META, VHB_ATG)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_attn_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_attn_set, uint(n_heads * ((rows + 7l) / 8l)))
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHB_ATG | VHB_META, VHB_HQ)
     cmd_bind_pipeline(vk_value_to_boost(raw), o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 256l : 32l) + 255l) / 256l))
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
     bind_batch_pipe(raw, g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_o)
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
+    if (vk_prof()) {
+        to_log(LOG_INFO, "vk_attn hz: {h.disp} nodes, {h.barriers} barriers\n")
+    }
     vk_check(vkEndCommandBuffer(raw), null)
 }
 
