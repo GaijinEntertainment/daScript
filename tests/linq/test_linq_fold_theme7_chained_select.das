@@ -1,7 +1,6 @@
 options gen2
 
 require math
-require strings
 require daslib/linq
 require daslib/linq_boost
 require daslib/linq_fold
@@ -124,7 +123,7 @@ struct T7Item {
 
 def populate_t7_decs() {
     restart()
-    create_entities(20) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(20) $ [unused_argument(eid)] (eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, T7Item(id = i, grp = i / 4))
     }
 }

@@ -1,7 +1,5 @@
 options gen2
 
-require math
-require strings
 require daslib/linq
 require daslib/linq_boost
 require daslib/linq_fold
@@ -263,7 +261,7 @@ def test_take_zero_where(t : T?) {
 def populate_decs_act_items() {
     let cats   = ["T", "F", "T", "F", "T", "F", "T", "T"]
     let prices = [ 10,  20,  30,  40,  50,  60,  70,  80]
-    create_entities(8) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(8) $ [unused_argument(eid)] (eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, DecsItem(category = cats[i], price = prices[i]))
     }
 }

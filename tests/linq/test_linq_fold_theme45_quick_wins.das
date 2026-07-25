@@ -1,7 +1,5 @@
 options gen2
 
-require math
-require strings
 require daslib/linq
 require daslib/linq_boost
 require daslib/linq_fold
