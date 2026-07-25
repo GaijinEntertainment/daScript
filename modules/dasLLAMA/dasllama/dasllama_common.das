@@ -8418,7 +8418,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 }
             }
             s.moe_hdn |> resize(int(nhits * dim))
-            prof_add("mm_moe", ts_down)
+            prof_add("mm_moe_dn", ts_down)
             let ts_join = ref_time_ticks()
             matmul_moe_gpu_ffn_join(s.moe_hdn)
             prof_add("heat_wait", ts_join)   // GPU residue after the CPU misses — 0 = fully hidden
@@ -8509,7 +8509,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
             } else {
                 mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
             }
-            prof_add("mm_moe", ts_down)
+            prof_add("mm_moe_dn", ts_down)
         }
         if (nhits == 0l) {   // the split arm above reduced its own hit/miss row banks
             let ts_red = ref_time_ticks()
@@ -8539,7 +8539,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
             if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
                 add_bias(s.xb2, 0l, t.fblob, t.web2_off + e * dim, dim)
             }
-            prof_add("mm_moe", ts_down)
+            prof_add("mm_moe_dn", ts_down)
             let ts_red = ref_time_ticks()
             axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), s.moe_w[j], dim)
             prof_add("moe_reduce", ts_red)
