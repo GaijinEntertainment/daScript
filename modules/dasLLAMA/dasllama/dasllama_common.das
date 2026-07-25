@@ -8763,7 +8763,9 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     let ne = c.n_expert
     let k = c.n_expert_used
     // routed branch — input, custom router, select, per-expert down scale, experts, post-norm
+    let ts_norm0 = ref_time_ticks()
     rms_at(s.xb, t, t.rms_pre_ffn2_off + l * dim, s.moe_ao, dim)
+    prof_add("norm", ts_norm0)
     trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
     let ts_route = ref_time_ticks()
     gemma4_router_tmp(t, s, l)
@@ -8774,7 +8776,9 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     }
     prof_add("moe_route", ts_route)
     moe_experts_apply(t, s, l)
+    let ts_norm1 = ref_time_ticks()
     rms_at(s.moe_acc, t, t.rms_post_ffn2_off + l * dim, s.moe_acc, dim)
+    prof_add("norm", ts_norm1)
     // dense parallel shared expert (its own pre/post norms), into s.xb
     let ts_sh = ref_time_ticks()
     trace_tag(TRACE_TAG_SHEXP)
@@ -8783,8 +8787,12 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     rms_at(s.xb, t, t.rms_post_ffn1_off + l * dim, s.xb, dim)
     prof_add("mm_shexp", ts_sh)
     // combine then the shared post_ffw_norm on the sum
+    let ts_comb = ref_time_ticks()
     add_inplace(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb[0])), dim)
+    prof_add("act_resid", ts_comb)
+    let ts_norm2 = ref_time_ticks()
     rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
+    prof_add("norm", ts_norm2)
 }
 
 // gemma4 FFN decode: dense (12B/31B) or the parallel dense-shared + routed MoE (26B-A4B) by expert count.
@@ -8803,7 +8811,9 @@ def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
         return
     }
     let dim = c.dim
+    let ts_copy = ref_time_ticks()
     copy_floats(s.x, 0l, s.moe_ao, 0l, dim)
+    prof_add("act_resid", ts_copy)
     gemma4_moe_ffn(t, s, l)
     let ts_resid = ref_time_ticks()
     if (c.layer_out_scale) {
@@ -9121,8 +9131,12 @@ def forward(t : Model; var s : Session; token, pos : int64) {
     if (!stack_done) {
         blob_only_panic(t, "decode stack")
         for (l in range64(c.n_layers)) {
+            let ts_blk_attn = ref_time_ticks()
             t.blocks.attn_decode(t, s, l, pos)
+            prof_add("blk_attn", ts_blk_attn)
+            let ts_blk_ffn = ref_time_ticks()
             t.blocks.ffn_decode(t, s, l)
+            prof_add("blk_ffn", ts_blk_ffn)
         }
     }
 
