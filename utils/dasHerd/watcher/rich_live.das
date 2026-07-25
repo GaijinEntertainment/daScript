@@ -1070,7 +1070,7 @@ var SHORTCUT_CONFLICT : table<int; NarrativeState>
 def private draw_shortcuts_tab() {
     if (!empty(g_command_registry.capture_command_id)) {
         text_colored(SHORTCUT_CAPTURE_TEXT,
-            (color = float4(0.97f, 0.76f, 0.28f, 1.0f),
+            (color = token_warning_color(),
                 text = "Press the new shortcut (Escape cancels)"))
     } elif (!empty(g_command_registry.status)) {
         text_disabled(SHORTCUT_STATUS_TEXT, (text = g_command_registry.status))
@@ -1109,7 +1109,7 @@ def private draw_shortcuts_tab() {
             if (!empty(conflict)) {
                 same_line(SHORTCUT_CONFLICT_JOIN[index])
                 text_colored(SHORTCUT_CONFLICT[index],
-                    (color = float4(1.0f, 0.45f, 0.25f, 1.0f),
+                    (color = token_error_color(),
                         text = "conflicts with {conflict}"))
             }
         }

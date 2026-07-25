@@ -211,8 +211,8 @@ def private ensure_project_model() {
 def private project_name_color(node : ProjectNode const) : uint {
     let alpha = node.hidden ? 0.55f : 1.0f
     return (node.is_folder
-        ? GetColorU32(float4(0.43f, 0.64f, 0.82f, alpha))
-        : GetColorU32(float4(0.90f, 0.91f, 0.93f, alpha)))
+        ? GetColorU32(token_path_dir_color(alpha))
+        : GetColorU32(token_path_name_color(alpha)))
 }
 
 def private project_size_label(size : int64) : string {
@@ -236,7 +236,7 @@ def private decorate_project_row(node : ProjectNode const;
                                  name_position : float2) {
     let row_max = GetItemRectMax()
     let row_right = git_visible_row_right(row_max.x)
-    let dirty_color = GetColorU32(float4(0.97f, 0.76f, 0.28f, 1.0f))
+    let dirty_color = GetColorU32(token_warning_color())
     with_window_drawlist() $(var dl) {
         let name_text = node.name + (node.is_folder ? "/" : "")
         dl |> add_text(name_position, project_name_color(node), name_text)

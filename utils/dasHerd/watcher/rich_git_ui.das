@@ -119,7 +119,7 @@ def draw_repositories_window() {
             text(REPOSITORY_TITLE[repository_row],
                 (text = "{repository.record.display_name}  [Local]{refreshing}"))
             if (!empty(repository.error)) {
-                text_colored(REPOSITORY_ERROR[repository_row], (color = float4(1.0f, 0.35f, 0.30f, 1.0f),
+                text_colored(REPOSITORY_ERROR[repository_row], (color = token_error_color(),
                     text = repository.error))
                 draw_error_context(REPOSITORY_ERROR_POPUP[repository_row],
                     REPOSITORY_ERROR_COPY[repository_row],
@@ -230,10 +230,10 @@ def draw_git_stats_text(position : float2;
             let added = "+{added_lines}"
             let deleted = "-{deleted_lines}"
             dl |> add_text(position,
-                GetColorU32(float4(0.42f, 0.82f, 0.42f, alpha)), added)
+                GetColorU32(token_added_color(alpha)), added)
             dl |> add_text(float2(position.x + CalcTextSize(added).x
                     + GetStyle().ItemSpacing.x, position.y),
-                GetColorU32(float4(0.37f, 0.65f, 0.96f, alpha)), deleted)
+                GetColorU32(token_deleted_color(alpha)), deleted)
         }
     }
 }
@@ -427,7 +427,7 @@ def draw_pr_review(repository : RepositorySnapshot const;
             if (commit.worktree_path != worktree.path) continue
             table_next_row()
             table_set_column_index(0)
-            with_style((ImGuiCol.Text, float4(0.36f, 0.76f, 0.96f, 1.0f))) {
+            with_style((ImGuiCol.Text, token_sha_color())) {
                 selectable_hover(GIT_PR_COMMIT_HOVER[commit_row],
                     (text = "{commit.short_hash}##pr:{commit.hash}",
                     flags = ImGuiSelectableFlags.SpanAllColumns |
@@ -437,11 +437,11 @@ def draw_pr_review(repository : RepositorySnapshot const;
                 commit.short_hash)
             table_set_column_index(1)
             text_colored(GIT_COMMIT_TITLE_TEXT[commit_row],
-                (color = float4(0.91f, 0.93f, 0.96f, 1.0f),
+                (color = token_title_color(),
                 text = commit.subject))
             table_set_column_index(2)
             text_colored(GIT_COMMIT_AUTHOR_TEXT[commit_row],
-                (color = float4(0.64f, 0.70f, 0.80f, 1.0f),
+                (color = token_muted_color(),
                 text = commit.author))
             commit_row++
         }
@@ -536,7 +536,7 @@ def draw_history_commits(repository : RepositorySnapshot const;
                 table_next_row()
                 table_set_column_index(0)
                 var selected = false
-                with_style((ImGuiCol.Text, float4(0.36f, 0.76f, 0.96f, 1.0f))) {
+                with_style((ImGuiCol.Text, token_sha_color())) {
                     selected = selectable_label(GIT_HISTORY_COMMIT_ROW[row],
                         (text = "{commit.short_hash}##history:{commit.hash}",
                         selected = commit.hash == selected_commit,
@@ -547,11 +547,11 @@ def draw_history_commits(repository : RepositorySnapshot const;
                     commit.short_hash)
                 table_set_column_index(1)
                 text_colored(GIT_COMMIT_TITLE_TEXT[row],
-                    (color = float4(0.91f, 0.93f, 0.96f, 1.0f),
+                    (color = token_title_color(),
                     text = commit.subject))
                 table_set_column_index(2)
                 text_colored(GIT_COMMIT_AUTHOR_TEXT[row],
-                    (color = float4(0.64f, 0.70f, 0.80f, 1.0f),
+                    (color = token_muted_color(),
                     text = commit.author))
                 if (selected && g_client != null && commit.hash != selected_commit) {
                     ui_event("history-commit-click {commit.short_hash}")
@@ -690,7 +690,7 @@ def draw_tree_commits(repository : RepositorySnapshot const;
                 table_set_column_index(0)
                 var selected = false
                 with_style((ImGuiCol.Text,
-                        float4(0.36f, 0.76f, 0.96f, text_alpha))) {
+                        token_sha_color(text_alpha))) {
                     selected = selectable_label(GIT_HISTORY_COMMIT_ROW[row],
                         (text = "{commit.short_hash}##tree:{commit.hash}",
                         selected = commit.hash == selected_commit,
@@ -725,11 +725,11 @@ def draw_tree_commits(repository : RepositorySnapshot const;
                     same_line(GIT_TREE_REF_SAME_LINE[row])
                 }
                 text_colored(GIT_COMMIT_TITLE_TEXT[row],
-                    (color = float4(0.91f, 0.93f, 0.96f, text_alpha),
+                    (color = token_title_color(text_alpha),
                     text = commit.subject))
                 table_set_column_index(2)
                 text_colored(GIT_COMMIT_AUTHOR_TEXT[row],
-                    (color = float4(0.64f, 0.70f, 0.80f, text_alpha),
+                    (color = token_muted_color(text_alpha),
                     text = commit.author))
                 if (selected && g_client != null
                         && commit.hash != selected_commit) {

@@ -166,7 +166,7 @@ def private draw_menu_status_cluster() {
         icon("warning", line)
         same_line()
         text_colored(MENU_STATUS_SYNTH_LOCK,
-            (color = float4(0.97f, 0.76f, 0.28f, 1.0f), text = "SYNTH LOCK"))
+            (color = token_warning_color(), text = "SYNTH LOCK"))
         set_item_tooltip(MENU_STATUS_SYNTH_LOCK_TIP,
             (text = "Real input is detached (set_user_control off) - an agent " +
                 "owns the UI; live command set_user_control enabled=true releases it"))
@@ -176,7 +176,7 @@ def private draw_menu_status_cluster() {
         icon("warning", line)
         same_line()
         text_colored(MENU_STATUS_ERROR,
-            (color = float4(1.0f, 0.35f, 0.30f, 1.0f), text = error_text))
+            (color = token_error_color(), text = error_text))
         set_item_tooltip(MENU_STATUS_ERROR_TIP, (text = full_error))
         draw_error_context(MENU_ERROR_POPUP, MENU_ERROR_COPY,
             MENU_ERROR_SEND, "menu_error", "Watcher", full_error)

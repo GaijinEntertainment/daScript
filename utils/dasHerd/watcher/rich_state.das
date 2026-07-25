@@ -21,6 +21,7 @@ require daslib/json_boost
 require daslib/jobque_boost
 require daslib/strings_boost
 require live/live_commands
+require ./rich_tokens.das public
 require ./watcher_core.das
 require ./repository_core.das
 require ./herd_sessions.das
@@ -781,9 +782,9 @@ def git_visible_row_right(row_right : float) : float {
 def draw_git_path_text(path : string; p0, p1 : float2;
                        subdued : bool) {
     let alpha = subdued ? 0.55f : 1.0f
-    let directory_color = GetColorU32(float4(0.43f, 0.64f, 0.82f, alpha))
-    let separator_color = GetColorU32(float4(0.78f, 0.55f, 0.30f, alpha))
-    let name_color = GetColorU32(float4(0.90f, 0.91f, 0.93f, alpha))
+    let directory_color = GetColorU32(token_path_dir_color(alpha))
+    let separator_color = GetColorU32(token_path_sep_color(alpha))
+    let name_color = GetColorU32(token_path_name_color(alpha))
     var inscope components <- split(replace(path, "\\", "/"), "/")
     var position = p0
     with_window_drawlist() $(var dl) {

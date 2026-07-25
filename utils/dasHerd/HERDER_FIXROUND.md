@@ -305,6 +305,16 @@ imgui_mouse_* bypass commands while input is detached.
   filter and sort driven through the rails.
 - 18 repositories readability; 20 token color language (one shared
   palette module feeds 18/20/22).
+  - 20 FOUNDATION DONE (2026-07-25): rich_tokens.das names every token
+    color once (sha/branch/pid/path dir-sep-name/warning/error/
+    added/deleted/title/muted/state) and rich_state re-exports it to
+    every surface; all previously hard-coded literals in git_ui,
+    files_ui, client chrome, terminal footer, and the shortcuts tab
+    now pull from it (identical values — zero visual delta), and the
+    terminal session line renders state + pid as colored tokens as
+    the exemplar for previously-plain tokens. Remaining under 18/22:
+    branch/path/sha adoption on herd cards and the repositories panel,
+    perspective indication.
 - 37 nested repositories in the Project view (found by Boris opening
   modules/dasVulkan): git lists a nested repo as one "dir/" entry.
   FIXED same day: the entry builds a folder chain tagged "(repo)"
