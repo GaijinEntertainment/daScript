@@ -31,6 +31,35 @@ def private max_rel_err(a, b : array<float>) : float {
     return m
 }
 
+// static_if shims: every driver symbol reference lives behind builtin_module_exists so the
+// FILE compiles off-Apple (the [test] arm feints there, but helper bodies still typecheck)
+def private t_accel_enable() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_enable(32l)
+    }
+}
+
+def private t_accel_disable() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_disable()
+    }
+}
+
+def private t_accel_pin_floor() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_set_min_mmac(0l)
+    }
+}
+
+[unused_argument(on)]  // off-Apple the else arm never reads it
+def private t_accel_set_f16(on : bool) : bool {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        return dasllama_accelerate_set_f16(on)
+    } else {
+        return false
+    }
+}
+
 // run the same mm twice — portable (override off) into yref, accelerate-armed into yacc
 def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : void>) : tuple<yref : array<float>; yacc : array<float>> {
     var res : tuple<yref : array<float>; yacc : array<float>>
@@ -38,9 +67,9 @@ def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : vo
     res.yacc |> resize(ntok * D)
     clear_float_batch_override()
     invoke(run_mm, res.yref)
-    dasllama_accelerate_enable(32l)
+    t_accel_enable()
     invoke(run_mm, res.yacc)
-    dasllama_accelerate_disable()
+    t_accel_disable()
     return <- res
 }
 
@@ -79,7 +108,7 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     var x : array<float>
     x |> resize(ntok * N)
     fill01(x, 7u)
-    if (f16_lane && !dasllama_accelerate_set_f16(true)) {
+    if (f16_lane && !t_accel_set_f16(true)) {
         to_log(LOG_WARNING, "BNNS probe failed on this OS — f16 lane arm feints\n")
         t |> success(true)
         return
@@ -87,17 +116,17 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     let r <- ref_and_accel(ntok) $(var y) {
         matmul_bf16_batch(y, wbf, 0l, x, int64(N), int64(D), int64(ntok))
     }
-    dasllama_accelerate_set_f16(false)
+    t_accel_set_f16(false)
     t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
 }
 
-[test]
+[test, unused_argument(t)]  // off-Apple the feint arm never reads t
 def test_accel_float_batch(t : T?) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
         with_job_que() {
             setup_dasllama_jobque_()
-            dasllama_accelerate_set_min_mmac(0l)  // tiny test shapes must engage, not fall through
-            dasllama_accelerate_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
+            t_accel_pin_floor()  // tiny test shapes must engage, not fall through
+            t_accel_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
             t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {
                 check_fp32(t, NTOK, false)
             }
