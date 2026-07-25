@@ -85,16 +85,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":819.20553410117259,
-            "stddev":13.841548919677734
+            "tok_s":875.35419976053322,
+            "stddev":2.7784712314605713
           },
           "tg128":{
-            "tok_s":64.715896081636217,
-            "stddev":0.048071339726448059
+            "tok_s":64.72437621415898,
+            "stddev":0.040281064808368683
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -287,16 +287,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":143.51014794316262,
-            "stddev":1.8688379526138306
+            "tok_s":145.24479853842553,
+            "stddev":2.0622482299804688
           },
           "tg128":{
-            "tok_s":14.490425807153695,
-            "stddev":0.0076773958280682564
+            "tok_s":14.494149035860834,
+            "stddev":0.0089524462819099426
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -489,16 +489,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":322.18006934471111,
-            "stddev":0.82716661691665649
+            "tok_s":327.5913902343861,
+            "stddev":0.31570258736610413
           },
           "tg128":{
-            "tok_s":33.410355402218116,
-            "stddev":1.4616864919662476
+            "tok_s":33.322471759728664,
+            "stddev":1.4384109973907471
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -753,16 +753,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":975.31116002164924,
-            "stddev":3.4707350730895996
+            "tok_s":979.87508768904149,
+            "stddev":2.6294610500335693
           },
           "tg128":{
-            "tok_s":52.005009558973953,
-            "stddev":0.034262686967849731
+            "tok_s":52.569869735164204,
+            "stddev":0.016571598127484322
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob"
@@ -880,7 +880,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -893,16 +893,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":945.41748437426793,
-            "stddev":46.733753204345703
+            "tok_s":1031.5256109500237,
+            "stddev":2.0743477344512939
           },
           "tg128":{
-            "tok_s":88.562698339367302,
-            "stddev":0.38233613967895508
+            "tok_s":88.130925363471718,
+            "stddev":0.035280764102935791
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"ac81c215e",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob"
@@ -913,7 +913,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -926,12 +926,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1032.8555940000001,
-            "stddev":3.24926
+            "tok_s":1033.84583,
+            "stddev":2.3984179999999999
           },
           "tg128":{
-            "tok_s":83.475138000000001,
-            "stddev":0.028147999999999999
+            "tok_s":84.420416000000003,
+            "stddev":0.012501999999999999
           }
         },
         "source":"official",
@@ -1095,16 +1095,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":839.13387512511383,
-            "stddev":21.282266616821289
+            "tok_s":847.21132532574086,
+            "stddev":19.207096099853516
           },
           "tg128":{
-            "tok_s":86.164890040423458,
-            "stddev":0.10428550839424133
+            "tok_s":85.955085255674334,
+            "stddev":0.03312971442937851
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -1297,16 +1297,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":129.39743550833799,
-            "stddev":1.3800555467605591
+            "tok_s":133.55806498041031,
+            "stddev":0.20453563332557678
           },
           "tg128":{
-            "tok_s":19.304210236321975,
-            "stddev":0.90736830234527588
+            "tok_s":20.336549004550896,
+            "stddev":0.29257255792617798
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob"
@@ -1468,16 +1468,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":899.61722962438034,
-            "stddev":9.0033988952636719
+            "tok_s":928.10501848796173,
+            "stddev":2.8307809829711914
           },
           "tg128":{
-            "tok_s":61.190055986399486,
-            "stddev":2.7236282825469971
+            "tok_s":60.979481778717954,
+            "stddev":2.6481883525848389
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob"
