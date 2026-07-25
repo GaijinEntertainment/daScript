@@ -207,6 +207,9 @@ struct GitInspectorState {
     prepare : InspectorLoadState = InspectorLoadState()
     prepare_elapsed_usec : int64
     mode : GitInspectorMode = GitInspectorMode.diff
+    // The user's chosen mode, updated only on manual tab switches; new files
+    // reopen in it (clean files still open straight in View).
+    sticky_mode : GitInspectorMode = GitInspectorMode.diff
     parsed : GitParsedPatch = GitParsedPatch()
     old_document : TextSourceDocument = TextSourceDocument()
     new_document : TextSourceDocument = TextSourceDocument()
@@ -635,8 +638,8 @@ def drain_inspector_prepare_events() {
                 let clean_view = (empty(g_inspector.parsed.hunks)
                     && !g_inspector.parsed.binary && g_inspector.view_prepared)
                 g_inspector.mode = (clean_view
-                    ? GitInspectorMode.view : GitInspectorMode.diff)
-                if (clean_view) {
+                    ? GitInspectorMode.view : g_inspector.sticky_mode)
+                if (g_inspector.mode == GitInspectorMode.view) {
                     g_inspector.pending_select_view_tab = true
                 } else {
                     g_inspector.pending_select_diff_tab = true
@@ -688,9 +691,13 @@ def begin_file_inspection(repository_id, worktree_path, file_path,
     } else {
         release_inspector_content()
         inspector_load_reset(g_inspector.prepare)
-        g_inspector.mode = GitInspectorMode.diff
+        g_inspector.mode = g_inspector.sticky_mode
         g_inspector.pending_widget_sync = true
-        g_inspector.pending_select_diff_tab = true
+        if (g_inspector.mode == GitInspectorMode.view) {
+            g_inspector.pending_select_view_tab = true
+        } else {
+            g_inspector.pending_select_diff_tab = true
+        }
     }
 }
 

@@ -12,8 +12,9 @@ much for the agent as for the human).
 1. Sessions & Activity: no "New session" icon in the panel.
 2. Worktree right-click: no context menu; expected "New session" with
    that worktree preselected (when not already claimed).
-3. New Session launcher must be a MODAL DIALOG, not dockable; rest of
-   the UI disabled while open. (Reverses the dockable-launcher call.)
+3. New Session launcher must be a MODAL DIALOG, not dockable; while
+   any dialog is up the rest of the UI is disabled and dimmed (darker
+   background), standard modal behavior. (Reverses the dockable call.)
 4. Agent session launch: (a) terminal colors wrong; (b) env leak —
    child Claude Code inherits CLAUDE_CODE_CHILD_SESSION → transcript
    saving off → Relaunch/`--continue` broken.
@@ -116,6 +117,11 @@ P2 — small defects:
 - 5 launch doesn't close launcher; 6 changelist row tooltips dead;
   14 inspector mode resets; 7 double-listed session; 9 aim policy
   (needs its one-paragraph design decision)
+- 36 Launch has no in-flight debounce: duplicate clicks (incl.
+  synthetic clicks queued while the window was minimized, then
+  replayed on restore) each create a session — observed three
+  identical env-probe sessions from one intended launch. Debounce on
+  a pending-create flag cleared by the herd revision bump.
 
 Features, foundation (command pattern/settings), and surface redesigns
 queue strictly behind these — the wave structure below survives as the

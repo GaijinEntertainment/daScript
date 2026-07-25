@@ -693,12 +693,20 @@ def draw_file_inspector_content() {
             (text = "InspectorModes", flags = ImGuiTabBarFlags.None)) {
         tab_item(INSPECTOR_DIFF_TAB.PUBLIC, (text = "Diff", closable = false,
                 flags = ImGuiTabItemFlags.None)) {
-            g_inspector.mode = GitInspectorMode.diff
+            // A mode lag here means the TAB changed first — a user click.
+            // Programmatic switches set mode before selecting the tab.
+            if (g_inspector.mode != GitInspectorMode.diff) {
+                g_inspector.mode = GitInspectorMode.diff
+                g_inspector.sticky_mode = GitInspectorMode.diff
+            }
             draw_side_by_side_diff()
         }
         tab_item(INSPECTOR_VIEW_TAB.PUBLIC, (text = "View", closable = false,
                 flags = ImGuiTabItemFlags.None)) {
-            g_inspector.mode = GitInspectorMode.view
+            if (g_inspector.mode != GitInspectorMode.view) {
+                g_inspector.mode = GitInspectorMode.view
+                g_inspector.sticky_mode = GitInspectorMode.view
+            }
             draw_file_view()
         }
     }

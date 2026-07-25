@@ -210,6 +210,7 @@ def draw_launcher_form() {
                 workflow_id, g_agent_source_repository_id,
                 g_agent_source_worktree_path, task)
         }
+        LAUNCHER_WIN.open = false
     }
     if (LAUNCHER_NEW_WORKTREE.value && !worktree_ok) {
         text_disabled("Name the session to derive the branch and worktree path.")

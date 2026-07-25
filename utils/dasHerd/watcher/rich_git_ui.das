@@ -275,7 +275,10 @@ def decorate_git_file_row(row_id, path : string;
     let row_min = GetItemRectMin()
     let row_max = GetItemRectMax()
     let row_right = git_visible_row_right(row_max.x)
-    let hovered = IsItemHovered()
+    // Geometric hover, not IsItemHovered: with AllowOverlap on the row the
+    // overlaid action icon steals item hover, which hid the icon and killed
+    // its tooltip the moment the mouse reached it.
+    let hovered = IsMouseHoveringRect(row_min, row_max, true)
     let icon_size = max(12.0f, GetTextLineHeight() - 3.0f)
     let icon_width = icon_size + GetStyle().FramePadding.x * 2.0f
     let action_x = row_right - icon_width
@@ -418,7 +421,8 @@ def draw_sha_copy_icon(hash, row_id : string;
         ? row_right - icon_width
         : row_min.x + GetStyle().FramePadding.x
             + CalcTextSize(visible_sha).x + GetStyle().ItemSpacing.x)
-    let hovered = IsItemHovered() && (empty(visible_sha)
+    // Geometric hover — AllowOverlap rows lose item hover to the overlay icon.
+    let hovered = IsMouseHoveringRect(row_min, row_max, true) && (empty(visible_sha)
         || GetMousePos().x <= icon_x + icon_width)
     if (icon_button_draw_at("##{row_id}:copy-sha", "duplicate",
             float2(icon_x, row_min.y), icon_size, 1.0f,

@@ -224,6 +224,17 @@ def herder_attach_session(input : JsonValue?) : JsonValue? {
     return JV((ok = true, session_id = target))
 }
 
+[live_command(description = "Close a durable herd session (terminates its PTY if running). Args: herd_id.")]
+def herder_close_session(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderAttachSessionArgs>)
+    if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    g_client->request_herd_close(args.herd_id)
+    return JV((ok = true, herd_id = args.herd_id))
+}
+
 struct HerderTerminalInputArgs {
     text : string
     submit : bool
