@@ -426,6 +426,45 @@ def layout_choice_path() : string {
     return path_join(dir_name(repository_default_config_path()),
         "dasHerd.layout.current")
 }
+
+// ===== UI settings (write-through) =====
+// Every change saves immediately — a crash must never lose settings.
+
+struct HerdUiSettings {
+    version : int = 1
+    // Matches the g_zoom_percent shipped default.
+    ui_zoom_percent : int = 150
+    show_exited : bool = false
+    show_tasks : bool = false
+    layout_preset : int = 0
+    window_zoom : table<string; int>
+}
+
+var g_ui_settings = HerdUiSettings()
+
+def settings_path() : string {
+    return path_join(dir_name(repository_default_config_path()), "dasHerd.ui.json")
+}
+
+def settings_save() {
+    let _ = fwrite(settings_path(), sprint_json(g_ui_settings, true))
+}
+
+def settings_load() {
+    if (fexist(settings_path())) {
+        var inscope loaded = HerdUiSettings()
+        if (sscan_json(fread(settings_path()), loaded) && loaded.version == 1) {
+            g_ui_settings <- loaded
+        }
+    } elif (fexist(layout_choice_path())) {
+        // Migrate the pre-settings layout choice file once.
+        g_ui_settings.layout_preset = clamp(to_int(strip(fread(layout_choice_path()))), 0, 1)
+    }
+    g_zoom_percent = clamp(g_ui_settings.ui_zoom_percent, 50, 300)
+    g_layout_preset = clamp(g_ui_settings.layout_preset, 0, 1)
+    g_show_exited = g_ui_settings.show_exited
+    g_show_tasks = g_ui_settings.show_tasks
+}
 // Launch debounce: a click stamps the herd revision; the button stays
 // disabled until the watcher's herd broadcast bumps it (or a timeout passes),
 // so duplicate/replayed clicks cannot create duplicate sessions.
@@ -707,8 +746,16 @@ def begin_file_inspection(repository_id, worktree_path, file_path,
     }
 }
 
+def set_ui_zoom(percent : int) {
+    g_zoom_percent = clamp(percent, 50, 300)
+    if (g_ui_settings.ui_zoom_percent != g_zoom_percent) {
+        g_ui_settings.ui_zoom_percent = g_zoom_percent
+        settings_save()
+    }
+}
+
 def zoom_by(delta : int) {
-    g_zoom_percent = clamp(g_zoom_percent + delta, 50, 300)
+    set_ui_zoom(g_zoom_percent + delta)
 }
 
 def first_focus_range(target : WatcherFocusTarget const) : int {

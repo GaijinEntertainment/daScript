@@ -258,15 +258,27 @@ def draw_main_menu() {
                 open_dock_window(LAUNCHER_WIN)
             }
             separator(VIEW_WINDOWS_SEPARATOR)
+            // g_show_* are authoritative (the Settings tab writes them too):
+            // seed the widget, then adopt only a user click on the menu item.
+            SHOW_EXITED.value = g_show_exited
             menu_item(SHOW_EXITED, (text = "Show exited sessions"))
-            g_show_exited = SHOW_EXITED.value
+            if (SHOW_EXITED.value != g_show_exited) {
+                g_show_exited = SHOW_EXITED.value
+                g_ui_settings.show_exited = g_show_exited
+                settings_save()
+            }
+            SHOW_TASKS.value = g_show_tasks
             menu_item(SHOW_TASKS, (text = "Show watcher task sessions"))
-            g_show_tasks = SHOW_TASKS.value
+            if (SHOW_TASKS.value != g_show_tasks) {
+                g_show_tasks = SHOW_TASKS.value
+                g_ui_settings.show_tasks = g_show_tasks
+                settings_save()
+            }
             separator(VIEW_ZOOM_SEPARATOR)
             if (menu_label(VIEW_ZOOM_IN, (text = "Zoom in", shortcut = "Ctrl++"))) zoom_by(5)
             if (menu_label(VIEW_ZOOM_OUT, (text = "Zoom out", shortcut = "Ctrl+-"))) zoom_by(-5)
             if (menu_label(VIEW_ZOOM_RESET, (text = "Reset zoom", shortcut = "Ctrl+0"))) {
-                g_zoom_percent = 100
+                set_ui_zoom(100)
             }
             if (menu_label(VIEW_SCROLL_BOTTOM, (text = "Scroll terminal to bottom"))) {
                 g_terminal_view.scroll_offset = 0
@@ -309,10 +321,9 @@ def init() {
     inspector_prepare_worker_start(g_prepare_worker)
     g_selected_worktree_path = get_das_root()
     SETTINGS_WIN.open = false
-    let layout_choice = fread(layout_choice_path())
-    if (!empty(layout_choice)) {
-        g_layout_preset = clamp(to_int(strip(layout_choice)), 0, 1)
-    }
+    settings_load()
+    SHOW_EXITED.value = g_show_exited
+    SHOW_TASKS.value = g_show_tasks
     let port = clamp(to_int(option_value("--port=", "9191")), 1024, 65535)
     g_token = option_value("--token=")
     g_url = "ws://127.0.0.1:{port}/ws?token={g_token}"
@@ -349,11 +360,8 @@ def update() {
             let _removed = remove(layout_ini_path(target))
         }
         g_layout_preset = target
-        fopen(layout_choice_path(), "wb") $(choice_file) {
-            if (choice_file != null) {
-                fwrite(choice_file, "{target}")
-            }
-        }
+        g_ui_settings.layout_preset = target
+        settings_save()
         if (fexist(layout_ini_path(target))) {
             LoadIniSettingsFromDisk(layout_ini_path(target))
             DOCK_ROOT.has_initial_layout = true

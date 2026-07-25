@@ -836,8 +836,32 @@ def herder_attention_open(input : JsonValue?) : JsonValue? {
 }
 
 def draw_settings_window() {
-    text("Global user configuration")
-    text_disabled("Repository registration and layout settings will be stored here.")
+    tab_bar(SETTINGS_TABS, (text = "Settings sections", flags = ImGuiTabBarFlags.None)) {
+        tab_item(SETTINGS_GENERAL_TAB, (text = "General", closable = false,
+                flags = ImGuiTabItemFlags.None)) {
+            SETTINGS_UI_ZOOM.bounds = (50, 300)
+            SETTINGS_UI_ZOOM.value = g_zoom_percent
+            SetNextItemWidth(240.0f)
+            if (slider_int(SETTINGS_UI_ZOOM, (text = "UI zoom %"))) {
+                set_ui_zoom(SETTINGS_UI_ZOOM.value)
+            }
+            SETTINGS_SHOW_EXITED.value = g_show_exited
+            if (checkbox(SETTINGS_SHOW_EXITED, (text = "Show exited sessions"))) {
+                g_show_exited = SETTINGS_SHOW_EXITED.value
+                g_ui_settings.show_exited = g_show_exited
+                settings_save()
+            }
+            SETTINGS_SHOW_TASKS.value = g_show_tasks
+            if (checkbox(SETTINGS_SHOW_TASKS, (text = "Show watcher task sessions"))) {
+                g_show_tasks = SETTINGS_SHOW_TASKS.value
+                g_ui_settings.show_tasks = g_show_tasks
+                settings_save()
+            }
+            separator(SETTINGS_GENERAL_SEPARATOR)
+            text_disabled(SETTINGS_PATH_TEXT,
+                (text = "Saved immediately to {settings_path()}"))
+        }
+    }
 }
 
 def draw_settings_dock() {
