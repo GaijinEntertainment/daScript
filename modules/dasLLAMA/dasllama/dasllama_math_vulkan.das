@@ -1620,28 +1620,36 @@ def dn_scan_p2 {
 }
 
 // plain Q8_0 requant of the o rows (no act) — the out-proj GEMM's activation image; input
-// floats at the DN_WS o region (binding 0 float view), one thread per 32-block
+// floats at the DN_WS o region (binding 0 float view). Subgroup per 4 blocks, word per lane
+// (same coalesced shape as q8_moe_actrq); bit-identical to the thread-per-block form.
 [compute_shader(local_size_x=256, name="dn_requant_spv")]
 def dn_requant {
-    let b = gl_GlobalInvocationID.x
+    let gid = gl_GlobalInvocationID.x
+    let sg = gid / 32u
+    let lane = gid % 32u
+    let b = sg * 4u + lane / 8u
     if (b < vk_meta[18u]) {
-        let base = vk_meta[10u] + b * 32u
-        var amax = 0.0
-        for (i in range(32)) {
-            amax = max(amax, abs(vk_upf[base + uint(i)]))
-        }
-        let d = amax / 127.0
+        let eb = vk_meta[10u] + sg * 128u + lane * 4u
+        let v0 = vk_upf[eb]
+        let v1 = vk_upf[eb + 1u]
+        let v2 = vk_upf[eb + 2u]
+        let v3 = vk_upf[eb + 3u]
+        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
-        vk_xs[b] = d
-        for (wi in range(8)) {
-            let wb = base + uint(wi) * 4u
-            var word = 0u
-            for (j in range(4)) {
-                let q = int(round(vk_upf[wb + uint(j)] * id))
-                word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
-            }
-            vk_xq[b * 8u + uint(wi)] = word
+        if (lane % 8u == 0u) {
+            vk_xs[b] = d
         }
+        let q0 = int(round(v0 * id))
+        let q1 = int(round(v1 * id))
+        let q2 = int(round(v2 * id))
+        let q3 = int(round(v3 * id))
+        let w = ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+        vk_xq[b * 8u + lane % 8u] = w
     }
 }
 
@@ -2550,28 +2558,40 @@ def rope_kv_store_b {
 }
 
 // plain Q8_K requant (no act) — the kq wo GEMM's activation image; input floats at vk_upf base
-// vk_meta[10], one thread per 256-weight superblock ([18] = superblock count). Mirrors
-// quantize_q8_k_into_ptr like q8k_moe_actrq does, minus the act.
+// vk_meta[10], one SUBGROUP per 256-weight superblock ([18] = superblock count): 8 coalesced
+// rounds/lane, 5-shuffle amax, butterfly pack — mirrors q8k_moe_actrq minus the act; bit-identical.
 [compute_shader(local_size_x=256, name="q8k_requant_spv")]
 def q8k_requant {
-    let b = gl_GlobalInvocationID.x
+    let gid = gl_GlobalInvocationID.x
+    let b = gid / 32u
+    let lane = gid % 32u
     if (b < vk_meta[18u]) {
         let base = vk_meta[10u] + b * 256u
-        var amax = 0.0
-        for (i in range(256)) {
-            amax = max(amax, abs(vk_upf[base + uint(i)]))
+        var vals : float[8]
+        var m = 0.0
+        for [unroll] (r in range(8)) {
+            let v = vk_upf[base + uint(r) * 32u + lane]
+            vals[r] = v
+            m = max(m, abs(v))
         }
-        let d = amax / 127.0
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        m = max(m, subgroupShuffleXor(m, 8u))
+        m = max(m, subgroupShuffleXor(m, 16u))
+        let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
-        vk_xs[b] = d
-        for (w in range(64)) {
-            let wb = base + uint(w) * 4u
-            var word = 0u
-            for (j in range(4)) {
-                let q = int(round(vk_upf[wb + uint(j)] * id))
-                word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
+        if (lane == 0u) {
+            vk_xs[b] = d
+        }
+        for [unroll] (r in range(8)) {
+            let q = int(round(vals[r] * id))
+            let b8 = uint(q) & 0xFFu
+            let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+            let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+            if (lane % 4u == 0u) {
+                vk_xq[b * 64u + uint(r) * 8u + lane / 4u] = w
             }
-            vk_xq[b * 64u + uint(w)] = word
         }
     }
 }
@@ -5457,7 +5477,7 @@ def private rd_record_token {
         rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.s_prologue, 1u, h)   // xb = rms_att[0](x)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 32l + 255l) / 256l), h)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), h)
             rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h)
             rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h)
@@ -5466,17 +5486,17 @@ def private rd_record_token {
             }
             rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)), h)
             rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads), h)
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 32l + 255l) / 256l), h)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.fo, L.s_wo, rd_gemv_wg(dim), h)
             rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_ffn, 1u, h)
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 32l + 255l) / 256l), h)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), h)
             rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid), h)
             rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim), h)
             rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_next, 1u, h)
         }
-        rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 32l + 255l) / 256l), h)
+        rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 4l + 255l) / 256l), h)
         rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
@@ -5792,7 +5812,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h)
                 rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h)
                 rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h)
@@ -5804,10 +5824,10 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 }
                 rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg, h)
                 rd_dispatch(raw, weak_copy(fa128 ? g_gpu.da_b128_pipeline : g_gpu.da_b_pipeline), g_rd.pf_sets[b + 5], attnwg, h)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h)
                 rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h)
                 rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
@@ -5815,7 +5835,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h)
             }
             if (last) {
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 4l + 255l) / 256l), h)
                 rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
@@ -6708,7 +6728,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         cmd_copy_whole(raw, g_gpu.dn_state_dev, g_gpu.dn_state_host.buf, nvh * ds * ds * 4l)
     }
     pfq_ts(raw)   // q6: tail copies
-    hz_dispatch(raw, h, weak_copy(g_gpu.dn_rq_pipeline), g_gpu.dn_rq_set, uint((rows * di / 32l + 255l) / 256l))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dn_rq_pipeline), g_gpu.dn_rq_set, uint((rows * di / 4l + 255l) / 256l))
     pfq_ts(raw)   // q7: o requant
     hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
         g_gpu.stacks[s_o].batch_set, nwg_out)
@@ -7158,7 +7178,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_kv_host.buf, AT_WINDOW * AT_MAX_KV * 4l, rows * kv_dim * 4l)
     hz_dispatch(raw, h, weak_copy(g_gpu.at_attn_pipeline), g_gpu.at_attn_set, uint(n_heads * ((rows + 7l) / 8l)))
     hz_dispatch(raw, h, weak_copy(o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline),
-        g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 256l : 32l) + 255l) / 256l))
+        g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 8l : 4l) + 255l) / 256l))
     hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
         g_gpu.stacks[s_o].batch_set, nwg_o)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
