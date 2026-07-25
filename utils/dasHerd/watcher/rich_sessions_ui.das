@@ -232,7 +232,8 @@ def draw_herd_cards() {
             }
             if (menu_item(HERD_MENU_CLOSE[index], (text = "Close session",
                     shortcut = "", enabled = true))) {
-                g_client->request_herd_close(record.id)
+                open_destructive_confirm("herd_close", record.id,
+                    "Close session '{record.name}' and terminate its PTY?")
             }
         }
         if (record.state == "exited") {
@@ -252,6 +253,42 @@ def draw_herd_cards() {
     if (visible == 0) {
         text_disabled(NO_HERD_LABEL,
             (text = "No sessions yet. Commands > New Session..."))
+    }
+}
+
+var g_confirm_kind : string
+var g_confirm_target : string
+var g_confirm_text : string
+
+// Destructive actions (note 27) route through one confirmation modal. The
+// target is captured at open time and re-checked at confirm so a selection
+// change while the dialog sits open can't redirect the action.
+def open_destructive_confirm(kind, target, description : string) {
+    g_confirm_kind = kind
+    g_confirm_target = target
+    g_confirm_text = description
+    open_popup(CONFIRM_DIALOG)
+}
+
+def draw_destructive_confirm_popup() {
+    popup_modal(CONFIRM_DIALOG.PUBLIC, (text = "Are you sure?",
+            closable = true, flags = ImGuiWindowFlags.None)) {
+        text(CONFIRM_TEXT, (text = g_confirm_text))
+        text_disabled(CONFIRM_HINT, (text = "This cannot be undone."))
+        if (button(CONFIRM_OK, (text = "Confirm", enabled = g_client != null))) {
+            if (g_confirm_kind == "terminate") {
+                if (g_client.selected_id == g_confirm_target) {
+                    g_client->terminate_selected()
+                }
+            } elif (g_confirm_kind == "herd_close") {
+                g_client->request_herd_close(g_confirm_target)
+            }
+            close_current_popup(CONFIRM_DIALOG)
+        }
+        same_line()
+        if (button(CONFIRM_CANCEL, (text = "Cancel"))) {
+            close_current_popup(CONFIRM_DIALOG)
+        }
     }
 }
 
@@ -297,8 +334,10 @@ def draw_session_list() {
     same_line()
     if (icon_button(TERMINATE_SESSION, (glyph = "stop",
             tip = "Terminate the attached session",
-            size = GetTextLineHeight())) && g_client != null) {
-        g_client->terminate_selected()
+            size = GetTextLineHeight())) && g_client != null
+            && !empty(g_client.selected_id)) {
+        open_destructive_confirm("terminate", g_client.selected_id,
+            "Terminate session {g_client.selected_id}?")
     }
     separator()
     draw_herd_cards()

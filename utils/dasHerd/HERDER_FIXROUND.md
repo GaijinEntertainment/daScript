@@ -315,7 +315,14 @@ imgui_mouse_* bypass commands while input is detached.
   worktree's Project view.
 - 9 auto-aim policy: empty selection may aim at attach origin;
   explicit selection stays sacred.
-- 27 destructive confirmations.
+- DONE 27 destructive confirmations (2026-07-25): Terminate-session
+  and Close-session route through one confirmation modal; the target
+  is captured at open and re-checked at confirm so a selection change
+  under an open dialog can't redirect the action. Live-verified:
+  right-click Close on scroll-probe -> modal with target-specific
+  text -> Confirm -> closed_by_user in the registry. Agent rails
+  (herder_close_session) stay direct by design — confirmation is a
+  human-mistake guard, not an agent gate.
 
 ## Wave 4 — structural
 

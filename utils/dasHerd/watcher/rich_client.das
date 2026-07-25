@@ -571,6 +571,7 @@ def update() {
         draw_settings_dock()
     }
     draw_herd_rename_popup()
+    draw_destructive_confirm_popup()
     herd_commands_drain()
     harness_end_frame()
 }
