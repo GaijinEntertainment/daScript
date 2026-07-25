@@ -83,6 +83,9 @@ class WatcherRichClient : HvWebSocketClient {
         delete agent_mark_files
         agent_mark_revision = -1l
         git_failure_baseline_ready = false
+        // A restarted watcher's revision counter starts over; reset so its
+        // first herd broadcast always applies instead of racing stale state.
+        herd_revision = -1l
         error = ""
         last_reconnect = ref_time_ticks()
         last_heartbeat = ref_time_ticks()

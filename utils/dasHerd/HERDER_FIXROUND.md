@@ -209,13 +209,30 @@ sanitizer now also scrubs NO_COLOR, CLAUDE_CODE_SESSION_ID, and
 CLAUDE_PID; verified with a live Claude launch rendering the brand
 truecolor logo.
 
-Still open in the dasImgui repo (separate checkout + rebuild block):
-30a selectable snapshot labels; the terminal scrollbar; NEW: combo
-imgui_force_set stops applying after a live reload (worked pre-reload,
-input_text unaffected); NEW: ClickState.click_count increments on
-disabled buttons (suppressed clicks are counted). Note 31's
-agent-session leg waits for the next live agent session — and the
-running cc-color-probe3 IS one, DASHERD_* env and all.
+DONE in the dasImgui checkout, branch codex/embedded-terminal (all
+das-side — no DLL rebuild was ever needed):
+- 30a (144f0ed): ClickState/ToggleState carry the visible label
+  (## suffix stripped) in snapshot payloads; icon_button reports its
+  glyph. Verified: worktree rows now name themselves.
+- Scrollbar (f85b643): draggable right-edge scrollback track on the
+  terminal widget, inset clear of the dock splitter's hover-stealing
+  grab zone. Verified: drag jumped scroll_offset 0→218 of 236.
+
+DONE note 31 in full + the conversation rails (dasHerd 5f9a38160):
+herder_session_say / herder_session_reply / herder_session_key
+(enter/escape/ctrl-c/tab/shift-tab/arrows), with the Enter deferred
+~200ms past the text so Ink TUIs submit instead of treating it as
+paste. Proven in a live conversation with a herd-launched Claude
+(greeting, 2+2 -> "4", paced ack). onOpen now resets herd_revision so
+a restarted watcher's first broadcast always applies.
+
+Still open, small, dasImgui-internal (agent-rail QoL, no dasHerd flow
+blocked): combo imgui_force_set stops applying after a live reload
+(popup-click workaround exists); ClickState.click_count counts clicks
+on enabled=false widgets (the macro gates the return value after the
+widget already counted). Also learned: set_user_control(false)
+detaches the GLFW layer imgui_click itself injects through — use the
+imgui_mouse_* bypass commands while input is detached.
 
 ## Wave 3 — surface reworks (each needs a short design pass)
 
