@@ -95,10 +95,10 @@ bulk-reset, so you don't see individual blocks.
 big stuff:
 	size	pointer		id
 	512	0x2069eeae630	1	array
-	48	0x2069ece4c20	2	new [[ ]]	D:/script.das:22:12
+	48	0x2069ece4c20	2	new [[ ]]	script.das:22:12
 	128	0x2069f1f4fa0	3	array
 bytes per location:
-48	D:/script.das:22:12
+48	script.das:22:12
 ```
 
 **Read it:** the persistent allocator shows each live block separately.

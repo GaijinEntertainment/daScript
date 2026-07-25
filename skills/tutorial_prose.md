@@ -10,8 +10,8 @@ every rule is `doc/source/reference/tutorials/dasLLAMA_00_problem_statement.rst`
 
 Software engineers, often non-native English speakers. They know programming
 and they know daslang. They do not know your domain, and every English idiom
-is a parse stall that teaches nothing. Write for "Boris the clown who made
-dasllama, not Boris the MS": playful-direct, never academic.
+is a parse stall that teaches nothing. The voice is playful-direct, never
+academic — a hacker showing a friend a neat trick, not a thesis defense.
 
 ## Sentence rules
 
