@@ -4259,9 +4259,11 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_X | VHG_YO)
         cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.ar_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.ar_set, 1u)   // one workgroup owns the whole row (it reduces)
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
         cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
@@ -4425,9 +4427,11 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_YO)
         cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.da_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.da_set, uint(n_heads))
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
@@ -4464,9 +4468,11 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_Y1 | VHG_Y2 | VHG_Y3)
         cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.rks_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.rks_set, uint((npairs + int64(WG_X) - 1l) / int64(WG_X)))
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
         cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
         cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
         cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
@@ -4900,6 +4906,18 @@ let private VHB_ATG = 0x800u      // at gate/o rows
 let private VHB_ATK = 0x1000u     // at roped-k panel
 let private VHB_ATV = 0x2000u     // at v panel (absolute positions)
 let private VHB_VRAW = 0x4000u    // at raw-v window
+
+// serial-seam region bits (decode GEMV preps, arena + standalone seams) — third namespace, same rail
+let private VHG_META = 0x1u       // ffn/dn params staged to device
+let private VHG_SM = 0x2u         // dn smalls image (β/γ + parity ring)
+let private VHG_Y1 = 0x4u         // gate / qkv / q out
+let private VHG_Y2 = 0x8u         // up / z / k out
+let private VHG_Y3 = 0x10u        // v out (qkv group, rope v mirror)
+let private VHG_HQ = 0x20u        // hq+hs requant image
+let private VHG_ST = 0x40u        // dn recurrent state (in place)
+let private VHG_WS = 0x80u        // dn o scratch (oq+os)
+let private VHG_X = 0x100u        // add_rms residual x (in place)
+let private VHG_YO = 0x200u       // the host-bound result plane (the DMA source)
 
 struct private VkHaz {
     w : uint            // bits with a pending (unbarriered) write
@@ -5458,23 +5476,26 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_META, true)
         cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        batch_barrier(raw, true)
         let gwg = uint((nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
+        vhz_dep(raw, h, 0u, VHG_Y1)
         bind_gemv_pipe(raw, f1)
         cmd_bind_dispatch(raw, g_gpu.af_gate_set, gwg)
+        vhz_dep(raw, h, 0u, VHG_Y2)
         if (f3 != f1) {
             bind_gemv_pipe(raw, f3)
         }
         cmd_bind_dispatch(raw, g_gpu.af_up_set, gwg)
-        comp_barrier(raw)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
+        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_META, VHG_HQ)
         cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.af_actrq_set, uint((nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_HQ, VHG_YO)
         bind_gemv_pipe(raw, f2)
         cmd_bind_dispatch(raw, g_gpu.af_down_set, uint((n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-        batch_barrier(raw, false)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
@@ -5542,9 +5563,11 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_YO)
         cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe_for(d, npos), VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, g_gpu.arenas[fmt].batch_set, groups)
-        batch_barrier(raw, false)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
@@ -5578,9 +5601,11 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_YO)
         bind_gemv_pipe(raw, fmt)
         cmd_bind_dispatch(raw, a.raw_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
@@ -5771,26 +5796,6 @@ def private fill_ffn_meta(elems, nblocks : int64; is_gelu : bool; comb_n : int64
         mp[6] = uint(comb_r0)
         mp[7] = uint(comb_r1)
     }
-}
-
-// compute -> compute barrier between the chain's kernels (RAW on the y/hidden planes; the
-// write-after-read hazard between requant and the down overwrite of y rides the same
-// execution dependency)
-def private comp_barrier(raw : VkCommandBuffer) {
-    var mb : MemoryBarrier
-    mb.srcAccessMask.shader_write = true
-    mb.dstAccessMask.shader_read = true
-    mb.dstAccessMask.shader_write = true
-    var mbs : array<MemoryBarrier>
-    mbs |> emplace(mb)
-    var sstage : VkPipelineStageFlags
-    sstage.compute_shader = true
-    var dstage : VkPipelineStageFlags
-    dstage.compute_shader = true
-    let dflags : VkDependencyFlags
-    let no_bufb : array<BufferMemoryBarrier>
-    let no_imgb : array<ImageMemoryBarrier>
-    cmd_pipeline_barrier(vk_value_to_boost(raw), sstage, dstage, dflags, mbs, no_bufb, no_imgb)
 }
 
 // ===== prefill batch dispatch (the FFN's batched-GEMM arm) =====
@@ -5993,26 +5998,6 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
     regions |> push(BufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(BATCH_META_BYTES)))
     cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(g_gpu.stacks[si].batch_meta.buf),
                     nonowning_buf(g_gpu.stacks[si].batch_meta_dev), regions)
-}
-
-def private batch_barrier(raw : VkCommandBuffer; src_transfer : bool) {
-    var mb : MemoryBarrier
-    mb.srcAccessMask.transfer_write = src_transfer
-    mb.srcAccessMask.shader_write = !src_transfer
-    mb.dstAccessMask.shader_read = src_transfer
-    mb.dstAccessMask.transfer_read = !src_transfer
-    var mbs : array<MemoryBarrier>
-    mbs |> emplace(mb)
-    var sstage : VkPipelineStageFlags
-    sstage.transfer = src_transfer
-    sstage.compute_shader = !src_transfer
-    var dstage : VkPipelineStageFlags
-    dstage.compute_shader = src_transfer
-    dstage.transfer = !src_transfer
-    let dflags : VkDependencyFlags
-    let no_bufb : array<BufferMemoryBarrier>
-    let no_imgb : array<ImageMemoryBarrier>
-    cmd_pipeline_barrier(vk_value_to_boost(raw), sstage, dstage, dflags, mbs, no_bufb, no_imgb)
 }
 
 def private cmd_copy_whole(raw : VkCommandBuffer; src, dst : uint64; bytes : int64) {
@@ -6542,22 +6527,29 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     let raw = st.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, 2l * nvh * 4l, st.smalls_dev, 8l, 4l)   // the ring parity word
+    vhz_dep(raw, h, 0u, VHG_META, true)
     cmd_copy_whole(raw, g_gpu.dnd_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
-    batch_barrier(raw, true)
+    vhz_dep(raw, h, 0u, VHG_Y1)
     bind_gemv_pipe(raw, 0)
     cmd_bind_dispatch(raw, g_gpu.stacks[s_qkv].raw_set, uint((cd + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    vhz_dep(raw, h, 0u, VHG_Y2)
     cmd_bind_dispatch(raw, st.z_set, uint((di + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_SM | VHG_META | VHG_ST, VHG_ST | VHG_WS | VHG_SM)
     cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dnd_fused_pipeline, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, st.fused_set, uint(nvh))
-    comp_barrier(raw)
+    vhz_dep(raw, h, VHG_WS, VHG_YO)
     bind_gemv_pipe(raw, 0)
     cmd_bind_dispatch(raw, st.out_set, uint((dim + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
+    if (vk_prof()) {
+        to_log(LOG_INFO, "vk_dnd hz: {h.disp} nodes, {h.barriers} barriers\n")
+    }
     vk_check(vkEndCommandBuffer(raw), null)
     g_gpu.dnd_steps |> insert(woq, st)
 }
@@ -6959,25 +6951,31 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         let raw = fc.cmd
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        vhz_dep(raw, h, 0u, VHG_META, true)
         cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        batch_barrier(raw, true)
+        vhz_dep(raw, h, 0u, VHG_Y1)
         bind_gemv_pipe(raw, g_gpu.stacks[s1].fmt)
         let ggu = uint((nrows * nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
         cmd_bind_dispatch(raw, g_gpu.stacks[s1].raw_set, ggu)
+        vhz_dep(raw, h, 0u, VHG_Y2)
         if (g_gpu.stacks[s3].fmt != g_gpu.stacks[s1].fmt) {
             bind_gemv_pipe(raw, g_gpu.stacks[s3].fmt)
         }
         cmd_bind_dispatch(raw, g_gpu.stacks[s3].raw_set, ggu)
-        comp_barrier(raw)
         // the requant form follows the DOWN stack — its GEMV is the consumer of hq/hs
         let dkq = g_gpu.stacks[s2].fmt != 0
+        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_META, VHG_HQ)
         cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
         cmd_bind_dispatch(raw, fc.actrq_set, uint((nrows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-        comp_barrier(raw)
+        vhz_dep(raw, h, VHG_HQ, VHG_YO)
         bind_gemv_pipe(raw, g_gpu.stacks[s2].fmt)
         cmd_bind_dispatch(raw, fc.down_set, uint((nrows * n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-        batch_barrier(raw, false)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
+        if (vk_prof()) {
+            to_log(LOG_INFO, "vk_ffng hz: {h.disp} nodes, {h.barriers} barriers\n")
+        }
         vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.ffn_cmds[key] = FfnCmd(cmd = fc.cmd, actrq_set = fc.actrq_set,
             down_set = fc.down_set, nrows = nrows)
@@ -7080,17 +7078,21 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     let fq = g_gpu.stacks[sq].fmt
     let fk = g_gpu.stacks[sk].fmt
     let fv = g_gpu.stacks[sv].fmt
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHG_Y1)
     bind_gemv_pipe(raw, fq)
     cmd_bind_dispatch(raw, g_gpu.stacks[sq].raw_set, uint((dq + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    vhz_dep(raw, h, 0u, VHG_Y2)
     if (fk != fq) {
         bind_gemv_pipe(raw, fk)
     }
     cmd_bind_dispatch(raw, qc.k_set, uint((dk + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    vhz_dep(raw, h, 0u, VHG_Y3)
     if (fv != fk) {
         bind_gemv_pipe(raw, fv)
     }
     cmd_bind_dispatch(raw, qc.v_set, uint((dv + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
     vk_check(vkEndCommandBuffer(raw), null)
     g_gpu.qkv_cmds |> insert(woq, qc)
@@ -7424,9 +7426,11 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     var raw = alloc_cmd()
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHG_YO)
     bind_gemv_pipe(raw, g_gpu.stacks[si].fmt)
     cmd_bind_dispatch(raw, g_gpu.stacks[si].cls_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    batch_barrier(raw, false)
+    vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
     vk_check(vkEndCommandBuffer(raw), null)
     g_gpu.stacks[si].cls_cmd = raw
