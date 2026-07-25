@@ -164,6 +164,13 @@ def test_herd_lifecycle(t : T?) {
         t |> equal(record.exit_code, 3l)
         t |> equal(record.reason, "process_exited")
         t |> equal(record.launch_count, 1)
+        let posted = watcher_mailbox_post(WatcherMailboxPostRequest(
+            session_id = first.session_id, direction = "outbox",
+            subject = "work is ready", notify = false))
+        t |> success(posted.ok, posted.error)
+        herd_tick()
+        t |> success(herd_get(herd_id, record) && record.unread_outbox == 1,
+            "unread agent mail is reflected on the durable session")
 
         var inscope relaunch = WatcherLaunchRequest()
         t |> success(herd_build_launch(herd_id, false, "", "", "", relaunch, error), error)

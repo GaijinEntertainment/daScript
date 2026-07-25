@@ -424,6 +424,7 @@ def update() {
         draw_terminal_dock()
         draw_settings_dock()
     }
+    draw_herd_rename_popup()
     harness_end_frame()
 }
 

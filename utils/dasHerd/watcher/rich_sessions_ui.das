@@ -21,6 +21,7 @@ require daslib/strings_boost
 require live/live_commands
 require ./watcher_core.das
 require ./repository_core.das
+require ./herd_sessions.das
 require ./git_graph_model.das
 require ./file_inspection.das
 require strings
@@ -30,6 +31,26 @@ require ./rich_focus.das
 require ./rich_inspector_ui.das
 
 var SESSION_ROW : table<int; ToggleState>
+
+var HERD_CARD_ROW : table<int; ToggleState>
+
+var HERD_ICON_JOIN : table<int; EmptyMarkerState>
+
+var HERD_STATE_JOIN : table<int; EmptyMarkerState>
+
+var HERD_ACTION_JOIN : table<int; EmptyMarkerState>
+
+var HERD_CARD_DETAIL : table<int; NarrativeState>
+
+var HERD_CARD_POPUP : table<int; PopupContextItemState>
+
+var HERD_MENU_RELAUNCH : table<int; ToggleState>
+
+var HERD_MENU_RENAME : table<int; ToggleState>
+
+var HERD_MENU_CLOSE : table<int; ToggleState>
+
+var g_herd_rename_id : string
 
 var ATTENTION_MESSAGE_ROW : table<int; ToggleState>
 
@@ -119,6 +140,111 @@ def pending_attention_count() : int {
     return count
 }
 
+def private herd_age_label(updated_wall_s : int64) : string {
+    let age = int64(get_clock()) - updated_wall_s
+    if (age < 60l) return "now"
+    if (age < 3600l) return "{age / 60l}m ago"
+    if (age < 86400l) return "{age / 3600l}h ago"
+    return "{age / 86400l}d ago"
+}
+
+def private attach_herd_card(record : HerdSession) {
+    if (g_client == null || empty(record.pty_session_id)) return
+    ui_event("herd-card-attach {record.id}")
+    g_client->attach_session(record.pty_session_id)
+    g_open_terminal_pending = true
+    g_focus_terminal_pending = true
+}
+
+def draw_herd_cards() {
+    if (g_client == null) return
+    let line = GetTextLineHeight()
+    var visible = 0
+    for (index in range(length(g_client.herd_sessions))) {
+        let record & = unsafe(g_client.herd_sessions[index])
+        if (record.state == "closed") continue
+        visible++
+        var profile_agent = false
+        for (profile in g_client.herd_profiles) {
+            if (profile.id == record.profile_id) {
+                profile_agent = profile.agent
+                break
+            }
+        }
+        icon(profile_agent ? "bolt" : "chevron-right", line)
+        same_line(HERD_ICON_JOIN[index])
+        var state_glyph = "clock"
+        if (record.state == "running") {
+            state_glyph = "play"
+        } elif (record.state == "exited") {
+            state_glyph = (record.launch_count == 0 ? "clock"
+                : (record.exit_code == 0l ? "check" : "warning"))
+        }
+        icon(state_glyph, line)
+        same_line(HERD_STATE_JOIN[index])
+        let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
+        HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
+            && record.pty_session_id == g_client.selected_id)
+        if (selectable(HERD_CARD_ROW[index],
+                (text = "{record.name}{unread_hint}##herd:{record.id}"))) {
+            attach_herd_card(record)
+        }
+        popup_context_item(HERD_CARD_POPUP[index],
+                (str_id = "herdcard:{record.id}",
+                 flags = ImGuiPopupFlags.MouseButtonRight)) {
+            if (menu_item(HERD_MENU_RELAUNCH[index], (text = "Relaunch",
+                    shortcut = "", enabled = record.state == "exited"))) {
+                g_client->request_herd_relaunch(record.id)
+            }
+            if (menu_item(HERD_MENU_RENAME[index], (text = "Rename...",
+                    shortcut = "", enabled = true))) {
+                g_herd_rename_id = record.id
+                HERD_RENAME_INPUT.pending_value = record.name
+                HERD_RENAME_INPUT.has_pending = true
+                open_popup(HERD_RENAME_DIALOG)
+            }
+            if (menu_item(HERD_MENU_CLOSE[index], (text = "Close session",
+                    shortcut = "", enabled = true))) {
+                g_client->request_herd_close(record.id)
+            }
+        }
+        if (record.state == "exited") {
+            same_line(HERD_ACTION_JOIN[index])
+            if (icon_button_draw("##herd-relaunch:{record.id}", "refresh", line)) {
+                g_client->request_herd_relaunch(record.id)
+            }
+        }
+        let satellite_hint = (!empty(record.satellites)
+            ? "  +{length(record.satellites)} repos" : "")
+        text_disabled(HERD_CARD_DETAIL[index],
+            (text = "      {record.profile_id} | {record.workflow} | " +
+                "{base_name(record.worktree_path)}{satellite_hint} | " +
+                "{herd_age_label(record.updated_wall_s)}"))
+    }
+    if (visible == 0) {
+        text_disabled(NO_HERD_LABEL,
+            (text = "No sessions yet. Commands > New Session..."))
+    }
+}
+
+def draw_herd_rename_popup() {
+    popup_modal(HERD_RENAME_DIALOG.PUBLIC, (text = "Rename session",
+            closable = true, flags = ImGuiWindowFlags.None)) {
+        input_text_growable(HERD_RENAME_INPUT, (text = "Name"))
+        if (button(HERD_RENAME_OK, (text = "Rename",
+                enabled = g_client != null && !empty(g_herd_rename_id)
+                    && !empty(strip(HERD_RENAME_INPUT.value))))) {
+            g_client->request_herd_rename(g_herd_rename_id,
+                strip(HERD_RENAME_INPUT.value))
+            close_current_popup(HERD_RENAME_DIALOG)
+        }
+        same_line()
+        if (button(HERD_RENAME_CANCEL, (text = "Cancel"))) {
+            close_current_popup(HERD_RENAME_DIALOG)
+        }
+    }
+}
+
 def draw_session_list() {
     let connection = g_client != null && g_client.connected ? "connected" : "disconnected"
     text("Watcher: {connection}")
@@ -129,6 +255,8 @@ def draw_session_list() {
     if (small_button(TERMINATE_SESSION, (text = "Terminate")) && g_client != null) {
         g_client->terminate_selected()
     }
+    separator()
+    draw_herd_cards()
     separator()
     draw_selected_session_context()
     child(SESSIONS_CHILD, (text = "sessions", size = float2(0.0f, 120.0f),
@@ -211,7 +339,7 @@ def draw_session_list() {
 }
 
 def sessions_ui_init() {
-    pass
+    HERD_RENAME_INPUT.capacity = 1024
 }
 
 def draw_sessions_dock() {

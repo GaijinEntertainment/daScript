@@ -1112,6 +1112,16 @@ def private append_mailbox_record(var session : WatcherSession?;
     fflush(session.mailbox_file)
 }
 
+def public watcher_mailbox_unread_outbox(session_id : string) : int {
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null) return 0
+    var count = 0
+    for (message in g_sessions[index].mailbox) {
+        if (message.direction == "outbox" && message.status == "new") count++
+    }
+    return count
+}
+
 def public watcher_mailbox_session_revision(session_id : string) : int64 {
     let index = watcher_find_session(session_id)
     if (index < 0 || g_sessions[index] == null) return -1l

@@ -51,6 +51,9 @@ struct public HerdSession {
     created_wall_s : int64
     updated_wall_s : int64
     launch_count : int
+    // Unread agent->human mailbox messages on the linked PTY; live UI state,
+    // refreshed every tick and not meaningful across restarts.
+    unread_outbox : int
     columns : int = 120
     rows : int = 36
 }
@@ -329,17 +332,26 @@ def public herd_mark_launch_failed(herd_id, reason : string) : string {
 }
 
 // Observes linked PTYs; the drained gate keeps the transition after the last
-// output byte so the terminal replay of an exited session is complete.
+// output byte so the terminal replay of an exited session is complete. Unread
+// mailbox counts bump only the revision (broadcast), never the registry file.
 def public herd_tick() {
-    var dirty = false
+    var save_dirty = false
+    var revision_dirty = false
     for (record in g_herd) {
+        if (!empty(record.pty_session_id)) {
+            let unread = watcher_mailbox_unread_outbox(record.pty_session_id)
+            if (unread != record.unread_outbox) {
+                record.unread_outbox = unread
+                revision_dirty = true
+            }
+        }
         if (record.state != "running") continue
         var info = WatcherSessionInfo()
         if (!watcher_get_session_info(record.pty_session_id, info)) {
             record.state = "exited"
             record.reason = "pty_missing"
             record.updated_wall_s = wall_seconds()
-            dirty = true
+            save_dirty = true
             continue
         }
         if ((info.state == "exited" || info.state == "failed") && info.drained) {
@@ -347,12 +359,14 @@ def public herd_tick() {
             record.reason = info.state == "failed" ? info.reason : "process_exited"
             record.exit_code = info.exit_code
             record.updated_wall_s = wall_seconds()
-            dirty = true
+            save_dirty = true
         }
     }
-    if (dirty) {
-        g_herd_revision++
+    if (save_dirty) {
         let _ = save_registry()
+    }
+    if (save_dirty || revision_dirty) {
+        g_herd_revision++
     }
 }
 
