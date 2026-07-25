@@ -411,16 +411,17 @@ class MetalManualDispatchCensus : AstPassMacro {
         for_each_structure(mod) $(var st) {
             for (field in st.fields) {
                 var is_ssbo = false
-                var has_role = false
                 for (annDecl in field.annotation) {
                     if (annDecl.name == "ssbo") {
                         is_ssbo = true
-                    } elif (annDecl.name == "role") {
-                        has_role = true
                     }
                 }
-                if (is_ssbo && !has_role) {
+                continue if (!is_ssbo)
+                let role = find_arg(field.annotation, "role") ?as tString ?? ""
+                if (empty(role)) {
                     macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — the scheduling rail needs every buffer's hazard intent declared")
+                } elif (!role_ok(role)) {
+                    macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has unknown @role '{role}' (read/write/readwrite/weight/alias)")
                 }
             }
         }
