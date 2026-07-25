@@ -447,7 +447,11 @@ class WatcherRichClient : HvWebSocketClient {
                 break
             }
         }
-        if (follow_origin && !empty(origin_repository_id) && !empty(origin_worktree_path)) {
+        // Auto-aim policy (note 9): an explicit worktree selection is sacred,
+        // but a seeded/default selection may always aim at the attach origin —
+        // even for task auto-attaches that pass follow_origin=false.
+        let may_aim = follow_origin || !g_selection_explicit
+        if (may_aim && !empty(origin_repository_id) && !empty(origin_worktree_path)) {
             let origin_changed = (g_selected_repository_id
                     != origin_repository_id
                 || g_selected_worktree_path != origin_worktree_path)

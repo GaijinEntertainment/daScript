@@ -313,8 +313,13 @@ imgui_mouse_* bypass commands while input is detached.
   repository-scoped listing — options are a filesystem-based listing
   or treating a registered nested repo as a portal into its own
   worktree's Project view.
-- 9 auto-aim policy: empty selection may aim at attach origin;
-  explicit selection stays sacred.
+- DONE 9 auto-aim policy (2026-07-25): g_selection_explicit tracks
+  whether the selection came from a deliberate pick (worktree row
+  click, focus-target navigation, herder_git_select_worktree) vs a
+  seed/auto-aim; attach_session may re-aim at the session origin
+  whenever the selection is not explicit, even for task auto-attaches
+  with follow_origin=false. Flag exposed in herder_client_state;
+  verified false on the seeded default, true after an explicit select.
 - DONE 27 destructive confirmations (2026-07-25): Terminate-session
   and Close-session route through one confirmation modal; the target
   is captured at open and re-checked at confirm so a selection change

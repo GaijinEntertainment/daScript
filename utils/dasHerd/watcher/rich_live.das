@@ -135,7 +135,8 @@ def herder_client_state(_input : JsonValue?) : JsonValue? {
         session_count = length(g_client.sessions),
         repository_count = length(g_client.repositories),
         selected_repository_id = g_selected_repository_id,
-        selected_worktree_path = g_selected_worktree_path))
+        selected_worktree_path = g_selected_worktree_path,
+        selection_explicit = g_selection_explicit))
 }
 
 [live_command(description = "Restore the rich client's default dock layout.")]
@@ -498,6 +499,7 @@ def herder_git_select_worktree(input : JsonValue?) : JsonValue? {
             if (worktree.path != args.worktree_path) continue
             g_selected_repository_id = args.repository_id
             g_selected_worktree_path = args.worktree_path
+            g_selection_explicit = true
             g_requested_history_commit = ""
             g_client->refresh_repository(args.repository_id)
             g_client->request_repository_review(

@@ -391,6 +391,11 @@ var g_selected_worktree_path : string
 
 var g_selected_repository_id : string
 
+// True once the selection came from a deliberate pick (worktree row click,
+// focus-target navigation, select rail) rather than a seed or auto-aim.
+// Note-9 policy: attaches may re-aim only while the selection is not explicit.
+var g_selection_explicit : bool
+
 var g_agent_source_worktree_path : string
 
 var g_agent_source_repository_id : string

@@ -14,6 +14,7 @@ def select_bundle_participant(participant : WatcherBundleParticipant const) {
     if (g_client == null) return
     g_selected_repository_id = participant.repository_id
     g_selected_worktree_path = participant.worktree_path
+    g_selection_explicit = true
     g_client->refresh_repository(participant.repository_id)
     g_client->request_repository_review(participant.repository_id,
         participant.worktree_path)
@@ -61,6 +62,7 @@ def activate_focus_target(message : WatcherMailboxMessage const;
         || g_selected_worktree_path != worktree_path)
     g_selected_repository_id = repository_id
     g_selected_worktree_path = worktree_path
+    g_selection_explicit = true
     if (message.status == "new") g_client->acknowledge_mailbox(message.id)
     if (selection_changed) {
         g_client->refresh_repository(repository_id)

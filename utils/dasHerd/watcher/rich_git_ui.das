@@ -144,6 +144,7 @@ def draw_repositories_window() {
                     ui_event("worktree-row-click {worktree.path}")
                     g_selected_repository_id = repository.record.id
                     g_selected_worktree_path = worktree.path
+                    g_selection_explicit = true
                     g_client->refresh_repository(repository.record.id)
                     g_client->request_repository_review(
                         repository.record.id, worktree.path)
