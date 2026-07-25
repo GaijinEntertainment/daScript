@@ -2810,9 +2810,9 @@ def kq_moe_batch_k6 {
 
 // ===== device state (process-lifetime; never finalized by design) =====
 
-let private WEIGHT_CAP = 4_200_000_000l    // conservative default: WDDM commit cliff hit at ~6.5GiB
-                                           // of 8GB (measured); other processes are invisible to the
-                                           // Vulkan budget query — DASLLAMA_GPU_VRAM_MB overrides for bigger cards
+let private WEIGHT_CAP = 4_200_000_000l    // default ceiling — NV/WDDM heapBudget IGNORES other
+                                           // processes (reported 7608 of 8192MB under a 1.7GB desktop);
+                                           // over-commit = silent SysMem demotion, act role 35x slower
 let private VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
@@ -3363,7 +3363,7 @@ def private vk_moe_init : bool {
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
     let sg = subgroup_properties(g_gpu.phys).subgroupSize
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
-    // DASLLAMA_GPU_VRAM_MB / gpu_vram_mb wins outright; env PRESENCE alone skips the budget clamp (=0 pins WEIGHT_CAP — the misreporting-driver escape hatch)
+    // env wins outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); else live budget - reserve
     g_gpu.weight_budget = WEIGHT_CAP
     let vram_mb = gpu_want_vram_mb()
     let vram_override = vram_mb > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
@@ -3385,8 +3385,13 @@ def private vk_moe_init : bool {
             }
         }
         if (best >= 0 && mb.heapBudget[best] > 0ul) {
+            let safe_cap = max(int64(mb.heapBudget[best]) - VRAM_RESERVE, 0l)
+            // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
+            let cliff = min(safe_cap, int64(mp2.memoryProperties.memoryHeaps[best].size) - 2_147_483_648l)
             if (!vram_override) {
-                g_gpu.weight_budget = clamp(int64(mb.heapBudget[best]) - VRAM_RESERVE, 0l, g_gpu.weight_budget)
+                g_gpu.weight_budget = min(safe_cap, g_gpu.weight_budget)
+            } elif (g_gpu.weight_budget > cliff) {
+                to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
             }
             to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {int64(mb.heapBudget[best]) / 1000000l} MB (used {int64(mb.heapUsage[best]) / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
         }
