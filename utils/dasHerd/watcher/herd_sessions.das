@@ -32,6 +32,10 @@ struct public HerdProfile {
     launch_argv : array<string>
     resume_argv : array<string>
     agent : bool
+    // Optional first-prompt lines injected on the INITIAL launch of an agent
+    // session (never on resume). Empty by default: prompt injection is a
+    // per-profile choice, since tolerance for it is agent- and model-specific.
+    intro_lines : array<string>
 }
 
 struct public HerdSession {
@@ -354,6 +358,7 @@ def public herd_build_launch(herd_id : string; initial : bool;
     request.worktree_path = record.worktree_path
     request.purpose = !empty(record.workflow) ? record.workflow : "session"
     request.task_context = record.task_context
+    request.intro_text = join(profile.intro_lines, "\n")
     request.herd_session_id = record.id
     request.resume = !initial
     request.columns = record.columns

@@ -155,6 +155,31 @@ def test_herd_registry(t : T?) {
             "closing the other attendees clears the advisory flag")
         herd_shutdown()
     }
+    t |> run("profile intro lines ride the initial launch request") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_herd_intro_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        let profiles_path = path_join(root, "profiles.json")
+        t |> success(fwrite(profiles_path, "\{\"version\":1,\"profiles\":[" +
+            "\{\"id\":\"intro\",\"display_name\":\"Intro\"," +
+            "\"launch_argv\":[\"claude\"]," +
+            "\"resume_argv\":[\"claude\",\"--continue\"]," +
+            "\"agent\":true,\"intro_lines\":[\"Line A\",\"Line B\"]\}]\}"),
+            "custom intro profile written")
+        t |> equal(herd_init(path_join(root, "_registry.json"), profiles_path), "")
+        var error : string
+        let herd_id = herd_create(HerdCreateRequest(name = "intro session",
+            profile_id = "intro", worktree_path = root), error)
+        t |> success(!empty(herd_id), error)
+        var inscope launch = WatcherLaunchRequest()
+        t |> success(herd_build_launch(herd_id, true, "", "", "", launch, error), error)
+        t |> equal(launch.intro_text, "Line A\nLine B")
+        t |> success(!launch.resume, "initial launch is not a resume")
+        herd_shutdown()
+    }
 }
 
 [test]

@@ -50,6 +50,8 @@ struct public WatcherLaunchRequest {
     worktree_path : string
     purpose : string
     task_context : string
+    // Profile intro_lines joined for the initial launch prompt (agents only).
+    intro_text : string
     agent_url : string
     agent_token : string
     agent_skill_path : string
@@ -954,11 +956,20 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
     var command_argv := request.argv
     if (empty(command_argv)) command_argv |> push("codex")
     // A resume relaunch runs the profile's resume argv verbatim: the agent CLI
-    // restores its own conversation, so re-sending the task would duplicate it.
-    if (!request.resume && !empty(strip(request.task_context))) {
-        command_argv |> push("Your assigned debug task is:\n\n{request.task_context}\n\n" +
-            "Read the dasHerd session context at {context_path} before acting. " +
-            "Use the dasHerd skill for session coordination, then begin the assigned task.")
+    // restores its own conversation, so re-sending the prompt would duplicate it.
+    if (!request.resume) {
+        var prompt = strip(request.intro_text)
+        if (!empty(strip(request.task_context))) {
+            if (!empty(prompt)) {
+                prompt += "\n\n"
+            }
+            prompt += ("Your assigned debug task is:\n\n{request.task_context}\n\n" +
+                "Read the dasHerd session context at {context_path} before acting. " +
+                "Use the dasHerd skill for session coordination, then begin the assigned task.")
+        }
+        if (!empty(prompt)) {
+            command_argv |> push(prompt)
+        }
     }
     if (get_platform_name() == "windows") {
         var command = ("$env:DASHERD_URL = {powershell_literal(request.agent_url)}; " +
