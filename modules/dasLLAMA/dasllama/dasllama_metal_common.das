@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _metal_manual_dispatch = true   // PERMANENT opt-out: this module IS the capture rail (kn_dispatch / graph replay dispatch here)
 
 module dasllama_metal_common shared public
 
@@ -1330,45 +1331,7 @@ def moe_metal_ok(t : Model) : bool {
 }
 
 
-let HZ_BX     = 1u
-let HZ_BXB    = 2u
-let HZ_BXB2   = 4u
-let HZ_BQKV   = 8u
-let HZ_BHB    = 16u
-let HZ_BHB2   = 32u
-let HZ_BPART  = 64u
-let HZ_ARENA  = 128u
-let HZ_BPSK   = 256u
-let HZ_BXF    = 512u
-let HZ_BLOG   = 1024u
-let HZ_BMLG   = 2048u   // MoE router logits (Wave C)
-let HZ_BMSEL  = 4096u   // MoE selection rows
-let HZ_BMDN   = 8192u   // MoE per-slot down outputs
-let HZ_BMG4X  = 16384u  // gemma4 MoE: the pre_ffn2 expert-input panel
-let HZ_BMRT   = 32768u  // gemma4 MoE: router-input / routed-acc panel
-let HZ_BMGH   = 65536u  // gemma4 MoE: expert gate panel (dense branch keeps bhb)
-let HZ_BMGH2  = 131072u // gemma4 MoE: expert up panel
-
-struct HazTrack {
-    on : bool
-    w : uint    // buffers with a pending (unbarriered) write
-    r : uint    // buffers with a pending read
-}
-
-def bar_dep(enc : MetalComputeEncoder?; var h : HazTrack; rmask, wmask : uint) {
-    if (!h.on) {
-        return
-    }
-    if ((rmask & h.w) != 0u || (wmask & h.w) != 0u || (wmask & h.r) != 0u) {
-        metal_memory_barrier(enc)
-        h.w = 0u
-        h.r = 0u
-    }
-    h.r |= rmask
-    h.w |= wmask
-}
-
-// ===== the single-decode range tracker (the dispatch port) =====
+// ===== the range tracker (the dispatch port; since P3 the batch rail's only hazard system) =====
 // lcpp ggml_mem_ranges-shaped, finer: exact (buffer, off, len) ranges over mutable FRAME buffers
 // only; armed only while the single-stream concurrent encoder builds (others no-op the staging)
 
@@ -1391,6 +1354,7 @@ var g_hz_barriers = 0l              // lifetime barrier count (chase prints the 
 var g_hz_gated = 0l                 // lifetime gated dispatches — the coverage check's twin
 var g_hz_undeclared = 0l            // conservative fallbacks taken (0 once migration completes)
 var g_hz_cover_warned = false
+var g_hz_g0 = 0l                    // g_hz_gated at the last hz_arm — per-encoder dispatch index
 
 def hz_read(b : MetalBuffer?; off, len : uint64) {
     if ((g_hz_on || g_gr_on) && b != null) {
@@ -1419,14 +1383,16 @@ def hz_write(b : MetalBuffer?) {
 // the per-dispatch gate: barrier + reset only when this dispatch's staged ranges conflict with
 // the live set (any overlap involving a write) — then the staged set joins the live set
 def hz_gate(enc : MetalComputeEncoder?) {
-    if (!g_hz_on) {
+    // capture mode outranks an armed oracle: kn_dispatch consumes the staged ranges into the
+    // node — gating here would eat them (leaving every captured node "undeclared")
+    if (g_gr_on || !g_hz_on) {
         return
     }
     g_hz_gated++
     if (empty(g_hz_stage)) {
         // undeclared dispatch: serial semantics — barrier before it, and dirty forces one after
         if (g_hz_strict) {
-            panic("dasLLAMA metal decode: undeclared dispatch under DASLLAMA_METAL_HAZARD_STRICT")
+            panic("dasLLAMA metal: undeclared dispatch under DASLLAMA_METAL_HAZARD_STRICT (gated #{g_hz_gated - g_hz_g0} on this encoder)")
         }
         g_hz_undeclared++
         if (g_hz_dirty || !empty(g_hz_pend)) {
@@ -1465,6 +1431,7 @@ def hz_arm(on : bool) {
     g_hz_stage |> clear()
     g_hz_pend |> clear()
     g_hz_dirty = false
+    g_hz_g0 = g_hz_gated   // per-encoder base — the strict panic names the offender by index
 }
 
 // ===== the step graph (the dispatch port, session 2) =====
@@ -1609,8 +1576,9 @@ def private gr_shape_hash : uint64 {
 def private gr_schedule(var sched : KSched) : bool {
     let n = length(g_gr_nodes)
     sched.nodes = n
-    for (nd in g_gr_nodes) {
-        if (nd.nrange == 0) {
+    for (j in range(n)) {
+        if (g_gr_nodes[j].nrange == 0) {
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
             return false
         }
     }
@@ -1685,14 +1653,16 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
 def graph_flush(enc : MetalComputeEncoder?; order : array<int>) {
     g_gr_on = false
     hz_arm(true)
+    // index loops, not for-in: a strict-mode panic must be able to unwind without leaving the
+    // node array LOCKED (a recovered test would then die on the next gr_arm's clear)
     if (empty(order)) {
-        for (n in g_gr_nodes) {
-            gr_encode_node(enc, n)
+        for (i in range(length(g_gr_nodes))) {   // nolint:PERF018 — no for-in lock, see above
+            gr_encode_node(enc, g_gr_nodes[i])
         }
     } else {
         assert(length(order) == length(g_gr_nodes))
-        for (i in order) {
-            gr_encode_node(enc, g_gr_nodes[i])
+        for (i in range(length(order))) {   // nolint:PERF018 — no for-in lock, see above
+            gr_encode_node(enc, g_gr_nodes[order[i]])
         }
     }
     hz_arm(false)

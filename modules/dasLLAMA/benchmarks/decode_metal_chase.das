@@ -16,8 +16,8 @@ require daslib/strings_boost   // nolint:STYLE030 — used only inside the Apple
 // (interleaved across reps, so box noise hits every arm equally) and prints the driver's per-stage
 // split next to the wall t/s:
 //   full      the production path (GPU logits) — the headline arm
-//   nologits  CPU classifier pinned: full minus the classifier rms+GEMV (wall t/s is polluted by
-//             the CPU classifier — read the gpu/encode stages, not t/s)
+//   nologits  RETIRED: blob models force GPU logits (no CPU classifier planes) and every chase
+//             model is blob-form — the arm is skipped loudly if requested
 //   noattn    DASLLAMA_METAL_DECODE_SKIP=attn semantics: nologits minus single-query attention
 //   noew      minus rms/rope/kv-store/add/swiglu (the elementwise set)
 //   nogemv    minus every layer GEMV — attention + elementwise only
@@ -60,8 +60,8 @@ struct Args {
     @clarg_doc = "Interleaved repetitions of the arm set (default: 3)"
     reps : int = 3
 
-    @clarg_doc = "Comma list of arms to run (default: full,nologits,noattn,noew,nogemv)"
-    arms : string = "full,nologits,noattn,noew,nogemv"
+    @clarg_doc = "Comma list of arms to run (default: full,noattn,noew,nogemv)"
+    arms : string = "full,noattn,noew,nogemv"
 
     @clarg_doc = "KV cache dtype (default: f16 — the emission arc's batch default)"
     kv : KVDtype = KVDtype.f16
@@ -174,7 +174,16 @@ def private run_chase(cfg) {   // untyped param = generic — non-Apple builds n
     if (select_prefill_override("metal")) {   // fast deep-window fill; declines fall back to CPU
         print("prefill override: metal\n")
     }
-    let arms <- [for (a in split(cfg.arms, ",")); a]
+    // blob models FORCE GPU logits (no CPU classifier planes), and the blob transform below makes
+    // every chase model blob-form — a `nologits` arm would silently measure `full`. Drop it loudly.
+    var arms : array<string>
+    for (a in split(cfg.arms, ",")) {
+        if (a == "nologits") {
+            print("nologits arm skipped: blob models force GPU logits — the arm would measure `full`\n")
+        } else {
+            arms |> push(a)
+        }
+    }
     let p = max(int64(cfg.prefill), 8l)
     let p2 = int64(cfg.prefill2)
     let n = max(int64(cfg.ngen), 1l)

@@ -1065,6 +1065,33 @@ def private emit_tg_store_half4(var ctx : MslCtx; ec : ExprCall?; indent : strin
     lines |> push("{indent}*(threadgroup half4*)({m.msl_name} + ({idx})) = half4({v});")
 }
 
+// tg_store_float4(dst, idx, v): the float twin — `*(threadgroup float4*)(dst + idx) = v;`
+// (idx % 4 == 0 by contract; 16-byte alignment)
+def private emit_tg_store_float4(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 3) {
+        err(ctx, ec.at, "tg_store_float4 takes (workgroup array, index, float4)")
+        return
+    }
+    let mem = member_lookup(ctx, ec.arguments[0])
+    if (empty(mem)) {
+        err(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
+        return
+    }
+    let m = ctx.members[mem]
+    if (!m.workgroup) {
+        err(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
+        return
+    }
+    if (m.elem != "float") {
+        err(ctx, ec.at, "tg_store_float4 destination must be a float workgroup array (got {m.elem})")
+        return
+    }
+    let idx = emit_value(ctx, ec.arguments[1])
+    let v = emit_value(ctx, ec.arguments[2])
+    note(ctx, "call.tg_store_float4")
+    lines |> push("{indent}*(threadgroup float4*)({m.msl_name} + ({idx})) = {v};")
+}
+
 // simdgroup_multiply_accumulate(d, a, b, c) / simdgroup_multiply(d, a, b) — argument-type combos
 // are enforced upstream by the das overload set (all-f32, all-f16, and mac's mixed f32-acc/f16-ab)
 def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -1278,6 +1305,8 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_sgmat_load_store(ctx, ec, indent, lines)
         } elif (cname == "tg_store_half4") {
             emit_tg_store_half4(ctx, ec, indent, lines)
+        } elif (cname == "tg_store_float4") {
+            emit_tg_store_float4(ctx, ec, indent, lines)
         } elif (cname == "simdgroup_multiply_accumulate" || cname == "simdgroup_multiply") {
             emit_sgmat_multiply(ctx, ec, indent, lines)
         } else {

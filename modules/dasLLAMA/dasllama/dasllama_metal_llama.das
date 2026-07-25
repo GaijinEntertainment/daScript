@@ -1059,7 +1059,9 @@ def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true
     let c = t.config
     let dim = c.dim
     var cb = metal_new_command_buffer_unretained(g_queue)
-    var enc = metal_new_compute_encoder(cb)
+    let conc = decode_concurrent() && empty(g_skip)
+    var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
+    gr_arm(conc)   // the draft step rides the same capture rail as the main step
     unsafe {
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
         enc_rms(enc, r.bx, bw_en, r.bxb, r.u_dim, r.u_eps)
@@ -1075,6 +1077,9 @@ def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true
     encode_layer(t, r, enc, c.n_layers, dn0)
     if (with_cls) {
         encode_cls_tail(t, r, enc, t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off)
+    }
+    if (conc) {
+        graph_flush_sched(enc)
     }
     metal_end_encoding(enc)
     metal_release(enc)
@@ -2576,14 +2581,13 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
     // (g_skip) run stays on the serial encoder so a skipped stage can't leave a dependent unbarriered.
     let conc = g_bconcurrent && empty(g_skip)
-    var haz = HazTrack(on = conc, w = 0u, r = 0u)
+    hz_arm(conc)   // the range oracle: the *_b encoders self-declare, hz_gate barriers at real hazards
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's)
     if (g_skip != "ew") {
         unsafe {
             var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
-            bar_dep(enc, haz, HZ_BX, HZ_BXB)
             enc_rms_b(enc, bx, bw_att0, bxb, u_dim, u_eps, nrows)
         }
     }
@@ -2617,7 +2621,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             let f2 = kq_fmt_at(t.w2_fmt, l)
             if (g_skip != "gemv") {
                 if (fq != KqFmt.q8) {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BQKV)
                     enc_kq_site_b(enc, t, fq, t.wq_offs[l], qd_l, dim, bxb, dim, bqkv, qkvd_l, 0l, u_dim, u_qd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
                     enc_kq_site_b(enc, t, kq_fmt_at(t.wk_fmt, l), t.wk_offs[l], kvd_l, dim, bxb, dim, bqkv, qkvd_l, qd_l, u_dim, u_kvd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
                     if (has_wv) {
@@ -2627,7 +2630,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     // three per-tensor blob dispatches into the ONE fused QKV buffer — y binds at
                     // the tensor's column byte offset, the qkvd row stride rides the ndim uniform;
                     // disjoint writes, so one barrier (bxb RAW) covers all three — they overlap
-                    bar_dep(enc, haz, HZ_BXB, HZ_BQKV)
                     let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
                     let bwk_ = blob_of(g_dev, t, t.wk_offs[l])
                     enc_gemm_mm_b(enc, bwq_.buf, bwq_.boff, bxb, bqkv, 0ul, u_dim, u_qkvd_l, mp, qd_l)
@@ -2640,7 +2642,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     // per-tensor mv dispatches into the fused bqkv at segment y offsets (the
                     // ys uniform carries the fused row stride; the cat streams died with the
                     // blob image — kind-major layout keeps q/k/v apart)
-                    bar_dep(enc, haz, HZ_BXB, HZ_BQKV)
                     let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
                     let bwk_ = blob_of(g_dev, t, t.wk_offs[l])
                     enc_mv_site(enc, bwq_.buf, bwq_.boff, bxb, bqkv, u_dim, u_qd_l, u_xs4_dim, u_qkvd_l,
@@ -2655,7 +2656,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } else {
                     // gemm/gemv tiers, per tensor into the fused buffer (split-K stands down —
                     // its reduce writes contiguous y; the qkv site takes plain GemmB instead)
-                    bar_dep(enc, haz, HZ_BXB, HZ_BQKV)
                     let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
                     let bwk_ = blob_of(g_dev, t, t.wk_offs[l])
                     if (use_gemm) {
@@ -2678,8 +2678,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             if ((!has_wv || c.v_norm) && g_skip != "ew") {
                 // gemma4 V: no-wv layers fill the v segment from the PRE-norm/PRE-rope K slice (the
                 // CPU mm_qkv order); with v_norm the copies FUSE into the ones-RMS. The k-slice READ
-                // orders against qk_norm's k WRITE ONLY via the bar_dep below (the V-race class).
-                bar_dep(enc, haz, HZ_BQKV, HZ_BQKV)
+                // orders against qk_norm's k WRITE via the encoders' own hz ranges (the V-race class).
                 if (!has_wv && !c.v_norm) {
                     for (i in range64(nrows)) {
                         enc_copy_row(enc, bqkv, uint64((i * qkvd_l + qd_l) * 4l), bqkv,
@@ -2701,7 +2700,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l), null, 0ul)
-                bar_dep(enc, haz, HZ_BQKV, HZ_BQKV)
                 enc_qk_norm(enc, bqkv, bqkw, u_nh, u_qd_l, u_qkvd_l, u_hs_l, u_hs_l, u_eps,
                     u_qd_l, n_heads + kvd_l / hs_l, nrows, hs_l)
             }
@@ -2719,7 +2717,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 // hetero: the swa pair's rows are hs_sw/2 wide — the class's own width)
                 var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                 var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                bar_dep(enc, haz, HZ_BQKV, HZ_BQKV | HZ_ARENA)
                 if (tq4) {
                     enc_rope_store_b_tq4(enc, bqkv, bcos_l, bsin_l, brt, ulay, u_qd_l, u_hs_l, u_nh, u_kvm_l, u_qkvd_l, u_neox,
                         bbias, u_hasb, n_heads + 2l * (kvd_l / hs_l), nrows, hs_l)
@@ -2737,7 +2734,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     bsnk = upload_region(addr < void? >(t.fblob[t.sinks_off + l * n_heads]), uint64(n_heads * 4l))
                 }
                 if (use_attn_d) {
-                    bar_dep(enc, haz, HZ_BQKV | HZ_ARENA, HZ_BPART)
                     if (tq4) {
                         enc_attn_d_tq4(enc, bqkv, bpart, brt, ulay, u_nblk, u_nh, u_kvm, u_hs, u_scale, u_qkvd, u_nsgs,
                             d_nsgs, nrows, n_heads)
@@ -2748,13 +2744,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         enc_attn_d(enc, f16, bqkv, bpart, brt, ulay, u_kvd, u_nh, u_kvm, u_hs, u_scale, u_qkvd, u_nsgs,
                             d_nsgs, nrows, n_heads)
                     }
-                    bar_dep(enc, haz, HZ_BPART, HZ_BXB)
                     enc_attn_comb_d(enc, bpart, bxb, brt, u_nsgs, u_nh, u_hs, nrows, n_heads, head_size)
                 } elif (chunked) {
                     // sliding layers bind the span; each row's kernels derive wstart from its own
                     // cnt (per-row depths differ), and the comb skips that row's below-window chunks
                     var bwin = lsl && u_winsl != null ? u_winsl : u_zero32
-                    bar_dep(enc, haz, HZ_BQKV | HZ_ARENA, HZ_BPART)
                     if (tq4) {
                         enc_attn_part_b_tq4(enc, bqkv, bpart, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l, u_nch,
                             u_softcap, bwin, nrows, nchmax, n_heads, hs_l)
@@ -2765,10 +2759,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         enc_attn_part_b(enc, f16, bqkv, bpart, brt, ulay, u_kvd_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l, u_nch,
                             u_softcap, bwin, nrows, nchmax, n_heads, hs_l)
                     }
-                    bar_dep(enc, haz, HZ_BPART, HZ_BXB)
                     enc_attn_comb_b(enc, bpart, bxb, brt, u_nch, u_nh, u_hs_l, bwin, nrows, n_heads, hs_l, bsnk, u_hass)
                 } else {
-                    bar_dep(enc, haz, HZ_BQKV | HZ_ARENA, HZ_BXB)
                     if (tq4) {
                         enc_attn_b_tq4(enc, bqkv, bxb, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l,
                             u_softcap, nrows, n_heads, hs_l, bsnk, u_hass)
@@ -2782,42 +2774,33 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
                 if (tq4) {
                     // the attention out is rotated-basis per head — un-rotate before the wo projection
-                    bar_dep(enc, haz, HZ_BXB, HZ_BXB)
                     enc_fwht_unsign(enc, bxb, u_hs_l, u_qd_l, n_heads, nrows, hs_l)
                 }
             }
             if (g_skip != "gemv") {
                 if (fo != KqFmt.q8) {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BXB2)
                     enc_kq_site_b(enc, t, fo, t.wo_offs[l], dim, qd_l, bxb, qd_l, bxb2, dim, 0l, u_qd_l, u_dim, u_dim, u_nrows_kq, nrows, mp)
                 } elif (use_mm) {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BXB2)
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     enc_gemm_mm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, 0ul, u_qd_l, u_dim, mp, dim)
                 } elif (mv) {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BXB2)
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     enc_mv_site(enc, bwo.buf, bwo.boff, bxb, bxb2,
                         u_qd_l, u_dim, het ? u_xs4_qd_sw : u_xs4_qd, u_dim, dim, nrows, dim, uint64(qd_l * 4l), u_nrows_mv, u_nrows_mv2)
                 } else {
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     if (wo_sk > 0l) {
-                        bar_dep(enc, haz, HZ_BXB, HZ_BPSK)
                         enc_gemm_sk_b(enc, bwo.buf, bwo.boff, bxb, bpsk, u_qd_l, u_dim, u_sk_wo, dim, wo_sk)
-                        bar_dep(enc, haz, HZ_BPSK, HZ_BXB2)
                         enc_sk_reduce_b(enc, bpsk, bxb2, u_skt_dim, u_sk_wo, 32l * dim)
                     } elif (use_gemm) {
-                        bar_dep(enc, haz, HZ_BXB, HZ_BXB2)
                         enc_gemm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, mp, dim)
                     } else {
-                        bar_dep(enc, haz, HZ_BXB, HZ_BXB2)
                         enc_gemv_b(enc, nrows > 2l, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, dim)
                     }
                 }
             }
             if (c.attn_out_bias && g_skip != "gemv") {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                bar_dep(enc, haz, HZ_BXB2, HZ_BXB2)
                 enc_ew2(enc, g_pso_add, bxb2, 0ul, bwo_b, 0ul, u_total_dim, nrows * dim)
             }
             // ffn: [post-attn norm ->] fused add+norm -> W1 / W3 (the cat region at byte offsets)
@@ -2826,18 +2809,15 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             if (g_skip != "ew") {
                 if (c.pre_post_norm) {
                     var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BXB2, HZ_BXB2)
                     enc_rms_b(enc, bxb2, bw_pa, bxb2, u_dim, u_eps, nrows)
                 }
                 var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
                 // add_rms updates the residual bx in place AND writes the norm-out bxb; past the
                 // fused kernel's row slab the unfused pair does the same in two dispatches
-                bar_dep(enc, haz, HZ_BX | HZ_BXB2, HZ_BX | HZ_BXB)
                 if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
                     enc_add_rms_b(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, nrows)
                 } else {
                     enc_ew2(enc, g_pso_add, bx, 0ul, bxb2, 0ul, u_total_dim, nrows * dim)
-                    bar_dep(enc, haz, HZ_BX, HZ_BXB)
                     enc_rms_b(enc, bx, bw_ffn, bxb, u_dim, u_eps, nrows)
                 }
             }
@@ -2846,9 +2826,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             let bex = g4moe ? bmg4x : bxb
             let bgh = g4moe ? bmgh : bhb
             let bgh2 = g4moe ? bmgh2 : bhb2
-            let hz_ex = g4moe ? HZ_BMG4X : HZ_BXB
-            let hz_gh = g4moe ? HZ_BMGH : HZ_BHB
-            let hz_gh2 = g4moe ? HZ_BMGH2 : HZ_BHB2
             if (moe && g_skip != "gemv") {
                 // MoE FFN (Wave C): per-row router -> select -> expert gate/up (grid (nfe, k,
                 // rows)) -> act over rows*k*nfe -> expert down -> per-row weighted combine
@@ -2863,25 +2840,18 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
                 if (g4moe) {
                     var bw_p2 = upload_region(addr < void? >(t.fblob[t.rms_pre_ffn2_off + l * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BX, HZ_BMG4X)
                     enc_rms_b(enc, bx, bw_p2, bmg4x, u_dim, u_eps, nrows)
                     var bw_rs = upload_region(addr < void? >(t.fblob[t.moe_router_scale_off + l * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BX, HZ_BMRT)
                     enc_g4_router_norm(enc, bx, bw_rs, bmg4rt, u_dim, u_eps, u_moe_invd, nrows)
-                    bar_dep(enc, haz, HZ_BMRT, HZ_BMLG)
                     enc_moe_router(enc, bw_rt, bmg4rt, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, c.n_expert, nrows)
                 } else {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BMLG)
                     enc_moe_router(enc, bw_rt, bxb, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, c.n_expert, nrows)
                 }
-                bar_dep(enc, haz, HZ_BMLG, HZ_BMSEL)
                 enc_moe_select(enc, bmlg, bmsel, bmsel, u_moe_ne, u_moe_k, u_moe_gmode, nrows)
                 if (g4moe) {
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
-                    bar_dep(enc, haz, HZ_BMSEL, HZ_BMSEL)
                     enc_moe_wscale(enc, bmsel, bmsel, bw_ds, u_moe_k, nrows)
                 }
-                bar_dep(enc, haz, hz_ex | HZ_BMSEL, hz_gh | hz_gh2)
                 if (t.experts_mx4) {
                     var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
@@ -2901,13 +2871,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
             }
             if (moe && g_skip != "ew") {
-                bar_dep(enc, haz, hz_gh | hz_gh2, hz_gh)
                 let pso_act = c.ffn_act == FfnAct.swiglu_oai ? g_pso_swiglu_oai : (g4moe ? g_pso_geglu : g_pso_swiglu)
                 enc_ew2(enc, pso_act, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
             }
             if (moe && g_skip != "gemv") {
                 let fe2 = kq_fmt_at(t.we2_fmt, l)
-                bar_dep(enc, haz, hz_gh | HZ_BMSEL, HZ_BMDN)
                 if (t.experts_mx4) {
                     var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
                     enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn,
@@ -2918,11 +2886,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         u_moe_nfe, u_dim, bmsel, fe2 == KqFmt.q8 ? u_moe_eblk : u_moe_esb, u_moe_xs_dn,
                         u_moe_ss, u_moe_knfe, u_moe_kdim)
                 }
-                bar_dep(enc, haz, HZ_BMDN | HZ_BMSEL, g4moe ? HZ_BMRT : HZ_BXB)
                 enc_moe_combine(enc, bmdn, bmsel, g4moe ? bmg4rt : bxb, u_dim, u_moe_k, dim, nrows)
                 if (g4moe && g_skip != "ew") {
                     var bw_pf2 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BMRT, HZ_BMRT)
                     enc_rms_b(enc, bmg4rt, bw_pf2, bmg4rt, u_dim, u_eps, nrows)
                 }
             }
@@ -2930,11 +2896,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 if (f1 != KqFmt.q8) {
                     // gate + up into DISJOINT bhb/bhb2 — the ew2 swiglu below fuses them
                     // (fuse13 stands down on kq loads)
-                    bar_dep(enc, haz, HZ_BXB, HZ_BHB | HZ_BHB2)
                     enc_kq_site_b(enc, t, f1, t.w1_offs[l], hidden, dim, bxb, dim, bhb, hidden, 0l, u_dim, u_hidden, u_hidden, u_nrows_kq, nrows, mp)
                     enc_kq_site_b(enc, t, kq_fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, bxb, dim, bhb2, hidden, 0l, u_dim, u_hidden, u_hidden, u_nrows_kq, nrows, mp)
                 } elif (use_mm) {
-                    bar_dep(enc, haz, HZ_BXB, HZ_BHB | HZ_BHB2)
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
                     enc_gemm_mm_b(enc, bw1.buf, bw1.boff, bxb, bhb, 0ul, u_dim, u_hidden, mp, hidden)
@@ -2942,7 +2906,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } elif (mv) {
                     // two mv dispatches read the same norm and write DISJOINT gate/up — one
                     // barrier covers both; the ew2 swiglu below fuses them (fuse13 stands down)
-                    bar_dep(enc, haz, HZ_BXB, HZ_BHB | HZ_BHB2)
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
                     enc_mv_site(enc, bw1.buf, bw1.boff, bxb, bhb,
@@ -2954,12 +2917,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
                     if (fuse13) {
                         // one fused dispatch: gate+up dot + swiglu straight into bhb (w2's input)
-                        bar_dep(enc, haz, HZ_BXB, HZ_BHB)
                         enc_gemv_w13sw_b(enc, nrows > 2l, bw1.buf, bw1.boff, bw3.boff, bxb, bhb, u_dim, u_hidden, hidden)
                     } else {
                         // W1 and W3 both read the ffn-norm output and write DISJOINT buffers (bhb / bhb2)
                         // — one barrier (bxb RAW) covers both; they then run concurrently
-                        bar_dep(enc, haz, HZ_BXB, HZ_BHB | HZ_BHB2)
                         if (use_gemm) {
                             enc_gemm_b(enc, bw1.buf, bw1.boff, bxb, bhb, u_dim, u_hidden, u_hidden, mp, hidden)
                             enc_gemm_b(enc, bw3.buf, bw3.boff, bxb, bhb2, u_dim, u_hidden, u_hidden, mp, hidden)
@@ -2972,34 +2933,26 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             }
             if ((!moe || g4moe) && g_skip != "ew" && !fuse13) {
                 // the gate ew reads gate (bhb) + up (bhb2), writes act(gate)*up back into bhb
-                bar_dep(enc, haz, HZ_BHB | HZ_BHB2, HZ_BHB)
                 enc_ew2(enc, geglu ? g_pso_geglu : g_pso_swiglu, bhb, 0ul, bhb2, 0ul, u_total_h, nrows * hidden)
             }
             if ((!moe || g4moe) && g_skip != "gemv") {
                 if (f2 != KqFmt.q8) {
-                    bar_dep(enc, haz, HZ_BHB, HZ_BXB)
                     enc_kq_site_b(enc, t, f2, t.w2_offs[l], dim, hidden, bhb, hidden, bxb, dim, 0l, u_hidden, u_dim, u_dim, u_nrows_kq, nrows, mp)
                 } elif (use_mm) {
-                    bar_dep(enc, haz, HZ_BHB, HZ_BXB)
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     enc_gemm_mm_b(enc, bw2.buf, bw2.boff, bhb, bxb, 0ul, u_hidden, u_dim, mp, dim)
                 } elif (mv) {
-                    bar_dep(enc, haz, HZ_BHB, HZ_BXB)
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     enc_mv_site(enc, bw2.buf, bw2.boff, bhb, bxb,
                         u_hidden, u_dim, u_xs4_hid, u_dim, dim, nrows, dim, uint64(hidden * 4l), u_nrows_mv, u_nrows_mv2)
                 } else {
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     if (w2_sk > 0l) {
-                        bar_dep(enc, haz, HZ_BHB, HZ_BPSK)
                         enc_gemm_sk_b(enc, bw2.buf, bw2.boff, bhb, bpsk, u_hidden, u_dim, u_sk_w2, dim, w2_sk)
-                        bar_dep(enc, haz, HZ_BPSK, HZ_BXB)
                         enc_sk_reduce_b(enc, bpsk, bxb, u_skt_dim, u_sk_w2, 32l * dim)
                     } elif (use_gemm) {
-                        bar_dep(enc, haz, HZ_BHB, HZ_BXB)
                         enc_gemm_b(enc, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, mp, dim)
                     } else {
-                        bar_dep(enc, haz, HZ_BHB, HZ_BXB)
                         enc_gemv_b(enc, nrows > 2l, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, dim)
                     }
                 }
@@ -3007,15 +2960,12 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             if (g4moe && g_skip != "ew") {
                 // dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                 var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
-                bar_dep(enc, haz, HZ_BXB, HZ_BXB)
                 enc_rms_b(enc, bxb, bw_pf1, bxb, u_dim, u_eps, nrows)
-                bar_dep(enc, haz, HZ_BXB | HZ_BMRT, HZ_BXB)
                 enc_ew2(enc, g_pso_add, bxb, 0ul, bmg4rt, 0ul, u_total_dim, nrows * dim)
             }
             if (g_skip != "ew") {
                 if (c.pre_post_norm) {
                     var bw_pf = upload_region(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BXB, HZ_BXB)
                     enc_rms_b(enc, bxb, bw_pf, bxb, u_dim, u_eps, nrows)
                 }
                 // gemma4 layer_out_scale multiplies the WHOLE layer output — (x + branch) * s
@@ -3026,17 +2976,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
                 if (l + 1l < c.n_layers) {
                     var bw_attn = upload_region(addr < void? >(t.fblob[t.rms_att_off + (l + 1l) * dim]), uint64(dim * 4l))
-                    bar_dep(enc, haz, HZ_BX | HZ_BXB, HZ_BX | HZ_BXB)
                     if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
                         enc_add_rms_b(enc, bx, bxb, bw_attn, bxb, u_dim, u_eps, nrows, bosc)
                     } else {
                         enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
-                        bar_dep(enc, haz, HZ_BX, HZ_BXB)
                         enc_rms_b(enc, bx, bw_attn, bxb, u_dim, u_eps, nrows)
                     }
                 } else {
                     // last layer: plain residual add into bx (the final rms reads bx)
-                    bar_dep(enc, haz, HZ_BX | HZ_BXB, HZ_BX)
                     enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
                 }
             }
@@ -3051,8 +2998,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             cb = metal_new_command_buffer_unretained(g_queue)
             enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
             // fresh encoder + in-order queue serialize cross-cb hazards — start the tracker clean
-            haz.w = 0u
-            haz.r = 0u
+            hz_arm(conc)   // fresh encoder — start the tracker clean (queue order covers cross-cb)
         }
     }
     var nc_all = false
@@ -3060,9 +3006,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         // batched final rmsnorm + classifier — the caller's CPU classifier step is skipped
         unsafe {
             var bwfin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
-            bar_dep(enc, haz, HZ_BX, HZ_BXF)
             enc_rms_b(enc, bx, bwfin, bxf, u_dim, u_eps, nrows)
-            bar_dep(enc, haz, HZ_BXF, HZ_BLOG)
             if (cls_fmt != KqFmt.q8) {
                 enc_kq_site_b(enc, t, cls_fmt, t.wcls_off, c.vocab_size, dim, bxf, dim, blog, c.vocab_size, 0l, u_dim, u_vocab, u_vocab, u_nrows_kq, nrows, mp)
             } elif (use_mm) {
@@ -3085,12 +3029,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         }
         if (u_flcap != null) {
             // final-logit soft cap (gemma2): cap*tanh over the live rows' contiguous logits
-            bar_dep(enc, haz, HZ_BLOG, HZ_BLOG)
             enc_softcap_row(enc, blog, 0ul, u_fltot, u_flcap, nrows * c.vocab_size)
         }
         if (bsupp != null) {
             // gemma4 suppressed ids pin to -1e30 AFTER the cap (the CPU order) — per live row
-            bar_dep(enc, haz, HZ_BLOG, HZ_BLOG)
             for (i in range64(nrows)) {
                 enc_suppress_row(enc, blog, uint64(i * c.vocab_size * 4l), bsupp, u_nsupp, nsupp)
             }
@@ -3103,7 +3045,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             nc_all &&= nc_logits_for(g_dev, *sessions[i]) != null
         }
         if (nc_all) {
-            bar_dep(enc, haz, HZ_BLOG, 0u)
             for (i in range64(nrows)) {
                 enc_copy_row(enc, blog, uint64(i * c.vocab_size * 4l), nc_logits_for(g_dev, *sessions[i]), 0ul, u_vocab, c.vocab_size)
             }
@@ -3113,6 +3054,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     metal_release(enc)
     metal_commit(cb)
     cbs |> push(cb)
+    hz_arm(false)   // disarm the oracle with the encoder — a leaked arm would eat the next CAPTURE's stage
     g_us_bencode += int64(get_time_usec(ts_enc))
     // optimistic watermark at commit: the in-order queue writes row pos before any later-committed
     // work reads the mirror — the pipe's fast-path prepare must not re-upload it from the (not yet
