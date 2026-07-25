@@ -1491,20 +1491,21 @@ class MetalMoeCombine {
 
 // gpt-oss clamped swiglu (stage 4): x = min(g, 7), y = clamp(u, -7, 7),
 // g = (x / (1 + exp(-1.702 x))) * (y + 1) — the clamps and the +1 are trained weights' contract.
+// float4 lanes, per-element math identical to the scalar form it replaced (bit-exact).
 class MetalSwigluOai {
-    @ssbo @binding = 0 g : array<float>
-    @ssbo @binding = 1 u : array<float>
-    @uniform @binding = 2 total : uint
+    @ssbo @binding = 0 g : array<float4>
+    @ssbo @binding = 1 u : array<float4>
+    @uniform @binding = 2 total : uint      // scalar element count
 
     [metal_kernel(name="metal_swiglu_oai_msl")]
     def metal_swiglu_oai {
         let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
+        if (gid * 4u >= total) {
             return
         }
-        let x = min(g[gid], 7.0)
-        let y = min(max(u[gid], -7.0), 7.0)   // nolint:STYLE019 — the MSL emitter doesn't lower clamp
-        g[gid] = (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
+        let x = min(g[gid], float4(7.0))
+        let y = min(max(u[gid], float4(-7.0)), float4(7.0))   // nolint:STYLE019 — the MSL emitter doesn't lower clamp
+        g[gid] = (x / (float4(1.0) + exp(-1.702 * x))) * (y + float4(1.0))
     }
 }
 
@@ -4492,8 +4493,8 @@ var private g_pf_mx4_vtab : MetalBuffer?
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 var private g_pf_logits_cpu = false            // set_metal_prefill_logits_cpu — the logits A/B rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm|moe|moe_mm|
-// moe_act|moe_reduce|moe_only_router|moe_only_route|moe_no_mm_act): skips encoding that stage
-// family; consumers of skipped stages always skip too (no garbage OOB). Output GARBAGE, debug only.
+// moe_act|moe_bias|moe_reduce|moe_only_router|moe_only_route|moe_no_mm_act): skips encoding that
+// stage family; consumers of skipped stages always skip too (no garbage OOB). Output GARBAGE, debug only.
 var private g_pf_skip = ""
 
 // composite skip predicates for the MoE stages (moe_only_* isolate the route chain per-kernel)
@@ -5553,6 +5554,16 @@ def private pf_enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; 
     metal_dispatch_threadgroups(enc, uint3(uint((total + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
+// the float4-lane twin (swiglu_oai): grid over total/4 threads — total % 4 == 0 by the callers'
+// 32-row-padded panel contract
+def private pf_enc_ew2_v4(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba, bb, btot : MetalBuffer?; total : int64) {
+    metal_set_pipeline(enc, pso)
+    metal_set_buffer(enc, ba, 0ul, 0)
+    metal_set_buffer(enc, bb, 0ul, 1)
+    metal_set_buffer(enc, btot, 0ul, 2)
+    metal_dispatch_threadgroups(enc, uint3(uint((total / 4l + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+}
+
 // the prefill half of the weights-epoch guard (see dasllama_metal_common): flush the module's
 // own address-keyed region cache when a model (re)load may have recycled the addresses
 var private g_pf_cache_epoch = -1l
@@ -6328,8 +6339,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                                 u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1)
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
                                 u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1)
-                            pf_enc_moe_bias_rows(enc, bmg, bwb1, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
-                            pf_enc_moe_bias_rows(enc, bmg2, bwb3, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
+                            if (g_pf_skip != "moe_bias") {
+                                pf_enc_moe_bias_rows(enc, bmg, bwb1, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
+                                pf_enc_moe_bias_rows(enc, bmg2, bwb3, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
+                            }
                         } else {
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g1)
@@ -6346,8 +6359,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if (moe && g_pf_skip != "ew" && g_pf_skip != "nongemm" && g_pf_skip != "moe" && !pf_skip_moe_act()) {
-                    let pso_act = c.ffn_act == FfnAct.swiglu_oai ? g_pf_pso_swiglu_oai : (g4moe ? g_pf_pso_geglu : g_pf_pso_swiglu)
-                    pf_enc_ew2(enc, pso_act, bmg, bmg2, u_moe_ptot, mpad * c.n_ff_exp)
+                    if (c.ffn_act == FfnAct.swiglu_oai) {
+                        pf_enc_ew2_v4(enc, g_pf_pso_swiglu_oai, bmg, bmg2, u_moe_ptot, mpad * c.n_ff_exp)
+                    } else {
+                        pf_enc_ew2(enc, g4moe ? g_pf_pso_geglu : g_pf_pso_swiglu, bmg, bmg2, u_moe_ptot, mpad * c.n_ff_exp)
+                    }
                     if (nsh > 0l) {
                         pf_enc_ew2(enc, g_pf_pso_swiglu, bhb, bhb2, u_moe_shtot, npos * nsh)
                     }
@@ -6359,7 +6375,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             var bwb2 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
                                 u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0)
-                            pf_enc_moe_bias_rows(enc, bmdn, bwb2, bmcnt, bmbase, u_dim, dim, npos, c.n_expert)
+                            if (g_pf_skip != "moe_bias") {
+                                pf_enc_moe_bias_rows(enc, bmdn, bwb2, bmcnt, bmbase, u_dim, dim, npos, c.n_expert)
+                            }
                         } else {
                             pf_enc_moe_mm(enc, t, fe2, t.we2_offs[l], dim, npos, bmg, bmdn,
                                 u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0)
