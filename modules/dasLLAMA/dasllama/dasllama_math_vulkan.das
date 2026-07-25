@@ -5,11 +5,14 @@ module dasllama_math_vulkan shared public
 
 require dasllama/dasllama_math
 require dasllama/dasllama_par
+require dasllama/dasllama_vulkan_lens
 require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
 require spirv/spirv_builtins public
 require math
+require strings
+require daslib/strings_boost
 require daslib/fio
 
 // dasLLAMA Vulkan GPU tier — per-layer MoE expert-stack offload. The loader gathers offloaded
@@ -3722,83 +3725,49 @@ def private vk_moe_init : bool {
     dpci.pPoolSizes |> push(psize)
     g_gpu.desc_pool <- create_descriptor_pool(g_gpu.device, dpci)
 
-    var shader <- create_shader_module(g_gpu.device, q8_moe_groupn_spv)   // never finalized (kept via pipeline)
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(g_gpu.set_layout)]
     g_gpu.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
-    g_gpu.pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, shader)
-    var bshader <- create_shader_module(g_gpu.device, q8_moe_batch_spv)   // same 6-binding layout
-    g_gpu.batch_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, bshader)
+    g_pipe_access |> clear()
+    g_gpu.pipeline <- make_kernel_pipe("q8_moe_groupn", q8_moe_groupn_spv)
+    g_gpu.batch_pipeline <- make_kernel_pipe("q8_moe_batch", q8_moe_batch_spv)   // same 6-binding layout
     if (g_gpu.coopmat_mode == 1) {   // f16 tensor-core prefill GEMMs (coopmat device only)
-        var cmf16shader <- create_shader_module(g_gpu.device, q8_moe_batch_cmf16_spv)
-        g_gpu.batch_coopmat_f16 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmf16shader)
-        var cmq40shader <- create_shader_module(g_gpu.device, kq_moe_batch_q40_cmf16_spv)
-        g_gpu.batch_coopmat_q40 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmq40shader)
+        g_gpu.batch_coopmat_f16 <- make_kernel_pipe("q8_moe_batch_cmf16", q8_moe_batch_cmf16_spv)
+        g_gpu.batch_coopmat_q40 <- make_kernel_pipe("kq_moe_batch_q40_cmf16", kq_moe_batch_q40_cmf16_spv)
     } elif (g_gpu.coopmat_mode == 2) {   // native-s8 tensor-core prefill GEMM
-        var cmi8shader <- create_shader_module(g_gpu.device, q8_moe_batch_cmi8_spv)
-        g_gpu.batch_coopmat_i8 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmi8shader)
+        g_gpu.batch_coopmat_i8 <- make_kernel_pipe("q8_moe_batch_cmi8", q8_moe_batch_cmi8_spv)
     } elif (g_gpu.coopmat_mode == 3) {   // the mul_mm L/M-tile prefill GEMMs (routed per dispatch)
-        var cmmmshader <- create_shader_module(g_gpu.device, q8_moe_batch_mm_spv)
-        g_gpu.batch_coopmat_mm <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader)
-        var cmmmshader_m <- create_shader_module(g_gpu.device, q8_moe_batch_mm_m_spv)
-        g_gpu.batch_coopmat_mm_m <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader_m)
-        var cmmmshader_a <- create_shader_module(g_gpu.device, q8_moe_batch_mm_a_spv)
-        g_gpu.batch_coopmat_mm_a <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cmmmshader_a)
+        g_gpu.batch_coopmat_mm <- make_kernel_pipe("q8_moe_batch_mm", q8_moe_batch_mm_spv)
+        g_gpu.batch_coopmat_mm_m <- make_kernel_pipe("q8_moe_batch_mm_m", q8_moe_batch_mm_m_spv)
+        g_gpu.batch_coopmat_mm_a <- make_kernel_pipe("q8_moe_batch_mm_a", q8_moe_batch_mm_a_spv)
     }
-    var ashader <- create_shader_module(g_gpu.device, q8_moe_actrq_spv)
-    g_gpu.actrq_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, ashader)
-    var k4shader <- create_shader_module(g_gpu.device, kq_moe_gemv_k4_spv)
-    g_gpu.gemv_k4 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, k4shader)
-    var k5shader <- create_shader_module(g_gpu.device, kq_moe_gemv_k5_spv)
-    g_gpu.gemv_k5 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, k5shader)
-    var k6shader <- create_shader_module(g_gpu.device, kq_moe_gemv_k6_spv)
-    g_gpu.gemv_k6 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, k6shader)
-    var q40shader <- create_shader_module(g_gpu.device, kq_moe_gemv_q40_spv)
-    g_gpu.gemv_q40 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, q40shader)
-    var rkshader <- create_shader_module(g_gpu.device, q8k_moe_actrq_spv)
-    g_gpu.actrq_k_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, rkshader)
-    var bk4shader <- create_shader_module(g_gpu.device, kq_moe_batch_k4_spv)
-    g_gpu.batch_k4 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, bk4shader)
-    var bk5shader <- create_shader_module(g_gpu.device, kq_moe_batch_k5_spv)
-    g_gpu.batch_k5 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, bk5shader)
-    var bk6shader <- create_shader_module(g_gpu.device, kq_moe_batch_k6_spv)
-    g_gpu.batch_k6 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, bk6shader)
-    var bq40shader <- create_shader_module(g_gpu.device, kq_moe_batch_q40_spv)
-    g_gpu.batch_q40 <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, bq40shader)
-    var cshader <- create_shader_module(g_gpu.device, moe_combine_spv)
-    g_gpu.comb_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, cshader)
-    var dcshader <- create_shader_module(g_gpu.device, dn_conv_spv)
-    g_gpu.dn_conv_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, dcshader)
-    var dfshader <- create_shader_module(g_gpu.device, dn_step_fused_spv)
-    g_gpu.dnd_fused_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, dfshader)
-    var ds1shader <- create_shader_module(g_gpu.device, dn_scan_p1_spv)
-    g_gpu.dn_scan_p1_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, ds1shader)
-    var ds2shader <- create_shader_module(g_gpu.device, dn_scan_p2_spv)
-    g_gpu.dn_scan_p2_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, ds2shader)
-    var drshader <- create_shader_module(g_gpu.device, dn_requant_spv)
-    g_gpu.dn_rq_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, drshader)
-    var apqshader <- create_shader_module(g_gpu.device, at_prep_q_spv)
-    g_gpu.at_prep_q_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, apqshader)
-    var apkshader <- create_shader_module(g_gpu.device, at_prep_k_spv)
-    g_gpu.at_prep_k_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, apkshader)
-    var atshader <- create_shader_module(g_gpu.device, at_attn_spv)
-    g_gpu.at_attn_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, atshader)
-    var qkrshader <- create_shader_module(g_gpu.device, q8k_requant_spv)
-    g_gpu.q8k_rq_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, qkrshader)
-    var arshader <- create_shader_module(g_gpu.device, ar_add_rms_spv)
-    g_gpu.ar_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, arshader)
-    var rksshader <- create_shader_module(g_gpu.device, rope_kv_store_spv)
-    g_gpu.rks_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, rksshader)
-    var dashader <- create_shader_module(g_gpu.device, da_attn_spv)
-    g_gpu.da_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, dashader)
-    var arbshader <- create_shader_module(g_gpu.device, ar_add_rms_b_spv)
-    g_gpu.ar_pipeline_b <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, arbshader)
-    var rksbshader <- create_shader_module(g_gpu.device, rope_kv_store_b_spv)
-    g_gpu.rks_b_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, rksbshader)
-    var dabshader <- create_shader_module(g_gpu.device, da_attn_b_spv)
-    g_gpu.da_b_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, dabshader)
-    var qknshader <- create_shader_module(g_gpu.device, qk_rms_spv)
-    g_gpu.qkn_pipeline <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, qknshader)
+    g_gpu.actrq_pipeline <- make_kernel_pipe("q8_moe_actrq", q8_moe_actrq_spv)
+    g_gpu.gemv_k4 <- make_kernel_pipe("kq_moe_gemv_k4", kq_moe_gemv_k4_spv)
+    g_gpu.gemv_k5 <- make_kernel_pipe("kq_moe_gemv_k5", kq_moe_gemv_k5_spv)
+    g_gpu.gemv_k6 <- make_kernel_pipe("kq_moe_gemv_k6", kq_moe_gemv_k6_spv)
+    g_gpu.gemv_q40 <- make_kernel_pipe("kq_moe_gemv_q40", kq_moe_gemv_q40_spv)
+    g_gpu.actrq_k_pipeline <- make_kernel_pipe("q8k_moe_actrq", q8k_moe_actrq_spv)
+    g_gpu.batch_k4 <- make_kernel_pipe("kq_moe_batch_k4", kq_moe_batch_k4_spv)
+    g_gpu.batch_k5 <- make_kernel_pipe("kq_moe_batch_k5", kq_moe_batch_k5_spv)
+    g_gpu.batch_k6 <- make_kernel_pipe("kq_moe_batch_k6", kq_moe_batch_k6_spv)
+    g_gpu.batch_q40 <- make_kernel_pipe("kq_moe_batch_q40", kq_moe_batch_q40_spv)
+    g_gpu.comb_pipeline <- make_kernel_pipe("moe_combine", moe_combine_spv)
+    g_gpu.dn_conv_pipeline <- make_kernel_pipe("dn_conv", dn_conv_spv)
+    g_gpu.dnd_fused_pipeline <- make_kernel_pipe("dn_step_fused", dn_step_fused_spv)
+    g_gpu.dn_scan_p1_pipeline <- make_kernel_pipe("dn_scan_p1", dn_scan_p1_spv)
+    g_gpu.dn_scan_p2_pipeline <- make_kernel_pipe("dn_scan_p2", dn_scan_p2_spv)
+    g_gpu.dn_rq_pipeline <- make_kernel_pipe("dn_requant", dn_requant_spv)
+    g_gpu.at_prep_q_pipeline <- make_kernel_pipe("at_prep_q", at_prep_q_spv)
+    g_gpu.at_prep_k_pipeline <- make_kernel_pipe("at_prep_k", at_prep_k_spv)
+    g_gpu.at_attn_pipeline <- make_kernel_pipe("at_attn", at_attn_spv)
+    g_gpu.q8k_rq_pipeline <- make_kernel_pipe("q8k_requant", q8k_requant_spv)
+    g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms", ar_add_rms_spv)
+    g_gpu.rks_pipeline <- make_kernel_pipe("rope_kv_store", rope_kv_store_spv)
+    g_gpu.da_pipeline <- make_kernel_pipe("da_attn", da_attn_spv)
+    g_gpu.ar_pipeline_b <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)
+    g_gpu.rks_b_pipeline <- make_kernel_pipe("rope_kv_store_b", rope_kv_store_b_spv)
+    g_gpu.da_b_pipeline <- make_kernel_pipe("da_attn_b", da_attn_b_spv)
+    g_gpu.qkn_pipeline <- make_kernel_pipe("qk_rms", qk_rms_spv)
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
     g_gpu.fence = boost_value_to_vk(fence)
@@ -3904,6 +3873,8 @@ def private ensure_gemv_scratch(si : int) {
     write_buf_desc(writes, g_gpu.stacks[si].raw_set, 5u, g_gpu.stacks[si].y_dev, Y_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    // default y role; role-fluid chains (gate/up pair, qkv group, dn step) re-declare before recording
+    hz_set_bits(g_gpu.stacks[si].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     g_gpu.stacks[si].gemv_made = true
 }
 
@@ -4004,6 +3975,7 @@ def vk_drop_model_state {
     // every descriptor set came from the one pool and every one is model-owned
     let rdpf : VkDescriptorPoolResetFlags
     vk_check(vkResetDescriptorPool(dev_raw(), boost_value_to_vk(g_gpu.desc_pool), rdpf), null)
+    g_set_bits |> clear()   // pool reset recycles set handles — stale region bits must not survive
     // device buffers: dev_mem tracks every make_device_buf result — all model-owned
     for (buf, mem in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
         unsafe {
@@ -4205,6 +4177,7 @@ def private arena_ensure_scratch(fmt : int) {
         write_buf_desc(writes, a.raw_set, 5u, a.y_dev, Y_BYTES)
         let no_copies : array<CopyDescriptorSet>
         update_descriptor_sets(g_gpu.device, writes, no_copies)
+        hz_set_bits(a.raw_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)
         a.ready = true
     }
 }
@@ -4232,6 +4205,7 @@ def private ensure_ar_state {
     write_buf_desc(writes, g_gpu.ar_set, 5u, g_gpu.ar_y_dev, bytes)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.ar_set, VHG_X, 0u, 0u, 0u, 0u, VHG_YO)   // a/w/meta/scal fill pre-cmd
     g_gpu.ar_ready = true
 }
 
@@ -4260,9 +4234,7 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_X | VHG_YO)
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.ar_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.ar_set, 1u)   // one workgroup owns the whole row (it reduces)
+        hz_dispatch(raw, h, weak_copy(g_gpu.ar_pipeline), g_gpu.ar_set, 1u)   // one workgroup owns the whole row (it reduces)
         vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
         cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -4332,6 +4304,10 @@ def private ensure_af_state(f1, f3, f2 : int) {
     write_buf_desc(writes, g_gpu.af_down_set, 5u, g_gpu.af_yo_dev, Y_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.af_gate_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    hz_set_bits(g_gpu.af_up_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+    hz_set_bits(g_gpu.af_actrq_set, VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1)
+    hz_set_bits(g_gpu.af_down_set, 0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO)
     g_gpu.af_ready = true
 }
 
@@ -4378,6 +4354,7 @@ def private ensure_rks_state {
     write_buf_desc(writes, g_gpu.rks_set, 5u, g_gpu.rks_q_dev, RKS_MAX_QD * 4l)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.rks_set, 0u, VHG_Y2, 0u, VHG_Y3, 0u, VHG_Y1)   // K mirror / V mirror / roped q
     g_gpu.rks_ready = true
 }
 
@@ -4402,6 +4379,7 @@ def private ensure_da_state {
     write_buf_desc(writes, g_gpu.da_set, 5u, g_gpu.da_out_dev, RKS_MAX_QD * 4l)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.da_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
 
@@ -4428,9 +4406,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_YO)
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.da_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.da_set, uint(n_heads))
+        hz_dispatch(raw, h, weak_copy(g_gpu.da_pipeline), g_gpu.da_set, uint(n_heads))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -4469,9 +4445,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_Y1 | VHG_Y2 | VHG_Y3)
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.rks_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.rks_set, uint((npairs + int64(WG_X) - 1l) / int64(WG_X)))
+        hz_dispatch(raw, h, weak_copy(g_gpu.rks_pipeline), g_gpu.rks_set, uint((npairs + int64(WG_X) - 1l) / int64(WG_X)))
         vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
         cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
         cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
@@ -4567,7 +4541,7 @@ let private PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts
 
 var private g_rd : RDec?
 
-def private rd_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64) : VkDescriptorSet {
+def private rd_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) : VkDescriptorSet {
     var set = alloc_desc_set()
     var writes : array<WriteDescriptorSet>
     write_buf_desc(writes, set, 0u, b0, s0)
@@ -4578,6 +4552,7 @@ def private rd_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : in
     write_buf_desc(writes, set, 5u, b5, s5)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(set, gbits)
     return set
 }
 
@@ -4683,53 +4658,69 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         L.m_actrq = rd_meta(); L.m_down = rd_meta(); L.m_addr_next = rd_meta()
         // quantize xb -> xq/xs (dn_requant: in vk_upf@0, meta@2, xq@3, xs@4)
         L.s_quant_xb = rd_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l)
+            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
+            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // q/k/v GEMV: arena[f] planes @0/1, meta@2, xq@3, xs@4, out@5
         L.s_q = rd_set6(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.q_dev,
-            pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, qd * 4l)
+            pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, qd * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
         L.s_k = rd_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
-            pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l)
+            pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
         L.s_v = rd_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
-            pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l)
+            pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
         // qk rmsnorm (qk_norm models): q@0 (q_dev), meta@2, norm rows@3, eps@4, k@5 (kv_dev, k at qd)
         if (g_rd.qk_norm) {
             L.m_qkn = rd_meta()
             L.s_qkn = rd_set6(g_rd.q_dev, g_rd.dummy, L.m_qkn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.kv_dev,
-                qd * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, (qd + 2l * kvd) * 4l)
+                qd * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, (qd + 2l * kvd) * 4l,
+                fixed_array(VHZ_Q, 0u, 0u, 0u, 0u, VHZ_KVK))
         }
         // rope+store: kv@0, Kmirror@1, meta@2, Vmirror@3, cossin@4, q@5
         let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
         L.s_rope = rd_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_rope.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
-            (qd + 2l * kvd) * 4l, mirbytes, META_BYTES, mirbytes, g_rd.head_size * 4l, qd * 4l)
+            (qd + 2l * kvd) * 4l, mirbytes, META_BYTES, mirbytes, g_rd.head_size * 4l, qd * 4l,
+            fixed_array(VHZ_KVK | VHZ_KVV, VHZ_MIR, 0u, VHZ_MIR, VHZ_COS, VHZ_Q))
         // attn: q@0, Kmirror@1, meta@2, Vmirror@3, scale@4, out@5
         L.s_attn = rd_set6(g_rd.q_dev, g_rd.k_mirror, L.m_attn.buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.attn_dev,
-            qd * 4l, mirbytes, META_BYTES, mirbytes, 64l, qd * 4l)
+            qd * 4l, mirbytes, META_BYTES, mirbytes, 64l, qd * 4l,
+            fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
         // quantize attn -> aq/as
         L.s_quant_at = rd_set6(g_rd.attn_dev, g_rd.dummy, L.m_quant_at.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.dummy,
-            qd * 4l, 256l, META_BYTES, qd, (qd / 32l) * 4l, 256l)
+            qd * 4l, 256l, META_BYTES, qd, (qd / 32l) * 4l, 256l,
+            fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
         // wo GEMV -> xb2
         L.s_wo = rd_set6(po.wq, po.ws, L.m_wo.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev,
-            po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l)
+            po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
         // addrms: x@0 += xb2@1, meta@2, norms@3, scalars@4, xb@5
         L.s_addr_ffn = rd_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
+            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
+            fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
         // quantize xb (post-ffn-norm) -> xq/xs
         L.s_quant_xb2 = rd_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb2.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l)
+            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
+            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // gate/up GEMV
         L.s_gate = rd_set6(p1.wq, p1.ws, L.m_gate.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.gate_dev,
-            p1.wqb, p1.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l)
+            p1.wqb, p1.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
         L.s_up = rd_set6(p3.wq, p3.ws, L.m_up.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.up_dev,
-            p3.wqb, p3.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l)
+            p3.wqb, p3.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
         // act+requant: up@0, filler@1, ffn_meta@2, hq@3, hs@4, gate@5
         L.s_actrq = rd_set6(g_rd.up_dev, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.gate_dev,
-            hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, hid * 4l)
+            hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, hid * 4l,
+            fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
         // down GEMV -> ffnout
         L.s_down = rd_set6(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev,
-            p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l)
+            p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
         // addrms next: x@0 += ffnout@1, norms@3, xb@5
         L.s_addr_next = rd_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
+            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
+            fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, 0u, VHZ_XB))
         L.made = true
     }
     g_rd.tok_recorded = false   // the recorded chain references the replaced sets
@@ -4748,14 +4739,17 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         g_rd.cls_meta_dev = make_device_buf(CLS_META_BYTES)
         // prologue: xb = rms_att[0](x), add off
         g_rd.s_prologue = rd_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l)
+            dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
+            fixed_array(VHZ_X, 0u, 0u, 0u, 0u, VHZ_XB))
         // quantize final xb
         g_rd.s_quant_final = rd_set6(g_rd.xb_dev, g_rd.dummy, g_rd.m_quant_final.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l)
+            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
+            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // cls GEMV: arena[fmt]@0/1, device meta@2, xq@3, xs@4, logits@5
         let pc = arena_planes(cls_fmt)
         g_rd.cls_set = rd_set6(pc.wq, pc.ws, g_rd.cls_meta_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev,
-            pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l)
+            pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))
         // cls meta is constant (block base, n=dim, d=vocab) — device-filled once
         var mp = reinterpret<uint?>(g_gpu.staging.mapped)
         mp[0] = uint(dim)
@@ -4928,7 +4922,115 @@ struct private VkHaz {
     disp : int
 }
 
+// ===== the derived-dispatch registry (the vulkan lens) =====
+// Pipelines register lens-derived binding access masks at creation, descriptor sets declare
+// per-binding region bits at build — hz_dispatch composes the two into vhz_dep masks.
+
+var private g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, write-bindings)
+var private g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
+var private g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
+
+struct private SetBits {
+    b : uint[6]
+}
+
+def private ensure_kernel_access {
+    if (!empty(g_kernel_access)) {
+        return
+    }
+    for (ent in split(vk_kernel_access_spec(), ";")) {
+        if (ent == "") {
+            continue
+        }
+        let nv <- split(ent, "=")
+        let rw <- split(nv[1], ",")
+        g_kernel_access |> insert(nv[0], uint2(uint(to_int(rw[0])), uint(to_int(rw[1]))))
+    }
+}
+
+//! Debug: log the lens-derived per-kernel binding access masks (bindings 0-5, hex bit masks).
+def vk_dump_kernel_access {
+    ensure_kernel_access()
+    for (k, v in keys(g_kernel_access), values(g_kernel_access)) {
+        to_log(LOG_INFO, "vk_access {k} r={v.x} w={v.y}\n")
+    }
+}
+
+// declare the region bits sitting at each of a set's 6 bindings (0 = untracked); a set must be
+// declared before hz_dispatch can serve it — the strict rail panics on an undeclared set
+def private hz_set_bits(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint) {
+    var sb : SetBits
+    sb.b[0] = b0
+    sb.b[1] = b1
+    sb.b[2] = b2
+    sb.b[3] = b3
+    sb.b[4] = b4
+    sb.b[5] = b5
+    g_set_bits[intptr(set_)] = sb
+}
+
+def private hz_set_bits(set_ : VkDescriptorSet; gbits : uint[6]) {
+    var sb : SetBits
+    for (i in range(6)) {
+        sb.b[i] = gbits[i]
+    }
+    g_set_bits[intptr(set_)] = sb
+}
+
+def private hz_pipe_register(pipe : Pipeline; kernel : string) {
+    ensure_kernel_access()
+    if (!key_exists(g_kernel_access, kernel)) {
+        panic("dasLLAMA vulkan lens: no derived access for kernel {kernel}")
+    }
+    g_pipe_access[intptr(boost_value_to_vk(pipe))] = g_kernel_access[kernel]
+}
+
+// create a kernel's pipeline and register its lens-derived access masks (the shader-module local
+// is deliberately never finalized — same lifetime the hand-written creation block had)
+def private make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
+    var shader <- create_shader_module(g_gpu.device, spv)
+    var pipe <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, shader)
+    hz_pipe_register(pipe, kernel)
+    return <- pipe
+}
+
+// derive this dispatch's hazard masks: the set's region bits distributed over the kernel's
+// read/write bindings. Undeclared pipeline or set = a programming error, not a fallback.
+def private hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : uint> {
+    let pk = intptr(boost_value_to_vk(pipe))
+    if (!key_exists(g_pipe_access, pk)) {
+        panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline")
+    }
+    let sk = intptr(set_)
+    if (!key_exists(g_set_bits, sk)) {
+        panic("dasLLAMA vulkan lens: dispatch against a set with no declared region bits")
+    }
+    let acc = g_pipe_access[pk]
+    let sb = g_set_bits[sk]
+    var r = 0u
+    var w = 0u
+    for (i in range(6)) {
+        let bit = 1u << uint(i)
+        if ((acc.x & bit) != 0u) {
+            r |= sb.b[i]
+        }
+        if ((acc.y & bit) != 0u) {
+            w |= sb.b[i]
+        }
+    }
+    return (r, w)
+}
+
+// the derived-mask dispatch node: declare via the composed masks, bind, dispatch
+def private hz_dispatch(raw : VkCommandBuffer; var h : VkHaz; pipe : Pipeline; var set_ : VkDescriptorSet; groups : uint) {
+    let m = hz_masks(pipe, set_)
+    vhz_dep(raw, h, m.r, m.w)
+    cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
+    cmd_bind_dispatch(raw, set_, groups)
+}
+
 var private g_vhz_paranoid = -1   // DASLLAMA_VK_HAZARD_PARANOID: barrier before every node
+var private g_vhz_trace = -1      // DASLLAMA_VK_HAZARD_TRACE: log every declared node (schedule oracle)
 var private g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
 
 def private vhz_paranoid : bool {
@@ -4938,9 +5040,19 @@ def private vhz_paranoid : bool {
     return g_vhz_paranoid != 0
 }
 
+def private vhz_trace : bool {
+    if (g_vhz_trace < 0) {
+        g_vhz_trace = get_env_variable("DASLLAMA_VK_HAZARD_TRACE") == "1" ? 1 : 0
+    }
+    return g_vhz_trace != 0
+}
+
 // the per-node gate: barrier iff this node's declared masks conflict with the pending set
 def private vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer : bool = false) {
     h.disp++
+    if (vhz_trace()) {
+        to_log(LOG_INFO, "vhz {h.disp} r={rmask} w={wmask} t={transfer ? 1 : 0}\n")
+    }
     var bar = (rmask & h.w) != 0u || (wmask & h.w) != 0u || (wmask & h.r) != 0u
     if (vhz_paranoid() && (h.w != 0u || h.r != 0u)) {
         bar = true
@@ -4980,19 +5092,14 @@ def private vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; t
     }
 }
 
-def private rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; var h : VkHaz; rmask, wmask : uint) {
-    vhz_dep(raw, h, rmask, wmask)
-    cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, set, groups)
+def private rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
+    hz_dispatch(raw, h, pipe, set, groups)
     pfq_ts(raw)
 }
 
 // GEMV dispatch — the per-format kernel selected off the plane format
-def private rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint; var h : VkHaz; rmask, wmask : uint) {
-    vhz_dep(raw, h, rmask, wmask)
-    bind_gemv_pipe(raw, fmt)
-    cmd_bind_dispatch(raw, set, groups)
-    pfq_ts(raw)
+def private rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
+    rd_dispatch(raw, gemv_pipe(fmt), set, groups, h)
 }
 
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
@@ -5063,33 +5170,30 @@ def private rd_record_token {
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
         vhz_dep(raw, h, 0u, VHZ_META, true)
         cmd_copy_whole(raw, g_rd.ffn_meta_h.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.s_prologue, 1u, h, VHZ_X, VHZ_XB)   // xb = rms_att[0](x)
+        rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.s_prologue, 1u, h)   // xb = rms_att[0](x)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-            rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), h, VHZ_XQ, VHZ_Q)
-            rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h, VHZ_XQ, VHZ_KVK)
-            rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h, VHZ_XQ, VHZ_KVV)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 32l + 255l) / 256l), h)
+            rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), h)
+            rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h)
+            rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h)
             if (g_rd.qk_norm) {
-                rd_dispatch(raw, g_gpu.qkn_pipeline, L.s_qkn, uint(g_rd.n_heads + kvd / g_rd.head_size),
-                    h, VHZ_Q | VHZ_KVK, VHZ_Q | VHZ_KVK)
+                rd_dispatch(raw, g_gpu.qkn_pipeline, L.s_qkn, uint(g_rd.n_heads + kvd / g_rd.head_size), h)
             }
-            rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)),
-                h, VHZ_Q | VHZ_KVK | VHZ_KVV | VHZ_COS, VHZ_Q | VHZ_KVK | VHZ_MIR)
-            rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads), h, VHZ_Q | VHZ_MIR, VHZ_ATT)
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 32l + 255l) / 256l), h, VHZ_ATT, VHZ_AQ)
-            rd_dispatch_gemv(raw, L.fo, L.s_wo, rd_gemv_wg(dim), h, VHZ_AQ, VHZ_XB2)
-            rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_ffn, 1u, h, VHZ_X | VHZ_XB2, VHZ_X | VHZ_XB)
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-            rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), h, VHZ_XQ, VHZ_GATE)
-            rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid), h, VHZ_XQ, VHZ_UP)
-            rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 32l + 255l) / 256l),
-                h, VHZ_GATE | VHZ_UP | VHZ_META, VHZ_HQ)
-            rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim), h, VHZ_HQ, VHZ_FFO)
-            rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_next, 1u, h, VHZ_X | VHZ_FFO, VHZ_X | VHZ_XB)
+            rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)), h)
+            rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads), h)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 32l + 255l) / 256l), h)
+            rd_dispatch_gemv(raw, L.fo, L.s_wo, rd_gemv_wg(dim), h)
+            rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_ffn, 1u, h)
+            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 32l + 255l) / 256l), h)
+            rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), h)
+            rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid), h)
+            rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 32l + 255l) / 256l), h)
+            rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim), h)
+            rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_next, 1u, h)
         }
-        rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-        rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h, VHZ_XQ, VHZ_LOG)
+        rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 32l + 255l) / 256l), h)
+        rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -5128,8 +5232,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
-def private pf_bind(idx : int; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64) {
-    g_rd.pf_sets[idx] = rd_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5)
+def private pf_bind(idx : int; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
+    g_rd.pf_sets[idx] = rd_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
 }
 
 def private pf_setup {
@@ -5176,59 +5280,77 @@ def private pf_setup {
         let po = arena_planes(L.fo); let p1 = arena_planes(L.f1); let p3 = arena_planes(L.f3); let p2 = arena_planes(L.f2)
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs
         pf_bind(b + 0, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 0].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l)
+            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l,
+            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // 1/2/3 q/k/v batch GEMM: arena planes, pf_xq/pf_xs act, -> pf_q / pf_kv(k@0) / pf_kv(v@np*kvd)
         pf_bind(b + 1, pq.wq, pq.ws, g_rd.pf_meta[b + 1].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_q,
-            pq.wqb, pq.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * qd * 4l)
+            pq.wqb, pq.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * qd * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
         pf_bind(b + 2, pk.wq, pk.ws, g_rd.pf_meta[b + 2].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_kv,
-            pk.wqb, pk.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * 2l * kvd * 4l)
+            pk.wqb, pk.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * 2l * kvd * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
         pf_bind(b + 3, pv.wq, pv.ws, g_rd.pf_meta[b + 3].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_v,
-            pv.wqb, pv.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * kvd * 4l)
+            pv.wqb, pv.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * kvd * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_VST))
         // 4 rope+store: q@0 in place, Kmir@1, Vmir@3, cos@4, kv@5
         pf_bind(b + 4, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 4].buf, g_rd.v_mirror, g_rd.pf_cos, g_rd.pf_kv,
-            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, np * g_rd.head_size * 4l, np * 2l * kvd * 4l)
+            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, np * g_rd.head_size * 4l, np * 2l * kvd * 4l,
+            fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, VHZ_COS, VHZ_KVK | VHZ_KVV))
         // 5 attn: q@0, Kmir@1, Vmir@3, scale@4, out@5
         pf_bind(b + 5, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 5].buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.pf_attn,
-            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, 64l, np * qd * 4l)
+            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, 64l, np * qd * 4l,
+            fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
         // 6 quant_at: pf_attn -> pf_aq/pf_as
         pf_bind(b + 6, g_rd.pf_attn, g_rd.dummy, g_rd.pf_meta[b + 6].buf, g_rd.pf_aq, g_rd.pf_as, g_rd.dummy,
-            np * qd * 4l, 256l, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, 256l)
+            np * qd * 4l, 256l, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, 256l,
+            fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
         // 7 wo GEMM -> pf_xb2
         pf_bind(b + 7, po.wq, po.ws, g_rd.pf_meta[b + 7].buf, g_rd.pf_aq, g_rd.pf_as, g_rd.pf_xb2,
-            po.wqb, po.wsb, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, np * dim * 4l)
+            po.wqb, po.wsb, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, np * dim * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
         // 8 addr_ffn: x += xb2, xb = rms_ffn
         pf_bind(b + 8, g_rd.pf_x, g_rd.pf_xb2, g_rd.pf_meta[b + 8].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l)
+            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
+            fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
         // 9 quant_xb2: pf_xb -> pf_xq
         pf_bind(b + 9, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 9].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l)
+            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l,
+            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // 10/11 gate/up GEMM
         pf_bind(b + 10, p1.wq, p1.ws, g_rd.pf_meta[b + 10].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_gate,
-            p1.wqb, p1.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l)
+            p1.wqb, p1.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
         pf_bind(b + 11, p3.wq, p3.ws, g_rd.pf_meta[b + 11].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_up,
-            p3.wqb, p3.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l)
+            p3.wqb, p3.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
         // 12 actrq: up@0, ffn_meta@2, hq@3, hs@4, gate@5
         pf_bind(b + 12, g_rd.pf_up, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_gate,
-            np * hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, np * hid * 4l)
+            np * hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, np * hid * 4l,
+            fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
         // 13 down GEMM: hq/hs act -> pf_ffnout
         pf_bind(b + 13, p2.wq, p2.ws, g_rd.pf_meta[b + 13].buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
-            p2.wqb, p2.wsb, BATCH_META_BYTES, np * hid, np * (hid / 32l) * 4l, np * dim * 4l)
+            p2.wqb, p2.wsb, BATCH_META_BYTES, np * hid, np * (hid / 32l) * 4l, np * dim * 4l,
+            fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
         // 14 addr_next: x += ffnout, xb = rms_att[l+1]|final
         pf_bind(b + 14, g_rd.pf_x, g_rd.pf_ffnout, g_rd.pf_meta[b + 14].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l)
+            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
+            fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, 0u, VHZ_XB))
         // 15 qk rmsnorm (qk_norm models): q@0 (pf_q), norm rows@3, eps@4, k@5 (pf_kv, k at 0)
         if (g_rd.qk_norm) {
             pf_bind(b + 15, g_rd.pf_q, g_rd.dummy, g_rd.pf_meta[b + 15].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_kv,
-                np * qd * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * 2l * kvd * 4l)
+                np * qd * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * 2l * kvd * 4l,
+                fixed_array(VHZ_Q, 0u, 0u, 0u, 0u, VHZ_KVK))
         }
     }
     let bp = int(g_rd.n_layers * PF_ROLES)
     // prologue: xb = rms_att[0](x), add off
     pf_bind(bp + 0, g_rd.pf_x, g_rd.dummy, g_rd.pf_meta[bp + 0].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-        np * dim * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l)
+        np * dim * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
+        fixed_array(VHZ_X, 0u, 0u, 0u, 0u, VHZ_XB))
     // final quantize of the LAST row (into the decode driver's xq_dev/xs_dev) for the cls GEMV
     pf_bind(bp + 1, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[bp + 1].buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-        np * dim * 4l, 256l, BATCH_META_BYTES, dim, (dim / 32l) * 4l, 256l)
+        np * dim * 4l, 256l, BATCH_META_BYTES, dim, (dim / 32l) * 4l, 256l,
+        fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
     g_rd.pf_ready = true
 }
 
@@ -5382,36 +5504,34 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             pfq_ts(raw)   // q1: meta copy
             let ropewg = uint((wlen * pairs + int64(WG_X) - 1l) / int64(WG_X))
             let attnwg = uint(g_rd.n_heads * ((wlen + 7l) / 8l))
-            rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h, VHZ_X, VHZ_XB)   // prologue norm
+            rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-                rd_dispatch(raw, q8_batch_pipe_for(qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h, VHZ_XQ, VHZ_Q)
-                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h, VHZ_XQ, VHZ_KVK)
-                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h, VHZ_XQ, VHZ_VST)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, q8_batch_pipe_for(qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h)
+                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h)
+                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 if (g_rd.qk_norm) {
                     rd_dispatch(raw, g_gpu.qkn_pipeline, g_rd.pf_sets[b + 15],
-                        uint(wlen * (g_rd.n_heads + kvd / g_rd.head_size)), h, VHZ_Q | VHZ_KVK, VHZ_Q | VHZ_KVK)
+                        uint(wlen * (g_rd.n_heads + kvd / g_rd.head_size)), h)
                 }
-                rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg,
-                    h, VHZ_Q | VHZ_KVK | VHZ_KVV | VHZ_COS, VHZ_Q | VHZ_KVK | VHZ_MIR)
-                rd_dispatch(raw, g_gpu.da_b_pipeline, g_rd.pf_sets[b + 5], attnwg, h, VHZ_Q | VHZ_MIR, VHZ_ATT)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l), h, VHZ_ATT, VHZ_AQ)
-                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h, VHZ_AQ, VHZ_XB2)
-                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h, VHZ_X | VHZ_XB2, VHZ_X | VHZ_XB)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h, VHZ_XQ, VHZ_GATE)
-                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h, VHZ_XQ, VHZ_UP)
-                rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 32l + 255l) / 256l),
-                    h, VHZ_GATE | VHZ_UP | VHZ_META, VHZ_HQ)
-                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h, VHZ_HQ, VHZ_FFO)
-                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h, VHZ_X | VHZ_FFO, VHZ_X | VHZ_XB)
+                rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg, h)
+                rd_dispatch(raw, g_gpu.da_b_pipeline, g_rd.pf_sets[b + 5], attnwg, h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h)
+                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h)
+                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h)
+                rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h)
+                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h)
             }
             if (last) {
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 32l + 255l) / 256l), h, VHZ_XB, VHZ_XQ)
-                rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h, VHZ_XQ, VHZ_LOG)
+                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 32l + 255l) / 256l), h)
+                rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
             }
@@ -5480,21 +5600,12 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         vhz_dep(raw, h, 0u, VHG_META, true)
         cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
         let gwg = uint((nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
-        vhz_dep(raw, h, 0u, VHG_Y1)
-        bind_gemv_pipe(raw, f1)
-        cmd_bind_dispatch(raw, g_gpu.af_gate_set, gwg)
-        vhz_dep(raw, h, 0u, VHG_Y2)
-        if (f3 != f1) {
-            bind_gemv_pipe(raw, f3)
-        }
-        cmd_bind_dispatch(raw, g_gpu.af_up_set, gwg)
+        hz_dispatch(raw, h, gemv_pipe(f1), g_gpu.af_gate_set, gwg)
+        hz_dispatch(raw, h, gemv_pipe(f3), g_gpu.af_up_set, gwg)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
-        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_META, VHG_HQ)
-        cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.af_actrq_set, uint((nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-        vhz_dep(raw, h, VHG_HQ, VHG_YO)
-        bind_gemv_pipe(raw, f2)
-        cmd_bind_dispatch(raw, g_gpu.af_down_set, uint((n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
+            g_gpu.af_actrq_set, uint((nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+        hz_dispatch(raw, h, gemv_pipe(f2), g_gpu.af_down_set, uint((n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -5545,6 +5656,7 @@ def private arena_ensure_batch(fmt : int) {
         write_buf_desc(writes, a.batch_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
         let no_copies : array<CopyDescriptorSet>
         update_descriptor_sets(g_gpu.device, writes, no_copies)
+        hz_set_bits(a.batch_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)   // meta/acts fill pre-cmd
         a.batch_ready = true
     }
 }
@@ -5564,9 +5676,7 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_YO)
-        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe_for(d, npos), VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.arenas[fmt].batch_set, groups)
+        hz_dispatch(raw, h, q8_batch_pipe_for(d, npos), g_gpu.arenas[fmt].batch_set, groups)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -5602,9 +5712,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_YO)
-        bind_gemv_pipe(raw, fmt)
-        cmd_bind_dispatch(raw, a.raw_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        hz_dispatch(raw, h, gemv_pipe(fmt), a.raw_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -5647,21 +5755,21 @@ def private cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet;
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
-// bind the GEMV pipeline for a stack's format (0 = the q8 kernel, 1/2/3/4 = kq_moe_gemv_k4/5/6/q40)
-def private bind_gemv_pipe(raw : VkCommandBuffer; fmt : int) {
+// the GEMV pipeline for a stack's format (0 = the q8 kernel, 1/2/3/4 = kq_moe_gemv_k4/5/6/q40)
+def private gemv_pipe(fmt : int) : Pipeline {
     if (fmt == 0) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.pipeline, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.pipeline)
     } elif (fmt == 1) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.gemv_k4, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.gemv_k4)
     } elif (fmt == 2) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.gemv_k5, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.gemv_k5)
     } elif (fmt == 3) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.gemv_k6, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.gemv_k6)
     } elif (fmt == 4) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.gemv_q40, VkPipelineBindPoint.COMPUTE)
-    } else {
-        panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
+        return weak_copy(g_gpu.gemv_q40)
     }
+    panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
+    return weak_copy(g_gpu.pipeline)
 }
 
 // The Q8_0 prefill batch pipeline, switched to the tensor-core coopmat variant when DASLLAMA_COOPMAT
@@ -5687,30 +5795,21 @@ def private q8_batch_pipe(tile : int64; aligned : bool = false) : Pipeline {
     return weak_copy(g_gpu.batch_pipeline)
 }
 
-// two stacks share one bound pipeline only when the whole choice agrees (fmt + tile + aligned)
-def private same_batch_pipe(a, b : int) : bool
-    => (g_gpu.stacks[a].fmt == g_gpu.stacks[b].fmt && g_gpu.stacks[a].batch_tile == g_gpu.stacks[b].batch_tile
-        && g_gpu.stacks[a].batch_aligned == g_gpu.stacks[b].batch_aligned)
-
-def private bind_batch_pipe(raw : VkCommandBuffer; fmt : int; tile : int64; aligned : bool = false) {
+def private batch_pipe(fmt : int; tile : int64; aligned : bool = false) : Pipeline {
     if (fmt == 0) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), q8_batch_pipe(tile, aligned), VkPipelineBindPoint.COMPUTE)
+        return q8_batch_pipe(tile, aligned)
     } elif (fmt == 1) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_k4, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.batch_k4)
     } elif (fmt == 2) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_k5, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.batch_k5)
     } elif (fmt == 3) {
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_k6, VkPipelineBindPoint.COMPUTE)
+        return weak_copy(g_gpu.batch_k6)
     } elif (fmt == 4) {
         // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-        if (g_gpu.coopmat_mode == 1) {
-            cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_coopmat_q40, VkPipelineBindPoint.COMPUTE)
-        } else {
-            cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.batch_q40, VkPipelineBindPoint.COMPUTE)
-        }
-    } else {
-        panic("dasLLAMA vulkan tier: no batch tile for stack format {fmt}")
+        return weak_copy(g_gpu.coopmat_mode == 1 ? g_gpu.batch_coopmat_q40 : g_gpu.batch_q40)
     }
+    panic("dasLLAMA vulkan tier: no batch tile for stack format {fmt}")
+    return weak_copy(g_gpu.batch_pipeline)
 }
 
 def private submit_nowait(var raw : VkCommandBuffer) {
@@ -5823,6 +5922,7 @@ def private ensure_batch_state {
     write_buf_desc(writes, g_gpu.batch_actrq_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.batch_actrq_set, VHB_Y2, 0u, VHB_META, VHB_HQ, VHB_HQ, VHB_Y1)
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
     g_gpu.batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")
@@ -5848,6 +5948,7 @@ def private ensure_comb_state {
     write_buf_desc(writes, g_gpu.comb_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.comb_set, VHB_CY, VHB_COMB, VHB_META, VHB_COMB, VHB_COMB, VHB_Y1)
     g_gpu.comb_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: device-side moe combine engaged\n")
 }
@@ -5855,7 +5956,7 @@ def private ensure_comb_state {
 // batch bindings differ from decode's: meta is the stack's BATCH table, activations point at a
 // role-fixed image (gate/up: the gathered x scratch; down: the requantized hidden planes), y one
 // of the two shared device planes (gate/down write y1_dev, up y2_dev)
-def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsbytes : int64; ybytes : int64 = BATCH_Y_BYTES) {
+def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsbytes : int64; xbit, ybit : uint; ybytes : int64 = BATCH_Y_BYTES) {
     if (g_gpu.stacks[si].batch_made && g_gpu.stacks[si].batch_y == ybuf && g_gpu.stacks[si].batch_xq == xqbuf) {
         return
     }
@@ -5874,6 +5975,7 @@ def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsb
     write_buf_desc(writes, g_gpu.stacks[si].batch_set, 5u, ybuf, ybytes)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.stacks[si].batch_set, 0u, 0u, VHB_META, xbit, xbit, ybit)
     g_gpu.stacks[si].batch_y = ybuf
     g_gpu.stacks[si].batch_xq = xqbuf
 }
@@ -6037,26 +6139,18 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
         cmd_copy_whole(raw, g_gpu.comb_stage.buf, g_gpu.comb_w_dev, comb_wi_bytes)
         cmd_copy_at(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, comb_wi_bytes)
     }
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, g_gpu.stacks[s1].fmt, g_gpu.stacks[s1].batch_tile, g_gpu.stacks[s1].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s1].batch_set, nwg_gu)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
-    if (!same_batch_pipe(s3, s1)) {
-        bind_batch_pipe(raw, g_gpu.stacks[s3].fmt, g_gpu.stacks[s3].batch_tile, g_gpu.stacks[s3].batch_aligned)
-    }
-    cmd_bind_dispatch(raw, g_gpu.stacks[s3].batch_set, nwg_gu)
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s1].fmt, g_gpu.stacks[s1].batch_tile, g_gpu.stacks[s1].batch_aligned),
+        g_gpu.stacks[s1].batch_set, nwg_gu)
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s3].fmt, g_gpu.stacks[s3].batch_tile, g_gpu.stacks[s3].batch_aligned),
+        g_gpu.stacks[s3].batch_set, nwg_gu)
     // the requant form follows the DOWN stack — its GEMM is the consumer of hq/hs
     let dkq = g_gpu.stacks[s2].fmt != 0
-    vhz_dep(raw, h, VHB_Y1 | VHB_Y2 | VHB_META, VHB_HQ)
-    cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile, g_gpu.stacks[s2].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s2].batch_set, nwg_dn)
+    hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
+        g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile, g_gpu.stacks[s2].batch_aligned),
+        g_gpu.stacks[s2].batch_set, nwg_dn)
     if (comb_npos > 0u) {
-        vhz_dep(raw, h, VHB_Y1 | VHB_COMB | VHB_CY | VHB_META, VHB_CY)
-        cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.comb_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, g_gpu.comb_set, comb_npos)
+        hz_dispatch(raw, h, weak_copy(g_gpu.comb_pipeline), g_gpu.comb_set, comb_npos)
         if (comb_last) {
             vhz_dep(raw, h, VHB_CY, 0u, true)
             cmd_copy_whole(raw, g_gpu.comb_y_dev, g_gpu.comb_y.buf, comb_y_bytes)
@@ -6084,9 +6178,9 @@ def private vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : i
     let xunit_in = kq_in ? 256l : 32l
     let xunit_mid = f2 != 0 ? 256l : 32l
     ensure_batch_state()
-    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
-    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
-    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES)
+    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
     let comb = npos > 0l
     var comb_k = 0l
     if (comb) {
@@ -6151,9 +6245,8 @@ def private record_dense_cmd(si : int; nwg : uint; y_bytes : int64; axq_bytes, a
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
     vhz_dep(raw, h, 0u, VHB_META, true)
     cmd_copy_batch_meta(raw, si)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, g_gpu.stacks[si].fmt, g_gpu.stacks[si].batch_tile, g_gpu.stacks[si].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[si].batch_set, nwg)
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[si].fmt, g_gpu.stacks[si].batch_tile, g_gpu.stacks[si].batch_aligned),
+        g_gpu.stacks[si].batch_set, nwg)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, y_bytes)
     vk_check(vkEndCommandBuffer(raw), null)
@@ -6166,7 +6259,7 @@ def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float c
     let si = find_stack(woff, fmt)
     let xunit = fmt != 0 ? 256l : 32l
     ensure_batch_state()
-    ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
+    ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
     var chunk = min(BATCH_XQ_BYTES / n, BATCH_XS_BYTES / ((n / xunit) * 4l))
     chunk = min(chunk, BATCH_Y_BYTES / (d * 4l))
     chunk = min(chunk, BATCH_CHUNK_ROWS) / BATCH_TILE * BATCH_TILE
@@ -6246,6 +6339,9 @@ def private ensure_dn_state {
     write_buf_desc(writes, g_gpu.dn_rq_set, 5u, g_gpu.dn_meta_dev, DN_META_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.dn_conv_set, VHB_HQ, 0u, VHB_META, 0u, VHB_SM, VHB_Y1)   // 1/3 = untouched fillers
+    hz_set_bits(g_gpu.dn_scan_set, VHB_HQ, VHB_ST, VHB_META, VHB_WS, VHB_SM, VHB_Y2)
+    hz_set_bits(g_gpu.dn_rq_set, VHB_WS, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u)     // 1/5 = untouched fillers
     g_gpu.dn_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain engaged\n")
 }
@@ -6305,26 +6401,16 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         cmd_copy_whole(raw, g_gpu.dn_state_stage.buf, g_gpu.dn_state_dev, nvh * ds * ds * 4l)
     }
     pfq_ts(raw)   // q1: uploads
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, 0, g_gpu.stacks[s_qkv].batch_tile, g_gpu.stacks[s_qkv].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_qkv].batch_set, nwg_qkv)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
-    if (!same_batch_pipe(s_z, s_qkv)) {
-        bind_batch_pipe(raw, 0, g_gpu.stacks[s_z].batch_tile, g_gpu.stacks[s_z].batch_aligned)
-    }
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_z].batch_set, nwg_z)
+    hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_qkv].batch_tile, g_gpu.stacks[s_qkv].batch_aligned),
+        g_gpu.stacks[s_qkv].batch_set, nwg_qkv)
+    hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_z].batch_tile, g_gpu.stacks[s_z].batch_aligned),
+        g_gpu.stacks[s_z].batch_set, nwg_z)
     pfq_ts(raw)   // q2: qkv+z GEMMs
-    vhz_dep(raw, h, VHB_Y1 | VHB_SM | VHB_META, VHB_HQ)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_conv_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.dn_conv_set, uint(rows))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dn_conv_pipeline), g_gpu.dn_conv_set, uint(rows))
     pfq_ts(raw)   // q3: conv
-    vhz_dep(raw, h, VHB_HQ | VHB_Y2 | VHB_SM | VHB_ST | VHB_META, VHB_ST | VHB_WS)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_scan_p1_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.dn_scan_set, uint(nvh * ((rows + DN_CS - 1l) / DN_CS)))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p1_pipeline), g_gpu.dn_scan_set, uint(nvh * ((rows + DN_CS - 1l) / DN_CS)))
     pfq_ts(raw)   // q4: scan phase 1
-    vhz_dep(raw, h, VHB_HQ | VHB_Y2 | VHB_SM | VHB_ST | VHB_WS | VHB_META, VHB_ST | VHB_WS)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_scan_p2_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.dn_scan_set, uint(nvh))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p2_pipeline), g_gpu.dn_scan_set, uint(nvh))
     pfq_ts(raw)   // q5: scan phase 2
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     if (!last) {
@@ -6337,13 +6423,10 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         cmd_copy_whole(raw, g_gpu.dn_state_dev, g_gpu.dn_state_host.buf, nvh * ds * ds * 4l)
     }
     pfq_ts(raw)   // q6: tail copies
-    vhz_dep(raw, h, VHB_WS | VHB_META, VHB_HQ)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dn_rq_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.dn_rq_set, uint((rows * di / 32l + 255l) / 256l))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dn_rq_pipeline), g_gpu.dn_rq_set, uint((rows * di / 32l + 255l) / 256l))
     pfq_ts(raw)   // q7: o requant
-    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, 0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_out)
+    hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
+        g_gpu.stacks[s_o].batch_set, nwg_out)
     pfq_ts(raw)   // q8: out GEMM
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
@@ -6376,9 +6459,9 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         "dasLLAMA vulkan tier: deltanet geometry outside chain capacity")
     ensure_batch_state()
     ensure_dn_state()
-    ensure_batch_set(s_qkv, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
-    ensure_batch_set(s_z, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
-    ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES)
+    ensure_batch_set(s_qkv, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s_z, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
     unsafe {
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
@@ -6524,6 +6607,11 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     write_buf_desc(writes, st.out_set, 5u, g_gpu.stacks[s_o].y_dev, Y_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    // the qkv stack's raw_set plays Y1 in this chain (role-fluid sets re-declare per record)
+    hz_set_bits(g_gpu.stacks[s_qkv].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    hz_set_bits(st.z_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+    hz_set_bits(st.fused_set, VHG_WS, VHG_ST, VHG_META, VHG_WS, VHG_SM, VHG_Y1 | VHG_Y2)
+    hz_set_bits(st.out_set, 0u, 0u, 0u, VHG_WS, VHG_WS, VHG_YO)
     let raw = st.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -6534,17 +6622,10 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, 2l * nvh * 4l, st.smalls_dev, 8l, 4l)   // the ring parity word
     vhz_dep(raw, h, 0u, VHG_META, true)
     cmd_copy_whole(raw, g_gpu.dnd_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
-    vhz_dep(raw, h, 0u, VHG_Y1)
-    bind_gemv_pipe(raw, 0)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_qkv].raw_set, uint((cd + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    vhz_dep(raw, h, 0u, VHG_Y2)
-    cmd_bind_dispatch(raw, st.z_set, uint((di + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_SM | VHG_META | VHG_ST, VHG_ST | VHG_WS | VHG_SM)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.dnd_fused_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, st.fused_set, uint(nvh))
-    vhz_dep(raw, h, VHG_WS, VHG_YO)
-    bind_gemv_pipe(raw, 0)
-    cmd_bind_dispatch(raw, st.out_set, uint((dim + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(0), g_gpu.stacks[s_qkv].raw_set, uint((cd + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(0), st.z_set, uint((di + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, weak_copy(g_gpu.dnd_fused_pipeline), st.fused_set, uint(nvh))
+    hz_dispatch(raw, h, gemv_pipe(0), st.out_set, uint((dim + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
     if (vk_prof()) {
@@ -6720,6 +6801,10 @@ def private ensure_at_state {
     write_buf_desc(writes, g_gpu.at_rq_set, 5u, g_gpu.at_meta_dev, AT_META_BYTES)
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(g_gpu.at_prep_q_set, VHB_ATQ, 0u, VHB_META, VHB_ATG, VHB_SM, VHB_Y1)
+    hz_set_bits(g_gpu.at_prep_k_set, VHB_ATK, 0u, VHB_META, 0u, VHB_SM, VHB_Y2)   // 3 = the never-fired gate view
+    hz_set_bits(g_gpu.at_attn_set, VHB_ATQ, VHB_ATK, VHB_META, VHB_ATG, VHB_SM, VHB_ATV)
+    hz_set_bits(g_gpu.at_rq_set, VHB_ATG, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u)
     g_gpu.at_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain engaged\n")
 }
@@ -6771,25 +6856,14 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_whole(raw, g_gpu.at_meta.buf, g_gpu.at_meta_dev, AT_META_BYTES)
     vhz_dep(raw, h, 0u, VHB_SM, true)
     cmd_copy_range(raw, g_gpu.at_smalls.buf, 0l, g_gpu.at_smalls_dev, 0l, sm_bytes)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile, g_gpu.stacks[s_q].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_q].batch_set, nwg_q)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_Y2)
-    if (!same_batch_pipe(s_k, s_q)) {
-        bind_batch_pipe(raw, g_gpu.stacks[s_k].fmt, g_gpu.stacks[s_k].batch_tile, g_gpu.stacks[s_k].batch_aligned)
-    }
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_k].batch_set, nwg_k)
-    vhz_dep(raw, h, VHB_ACT | VHB_META, VHB_VRAW)
-    if (!same_batch_pipe(s_v, s_k)) {
-        bind_batch_pipe(raw, g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile, g_gpu.stacks[s_v].batch_aligned)
-    }
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_v].batch_set, nwg_v)
-    vhz_dep(raw, h, VHB_Y1 | VHB_SM | VHB_META, VHB_ATQ | VHB_ATG)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_prep_q_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.at_prep_q_set, uint(rows))
-    vhz_dep(raw, h, VHB_Y2 | VHB_SM | VHB_META, VHB_ATK)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_prep_k_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.at_prep_k_set, uint(rows))
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile, g_gpu.stacks[s_q].batch_aligned),
+        g_gpu.stacks[s_q].batch_set, nwg_q)
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_k].fmt, g_gpu.stacks[s_k].batch_tile, g_gpu.stacks[s_k].batch_aligned),
+        g_gpu.stacks[s_k].batch_set, nwg_k)
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile, g_gpu.stacks[s_v].batch_aligned),
+        g_gpu.stacks[s_v].batch_set, nwg_v)
+    hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_q_pipeline), g_gpu.at_prep_q_set, uint(rows))
+    hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_k_pipeline), g_gpu.at_prep_k_set, uint(rows))
     // transfer window: append raw v at absolute positions, DMA roped k/raw v to host
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
@@ -6797,15 +6871,11 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
     vhz_dep(raw, h, VHB_VRAW, 0u, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_kv_host.buf, AT_WINDOW * AT_MAX_KV * 4l, rows * kv_dim * 4l)
-    vhz_dep(raw, h, VHB_ATQ | VHB_ATK | VHB_ATV | VHB_ATG | VHB_SM | VHB_META, VHB_ATG)
-    cmd_bind_pipeline(vk_value_to_boost(raw), g_gpu.at_attn_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.at_attn_set, uint(n_heads * ((rows + 7l) / 8l)))
-    vhz_dep(raw, h, VHB_ATG | VHB_META, VHB_HQ)
-    cmd_bind_pipeline(vk_value_to_boost(raw), o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 256l : 32l) + 255l) / 256l))
-    vhz_dep(raw, h, VHB_HQ | VHB_META, VHB_Y1)
-    bind_batch_pipe(raw, g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned)
-    cmd_bind_dispatch(raw, g_gpu.stacks[s_o].batch_set, nwg_o)
+    hz_dispatch(raw, h, weak_copy(g_gpu.at_attn_pipeline), g_gpu.at_attn_set, uint(n_heads * ((rows + 7l) / 8l)))
+    hz_dispatch(raw, h, weak_copy(o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline),
+        g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 256l : 32l) + 255l) / 256l))
+    hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
+        g_gpu.stacks[s_o].batch_set, nwg_o)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
     if (vk_prof()) {
@@ -6846,11 +6916,11 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
     let xunit = kq ? 256l : 32l
     ensure_batch_state()
     ensure_at_state()
-    ensure_batch_set(s_q, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
-    ensure_batch_set(s_k, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES)
+    ensure_batch_set(s_q, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s_k, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
     ensure_batch_set(s_v, g_gpu.at_vraw_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES,
-        [ybytes = AT_WINDOW * AT_MAX_KV * 4l])
-    ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES)
+        VHB_ACT, VHB_VRAW, [ybytes = AT_WINDOW * AT_MAX_KV * 4l])
+    ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
     unsafe {
         var sp = reinterpret<float?>(g_gpu.at_smalls.mapped)
         sp[0] = eps
@@ -6951,26 +7021,22 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         let raw = fc.cmd
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        // gate/up roles on the two stacks' raw_sets, this chain's view (re-declared per record)
+        hz_set_bits(g_gpu.stacks[s1].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+        hz_set_bits(g_gpu.stacks[s3].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+        hz_set_bits(fc.actrq_set, VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1)
+        hz_set_bits(fc.down_set, 0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO)
         var h : VkHaz
         vhz_dep(raw, h, 0u, VHG_META, true)
         cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        vhz_dep(raw, h, 0u, VHG_Y1)
-        bind_gemv_pipe(raw, g_gpu.stacks[s1].fmt)
         let ggu = uint((nrows * nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
-        cmd_bind_dispatch(raw, g_gpu.stacks[s1].raw_set, ggu)
-        vhz_dep(raw, h, 0u, VHG_Y2)
-        if (g_gpu.stacks[s3].fmt != g_gpu.stacks[s1].fmt) {
-            bind_gemv_pipe(raw, g_gpu.stacks[s3].fmt)
-        }
-        cmd_bind_dispatch(raw, g_gpu.stacks[s3].raw_set, ggu)
+        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s1].fmt), g_gpu.stacks[s1].raw_set, ggu)
+        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s3].fmt), g_gpu.stacks[s3].raw_set, ggu)
         // the requant form follows the DOWN stack — its GEMV is the consumer of hq/hs
         let dkq = g_gpu.stacks[s2].fmt != 0
-        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_META, VHG_HQ)
-        cmd_bind_pipeline(vk_value_to_boost(raw), dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline, VkPipelineBindPoint.COMPUTE)
-        cmd_bind_dispatch(raw, fc.actrq_set, uint((nrows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
-        vhz_dep(raw, h, VHG_HQ, VHG_YO)
-        bind_gemv_pipe(raw, g_gpu.stacks[s2].fmt)
-        cmd_bind_dispatch(raw, fc.down_set, uint((nrows * n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
+            fc.actrq_set, uint((nrows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s2].fmt), fc.down_set, uint((nrows * n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
         if (vk_prof()) {
@@ -7078,20 +7144,14 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     let fq = g_gpu.stacks[sq].fmt
     let fk = g_gpu.stacks[sk].fmt
     let fv = g_gpu.stacks[sv].fmt
+    // three disjoint row levels on the shared y — the q stack's raw_set plays Y1 in this chain
+    hz_set_bits(g_gpu.stacks[sq].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    hz_set_bits(qc.k_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+    hz_set_bits(qc.v_set, 0u, 0u, 0u, 0u, 0u, VHG_Y3)
     var h : VkHaz
-    vhz_dep(raw, h, 0u, VHG_Y1)
-    bind_gemv_pipe(raw, fq)
-    cmd_bind_dispatch(raw, g_gpu.stacks[sq].raw_set, uint((dq + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    vhz_dep(raw, h, 0u, VHG_Y2)
-    if (fk != fq) {
-        bind_gemv_pipe(raw, fk)
-    }
-    cmd_bind_dispatch(raw, qc.k_set, uint((dk + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    vhz_dep(raw, h, 0u, VHG_Y3)
-    if (fv != fk) {
-        bind_gemv_pipe(raw, fv)
-    }
-    cmd_bind_dispatch(raw, qc.v_set, uint((dv + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(fq), g_gpu.stacks[sq].raw_set, uint((dq + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(fk), qc.k_set, uint((dk + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(fv), qc.v_set, uint((dv + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
     vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
     vk_check(vkEndCommandBuffer(raw), null)
@@ -7426,10 +7486,10 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     var raw = alloc_cmd()
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
+    hz_set_bits(g_gpu.stacks[si].cls_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)
     var h : VkHaz
-    vhz_dep(raw, h, 0u, VHG_YO)
-    bind_gemv_pipe(raw, g_gpu.stacks[si].fmt)
-    cmd_bind_dispatch(raw, g_gpu.stacks[si].cls_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[si].fmt), g_gpu.stacks[si].cls_set,
+        uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
     vk_check(vkEndCommandBuffer(raw), null)
