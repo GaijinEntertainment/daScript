@@ -37,6 +37,9 @@ struct private ProjectNode {
     is_folder : bool
     hidden : bool
     dirty : bool
+    // A nested git repository (git lists it as one "dir/" entry) — its
+    // contents are invisible to this repository's file listing.
+    external : bool
     stat_size : int64
     stat_mtime : int64
     children : array<int>
@@ -107,9 +110,15 @@ def private project_mark_dirty() {
     for (repository in g_client.repositories) {
         if (repository.record.id != g_selected_repository_id) continue
         for (file in repository.files) {
-            if (file.worktree_path != g_selected_worktree_path
-                    || !key_exists(g_project_index, file.path)) continue
-            var index = g_project_index?[file.path] ?? 0
+            if (file.worktree_path != g_selected_worktree_path) continue
+            // Status reports untracked/nested directories with a trailing
+            // slash; the index keys carry none.
+            var status_path = file.path
+            if (ends_with(status_path, "/")) {
+                status_path = slice(status_path, 0, length(status_path) - 1)
+            }
+            if (!key_exists(g_project_index, status_path)) continue
+            var index = g_project_index?[status_path] ?? 0
             while (index >= 0) {
                 if (g_project_nodes[index].dirty) break
                 g_project_nodes[index].dirty = true
@@ -160,8 +169,24 @@ def private ensure_project_model() {
     g_project_nodes |> reserve(length(g_worktree_files)
         + length(g_worktree_files) / 8 + 16)
     g_project_nodes |> emplace(ProjectNode(name = "", path = "", is_folder = true))
-    g_project_file_count = length(g_worktree_files)
+    g_project_file_count = 0
     for (path in g_worktree_files) {
+        // A nested git repository (or fully untracked directory) lists as a
+        // single "dir/" entry: build the folder chain, add no file node.
+        if (ends_with(path, "/")) {
+            var inscope dir_segments <- split(slice(path, 0, length(path) - 1), "/")
+            var dir_parent = 0
+            var dir_prefix = ""
+            for (segment in dir_segments) {
+                dir_prefix = (empty(dir_prefix) ? segment
+                    : "{dir_prefix}/{segment}")
+                dir_parent = project_folder_node(dir_parent,
+                    segment, dir_prefix)
+            }
+            g_project_nodes[dir_parent].external = true
+            continue
+        }
+        g_project_file_count++
         var inscope segments <- split(path, "/")
         var parent = 0
         var prefix = ""
@@ -215,9 +240,15 @@ def private decorate_project_row(node : ProjectNode const;
     with_window_drawlist() $(var dl) {
         let name_text = node.name + (node.is_folder ? "/" : "")
         dl |> add_text(name_position, project_name_color(node), name_text)
+        var marker_x = name_position.x + CalcTextSize(name_text).x + 4.0f
+        if (node.external) {
+            let repo_tag = "(repo)"
+            dl |> add_text(float2(marker_x, name_position.y),
+                GetColorU32(ImGuiCol.TextDisabled), repo_tag)
+            marker_x += CalcTextSize(repo_tag).x + 4.0f
+        }
         if (node.dirty) {
-            dl |> add_text(float2(name_position.x
-                + CalcTextSize(name_text).x + 4.0f, name_position.y),
+            dl |> add_text(float2(marker_x, name_position.y),
                 dirty_color, "*")
         }
         var column_x = row_right

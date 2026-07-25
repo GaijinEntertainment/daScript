@@ -219,6 +219,14 @@ session.
   filter and sort driven through the rails.
 - 18 repositories readability; 20 token color language (one shared
   palette module feeds 18/20/22).
+- 37 nested repositories in the Project view (found by Boris opening
+  modules/dasVulkan): git lists a nested repo as one "dir/" entry.
+  FIXED same day: the entry builds a folder chain tagged "(repo)"
+  instead of a phantom empty-named file row that opened the directory
+  as a file. OPEN follow-up: their CONTENTS stay invisible to the
+  repository-scoped listing — options are a filesystem-based listing
+  or treating a registered nested repo as a portal into its own
+  worktree's Project view.
 - 9 auto-aim policy: empty selection may aim at attach origin;
   explicit selection stays sacred.
 - 27 destructive confirmations.
