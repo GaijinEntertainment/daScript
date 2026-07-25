@@ -123,8 +123,13 @@ P1 — tooling bugs by the parity rule (agent-blindness is a defect):
 
 P2 — small defects:
 - 5 launch doesn't close launcher; 6 changelist row tooltips dead;
-  14 inspector mode resets; 7 double-listed session; 9 aim policy
-  (needs its one-paragraph design decision)
+  14 inspector mode resets; 7 double-listed session
+- RESOLVED 9 by the note-10 fix: attach_session always re-aimed at the
+  session origin (selection + review/history/refs) — it looked dead
+  because the origin carried the mixed-slash spelling and matched no
+  observed worktree. Canonical spellings restored the behavior; the
+  selection-is-sacred rule still holds for task auto-attaches (they
+  pass follow_origin=false since the ghost fix).
 - 36 Launch has no in-flight debounce: duplicate clicks (incl.
   synthetic clicks queued while the window was minimized, then
   replayed on restore) each create a session — observed three

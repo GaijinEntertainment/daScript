@@ -273,6 +273,18 @@ def draw_herd_rename_popup() {
     }
 }
 
+// A PTY row whose session is a live herd card's terminal is redundant in the
+// list — the card is its surface. The plumbing View toggle shows everything.
+def private herd_owns_pty(session_id : string) : bool {
+    if (g_client == null) return false
+    for (record in g_client.herd_sessions) {
+        if (record.state != "closed" && record.pty_session_id == session_id) {
+            return true
+        }
+    }
+    return false
+}
+
 def draw_session_list() {
     let connection = g_client != null && g_client.connected ? "connected" : "disconnected"
     text("Watcher: {connection}")
@@ -299,7 +311,8 @@ def draw_session_list() {
             for (index in range(length(g_client.sessions))) {
                 let session = g_client.sessions[index]
                 if ((!g_show_tasks && session_is_task(session.kind))
-                        || (!g_show_exited && session.state == "exited")) continue
+                        || (!g_show_exited && session.state == "exited")
+                        || (!g_show_tasks && herd_owns_pty(session.id))) continue
                 visible_sessions++
                 var state_glyph = "clock"
                 if (session.state == "running") {
