@@ -53,12 +53,18 @@ struct public WatcherLaunchRequest {
     agent_url : string
     agent_token : string
     agent_skill_path : string
+    // Durable herd session hosting this PTY (empty for plumbing/legacy launches).
+    herd_session_id : string
+    // Relaunch of a durable session: argv is used verbatim, no task prompt.
+    resume : bool
     columns : int = 100
     rows : int = 30
     timeout_ms : int64
     // 0 keeps the conservative interactive default (DEFAULT_DRAIN_QUIET_MS).
     drain_quiet_ms : int64
 }
+
+def public watcher_kind_is_agent(kind : string) : bool => starts_with(kind, "agent-")
 
 def public watcher_target_id_or_local(target_id : string) : string {
     return empty(target_id) ? "local" : target_id
@@ -221,6 +227,7 @@ struct public WatcherSessionInfo {
     purpose : string
     task_context : string
     context_path : string
+    herd_session_id : string
     state : string
     reason : string
     pid : int = 0
@@ -281,6 +288,7 @@ class private WatcherSession {
     purpose : string
     task_context : string
     context_path : string
+    herd_session_id : string
     session_dir : string
     output_path : string
     events_path : string
@@ -406,6 +414,7 @@ def private session_info(session : WatcherSession?) : WatcherSessionInfo {
         worktree_path = session.worktree_path,
         purpose = session.purpose, task_context = session.task_context,
         context_path = session.context_path,
+        herd_session_id = session.herd_session_id,
         state = session.state, reason = session.reason,
         pid = session.pid, exit_code = session.exit_code,
         elapsed_ms = elapsed_ms(session), output_bytes = session.output_bytes,
@@ -441,8 +450,10 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }
-    if (request.kind == "agent-codex") {
-        if (empty(strip(request.task_context))) {
+    if (watcher_kind_is_agent(request.kind)) {
+        // Herd-managed agent sessions may be task-less (human drives from the
+        // terminal); direct agent launches keep requiring an assigned task.
+        if (empty(request.herd_session_id) && empty(strip(request.task_context))) {
             return WatcherLaunchResult(error = "agent task is required")
         }
         if (length(request.task_context) > MAX_COMMAND_BYTES / 2) {
@@ -483,6 +494,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         target_id = request.target_id, repository_id = request.repository_id,
         worktree_path = request.worktree_path, purpose = request.purpose,
         task_context = request.task_context,
+        herd_session_id = request.herd_session_id,
         session_dir = session_dir,
         output_path = path_join(session_dir, "output.raw"),
         events_path = path_join(session_dir, "events.jsonl"),
@@ -511,7 +523,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         return WatcherLaunchResult(error = "could not write session metadata")
     }
     var session_created_detail = "cwd={request.cwd}; display={visible_command}"
-    if (request.kind == "agent-codex") {
+    if (watcher_kind_is_agent(request.kind)) {
         if (!write_text_file(session.context_path,
                 agent_context_markdown(request, session_id, session.context_path))) {
             unsafe { delete session }
@@ -521,7 +533,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     }
     append_event(session, "session_created", session_created_detail)
 
-    if (request.kind == "agent-codex") {
+    if (watcher_kind_is_agent(request.kind)) {
         append_event(session, "agent_bootstrap_prepared",
             "context={session.context_path}; skill={request.agent_skill_path}; " +
             "task_bytes={length(request.task_context)}")
@@ -941,14 +953,19 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
                               session_id, context_path : string) : array<string> {
     var command_argv := request.argv
     if (empty(command_argv)) command_argv |> push("codex")
-    command_argv |> push("Your assigned debug task is:\n\n{request.task_context}\n\n" +
-        "Read the dasHerd session context at {context_path} before acting. " +
-        "Use the dasHerd skill for session coordination, then begin the assigned task.")
+    // A resume relaunch runs the profile's resume argv verbatim: the agent CLI
+    // restores its own conversation, so re-sending the task would duplicate it.
+    if (!request.resume && !empty(strip(request.task_context))) {
+        command_argv |> push("Your assigned debug task is:\n\n{request.task_context}\n\n" +
+            "Read the dasHerd session context at {context_path} before acting. " +
+            "Use the dasHerd skill for session coordination, then begin the assigned task.")
+    }
     if (get_platform_name() == "windows") {
         var command = ("$env:DASHERD_URL = {powershell_literal(request.agent_url)}; " +
             "$env:DASHERD_TOKEN = {powershell_literal(request.agent_token)}; " +
             "$env:DASHERD_SESSION_ID = {powershell_literal(session_id)}; " +
             "$env:DASHERD_SESSION_KIND = {powershell_literal(request.purpose)}; " +
+            "$env:DASHERD_HERD_SESSION_ID = {powershell_literal(request.herd_session_id)}; " +
             "$env:DASHERD_CONTEXT_PATH = {powershell_literal(context_path)}; & ")
         var quoted : array<string>
         quoted |> reserve(length(command_argv))
@@ -960,7 +977,9 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
     }
     var result <- ["env", "DASHERD_URL={request.agent_url}",
         "DASHERD_TOKEN={request.agent_token}", "DASHERD_SESSION_ID={session_id}",
-        "DASHERD_SESSION_KIND={request.purpose}", "DASHERD_CONTEXT_PATH={context_path}"]
+        "DASHERD_SESSION_KIND={request.purpose}",
+        "DASHERD_HERD_SESSION_ID={request.herd_session_id}",
+        "DASHERD_CONTEXT_PATH={context_path}"]
     result |> push_from(command_argv)
     return <- result
 }

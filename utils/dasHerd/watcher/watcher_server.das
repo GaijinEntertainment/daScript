@@ -11,6 +11,7 @@ module watcher_server shared public
 require dashv/dashv_boost public
 require ./watcher_core.das public
 require ./repository_core.das public
+require ./herd_sessions.das public
 require ./file_inspection.das
 require daslib/json_boost
 require daslib/base64
@@ -73,6 +74,10 @@ struct private WatcherWsMessage {
     message_id : string
     status : string
     notify : bool = true
+    name : string
+    profile_id : string
+    workflow : string
+    herd_session_id : string
     focus : WatcherFocusSet = WatcherFocusSet()
     bundle : WatcherReviewBundle = WatcherReviewBundle()
 }
@@ -146,6 +151,7 @@ struct private PendingAgentWorktreeLaunch {
     repository_id : string
     source_worktree_path : string
     new_worktree_path : string
+    branch : string
     task_context : string
 }
 
@@ -160,6 +166,7 @@ class private WatcherClient {
     raw : bool
     raw_offset : int64
     repository_revision : int64 = -1l
+    herd_revision : int64 = -1l
     mailbox_revision : int64 = -1l
     bundles_revision : int64 = -1l
     inspection_request_id : int
@@ -335,6 +342,12 @@ class DasHerdWatcherServer : HvWebServer {
             if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
             return resp |> JSON(repository_list_json(), http_status.OK)
         }
+        GET("/api/v1/herd_sessions") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
+            return resp |> JSON("\{\"revision\":{herd_revision()}," +
+                "\"profiles\":{herd_profiles_json()},\"data\":{herd_sessions_json()}\}",
+                http_status.OK)
+        }
         GET("/api/v1/mailbox") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
             let url = req != null ? string(req.url) : ""
@@ -387,7 +400,7 @@ class DasHerdWatcherServer : HvWebServer {
             if (!sscan_json(string(req.body), launch)) {
                 return self.respond_error(resp, http_status.BAD_REQUEST, "invalid launch JSON")
             }
-            if (launch.kind == "agent-codex") {
+            if (watcher_kind_is_agent(launch.kind)) {
                 launch.agent_url = self.agent_url
                 launch.agent_token = self.token
                 launch.agent_skill_path = self.agent_skill_path
@@ -529,6 +542,36 @@ class DasHerdWatcherServer : HvWebServer {
         client.repository_revision = revision
         send(client.channel, "\{\"type\":\"repositories\",\"data\":{repository_list_json()}\}",
             ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
+    def send_herd_sessions(var client : WatcherClient?; force : bool = false) {
+        if (client == null) return
+        let revision = herd_revision()
+        if (!force && client.herd_revision == revision) return
+        client.herd_revision = revision
+        send(client.channel, "\{\"type\":\"herd_sessions\",\"revision\":{revision}," +
+            "\"profiles\":{herd_profiles_json()},\"data\":{herd_sessions_json()}\}",
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
+    // Launches (or relaunches) the PTY for a durable herd session and links it.
+    def launch_herd_session(herd_id : string; initial : bool; var error : string&) : string {
+        var inscope request = WatcherLaunchRequest()
+        if (!herd_build_launch(herd_id, initial, self.agent_url, self.token,
+                self.agent_skill_path, request, error)) {
+            return ""
+        }
+        let launched = watcher_launch(request)
+        if (!launched.ok) {
+            let _ = herd_mark_launch_failed(herd_id, launched.error)
+            error = launched.error
+            return ""
+        }
+        let link_error = herd_link_pty(herd_id, launched.session_id)
+        if (!empty(link_error)) {
+            print("dasHerd watcher: herd registry save failed: {link_error}\n")
+        }
+        return launched.session_id
     }
 
     def send_mailbox(var client : WatcherClient?; force : bool = false) {
@@ -892,6 +935,7 @@ class DasHerdWatcherServer : HvWebServer {
             repository_id = incoming.repository_id,
             source_worktree_path = incoming.worktree_path,
             new_worktree_path = incoming.new_worktree_path,
+            branch = incoming.branch,
             task_context = incoming.task_context))
         let _ = watcher_record_event(created.session_id, "agent_worktree_queued",
             "source={incoming.worktree_path}; target={incoming.new_worktree_path}; " +
@@ -933,32 +977,37 @@ class DasHerdWatcherServer : HvWebServer {
             let worktree_created_logged = watcher_record_event(pending.create_session_id,
                 "agent_worktree_created", "target={pending.new_worktree_path}")
             let repository_refreshed = repository_refresh(pending.repository_id)
-            var agent_argv <- ["codex"]
-            let launched = watcher_launch(WatcherLaunchRequest(argv <- agent_argv,
-                cwd = pending.new_worktree_path, display_name = "Codex debug",
-                kind = "agent-codex", purpose = "debug",
-                task_context = pending.task_context, target_id = "local",
+            var create_error : string
+            let herd_id = herd_create(HerdCreateRequest(
+                name = !empty(pending.branch) ? pending.branch : base_name(pending.new_worktree_path),
+                profile_id = "codex", workflow = "debug",
                 repository_id = pending.repository_id,
                 worktree_path = pending.new_worktree_path,
-                agent_url = self.agent_url, agent_token = self.token,
-                agent_skill_path = self.agent_skill_path,
-                columns = 120, rows = 36, timeout_ms = 0l))
-            if (!launched.ok) {
+                task_context = pending.task_context), create_error)
+            var launch_error : string
+            var pty_session_id : string
+            if (empty(herd_id)) {
+                launch_error = create_error
+            } else {
+                pty_session_id = self.launch_herd_session(herd_id, true, launch_error)
+            }
+            if (empty(pty_session_id)) {
                 let launch_failure_logged = watcher_record_event(pending.create_session_id,
-                    "agent_launch_failed", launched.error)
+                    "agent_launch_failed", launch_error)
             } else {
                 let launch_started_logged = watcher_record_event(pending.create_session_id,
-                    "agent_launch_started", "session={launched.session_id}")
+                    "agent_launch_started", "session={pty_session_id}; herd={herd_id}")
             }
             if (client != null) {
-                if (!launched.ok) {
-                    send_error(client.channel, launched.error)
+                if (empty(pty_session_id)) {
+                    send_error(client.channel, launch_error)
                 } else {
                     send(client.channel, "\{\"type\":\"launched\",\"session_id\":" +
-                        "{sprint_json(launched.session_id, false)}\}",
+                        "{sprint_json(pty_session_id, false)}\}",
                         ws_opcode.WS_OPCODE_TEXT, true)
                 }
                 send_sessions(client.channel)
+                send_herd_sessions(client, true)
             }
             pending_agent_launches |> erase(index)
             index--
@@ -1291,6 +1340,7 @@ class DasHerdWatcherServer : HvWebServer {
             ws_opcode.WS_OPCODE_TEXT, true)
         send_sessions(channel)
         send_repositories(clients[length(clients) - 1], true)
+        send_herd_sessions(clients[length(clients) - 1], true)
     }
 
     def override onWsClose(channel : WebSocketChannel) {
@@ -1411,7 +1461,7 @@ class DasHerdWatcherServer : HvWebServer {
                 columns = incoming.columns, rows = incoming.rows,
                 timeout_ms = incoming.timeout_ms)
             launch.argv := incoming.argv
-            if (launch.kind == "agent-codex") {
+            if (watcher_kind_is_agent(launch.kind)) {
                 launch.agent_url = self.agent_url
                 launch.agent_token = self.token
                 launch.agent_skill_path = self.agent_skill_path
@@ -1424,6 +1474,74 @@ class DasHerdWatcherServer : HvWebServer {
             send(channel, "\{\"type\":\"launched\",\"session_id\":{sprint_json(result.session_id, false)}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             send_sessions(channel)
+        } elif (incoming.op == "herd_create") {
+            var create_error : string
+            let herd_id = herd_create(HerdCreateRequest(name = incoming.name,
+                host = watcher_target_id_or_local(incoming.target_id),
+                profile_id = incoming.profile_id, workflow = incoming.workflow,
+                repository_id = incoming.repository_id,
+                worktree_path = incoming.worktree_path,
+                task_context = incoming.task_context,
+                columns = incoming.columns > 0 ? incoming.columns : 120,
+                rows = incoming.rows > 0 ? incoming.rows : 36), create_error)
+            if (empty(herd_id)) {
+                send_error(channel, create_error)
+                return
+            }
+            var launch_error : string
+            let pty_session_id = self.launch_herd_session(herd_id, true, launch_error)
+            if (empty(pty_session_id)) {
+                send_error(channel, launch_error)
+            } else {
+                send(channel, "\{\"type\":\"herd_created\",\"herd_session_id\":" +
+                    "{sprint_json(herd_id, false)},\"session_id\":" +
+                    "{sprint_json(pty_session_id, false)}\}",
+                    ws_opcode.WS_OPCODE_TEXT, true)
+            }
+            send_sessions(channel)
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_relaunch") {
+            var inscope record = HerdSession()
+            if (!herd_get(incoming.herd_session_id, record)) {
+                send_error(channel, "unknown herd session")
+                return
+            }
+            if (record.state != "exited") {
+                send_error(channel, "herd session is {record.state}; only exited sessions relaunch")
+                return
+            }
+            var launch_error : string
+            let pty_session_id = self.launch_herd_session(incoming.herd_session_id,
+                record.launch_count == 0, launch_error)
+            if (empty(pty_session_id)) {
+                send_error(channel, launch_error)
+            } else {
+                send(channel, "\{\"type\":\"herd_relaunched\",\"herd_session_id\":" +
+                    "{sprint_json(incoming.herd_session_id, false)},\"session_id\":" +
+                    "{sprint_json(pty_session_id, false)}\}",
+                    ws_opcode.WS_OPCODE_TEXT, true)
+            }
+            send_sessions(channel)
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_close") {
+            var pty_to_terminate : string
+            let close_error = herd_close(incoming.herd_session_id, pty_to_terminate)
+            if (!empty(close_error)) {
+                send_error(channel, close_error)
+                return
+            }
+            if (!empty(pty_to_terminate)) {
+                let _ = watcher_terminate(pty_to_terminate, "herd_session_closed")
+            }
+            send_sessions(channel)
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_rename") {
+            let rename_error = herd_rename(incoming.herd_session_id, incoming.name)
+            if (!empty(rename_error)) {
+                send_error(channel, rename_error)
+                return
+            }
+            send_herd_sessions(client, true)
         } elif (incoming.op == "attach") {
             if (watcher_find_session(incoming.session_id) < 0) {
                 send_error(channel, "unknown session")
@@ -1500,6 +1618,7 @@ class DasHerdWatcherServer : HvWebServer {
 
     def override onTick {
         watcher_tick()
+        herd_tick()
         repository_tick()
         self.retry_inspection_artifact_cleanup()
         self.poll_orphaned_git_actions()
@@ -1515,6 +1634,7 @@ class DasHerdWatcherServer : HvWebServer {
             send_snapshot(client)
             send_raw_output(client)
             send_repositories(client)
+            send_herd_sessions(client)
             send_mailbox(client)
             send_bundles(client)
             self.poll_git_file_action(client)

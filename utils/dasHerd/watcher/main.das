@@ -146,6 +146,14 @@ def init() {
         return
     }
     g_repositories_initialized = true
+    let herd_error = herd_init(path_join(g_log_root, "_registry.json"),
+        path_join(dir_name(g_config_path), "dasHerd.profiles.json"))
+    if (!empty(herd_error)) {
+        print("dasHerd watcher: could not initialize herd registry: {herd_error}\n")
+        g_exit_code = 6
+        request_exit()
+        return
+    }
 
     g_server = new DasHerdWatcherServer()
     g_server.token = g_token
@@ -216,6 +224,7 @@ def shutdown() {
             repository_shutdown()
             g_repositories_initialized = false
         }
+        herd_shutdown()
         watcher_shutdown()
         g_watcher_initialized = false
     }
