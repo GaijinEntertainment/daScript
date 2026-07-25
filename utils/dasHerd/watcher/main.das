@@ -116,13 +116,15 @@ def private maybe_collect_gc() {
 }
 
 // Children inherit the watcher's environment. When the watcher itself was
-// started from a Claude Code session, the inherited child-session markers make
-// every launched agent disable transcript persistence — which silently breaks
-// Relaunch (`claude --continue` has nothing to continue). Scrub the markers
-// once at startup; force persistence too since POSIX setenv cannot remove.
+// started from a Claude Code tool shell, the inherited session markers make
+// every launched agent disable transcript persistence (breaking Relaunch via
+// `claude --continue`) and NO_COLOR renders every agent TUI monochrome — the
+// play-session "terminal colors came out wrong". Scrub once at startup; force
+// persistence too since POSIX setenv cannot remove.
 def private sanitize_child_environment() {
     for (marker in fixed_array("CLAUDE_CODE_CHILD_SESSION", "CLAUDECODE",
-            "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT")) {
+            "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT",
+            "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID", "NO_COLOR")) {
         set_env_variable(marker, "")
     }
     set_env_variable("CLAUDE_CODE_FORCE_SESSION_PERSISTENCE", "1")

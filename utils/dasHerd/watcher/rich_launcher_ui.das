@@ -225,12 +225,21 @@ def draw_launcher_form() {
         g_launch_pending_started = ref_time_ticks()
         LAUNCHER_WIN.open = false
     }
-    // The button never goes silently dead: the reserved line under it says
-    // why it is disabled (the launch race used to be a silent no-op).
+    if (LAUNCHER_LAUNCH.clicked) {
+        // Click-frame forensics: logs every enabled term, so a click that the
+        // branch above ignored explains itself in herder_ui_events.
+        ui_event("launcher-button clicked pending={launch_pending} " +
+            "connected={connected} profile={profile_id} worktree_ok={worktree_ok} " +
+            "src={g_agent_source_repository_id}")
+    }
+    // The button never goes silently dead: the ladder mirrors the enabled
+    // expression exactly, so every disabled state names itself.
     if (launch_pending) {
         text_disabled("Launching...")
     } elif (!connected) {
         text_disabled("Waiting for the watcher connection...")
+    } elif (empty(profile_id)) {
+        text_disabled("Waiting for agent profiles from the watcher...")
     } elif (empty(g_agent_source_repository_id)
             || empty(g_agent_source_worktree_path)) {
         text_disabled("Waiting for the repository list...")

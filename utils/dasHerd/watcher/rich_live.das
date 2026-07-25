@@ -265,9 +265,20 @@ def herder_terminal_input(input : JsonValue?) : JsonValue? {
         session_id = g_client.selected_id))
 }
 
-[live_command(description = "Read the attached terminal screen text and viewport state.")]
-def herder_terminal_state(_input : JsonValue?) : JsonValue? {
+struct HerderTerminalStateArgs {
+    ansi : bool
+}
+
+[live_command(description = "Read the attached terminal screen text and viewport state. Args: ansi (true adds the checkpoint ANSI with full SGR colors for attribute inspection).")]
+def herder_terminal_state(input : JsonValue?) : JsonValue? {
     if (g_client == null) return JV((ok = false, error = "client is unavailable"))
+    let args = from_JV(input, type<HerderTerminalStateArgs>)
+    if (args.ansi) {
+        return JV((ok = g_client.attached,
+            attached = g_client.attached,
+            session_id = g_client.selected_id,
+            ansi = terminal_checkpoint_ansi(g_terminal)))
+    }
     return JV((ok = g_client.attached,
         attached = g_client.attached,
         controls = g_client.controls,

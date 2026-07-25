@@ -193,12 +193,29 @@ Findings while landing Wave 0:
 ## Bug-queue status (2026-07-25, end of first burn-down)
 
 Every in-repo bug from the triage is fixed, live-verified, and
-committed. Still open, all in the dasImgui repo (separate checkout,
-separate PR flow; rebuilding its DLLs tears down the running rig):
-30a selectable snapshot labels, 30b terminal cell-attribute
-inspection, 4a terminal colors (blocked on 30b), the terminal
-scrollbar. Note 31's agent-session leg waits for the next live agent
-session.
+committed.
+
+DONE 30b (2026-07-25): herder_terminal_state gained an `ansi` arg
+returning the emulator's checkpoint ANSI with full SGR — terminal
+attributes are now inspectable end to end.
+
+DONE 4a (2026-07-25, root-caused via 30b): the colors were never a
+rendering bug. Probes proved the dasTerminal emulator decodes and the
+imgui_terminal renderer draws 16/256/truecolor + dim + resets
+correctly. The TUIs were monochrome because Claude Code sets
+NO_COLOR=1 in its tool shells — the watcher inherited it and passed it
+to every PTY child, so chalk disabled color at the source. The env
+sanitizer now also scrubs NO_COLOR, CLAUDE_CODE_SESSION_ID, and
+CLAUDE_PID; verified with a live Claude launch rendering the brand
+truecolor logo.
+
+Still open in the dasImgui repo (separate checkout + rebuild block):
+30a selectable snapshot labels; the terminal scrollbar; NEW: combo
+imgui_force_set stops applying after a live reload (worked pre-reload,
+input_text unaffected); NEW: ClickState.click_count increments on
+disabled buttons (suppressed clicks are counted). Note 31's
+agent-session leg waits for the next live agent session — and the
+running cc-color-probe3 IS one, DASHERD_* env and all.
 
 ## Wave 3 — surface reworks (each needs a short design pass)
 
