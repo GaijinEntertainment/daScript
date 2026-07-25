@@ -5,7 +5,7 @@ name: nightly daspkg index
 # HEAD. The list is fetched at RUN time, so newly published packages are
 # picked up automatically — no workflow edit needed. External ABI breakage
 # surfaces here as a nightly signal instead of inside an unrelated PR's
-# extended_checks run. COVERAGE_GAP.md stage 4.
+# extended_checks run. history/ci/COVERAGE_GAP.md stage 4.
 #
 # Linux-only by design: the recorded incident class (external module compiled
 # against changed daslang headers) is a compile error, platform-independent.

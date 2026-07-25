@@ -9,7 +9,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 3 Phase 2 (audit `benchmarks/sql/linq_fold_chain_audit.md` probe C2): the
+// Theme 3 Phase 2 (audit `history/linq_fold/linq_fold_chain_audit.md` probe C2): the
 // canonical SQL `GROUP BY ... ORDER BY COUNT(*)` shape ("brands sorted by
 // frequency"). plan_group_by_core gained an `orderName`/`orderKey` lane that
 // emits an inline-cmp `sort(buf, ...)` right after the to_array buf-fill,

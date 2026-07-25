@@ -79,7 +79,8 @@ modules/dasLLAMA/
   API_REWORK.md               # API + backend-seam design record (the plan of record)
   x64_arch.md                 # x64 port docs — seam map; get_x64_going.md = runbook,
   get_x64_going.md            #   tune_for_this_box.md = per-box tuning + measurement discipline
-  tune_for_this_box.md
+  tune_for_this_box.md        # (closed-arc docs — avx_kernel_matrix.md, epyc9654_measurements.md,
+                              #  model_expansion_plan.md — are archived under history/dasLLAMA/)
   dasllama/                   # the module — require dasllama/<name>
     dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q4) + Q8·Q8 kernel-backend registry
     dasllama_math_default.das #   the portable Q8·Q8 kernel backend (the fallback; platform backends out-rank it)

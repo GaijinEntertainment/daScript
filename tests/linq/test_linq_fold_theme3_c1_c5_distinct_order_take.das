@@ -9,7 +9,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 3 Phase 3 (audit `benchmarks/sql/linq_fold_chain_audit.md` probes C1 + C5):
+// Theme 3 Phase 3 (audit `history/linq_fold/linq_fold_chain_audit.md` probes C1 + C5):
 // the "top-K distinct" composition family. Two arm pairs in mirror order:
 //   C1: `_distinct_by(K1) |> _order_by(K2) |> take(N) |> to_array()`
 //   C5: `_order_by(K1) |> distinct() |> take(N) |> to_array()`

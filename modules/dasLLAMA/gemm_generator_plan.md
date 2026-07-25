@@ -5,9 +5,9 @@ the GEMM-only first draft of this document. The GEMM generator is now the flagsh
 of two generic dasLLVM capabilities — an external-codegen hook (`[llvm_code]`, part 1) and a
 generalized tune framework (part 2) — with GEMM as part 3. Work order: **part 1 minimal →
 M0–M2 evidence on the M1 Mac → parts 2–3 built on that evidence.** Companion docs:
-`x64_arch.md` (the two x64 seams), `avx_kernel_matrix.md` (the hand-written tier matrix this
+`x64_arch.md` (the two x64 seams), `history/dasLLAMA/avx_kernel_matrix.md` (the hand-written tier matrix this
 eventually deletes), `tune_for_this_box.md` (the tuner rail being generalized),
-`epyc9654_measurements.md` (the motivating fleet evidence).
+`history/dasLLAMA/epyc9654_measurements.md` (the motivating fleet evidence).
 
 **Hardware plan (settled):** the M1 Mac first — this box's **sdot kernels** are the M0–M2
 vehicle. Zen2 desktop after (avx2/maddubs perms; no VNNI). The EPYC 9654 is parked but
@@ -1495,7 +1495,7 @@ get replaced as family coverage lands. What that implies, in order:
    group3/groupN traversals, the mx4 family (MXFP4 kernels — the second quant family), token
    tails.
 3. **x64 legs**: vpdpbusd/maddubs/vpdpbssd dot emitters + width/tail perms — replaces the
-   whole AVX kernel matrix (avx_kernel_matrix.md). Zen2 desktop first, EPYC for zvnni.
+   whole AVX kernel matrix (history/dasLLAMA/avx_kernel_matrix.md). Zen2 desktop first, EPYC for zvnni.
 4. **Delete**: arm64-laneq tier, x64 AVX matrix tiers, dasllama_tune's [tuned]/box_profile
    rail (subsumed by the loop-hint manifest kind), keeping portable/default backends only.
 
@@ -1516,6 +1516,6 @@ EPYC session, slice F section above.)
   `benchmarks/matmul/bench_gemm_iso.das`, `harness/gemm_1core_probe.das`,
   `harness/avx_matrix_probe.das` (exactness gates), `benchmarks/emission_bench.das`
   (fleet pp512 method).
-- Evidence: `epyc9654_measurements.md` (sessions 3b–5: why portable+pin wins today, the
+- Evidence: `history/dasLLAMA/epyc9654_measurements.md` (sessions 3b–5: why portable+pin wins today, the
   0.73–0.86× fleet column, the Genoa zmm-engine finding); `~/Downloads/M1_results.md`
   (M1 baseline: prefill 0.92×, decode 0.84× median — local, not committed).

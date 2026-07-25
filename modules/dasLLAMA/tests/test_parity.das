@@ -636,7 +636,7 @@ def private parity_text_ok(path : string; quant : QuantMode; text : string; want
 // to match ggml (`ggml_float`), which removes the SYSTEMATIC flips (steps where the oracle is
 // confident); what remains is irreducible near-tie sensitivity no float engine can pin. The first 11
 // counting tokens are all oracle-confident (gap >6) and match token-for-token. Details:
-// modules/dasLLAMA/model_expansion_plan.md (Wave G2). Large-tier (~26 GB): DASLLAMA_PARITY_FULL=1.
+// history/dasLLAMA/model_expansion_plan.md (Wave G2). Large-tier (~26 GB): DASLLAMA_PARITY_FULL=1.
 let GEMMA4_26B_GEN <- [236743l, 236800l, 236778l, 236770l, 236764l, 236743l, 236800l, 236778l, 236778l, 236764l, 236743l]
 
 [test]

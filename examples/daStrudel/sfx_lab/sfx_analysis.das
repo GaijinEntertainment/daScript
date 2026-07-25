@@ -210,7 +210,7 @@ def public fit(ref, mix : array<float>; rate : int; w : FitWeights = FitWeights(
     //! Composite fit (research-backed): spectral timbre + temporal shape (anti-wash) + attack.
     //! The shape + attack terms structurally forbid a sustained noise wash from scoring well
     //! against a sharp transient — a wash cannot have an early temporal centroid, a short
-    //! effective duration, AND a high crest factor at once. See research/metric_design notes.
+    //! effective duration, AND a high crest factor at once. See history/examples/sfx_lab/research/metric_design.md.
     var f = FitScore()
     if (empty(ref) || empty(mix)) return f
     f.spectral = 1.0 - spectral_dist(ref, mix, rate)

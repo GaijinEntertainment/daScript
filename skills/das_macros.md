@@ -414,7 +414,7 @@ call_macros recursively. By the time `visit(call)` runs:
   rewrite them anyway.
 
 You almost never want to override this default. The Mode-1/Mode-2 story
-documented in `modules/dasSQLITE/API_REWORK.md` chunk-2 section is the
+documented in `history/dasSQLITE/API_REWORK.md` chunk-2 section is the
 cautionary tale: `_sql` shipped briefly with `canVisitArgument → false`
 overrides because a synthetic test seemed to show inner expansion not
 firing. The real cause was a missing `require daslib/linq_boost public`

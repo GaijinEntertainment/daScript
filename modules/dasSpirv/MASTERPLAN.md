@@ -1553,8 +1553,8 @@ local-GPU behavioral proof through dasVulkan.
 - **`PhysicalStorageBuffer` (BDA).** Requires SPIR-V > 1.3; defer until a `spirv_version` annotation
   arg lands (the existing version-knob plan).
 - **`PHASE6_VISITOR_PORT.md` / `PHASE7_TEXTURES.md` / `PHASE8_LANGUAGE.md` / `PHASE9_TUTORIALS.md`.**
-  Fully shipped; content captured in the Implementation log above. Standalone files are stale and
-  superseded by this section + the LANDED entries. Candidate for a hygiene-PR archival pass.
+  Fully shipped; content captured in the Implementation log above. The standalone working plans are
+  archived under `history/dasSpirv/` (2026-07-24) — superseded by this section + the LANDED entries.
 
 ### Tutorial-11 (HDR + bloom)
 

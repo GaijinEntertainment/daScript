@@ -9,7 +9,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 2 (audit `benchmarks/sql/linq_fold_chain_audit.md`): trailing `_where` extensions
+// Theme 2 (audit `history/linq_fold/linq_fold_chain_audit.md`): trailing `_where` extensions
 // across plan_decs_join (8a, C6), plan_group_by_core (4a, 4e), plan_loop_or_count (5c).
 
 struct Item {

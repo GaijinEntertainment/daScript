@@ -13,7 +13,7 @@ require daslib/sql_linq
 // The raw-SQL escape hatch (`query_one(sql, type<T>, args...)`) is NOT
 // covered here — it is a non-chain code path with no Mode-3 analog.
 //
-// See modules/dasSQLITE/API_CHECKED.md for the equivalence-harness plan.
+// See history/dasSQLITE/API_CHECKED.md for the equivalence-harness plan.
 
 [sql_table(name = "Cars")]
 struct Car {

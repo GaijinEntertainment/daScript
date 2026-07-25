@@ -1,6 +1,6 @@
 # sqlite_linq lowering gaps — bench cells marked `—`
 
-Catalogues every `—` SQL cell in [`results.md`](results.md), split by **what's
+Catalogues every `—` SQL cell in [`results.md`](../../benchmarks/sql/results.md), split by **what's
 missing** rather than by bench. Each gap is either:
 
 - **window functions** — the canonical SQL form requires `ROW_NUMBER() OVER (...)` /

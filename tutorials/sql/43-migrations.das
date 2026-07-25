@@ -23,7 +23,7 @@ options gen2
 // The struct describes the CURRENT schema. Old shapes live ONLY in the
 // migration body's raw SQL — daslang has no model-snapshot system.
 //
-// See: API_MIGRATION.md (design notes), tut 39 (schema_from), tut 42
+// See: history/dasSQLITE/API_MIGRATION.md (design notes), tut 39 (schema_from), tut 42
 // (multi-version ETL with schema_from for the *read* side).
 
 require sqlite/sqlite_migrate

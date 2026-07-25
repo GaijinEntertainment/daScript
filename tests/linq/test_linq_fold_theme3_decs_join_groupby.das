@@ -10,7 +10,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 3 Phase 1 (audit `benchmarks/sql/linq_fold_chain_audit.md` probe C3): the
+// Theme 3 Phase 1 (audit `history/linq_fold/linq_fold_chain_audit.md` probe C3): the
 // "killer demo" composition. plan_decs_group_by recognizes a trailing `join`
 // upstream of `group_by_lazy` and switches to the isDecsJoin adapter mode so
 // plan_decs_join's hashB-collect + srcA-probe + per-pair result-lam bind feeds

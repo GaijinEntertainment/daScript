@@ -9,7 +9,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 4 + Theme 5 (audit `benchmarks/sql/linq_fold_chain_audit.md`):
+// Theme 4 + Theme 5 (audit `history/linq_fold/linq_fold_chain_audit.md`):
 //   Theme 4 — 2-arg terminator predicates: plan_distinct + plan_decs_distinct + plan_zip
 //             accept count(p) / long_count(p). plan_decs_unroll already had the machinery
 //             in emit_decs_accumulator; this PR unblocks it via the extract_decs_bridge

@@ -10,7 +10,7 @@ The companion skill is `skills/documentation_rst.md` for the RST side. **This fi
 |---|---|
 | `tutorials/<area>/*.das` | The canonical, project-wide tutorial home. New tutorials go here. |
 | `modules/<X>/tutorial/*.das` | **Inherited / upstream examples** (e.g. `modules/dasSQLITE/tutorial/` is the zetcode C-API port). Reference material — leave them alone. |
-| `modules/<X>/tutorial-mockup/*.mockup` | Pre-implementation design artifacts (un-compilable). Reference material — leave them alone. |
+| `history/<X>/tutorial-mockup/*.mockup` | Pre-implementation design artifacts (un-compilable), archived with their arc (e.g. `history/dasSQLITE/tutorial-mockup/`). Reference material — leave them alone. |
 
 If you find yourself editing or replacing a file under `modules/<X>/tutorial/`, **stop**. Create the new tutorial under `tutorials/<area>/` instead and leave the inherited file as-is — those files are the cross-reference for the API rewrite, and overwriting them loses provenance.
 

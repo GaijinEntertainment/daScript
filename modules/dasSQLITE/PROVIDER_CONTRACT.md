@@ -8,6 +8,10 @@ reference implementation; [dasDuckDB](https://github.com/borisbat/dasDuckDB) and
 document is the contract; the registry core in `daslib/sql_provider.das` is its
 executable form.
 
+The rework arc's design records — `API_REWORK.md`, `API_MISSING.md`, `API_CHECKED.md`,
+`API_MIGRATION.md`, `TUTORIALS.md`, and the `tutorial-mockup/` design artifacts — are
+archived under `history/dasSQLITE/` (2026-07-24).
+
 ## Architecture in one paragraph
 
 `_sql(...)` and its siblings analyze a LINQ-shaped chain at **compile time** and emit
