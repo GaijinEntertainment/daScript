@@ -480,7 +480,11 @@ foreach(_row IN LISTS DAS_AOT_IRREGULAR)
     endif()
     set(_emit TRUE)
     if(NOT _guard STREQUAL "-")
-        if(NOT (${_guard}))
+        # _guard is ONE list element ("NOT DAS_X_DISABLED") — expanded as a single argument,
+        # if() reads the whole string as an (undefined) variable name and every guarded row
+        # silently stops emitting. Split into real tokens first.
+        string(REPLACE " " ";" _guard_expr "${_guard}")
+        if(NOT (${_guard_expr}))
             set(_emit FALSE)
         endif()
     endif()

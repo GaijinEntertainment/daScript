@@ -143,19 +143,37 @@
       var boxHTML = Object.keys(boxes).sort().map(function (bx) {
         var runs = boxes[bx].slice().sort(function (a, b) { return val(b, sortKey) - val(a, sortKey); });
         var maxV = runs.reduce(function (mx, r) { return Math.max(mx, val(r, sortKey)); }, 0);
-        // best llama.cpp row per backend, on the sort metric — the das ratio denominator
-        var bestRef = {};
+        // Config pairing: each das row compares against ONE named llama.cpp sibling — never
+        // "best on the backend" (a stock build at -ngl 0 quietly op-offloads big-batch work to
+        // Metal, so it is not a CPU number; the records run it with -nopo 1).
+        //   das cpu tuned  vs cpu clean-cpu -> "generic neon-64" (kernel vs kernel)
+        //   das cpu accel  vs cpu stock     -> "cpu + AMX" (Accelerate both sides, no GPU)
+        //   das metal      vs metal stock   -> "as shipped"
+        function refFlavorFor(r) {
+          if (r.backend === 'metal') return 'stock';
+          return r.flavor === 'accel' ? 'stock' : 'clean-cpu';
+        }
+        function configLabel(r) {
+          if (r.backend === 'metal') return 'as shipped';
+          return r.flavor === 'accel' ? 'cpu + AMX' : 'generic neon-64';
+        }
+        var refV = {};
         runs.forEach(function (r) {
-          if (r.engine === 'llama.cpp') bestRef[r.backend] = Math.max(bestRef[r.backend] || 0, val(r, sortKey));
+          if (r.engine === 'llama.cpp') {
+            var k = r.backend + '/' + r.flavor;
+            refV[k] = Math.max(refV[k] || 0, val(r, sortKey));
+          }
         });
         var rowsHTML = runs.map(function (r, i) {
-          var tags = [r.backend, r.flavor];
+          var tags = r.engine === 'das' ? [r.backend, configLabel(r)] : [r.backend, r.flavor];
+          if (r.engine === 'llama.cpp' && r.cmd && r.cmd.indexOf('-nopo') >= 0) tags.push('no gpu offload');
           if (r.source === 'community') tags.push('community');
           var v = val(r, sortKey);
           var w = maxV > 0 && v > 0 ? Math.max(2, v / maxV * 100) : 0;
           var ratioHTML = '';
-          if (r.engine === 'das' && v > 0 && bestRef[r.backend] > 0) {
-            var rr = v / bestRef[r.backend];
+          var denom = r.engine === 'das' ? (refV[r.backend + '/' + refFlavorFor(r)] || 0) : 0;
+          if (r.engine === 'das' && v > 0 && denom > 0) {
+            var rr = v / denom;
             var cls = rr > 1.005 ? 'dl-win' : (rr < 0.995 ? 'dl-dim' : '');
             ratioHTML = '<span class="' + cls + '">' + fmt(rr, 2) + '×</span>';
           }

@@ -1,0 +1,91 @@
+diff --git a/ggml/src/ggml-blas/ggml-blas.cpp b/ggml/src/ggml-blas/ggml-blas.cpp
+index b4c7352..e6c6789 100644
+--- a/ggml/src/ggml-blas/ggml-blas.cpp
++++ b/ggml/src/ggml-blas/ggml-blas.cpp
+@@ -27,6 +27,52 @@ struct ggml_backend_blas_context {
+ #endif
+ };
+ 
++// ==== dasllama BLAS section profiler (TEMP PATCH — twin of the ggml-cpu.c dasprof; ====
++// ==== self-contained per-lib copy to avoid cross-backend-library linkage)          ====
++#include <cstdio>
++#include <cstdlib>
++typedef struct { char key[96]; double us; long n; } dasprof_blas_slot_t;
++static dasprof_blas_slot_t dasprof_blas_slots[512];
++static int dasprof_blas_nslots = 0;
++static int dasprof_blas_registered = 0;
++static void dasprof_blas_dump(void) {
++    for (int i = 1; i < dasprof_blas_nslots; i++) {
++        dasprof_blas_slot_t v = dasprof_blas_slots[i];
++        int j = i - 1;
++        while (j >= 0 && dasprof_blas_slots[j].us < v.us) { dasprof_blas_slots[j+1] = dasprof_blas_slots[j]; j--; }
++        dasprof_blas_slots[j+1] = v;
++    }
++    double tot = 0;
++    for (int i = 0; i < dasprof_blas_nslots; i++) tot += dasprof_blas_slots[i].us;
++    fprintf(stderr, "==== ggml BLAS section profile (total us | calls | us/call | %%) ====\n");
++    for (int i = 0; i < dasprof_blas_nslots; i++) {
++        fprintf(stderr, "%-44s %12.0f %9ld %10.2f %6.2f%%\n",
++            dasprof_blas_slots[i].key, dasprof_blas_slots[i].us, dasprof_blas_slots[i].n,
++            dasprof_blas_slots[i].us / (double)dasprof_blas_slots[i].n, 100.0 * dasprof_blas_slots[i].us / tot);
++    }
++    fprintf(stderr, "BLAS TOTAL %f us\n", tot);
++}
++static void dasprof_blas_add(const char * key, double us) {
++    for (int i = 0; i < dasprof_blas_nslots; i++) {
++        if (strcmp(dasprof_blas_slots[i].key, key) == 0) { dasprof_blas_slots[i].us += us; dasprof_blas_slots[i].n++; return; }
++    }
++    if (dasprof_blas_nslots < 512) {
++        snprintf(dasprof_blas_slots[dasprof_blas_nslots].key, 96, "%s", key);
++        dasprof_blas_slots[dasprof_blas_nslots].us = us;
++        dasprof_blas_slots[dasprof_blas_nslots].n = 1;
++        dasprof_blas_nslots++;
++        if (!dasprof_blas_registered) { dasprof_blas_registered = 1; atexit(dasprof_blas_dump); }
++    }
++}
++// same key shape as ggml-cpu.c dasprof_key ("MUL_MAT:ffn_up.weight"), plus a :deq/:sgemm suffix
++static void dasprof_blas_key(const struct ggml_tensor * dst, const char * suffix, char * out, size_t cap) {
++    const char * wname = dst->src[0] ? dst->src[0]->name : NULL;
++    const char * q = (wname && *wname) ? wname : "?";
++    if (strncmp(q, "blk.", 4) == 0) { q += 4; while (*q && *q != '.') q++; if (*q == '.') q++; }
++    snprintf(out, cap, "%s:%s:%s", ggml_op_name(dst->op), q, suffix);
++}
++// ==== end dasllama BLAS section profiler ====
++
+ static void ggml_backend_blas_mul_mat(ggml_backend_blas_context * ctx, struct ggml_tensor * dst) {
+     const struct ggml_tensor * src0 = dst->src[0];
+     const struct ggml_tensor * src1 = dst->src[1];
+@@ -63,6 +109,8 @@ static void ggml_backend_blas_mul_mat(ggml_backend_blas_context * ctx, struct gg
+     }
+     void * wdata = ctx->work_data.get();
+ 
++    const int64_t dasprof_t0 = ggml_time_us();
++
+     // convert src0 to float
+     if (type != GGML_TYPE_F32) {
+         const auto * type_traits = ggml_get_type_traits(type);
+@@ -115,6 +163,8 @@ static void ggml_backend_blas_mul_mat(ggml_backend_blas_context * ctx, struct gg
+ #endif
+     }
+ 
++    const int64_t dasprof_t1 = ggml_time_us();
++
+ #if defined(GGML_BLAS_USE_OPENBLAS)
+     openblas_set_num_threads(ctx->n_threads);
+ #elif defined(GGML_BLAS_USE_BLIS)
+@@ -145,6 +195,15 @@ static void ggml_backend_blas_mul_mat(ggml_backend_blas_context * ctx, struct gg
+                         0.0f,   d, ne01);
+         }
+     }
++
++    {
++        const int64_t dasprof_t2 = ggml_time_us();
++        char dasprof_k[96];
++        dasprof_blas_key(dst, "deq",   dasprof_k, sizeof(dasprof_k));
++        dasprof_blas_add(dasprof_k, (double)(dasprof_t1 - dasprof_t0));
++        dasprof_blas_key(dst, "sgemm", dasprof_k, sizeof(dasprof_k));
++        dasprof_blas_add(dasprof_k, (double)(dasprof_t2 - dasprof_t1));
++    }
+ }
+ 
+ static void ggml_backend_blas_out_prod(ggml_backend_blas_context * ctx, struct ggml_tensor * dst) {
