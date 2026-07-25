@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.17)
-project (DAS VERSION 0.6.3)
+project (DAS VERSION 0.6.4)
 
 # Set build type to Debug by default. If not set it will break
 # dependencies for modules.

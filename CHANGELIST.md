@@ -1,5 +1,208 @@
 # daslang Changelog
 
+## 0.6.4 (July 2026)
+
+### New Features
+
+#### dasLLAMA: Native LLM Inference in Pure daslang
+
+The headline of this release: `modules/dasLLAMA`, a complete LLM inference engine written in daslang — GGUF loading, transformer forwards, quantized kernels, threading, sampling, speculative decode, and serving — competitive with (and on many shapes ahead of) llama.cpp on both CPU and GPU.
+
+- **Engine** (#3297, #3340, #3354) — the core CPU engine (Llama-2/3 forwards, GGUF, quantization, threading), the `Model` / `Session` API rework with arch/kernel seams, and the user-facing `dasllama` facade + tutorials
+- **Model families** (#3304, #3346, #3354, #3407, #3448, #3457, #3458, #3468, #3475, #3479, #3480) — Mistral / SmolLM2, Qwen2.5 / Qwen3, Phi-3.5, Gemma-2 / 3 / 4 (dense and MoE), Qwen-MoE + gpt-oss-20b, the Qwen3.5/3.6 Gated-DeltaNet hybrids (`qwen35` / `qwen35moe`), `qwen3next` (Qwen3-Coder-Next 80B), native split-GGUF loading (Qwen3.5-122B), Mistral-Medium-3.5-128B (`mistral3`, key-driven YaRN betas), and GLM-4.5-Air 106B-A12B (`glm4moe`, dense-lead MoE + `exp_probs_b` routing); Q5_0 GGUF support with an exact Q5_0→Q8 transcode
+- **Quantization tiers** (#3363, #3369, #3444, #3450, #3481, #3486, #3535) — native MXFP4 expert kernels + MoE dispatch fuse (gpt-oss decode 22→35 t/s), the native K-quant tier (Q4_K / Q5_K / Q6_K) with the kq v2/v3 integer-fold and panel-scratch kernel arcs, the native q4_0 tier (QAT files on the full kq rails, with automatic steering of q4_0 files onto them), and native Q5_1
+- **KV cache** (#3419, #3425, #3447) — multi-format KV (f32/f16, F16 default) with batched decode; paged KV + a q8_0 KV codec behind a continuous-batching scheduler with prefix caching; and `tq4`, a rotated 4-bit KV codec
+- **CPU performance** (#3310, #3315, #3318, #3322, #3325, #3359, #3361, #3365, #3369, #3370, #3371, #3372, #3432, #3434, #3518, #3542, #3544, #3558) — threaded prefill (4.2×), flash attention + FMA + RoPE tables, vectorized exp/softmax, ggml-parity FFN gate fusion, and the cache-blocked Q8 GEMM that took CPU prefill past llama.cpp on ARM; grouped MoE prefill (route-all + per-expert batched GEMM chains, bit-exact, ~8.7× on Qwen1.5-MoE) and tied-classifier Q8; the x64/AVX arc (jobque main-steal + join-poll, acc8/grp4 kernels, `cpu_supports(feature)` ISA gating — 1B/8B Zen2 prefill at ~120% of llama.cpp) and the EPYC 9654 campaign; the decode arc (async-hidden shared expert + DeltaNet chain fusion, 35B 19.6→26.4 t/s); f16 weight-scale planes and kq/q8 tile reworks
+- **MTP/NextN self-speculative decode** (#3469, #3472, #3527, #3530) — draft + verify on the model's own NextN head: 1.39× decode on Qwen3.6-27B, then engine-rail integration (paged KV, chunked prefill, `--mtp`; 2.07× through the server), then whole-GPU Metal draft + B=2 verify with GPU-prefill warm
+- **Prepared-model images + fast load** (#3460, #3492, #3509) — parallel GGUF load (Q4_K_M 30B: 113 s → 8.3 s), and `.dlim` prepared-model images (70B GGUF load 78.7 s → 34 ms map), redesigned blob-only so models serve map-only
+- **Sampling + chat** (#3478) — the full sampler parameter set (`top_p` / `min_p` / presence / frequency penalties over a window, seeded, llama.cpp-semantics repetition penalty) and Qwen3-family non-thinking mode; defaults stay bit-identical to greedy argmax
+- **Audio / ASR** (#3388, #3390, #3401, #3406) — microphone capture in dasAudio; Whisper family, Qwen2-Audio, Ultravox / Omni / Voxtral, Qwen3-ASR, and Parakeet-TDT verified token-for-token behind a uniform ASR / chat-audio API; the ASR performance arc (das leads parakeet-cli / whisper-cli / onnx on both perf boxes); and a native Silero-VAD port
+- **Per-box tuning** (#3359, #3385, #3403, #3447) — the generated-GEMM `[tune]` kernel family + dispatch overhaul, `[tune_scope]` / `[tune_policy]` / `--tune` UX, per-app tune sidecars, and `box_profile.json` carrying both the compile-time kernel perms and a runtime-knob section auto-applied by `load_model`
+- **Benchmarks + site** (#3416, #3452, #3476, #3477, #3489, #3535) — the profiling suite + daslang.io results page, a `llama-bench` mirror (`lcpp_bench`), the public-benchmarks records rail, and the 28-model zen2 scoreboard
+
+#### dasMetal: Native Metal Compute + the dasLLAMA Metal Tier (#3443, #3459, #3474, #3484, #3496, #3509, #3515, #3519, #3521, #3526, #3527, #3530, #3533, #3535, #3546, #3554, #3558, #3562)
+
+`modules/dasMetal` is a new module: a pure-daslang MSL backend and Metal compute host, built to put dasLLAMA fully GPU-resident on Apple Silicon.
+
+- **The backend** (#3443, #3459) — das-authored kernels lowered to MSL; full-GPU-resident prefill at 2.9× CPU, matching llama.cpp's best mode on llama-3B
+- **Decode + formats** (#3474, #3484, #3496) — batched decode past llama.cpp (mv-shape GEMV, encode-ahead pipe, partD attention); the full llama format matrix on Metal (K-quants, quantized KV, `MetalMode`, no capability gaps); the 3B format roster brought to parity (k5 ext twins, k6, zero-copy logits)
+- **Family waves** (#3509, #3515, #3519, #3546, #3558) — waves A+B, wave C (whole-graph GPU MoE: qwen3moe, gemma4moe, gpt-oss), wave D (Gated-DeltaNet hybrids whole-graph on GPU), gemma's geglu fused into the w13 GEMV, and lcpp-shape mx4 kernels + a GPU PLE pre-step digging the last scoreboard reds green
+- **GPU tier config** (#3521, #3526, #3533) — automatic GPU tier configuration + resident classifier offload (+11–15%), mixed q8/kq expert triples (opening glm4moe on GPU), and the native Q4_0 GPU tier + gemma-4 MoE prefill + Q5_K encoder
+- **Scheduling** (#3554) — concurrent dispatch port with the `[metal_dispatch]` lens, and a re-swept kernel ladder
+- **dasAccelerate** (#3562) — a new companion module binding Apple Accelerate: the +AMX CPU tier (sgemm arm + BNNS-f16 lane) with matched-pair board scoring against stock llama.cpp configs
+
+#### dasLLAMA on Vulkan (#3499, #3503, #3537, #3547, #3559)
+
+The same whole-stack GPU push for Windows/Linux GPUs, driven through dasVulkan + dasSpirv compute.
+
+- **The MoE tier** (#3499) — K-quant expert offload, streamed prefill, GPU classifier head (35B: +36% prefill, +18% decode)
+- **The inversion arc** (#3503) — deltanet, attention, and MoE-combine GPU chains; pp512 202.8 → 266.3, past llama.cpp's 227 on the same box
+- **The resident driver** (#3537, #3547, #3559) — a whole-stack GPU driver (dense decode + prefill + batch) with resident prefill, two-phase `dn_scan`, cooperative-matrix A/B, a GPU profiler, record-once decode, and 3B resident arming
+
+#### dasllama-server: OpenAI-Compatible Serving (#3394, #3425, #3463, #3508, #3511, #3512, #3552)
+
+- **The server** (#3394) — an OpenAI-compatible HTTP server over the dasllama facade (chat completions with streaming, `/v1/embeddings`), riding a new dasHV streaming writer
+- **Scheduling** (#3425) — continuous batching with prefix caching on the paged KV engine
+- **Tool calling** (#3463) — OpenAI tools via the Hermes/ChatML protocol, plus unhandled-request logging
+- **The control page** (#3508) — live stats, a request swimlane, chat, an ASR studio, and a config editor served by the server itself
+- **Deployment** (#3511, #3512) — JIT-only deploy discipline (jobque sizing from config, a JIT guard, daspkg refusing `-exe` for it) and crash fixes + JIT debug tooling from hardening the long-running instance
+- **Multi-model serving** (#3552) — live GPU slot switching between models, per-model config, and control-page integration
+
+#### Automatic Inlining (#3389, #3393, #3396, #3441, #3445, #3462)
+
+- **`[inline]`** (#3389) — fail-closed body splicing in the patch slot; **automatic block inlining + invoke devirtualization** with CSE/DSE v2 field chains (#3393); a soundness pass (CondFolding, return canonicalization, refType/unsafe splicing, DSE op-assign) (#3396)
+- **Auto-inline ON by default** (#3441) — same-module heuristic tier, macro-code fences, stack bounds, `[never_inline]`
+- **Inline v2** (#3462) — multiple returns, the `with (module foo)` compile-time resolution scope, and cross-module splices
+- The machinery has its own blog post, "Walking the inline." (#3445)
+
+#### Optimizer Wave: fast-math, CSE, DSE, Bound-Check Elision (#3213, #3327, #3384, #3386, #3387)
+
+- **fast_math policy + algebraic identity folding** (#3384), fixing `isNop` and `RunFolding` round bugs along the way
+- **Dead-store elimination** (#3386) with `Expression::sameAs` same-shape folds; **CSE value reuse over the statement-level CFG** + AOT fast-math pragmas (#3387)
+- **Bound-check elision** in the interpreter for provably in-range array/vector access (#3327); **escape analysis 2** (#3213)
+
+#### 16/8-bit Type Lattice (#3430, #3433, #3437, #3455)
+
+`float16`/`half` scalars plus the packed `half/short/ushort/byte/ubyte` vector families (closed fp16 arithmetic, storage+convert int families, `.s`-hex swizzles, `.lo`/`.hi`) — across interpreter, AOT, JIT (native lowering with arm64 fullfp16, #3433), the shader backends (dasSpirv + dasGlsl with real-GPU parity gates, #3437), and the debugger's `DapiDataWalker` (#3455).
+
+#### Distinct Types (#3424)
+
+`typedef distinct Foo = int` — a nominal newtype over any workhorse underlying type: ABI-identical, fully erased at runtime, no implicit interconversion in either direction, user-defined operators, `Foo(x)` in / `*a` out. Reference page `language/distinct.rst`; C++ side via `MAKE_DISTINCT_TYPE_FACTORY`.
+
+#### Named Calls: Bare Syntax (#3410, #3412, #3413, #3415)
+
+`foo(pos, name=value)` without the square brackets, on free calls, piped calls (with trailing-block padding), and both `obj.m(name=v)` / `obj->m(name=v)` method forms including pure all-named calls.
+
+#### SQL: Multi-Provider LINQ-to-SQL (#3373, #3375, #3377, #3378, #3380, #3381, #3382, #3487)
+
+The typed SQL layer left SQLite-only behind: a `sql_provider` registry seam in dasSQLITE (#3373), the neutral core promoted to `daslib/sql_linq` with a provider conformance suite (#3375), external **dasDuckDB** (#3377) and **dasPostgreSQL** (#3378) providers registered through it, four-engine benchmarks (sqlite / duckdb / postgres / in-memory array, interp + JIT, #3380), a `DISTINCT ON` dialect hook (#3381), provider-neutral migrations + `[sql_function]` hoisting (#3382), and typed-query gap closures driven by a real application (#3487).
+
+#### dasGLTF: glTF 2.0 Loader + PBR Renderer (#3414, #3418, #3420)
+
+A native glTF 2.0 loader with an OpenGL PBR renderer, viewer, and capstone tutorial (#3414); `load_gltf_from_memory` (#3418); and Vulkan-mirror groundwork — fail-closed loading, shared PBR core, HDR environment, and a Vulkan viewer (#3420).
+
+#### daslang on the Web: wasm64 + the Playground Examples Page (#3272, #3283, #3284, #3288, #3289, #3290, #3292, #3293, #3294, #3295, #3296, #3305, #3307, #3309, #3323, #3326, #3331, #3351, #3358, #3549)
+
+- **wasm64 cross-compile** + daspkg wasm release archives + the daslang.io `/examples` page (#3284, #3288, #3295, #3305, #3307, #3549), with `--disable-module` keeping native-only modules out of the cross-compile (#3290)
+- **Real threads on the web** (#3293, #3309, #3331) — `DAS_WASM_PTHREADS` with an AudioWorklet audio thread, real core count via `emscripten_num_logical_cores`, and the worklet futex + persistent-jobque fixes
+- **Pure-das Dear ImGui renderer** (#3283) and its compile-time WebGL2 draw path + `get_running_platform_name` (#3294); strudel audio in the playground (#3272); embedded fonts (#3292); canvas-CSS-size/DPR + `glfw_toggle_fullscreen` externs for responsive, fullscreen-capable cards (#3323, #3326)
+- **Static-link gates** (#3351, #3358) — `examples/fatman` links every external C++ module into one host with a CI lane (the ABI canary for daslang-vs-externals drift), and its web sibling builds the imgui family from source into the threaded wasm playground
+
+#### dasTerminal: Terminal Emulator in daslang (#3510, #3513, #3514, #3516)
+
+The terminal emulator moved to daslang (#3513) on a renderless core with ConPTY support (#3510), verified by a target-CLI compatibility oracle that diffs control-stream replies against real terminal behavior (#3514, #3516).
+
+#### dasSMT: Z3 Solver Bindings (#3398)
+
+Z3 SMT solver bindings as a dynamic module, dasLLVM-style.
+
+#### daslang LSP Server (#3352)
+
+`utils/lsp` — push diagnostics + navigation for Claude Code and stdio clients, shipped with the SDK.
+
+#### jobque: Team Dispatch, Fork/Join Optimization, and the Timeline Viewer (#3317, #3361, #3365, #3368, #3372, #3401, #3449, #3542, #3553)
+
+- **Fork/join dispatch optimizations** (#3361) — wake propagation (log-depth fan-out instead of serialized wake chains), batched dispatch (`pushBatch`: one lock + one wake), and worker spin-before-park; empty 32-worker round trip 164 → ~100 µs
+- **Main-steal + join-poll** (#3365) — the dispatching thread pops and runs queued chunks through the fork instead of parking, with a counted join poll before parking
+- **Team dispatch** (#3368, #3401) — indexed worker teams integrated into dasLLAMA decode; **`DAS_JOBQUE_THREADS` = total lanes** with wave-aligned matmul dispatch (#3372) and validation (#3542)
+- **Self-describing traces + the timeline viewer** (#3449, #3553) — named categories, colors, and unit markers in jobque traces, and `utils/jobque-timeline`, a per-lane trace viewer
+- `Feature::setFrom` guarded against an empty weak_ptr in standalone exes (#3317)
+
+#### dasSpirv: RT Stages, Cooperative Matrices, Subgroups, 8/16-bit Storage (#3342, #3348, #3437, #3493, #3494, #3522, #3524, #3525, #3539, #3541)
+
+- **Ray-tracing pipeline stages** (#3342) — raygen / miss / closest-hit
+- **Cooperative matrices** (#3539, #3541) — the `VK_KHR_cooperative_matrix` emitter tier, plus the native INT8 path (s8×s8→s32)
+- **Subgroup ops + specialization constants** (#3493); **8/16-bit SSBO storage** (std430 rules, storage caps, unpack8/pack32) (#3494); the 16/8-bit shader lattice (#3437)
+- **Emitter hardening + showcase** (#3348) — four emitter fixes found by lowering a real shared core, and `examples/vulkan/one_source_path_tracer`: the same daslang path-tracer functions running on four engines (CPU interp/JIT, CPU threads, dasSpirv compute, hardware RT) — 0.03 / 1.1 / 110 / 330 Mpaths/s at 512² on an RTX 3060 Ti
+- **Contributor emitter series** (#3522, #3524, #3525) — base value/vector/matrix/swizzle emit machinery, resource & stage bindings, and fp16/int16/fp64/int64 lattice lowering
+
+#### dasHerd: Agent-Herding Control Plane (#3497, #3501, #3506, #3528, #3529, #3532, #3536, #3540, #3557)
+
+`utils/dasHerd` — a watcher + rich-client control plane for running fleets of coding agents over daslang worktrees: detachable terminals (#3528), preserved failure state (#3529), dockable worktree Git inspection (#3532), Git review views + semantic topology (#3536), bidirectional review focus (#3540), multi-repository resumable sessions (#3557), a docked Unicode Markdown viewer + clipboard transport (#3497, #3501), and Tree-sitter syntax highlighting (#3506).
+
+#### Telegram Dictation Bot + Cadmus (#3408, #3411, #3465, #3482, #3483, #3491, #3517, #3531)
+
+`examples/telegram` — a production dictation bot on the dasLLAMA ASR stack, shipped standalone via daspkg (#3408, with the dasLLVM/daspkg fixes to get there): standalone-exe config/log resolution (#3411), local conversation history + the Cadmus assistant (#3465), lifecycle resilience (#3482, #3483), per-box tuning + release-config preservation (#3491), a live control page + runtime overlay (#3517), and one watchdog supervisor for every program (#3531).
+
+### Improvements
+
+#### Language and Compiler
+
+- **gen2 casts require call-style parens** (#3420) — `cast<T>(x)` / `upcast<T>(x)` / `reinterpret<T>(x)`; the old juxtaposition form silently swallowed trailing arithmetic into the operand
+- **`addr<T?>(x)` sugar** (#3464) — `reinterpret<T?>(addr(x))` with a single unsafe gate, plus STYLE034 and a tree-wide sweep
+- **Fixed arrays accept int64/uint64 indexes** (#3345) — across interpreter, fusion, AOT, and JIT
+- **`template_structure` classes** (#3538); **auto-required module handling** (#3336)
+- **`array` `resize()` sizes exactly past 256 bytes** (#3400) — no more capacity doubling on explicit resize
+- **Instance-registry re-resolution** (#3399) — flavor tie-break + origin-generic fallback for generic instances
+- **Promoted shared modules match by canonical require identity** (#3360)
+- **LineInfo audit** (#3431) — a validation suite + three systematic range fixes
+- **AST serialization** (#3436, #3470, #3488) — env-rail module-cache corruption fix, `disableSerializationOnDebugger`, parser gc_node deletes; valid GC roots maintained across module swaps; cross-module variable handling in `Function::AliasInfo`
+- **gc_node survives a panic** inside `ast_gc_guard` / `ast_gc_collect_scope` (#3350)
+- **vecmath updated to upstream 25.06.26** (#3355) — with a ubsan knob and `NO_ASAN_INLINE`
+
+#### JIT, AOT, and dasLLVM
+
+- **Windows JIT links via lld-link directly** (#3353) — `lld-link.exe` ships in the package (the bundled clang-cl could not link without a full LLVM on PATH)
+- **LLVM-AOT object mode + the JIT-AOT test rail** (#3534); **JIT extern function types derived from a das signature** (#3550)
+- **`--jit-check-abi`** (#3299) — handled-type size/offset validation, plus a libc++ wasm cross-compile host
+- **Unwind tables on emitted functions** when the host uses C++ exceptions (#3347)
+- **JIT debug tooling** (#3511); **`llvm_tune` per-box UX** (#3403) — scope / policy / `--tune`, self-tuning servers, `-exe` fix
+- **AOT batch-composition hash fix** (`g_isInAot` leak) + `aot_cpp` made AOT-linkable (#3409); **AOT fuzzer-failure hardening** (#3303)
+
+#### Runtime, Tooling, and Hosting
+
+- **Crash capture** (#3523) — failures that used to die silently now report; **`get_stackwalk`** (#3344) captures the stack walk as a string (builtin + debugapi)
+- **C API split initialization + explicit-length strings** (#3545); **rtti retains named-module initializer hashes** (#3543)
+- **One shared lock for handle type-info** (#3453) — drops the per-annotation mutex
+- **MCP** (#3320, #3392, #3520) — a stdio supervisor that auto-respawns the daslang MCP child across rebuilds; a cross-tree guard warning when a file is queried against the wrong worktree's binder; a transport-neutral protocol core
+- **Preflight** (#3285, #3306, #3502) — a HEAD-bound full-pass token + pre-push gate mirroring CI, drift tolerance, and a speed pass
+- **daspkg** (#3376, #3379) — fork-fallback for index writes without access, correct last-updated dates
+- **`module_path` resolution for standalone `-exe`** config/log paths (#3411)
+- **`alloc_tracker`** lexer NAME-token leak-dump opt-out (#3334); **`DAS_MODULES_INCLUDE`** curated module list in CMake (#3333)
+- **`sprint_json` skips class methods** (#3366) — function/lambda fields stay valid JSON
+- **strudel accepts compressed/SF3 or truncated soundfonts** (#3280)
+
+#### Lint
+
+- **LINT015** (#3287) — free-floating unary `+`/`-` statements (the silently-dropped-term trap)
+- **STYLE034** (#3464) — `reinterpret`-of-`addr` → `addr<T?>` sugar; **STYLE035** (#3504) — numeric-cast character comparisons
+- **Comment hygiene** (#3504, #3505) — `_comment_hygiene` enabled across daslib and all 48 dasllama module files (~640 oversized blocks trimmed)
+- **String clone semantics linted and fixed** (#3507)
+
+### Bug Fixes
+
+- **Side-effect inference misses that DCE'd real writes** — writes through forwarded `const?` args (#3313, fixes #3311) and through pointer-offset args (#3324, fixes #3321) are now recorded
+- **`E(a=1)` on an enum silently folded to the zero enumerant** (#3427, fixes #3426)
+- **Block variables hoisted correctly in blocks with `finally`** (#3367)
+- **`v_ldu` over-read of by-value `float3` in math builtins** (#3485)
+- **CMRES elision vs a heap-mode array literal** — the alias is declined on collision (#3467)
+- **ThinLTO fence revert** (#3405) — the `das_index<Matrix>::at` signal-fence workaround backed out
+- **dasHV tsan races** (#3429) — writer ops marshaled via `loop(0)`, libhv tsan-instrumented
+- **wasm AudioWorklet malloc/free serialized** (#3308) and HiDPI / fullscreen input mapping on the web example cards (#3328, #3337, #3339)
+- **`das_get_root` / `das_error_report` buffer termination** (#3276); **crash on a flag with a missing argument value** (#3298)
+- **Telegram imports survive malformed timestamps** (#3483)
+
+### Site / Blog / Docs
+
+- **Blog** — "Pretty things." on the WASM64 arc + dasVulkan RT (#3357) and "Walking the inline." on the inline machinery (#3445)
+- **daslang.io** — the dasLLAMA page published with profiling results and the zen2 scoreboard (#3416, #3421, #3477), `sitemap.xml` + Search Console deploy (#3471), 0.6.3 release + dasImgui 1.92.6 news (#3279, #3282), and a hideable navigation sidebar on the docs (#3561)
+- **Docs sweeps** — pre-release SDK doc sync + daslang.io domain fix (#3275), a skills/CLAUDE.md accuracy sweep + refreshed shipped install docs (#3341), and the OpenGL/WebGL2 tutorials folded into the main tutorials index (#3364)
+
+### Build / CI
+
+- **CI gates as cmake targets** (#3291) — format / dasgen / docs / test extracted for local mirroring
+- **Lane changes** — clang-cl on Ninja (#3338), JIT disabled on Debug matrix cells (#3417), win32/Debug dropped (#3473), Win64 LLVM/JIT moved to nightly (#3500), the interpreter-suite watchdog bumped (#3395), scheduled workflows guarded to the canonical repo (#3330), TeX Live 2025 pinned on PDF steps (#3343)
+- **AOT gate split** (#3435) — `test_aot_subset` as the per-PR AOT compile gate, full `test_aot` nightly; **the JIT sweep runs isolated-parallel** (#3438)
+- **New lanes** — `fatman.yml` (every external module statically linked into one host) (#3351) and `wasmboy.yml` (the imgui family built from source into the threaded wasm playground) (#3358)
+- **Build fixes** — libhv under clang-cl `/EHsc` (#3332), libhv inheriting parent compiler/linker flags (#3301), C4706 silenced on MSVC ≤ VS2019 (#3335)
+
+### Examples and Tutorials
+
+- **Path Tracer Lab** (#3302, #3312) and **Physarum Lab** (#3314) — threaded OpenGL + ImGui showcases, on the web; **furier** (#3296) — the ImGui-in-wasm showcase card; **vulkan_imgui_cube** (#3281)
+- **one_source_path_tracer** (#3348) — the same daslang source on four engines, live-switchable
+- **dasGLTF viewer + capstone tutorial** (#3414); **embeddings tutorial** riding `/v1/embeddings` (#3394); **dasLLAMA facade tutorials** (#3354)
+- **dasLLAMA tutorial 00** (#3548, #3551, #3555, #3556) — a general-reader problem-statement tutorial with Forge figures, revised on reader feedback; the writing rules became `skills/tutorial_prose.md`
+
 ## 0.6.3 (June 2026)
 
 ### New Features

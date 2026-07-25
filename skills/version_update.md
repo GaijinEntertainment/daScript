@@ -8,7 +8,7 @@ How to update the daslang version number across the codebase.
 |---|---|---|
 | `include/daScript/misc/platform.h` | `DAS_VERSION_MAJOR`, `DAS_VERSION_MINOR`, `DAS_VERSION_PATCH` macros | `#define DAS_VERSION_PATCH 1` |
 | `CMakeLists.txt` (line 2) | `project (DAS VERSION X.Y.Z)` | `project (DAS VERSION 0.6.1)` |
-| `doc/source/conf.py` | `version` (short X.Y) and `release` (full X.Y.Z) | `version = u'0.6'`, `release = u'0.6.1'` |
+| `doc/source/conf.py` | `version` and `release` — both carry the full X.Y.Z (de-facto since 0.6.3) | `version = u'0.6.4'`, `release = u'0.6.4'` |
 
 ## Documentation (MUST update)
 
@@ -30,7 +30,7 @@ These are computed from the macros in `platform.h` — no manual update required
 
 ## Short version (X.Y) vs full version (X.Y.Z)
 
-- `conf.py` `version` and RST titles use **short** form (e.g. `0.6`) — only update on minor/major bumps
+- RST titles use **short** form (e.g. `0.6`) — only update on minor/major bumps. `conf.py` `version` carries the **full** X.Y.Z in practice (0.6.3 shipped it that way) — bump it on every release alongside `release`
 - Everything else uses **full** form (e.g. `0.6.1`)
 
 ## Checklist
