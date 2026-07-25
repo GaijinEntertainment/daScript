@@ -35,6 +35,7 @@ require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
 require ./rich_launcher_ui.das
+require ./rich_files_ui.das
 require ./rich_live.das
 
 // Session preset: the terminal is the spine; the inspector and Git
@@ -311,6 +312,7 @@ def init() {
     git_ui_init()
     sessions_ui_init()
     launcher_ui_init()
+    files_ui_init()
     var io & = unsafe(GetIO())
     io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
     g_fonts = load_unicode_font_roles(14.0f, g_font_sources)

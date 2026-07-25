@@ -36,6 +36,7 @@ require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
 require ./rich_launcher_ui.das
+require ./rich_files_ui.das
 
 struct HerderInspectorTextArgs {
     side : string = "view"
@@ -548,13 +549,23 @@ def herder_git_perspective(input : JsonValue?) : JsonValue? {
 
 [live_command(description = "Inspect the Git Activity Project tab file-tree state.")]
 def herder_project_state(_input : JsonValue?) : JsonValue? {
+    var folders, files, dirty : int
+    project_model_counts(folders, files, dirty)
     return JV((ok = empty(g_worktree_files_error),
         selected = GIT_PROJECT_TAB.selected,
         loading = g_worktree_files_loading,
         error = g_worktree_files_error,
         file_count = length(g_worktree_files),
         identity = g_worktree_files_identity,
-        expanded_count = length(g_files_expanded)))
+        expanded_count = length(g_files_expanded),
+        model_folders = folders,
+        model_files = files,
+        model_dirty = dirty,
+        sort = g_ui_settings.project_sort,
+        show_size = g_ui_settings.project_show_size,
+        show_date = g_ui_settings.project_show_date,
+        filter = project_filter_text(),
+        filter_matches = project_filter_match_count()))
 }
 
 [live_command(description = "Stage or unstage one observed worktree file. Args: repository_id, worktree_path, file_path, action.")]

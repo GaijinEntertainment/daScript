@@ -438,6 +438,11 @@ struct HerdUiSettings {
     show_tasks : bool = false
     layout_preset : int = 0
     window_zoom : table<string; int>
+    // Project tab: sort mode (0 folders-first, 1 name, 2 largest, 3 newest)
+    // and the optional size/modified columns.
+    project_sort : int = 0
+    project_show_size : bool = false
+    project_show_date : bool = false
 }
 
 var g_ui_settings = HerdUiSettings()
@@ -747,6 +752,36 @@ def begin_file_inspection(repository_id, worktree_path, file_path,
 }
 
 let UI_BASE_FONT_SIZE = 14.0f
+
+def git_visible_row_right(row_right : float) : float {
+    let style & = GetStyle()
+    let window_right = GetWindowPos().x + GetWindowSize().x - style.WindowPadding.x - style.ScrollbarSize
+    return min(row_right, window_right)
+}
+
+def draw_git_path_text(path : string; p0, p1 : float2;
+                       subdued : bool) {
+    let alpha = subdued ? 0.55f : 1.0f
+    let directory_color = GetColorU32(float4(0.43f, 0.64f, 0.82f, alpha))
+    let separator_color = GetColorU32(float4(0.78f, 0.55f, 0.30f, alpha))
+    let name_color = GetColorU32(float4(0.90f, 0.91f, 0.93f, alpha))
+    var inscope components <- split(replace(path, "\\", "/"), "/")
+    var position = p0
+    with_window_drawlist() $(var dl) {
+        dl |> with_drawlist_clip_rect(p0, p1, true) {
+            for (index in range(length(components))) {
+                let component = components[index]
+                let color = index + 1 == length(components) ? name_color : directory_color
+                dl |> add_text(position, color, component)
+                position.x += CalcTextSize(component).x
+                if (index + 1 < length(components)) {
+                    dl |> add_text(position, separator_color, "/")
+                    position.x += CalcTextSize("/").x
+                }
+            }
+        }
+    }
+}
 
 def window_zoom_percent(name : string) : int {
     return clamp(g_ui_settings.window_zoom?[name] ?? 100, 50, 300)

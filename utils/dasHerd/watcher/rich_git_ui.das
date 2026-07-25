@@ -216,29 +216,6 @@ def draw_git_file_group(repository : RepositorySnapshot const;
     return count
 }
 
-def draw_git_path_text(path : string; p0, p1 : float2;
-                       subdued : bool) {
-    let alpha = subdued ? 0.55f : 1.0f
-    let directory_color = GetColorU32(float4(0.43f, 0.64f, 0.82f, alpha))
-    let separator_color = GetColorU32(float4(0.78f, 0.55f, 0.30f, alpha))
-    let name_color = GetColorU32(float4(0.90f, 0.91f, 0.93f, alpha))
-    var inscope components <- split(replace(path, "\\", "/"), "/")
-    var position = p0
-    with_window_drawlist() $(var dl) {
-        dl |> with_drawlist_clip_rect(p0, p1, true) {
-            for (index in range(length(components))) {
-                let component = components[index]
-                let color = index + 1 == length(components) ? name_color : directory_color
-                dl |> add_text(position, color, component)
-                position.x += CalcTextSize(component).x
-                if (index + 1 < length(components)) {
-                    dl |> add_text(position, separator_color, "/")
-                    position.x += CalcTextSize("/").x
-                }
-            }
-        }
-    }
-}
 
 def draw_git_stats_text(position : float2;
                         added_lines, deleted_lines : int;
@@ -260,11 +237,6 @@ def draw_git_stats_text(position : float2;
     }
 }
 
-def git_visible_row_right(row_right : float) : float {
-    let style & = GetStyle()
-    let window_right = GetWindowPos().x + GetWindowSize().x - style.WindowPadding.x - style.ScrollbarSize
-    return min(row_right, window_right)
-}
 
 def decorate_git_file_row(row_id, path : string;
                           added_lines, deleted_lines : int;

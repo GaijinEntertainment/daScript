@@ -179,10 +179,26 @@ Findings while landing Wave 0:
 
 ## Wave 2 — foundation (discuss shape, then build)
 
-- 23/24 command pattern: every menu/shortcut action becomes a named
-  command; Settings tabs (General / Shortcuts / Appearance); editable
-  bindings; write-through persistence; per-window zoom stored there.
-- 12 wheel-zoom scoping rides on per-window zoom.
+- DONE 23/24 settings core (2026-07-25): dasHerd.ui.json, write-through
+  on every change, tabbed Settings window (General: base zoom slider,
+  session-list toggles), migrates the old layout-choice file; verified
+  save+load live.
+- DONE 12 per-window zoom (2026-07-25): window_zoom_scope wraps each
+  work window — Ctrl+wheel adjusts only the hovered window, persists in
+  window_zoom, composes with the base zoom via with_font. Terminal
+  keeps its explicit buttons on the base zoom pending a renderer pass.
+- REMAINING: command pattern (named commands as the single dispatch) +
+  editable shortcuts + Settings > Shortcuts tab.
+
+## Bug-queue status (2026-07-25, end of first burn-down)
+
+Every in-repo bug from the triage is fixed, live-verified, and
+committed. Still open, all in the dasImgui repo (separate checkout,
+separate PR flow; rebuilding its DLLs tears down the running rig):
+30a selectable snapshot labels, 30b terminal cell-attribute
+inspection, 4a terminal colors (blocked on 30b), the terminal
+scrollbar. Note 31's agent-session leg waits for the next live agent
+session.
 
 ## Wave 3 — surface reworks (each needs a short design pass)
 
