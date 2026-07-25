@@ -1392,7 +1392,7 @@ def hz_gate(enc : MetalComputeEncoder?) {
     if (empty(g_hz_stage)) {
         // undeclared dispatch: serial semantics — barrier before it, and dirty forces one after
         if (g_hz_strict) {
-            panic("dasLLAMA metal decode: undeclared dispatch under DASLLAMA_METAL_HAZARD_STRICT (gated #{g_hz_gated - g_hz_g0} on this encoder)")
+            panic("dasLLAMA metal: undeclared dispatch under DASLLAMA_METAL_HAZARD_STRICT (gated #{g_hz_gated - g_hz_g0} on this encoder)")
         }
         g_hz_undeclared++
         if (g_hz_dirty || !empty(g_hz_pend)) {
@@ -1578,7 +1578,7 @@ def private gr_schedule(var sched : KSched) : bool {
     sched.nodes = n
     for (j in range(n)) {
         if (g_gr_nodes[j].nrange == 0) {
-            to_log(LOG_WARNING, "dasLLAMA metal decode: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
             return false
         }
     }

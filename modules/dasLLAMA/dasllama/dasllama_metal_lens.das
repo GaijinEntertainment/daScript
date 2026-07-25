@@ -420,7 +420,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                     }
                 }
                 if (is_ssbo && !has_role) {
-                    macro_error(prog, st.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — the scheduling rail needs every buffer's hazard intent declared")
+                    macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — the scheduling rail needs every buffer's hazard intent declared")
                 }
             }
         }
