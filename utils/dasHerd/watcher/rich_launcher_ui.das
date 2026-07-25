@@ -90,7 +90,9 @@ def prepare_launcher(repository_id, worktree_path : string) {
     LAUNCHER_TASK.pending_value = ""
     LAUNCHER_TASK.has_pending = true
     LAUNCHER_SOURCE.value = -1
-    LAUNCHER_NEW_WORKTREE.value = true
+    // Run-in-selected-worktree is the default: choosing an existing worktree
+    // in "Start from" means run THERE unless the user opts into a new one.
+    LAUNCHER_NEW_WORKTREE.value = false
 }
 
 def private default_profile_index : int {
@@ -192,8 +194,17 @@ def draw_launcher_form() {
     let worktree_ok = (!LAUNCHER_NEW_WORKTREE.value
         || (!empty(launcher_name_slug()) && !empty(LAUNCHER_BRANCH.value)
             && !empty(LAUNCHER_WORKTREE_PATH.value)))
+    let connected = g_client != null && g_client.connected
+    let launch_pending = (g_launch_pending_revision >= 0l && connected
+        && g_client.herd_revision == g_launch_pending_revision
+        && get_time_nsec(g_launch_pending_started) / 1000000l < 10000l)
+    // ### keeps the widget identity stable while the label changes.
+    let launch_label = (LAUNCHER_NEW_WORKTREE.value
+        ? "Create worktree + launch###launcher-launch"
+        : "Launch in {base_name(g_agent_source_worktree_path)}###launcher-launch")
     if (button(LAUNCHER_LAUNCH,
-            (text = "Launch session", enabled = !empty(g_agent_source_repository_id)
+            (text = launch_label, enabled = connected && !launch_pending
+                && !empty(g_agent_source_repository_id)
                 && !empty(g_agent_source_worktree_path) && worktree_ok
                 && !empty(profile_id)))) {
         let session_name = strip(LAUNCHER_NAME.value)
@@ -210,9 +221,20 @@ def draw_launcher_form() {
                 workflow_id, g_agent_source_repository_id,
                 g_agent_source_worktree_path, task)
         }
+        g_launch_pending_revision = g_client.herd_revision
+        g_launch_pending_started = ref_time_ticks()
         LAUNCHER_WIN.open = false
     }
-    if (LAUNCHER_NEW_WORKTREE.value && !worktree_ok) {
+    // The button never goes silently dead: the reserved line under it says
+    // why it is disabled (the launch race used to be a silent no-op).
+    if (launch_pending) {
+        text_disabled("Launching...")
+    } elif (!connected) {
+        text_disabled("Waiting for the watcher connection...")
+    } elif (empty(g_agent_source_repository_id)
+            || empty(g_agent_source_worktree_path)) {
+        text_disabled("Waiting for the repository list...")
+    } elif (LAUNCHER_NEW_WORKTREE.value && !worktree_ok) {
         text_disabled("Name the session to derive the branch and worktree path.")
     }
 }
@@ -223,7 +245,7 @@ def launcher_ui_init() {
     LAUNCHER_BASE_REF.capacity = 1024
     LAUNCHER_WORKTREE_PATH.capacity = 16 * 1024
     LAUNCHER_TASK.capacity = 16 * 1024
-    LAUNCHER_NEW_WORKTREE.value = true
+    LAUNCHER_NEW_WORKTREE.value = false
     LAUNCHER_PROFILE.value = -1
     LAUNCHER_WORKFLOW.value = 0
     LAUNCHER_WIN.open = false

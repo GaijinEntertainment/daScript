@@ -426,6 +426,12 @@ def layout_choice_path() : string {
     return path_join(dir_name(repository_default_config_path()),
         "dasHerd.layout.current")
 }
+// Launch debounce: a click stamps the herd revision; the button stays
+// disabled until the watcher's herd broadcast bumps it (or a timeout passes),
+// so duplicate/replayed clicks cannot create duplicate sessions.
+var g_launch_pending_revision : int64 = -1l
+var g_launch_pending_started : int64
+
 // Project tab: full project structure of the selected worktree.
 var g_worktree_files : array<string>
 var g_worktree_files_identity = ""
