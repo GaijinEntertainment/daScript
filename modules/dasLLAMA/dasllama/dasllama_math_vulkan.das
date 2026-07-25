@@ -3647,6 +3647,8 @@ struct private GpuState {
     ffn_pend_bytes : int64
     qkv_cmds : table<int64; QkvCmd>   // q plane offset -> the layer's decode q/k/v group
     dev_mem : table<uint64; uint64>   // device buffer -> its VkDeviceMemory (rollback destroy needs it)
+    dev_mapped : table<uint64; uint64>   // ReBAR: device buffer -> persistent CPU mapping (uploads write direct)
+    rebar_type : int = -1         // DL|HV|HC memory type on the full-VRAM heap (-1 = staging path only)
     host_mem : table<uint64; uint64>  // host-visible buffer -> memory: every make_host_buf result except
                                       // the process-lifetime pair (staging, profiler readback) — the
                                       // whole-model drop sweeps this
@@ -3733,6 +3735,8 @@ var private g_vk_prof = false      // DASLLAMA_GPU_PROF=1: per-piece batch-chain
 var private g_vk_prof_probed = false
 var private g_vk_dispatches = 0ul
 var private g_vk_submits = 0ul
+var private g_vk_upload_us = 0l
+var private g_vk_upload_bytes = 0l
 
 //! Lifetime vkCmdDispatch calls the tier RECORDS (not executions — a re-submitted pre-recorded
 //! cmd does not advance it). Pair with vk_submit_count for per-step encode-cost deltas.
@@ -3802,6 +3806,24 @@ def private make_device_buf(bytes : int64) : uint64 {
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
     var b <- create_buffer(g_gpu.device, bci)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
+    if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
+        // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
+        var rmai = VkMemoryAllocateInfo()
+        rmai.allocationSize = req.size
+        rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
+        var rmem : VkDeviceMemory
+        if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
+            vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
+            var mapped : void? = null
+            let mf : VkMemoryMapFlags
+            unsafe {
+                vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, addr(mapped)), null)
+            }
+            g_gpu.dev_mem |> insert(b._vk, unsafe(reinterpret<uint64>(rmem)))
+            g_gpu.dev_mapped |> insert(b._vk, unsafe(reinterpret<uint64>(mapped)))
+            return b._vk
+        }
+    }
     var want : VkMemoryPropertyFlags
     want.device_local = true
     let mai = MemoryAllocateInfo(allocationSize = req.size,
@@ -3816,10 +3838,11 @@ def private destroy_device_buf(h : uint64) {
     unsafe {
         vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(h), null)
         if (key_exists(g_gpu.dev_mem, h)) {
-            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(g_gpu.dev_mem[h]), null)
+            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(g_gpu.dev_mem[h]), null)   // implicitly unmaps
             g_gpu.dev_mem |> erase(h)
         }
     }
+    g_gpu.dev_mapped |> erase(h)
 }
 
 def private destroy_host_buf(hb : HostBuf) {   // vkFreeMemory implicitly unmaps
@@ -3920,6 +3943,22 @@ def private vk_moe_init : bool {
     if (gpu_want_moe_stream() > 0l) {
         g_gpu.weight_budget = max(g_gpu.weight_budget - STREAM_RESERVE, 0l)   // room for the 2 slots
     }
+    // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
+    if (get_env_variable("DASLLAMA_VK_REBAR") != "0") {
+        var rmp : VkPhysicalDeviceMemoryProperties
+        vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, rmp)
+        for (i in range(int(rmp.memoryTypeCount))) {
+            let fl = rmp.memoryTypes[i].propertyFlags
+            if (fl.device_local && fl.host_visible && fl.host_coherent
+                    && int64(rmp.memoryHeaps[int(rmp.memoryTypes[i].heapIndex)].size) > 1_073_741_824l) {
+                g_gpu.rebar_type = i
+                break
+            }
+        }
+        if (g_gpu.rebar_type >= 0) {
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active — uploads write direct to VRAM (DASLLAMA_VK_REBAR=0 restores staging)\n")
+        }
+    }
     var pci : CommandPoolCreateInfo
     pci.queueFamilyIndex = g_gpu.fam
     pci.flags.reset_command_buffer = true   // per-stack buffers re-record if a shape ever changes
@@ -4017,17 +4056,27 @@ def private staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
 }
 
 // Stage `total` bytes into `dst` starting at `dst_off`. The arena packs many tensors into one
-// buffer, so it needs the offset; the per-op tier's own planes start at 0.
+// buffer, so it needs the offset; the per-op tier's own planes start at 0. ReBAR buffers skip
+// staging outright — the CPU writes the mapped VRAM; visibility comes from the next queue submit.
 def private upload_region_at(dst : uint64; dst_off : int64; src : uint8 const?; total : int64) {
-    var off = 0l
-    while (off < total) {
-        let chunk = min(total - off, STAGING_BYTES)
+    let t0 = ref_time_ticks()
+    if (key_exists(g_gpu.dev_mapped, dst)) {
         unsafe {
-            par_memcpy(g_gpu.staging.mapped, reinterpret<void? -const>(src + off), chunk)
+            par_memcpy(reinterpret<void?>(g_gpu.dev_mapped[dst] + uint64(dst_off)), reinterpret<void? -const>(src), total)
         }
-        staged_upload(dst, dst_off + off, chunk)
-        off += chunk
+    } else {
+        var off = 0l
+        while (off < total) {
+            let chunk = min(total - off, STAGING_BYTES)
+            unsafe {
+                par_memcpy(g_gpu.staging.mapped, reinterpret<void? -const>(src + off), chunk)
+            }
+            staged_upload(dst, dst_off + off, chunk)
+            off += chunk
+        }
     }
+    g_vk_upload_us += int64(get_time_usec(t0))
+    g_vk_upload_bytes += total
 }
 
 def private upload_region(dst : uint64; src : uint8 const?; total : int64) {
@@ -4204,6 +4253,7 @@ def vk_drop_model_state {
         }
     }
     g_gpu.dev_mem |> clear()
+    g_gpu.dev_mapped |> clear()
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
@@ -4846,6 +4896,11 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
 def vk_rdec_upload_norms(norms : array<float>) {
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
     upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), int64(length(norms)) * 4l)
+    // norms are the last upload of the resident arm sequence — report the accumulated cost
+    if (g_vk_upload_us > 0l) {
+        let gbps = double(g_vk_upload_bytes) / (double(g_vk_upload_us) * 1000.0lf)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: uploads {g_vk_upload_bytes / 1000000l} MB in {g_vk_upload_us / 1000l} ms ({gbps} GB/s, {key_exists(g_gpu.dev_mapped, g_rd.norms_dev) ? "direct" : "staged"})\n")
+    }
 }
 
 //! Register a dense layer's arena block indices + formats and build its descriptor sets. Called
