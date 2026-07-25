@@ -35,6 +35,7 @@ require ./rich_inspector_ui.das
 require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
+require ./rich_launcher_ui.das
 require ./rich_files_ui.das
 
 struct HerderInspectorTextArgs {
@@ -164,6 +165,35 @@ def herder_perf_state(input : JsonValue?) : JsonValue? {
     if (args.clear) {
         g_perf_samples |> clear()
     }
+    return result
+}
+
+[live_command(description = "Open the New Session launcher pane seeded from the current selection.")]
+def herder_open_launcher(_input : JsonValue?) : JsonValue? {
+    prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
+    open_dock_window(LAUNCHER_WIN)
+    return JV((ok = true, repository_id = g_selected_repository_id,
+        worktree_path = g_selected_worktree_path))
+}
+
+[live_command(description = "Read durable herd sessions, profiles, and launcher state.")]
+def herder_herd_state(_input : JsonValue?) : JsonValue? {
+    if (g_client == null) {
+        return JV((ok = false, error = "client is not initialized"))
+    }
+    var profiles <- [for (profile in g_client.herd_profiles);
+        JV((id = profile.id, display_name = profile.display_name,
+            agent = profile.agent))]
+    var records <- [for (record in g_client.herd_sessions);
+        JV((id = record.id, name = record.name, profile_id = record.profile_id,
+            workflow = record.workflow, state = record.state,
+            reason = record.reason, worktree_path = record.worktree_path,
+            pty_session_id = record.pty_session_id,
+            exit_code = record.exit_code, launch_count = record.launch_count,
+            satellite_count = length(record.satellites)))]
+    var result = JV((ok = true, revision = g_client.herd_revision,
+        launcher_open = LAUNCHER_WIN.open,
+        profiles = profiles, sessions = records))
     return result
 }
 

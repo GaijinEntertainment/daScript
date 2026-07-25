@@ -17,6 +17,7 @@ require daslib/strings_boost
 require live/live_commands
 require ./watcher_core.das
 require ./repository_core.das
+require ./herd_sessions.das
 require ./git_graph_model.das
 require ./file_inspection.das
 require math
@@ -32,6 +33,9 @@ class WatcherRichClient : HvWebSocketClient {
     attached_id : string
     sessions : array<WatcherSessionInfo>
     repositories : array<RepositorySnapshot>
+    herd_profiles : array<HerdProfile>
+    herd_sessions : array<HerdSession>
+    herd_revision : int64 = -1l
     mailbox : array<WatcherMailboxMessage>
     mailbox_revision : int64
     bundles : array<WatcherReviewBundle>
@@ -242,6 +246,24 @@ class WatcherRichClient : HvWebSocketClient {
                 perf_observe_repositories(repositories)
             } else {
                 error = "invalid repository snapshot message"
+            }
+        } elif (envelope._type == "herd_sessions") {
+            var incoming = WatcherHerdSessionsMessage()
+            if (sscan_json(body, incoming)) {
+                delete herd_profiles
+                delete herd_sessions
+                herd_profiles <- incoming.profiles
+                herd_sessions <- incoming.data
+                herd_revision = incoming.revision
+            } else {
+                error = "invalid herd sessions message"
+            }
+        } elif (envelope._type == "herd_created" || envelope._type == "herd_relaunched") {
+            var incoming : WatcherHerdLaunchedMessage
+            if (sscan_json(body, incoming)) {
+                attach_session(incoming.session_id)
+                g_open_terminal_pending = true
+                g_focus_terminal_pending = true
             }
         } elif (envelope._type == "mailbox") {
             var incoming = WatcherMailboxMessageEnvelope()
@@ -464,25 +486,43 @@ class WatcherRichClient : HvWebSocketClient {
             "\"worktree_path\":{sprint_json(worktree_path, false)}\}")
     }
 
-    def launch_codex_debug(cwd, repository_id, task_context : string) {
+    def request_herd_create(name, profile_id, workflow, repository_id,
+                            worktree_path, task_context : string) {
         if (!connected) {
             error = "watcher is not connected"
             return
         }
-        let argv <- ["codex"]
-        send("\{\"op\":\"launch\",\"argv\":{sprint_json(argv, false)}," +
-            "\"cwd\":{sprint_json(cwd, false)},\"columns\":120,\"rows\":36," +
-            "\"timeout_ms\":0,\"display_name\":\"Codex debug\"," +
-            "\"kind\":\"agent-codex\",\"purpose\":\"debug\"," +
-            "\"task_context\":{sprint_json(task_context, false)}," +
-            "\"target_id\":\"local\",\"repository_id\":" +
-            "{sprint_json(repository_id, false)},\"worktree_path\":" +
-            "{sprint_json(cwd, false)}\}")
+        send("\{\"op\":\"herd_create\",\"name\":{sprint_json(name, false)}," +
+            "\"profile_id\":{sprint_json(profile_id, false)}," +
+            "\"workflow\":{sprint_json(workflow, false)}," +
+            "\"repository_id\":{sprint_json(repository_id, false)}," +
+            "\"worktree_path\":{sprint_json(worktree_path, false)}," +
+            "\"task_context\":{sprint_json(task_context, false)}\}")
     }
 
-    def create_worktree_and_launch_codex(source_worktree, repository_id,
+    def request_herd_relaunch(herd_session_id : string) {
+        if (!connected || empty(herd_session_id)) return
+        send("\{\"op\":\"herd_relaunch\",\"herd_session_id\":" +
+            "{sprint_json(herd_session_id, false)}\}")
+    }
+
+    def request_herd_close(herd_session_id : string) {
+        if (!connected || empty(herd_session_id)) return
+        send("\{\"op\":\"herd_close\",\"herd_session_id\":" +
+            "{sprint_json(herd_session_id, false)}\}")
+    }
+
+    def request_herd_rename(herd_session_id, name : string) {
+        if (!connected || empty(herd_session_id)) return
+        send("\{\"op\":\"herd_rename\",\"herd_session_id\":" +
+            "{sprint_json(herd_session_id, false)},\"name\":" +
+            "{sprint_json(name, false)}\}")
+    }
+
+    def create_worktree_and_launch_agent(source_worktree, repository_id,
                                          new_worktree_path, branch, base_ref,
-                                         task_context : string) {
+                                         task_context, profile_id, name,
+                                         workflow : string) {
         if (!connected) {
             error = "watcher is not connected"
             return
@@ -493,7 +533,10 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(new_worktree_path, false)},\"branch\":" +
             "{sprint_json(branch, false)},\"base_ref\":" +
             "{sprint_json(base_ref, false)},\"task_context\":" +
-            "{sprint_json(task_context, false)}\}")
+            "{sprint_json(task_context, false)},\"profile_id\":" +
+            "{sprint_json(profile_id, false)},\"name\":" +
+            "{sprint_json(name, false)},\"workflow\":" +
+            "{sprint_json(workflow, false)}\}")
     }
 
     def add_repository(path : string) {

@@ -34,6 +34,7 @@ require ./rich_inspector_ui.das
 require ./rich_git_ui.das
 require ./rich_terminal_ui.das
 require ./rich_sessions_ui.das
+require ./rich_launcher_ui.das
 require ./rich_files_ui.das
 require ./rich_live.das
 
@@ -201,11 +202,11 @@ def draw_main_menu() {
             }
         }
         menu(COMMANDS_MENU, (text = "Commands", enabled = true)) {
-            if (menu_label(COMMAND_CODEX_DEBUG,
-                    (text = "Debug with Codex...", enabled = g_client != null
+            if (menu_label(COMMAND_NEW_SESSION,
+                    (text = "New Session...", enabled = g_client != null
                         && g_client.connected && !empty(g_selected_worktree_path)))) {
-                prepare_debug_launcher()
-                open_popup(SESSION_LAUNCHER_DIALOG)
+                prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
+                open_dock_window(LAUNCHER_WIN)
             }
             if (menu_label(COMMAND_POWERSHELL,
                     (text = "PowerShell", enabled = g_client != null && g_client.connected))) {
@@ -259,6 +260,10 @@ def draw_main_menu() {
                     (text = "Worktree Files", selected = WORKTREE_FILES_WIN.open))) {
                 open_dock_window(WORKTREE_FILES_WIN)
             }
+            if (menu_label(VIEW_LAUNCHER,
+                    (text = "New Session", selected = LAUNCHER_WIN.open))) {
+                open_dock_window(LAUNCHER_WIN)
+            }
             separator(VIEW_WINDOWS_SEPARATOR)
             menu_item(SHOW_EXITED, (text = "Show exited sessions"))
             g_show_exited = SHOW_EXITED.value
@@ -300,6 +305,7 @@ def init() {
     inspector_ui_init()
     git_ui_init()
     sessions_ui_init()
+    launcher_ui_init()
     var io & = unsafe(GetIO())
     io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
     g_fonts = load_unicode_font_roles(14.0f, g_font_sources)
@@ -414,10 +420,10 @@ def update() {
         draw_git_activity_dock()
         draw_git_changelist_dock()
         draw_file_inspector_dock()
+        draw_launcher_dock()
         draw_terminal_dock()
         draw_settings_dock()
     }
-    draw_session_launcher_popup()
     harness_end_frame()
 }
 
@@ -429,6 +435,8 @@ def shutdown() {
         g_client->cleanup()
         delete g_client.sessions
         delete g_client.repositories
+        delete g_client.herd_profiles
+        delete g_client.herd_sessions
         delete g_client.mailbox
         delete g_client.bundles
         delete g_client.git_failure_revisions

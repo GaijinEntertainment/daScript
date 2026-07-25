@@ -153,6 +153,9 @@ struct private PendingAgentWorktreeLaunch {
     new_worktree_path : string
     branch : string
     task_context : string
+    profile_id : string
+    name : string
+    workflow : string
 }
 
 class private WatcherClient {
@@ -900,7 +903,9 @@ class DasHerdWatcherServer : HvWebServer {
     def start_agent_worktree_launch(var client : WatcherClient?;
                                     incoming : WatcherWsMessage const) {
         if (client == null) return
-        if (empty(strip(incoming.task_context))) {
+        // Legacy task-driven launches carry no profile; herd-managed launches
+        // pick a profile and may be task-less (the human drives the agent).
+        if (empty(incoming.profile_id) && empty(strip(incoming.task_context))) {
             send_error(client.channel, "agent task is required")
             return
         }
@@ -936,7 +941,10 @@ class DasHerdWatcherServer : HvWebServer {
             source_worktree_path = incoming.worktree_path,
             new_worktree_path = incoming.new_worktree_path,
             branch = incoming.branch,
-            task_context = incoming.task_context))
+            task_context = incoming.task_context,
+            profile_id = incoming.profile_id,
+            name = incoming.name,
+            workflow = incoming.workflow))
         let _ = watcher_record_event(created.session_id, "agent_worktree_queued",
             "source={incoming.worktree_path}; target={incoming.new_worktree_path}; " +
             "branch={incoming.branch}; base={incoming.base_ref}")
@@ -978,9 +986,12 @@ class DasHerdWatcherServer : HvWebServer {
                 "agent_worktree_created", "target={pending.new_worktree_path}")
             let repository_refreshed = repository_refresh(pending.repository_id)
             var create_error : string
+            let fallback_name = (!empty(pending.branch) ? pending.branch
+                : base_name(pending.new_worktree_path))
             let herd_id = herd_create(HerdCreateRequest(
-                name = !empty(pending.branch) ? pending.branch : base_name(pending.new_worktree_path),
-                profile_id = "codex", workflow = "debug",
+                name = !empty(strip(pending.name)) ? pending.name : fallback_name,
+                profile_id = !empty(pending.profile_id) ? pending.profile_id : "codex",
+                workflow = !empty(pending.workflow) ? pending.workflow : "debug",
                 repository_id = pending.repository_id,
                 worktree_path = pending.new_worktree_path,
                 task_context = pending.task_context), create_error)

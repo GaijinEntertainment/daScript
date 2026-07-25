@@ -23,6 +23,7 @@ require daslib/strings_boost
 require live/live_commands
 require ./watcher_core.das
 require ./repository_core.das
+require ./herd_sessions.das
 require ./git_graph_model.das
 require ./file_inspection.das
 require ./inspection_worker.das
@@ -63,6 +64,19 @@ struct WatcherSessionsMessage {
 struct WatcherRepositoriesMessage {
     @rename = "type" _type : string
     data : array<RepositorySnapshot>
+}
+
+struct WatcherHerdSessionsMessage {
+    @rename = "type" _type : string
+    revision : int64
+    profiles : array<HerdProfile>
+    data : array<HerdSession>
+}
+
+struct WatcherHerdLaunchedMessage {
+    @rename = "type" _type : string
+    herd_session_id : string
+    session_id : string
 }
 
 struct WatcherMailboxMessageEnvelope {
