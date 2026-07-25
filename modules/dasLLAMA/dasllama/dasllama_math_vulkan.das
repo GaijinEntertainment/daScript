@@ -978,54 +978,77 @@ def private act_mul(v, u : float; gelu : uint) : float => (
         : (v / (1.0 + exp(-v))) * u)
 
 // fused act + q8_0 requant of the hidden rows (gate floats in vk_y, up in vk_upf -> vk_xq
-// quant words + vk_xs per-32 scales), one thread per 32-block
+// words + vk_xs per-32 scales). Subgroup per 4 blocks, word per lane: coalesced loads,
+// single-pass act, 8-lane shuffle amax (xor 1/2/4); bit-identical to the thread-per-block form.
 [compute_shader(local_size_x=256, name="q8_moe_actrq_spv")]
 def q8_moe_actrq {
-    let b = gl_GlobalInvocationID.x
+    let gid = gl_GlobalInvocationID.x
+    let sg = gid / 32u
+    let lane = gid % 32u
+    let b = sg * 4u + lane / 8u
     if (b < vk_meta[2u]) {
-        let base = b * 32u
         let gelu = vk_meta[1u]
-        var amax = 0.0
-        for (i in range(32)) {
-            amax = max(amax, abs(act_mul(vk_y[base + uint(i)], vk_upf[base + uint(i)], gelu)))
-        }
-        let d = amax / 127.0
+        let eb = sg * 128u + lane * 4u
+        let v0 = act_mul(vk_y[eb], vk_upf[eb], gelu)
+        let v1 = act_mul(vk_y[eb + 1u], vk_upf[eb + 1u], gelu)
+        let v2 = act_mul(vk_y[eb + 2u], vk_upf[eb + 2u], gelu)
+        let v3 = act_mul(vk_y[eb + 3u], vk_upf[eb + 3u], gelu)
+        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
-        vk_xs[b] = d
-        for (w in range(8)) {
-            let wb = base + uint(w) * 4u
-            var word = 0u
-            for (j in range(4)) {
-                let q = int(round(act_mul(vk_y[wb + uint(j)], vk_upf[wb + uint(j)], gelu) * id))
-                word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
-            }
-            vk_xq[b * 8u + uint(w)] = word
+        if (lane % 8u == 0u) {
+            vk_xs[b] = d
         }
+        let q0 = int(round(v0 * id))
+        let q1 = int(round(v1 * id))
+        let q2 = int(round(v2 * id))
+        let q3 = int(round(v3 * id))
+        let w = ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+        vk_xq[b * 8u + lane % 8u] = w
     }
 }
 
-// the Q8_K twin for the K-quant chains: one thread per 256-weight superblock, per-256 scale
+// the Q8_K twin for the K-quant chains: one SUBGROUP per 256-weight superblock, per-256 scale.
+// 8 coalesced 128B rounds per lane, whole-subgroup 5-shuffle amax, butterfly byte pack (the old
+// thread-per-superblock form strode 1KB per lane = ~21x slower). Bit-identical to the old form.
 [compute_shader(local_size_x=256, name="q8k_moe_actrq_spv")]
 def q8k_moe_actrq {
-    let b = gl_GlobalInvocationID.x
+    let gid = gl_GlobalInvocationID.x
+    let b = gid / 32u
+    let lane = gid % 32u
     if (b < vk_meta[2u]) {
-        let base = b * 256u
         let gelu = vk_meta[1u]
-        var amax = 0.0
-        for (i in range(256)) {
-            amax = max(amax, abs(act_mul(vk_y[base + uint(i)], vk_upf[base + uint(i)], gelu)))
+        let base = b * 256u
+        var vals : float[8]
+        var m = 0.0
+        for [unroll] (r in range(8)) {
+            let e = base + uint(r) * 32u + lane
+            let v = act_mul(vk_y[e], vk_upf[e], gelu)
+            vals[r] = v
+            m = max(m, abs(v))
         }
-        let d = amax / 127.0
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        m = max(m, subgroupShuffleXor(m, 8u))
+        m = max(m, subgroupShuffleXor(m, 16u))
+        let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
-        vk_xs[b] = d
-        for (w in range(64)) {
-            let wb = base + uint(w) * 4u
-            var word = 0u
-            for (j in range(4)) {
-                let q = int(round(act_mul(vk_y[wb + uint(j)], vk_upf[wb + uint(j)], gelu) * id))
-                word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
+        if (lane == 0u) {
+            vk_xs[b] = d
+        }
+        for [unroll] (r in range(8)) {
+            let q = int(round(vals[r] * id))
+            let b8 = uint(q) & 0xFFu
+            let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+            let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+            if (lane % 4u == 0u) {
+                vk_xq[b * 64u + uint(r) * 8u + lane / 4u] = w
             }
-            vk_xq[b * 64u + uint(w)] = word
         }
     }
 }
@@ -5394,7 +5417,7 @@ def private rd_record_token {
             rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 32l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), h)
             rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid), h)
-            rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 32l + 255l) / 256l), h)
+            rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim), h)
             rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_next, 1u, h)
         }
@@ -5732,7 +5755,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 32l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h)
                 rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h)
-                rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 32l + 255l) / 256l), h)
+                rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h)
             }
@@ -5811,7 +5834,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         hz_dispatch(raw, h, gemv_pipe(f3), g_gpu.af_up_set, gwg)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
         hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
-            g_gpu.af_actrq_set, uint((nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+            g_gpu.af_actrq_set, uint((nfe / (dkq ? 8l : 4l) + 255l) / 256l))
         hz_dispatch(raw, h, gemv_pipe(f2), g_gpu.af_down_set, uint((n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
@@ -6353,7 +6376,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     // the requant form follows the DOWN stack — its GEMM is the consumer of hq/hs
     let dkq = g_gpu.stacks[s2].fmt != 0
     hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
-        g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+        g_gpu.batch_actrq_set, uint((rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l))
     hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s2].fmt, g_gpu.stacks[s2].batch_tile, g_gpu.stacks[s2].batch_aligned),
         g_gpu.stacks[s2].batch_set, nwg_dn)
     if (comb_npos > 0u) {
@@ -7242,7 +7265,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         // the requant form follows the DOWN stack — its GEMV is the consumer of hq/hs
         let dkq = g_gpu.stacks[s2].fmt != 0
         hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
-            fc.actrq_set, uint((nrows * nfe / (dkq ? 256l : 32l) + 255l) / 256l))
+            fc.actrq_set, uint((nrows * nfe / (dkq ? 8l : 4l) + 255l) / 256l))
         hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s2].fmt), fc.down_set, uint((nrows * n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
