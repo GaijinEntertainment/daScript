@@ -1014,20 +1014,26 @@ def git_ui_init() {
 def draw_repositories_dock() {
     dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Repositories & Worktrees", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        draw_repositories_window()
+        window_zoom_scope("repositories") {
+            draw_repositories_window()
+        }
     }
 }
 
 def draw_git_activity_dock() {
     dock_window(GIT_ACTIVITY_WIN.PUBLIC, (text = "Git Activity", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        draw_git_activity_window()
+        window_zoom_scope("git-activity") {
+            draw_git_activity_window()
+        }
     }
 }
 
 def draw_git_changelist_dock() {
     dock_window(GIT_CHANGELIST_WIN.PUBLIC, (text = "Git Changelist", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        draw_git_changelist_window()
+        window_zoom_scope("git-changelist") {
+            draw_git_changelist_window()
+        }
     }
 }

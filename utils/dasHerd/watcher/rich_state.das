@@ -746,6 +746,40 @@ def begin_file_inspection(repository_id, worktree_path, file_path,
     }
 }
 
+let UI_BASE_FONT_SIZE = 14.0f
+
+def window_zoom_percent(name : string) : int {
+    return clamp(g_ui_settings.window_zoom?[name] ?? 100, 50, 300)
+}
+
+def set_window_zoom(name : string; percent : int) {
+    let clamped = clamp(percent, 50, 300)
+    if (window_zoom_percent(name) == clamped) return
+    g_ui_settings.window_zoom[name] = clamped
+    settings_save()
+}
+
+// Per-window zoom (notes 12/24): wraps a dock window's content in a resized
+// font (children inherit the push) and claims Ctrl+wheel for THIS window
+// only. The base UI zoom lives in Settings; the two compose.
+def window_zoom_scope(name : string; blk : block) {
+    var io & = unsafe(GetIO())
+    if (io.KeyCtrl && io.MouseWheel != 0.0f
+            && IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)) {
+        set_window_zoom(name, window_zoom_percent(name)
+            + (io.MouseWheel > 0.0f ? 10 : -10))
+        io.MouseWheel = 0.0f
+    }
+    let percent = window_zoom_percent(name)
+    if (percent == 100) {
+        invoke(blk)
+    } else {
+        with_font(null, UI_BASE_FONT_SIZE * float(percent) * 0.01f) {
+            invoke(blk)
+        }
+    }
+}
+
 def set_ui_zoom(percent : int) {
     g_zoom_percent = clamp(percent, 50, 300)
     if (g_ui_settings.ui_zoom_percent != g_zoom_percent) {

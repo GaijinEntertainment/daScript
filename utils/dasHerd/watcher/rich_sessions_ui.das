@@ -395,7 +395,9 @@ def draw_sessions_dock() {
         : "Sessions & Activity###SessionsActivity")
     dock_window(SESSIONS_WIN.PUBLIC, (text = sessions_title, closable = true,
             flags = ImGuiWindowFlags.None)) {
-        draw_session_list()
+        window_zoom_scope("sessions") {
+            draw_session_list()
+        }
     }
 }
 

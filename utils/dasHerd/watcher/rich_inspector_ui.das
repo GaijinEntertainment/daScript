@@ -634,11 +634,6 @@ def draw_file_inspector_content() {
         g_inspector.pending_select_view_tab = false
         g_inspector.pending_widget_sync = false
     }
-    let io & = unsafe(GetIO())
-    if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
-        if (io.MouseWheel > 0.0f) zoom_by(5)
-        elif (io.MouseWheel < 0.0f) zoom_by(-5)
-    }
     if (!g_inspector.prepare.has_retained_content) {
         if (empty(g_inspector.file_path)) {
             text_disabled("Select a changed file")
@@ -742,6 +737,8 @@ def inspector_ui_init() {
 def draw_file_inspector_dock() {
     dock_window(FILE_INSPECTOR_WIN.PUBLIC, (text = "File Inspector", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        draw_file_inspector_window()
+        window_zoom_scope("inspector") {
+            draw_file_inspector_window()
+        }
     }
 }
