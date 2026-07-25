@@ -129,6 +129,15 @@ def public tg_store_half4(var dst; idx : uint; v : float4) {
     dst[int(idx) + 3] = float16(v.w)
 }
 
+// tg_store_float4(dst, idx, v): the float twin — one aligned float4 vector store into a float
+// @workgroup array (idx % 4 == 0 — 16-byte alignment).
+def public tg_store_float4(var dst; idx : uint; v : float4) {
+    dst[int(idx)] = v.x
+    dst[int(idx) + 1] = v.y
+    dst[int(idx) + 2] = v.z
+    dst[int(idx) + 3] = v.w
+}
+
 // simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo destinations only.
 def public simdgroup_store(m : simdgroup_float8x8; var dst; offset : uint; stride : uint) {
     for (r in range(8)) {
@@ -179,6 +188,32 @@ def public simdgroup_multiply_accumulate(var d : simdgroup_float8x8; a, b : simd
             var acc = c.data[r * 8 + cc]
             for (k in range(8)) {
                 acc += float(a.data[r * 8 + k]) * float(b.data[k * 8 + cc])
+            }
+            d.data[r * 8 + cc] = acc
+        }
+    }
+}
+
+// the f32-B/f16-A operand mix (llama.cpp's quant mul_mm shape: float activation tiles against
+// half dequantized-weight tiles) — MSL accepts mixed operand element types on Apple silicon
+def public simdgroup_multiply_accumulate(var d : simdgroup_float8x8; a : simdgroup_float8x8; b : simdgroup_half8x8; c : simdgroup_float8x8) {
+    for (r in range(8)) {
+        for (cc in range(8)) {
+            var acc = c.data[r * 8 + cc]
+            for (k in range(8)) {
+                acc += a.data[r * 8 + k] * float(b.data[k * 8 + cc])
+            }
+            d.data[r * 8 + cc] = acc
+        }
+    }
+}
+
+def public simdgroup_multiply_accumulate(var d : simdgroup_float8x8; a : simdgroup_half8x8; b : simdgroup_float8x8; c : simdgroup_float8x8) {
+    for (r in range(8)) {
+        for (cc in range(8)) {
+            var acc = c.data[r * 8 + cc]
+            for (k in range(8)) {
+                acc += float(a.data[r * 8 + k]) * b.data[k * 8 + cc]
             }
             d.data[r * 8 + cc] = acc
         }

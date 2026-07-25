@@ -1184,7 +1184,10 @@ def private dump_gmx4_msl : bool {
     fwrite("{dd}/gmx4_lcpp.metal", lab_moe_mx4_l_msl)
     fwrite("{dd}/gmx4_lcppw.metal", lab_moe_mx4_w_msl)
     fwrite("{dd}/gmx4_lcppe.metal", lab_moe_mx4_e_msl)
-    print("gmx4 MSL dumped to {dd}\n")
+    fwrite("{dd}/gmm4_prod.metal", metal_moe_mulmm_mx4_msl)
+    fwrite("{dd}/gmm4_bf32.metal", lab_moe_mm_mx4_bf32_msl)
+    fwrite("{dd}/gmm4_lcpp.metal", lab_moe_mm_mx4_lcpp_msl)
+    print("gmx4+gmm4 MSL dumped to {dd}\n")
     return true
 }
 
@@ -1316,6 +1319,526 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     metal_release(pso_l)
     metal_release(pso_w)
     metal_release(pso_e)
+}
+
+// ===== gmm4: gathered mx4 MUL_MM section (gptoss pp512 shapes — the Wave-1 pp chase) =====
+// The pp knockout chase convicted the gathered expert mul_mms: 397ms of the 516ms pp512 GPU
+// window (77%) while lcpp's whole wall is ~496ms. Same discriminator as gmx4: price the
+// PRODUCTION MetalMoeMulMmMx4 at the exact shapes (E=32 nk=4 ntok=512, 2880x2880 planes, padded
+// 32-row buckets) on pipe vs serial, against (a) lcpp's kernel_mul_mm_id classic-simdgroup path
+// monomorphized VERBATIM for mxfp4 (their 17-byte interleaved blocks, byte loads, f32 B tile,
+// mixed float x half MMAs) and (b) the production kernel with the one structural delta lcpp
+// holds: an f32 B tile (no f32->f16 activation convert).
+
+let GNTOK = 512l                  // pp512 token rows
+let GROWS = GNTOK * GK            // routed (token, slot) rows
+
+// production body, B tile widened to f32 (tg_store_float4 + mixed float x half MMAs)
+class LabMoeMmMx4Bf32 {
+    @ssbo @binding = 0 mxq4 : array<uint4>
+    @ssbo @binding = 1 mxe : array<uint8>
+    @ssbo @binding = 2 xf : array<float4>
+    @ssbo @binding = 3 y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+    @ssbo @binding = 6 cnt : array<uint>
+    @ssbo @binding = 7 basep : array<uint>
+    @ssbo @binding = 8 bkt : array<uint>
+    @uniform @binding = 9 eblk : uint
+    @uniform @binding = 10 nk : uint
+    @uniform @binding = 11 gather : uint
+    @ssbo @binding = 13 vtab : array<float>
+    @workgroup ta : float16[2048]
+    @workgroup tb : float[1024]
+    @workgroup vt : float[32]
+
+    [metal_kernel(name="lab_moe_mm_mx4_bf32_msl")]
+    def lab_moe_mm_mx4_bf32 {
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {
+            return
+        }
+        let rbase = basep[e]
+        let lid = gl_LocalInvocationID.x
+        if (lid < 32u) {
+            vt[lid] = vtab[lid % 16u]
+        }
+        barrier()
+        let sg = gl_SubgroupID
+        let nBase = gl_WorkGroupID.y * 64u
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_float8x8[2]
+        var va : float16[16]
+        let kdim4 = kdim / 4u
+        let nkb = kdim / 32u
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        let eb = e * eblk + (nBase + lr0) * nkb
+        var srcrow = rbase + mBase + lr1
+        if (gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / nk
+        }
+        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
+        var kb = 0u
+        while (kb < nkb) {
+            let blk = eb + kb
+            let b0 = unsafe(xcur[0])
+            let b1 = unsafe(xcur[1])
+            let sc = uint(mxe[blk])
+            let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))   // exact e8m0_half, denormal e < 2 included
+            let u4 = mxq4[blk]
+            for [unroll_full] (w in range(4)) {
+                let uw = w == 0 ? u4.x : (w == 1 ? u4.y : (w == 2 ? u4.z : u4.w))
+                for [unroll_full] (c in range(4)) {
+                    let nby = (uw >> (uint(c) * 8u)) & 255u
+                    va[w * 4 + c] = float16(vt[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
+                }
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_float4(tb, ibB, b0)
+            tg_store_float4(tb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(ta[aB]))
+            var bcur = unsafe(addr(tb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            xcur = unsafe(xcur + 8)
+            kb++
+        }
+        let row0 = rbase + mBase + (sg / 2u) * 16u
+        let col0 = nBase + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+        }
+    }
+}
+
+// lcpp kernel_mul_mm_id monomorphized (mxfp4, classic simdgroup branch — the M1 path):
+// 17-byte interleaved block_mxfp4 A plane read with their 16 byte-loads through the halved LUT,
+// half A tile in their swizzled-transposed layout, f32 B rows through the per-expert id list
+// (their map0 output), mixed float x half MMAs. Deviations, both noted at the measurement: the
+// LUT rides tgmem (their constant address space has no msl_emit spelling — same on-chip class),
+// and the epilogue stores C tiles STRAIGHT to the padded bucket panel (their tgmem-restage +
+// ids-scatter epilogue is the production reduce's job in our graph; the K-loop engine races
+// here). ndim % 64 == 0 at these shapes, so their nr0 partial-tile clamp drops out.
+class LabMoeMmMx4Lcpp {
+    @ssbo @binding = 0 ab : array<uint8>    // interleaved block_mxfp4 plane: e byte + 16 nibble bytes
+    @ssbo @binding = 1 xr : array<float4>   // token rows [ntok x kdim] f32
+    @ssbo @binding = 2 tpe : array<uint>    // [E] per-expert routed-row counts (their htpe)
+    @ssbo @binding = 3 ids : array<int>     // [E x ntok] per-expert id lists (their hids; id = tok * nk + slot)
+    @ssbo @binding = 4 y : array<float>     // padded bucket panel (prod layout — shared CPU check)
+    @ssbo @binding = 5 basep : array<uint>  // padded panel bases
+    @uniform @binding = 6 kdim : uint       // ne00
+    @uniform @binding = 7 ndim : uint       // ne0 (weight rows)
+    @uniform @binding = 8 ntok : uint       // ne21
+    @uniform @binding = 9 nk : uint         // ne20
+    @ssbo @binding = 10 vtab : array<float> // [16] their halved LUT (kvalues_mxfp4_f)
+    @workgroup sa : float16[2048]           // A tile: 64 rows x 32 k, 8x8-block swizzled
+    @workgroup sb : float[1024]             // B tile: 32 rows x 32 k, 8x8-block swizzled
+    @workgroup vt : float[16]
+
+    [metal_kernel(name="lab_moe_mm_mx4_lcpp_msl")]
+    def lab_moe_mm_mx4_lcpp {
+        let lid = gl_LocalInvocationID.x
+        if (lid < 16u) {
+            vt[lid] = vtab[lid]
+        }
+        barrier()
+        let im = gl_WorkGroupID.z
+        let r1 = gl_WorkGroupID.x * 32u
+        let neh1 = tpe[im]
+        if (r1 >= neh1) {
+            return
+        }
+        let r0 = gl_WorkGroupID.y * 64u
+        let nr1 = min(neh1 - r1, 32u)
+        let lr0 = lid / 2u
+        let lr1 = min(lid / 4u, nr1 - 1u)
+        let il0 = lid % 2u
+        let shr = il0 * 4u
+        let id = uint(ids[im * ntok + r1 + lr1])
+        let idt = id / nk
+        let nkb = kdim / 32u
+        let ablk = (im * ndim + r0 + lr0) * nkb
+        let iy = (lid % 4u) * 8u
+        var xcur = idt * (kdim / 4u) + iy / 4u
+        let sg = gl_SubgroupID
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_float8x8[2]
+        var mc : simdgroup_float8x8[8]
+        var va : float16[16]
+        // their A/B swizzles, hoisted: A ib = 8*(2*il0 + i/8) + (lid/2)/8, addr 64*ib + 8*(i%8) + (lid/2)%8;
+        // B ib = 4*(lid%4) + (lid/4)/8, addr 64*ib + 8*((lid/4)%8)
+        let tA0 = (il0 * 2u * 8u + lr0 / 8u) * 64u + lr0 % 8u
+        let ibB = ((lid % 4u) * 4u + (lid / 4u) / 8u) * 64u + ((lid / 4u) % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var kb = 0u
+        while (kb < nkb) {
+            // dequantize_mxfp4(x, il, temp_a): d = e8m0_to_fp32(e); 16 byte loads through the LUT
+            let abase = (ablk + kb) * 17u
+            let sc = uint(ab[abase])
+            let d = uint_bits_to_float(sc == 0u ? 0x00400000u : (sc << 23u))
+            for [unroll_full] (i in range(16)) {
+                let q = uint(ab[abase + 1u + uint(i)])
+                va[i] = float16(d * vt[(q >> shr) & 15u])
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                sa[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            let b0 = xr[xcur]
+            let b1 = xr[xcur + 1u]
+            tg_store_float4(sb, ibB, b0)
+            tg_store_float4(sb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(sa[aB]))
+            var bcur = unsafe(addr(sb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            xcur += 8u
+            kb++
+        }
+        let row0 = basep[im] + r1 + (sg / 2u) * 16u
+        let col0 = r0 + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+        }
+    }
+}
+
+// gmm4 buffer slots
+let GM_GQ = 0       // nibble plane (prod layout, uint4 view in-kernel)
+let GM_GE = 1       // scale bytes (prod layout)
+let GM_AB = 2       // interleaved block_mxfp4 plane (lcpp layout)
+let GM_X = 3        // token rows [GNTOK x GDIM] f32
+let GM_CNT = 4      // per-expert routed-row counts
+let GM_BASE = 5     // padded panel bases
+let GM_BKT = 6      // padded bucket -> (tok*nk + slot)
+let GM_IDS = 7      // lcpp hids: [E x GNTOK] id lists
+let GM_Y1 = 8       // gate dst panel
+let GM_Y2 = 9       // up dst panel
+let GM_UK = 10      // kdim = GDIM
+let GM_UN = 11      // ndim = GNFE
+let GM_UEBLK = 12
+let GM_UNK = 13
+let GM_UG1 = 14     // gather = 1
+let GM_UNTOK = 15
+let GM_VT = 16      // prod doubled-e2m1 LUT
+let GM_LVT = 17     // lcpp halved LUT
+
+def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
+    metal_set_buffer(enc, gb[GM_GE], 0ul, 1)
+    metal_set_buffer(enc, gb[GM_X], 0ul, 2)
+    metal_set_buffer(enc, gb[yslot], 0ul, 3)
+    metal_set_buffer(enc, gb[GM_UK], 0ul, 4)
+    metal_set_buffer(enc, gb[GM_UN], 0ul, 5)
+    metal_set_buffer(enc, gb[GM_CNT], 0ul, 6)
+    metal_set_buffer(enc, gb[GM_BASE], 0ul, 7)
+    metal_set_buffer(enc, gb[GM_BKT], 0ul, 8)
+    metal_set_buffer(enc, gb[GM_UEBLK], 0ul, 9)
+    metal_set_buffer(enc, gb[GM_UNK], 0ul, 10)
+    metal_set_buffer(enc, gb[GM_UG1], 0ul, 11)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
+    metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
+}
+
+def private enc_gmm4_lcpp(gb; pso; tgmem : uint64; enc; yslot : int) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[GM_AB], 0ul, 0)
+    metal_set_buffer(enc, gb[GM_X], 0ul, 1)
+    metal_set_buffer(enc, gb[GM_CNT], 0ul, 2)
+    metal_set_buffer(enc, gb[GM_IDS], 0ul, 3)
+    metal_set_buffer(enc, gb[yslot], 0ul, 4)
+    metal_set_buffer(enc, gb[GM_BASE], 0ul, 5)
+    metal_set_buffer(enc, gb[GM_UK], 0ul, 6)
+    metal_set_buffer(enc, gb[GM_UN], 0ul, 7)
+    metal_set_buffer(enc, gb[GM_UNTOK], 0ul, 8)
+    metal_set_buffer(enc, gb[GM_UNK], 0ul, 9)
+    metal_set_buffer(enc, gb[GM_LVT], 0ul, 10)
+    metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
+}
+
+// exact under the fill contract (pow2 scales, small-int x -> f16-exact A and B, f32-exact sums):
+// sample rows/cols per expert against the gathered CPU ref
+def private check_gmm4(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; name : string; kind : int;
+                       gq, ge : array<uint8>; gx, etab, vtab : array<float>;
+                       cnt, basep, bkt : array<uint>) {
+    let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        if (kind == 0) {
+            enc_gmm4_prod(gb, pso, tgmem, enc, GM_Y1)
+        } else {
+            enc_gmm4_lcpp(gb, pso, tgmem, enc, GM_Y1)
+        }
+    }
+    var xrow : array<float>
+    xrow |> resize(int(GDIM))
+    var worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gb[GM_Y1]))
+        for (e in [0l, 5l, 31l]) {
+            for (r in [0l, int64(cnt[e]) - 1l]) {
+                let tok = int64(bkt[int64(basep[e]) + r] / uint(GK))
+                for (i in range64(GDIM)) {
+                    xrow[i] = gx[tok * GDIM + i]
+                }
+                for (col in [0l, 1l, 1234l, GNFE - 1l]) {
+                    let want_v = ref_mx4_row(gq, ge, xrow, etab, vtab, e * GEBLK, col, GDIM)
+                    let got = y[(int64(basep[e]) + r) * GNFE + col]
+                    worst = max(worst, abs(got - want_v) / max(1.0, abs(want_v)))
+                }
+            }
+        }
+    }
+    delete xrow
+    if (worst > 1e-4) {
+        panic("{name} correctness: worst rel diff {worst}")
+    }
+    print("{name} correctness: worst rel {worst}  (single mm {t / 1000.0lf} ms)\n")
+}
+
+def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
+    var pso_p = compile_or_die(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath)
+    var pso_b = compile_or_die(dev, lab_moe_mm_mx4_bf32_msl, lab_moe_mm_mx4_bf32_msl_entry, lab_moe_mm_mx4_bf32_msl_fastmath)
+    var pso_l = compile_or_die(dev, lab_moe_mm_mx4_lcpp_msl, lab_moe_mm_mx4_lcpp_msl_entry, lab_moe_mm_mx4_lcpp_msl_fastmath)
+    var etab : array<float>
+    var vtab : array<float>
+    build_mx4_tabs(etab, vtab)
+    var lvt : array<float>
+    lvt |> resize(16)
+    for (i in range(16)) {
+        lvt[i] = vtab[i] * 0.5   // their halved LUT x their full e8m0 == our doubled LUT x e8m0_half
+    }
+    let t_fill = ref_time_ticks()
+    var gq : array<uint8>
+    gq |> resize(int(GE * GEBLK * 16l))
+    for (i in range(length(gq))) {
+        gq[i] = uint8((i * 37) % 251)
+    }
+    var ge : array<uint8>
+    ge |> resize(int(GE * GEBLK))
+    for (i in range(length(ge))) {
+        ge[i] = uint8(120 + (i * 13) % 15)   // pow2 scales near 1 — exact-arithmetic contract
+    }
+    var ab : array<uint8>
+    ab |> resize(int(GE * GEBLK * 17l))
+    for (blk in range64(GE * GEBLK)) {
+        ab[blk * 17l] = ge[blk]
+        for (i in range64(16l)) {
+            ab[blk * 17l + 1l + i] = gq[blk * 16l + i]
+        }
+    }
+    var gx : array<float>
+    gx |> resize(int(GNTOK * GDIM))
+    for (i in range(length(gx))) {
+        gx[i] = float((i * 5) % 13 - 6)
+    }
+    // routing: 4 distinct experts per token (odd stride mod 32), hash jitter on the base for
+    // realistic per-expert count spread (the padded-tile waste production pays)
+    var cnt : array<uint>
+    cnt |> resize(int(GE))
+    var selE : array<int>
+    selE |> resize(int(GROWS))
+    for (tk in range64(GNTOK)) {
+        let base = int64((uint(int(tk)) * 2654435761u) >> 27u)   // multiplicative hash — realistic count spread
+        for (s in range64(GK)) {
+            let e = int((base + s * 9l) % GE)
+            selE[tk * GK + s] = e
+            cnt[e]++
+        }
+    }
+    var basep : array<uint>
+    basep |> resize(int(GE))
+    var ppad = 0l
+    for (e in range64(GE)) {
+        basep[e] = uint(ppad)
+        ppad += (int64(cnt[e]) + 31l) / 32l * 32l
+    }
+    var bkt : array<uint>
+    bkt |> resize(int(ppad))
+    var hids : array<int>
+    hids |> resize(int(GE * GNTOK))
+    var fill : array<uint>
+    fill |> resize(int(GE))
+    for (tk in range64(GNTOK)) {
+        for (s in range64(GK)) {
+            let e = selE[tk * GK + s]
+            let idv = uint(tk * GK + s)
+            bkt[int64(basep[e]) + int64(fill[e])] = idv
+            hids[int64(e) * GNTOK + int64(fill[e])] = int(idv)
+            fill[e]++
+        }
+    }
+    var hidsb : array<uint8>
+    hidsb |> resize(length(hids) * 4)
+    var cntb : array<uint8>
+    cntb |> resize(length(cnt) * 4)
+    var basepb : array<uint8>
+    basepb |> resize(length(basep) * 4)
+    var bktb : array<uint8>
+    bktb |> resize(length(bkt) * 4)
+    unsafe {
+        memcpy(addr < void? >(hidsb[0]), addr < void? >(hids[0]), length(hids) * 4)
+        memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
+        memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
+        memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+    }
+    var cmin = cnt[0]
+    var cmax = cnt[0]
+    for (e in range64(GE)) {
+        cmin = min(cmin, cnt[e])
+        cmax = max(cmax, cnt[e])
+    }
+    print("gmm4 host fill: {get_time_usec(t_fill) / 1000} ms ({length(gq) / 1048576} + {length(ab) / 1048576} MB planes; rows {GROWS} padded {ppad}, cnt {int(cmin)}..{int(cmax)})\n")
+
+    var gb : array<MetalBuffer?>
+    gb |> push(upload_bytes(dev, gq))                                          // GM_GQ
+    gb |> push(upload_bytes(dev, ge))                                          // GM_GE
+    gb |> push(upload_bytes(dev, ab))                                          // GM_AB
+    gb |> push(upload_floats(dev, gx))                                         // GM_X
+    gb |> push(upload_bytes(dev, cntb))                                        // GM_CNT
+    gb |> push(upload_bytes(dev, basepb))                                      // GM_BASE
+    gb |> push(upload_bytes(dev, bktb))                                        // GM_BKT
+    gb |> push(upload_bytes(dev, hidsb))                                       // GM_IDS
+    gb |> push(metal_new_buffer_untracked(dev, uint64(ppad * GNFE * 4l)))      // GM_Y1
+    gb |> push(metal_new_buffer_untracked(dev, uint64(ppad * GNFE * 4l)))      // GM_Y2
+    gb |> push(upload_u32v(dev, uint(GDIM)))                                   // GM_UK
+    gb |> push(upload_u32v(dev, uint(GNFE)))                                   // GM_UN
+    gb |> push(upload_u32v(dev, uint(GEBLK)))                                  // GM_UEBLK
+    gb |> push(upload_u32v(dev, uint(GK)))                                     // GM_UNK
+    gb |> push(upload_u32v(dev, 1u))                                           // GM_UG1
+    gb |> push(upload_u32v(dev, uint(GNTOK)))                                  // GM_UNTOK
+    gb |> push(upload_floats(dev, vtab))                                       // GM_VT
+    gb |> push(upload_floats(dev, lvt))                                        // GM_LVT
+
+    check_gmm4(queue, gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, "gmm4_prod", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, "gmm4_lcpp", 1, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+
+    // per pass: GLAYERS layers of the gathered 2880x2880 class that owns the pp window.
+    // pipe = 2 mms/layer, concurrent, no barriers (ceiling); serial = barrier per dispatch;
+    // graph = the production layer shape — (gate ∥ up), barrier (the act), down, barrier (the
+    // reduce) — 3 mms/layer, the partial-overlap regime the in-graph 5.51 ms/mm lives in
+    let mac_mm = double(GROWS * GNFE * GDIM)
+    let wbytes_mm = double((ppad / 32l) * GNFE * (GDIM / 32l) * 17l)   // A plane re-read per row tile
+    var garms <- [("gmm4_prod", 0, 0), ("gmm4_prod_serial", 0, 1), ("gmm4_prod_graph", 0, 2),
+                  ("gmm4_bf32", 1, 0), ("gmm4_bf32_graph", 1, 2),
+                  ("gmm4_lcpp", 2, 0), ("gmm4_lcpp_serial", 2, 1), ("gmm4_lcpp_graph", 2, 2)]
+    var gbest : table<string; double>
+    for (a in garms) {
+        gbest[a._0] = 1e18lf
+    }
+    for (_rd in range(rounds)) {
+        for (a in garms) {
+            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+                continue
+            }
+            let kind = a._1
+            let mode = a._2
+            let nmm = mode == 2 ? 3 : 2
+            let us = time_arm(queue, true) $(enc : MetalComputeEncoder?) {
+                for (_p in range64(passes)) {
+                    for (_l in range64(GLAYERS)) {
+                        for (half in range(nmm)) {
+                            if (kind == 2) {
+                                enc_gmm4_lcpp(gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
+                            } elif (kind == 1) {
+                                enc_gmm4_prod(gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
+                            } else {
+                                enc_gmm4_prod(gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
+                            }
+                            if (mode == 1 || (mode == 2 && half >= 1)) {
+                                metal_memory_barrier(enc)   // graph: after (gate ∥ up) and after down
+                            }
+                        }
+                    }
+                }
+            }
+            let per = us / double(passes)
+            if (per < gbest[a._0]) {
+                gbest[a._0] = per
+            }
+        }
+    }
+    print("--- gmm4 (gptoss pp512 shapes: E={GE} nk={GK} ntok={GNTOK}, {int(GNFE)}x{int(GDIM)} planes, {int(mac_mm) / 1000000000} GMAC/mm; in-graph ref 5.51 ms/mm) ---\n")
+    for (a in garms) {
+        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            continue
+        }
+        let per = gbest[a._0]
+        let per_mm = per / double(GLAYERS * int64(a._2 == 2 ? 3 : 2))
+        print("  {a._0}: {per / 1000.0lf} ms/pass  {per_mm / 1000.0lf} ms/mm  {mac_mm / per_mm / 1000.0lf} GMAC/s  {wbytes_mm / per_mm / 1000.0lf} wGB/s\n")
+    }
+
+    delete etab
+    delete vtab
+    delete lvt
+    delete gq
+    delete ge
+    delete ab
+    delete gx
+    delete cnt
+    delete selE
+    delete basep
+    delete bkt
+    delete hids
+    delete fill
+    delete hidsb
+    delete cntb
+    delete basepb
+    delete bktb
+    delete garms
+    delete gbest
+    for (b in gb) {
+        metal_release(b)
+    }
+    gb |> clear()   // handles are metal_release-owned — delete on a ptr array would free pointees
+    unsafe {
+        delete gb
+    }
+    metal_release(pso_p)
+    metal_release(pso_b)
+    metal_release(pso_l)
 }
 
 def private main_apple(dummy) {
@@ -1609,6 +2132,7 @@ def private main_apple(dummy) {
     delete sbest
 
     run_gmx4_lab(dev, queue, rounds, passes)
+    run_gmm4_lab(dev, queue, rounds, passes)
 
     delete k4q
     delete k4c
