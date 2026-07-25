@@ -58,6 +58,7 @@ require daslib/fio
 // to the resident stack, activation blocks into vk_xq/vk_xs).
 
 var @ssbo @binding = 0 vk_wq : array<uint>
+var @ssbo @binding = 0 vk_wq4 : array<uint4>   // vec4 view of the same weight words (16B loads)
 var @ssbo @binding = 1 vk_ws : array<float16>
 var @ssbo @binding = 2 vk_meta : array<uint>
 var @ssbo @binding = 3 vk_xq : array<uint>
@@ -77,24 +78,25 @@ def q8_moe_groupn {
         let wb0 = vk_meta[4u + r * 2u] + row * nb
         let xb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        let my_word = lane % 8u
-        let my_boff = lane / 8u
-        let bpp = gl_SubgroupSize / 8u   // blocks per cooperative pass
+        // uint4 loads, 16-block span/pass: lane's vec4 is 4 words of block bi0+lane/2 (a block is
+        // 2 vec4s) — 512B/warp in flight, one shuffle per pass (probe: +4-12% DRAM vs scalar)
         var acc = 0.0
         var bi0 = 0u
         while (bi0 < nb) {
-            let b = bi0 + my_boff
-            var idot = 0
+            let b = bi0 + lane / 2u
             if (b < nb) {
-                idot = sdot4(vk_wq[(wb0 + b) * 8u + my_word], vk_xq[(xb0 + b) * 8u + my_word])
+                let wv = vk_wq4[(wb0 + bi0) * 2u + lane]
+                let xbase = (xb0 + bi0) * 8u + lane * 4u
+                var idot = sdot4(wv.x, vk_xq[xbase])
+                idot += sdot4(wv.y, vk_xq[xbase + 1u])
+                idot += sdot4(wv.z, vk_xq[xbase + 2u])
+                idot += sdot4(wv.w, vk_xq[xbase + 3u])
+                idot += subgroupShuffleXor(idot, 1u)
+                if (lane % 2u == 0u) {
+                    acc += float(idot) * float(vk_ws[wb0 + b]) * vk_xs[xb0 + b]
+                }
             }
-            idot += subgroupShuffleXor(idot, 1u)
-            idot += subgroupShuffleXor(idot, 2u)
-            idot += subgroupShuffleXor(idot, 4u)
-            if (my_word == 0u && b < nb) {
-                acc += float(idot) * float(vk_ws[wb0 + b]) * vk_xs[xb0 + b]
-            }
-            bi0 += bpp
+            bi0 += 16u
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
@@ -4759,6 +4761,8 @@ struct private RLayer {
     // the layer's descriptor sets (built once, referenced every token)
     s_quant_xb : VkDescriptorSet    // dn_requant of the attn-norm activation
     s_q, s_k, s_v : VkDescriptorSet  // q/k/v GEMV
+    s_kv : VkDescriptorSet          // merged k+v two-region GEMV (fk == fv: same arena planes)
+    kv_merged : bool
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm (qk_norm models only)
     s_rope : VkDescriptorSet
     s_attn : VkDescriptorSet
@@ -4965,6 +4969,13 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         L.s_v = rd_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
             pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
+        // same-format k/v share arena planes — one two-region dispatch fills both kv halves
+        L.kv_merged = fk == fv
+        if (L.kv_merged) {
+            L.s_kv = rd_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
+                pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+                fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
+        }
         // qk rmsnorm (qk_norm models): q@0 (q_dev), meta@2, norm rows@3, eps@4, k@5 (kv_dev, k at qd)
         if (g_rd.qk_norm) {
             L.m_qkn = rd_meta()
@@ -5070,6 +5081,21 @@ def private fill_gemv_meta(hb : HostBuf; n, d, ybase, blk : int64) {
         mp[3] = uint(ybase)
         mp[4] = uint(blk)
         mp[5] = 0u
+    }
+}
+
+// two-region form: regions land contiguously in y at ybase, ybase+d (groupn's r*d+row rule)
+def private fill_gemv_meta2(hb : HostBuf; n, d, ybase, blk_a, blk_b : int64) {
+    unsafe {
+        var mp = reinterpret<uint?>(hb.mapped)
+        mp[0] = uint(n)
+        mp[1] = uint(d)
+        mp[2] = 2u
+        mp[3] = uint(ybase)
+        mp[4] = uint(blk_a)
+        mp[5] = 0u
+        mp[6] = uint(blk_b)
+        mp[7] = 0u
     }
 }
 
@@ -5435,8 +5461,12 @@ def private rd_record_token {
             var L & = g_rd.layers[l]
             fill_quant_meta(L.m_quant_xb, dim / 32l)
             fill_gemv_meta(L.m_q, dim, qd, 0l, L.bq)
-            fill_gemv_meta(L.m_k, dim, kvd, qd, L.bk)             // k at ybase qd in kv_dev
-            fill_gemv_meta(L.m_v, dim, kvd, qd + kvd, L.bv)       // v at ybase qd+kvd
+            if (L.kv_merged) {
+                fill_gemv_meta2(L.m_k, dim, kvd, qd, L.bk, L.bv)  // k, v regions land at qd, qd+kvd
+            } else {
+                fill_gemv_meta(L.m_k, dim, kvd, qd, L.bk)         // k at ybase qd in kv_dev
+                fill_gemv_meta(L.m_v, dim, kvd, qd + kvd, L.bv)   // v at ybase qd+kvd
+            }
             if (g_rd.qk_norm) {
                 let hs = g_rd.head_size
                 var mn = reinterpret<uint?>(L.m_qkn.mapped)
@@ -5467,6 +5497,8 @@ def private rd_record_token {
         vk_check(vkResetCommandBuffer(raw, rf), null)
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
+        pfq_begin(raw)
+        pfq_ts(raw)   // t0 anchor — the recorded-once cmd re-stamps every token submit
         var h : VkHaz
         vhz_dep(raw, h, 0u, VHZ_X, true)
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
@@ -5479,8 +5511,12 @@ def private rd_record_token {
             var L & = g_rd.layers[l]
             rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 4l + 255l) / 256l), h)
             rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), h)
-            rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h)
-            rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h)
+            if (L.kv_merged) {
+                rd_dispatch_gemv(raw, L.fk, L.s_kv, rd_gemv_wg(2l * kvd), h)
+            } else {
+                rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h)
+                rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h)
+            }
             if (g_rd.qk_norm) {
                 rd_dispatch(raw, g_gpu.qkn_pipeline, L.s_qkn, uint(g_rd.n_heads + kvd / g_rd.head_size), h)
             }
@@ -5500,9 +5536,59 @@ def private rd_record_token {
         rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
+        pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
+    g_rdq_n = g_pfq_n   // decode's stamp count (prefill re-arms the shared pool per window)
     g_rd.tok_recorded = true
+}
+
+// decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
+var private g_rdq_n = 0u
+var private g_rdq_count = 0l
+var private g_rdq_total = 0.0lf
+var private g_rdq_pro = 0.0lf
+var private g_rdq_tail = 0.0lf
+var private g_rdq_role : double[16]
+
+def private rdq_sample {
+    let merged = !empty(g_rd.layers) && g_rd.layers[0].kv_merged
+    let rpl = (g_rd.qk_norm ? 16 : 15) - (merged ? 1 : 0)
+    if (g_rdq_n != uint(2 + int(g_rd.n_layers) * rpl + 2)) {
+        return   // deep graphs overflow PFQ_CAP — no aggregation
+    }
+    g_rdq_pro += pfq_us(1u)
+    for (l in range64(g_rd.n_layers)) {
+        for (s in range(rpl)) {
+            g_rdq_role[s] += pfq_us(uint(2l + l * int64(rpl)) + uint(s))
+        }
+    }
+    g_rdq_tail += pfq_us(g_rdq_n - 2u) + pfq_us(g_rdq_n - 1u)
+    unsafe {
+        var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
+        g_rdq_total += double(tp[g_rdq_n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
+    }
+    g_rdq_count++
+    if (g_rdq_count % 32l == 0l) {
+        let n = double(g_rdq_count)
+        var names : array<string>
+        if (g_rd.qk_norm && merged) {
+            names <- ["rq_x", "q", "kv", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+        } elif (g_rd.qk_norm) {
+            names <- ["rq_x", "q", "k", "v", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+        } elif (merged) {
+            names <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+        } else {
+            names <- ["rq_x", "q", "k", "v", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+        }
+        let rs = build_string() $(w) {
+            for (s in range(rpl)) {
+                w |> write("{names[s]} {int(g_rdq_role[s] / n)} ")
+            }
+        }
+        delete names
+        to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: prologue {int(g_rdq_pro / n)} {rs}tail {int(g_rdq_tail / n)} total {int(g_rdq_total / n)}\n")
+    }
 }
 
 //! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
@@ -5527,6 +5613,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
         }
         submit_wait(g_rd.cmd)
         memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, int(g_rd.vocab * 4l))
+    }
+    if (vk_prof() && g_rdq_n > 2u) {
+        rdq_sample()
     }
 }
 
