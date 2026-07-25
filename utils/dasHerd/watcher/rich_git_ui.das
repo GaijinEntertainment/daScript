@@ -852,7 +852,11 @@ def git_activity_status(repository : RepositorySnapshot const;
     }
     let base = (!empty(worktree.review_base_ref)
         ? worktree.review_base_ref : "detecting base...")
-    return GitWindowStatus(text = "OUTGOING COMMITS  {git_review_commit_count(repository, worktree)}   -> {base}")
+    // An empty PR table with a dirty worktree is not "no work" — say where
+    // the uncommitted changes live instead of showing a silent empty view.
+    let dirty = worktree.staged + worktree.unstaged + worktree.untracked
+    let dirty_hint = dirty > 0 ? "   {dirty} uncommitted in Changelist" : ""
+    return GitWindowStatus(text = "OUTGOING COMMITS  {git_review_commit_count(repository, worktree)}   -> {base}{dirty_hint}")
 }
 
 def git_changelist_status(repository : RepositorySnapshot const;
