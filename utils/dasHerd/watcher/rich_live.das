@@ -143,6 +143,27 @@ def herder_reset_layout(_input : JsonValue?) : JsonValue? {
     return JV((ok = true))
 }
 
+[live_command(description = "Inspect input ownership: the @live user-control lock, synth cursor/key state, io cursor, and real wheel/click counters.")]
+def herder_input_state(_input : JsonValue?) : JsonValue? {
+    let sc = get_synth_cursor()
+    let sk = get_synth_keys()
+    let mouse = GetMousePos()
+    return JV((ok = true,
+        user_control = user_control_enabled(),
+        synth_cursor_owned = sc._0,
+        synth_cursor_x = sc._1,
+        synth_cursor_y = sc._2,
+        synth_keys_held = sk._0,
+        io_mouse_x = mouse.x,
+        io_mouse_y = mouse.y,
+        io_mouse_valid = IsMousePosValid(null),
+        wheel_events_seen = g_wheel_events_seen,
+        wheel_last_delta = g_wheel_last_delta,
+        click_events_seen = g_click_events_seen,
+        attached = g_client != null && g_client.attached,
+        controls_lease = g_client != null && g_client.controls))
+}
+
 struct HerderPerfArgs {
     clear : bool
 }

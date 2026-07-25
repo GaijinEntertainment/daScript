@@ -92,6 +92,27 @@ def public live_destroy_window() {
     }
 }
 
+var private g_window_base_title : string
+
+def public live_apply_control_badge(locked : bool) {
+    //! Reflect a synthetic-input takeover in the OS window header: appends
+    //! ``[AGENT CONTROL]`` to the title while ``locked``, restores the plain
+    //! title on release. The window header is visible even when the app's own
+    //! UI is obscured, so a takeover is never silent.
+    return if (live_window == null)
+    if (locked) {
+        if (empty(g_window_base_title)) {
+            // glfwGetWindowTitle returns GLFW's internal buffer, invalidated by
+            // the next set — clone before overwriting.
+            g_window_base_title = clone_string(glfwGetWindowTitle(live_window))
+        }
+        glfwSetWindowTitle(live_window, "{g_window_base_title}  [AGENT CONTROL]")
+    } elif (!empty(g_window_base_title)) {
+        glfwSetWindowTitle(live_window, g_window_base_title)
+        g_window_base_title = ""
+    }
+}
+
 def public live_begin_frame() : bool {
     //! Polls GLFW events and checks if the window should close.
     //! Returns false if the window was closed (signals exit).

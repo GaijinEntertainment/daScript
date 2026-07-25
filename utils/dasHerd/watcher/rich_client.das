@@ -143,7 +143,11 @@ def private draw_menu_status_cluster() {
     let busy = menu_status_busy_count()
     let connected = g_client != null && g_client.connected
     let conn_label = connected ? "watcher" : "reconnecting"
+    let synth_locked = !user_control_enabled()
     var width = line + style.ItemSpacing.x + CalcTextSize(conn_label).x
+    if (synth_locked) {
+        width += line + CalcTextSize("SYNTH LOCK").x + style.ItemSpacing.x * 3.0f
+    }
     if (busy > 0) {
         width += line + CalcTextSize("{busy}").x + style.ItemSpacing.x * 3.0f
     }
@@ -155,6 +159,18 @@ def private draw_menu_status_cluster() {
     }
     SetCursorPosX(max(GetCursorPosX(),
         GetWindowWidth() - width - style.WindowPadding.x))
+    if (synth_locked) {
+        // The @live user-control lock is app-global and otherwise invisible:
+        // real mouse/keyboard are detached while an agent drives synth input.
+        icon("warning", line)
+        same_line()
+        text_colored(MENU_STATUS_SYNTH_LOCK,
+            (color = float4(0.97f, 0.76f, 0.28f, 1.0f), text = "SYNTH LOCK"))
+        set_item_tooltip(MENU_STATUS_SYNTH_LOCK_TIP,
+            (text = "Real input is detached (set_user_control off) - an agent " +
+                "owns the UI; live command set_user_control enabled=true releases it"))
+        same_line()
+    }
     if (!empty(error_text)) {
         icon("warning", line)
         same_line()
@@ -386,6 +402,17 @@ def update() {
     }
     harness_new_frame()
     g_ui_frame++
+    {
+        let io & = unsafe(GetIO())
+        if (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f) {
+            g_wheel_events_seen++
+            g_wheel_last_delta = io.MouseWheel
+        }
+        if (IsMouseClicked(ImGuiMouseButton.Left)
+                || IsMouseClicked(ImGuiMouseButton.Right)) {
+            g_click_events_seen++
+        }
+    }
     let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
         "tree={GIT_TREE_TAB.selected} proj={GIT_PROJECT_TAB.selected} " +
         "diff={INSPECTOR_DIFF_TAB.selected} " +

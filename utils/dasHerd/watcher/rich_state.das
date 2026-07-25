@@ -477,6 +477,13 @@ def settings_load() {
 var g_submit_stamp : int64
 var g_submit_session : string
 
+// Real-input forensics: per-frame counters of wheel/click events that reached
+// ImGui IO. With user control locked these must stay flat — a moving counter
+// is a leak through the lock (note 38).
+var g_wheel_events_seen : int
+var g_wheel_last_delta : float
+var g_click_events_seen : int
+
 // Launch debounce: a click stamps the herd revision; the button stays
 // disabled until the watcher's herd broadcast bumps it (or a timeout passes),
 // so duplicate/replayed clicks cannot create duplicate sessions.

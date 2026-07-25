@@ -43,6 +43,18 @@ def draw_terminal_footer() {
     same_line()
     text("Zoom {g_zoom_percent}%")
     same_line()
+    // Input mode first: scroll is always local, but typing needs the
+    // controller lease — say so instead of silently eating keys (note 38).
+    if (g_client != null && g_client.attached && !g_client.controls) {
+        icon("warning", GetTextLineHeight())
+        same_line()
+        text_colored(TERMINAL_INPUT_OFF, (color = float4(0.97f, 0.76f, 0.28f, 1.0f),
+            text = "VIEW ONLY - input lease held elsewhere"))
+        set_item_tooltip(TERMINAL_INPUT_OFF_TIP,
+            (text = "Scrollback and selection stay local; typing goes to the " +
+                "session and needs the controller lease"))
+        same_line()
+    }
     text_disabled("{g_terminal_view.scrollback_rows} history lines - {g_status}")
     if (g_client != null) {
         same_line()

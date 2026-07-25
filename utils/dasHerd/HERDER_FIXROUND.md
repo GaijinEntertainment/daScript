@@ -226,6 +226,35 @@ paste. Proven in a live conversation with a herd-launched Claude
 (greeting, 2+2 -> "4", paced ack). onOpen now resets herd_revision so
 a restarted watcher's first broadcast always applies.
 
+38. (Boris, post-batch; diagnosis corrected by Boris) The @live
+    user-control lock leaked real input: with set_user_control(false)
+    active (agent owns synth input), clicks and typing were dead as
+    intended but REAL mouse wheel still scrolled the terminal. Root
+    cause class: three independent owners of the GLFW callback slots
+    (raw glfw, ImGui_ImplGlfw Install/Restore, the DasGlfw chain with
+    its retained prev_* pointers) interleave; any glfw_post_* re-arms
+    a slot with the chain dispatcher whose captured prev still routes
+    into ImGui, so the backend detach alone cannot sever real input.
+    DONE (three layers):
+    - dasGlfw C++: real/synth entry split — GLFW slots now get
+      DasGlfw_Real* trampolines gated by glfw_set_real_input_muted;
+      DasGlfw_Post* (synth) call the dispatchers directly and bypass
+      the mute. Depth guard in dispatchers breaks historical
+      prev-pointer cycles. imgui_live's toggle sets the mute alongside
+      the backend detach.
+    - Visibility (Boris: "indicate in window header"): generic
+      live_apply_control_badge in glfw_live appends "[AGENT CONTROL]"
+      to the OS window title while locked (any glfw app); dasHerd
+      menu status cluster shows an amber SYNTH LOCK badge; terminal
+      footer states VIEW ONLY when the PTY controller lease is held
+      elsewhere (the original, lease-level half of this note).
+    - Inspectability: herder_input_state live command (user-control
+      lock, synth cursor/keys, io cursor, real wheel/click counters)
+      — the lock was previously invisible to both screenshot and
+      snapshot, a parity-audit violation.
+    The lease-arbitration UX ("input is leased to X — click to
+    claim") still folds into the note-35 design.
+
 Still open, small, dasImgui-internal (agent-rail QoL, no dasHerd flow
 blocked): combo imgui_force_set stops applying after a live reload
 (popup-click workaround exists); ClickState.click_count counts clicks
