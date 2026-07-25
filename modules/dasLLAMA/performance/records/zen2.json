@@ -1,0 +1,101 @@
+[
+  {
+    "gguf":"Qwen3-4B-Instruct-2507-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"resident mm, budget 6000, ReBAR on",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-25",
+        "cmd":"DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=6000 DASLLAMA_COOPMAT=mm bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:\\Work\\llama.cpp\\models\\Qwen3-4B-Instruct-2507-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"NVIDIA GeForce RTX 5060 Ti 16GB (driver 610.74)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":3759.2463781569081,
+            "stddev":31.282392501831055
+          },
+          "tg128":{
+            "tok_s":63.841557586720718,
+            "stddev":0.050056304782629013
+          }
+        },
+        "sha":"6c4efe7fb",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest)",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; resident vulkan graph (prefill + decode)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"full offload, NV_coopmat2",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-25",
+        "cmd":"D:\\Work\\llama.cpp\\build-vulkan\\bin\\Release\\llama-bench.exe -m D:\\Work\\llama.cpp\\models\\Qwen3-4B-Instruct-2507-Q8_0.gguf",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"NVIDIA GeForce RTX 5060 Ti 16GB (driver 610.74)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":4679.78,
+            "stddev":21.35
+          },
+          "tg128":{
+            "tok_s":77.52,
+            "stddev":0.11
+          }
+        },
+        "source":"official",
+        "sha":"fdb1db877",
+        "exec_fmt":"native gguf; Vulkan cm2 shaders (matrix cores: NV_coopmat2)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"full offload, KHR coopmat; session-log 2026-07-24, stddev not recorded",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-24",
+        "cmd":"D:\\Work\\llama.cpp\\build-vulkan\\bin\\Release\\llama-bench.exe -m D:\\Work\\llama.cpp\\models\\Qwen3-4B-Instruct-2507-Q8_0.gguf",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"NVIDIA GeForce RTX 3060 Ti 8GB"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":2252.0,
+            "stddev":0.0
+          },
+          "tg128":{
+            "tok_s":24.74,
+            "stddev":0.0
+          }
+        },
+        "source":"session-log",
+        "sha":"fdb1db877",
+        "exec_fmt":"native gguf; Vulkan coopmat shaders (KHR coopmat, f16acc)"
+      }
+    ],
+    "arch":"qwen3",
+    "quant":"q8",
+    "active_b":4.0222720000000001,
+    "size_bytes":4280405600
+  }
+]
