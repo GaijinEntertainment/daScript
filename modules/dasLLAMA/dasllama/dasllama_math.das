@@ -1476,7 +1476,7 @@ var g_moe_gpu_attn_route = true        // runtime routing gate over the attentio
 // symbol. reserve/place fill the arenas; prepare/norms/set_layer/set_cls build it; token runs one forward.
 typedef RdecReserveFn = function<(fmt : int; cap_blocks : int64) : bool>
 typedef RdecPlaceFn = function<(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64>
-typedef RdecPrepareFn = function<(n_layers : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float) : bool>
+typedef RdecPrepareFn = function<(n_layers : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool) : bool>
 typedef RdecNormsFn = function<(norms : array<float>) : void>
 typedef RdecSetLayerFn = function<(l : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int) : void>
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int) : void>
@@ -1490,8 +1490,8 @@ typedef RdecReadKvBulkFn = function<(l : int64; kp : float?; vp : float?; npos :
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 [unused_argument(wq, ws, n, rows, fmt)]
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
-[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale)]
-def private rdec_unset_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float) : bool => false
+[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)]
+def private rdec_unset_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool) : bool => false
 [unused_argument(norms)]
 def private rdec_unset_norms(norms : array<float>) {}
 [unused_argument(l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
@@ -1551,7 +1551,7 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
-def public rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float) : bool => invoke(g_rdec_prepare, n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale)
+def public rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool) : bool => invoke(g_rdec_prepare, n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)
 def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
 def public rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) { invoke(g_rdec_set_layer, l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int) { invoke(g_rdec_set_cls, cls_block, cls_fmt) }
