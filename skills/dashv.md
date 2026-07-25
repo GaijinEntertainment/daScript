@@ -4,7 +4,7 @@ Read this before writing or editing any `.das` that serves HTTP, streams SSE, ma
 HTTP requests, or tests a server. `dasHV` wraps [libhv](https://github.com/ithewei/libhv);
 the high-level das layer is `dashv/dashv_boost`, the native bindings are the `dashv` module.
 Worked example end-to-end: `utils/dasllama-server/` (an OpenAI-compatible server) and
-`tests/dasHV/`.
+`tests/dasHV/`, both in the daslang repo.
 
 ```das
 require dashv/dashv_boost public   // HvWebServer, HvWebSocketClient, with_http_request, get_body_bytes

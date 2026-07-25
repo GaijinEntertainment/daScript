@@ -172,7 +172,7 @@ into the DLL cache key; never execute forced artifacts). Exactness gates live in
 `harness/avx_matrix_probe.das`: every vnni backend is BIT-EXACT vs its donor; z16 tiers gate
 rel<1e-5 vs portable (the acc8/ps float-shape class) + a bit-exact strip-expansion contract.
 Full detail — intrinsic/emitter facts, backend/slot map, validation status, the rented-box
-measurement runbook, and the PR-time TODO — lives in **`avx_kernel_matrix.md`** (next to this
+measurement runbook, and the PR-time TODO — lives in **`history/dasLLAMA/avx_kernel_matrix.md`** (archived; formerly next to this
 file).
 
 **The x64 backends** (all in `dasllama_math_x64_avx.das`, shipped 2026-07): `x64-avx2` =

@@ -82,6 +82,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/glob.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
 | `skills/gc_migration.md` | Migrating external/archived code from `smart_ptr<T>` AST patterns to gc_node (in-tree migration is complete) |
 | `skills/version_update.md` | Bumping the daslang version number |
+| `skills/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` — the archive-vs-stay test, reference-update discipline, area-index notes, the `history/README.md` ledger |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
@@ -127,9 +128,11 @@ When you discover something new about daslang syntax, semantics, or conventions 
 - **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **`with (module foo/bar) { ... }`:** compile-time resolution scope — names inside resolve as if written in module foo/bar (incl. its PRIVATES + its require graph; the enclosing module's own symbols are NOT visible inside); `_::name` escapes back to the enclosing module; locals stay lexical and win; nested forms don't combine — innermost wins outright; erased after infer, zero runtime. Policy `with_module_is_unsafe` (or `.das_project` `with_module_unsafe(mod, file)`) makes user-written ones require `unsafe`
-- **Named arguments:** `foo([name = value])` with square brackets. Multiple named arguments share
-  one bracket group: `foo(positional, [first = a, second = b])`; separate groups such as
-  `foo([first = a], [second = b])` are a syntax error
+- **Named arguments:** bare `foo(pos, name = value)` — named args after positionals, no brackets
+  needed (0.6.4+, #3410–#3415; probe-verified 2026-07-24); works on method calls too
+  (`obj.m(name = v)` / `obj->m(name = v)`). The bracketed form `foo([name = value])` still parses;
+  there, multiple named arguments share one bracket group: `foo(positional, [first = a, second = b])`;
+  separate groups such as `foo([first = a], [second = b])` are a syntax error
 - **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`. **Arrow shorthand for single-expression blocks:** `arr |> sort() $(a, b) => a < b`. Defaulted parameters sitting between the explicit args and a trailing block are padded automatically — don't spell them out
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture). **Inline arrow form:** `@(x) => expr` (capture lambda) and `@@(x) => expr` (no-capture function pointer) — preferred for short transforms passed as arguments: `sometimes(pat, @@(x) => fast(x, 2.0lf))`
 - **Function/method arrow body:** `def add(a, b : int) : int => a + b` — single-expression body, return type optional (`def add(a, b : int) => a + b` infers). Works on class methods too: `def get() : int => count + 2`. The body must START on the `=>` line — `def f() : int64 =>` followed by a newline is `error[30151]` (probe-verified 2026-07-12); wrap a long body by opening `(` on the `=>` line and breaking inside the parens
@@ -222,8 +225,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
 - **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
 - **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
-- **`reinterpret<T>(expr)`** requires `unsafe` — used for const-stripping on regular pointers: `unsafe(reinterpret<Foo?>(const_ptr))`
-- **`reinterpret` is a PREFIX operator that swallows a following additive expression — silent wrong pointer math.** `reinterpret<float?>(p) + off` parses as `reinterpret<float?>((p) + off)`: the parens around `p` do NOT delimit the operand, so `+ off` executes on `p`'s ORIGINAL type first (byte-scaled for `uint8?`), then the result is cast — no diagnostic (probe-verified 2026-07-09: values landed at byte offsets, not element offsets). Fixes (both verified): bind the cast to a local first (`var d = reinterpret<float?>(p); d + off`), or parenthesize the whole cast (`(reinterpret<float?>(p)) + off`)
+- **`reinterpret<T>(expr)`** requires `unsafe` — used for const-stripping on regular pointers: `unsafe(reinterpret<Foo?>(const_ptr))`. Since casts require call-style parens (#3420), the cast is self-delimiting: `reinterpret<float?>(b) + 1` adds on the CAST result's stride (probe-verified 2026-07-24; the old prefix-form operand-swallow trap is gone — that form is now a syntax error)
 - **`typeinfo is_unsafe_when_uninitialized(type<T>)`** — the trait that gates unsafe-ness per type in generic code. Pairs with field-level `@safe_when_uninitialized` and struct-level `[safe_when_uninitialized]` annotations. Canonical use in `daslib/builtin.das`: declare `var x : TT` inside `static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }` — the unsafe block needs `// nolint:STYLE025` on the `unsafe {` line because STYLE025 sees only one statement needing unsafe at any instantiation and can't reason across the static_if branches
 
 ### Error handling

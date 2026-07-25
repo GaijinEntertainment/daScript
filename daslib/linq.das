@@ -2763,7 +2763,7 @@ def private group_by_lazy_impl_const(source : auto(ARGT); tt : auto(TT); key)  {
 
 def group_by_lazy(var source : iterator<auto(TT)>; key)  {
     //! IGrouping shape — yields ``(key, array<TT>)`` per group; per-bucket processing is left to the caller.
-    //! Backs the ``_group_by_lazy`` macro. Per spec ``modules/dasSQLITE/API_REWORK.md "### 19-group_by"`` this form is
+    //! Backs the ``_group_by_lazy`` macro. Per spec ``history/dasSQLITE/API_REWORK.md "### 19-group_by"`` this form is
     //! ``macro_error`` inside ``_sql(...)`` — per-group windowing has no general SQL form.
     return <- group_by_lazy_impl(source, type<TT -const -&>, key).to_sequence_move()
 }

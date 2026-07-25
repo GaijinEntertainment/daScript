@@ -556,7 +556,7 @@ def setup_dasllama_jobque_() {
     set_jobque_batch_dispatch(true)
     // team dispatch (#3368) as the runner default: fifo fork/join costs ~10us PER JOB, so a
     // 96-lane dispatch is ~1ms x ~160 dispatches/decoded token — EPYC 9654 measured Llama-1B
-    // decode 7.6 -> 43 t/s (5.7x) and prefill-512 2x from this one switch (epyc9654_measurements.md)
+    // decode 7.6 -> 43 t/s (5.7x) and prefill-512 2x from this one switch (history/dasLLAMA/epyc9654_measurements.md)
     set_jobque_team_mode(true)
     set_jobque_worker_spin(int(min(g_jobque_spin_us, 2147483647l)))
     set_jobque_join_spin(int(min(g_jobque_join_poll, 2147483647l)))

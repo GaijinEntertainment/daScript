@@ -6,6 +6,7 @@ clargs_usage.md
 cpp_integration.md
 das_formatting.md
 das_macros.md
+dashv.md
 daslang_live.md
 daslib_modules.md
 daspkg.md
@@ -14,6 +15,7 @@ detect_dupe.md
 dynamic_modules.md
 external_module_debugging.md
 filesystem.md
+find_dupe.md
 gc_migration.md
 glob.md
 imgui_ui_debugging.md

@@ -11,7 +11,7 @@ require daslib/sql_linq
 // same SQL source) ≡ same chain over a plain `array<T>`. Three modes
 // must produce identical results for every chain shape the tutorial uses.
 //
-// See modules/dasSQLITE/API_CHECKED.md for the equivalence-harness plan.
+// See history/dasSQLITE/API_CHECKED.md for the equivalence-harness plan.
 
 [sql_table(name = "Cars")]
 struct Car {

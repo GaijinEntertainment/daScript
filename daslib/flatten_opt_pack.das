@@ -19,7 +19,7 @@ require daslib/flatten_opt_common
 
 // ===== Scalar packing — map-reduce loop re-roll (Phase 1) =====
 // Re-rolls an unrolled min/max reduction's N isomorphic scalar lanes into width-W vector ops + a
-// horizontal reduce (backend emits one width-W node, not N). Pre-fold. Design: scalar_packing/PLAN.md.
+// horizontal reduce (backend emits one width-W node, not N). Pre-fold. Design: history/examples/scalar_packing/PLAN.md.
 
 struct private LinkInfo {
     ok      : bool
