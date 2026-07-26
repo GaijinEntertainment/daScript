@@ -288,8 +288,17 @@ imgui_mouse_* bypass commands while input is detached.
 
 ## Wave 3 — surface reworks (each needs a short design pass)
 
-- 3+11+5 launcher: modal dialog, explicit run-here vs create-new,
-  claimed-worktree awareness (ties to conflict advisory).
+- DONE 3+11+5 launcher (11/5 landed earlier; 3 on 2026-07-25): the
+  launcher is now a true MODAL dialog — popup_modal centers it, dims
+  the whole UI, and blocks input to everything behind (note 3's exact
+  ask); Escape or the X dismisses; a successful Launch closes it via
+  close_current_popup. LAUNCHER_WIN is gone; all openers (menus, the
+  session.new command, worktree context menu, herder_open_launcher
+  rail) route through open_launcher_modal, and herder_herd_state's
+  launcher_open now reads the modal. Claimed-worktree awareness stays
+  covered by the conflict icon/advisory from the earlier rounds.
+  Live-verified: rail-opened modal renders centered over a dimmed,
+  input-blocked UI.
 - MOSTLY DONE 7+19+28+29 sessions panel (2026-07-25): each herd card
   now carries its own Attention (N) / Review bundles (N) children
   (mailbox/bundle session_id joined to the card's pty_session_id via

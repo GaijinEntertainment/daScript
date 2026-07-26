@@ -212,7 +212,7 @@ def private draw_menu_status_cluster() {
 def private command_new_session() {
     return if (g_client == null || !g_client.connected || empty(g_selected_worktree_path))
     prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
-    open_dock_window(LAUNCHER_WIN)
+    open_launcher_modal()
 }
 
 def private command_powershell() {
@@ -250,8 +250,8 @@ def private register_commands() {
     register_herd_command("view.terminal", "View", "Terminal",
         command_binding("view.terminal", ImGuiKey.T, primary = true, shift = true),
         @@() { open_dock_window(TERMINAL_WIN); })
-    register_herd_command("view.launcher", "View", "New Session window",
-        CommandBinding(), @@() { open_dock_window(LAUNCHER_WIN); })
+    register_herd_command("view.launcher", "View", "New Session dialog",
+        CommandBinding(), @@() { open_launcher_modal(); })
     register_herd_command("view.settings", "View", "Settings",
         command_binding("view.settings", ImGuiKey.Comma, primary = true),
         @@() { open_dock_window(SETTINGS_WIN); })
@@ -360,7 +360,7 @@ def draw_main_menu() {
                 let _ = run_herd_command("view.terminal")
             }
             if (menu_label(VIEW_LAUNCHER,
-                    (text = "New Session", selected = LAUNCHER_WIN.open,
+                    (text = "New Session", selected = launcher_modal_open(),
                         shortcut = herd_command_shortcut("view.launcher")))) {
                 let _ = run_herd_command("view.launcher")
             }
@@ -595,12 +595,12 @@ def update() {
         draw_git_activity_dock()
         draw_git_changelist_dock()
         draw_file_inspector_dock()
-        draw_launcher_dock()
         draw_terminal_dock()
         draw_settings_dock()
     }
     draw_herd_rename_popup()
     draw_destructive_confirm_popup()
+    draw_launcher_modal()
     herd_commands_drain()
     harness_end_frame()
 }

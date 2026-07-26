@@ -235,7 +235,7 @@ def herder_perf_state(input : JsonValue?) : JsonValue? {
 [live_command(description = "Open the New Session launcher pane seeded from the current selection.")]
 def herder_open_launcher(_input : JsonValue?) : JsonValue? {
     prepare_launcher(g_selected_repository_id, g_selected_worktree_path)
-    open_dock_window(LAUNCHER_WIN)
+    open_launcher_modal()
     return JV((ok = true, repository_id = g_selected_repository_id,
         worktree_path = g_selected_worktree_path))
 }
@@ -256,7 +256,7 @@ def herder_herd_state(_input : JsonValue?) : JsonValue? {
             exit_code = record.exit_code, launch_count = record.launch_count,
             satellite_count = length(record.satellites)))]
     var result = JV((ok = true, revision = g_client.herd_revision,
-        launcher_open = LAUNCHER_WIN.open,
+        launcher_open = launcher_modal_open(),
         profiles = profiles, sessions = records))
     return result
 }

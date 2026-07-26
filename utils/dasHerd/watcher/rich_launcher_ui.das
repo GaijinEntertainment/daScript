@@ -223,7 +223,7 @@ def draw_launcher_form() {
         }
         g_launch_pending_revision = g_client.herd_revision
         g_launch_pending_started = ref_time_ticks()
-        LAUNCHER_WIN.open = false
+        close_current_popup(LAUNCHER_DIALOG)
     }
     if (LAUNCHER_LAUNCH.clicked) {
         // Click-frame forensics: logs every enabled term, so a click that the
@@ -257,12 +257,21 @@ def launcher_ui_init() {
     LAUNCHER_NEW_WORKTREE.value = false
     LAUNCHER_PROFILE.value = -1
     LAUNCHER_WORKFLOW.value = 0
-    LAUNCHER_WIN.open = false
 }
 
-def draw_launcher_dock() {
-    dock_window(LAUNCHER_WIN.PUBLIC, (text = "New Session###NewSession",
-            closable = true, flags = ImGuiWindowFlags.None)) {
+// The launcher is a MODAL dialog (note 3): while it is up the rest of the UI
+// dims and ignores input — it is not a dockable pane.
+def open_launcher_modal() {
+    open_popup(LAUNCHER_DIALOG)
+}
+
+def launcher_modal_open() : bool {
+    return LAUNCHER_DIALOG.open
+}
+
+def draw_launcher_modal() {
+    popup_modal(LAUNCHER_DIALOG.PUBLIC, (text = "New Session###NewSession",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
         draw_launcher_form()
     }
 }
