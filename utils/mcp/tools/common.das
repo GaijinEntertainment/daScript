@@ -521,8 +521,11 @@ def resolve_path(path : string) : string {
     // `find(path, ":") == 1` preserves Windows drive-relative paths (`C:foo`):
     // std::filesystem doesn't classify them as absolute (no trailing separator),
     // so they'd otherwise be joined under das_root and produce an invalid path.
-    if (is_absolute(path) || find(path, ":") == 1) return path
-    return path_join(get_das_root(), path)
+    if (find(path, ":") == 1) return path
+    // normalize collapses a trailing `/.` and doubled separators. Those survive
+    // path_join and defeat ast-grep's path relativization, which silently zeroes
+    // any slash-anchored --globs filter instead of reporting an error.
+    return normalize(is_absolute(path) ? path : path_join(get_das_root(), path))
 }
 
 def make_relative_path(path, root : string) : string {

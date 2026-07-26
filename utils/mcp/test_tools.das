@@ -1155,6 +1155,17 @@ def test_grep_usage(t : T?) {
         parse_result(do_grep_usage("", "", "", ""), text, is_error)
         t |> success(is_error, "should be error")
     }
+    // A glob containing `/` is anchored to the search root. Passing the root as
+    // `<root>/.` (what resolve_path(".") used to return) defeats ast-grep's path
+    // relativization, so every such filter silently matched nothing.
+    t |> run("slash-anchored glob filters rather than zeroing") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "", "", "utils/mcp/tools/*.das"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "common.das") >= 0, "root-anchored glob should match")
+        t |> success(find(text, "Found 0 match") < 0, "glob must not silently zero the result")
+    }
 }
 
 [test]
