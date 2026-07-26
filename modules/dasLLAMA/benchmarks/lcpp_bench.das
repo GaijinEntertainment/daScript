@@ -217,17 +217,24 @@ def main() {
     if (cfg.prefill_ab && !has_env_variable("DASLLAMA_GPU_MOE_LAYERS") && !has_env_variable("DASLLAMA_GPU_MOE_STREAM")) {
         print("warning: --prefill-ab without DASLLAMA_GPU_MOE_LAYERS/_STREAM — no resident expert layers, both arms identical\n")
     }
-    say(fmt, "loading {cfg.model}\n")
-    var results : array<RowStat>
-    var modelArch = ""
-    var activeB = 0.0lf
-    var execFmt = ""
+    // -m accepts a comma-separated list: one process benches every model in turn, so a sweep
+    // pays the compile/startup cost once; a single -m path behaves exactly as before
+    var model_list <- split(cfg.model, ",")
+    var mdRows : array<array<string>>
+    var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        for (mpath in model_list) {
+        continue if (empty(mpath))
+        say(fmt, "loading {mpath}\n")
+        var results : array<RowStat>
+        var modelArch = ""
+        var activeB = 0.0lf
+        var execFmt = ""
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
-        var t <- load_model_cached(cfg.model, cfg.quant)
+        var t <- load_model_cached(mpath, cfg.quant)
         t.config.seq_len = min(t.config.seq_len, max(plen, ngen) + 8l)   // cap the KV allocation
         let c = t.config
         say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
@@ -294,46 +301,44 @@ def main() {
         }
         delete s
         delete t
-    }
-    // the reference runs AFTER our model is freed — one model process at a time, per the protocol
-    var refRows : array<LlamaBenchRow>
-    var refCmd = ""
-    if (!empty(cfg.ref)) {
-        let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
-        refCmd = "\"{cfg.ref}\" -m \"{cfg.model}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
-        say(fmt, "ref: {refCmd}\n")
-        if (!run_llama_bench(refCmd, refRows)) {
-            say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
+        // the reference runs AFTER our model is freed — one model in memory at a time
+        var refRows : array<LlamaBenchRow>
+        var refCmd = ""
+        if (!empty(cfg.ref)) {
+            let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
+            refCmd = "\"{cfg.ref}\" -m \"{mpath}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
+            say(fmt, "ref: {refCmd}\n")
+            if (!run_llama_bench(refCmd, refRows)) {
+                say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
+            }
+            for (rr in refRows) {
+                let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
+                say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+            }
         }
-        for (rr in refRows) {
-            let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
-            say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+        if (fmt == OutFmt.txt) {
+            delete results
+            delete refRows
+            continue
         }
-    }
-    if (fmt == OutFmt.txt) {
-        return
-    }
-    let backend = gpu ? "metal" : "cpu"
-    let gguf = base_name(cfg.model)
-    if (fmt == OutFmt.md) {
-        let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
-        let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
-        var rows : array<array<string>>
-        rows |> reserve(length(results) + length(refRows))
-        for (st in results) {
-            var row <- ["das", gguf, backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
-            rows |> emplace(row)
+        let backend = gpu ? "metal" : "cpu"
+        let gguf = base_name(mpath)
+        if (fmt == OutFmt.md) {
+            for (st in results) {
+                var row <- ["das", gguf, backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            for (rr in refRows) {
+                let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
+                let sd = rr.stddev_ts
+                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            delete results
+            delete refRows
+            continue
         }
-        for (rr in refRows) {
-            let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
-            let sd = rr.stddev_ts
-            var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
-            rows |> emplace(row)
-        }
-        print(render_md_table(headers, aligns, rows))
-        return
-    }
-    // -o json: the public bench records — one BenchModel, das run + optional llama.cpp sibling
+    // -o json: the public bench records — one BenchModel per gguf, das run + optional llama.cpp sibling
     let hw = gather_hardware()
     let date = format_time(get_clock(), "%Y-%m-%d")
     let box = box_name()
@@ -342,7 +347,7 @@ def main() {
         arch = modelArch,
         quant = quant_str(cfg.quant),
         active_b = activeB,
-        size_bytes = int64(stat(cfg.model).size))
+        size_bytes = int64(stat(mpath).size))
     if (!empty(refRows)) {
         m.params_b = double(refRows[0].model_n_params) / 1.0e9lf
     }
@@ -380,9 +385,21 @@ def main() {
         }
         m.runs |> emplace(rr)
     }
-    var models : array<BenchModel>
-    models |> emplace(m)
-    let text = sprint_json(models, true)
+    jsonModels |> emplace(m)
+    delete results
+    delete refRows
+    }   // model loop
+    }   // with_job_que
+    if (fmt == OutFmt.md) {
+        let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
+        let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
+        print(render_md_table(headers, aligns, mdRows))
+        return
+    }
+    if (fmt != OutFmt.json) {
+        return
+    }
+    let text = sprint_json(jsonModels, true)
     if (!empty(cfg.json_path)) {
         var wrote = false
         fopen(cfg.json_path, "wb") $(f) {
