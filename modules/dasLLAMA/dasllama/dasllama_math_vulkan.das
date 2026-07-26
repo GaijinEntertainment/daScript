@@ -3380,6 +3380,15 @@ let private FFN_META_BYTES = 64l           // act/requant params (element count,
                                            // + the combine's [n, k, r0, r1] at words 4..7
 let private COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid entries x 4B)
 let private CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
+var private g_coopmat_mode_force = -1
+
+//! Test hook: pin the GEMM mode (0 sdot4 / 1 f16 / 2 int8 / 3 mm) ahead of the mm default and
+//! DASLLAMA_COOPMAT — must run before the tier's lazy device init. The CPU-reference tier tests
+//! pin 0 so their oracles stay reference-kernel-deterministic under any router default.
+def vk_force_coopmat_mode(m : int) {
+    g_coopmat_mode_force = m
+}
+
 let private STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — used only when
                                              // the loader never reported the model's exact need
                                              // (moe_gpu_stream_need; big-expert geometries like
@@ -3908,16 +3917,22 @@ def private vk_moe_init : bool {
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
-    g_gpu.coopmat_mode = 0
+    // fastest-supported default (mm); DASLLAMA_COOPMAT overrides, "sdot4" pins the int-dot fallback
+    g_gpu.coopmat_mode = g_gpu.has_coopmat ? 3 : 0
     if (g_gpu.has_coopmat) {
         let mode = get_env_variable("DASLLAMA_COOPMAT")
-        if (mode == "f16") {
+        if (mode == "sdot4") {
+            g_gpu.coopmat_mode = 0
+        } elif (mode == "f16") {
             g_gpu.coopmat_mode = 1
         } elif (mode == "int8") {
             g_gpu.coopmat_mode = 2
         } elif (mode == "mm") {
             g_gpu.coopmat_mode = 3
         }
+    }
+    if (g_coopmat_mode_force >= 0) {
+        g_gpu.coopmat_mode = g_gpu.has_coopmat ? g_coopmat_mode_force : 0
     }
     if (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam)
