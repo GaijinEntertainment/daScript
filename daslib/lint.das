@@ -399,7 +399,8 @@ class LintVisitor : AstVisitor {
         if (fname == "capacity" && (bt == Type.tArray || bt == Type.tTable)) return "long_capacity"
         if (fname == "count" && (bt == Type.tArray || bt == Type.tIterator)) return "long_count"
         if (fname == "find_index" && bt == Type.tArray && nargs == 2) return "long_find_index"
-        if ((fname == "fread" || fname == "fwrite") && nargs == 2) return "long_{fname}"
+        // fio's `file` is a pointer-to-handle; the type gate keeps a user-defined 2-arg fread/fwrite from being told to call a long_ twin that does not exist.
+        if ((fname == "fread" || fname == "fwrite") && bt == Type.tPointer && nargs == 2) return "long_{fname}"
         return ""
     }
 
