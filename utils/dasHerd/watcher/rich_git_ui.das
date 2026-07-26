@@ -196,6 +196,7 @@ def draw_repositories_window() {
                 // overlay draws MAIN / slash-tinted branch / amber dirty in
                 // the shared token palette (notes 18/20).
                 let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
+                WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 var row_clicked = false
                 with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
                     row_clicked = selectable(WORKTREE_ROW[row], (text = row_label))
@@ -212,7 +213,6 @@ def draw_repositories_window() {
                     GIT_CHANGELIST_WIN.pending_raise = true
                     GIT_ACTIVITY_WIN.open = true
                 }
-                WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 {
                     let row_min = GetItemRectMin()
                     let row_max = GetItemRectMax()

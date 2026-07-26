@@ -40,6 +40,9 @@ struct private ProjectNode {
     // A nested git repository (git lists it as one "dir/" entry) — its
     // contents are invisible to this repository's file listing.
     external : bool
+    // Portal listing already ran; empty children can't stand in for this
+    // (an empty dir would re-run dir() every frame while expanded).
+    populated : bool
     stat_size : int64
     stat_mtime : int64
     children : array<int>
@@ -313,6 +316,7 @@ def private draw_project_row(var row : int&; node_index, depth : int) : bool {
 // its contents. Folder children stay external so the portal recurses; .git
 // stays out of the tree.
 def private populate_external_folder(node_index : int) {
+    g_project_nodes[node_index].populated = true
     var inscope names : array<string>
     names |> reserve(32)
     {
@@ -343,7 +347,7 @@ def private populate_external_folder(node_index : int) {
     g_project_nodes[node_index].children <- order
     // Aggregate the discovered stats up the ancestor chain and re-sort each
     // level, so Largest/Newest order the portal by its real contents. Runs
-    // once per portal level (populate only fires on empty children).
+    // once per portal level (the populated flag gates re-entry).
     var added_size = 0l
     var newest = 0l
     for (child in g_project_nodes[node_index].children) {
@@ -392,7 +396,7 @@ def private draw_project_tree() {
         }
         if (is_folder && expanded) {
             if (g_project_nodes[node_index].external
-                    && empty(g_project_nodes[node_index].children)) {
+                    && !g_project_nodes[node_index].populated) {
                 populate_external_folder(node_index)
             }
             let children & = unsafe(g_project_nodes[node_index].children)

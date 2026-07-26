@@ -491,6 +491,20 @@ def update() {
                 g_session_output_seen[session.id] = session.output_bytes
             }
         }
+        // Sessions the watcher pruned leave orphaned entries behind forever
+        // otherwise (the tables only ever gain keys above).
+        if (length(g_session_output_seen) > length(g_client.sessions)) {
+            var inscope live_ids : table<string>
+            for (session in g_client.sessions) {
+                live_ids |> insert(session.id)
+            }
+            var inscope stale <- [for (id in keys(g_session_output_seen));
+                clone_string(id); where !key_exists(live_ids, id)]
+            for (id in stale) {
+                g_session_output_seen |> erase(id)
+                g_session_output_wall |> erase(id)
+            }
+        }
     }
     if (g_submit_stamp != 0l
             && get_time_nsec(g_submit_stamp) / 1000000l >= 200l) {
@@ -500,6 +514,23 @@ def update() {
         }
         g_submit_stamp = 0l
         g_submit_session = ""
+    }
+    // Feed queued says only once the pending Enter has flushed; an item for a
+    // session we no longer control is dropped (same rule as the \r above).
+    while (g_submit_stamp == 0l && !empty(g_input_queue)) {
+        let item = g_input_queue[0]
+        g_input_queue |> erase(0)
+        if (g_client == null || !g_client.controls
+                || g_client.selected_id != item.session) continue
+        if (!empty(item.text)) {
+            g_client->send_input(item.text)
+        }
+        if (item.submit) {
+            // Even a lone queued submit re-arms the paste window — its \r must
+            // stay clear of whatever text drained just before it.
+            g_submit_stamp = ref_time_ticks()
+            g_submit_session = item.session
+        }
     }
     if (!harness_begin_frame()) return
     service_sha_copy()

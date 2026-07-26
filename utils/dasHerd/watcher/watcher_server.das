@@ -261,6 +261,24 @@ def private query_value(url, key : string) : string {
     return ""
 }
 
+def private query_value_raw(url, key : string) : string {
+    let query = find(url, "?")
+    if (query < 0) return ""
+    let wanted = key + "="
+    let url_length = length(url)
+    var position = query + 1
+    while (position < url_length) {
+        let amp = find(url, "&", position)
+        let end = amp < 0 ? url_length : amp
+        if (starts_with(slice(url, position, end), wanted)) {
+            return slice(url, position + length(wanted), end)
+        }
+        if (amp < 0) break
+        position = amp + 1
+    }
+    return ""
+}
+
 class DasHerdWatcherServer : HvWebServer {
     token : string
     agent_url : string
@@ -278,7 +296,13 @@ class DasHerdWatcherServer : HvWebServer {
     next_client_id : int
 
     def authorized(url : string) : bool {
-        return !empty(token) && query_value(url, "token") == token
+        if (empty(token)) return false
+        // The browser panel sends the token percent-ENCODED (URLSearchParams
+        // decodes, encodeURIComponent re-encodes); the native clients and the
+        // printed control URL splice it RAW. A token containing '%' or '+'
+        // satisfies only one spelling — accept both interpretations.
+        return (query_value(url, "token") == token
+            || query_value_raw(url, "token") == token)
     }
 
     def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status {

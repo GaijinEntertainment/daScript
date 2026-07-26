@@ -499,6 +499,16 @@ def settings_load() {
 var g_submit_stamp : int64
 var g_submit_session : string
 
+// Say requests that arrive while an Enter is still pending: sending their text
+// immediately would merge it into the prior paste and garble both commands, so
+// they wait here until the frame loop flushes the pending \r.
+struct PendingSay {
+    text : string
+    submit : bool
+    session : string
+}
+var g_input_queue : array<PendingSay>
+
 // Real-input forensics: per-frame counters of wheel/click events that reached
 // ImGui IO. With user control locked these must stay flat — a moving counter
 // is a leak through the lock (note 38).

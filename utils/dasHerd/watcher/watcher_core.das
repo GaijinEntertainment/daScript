@@ -986,6 +986,12 @@ def private ensure_git_exclude(worktree_path, pattern : string;
 // launch. A hand-written file without our marker is never touched.
 def private ensure_agent_local_instructions(request : WatcherLaunchRequest const;
                                             var detail : string&) {
+    // A launch without a cwd would resolve the drop into the WATCHER's own
+    // working directory — skip rather than litter it.
+    if (empty(request.cwd)) {
+        detail += "; local_md=skipped_no_cwd"
+        return
+    }
     let local_path = path_join(request.cwd, "CLAUDE.local.md")
     let existing = fexist(local_path) ? fread(local_path) : ""
     if (!empty(existing) && find(existing, DASHERD_LOCAL_MARKER) < 0) {
