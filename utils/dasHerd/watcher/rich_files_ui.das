@@ -314,6 +314,7 @@ def private draw_project_row(var row : int&; node_index, depth : int) : bool {
 // stays out of the tree.
 def private populate_external_folder(node_index : int) {
     var inscope names : array<string>
+    names |> reserve(32)
     {
         let full = path_join(g_selected_worktree_path,
             g_project_nodes[node_index].path)
@@ -323,6 +324,7 @@ def private populate_external_folder(node_index : int) {
             }
         }
     }
+    g_project_nodes[node_index].children |> reserve(length(names))
     for (name in names) {
         let child_path = "{g_project_nodes[node_index].path}/{name}"
         let st = stat(path_join(g_selected_worktree_path, child_path))

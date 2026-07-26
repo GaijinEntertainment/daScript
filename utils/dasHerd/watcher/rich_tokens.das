@@ -5,8 +5,6 @@ options no_unused_function_arguments = false
 
 module rich_tokens
 
-require imgui/imgui_harness
-
 //! The token color language (note 20): one color per token TYPE, shared by
 //! every surface. A SHA is the same blue in the PR table, the History table,
 //! the changelist header, and a card; a path renders dir/sep/name in the same

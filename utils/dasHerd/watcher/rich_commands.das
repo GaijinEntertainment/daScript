@@ -9,7 +9,6 @@ require imgui/imgui_harness
 require imgui/imgui_commands public
 require daslib/enum_trait
 require daslib/strings_boost
-require strings
 require ./rich_state.das
 
 //! dasHerd's named-command layer (note 23) over imgui/imgui_commands: one
