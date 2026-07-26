@@ -369,10 +369,18 @@ imgui_mouse_* bypass commands while input is detached.
   modules/dasVulkan): git lists a nested repo as one "dir/" entry.
   FIXED same day: the entry builds a folder chain tagged "(repo)"
   instead of a phantom empty-named file row that opened the directory
-  as a file. OPEN follow-up: their CONTENTS stay invisible to the
-  repository-scoped listing — options are a filesystem-based listing
-  or treating a registered nested repo as a portal into its own
-  worktree's Project view.
+  as a file. PORTAL DONE (2026-07-25): expanding a "(repo)" folder
+  lazily lists the FILESYSTEM (skipping .git), children recurse as
+  portals, hidden tier applies, only the portal root carries the tag,
+  and children sort with the active mode. Verified live: dasVulkan in
+  MAIN expands to .github/_build/cmake/daslib/doc/examples/generator —
+  contents no git listing can see. LIMITATION: a GITIGNORED nested
+  repo (modules/dasImgui inside worktrees, .gitignore:108) produces
+  no status entry at all, so no portal root exists — discovery for
+  those needs registered-repository synthesis (planned with the
+  portal-into-own-Project-view follow-up). Opening a portal file in
+  the inspector still goes through the parent repo's git plumbing and
+  may error — acceptable until nested repos register as repositories.
 - DONE 9 auto-aim policy (2026-07-25): g_selection_explicit tracks
   whether the selection came from a deliberate pick (worktree row
   click, focus-target navigation, herder_git_select_worktree) vs a

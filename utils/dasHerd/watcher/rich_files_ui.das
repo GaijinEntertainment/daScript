@@ -241,7 +241,10 @@ def private decorate_project_row(node : ProjectNode const;
         let name_text = node.name + (node.is_folder ? "/" : "")
         dl |> add_text(name_position, project_name_color(node), name_text)
         var marker_x = name_position.x + CalcTextSize(name_text).x + 4.0f
-        if (node.external) {
+        // Tag only a portal ROOT — every folder inside stays external for
+        // recursive listing, but repeating the tag would be noise.
+        if (node.external && node.parent >= 0
+                && !g_project_nodes[node.parent].external) {
             let repo_tag = "(repo)"
             dl |> add_text(float2(marker_x, name_position.y),
                 GetColorU32(ImGuiCol.TextDisabled), repo_tag)
@@ -305,6 +308,39 @@ def private draw_project_row(var row : int&; node_index, depth : int) : bool {
     return clicked
 }
 
+// Note 37: a nested repository is one opaque "dir/" entry in the parent's
+// listing. Expanding it lists the filesystem directly — a local portal into
+// its contents. Folder children stay external so the portal recurses; .git
+// stays out of the tree.
+def private populate_external_folder(node_index : int) {
+    var inscope names : array<string>
+    {
+        let full = path_join(g_selected_worktree_path,
+            g_project_nodes[node_index].path)
+        dir(full) $(name) {
+            if (name != "." && name != ".." && name != ".git") {
+                names |> push(clone_string(name))
+            }
+        }
+    }
+    for (name in names) {
+        let child_path = "{g_project_nodes[node_index].path}/{name}"
+        let st = stat(path_join(g_selected_worktree_path, child_path))
+        let is_dir = st.is_valid && st.is_dir
+        let child_index = length(g_project_nodes)
+        g_project_nodes |> emplace(ProjectNode(name = name, path = child_path,
+            parent = node_index, is_folder = is_dir,
+            hidden = starts_with(name, "."), external = is_dir,
+            stat_size = (st.is_valid && !is_dir ? int64(st.size) : 0l),
+            stat_mtime = (st.is_valid ? int64(st.mtime) : 0l)))
+        g_project_index[child_path] = child_index
+        g_project_nodes[node_index].children |> push(child_index)
+    }
+    var order := g_project_nodes[node_index].children
+    sort(order) $(a, b) => project_child_before(a, b)
+    g_project_nodes[node_index].children <- order
+}
+
 def private draw_project_tree() {
     var row = 0
     // Explicit stack: (node, depth) pairs, children pushed in reverse so the
@@ -332,6 +368,10 @@ def private draw_project_tree() {
             }
         }
         if (is_folder && expanded) {
+            if (g_project_nodes[node_index].external
+                    && empty(g_project_nodes[node_index].children)) {
+                populate_external_folder(node_index)
+            }
             let children & = unsafe(g_project_nodes[node_index].children)
             for (index in range(length(children))) {
                 stack |> push(children[length(children) - 1 - index] => depth + 1)
