@@ -442,3 +442,101 @@ def public coopmatLoad(var dst : coopmatB_s8_32x16; src; idx : int | uint; strid
 def public coopmatStore(mat : coopmatAcc_s32_16x16; dst; idx, stride, layout : int) : void {}
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopmatAcc_s32_16x16) : coopmatAcc_s32_16x16 { return c }
+
+// ===== cooperative matrices v2 (SPV_NV_cooperative_matrix2 — tensor addressing, workgroup scope) =====
+// A cm2 tile is WORKGROUP-scoped (the whole workgroup owns one MxN tile; the driver manages staging)
+// and is addressed through tensor LAYOUT objects (dims + strides + a per-load slice window + an
+// optional q8-style block size) instead of a flat (idx, stride) pair. The wg markers are name-parsed:
+// coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C} — declare a new struct here and coopmat_info picks it up.
+struct coopmatWgA_f16_64x16 {}
+struct coopmatWgB_f16_16x16 {}
+struct coopmatWgB_f16_16x32 {}
+struct coopmatWgB_f16_16x64 {}
+struct coopmatWgAcc_f16_64x16 {}
+struct coopmatWgAcc_f16_64x32 {}
+struct coopmatWgAcc_f16_64x64 {}
+struct coopmatWgAcc_f32_64x16 {}
+struct coopmatWgAcc_f32_64x32 {}
+struct coopmatWgAcc_f32_64x64 {}
+// the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
+struct coopmatWgA_s8_64x32 {}
+struct coopmatWgB_s8_32x16 {}
+struct coopmatWgB_s8_32x32 {}
+struct coopmatWgB_s8_32x64 {}
+struct coopmatWgAcc_s32_64x16 {}
+struct coopmatWgAcc_s32_64x32 {}
+struct coopmatWgAcc_s32_64x64 {}
+
+// wg-scope MulAdd twins (the emitter arm is shape-agnostic; these type the das call)
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f16_64x16) : coopmatWgAcc_f16_64x16 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f16_64x32) : coopmatWgAcc_f16_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f32_64x16) : coopmatWgAcc_f32_64x16 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x32; c : coopmatWgAcc_s32_64x32) : coopmatWgAcc_s32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x64; c : coopmatWgAcc_s32_64x64) : coopmatWgAcc_s32_64x64 { return c }
+
+// Tensor layout objects (Function-storage locals, like coopmat tiles). tensorLayout2D = clamp
+// Undefined (the aligned fast path: every slice window must be fully in-bounds); tensorLayout2DPad =
+// clamp Constant (out-of-bounds reads yield 0 — the guarded/edge path, llama.cpp's general arm).
+struct tensorLayout2D {}
+struct tensorLayout2DPad {}
+// Tensor view objects: element permutation applied at load/store. tensorView2Dt = (1,0) TRANSPOSE
+// (a KxN B-tile loading from an NxK-major panel); tensorView2D = (0,1) identity.
+struct tensorView2D {}
+struct tensorView2Dt {}
+
+// The layout/view params are untyped (the emitter reads the LOCAL structurally and validates the
+// marker type); dims/strides/offsets are uint <id> operands. Each setter reads the layout local,
+// applies the op, and stores the new value back — author them as plain sequential statements.
+[unused_argument(tl), sideeffects]
+def public tensorLayoutCreate(var tl) : void {}
+[unused_argument(tl, d0, d1), sideeffects]
+def public tensorLayoutSetDimension(var tl; d0, d1 : uint) : void {}
+[unused_argument(tl, s0, s1), sideeffects]
+def public tensorLayoutSetStride(var tl; s0, s1 : uint) : void {}
+[unused_argument(tl, b0, b1), sideeffects]
+def public tensorLayoutSetBlockSize(var tl; b0, b1 : uint) : void {}
+[unused_argument(tv), sideeffects]
+def public tensorViewCreate(var tv) : void {}
+
+// coopmatLoadTensor(dst, src, base, tl, r0, nr, c0, nc [, tv]): slice the (r0, nr, c0, nc) window off
+// layout `tl` (OpTensorLayoutSliceNV — the base layout local is NOT modified; slicing per K-tile IS
+// the loop), then OpCooperativeMatrixLoadTensorNV from &src[base]. `src` is an @ssbo global; `base`
+// an element index. The optional trailing view permutes (transposed B panels). The DECODE form takes
+// `@@fn` of a [spirv_decode] function as its last argument: src elements are then opaque BLOCKS
+// (e.g. gguf q8_0 {f16 d; u16 qs[16]}) decoded in-load — pair it with tensorLayoutSetBlockSize.
+[unused_argument(dst, src, base, tl, r0, nr, c0, nc), sideeffects]
+def public coopmatLoadTensor(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint) : void {}
+[unused_argument(dst, src, base, tl, r0, nr, c0, nc, tv), sideeffects]
+def public coopmatLoadTensor(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint; var tv) : void {}
+[unused_argument(dst, src, base, tl, r0, nr, c0, nc, decode), sideeffects]
+def public coopmatLoadTensorDecode(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint; decode) : void {}
+[unused_argument(mat, dst, base, tl, r0, nr, c0, nc), sideeffects]
+def public coopmatStoreTensor(mat; var dst; base : int | uint; var tl; r0, nr, c0, nc : uint) : void {}
+[unused_argument(mat, dst, base, tl, r0, nr, c0, nc, tv), sideeffects]
+def public coopmatStoreTensor(mat; var dst; base : int | uint; var tl; r0, nr, c0, nc : uint; var tv) : void {}
+
+// Per-element clamp of a float accumulator tile to [lo, hi] — the f16-accumulate overflow guard
+// (llama.cpp clamps to ±65504 after the K loop). Emits the whole Length/AccessChain/FClamp loop.
+[unused_argument(mat, lo, hi), sideeffects]
+def public coopmatClamp(var mat; lo, hi : float) : void {}
+
+// wg-scope f16 -> f32 accumulator widening (whole-tile OpFConvert, same arm as the subgroup form)
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x16; src : coopmatWgAcc_f16_64x16) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x32; src : coopmatWgAcc_f16_64x32) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f16_64x64) : void {}

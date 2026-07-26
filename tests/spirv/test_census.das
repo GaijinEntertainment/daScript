@@ -101,7 +101,8 @@ def test_opcode_census(t : T?) {
         add_set(present, coopmat_words())
         add_set(present, coopmat_i8_words())
         add_set(present, coopmat_sm_words())
-        var declared <- coopmat_emitter_opcodes()
+        add_set(present, coopmat2_words())
+        var declared <- coopmat2_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }
