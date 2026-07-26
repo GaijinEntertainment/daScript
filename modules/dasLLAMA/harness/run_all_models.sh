@@ -37,8 +37,8 @@ MODELS_LIST=(
 
 das_bench() { # $1 = model path -> "pp512 tg64" means (lcpp_bench self-reps, llama-bench protocol)
   out=$(DAS_JOBQUE_THREADS="$CORES" "$DAS" -jit "$BENCH" -- -m "$1" -p 512 -n 64 -r "$REPS" -t "$CORES" 2>/dev/null)
-  pp=$(echo "$out" | grep -oE 'pp512: [0-9.]+' | grep -oE '[0-9.]+' | head -1)
-  tg=$(echo "$out" | grep -oE 'tg64: [0-9.]+' | grep -oE '[0-9.]+' | head -1)
+  pp=$(echo "$out" | grep -oE 'pp512: [0-9.]+' | head -1 | cut -d' ' -f2)
+  tg=$(echo "$out" | grep -oE 'tg64: [0-9.]+' | head -1 | cut -d' ' -f2)
   echo "${pp:-ERR} ${tg:-ERR}"
 }
 
