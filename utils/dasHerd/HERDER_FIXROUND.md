@@ -449,3 +449,28 @@ the UI currently substitutes text or a wrong-shaped glyph):
 No intermediate PR — no users yet. The whole fix round (Waves 0-4)
 lands on this branch, then one PR for historical record, then the big
 review happens on that PR.
+
+## Review round (2026-07-25, post-merge of PR #3567)
+
+Full-tree review: personal pass on watcher core/server/net + 3 agent
+passes (git/inspector/files UI, sessions/launcher/terminal, C++/glue).
+9 verified defects fixed in commits 872fe420d + c6e285d74 (token
+dual-spelling auth, empty-cwd guard, worktree-row highlight, portal
+re-list, say-queue garbling, output-age table growth, glfw chain
+dispatch UAF, daslang-live is_reload, CMake stale-module sweep
+deleting standalone-module artifacts).
+
+Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
+- token in child command line: fix is env-block support in dasTerminal
+  spawn (pass DASHERD_* via CreateProcess lpEnvironment instead of a
+  powershell -Command prefix). Harden later, way later.
+- lease heartbeat starvation under multi-second frame stalls (client
+  pumps ~1s, server timeout 5s) — observation, no repro.
+- diff BEFORE/AFTER one-frame scroll desync when the AFTER pane drives
+  the wheel — cosmetic, inherent child draw order.
+- ImGui Install/RestoreCallbacks vs chain prev caches can strand a das
+  glfw_chain_add_* listener after mute/unmute — latent, zero in-tree
+  callers; touching the interleave risks regressing note 38.
+- mcp_supervisor.py cannot answer ping while a tool call blocks
+  (single-threaded stdin loop); mcp_main.das query values not
+  URL-encoded (watcher-generated ids/tokens are URL-safe).
