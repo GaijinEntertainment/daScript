@@ -3531,7 +3531,9 @@ class SpirvEmit : AstVisitor {
                 e2ptr[k] = res
                 e2pty[k] = pointee
                 if (storage == SpvStorageClass.PhysicalStorageBuffer && scalar_class(result_expr._type.baseType) >= 0) {
-                    e2align[k] = uint(block_scalar_size(result_expr._type.baseType))
+                    // the Aligned literal must be a POWER OF TWO — the std430 alignment, not the size
+                    // (a 3-lane vector's size is 6/12, its alignment 8/16)
+                    e2align[k] = uint(block_scalar_align(result_expr._type.baseType, BlockLayoutRules.std430))
                 }
                 return
             }
@@ -3998,7 +4000,8 @@ class SpirvEmit : AstVisitor {
                 e2ptr[k] = res
                 e2pty[k] = pointee
                 if (storage == SpvStorageClass.PhysicalStorageBuffer && scalar_class(expr._type.baseType) >= 0) {
-                    e2align[k] = uint(block_scalar_size(expr._type.baseType))
+                    // power-of-two Aligned literal — std430 alignment, not size (see the ExprAt twin)
+                    e2align[k] = uint(block_scalar_align(expr._type.baseType, BlockLayoutRules.std430))
                 }
                 return expr
             }
