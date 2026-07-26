@@ -10,6 +10,16 @@
 
 using namespace das;
 
+// BLASSetThreading/BLASGetThreading exist only in the macOS 15 / iOS 18 SDK headers — the
+// __builtin_available checks below gate RUNTIME, but an older SDK fails at COMPILE time
+// (undeclared identifier on the macOS 14 CI images), so the call sites need this guard too.
+#if (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000) || \
+    (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000)
+    #define DAS_ACCEL_HAS_BLAS_THREADING 1
+#else
+    #define DAS_ACCEL_HAS_BLAS_THREADING 0
+#endif
+
 // Accelerate's internal pool starves against the spinning jobque (~50ms/call), and its threading
 // model is PER-THREAD state (thread_api.h: "saved in a thread local variable") — so the pin must
 // happen on every calling lane, not at init. Callers parallelize by strip-dispatching over the
@@ -18,9 +28,11 @@ static thread_local bool t_blas_pinned = false;
 static inline void accel_pin_single_thread() {
     if (t_blas_pinned) return;
     t_blas_pinned = true;
+#if DAS_ACCEL_HAS_BLAS_THREADING
     if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, *)) {
         BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
     }
+#endif
 }
 
 // C[m x n] = A[m x k] * B[n x k]^T, row-major — the exact call shape ggml-blas.cpp uses for
@@ -89,9 +101,11 @@ static int32_t accel_bnns_hgemm_nt(int32_t m, int32_t n, int32_t k,
 // -1 = BLASSetThreading unavailable (pre-macOS-15). Diagnostics for the contention rig.
 static int32_t accel_threading_mode() {
     accel_pin_single_thread();
+#if DAS_ACCEL_HAS_BLAS_THREADING
     if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, *)) {
         return (int32_t)BLASGetThreading();
     }
+#endif
     return -1;
 }
 
