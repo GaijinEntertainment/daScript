@@ -493,6 +493,17 @@ Issue intake (live rig, numbering continues):
   vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
   edge). Looks like a stale/displaced grid column surviving the
   attach-time resize, un-clipped; fades as output overwrites
+- 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
+  ("its not ok to kill my terminal session"). Today PTYs are ConPTY
+  children of the watcher and die with it; needs a per-session broker
+  process that owns the ConPTY and outlives the watcher (tmux-server
+  model), with restart = re-discover + re-attach. Operationally until
+  then: the watcher only restarts when no agent session is running or
+  Boris explicitly says go
+- 49: default layout — Git Changelist docks bottom-right as its own pane
+  under the Git Activity + File Inspector tab stack (per Boris's live
+  arrangement, captured in boris_changelist_dock.png); update
+  setup_layout_preset so dock reset / fresh install lands there
 - 48: Project tab says "Select a worktree to browse its files" while a
   session is attached and selected. Rule: selecting or creating a session
   selects its primary worktree (a session pick IS a deliberate worktree
