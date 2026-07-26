@@ -4,9 +4,9 @@
 #   run_all_models.sh <cores> [reps]
 #
 # <cores> maps to BOTH sides apples-to-apples: DAS_JOBQUE_THREADS=<cores> (post-fix = <cores>-1
-# workers + the computing main == <cores> lanes) and llama-bench -t <cores>. dasLLAMA's per-N
-# single-shot is noisy, so each dasLLAMA number is the BEST of <reps> (default 3); llama-bench
-# self-averages. Prints a per-model line as it goes, then a summary table.
+# workers + the computing main == <cores> lanes) and llama-bench -t <cores>. Both sides run the
+# llama-bench protocol with <reps> timed repetitions (default 3): the das side is
+# benchmarks/lcpp_bench.das, the one bench. Prints a per-model line as it goes, then a summary.
 #
 # Config via env (no box-specific defaults):
 #   DASLLAMA_MODELS_DIR  (REQUIRED)  directory holding the .gguf models
@@ -20,8 +20,7 @@ ROOT="${DASLLAMA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 DAS="${DASLANG:-$ROOT/bin/Release/daslang.exe}"
 MODELS="${DASLLAMA_MODELS_DIR:?set DASLLAMA_MODELS_DIR to the directory holding the .gguf models}"
 LBENCH="${LLAMA_BENCH:-$(command -v llama-bench 2>/dev/null || echo llama-bench)}"
-PREFILL="$ROOT/modules/dasLLAMA/benchmarks/prefill_perf.das"
-DECODE="$ROOT/modules/dasLLAMA/benchmarks/llama3_perf.das"
+BENCH="$ROOT/modules/dasLLAMA/benchmarks/lcpp_bench.das"
 
 # display-name | gguf filename (Q8_0 dense, mxfp4 for gpt-oss)
 MODELS_LIST=(
@@ -36,28 +35,20 @@ MODELS_LIST=(
   "gpt-oss-20b|gpt-oss-20b-mxfp4.gguf"
 )
 
-best() { awk 'BEGIN{m=0}{if($1+0>m)m=$1+0}END{if(m>0)printf "%.1f",m; else printf "ERR"}'; }
-
-das_prefill() { # $1 = model path -> best pp512 t/s over REPS
-  for _ in $(seq 1 "$REPS"); do
-    DAS_JOBQUE_THREADS="$CORES" "$DAS" -jit "$PREFILL" -- "$1" 2>/dev/null \
-      | grep 'N=512:' | grep -oE 'prefill [0-9]+us [0-9.]+ tok/s' | grep -oE '[0-9.]+ tok/s' | grep -oE '^[0-9.]+'
-  done | best
-}
-das_decode() { # $1 = model path -> best gen t/s over REPS
-  for _ in $(seq 1 "$REPS"); do
-    DAS_JOBQUE_THREADS="$CORES" "$DAS" -jit "$DECODE" -- "$1" 2>/dev/null \
-      | grep -oE '\-> [0-9.]+ tok/s' | grep -oE '[0-9.]+'
-  done | best
+das_bench() { # $1 = model path -> "pp512 tg64" means (lcpp_bench self-reps, llama-bench protocol)
+  out=$(DAS_JOBQUE_THREADS="$CORES" "$DAS" -jit "$BENCH" -- -m "$1" -p 512 -n 64 -r "$REPS" -t "$CORES" 2>/dev/null)
+  pp=$(echo "$out" | grep -oE 'pp512: [0-9.]+' | head -1 | cut -d' ' -f2)
+  tg=$(echo "$out" | grep -oE 'tg64: [0-9.]+' | head -1 | cut -d' ' -f2)
+  echo "${pp:-ERR} ${tg:-ERR}"
 }
 
-echo "=== dasLLAMA vs llama.cpp @ ${CORES} cores (best-of-${REPS} dasLLAMA, llama-bench -t ${CORES}) ==="
+echo "=== dasLLAMA vs llama.cpp @ ${CORES} cores (${REPS} reps both sides, llama-bench protocol) ==="
 ROWS=""
 for entry in "${MODELS_LIST[@]}"; do
   name="${entry%%|*}"; file="${entry#*|}"; path="$MODELS/$file"
   if [ ! -f "$path" ]; then echo "  [skip] $name ($file not found)"; continue; fi
-  dpp=$(das_prefill "$path"); dtg=$(das_decode "$path")
-  lb=$("$LBENCH" -m "$path" -t "$CORES" -p 512 -n 64 2>/dev/null)
+  read -r dpp dtg <<< "$(das_bench "$path")"
+  lb=$("$LBENCH" -m "$path" -t "$CORES" -p 512 -n 64 -r "$REPS" 2>/dev/null)
   lpp=$(echo "$lb" | awk -F'|' '/pp512/{split($8,a,"±");gsub(/ /,"",a[1]);print a[1]}')
   ltg=$(echo "$lb" | awk -F'|' '/tg64/{split($8,a,"±");gsub(/ /,"",a[1]);print a[1]}')
   [ -z "$lpp" ] && lpp="ERR"; [ -z "$ltg" ] && ltg="ERR"

@@ -989,7 +989,7 @@ fresh commit off origin/master, delete the old remote branch) -> final clean rou
 87.1-87.3 t/s (clean Parsec-off round, best-of-3 process-fresh, ≥ lcpp Metal's 87.0).**
 Deep row: ctx 512 -> 640 at 80.4-80.7 t/s. Protocol: decode_prof, DASLLAMA_PIN_DECODE=metal +
 portable backend, wscale-f16 1, f16 KV, -p 8 -n 128. From P2's 69.9/46.3 baseline via the P3
-chase (attribution harness `benchmarks/decode_metal_chase.das`, knockout arms + per-stage
+chase (attribution harness `history/dasLLAMA/benchmarks/decode_metal_chase.das`, knockout arms + per-stage
 driver split): (1) coalesced simdgroup-cooperative attention scoring + hoisted q + 4-row-ILP V
 pass + 64-row chunked split-K above depth 64 (deep attention 7.5ms -> ~0.8ms/token); (2) layer
 dispatch set 15 -> 7 levels: concat-region fused QKV and W1|W3 GEMVs, then 2-ROWS-PER-SIMDGROUP
