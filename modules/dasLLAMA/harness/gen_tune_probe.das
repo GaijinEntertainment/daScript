@@ -766,8 +766,18 @@ def close_to_q51_ref(fx : Q51Fixture; y : array<float>; mr : int64; var maxdiff 
     return ok
 }
 
-// reference walks the layout companion's resolve (grp1/disk in the tuner process)
-def private q51_mr_of(sfx : string) : int64 => sfx == "mr8" ? 8l : (sfx == "mr4" ? 4l : int64(q51q8_layout_gen()))
+// per-variant plane interleave off the layout companion registry — declined perms report the
+// reference resolve (the lockstep rail). Trusting the SUFFIX instead repacks planes to a grp
+// the declined-to-reference kernel then walks at the companion mr — the zen2 maxdiff-120 trap.
+def private q51_layout_mrs() : table<string; int> {
+    var mrs : table<string; int>
+    var lvs <- q51q8_layout_gen_variants()
+    for (v in lvs) {
+        mrs[v._0] = invoke(v._1)
+    }
+    delete lvs
+    return <- mrs
+}
 
 // The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
@@ -775,6 +785,7 @@ def q51_tune_family() : string {
     var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
     var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
     var tvs <- q51q8_gemv_gen_variants()
+    var mrs <- q51_layout_mrs()
     var best = ""
     var bestDt = 2147483647
     var y : array<float>
@@ -782,7 +793,7 @@ def q51_tune_family() : string {
     var yh : array<float>
     yh |> resize(int(hfx.d))
     for (v in tvs) {
-        let mr = q51_mr_of(v._0)
+        let mr = int64(mrs?[v._0] ?? q51q8_layout_gen())
         var sq := sfx.qq
         var ss := sfx.qs
         var hq := hfx.qq
@@ -821,6 +832,7 @@ def q51_tune_family() : string {
     delete sfx
     delete hfx
     delete tvs
+    delete mrs
     delete y
     delete yh
     return best
