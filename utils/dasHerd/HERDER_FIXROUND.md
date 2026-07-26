@@ -286,6 +286,17 @@ widget already counted). Also learned: set_user_control(false)
 detaches the GLFW layer imgui_click itself injects through — use the
 imgui_mouse_* bypass commands while input is detached.
 
+39. (Boris, end of round) Opening a portal (nested-repo) file from the
+    Project view in sticky Diff mode shows a SILENT EMPTY inspector —
+    reads as stuck. Forensics (live, while stuck): the app was fine
+    (frames advancing); diff_row_count/old/new byte counts all 0 with
+    prepare_outcome "ready", status "" — the parent repo's git cannot
+    diff a nested-repo file, and nothing says so. The VIEW side had
+    prepared fine (13.7KB). Fix shape for the review round: portal
+    files force View mode (or the diff pane states "file belongs to a
+    nested repository — no diff against the parent") — pairs with the
+    registered-repo synthesis follow-up under note 37.
+
 ## Wave 3 — surface reworks (each needs a short design pass)
 
 - DONE 3+11+5 launcher (11/5 landed earlier; 3 on 2026-07-25): the
