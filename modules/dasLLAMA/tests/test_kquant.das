@@ -415,6 +415,70 @@ def private q51_batch_gate(t : T?) {
     }
 }
 
+// the grp<mr> q51 layout (the emitter family's plane): repack round-trip, the grp scalar walk,
+// the grp expand twins, and the untouched disk-order tail rows — all bit-exact vs disk
+def private q51_grp_gate(t : T?) {
+    let n = 704l
+    let nb = n / 32l
+    let d = 26l   // 3 grp8 (6 grp4) groups + a 2-row disk-order tail
+    var kq : array<uint8>
+    var ks : array<uint8>
+    q51_fill_planes(kq, ks, d, n)
+    var xq : array<int8>
+    var xs : array<float>
+    q51_fill_acts(xq, xs, 1l, n)
+    var xbs : array<int>
+    xbs |> resize(int(nb))
+    for (bi in range64(nb)) {
+        var s = 0
+        for (j in range64(32l)) {
+            s += int(xq[bi * 32l + j])
+        }
+        xbs[bi] = s
+    }
+    var yref : array<float>
+    yref |> resize(int(d))
+    unsafe {
+        for (r in range64(d)) {
+            yref[r] = dot_q51q8_scalar(addr(kq[0]) + r * nb * 20l, addr(ks[0]) + r * nb * 4l, addr(xq[0]), addr(xs[0]), n)
+        }
+        var qe : array<int8>
+        qe |> resize(int(n))
+        var qe2 : array<int8>
+        qe2 |> resize(int(n))
+        var sc : array<uint8>
+        sc |> resize(int(nb * 4l))
+        for (mr in fixed_array(4l, 8l)) {
+            var gq := kq
+            var gs := ks
+            repack_q51_grp(addr(gq[0]), addr(gs[0]), n, d, mr)
+            let grpRows = (d / mr) * mr
+            for (r in range64(d)) {
+                if (r < grpRows) {
+                    let gbase = (r / mr) * mr * nb
+                    let got = q51_grp_row_dot(addr(gq[0]) + gbase * 20l, addr(gs[0]) + gbase * 4l, r % mr, mr,
+                                              addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    t |> success(got == yref[r], "q51_grp_row_dot must bit-match the disk scalar dot")
+                    expand_q51_grp_row(addr(gq[0]) + gbase * 20l, r % mr, mr, addr(qe[0]), nb)
+                    gather_q51_grp_scales(addr(gs[0]) + gbase * 4l, r % mr, mr, addr(sc[0]), nb)
+                    expand_q51_row(addr(kq[0]) + r * nb * 20l, addr(qe2[0]), nb)
+                    let ge = dot_q51e(addr(qe[0]), addr(sc[0]), addr(xq[0]), addr(xs[0]), n)
+                    let de = dot_q51e(addr(qe2[0]), addr(ks[0]) + r * nb * 4l, addr(xq[0]), addr(xs[0]), n)
+                    t |> success(ge == de, "q51 grp expand twins must bit-match the disk expand")
+                } else {
+                    let got = dot_q51q8_scalar(addr(gq[0]) + r * nb * 20l, addr(gs[0]) + r * nb * 4l, addr(xq[0]), addr(xs[0]), n)
+                    t |> success(got == yref[r], "q51 grp tail rows must stay disk-order")
+                }
+            }
+            delete gq
+            delete gs
+        }
+        delete qe
+        delete qe2
+        delete sc
+    }
+}
+
 [test]
 def test_q51_kernels(t : T?) {
     t |> run("dot_q51q8_scalar matches the fp64 plane-dequant reference at n=704") @(t : T?) {
@@ -422,6 +486,9 @@ def test_q51_kernels(t : T?) {
     }
     t |> run("q51 groupn bit-matches scalar row dots") @(t : T?) {
         q51_groupn_gate(t)
+    }
+    t |> run("q51 grp<mr> planes bit-match disk (repack + grp walk + expand twins + tails)") @(t : T?) {
+        q51_grp_gate(t)
     }
     t |> run("q51 batch + batch-groupn bit-match scalar row dots") @(t : T?) {
         q51_batch_gate(t)

@@ -3142,6 +3142,7 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
     let rq8 = g_repack_q8q8
     let rkq = g_repack_kq
     let rmx = g_repack_mx4
+    let rq51 = g_repack_q51
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
@@ -3155,6 +3156,8 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
         var k6sp : uint8? = null
         var q40qp : uint8? = null
         var q40sp : uint8? = null
+        var q51qp : uint8? = null
+        var q51sp : uint8? = null
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
         if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
@@ -3167,6 +3170,8 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
         if (!empty(t.k6s)) { k6sp = addr(t.k6s[0]) }
         if (!empty(t.q40q)) { q40qp = addr(t.q40q[0]) }
         if (!empty(t.q40s)) { q40sp = addr(t.q40s[0]) }
+        if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
+        if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
         let rp = addr<RepackReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -3178,6 +3183,8 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
                         invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / 32l, rp[i].n, rp[i].d)
                     } elif (f == 1) {
                         invoke(rmx, mxqp + rp[i].off / 2l, mxsp + rp[i].off / 32l, rp[i].n, rp[i].d)
+                    } elif (f == 2) {
+                        invoke(rq51, q51qp + (rp[i].off / 32l) * 20l, q51sp + (rp[i].off / 32l) * 4l, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
                         let qsb = kq_qsb(f)
@@ -3386,6 +3393,40 @@ def private repack_mx4_stacks(var t : Model) {
         }
     }
     repack_regions(t, regs)
+    delete regs
+}
+
+// q51-native expert stacks -> the active backend's grp<mr> q51 layout (per-stack: a model can
+// mix q51 downs with k4 gates, e.g. gemma-4-26B-A4B). No-op unless a stack is tagged q51.
+def private repack_q51_stacks(var t : Model) {
+    let c = t.config
+    let dim = c.dim
+    let ege = dim * c.n_ff_exp
+    var regs : array<RepackReg>
+    for (l in range64(c.n_layers)) {
+        let f1q = fmt_at(t.we1_fmt, l) == KqFmt.q51
+        let f2q = fmt_at(t.we2_fmt, l) == KqFmt.q51
+        let f3q = fmt_at(t.we3_fmt, l) == KqFmt.q51
+        if (!(f1q || f2q || f3q)) {
+            continue
+        }
+        for (e in range64(c.n_expert)) {
+            let base = e * ege
+            if (f1q) {
+                push_repack(regs, 2, t.we1_offs[l] + base, dim, c.n_ff_exp)
+            }
+            if (f2q) {
+                push_repack(regs, 2, t.we2_offs[l] + base, c.n_ff_exp, dim)
+            }
+            if (f3q) {
+                push_repack(regs, 2, t.we3_offs[l] + base, dim, c.n_ff_exp)
+            }
+        }
+    }
+    if (!empty(regs)) {
+        repack_regions(t, regs)
+        to_log(LOG_INFO, "dasLLAMA: q51 expert planes repacked to grp{active_q51_layout_mr()}\n")
+    }
     delete regs
 }
 
@@ -4261,6 +4302,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             repack_q8_weights(t)
             if (t.experts_mx4) {
                 repack_mx4_stacks(t)
+            }
+            if (active_q51_layout_mr() > 1l) {
+                repack_q51_stacks(t)
             }
             if (t.kquant_native && kernel_backend_has_kq()) {
                 repack_kq_weights(t)

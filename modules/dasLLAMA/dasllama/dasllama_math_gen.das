@@ -629,6 +629,167 @@ def private repack_mx4_gen(var np : uint8?; var ep : uint8?; n, d : int64) {
     repack_mx4_grp(np, ep, n, d, int64(q8q8_layout_gen()))
 }
 
+// ===== the q51 GEMV family (self-anchored — q51 does NOT ride the Q8 mr; its grid is
+// sdot-only, so x64 declines to the portable disk-order kernels via backend wiring) =====
+
+//! The q51 layout companion: the grp interleave the stamped q51 rows core reads. Reference
+//! body = 1 (grp1 IS the disk order byte-for-byte), so a declined stamp keeps the verbatim
+//! planes and the scalar walk coherent.
+def q51q8_layout_gen() : int {
+    return 1
+}
+
+//! mr-generalized q51 plane repack: per (block-group, block) at 20·mr bytes — nibbles
+//! dword-interleaved like repack_mx4_grp, then qh row-major (mr × 4B); scale plane mr × 4B
+//! f16 (d, m) per block. grp1 == disk order; tail rows (d % mr) stay disk-order.
+def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
+    let nb = n / 32l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(int(d * nb * 20l))
+    ts |> resize(int(d * nb * 4l))
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        for (i in range64(d * nb * 20l)) {
+            tqp[i] = qp[i]
+        }
+        for (i in range64(d * nb * 4l)) {
+            tsp[i] = sp[i]
+        }
+        for (g in range64(ng)) {
+            let gqb = g * mr * nb * 20l
+            let gsb = g * mr * nb * 4l
+            for (bi in range64(nb)) {
+                let dst = gqb + bi * 20l * mr
+                for (r in range64(mr)) {
+                    let src = ((g * mr + r) * nb + bi) * 20l
+                    for (j in range64(4l)) {   // nibble dwords, mx4 order
+                        let dj = dst + j * 4l * mr + r * 4l
+                        qp[dj + 0l] = tqp[src + j * 4l + 0l]
+                        qp[dj + 1l] = tqp[src + j * 4l + 1l]
+                        qp[dj + 2l] = tqp[src + j * 4l + 2l]
+                        qp[dj + 3l] = tqp[src + j * 4l + 3l]
+                    }
+                    let dh = dst + 16l * mr + r * 4l       // qh tail section
+                    qp[dh + 0l] = tqp[src + 16l]
+                    qp[dh + 1l] = tqp[src + 17l]
+                    qp[dh + 2l] = tqp[src + 18l]
+                    qp[dh + 3l] = tqp[src + 19l]
+                    let ds = gsb + bi * 4l * mr + r * 4l
+                    let ss = ((g * mr + r) * nb + bi) * 4l
+                    sp[ds + 0l] = tsp[ss + 0l]
+                    sp[ds + 1l] = tsp[ss + 1l]
+                    sp[ds + 2l] = tsp[ss + 2l]
+                    sp[ds + 3l] = tsp[ss + 3l]
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+// the backend q51 repack slot: the family's OWN layout companion decides the interleave
+def private repack_q51_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
+    repack_q51_grp(qp, sp, n, d, int64(q51q8_layout_gen()))
+}
+
+//! One row's dot off the grp<mr> q51 planes, scalar — the q51 stub's reference body and the
+//! tests' repack oracle. Exact integer sums, same per-block float fold order as
+//! dot_q51q8_scalar; asum comes from the caller's per-32 activation sums (xbsp).
+def q51_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    let nb = n / 32l
+    var f = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            let qb = bi * 20l * mr
+            let hp = qg + qb + 16l * mr + r * 4l
+            let qh = uint(hp[0]) | (uint(hp[1]) << 8u) | (uint(hp[2]) << 16u) | (uint(hp[3]) << 24u)
+            var isum = 0
+            for (j in range64(16l)) {
+                let b = int(qg[qb + (j / 4l) * 4l * mr + r * 4l + j % 4l])
+                let h0 = (int(qh >> uint(j)) & 1) << 4
+                let h1 = (int(qh >> uint(j + 16l)) & 1) << 4
+                isum += ((b & 15) | h0) * int(xqp[bi * 32l + j]) + ((b >> 4) | h1) * int(xqp[bi * 32l + j + 16l])
+            }
+            let sb = bi * 4l * mr + r * 4l
+            let d = f16_to_f32(uint(sg[sb]) | (uint(sg[sb + 1l]) << 8u))
+            let m = f16_to_f32(uint(sg[sb + 2l]) | (uint(sg[sb + 3l]) << 8u))
+            f += (d * float(isum) + m * float(xbsp[bi])) * xsp[bi]
+        }
+    }
+    return f
+}
+
+//! The q51 GEMV kernel (the family anchor): rows [rb, re) of one plane-region pair off the
+//! grp<mr> q51 planes. xbsp = per-32 activation quant sums (the min-term's asum — the groupn
+//! driver precomputes them once per region). Reference body = the scalar grp walk above.
+[tune_perm(mr = 4), tune_perm(mr = 8),
+ tune_companion(fn = "q51q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
+ tune(gen = "dasllama_gemm_gen::q51_gemv", fallback = "mr4"),
+ hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def q51q8_gemv_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    let mr = int64(q51q8_layout_gen())
+    let nb = n / 32l
+    unsafe {
+        for (i in range64(rb, re)) {
+            let g = i / mr
+            yp[i] = q51_grp_row_dot(qgp + g * mr * nb * 20l, sgp + g * mr * nb * 4l, i % mr, mr, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
+// groupn_q51 slot (arm64-gen): region-contiguous rows-core spans off the grp<mr> q51 planes;
+// per-region per-32 activation sums precomputed once (shared by every row of the region), row
+// tails (d % mr) disk-order via the portable scalar dot
+def private q51q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    let nb = n / 32l
+    let mr = int64(q51q8_layout_gen())
+    let ng = d / mr
+    var myp = yp
+    var bs : array<int>
+    bs |> resize(int(nregions * nb))
+    unsafe {
+        var bsp = addr(bs[0])
+        for (r in range64(nregions)) {
+            let xoff = offs[r * 2l + 1l]
+            for (bi in range64(nb)) {
+                var s = 0
+                for (j in range64(32l)) {
+                    s += int(xqp[xoff + bi * 32l + j])
+                }
+                bsp[r * nb + bi] = s
+            }
+        }
+        maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
+            unsafe {
+                var gg = int64(gb)
+                while (gg < int64(ge)) {
+                    let r = gg / ng
+                    let gLocal = gg % ng
+                    let gEnd = min(int64(ge) - r * ng, ng)
+                    let woff = offs[r * 2l]
+                    let xoff = offs[r * 2l + 1l]
+                    q51q8_gemv_gen(myp + r * d, wq + (woff / 32l) * 20l, ws + (woff / 32l) * 4l,
+                                   xqp + xoff, xsp + xoff / 32l, bsp + r * nb, n, gLocal * mr, gEnd * mr)
+                    gg = r * ng + gEnd
+                }
+            }
+        }
+        for (r in range64(nregions)) {   // row tails (d % mr): disk-order scalar dot per region
+            let woff = offs[r * 2l]
+            let xoff = offs[r * 2l + 1l]
+            for (i in range64(ng * mr, d)) {
+                myp[r * d + i] = dot_q51q8_scalar(wq + (woff / 32l + i * nb) * 20l, ws + (woff / 32l + i * nb) * 4l,
+                                                  xqp + xoff, xsp + xoff / 32l, n)
+            }
+        }
+    }
+    delete bs
+}
+
 // ===== K-quant grp<mr> repacks (kq stage 4): the layouts the stamped k4/k5/k6 rows cores read,
 // per superblock per mr-row group (tail rows d % mr stay disk-order, served by the portable
 // dots). Quant/high/scale byte layouts differ per format — see repack_k4/k5/k6_grp bodies. =====
@@ -1971,6 +2132,10 @@ def dasllama_math_gen_register() {
             kq_rows_k6 = @@k6q8_gemv_gen, kq_rows_q40 = @@q40q8_gemv_gen,
             kq_batch = @@kq_batch_kernel_gen,
             kq_groupn = @@kq_groupn_gen, kq_batch_groupn = @@kq_batch_groupn_gen,
+            // q51 family: self-anchored sdot GEMV (own grid/manifest entry) — arm64 only; the
+            // x64 twin below keeps the portable disk-order q51 slots
+            groupn_q51 = @@q51q8_groupn_gen, repack_q51 = @@repack_q51_gen,
+            q51_layout = @@q51q8_layout_gen,
             needs_repack = true, mx4_expand_interleaved = true, priority = 25,
             q8_layout = @@q8q8_layout_gen, kq_layout = @@kq_layout_fmt_gen, q8_wbias = @@q8q8_wbias_gen,
             q8_kgroup = @@q8q8_kgroup_gen))

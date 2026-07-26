@@ -1212,6 +1212,9 @@ typedef MatmulMx4Q8BatchFn = function<(var yp : float?; wn : uint8 const?; we : 
 // In-place repack of one MXFP4 region [d rows x n cols] (raw plane pointers at the region start)
 // into the active backend's preferred layout. Default = no-op (row-major). n % 32 == 0.
 typedef RepackMx4Fn = function<(var np : uint8?; var ep : uint8?; n : int64; d : int64) : void>
+// In-place repack of one q51 region [d rows x n cols] (quant + scale plane pointers at the
+// region start) into the active backend's grp<mr> layout. Default = no-op (disk order).
+typedef RepackQ51Fn = function<(var qp : uint8?; var sp : uint8?; n : int64; d : int64) : void>
 // Region-list GEMV, ONE dispatch for N same-shape [d x n] projections (MoE decode fuse: all k
 // routed experts' gates/ups/downs in one fork/join). `offs` packs PAIRS [weight offset, activation
 // offset] per region; region r -> yp+r*d. bp folds a per-region bias at the store (~36us/layer saved).
@@ -1287,6 +1290,8 @@ struct KernelBackend {
     q51_batch : MatmulQ51Q8BatchFn = @@q51q8_batch_kernel
     groupn_q51 : MatmulQ51GroupNFn = @@q51q8_groupn_kernel
     q51_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@q51q8_batch_groupn_kernel
+    repack_q51 : RepackQ51Fn = @@repack_q51_identity
+    q51_layout : function<() : int> = @@q51_layout_grp1
     // Optional row-range GEMV core (see MatmulQ8Q8RowsFn) — backends without one keep the panic
     // stub, and the fused multi-stage decode falls back to the per-op dispatch path.
     mm_rows : MatmulQ8Q8RowsFn = @@q8q8_unset_rows
@@ -1374,6 +1379,7 @@ var g_active_has_kq_groupn = false  // ... and the region-list kq GEMV (MoE expe
 var g_active_has_kq_batch_groupn = false   // ... and the fused batched region-list GEMM (MoE prefill)?
 var g_repack_q8q8 = @@repack_q8q8_identity   // no-op until a repack backend is selected
 var g_repack_mx4 = @@repack_mx4_identity     // no-op until a repack backend is selected
+var g_repack_q51 = @@repack_q51_identity     // no-op until a repack backend is selected
 var g_repack_kq = @@repack_kq_identity       // no-op until a kq-capable backend is selected
 
 // ===== MoE GPU tier (per-layer expert offload) =====
@@ -2306,6 +2312,7 @@ var g_active_mx4_expand_interleaved = false   // see KernelBackend.mx4_expand_in
 var g_active_mx4_native_batch = false         // see KernelBackend.mx4_native_batch
 var g_active_q8_layout_mr = 4l                // see KernelBackend.q8_layout (activation-time cache)
 var g_active_kq_layout = @@kq_layout_grp4_fmt // see KernelBackend.kq_layout (activation-time cache)
+var g_active_q51_layout_mr = 1l               // see KernelBackend.q51_layout (activation-time cache)
 var g_active_q8_wbias = 0l                    // see KernelBackend.q8_wbias (activation-time cache)
 var g_active_q8_kgroup = 4l                   // see KernelBackend.q8_kgroup (activation-time cache)
 var g_backend_pin = ""              // A/B: force this backend by name; "" = auto-select
@@ -2323,6 +2330,10 @@ def repack_mx4_identity(var np : uint8?; var ep : uint8?; n, d : int64) {}
 //! Default K-quant repack: no-op — the kq planes stay disk-order for the portable kernels.
 [unused_argument(fmt, kq, ks, n, d)]
 def repack_kq_identity(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {}
+
+//! Default q51 repack: no-op — the q51 planes stay disk-order for the portable kernels.
+[unused_argument(qp, sp, n, d)]
+def repack_q51_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
 
 //! Q5_1·Q8 dot, scalar reference form — THE q51 float-order contract every q51 kernel
 //! reproduces: per 32-block isum = Σ q·a (q = nibble | qh_bit << 4, unsigned [0,31]), asum = Σ a
@@ -2404,26 +2415,73 @@ def template dot_q51e_template(qe : int8 const ?; ws : uint8 const ?; xq : int8 
 [hint(unsafe_range_check, noalias = qe, noalias = ws, noalias = xq, noalias = xs), tuned(fallback = "vec16")]
 def dot_q51e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
+//! expand_q51_row's grp<mr> twin: row r of one mr-row group off the interleaved plane (nibble
+//! dwords at j·4·mr + r·4, qh at the 16·mr tail section). Bit-identical expansion.
+def expand_q51_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64) {
+    unsafe {
+        for (bi in range64(nb)) {
+            let base = bi * 20l * mr
+            let hb = base + 16l * mr + r * 4l
+            let qh = uint(gq[hb]) | (uint(gq[hb + 1l]) << 8u) | (uint(gq[hb + 2l]) << 16u) | (uint(gq[hb + 3l]) << 24u)
+            for (j in range64(16l)) {
+                let b = int(gq[base + (j / 4l) * 4l * mr + r * 4l + j % 4l])
+                let h0 = (int(qh >> uint(j)) & 1) << 4
+                let h1 = (int(qh >> uint(j + 16l)) & 1) << 4
+                qe[bi * 32l + j] = int8((b & 15) | h0)
+                qe[bi * 32l + j + 16l] = int8((b >> 4) | h1)
+            }
+        }
+    }
+}
+
+//! One row's scale bytes gathered contiguous off the grp<mr> scale plane (dot_q51e reads a
+//! packed 4B-per-block row).
+def gather_q51_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64) {
+    unsafe {
+        for (bi in range64(nb)) {
+            let src = bi * 4l * mr + r * 4l
+            ss[bi * 4l] = gs[src]
+            ss[bi * 4l + 1l] = gs[src + 1l]
+            ss[bi * 4l + 2l] = gs[src + 2l]
+            ss[bi * 4l + 3l] = gs[src + 3l]
+        }
+    }
+}
+
 // Portable q51 batch (the KernelBackend.q51_batch default): rows-outer/tokens-inner — each row
 // expands ONCE into the worker's scratch, then ntok MAC passes (the mm_b_q51_pre core).
 def q51q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
+    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
     var myp = yp
     unsafe {
         maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(int(nb * 4l))
             unsafe {
                 var qep = addr(qe[0])
+                var scp = addr(sc[0])
                 for (i in range(rb, re)) {
-                    expand_q51_row(wq + int64(i) * nb * 20l, qep, nb)
-                    let srow = ws + int64(i) * nb * 4l
+                    let row = int64(i)
+                    var srow = ws + row * nb * 4l
+                    if (mr == 1l || row >= grpRows) {
+                        expand_q51_row(wq + row * nb * 20l, qep, nb)
+                    } else {
+                        let gbase = (row / mr) * mr * nb
+                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
+                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
+                        srow = scp
+                    }
                     for (tk in range64(ntok)) {
-                        myp[tk * d + int64(i)] = dot_q51e(qep, srow, xqp + tk * n, xsp + tk * nb, n)
+                        myp[tk * d + row] = dot_q51e(qep, srow, xqp + tk * n, xsp + tk * nb, n)
                     }
                 }
             }
             delete qe
+            delete sc
         }
     }
 }
@@ -2432,24 +2490,38 @@ def q51q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xq
 // xoff) pairs, expand-then-MAC per (region, row). No bias form — no biased-q51 arch exists.
 def q51q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
+    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
     var myp = yp
     unsafe {
         maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(int(nb * 4l))
             unsafe {
                 var qep = addr(qe[0])
+                var scp = addr(sc[0])
                 for (i in range(rb, re)) {
                     let ii = int64(i)
                     let r = ii / d
                     let row = ii % d
                     let woff = offs[r * 2l]
                     let xoff = offs[r * 2l + 1l]
-                    expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
-                    myp[ii] = dot_q51e(qep, ws + (woff / 32l + row * nb) * 4l, xqp + xoff, xsp + xoff / 32l, n)
+                    var srow = ws + (woff / 32l + row * nb) * 4l
+                    if (mr == 1l || row >= grpRows) {
+                        expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
+                    } else {
+                        let gbase = woff / 32l + (row / mr) * mr * nb
+                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
+                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
+                        srow = scp
+                    }
+                    myp[ii] = dot_q51e(qep, srow, xqp + xoff, xsp + xoff / 32l, n)
                 }
             }
             delete qe
+            delete sc
         }
     }
 }
@@ -2458,13 +2530,18 @@ def q51q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; o
 // row0, cnt) triples; each (region, row) expands once, then cnt token MACs.
 def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
+    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
     var myp = yp
     unsafe {
         maybe_parallel_for(0, int(nregions * d), matmul_chunks(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
             var qe : array<int8>
             qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(int(nb * 4l))
             unsafe {
                 var qep = addr(qe[0])
+                var scp = addr(sc[0])
                 for (i in range(rb, re)) {
                     let ii = int64(i)
                     let r = ii / d
@@ -2472,14 +2549,22 @@ def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 con
                     let woff = offs[r * 3l]
                     let row0 = offs[r * 3l + 1l]
                     let cnt = offs[r * 3l + 2l]
-                    expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
-                    let srow = ws + (woff / 32l + row * nb) * 4l
+                    var srow = ws + (woff / 32l + row * nb) * 4l
+                    if (mr == 1l || row >= grpRows) {
+                        expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
+                    } else {
+                        let gbase = woff / 32l + (row / mr) * mr * nb
+                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
+                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
+                        srow = scp
+                    }
                     for (tk in range64(cnt)) {
                         myp[(row0 + tk) * d + row] = dot_q51e(qep, srow, xqp + (row0 + tk) * n, xsp + (row0 + tk) * nb, n)
                     }
                 }
             }
             delete qe
+            delete sc
         }
     }
 }
@@ -2489,6 +2574,7 @@ def private no_backend() {
 }
 def private backend_always_available() : bool => true
 def private q8_layout_grp4() : int => 4
+def private q51_layout_grp1() : int => 1
 
 [unused_argument(fmt)]
 def private kq_layout_grp4_fmt(fmt : int) : int => 4
@@ -2502,6 +2588,10 @@ def active_q8_layout_mr() : int64 => g_active_q8_layout_mr
 //! The active backend's kq plane interleave for `fmt` (4/5/6) — per-format since the kq v2
 //! family split; the loader freezes these onto the Model at repack time.
 def active_kq_layout_mr(fmt : int) : int64 => int64(invoke(g_active_kq_layout, fmt))
+
+//! The active backend's q51 plane interleave — 1 (disk order) on every hand tier; the stamped
+//! mr on the arm64-gen backend (the self-anchored q51 GEMV family).
+def active_q51_layout_mr() : int64 => g_active_q51_layout_mr
 
 //! The weight-plane bias of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_wbias (0 for every hand tier; 128 on a bias128 gen stamp). The mx4->Q8
@@ -2618,6 +2708,7 @@ def private activate(be : KernelBackend) {
     g_active_has_kq_batch_groupn = !(be.kq_batch_groupn == @@kq_unset_batch_groupn)
     g_repack_q8q8 = be.repack
     g_repack_mx4 = be.repack_mx4
+    g_repack_q51 = be.repack_q51
     g_repack_kq = be.repack_kq
     g_active_backend = be.name
     g_active_needs_repack = be.needs_repack
@@ -2625,6 +2716,7 @@ def private activate(be : KernelBackend) {
     g_active_mx4_native_batch = be.mx4_native_batch
     g_active_q8_layout_mr = int64(invoke(be.q8_layout))
     g_active_kq_layout = be.kq_layout
+    g_active_q51_layout_mr = int64(invoke(be.q51_layout))
     g_active_q8_wbias = int64(invoke(be.q8_wbias))
     g_active_q8_kgroup = int64(invoke(be.q8_kgroup))
     g_active_batch_backend = be.name

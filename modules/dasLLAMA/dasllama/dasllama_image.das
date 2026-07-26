@@ -50,6 +50,7 @@ def image_identity(tag : string = "") : string {
     return ("v{IMAGE_VERSION}|{active_kernel_backend()}|{get_wscale_f16() ? "s16" : "s32"}"
         + "|q8 mr{active_q8_layout_mr()} b{active_q8_wbias()} g{active_q8_kgroup()}"
         + "|kq {active_kq_layout_mr(4)}/{active_kq_layout_mr(5)}/{active_kq_layout_mr(6)}/{active_kq_layout_mr(40)}"
+        + "|q51 mr{active_q51_layout_mr()}"
         + (tag != "" ? "|{tag}" : ""))
 }
 
