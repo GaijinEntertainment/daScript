@@ -483,6 +483,11 @@ Issue intake (live rig, numbering continues):
   focus — a mouse click is needed before typing
 - 45: the icons left of each session card (profile / state / conflict) have
   no tooltips — unexplained glyphs
+- 46: Sessions & Activity shows opaque rows — "REGULAR s2563..." entries and
+  an error list ("unknown session", "4m ago") that is not clickable, not
+  scrollable, not hideable, purpose unclear. Needs names over raw ids,
+  click-through, dismiss/collapse, and dropping entries whose session no
+  longer resolves
 
 Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
