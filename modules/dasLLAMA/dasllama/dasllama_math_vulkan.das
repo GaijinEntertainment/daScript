@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_math_vulkan shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb + the q8/kq plane consts — the stride source
 require dasllama/dasllama_par
 require dasllama/dasllama_vulkan_lens
 require vulkan
@@ -4389,18 +4390,28 @@ struct private ArenaFmt {
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
+// the tier's stack fmt space is int(KqFmt) — bridge to the gemm_schema kq id space (4/5/6/40)
+def private vk_kq_schema_id(fmt : int) : int {
+    if (fmt == 1) return 4
+    if (fmt == 2) return 5
+    if (fmt == 3) return 6
+    if (fmt == 4) return 40
+    panic("vk_kq_schema_id: not a kq stack fmt")
+    return 0
+}
+
 def private arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == 0) {
-        return (wq = 32l, ws = 2l)            // 32 int8 quants + one f16 scale
+        return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
     }
-    let q = fmt == 2 ? 160l : (fmt == 3 ? 192l : 128l)   // k4 and q40 share the 128B nibble tiling
-    return (wq = q, ws = 20l)                 // decoded scale row: [f16 d][f16 dmin][8 sc][8 mn]
+    // decoded scale row: [f16 d][f16 dmin][8 sc][8 mn]
+    return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = KQ_DEV_SSB)
 }
 
 def private arena_blocks_for(n, rows : int64; fmt : int) : int64 {
-    assert(fmt == 0 || n % 256l == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
-    assert(fmt != 0 || n % 32l == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
-    return rows * (n / (fmt == 0 ? 32l : 256l))
+    assert(fmt == 0 || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
+    assert(fmt != 0 || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
+    return rows * (n / (fmt == 0 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
 // Reserve one format's arena up front. Sizing is a decision, not a walk: the resident driver knows

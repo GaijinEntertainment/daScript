@@ -15,6 +15,17 @@ require math
 // walkers, and the GPU tier gathers. Requires dasllama_common back for Model/KqFmt; the loader
 // reaches the entry points through the hooks registered at [init] (register_model_layout).
 
+//! KqFmt -> the gemm_schema kq format id space (4/5/6/40) — the ONE bridge between the enum
+//! and the stride tables. q8/q51 are not kq superblock formats and panic.
+def kq_schema_id(f : KqFmt) : int {
+    if (f == KqFmt.k4) return 4
+    if (f == KqFmt.k5) return 5
+    if (f == KqFmt.k6) return 6
+    if (f == KqFmt.q40) return 40
+    panic("kq_schema_id: not a kq superblock format")
+    return 0
+}
+
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6
@@ -109,9 +120,10 @@ def convert_model_to_metal_blob(var t : Model) : bool {
         return false
     }
     let ts = ref_time_ticks()
-    let nb = long_length(t.qblob) / 32l
+    let nb = long_length(t.qblob) / Q8_BLOCK_ELEMS
+    let mbb = Q8_QPB + Q8_SPB   // the 34B gguf-native block_q8_0
     if (nb > 0l) {
-        t.mblob |> resize(nb * 34l)
+        t.mblob |> resize(nb * mbb)
         let s16 = t.wscale_f16
         unsafe {
             var dp = addr(t.mblob[0])
@@ -127,9 +139,9 @@ def convert_model_to_metal_blob(var t : Model) : bool {
             maybe_parallel_for(0, int(nb / 32l) + (nb % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
                 unsafe {
                     for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nb))) {
-                        var ph = reinterpret<uint16?>(dp + b * 34l)
+                        var ph = reinterpret<uint16?>(dp + b * mbb)
                         ph[0] = s16 ? sp16[b] : uint16(f32_to_f16(clamp(sp[b], -65504.0, 65504.0)))
-                        memcpy(reinterpret<void?>(dp + b * 34l + 2l), reinterpret<void const?>(qp + b * 32l), 32)
+                        memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
                     }
                 }
             }
@@ -250,11 +262,11 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
                 for (i in range(rb, re)) {
                     let f = rp[i].fmt
                     if (f == 0) {
-                        invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / 32l, rp[i].n, rp[i].d)
+                        invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / Q8_BLOCK_ELEMS, rp[i].n, rp[i].d)
                     } elif (f == 1) {
                         invoke(rmx, mxqp + rp[i].off / 2l, mxsp + rp[i].off / 32l, rp[i].n, rp[i].d)
                     } elif (f == 2) {
-                        invoke(rq51, q51qp + (rp[i].off / 32l) * 20l, q51sp + (rp[i].off / 32l) * 4l, rp[i].n, rp[i].d)
+                        invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
                         let qsb = kq_qsb(f)
@@ -507,10 +519,10 @@ def private repack_q51_stacks(var t : Model) {
 // Reads whatever the active backend prepared (grp<mr> interleave or plain row-major).
 def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
                          var wq : array<uint8>; var ws : array<uint8>) {
-    let nb = n / 32l
+    let nb = n / Q8_BLOCK_ELEMS
     assert(rows * n <= 2147483647l, "GPU MoE stack exceeds the int32 gather-buffer rail")
     wq |> resize(int(rows * n))
-    ws |> resize(int(rows * nb * 2l))
+    ws |> resize(int(rows * nb * Q8_SPB))
     assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -518,9 +530,9 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
         var s16p : uint16 const? = null
         var s32p : float const? = null
         if (t.wscale_f16) {
-            s16p = addr<uint16 const?>(t.qscales16[woff / 32l])
+            s16p = addr<uint16 const?>(t.qscales16[woff / Q8_BLOCK_ELEMS])
         } else {
-            s32p = addr<float const?>(t.qscales[woff / 32l])
+            s32p = addr<float const?>(t.qscales[woff / Q8_BLOCK_ELEMS])
         }
         var wqp = addr(wq[0])
         var wsp = addr<uint16?>(ws[0])
@@ -600,25 +612,26 @@ def private kq_disk_nib6(rowq : uint8 const?; k : int64) : uint {
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    let nsb = n / 256l
-    let qsb = fmt == KqFmt.k5 ? 160l : (fmt == KqFmt.k6 ? 192l : 128l)   // k4 and q40 share the 128B nibble region
-    let dssb = fmt == KqFmt.k6 ? 18l : (fmt == KqFmt.q40 ? 16l : 20l)   // disk/plane scale stride; device rows are 20B for all
-    assert(n % 256l == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
+    let nsb = n / KQ_SUPERBLOCK_ELEMS
+    let sid = kq_schema_id(fmt)
+    let qsb = kq_qsb(sid)    // quant plane stride per superblock (disk == device for quants)
+    let dssb = kq_ssb(sid)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
+    assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
     wq |> resize(int(rows * nsb * qsb))
-    ws |> resize(int(rows * nsb * 20l))
+    ws |> resize(int(rows * nsb * KQ_DEV_SSB))
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
     unsafe {
-        let sb0 = woff / 256l
-        let qp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4q[sb0 * 128l])
-            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5q[sb0 * 160l])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * 192l]) : addr<uint8 const?>(t.q40q[sb0 * 128l]))))
-        let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * 20l])
-            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * 20l])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * 18l]) : addr<uint8 const?>(t.q40s[sb0 * 16l]))))
+        let sb0 = woff / KQ_SUPERBLOCK_ELEMS
+        let qp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4q[sb0 * kq_qsb(4)])
+            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5q[sb0 * kq_qsb(5)])
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)]) : addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)]))))
+        let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * kq_ssb(4)])
+            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * kq_ssb(5)])
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)]) : addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)]))))
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -634,7 +647,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                         let r = ri % mr
                         for (sbi in range64(nsb)) {
                             var dq = wqp + rr * qrow + sbi * qsb
-                            var dsc = wsp + (rr * nsb + sbi) * 20l
+                            var dsc = wsp + (rr * nsb + sbi) * KQ_DEV_SSB
                             if (grouped) {
                                 let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                                 let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
@@ -710,7 +723,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (idx in range64(dssb)) {
                                         dsc[idx] = rs[idx]
                                     }
-                                    for (idx in range64(dssb, 20l)) {
+                                    for (idx in range64(dssb, KQ_DEV_SSB)) {
                                         dsc[idx] = uint8(0)
                                     }
                                 } else {

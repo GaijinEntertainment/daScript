@@ -1934,7 +1934,7 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     return blk
 }
 
-def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => rows * (n / (f == KqFmt.q8 ? 32l : 256l))
+def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => rows * (n / (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
