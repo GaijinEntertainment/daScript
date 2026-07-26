@@ -3,10 +3,10 @@
 Tests use the `dastest` framework, which ships with the SDK under `dastest/`. Everything
 below applies wherever you write tests — in your own project or in the daslang repo.
 
-Working inside the daslang repository? The repo's own harness — AOT registration for new
-test directories, the `tests/.das_test` gating filter, deep-engine model-test rules — is a
-separate concern and no part of it applies to an SDK install, so it is not shipped here:
-see `skills/tests_in_repo.md` (repo-only).
+Working inside the daslang repository? Its own harness is a separate concern and no part
+of it applies to an SDK install, so none of it is shipped here — AOT registration for new
+test directories, the `tests/.das_test` gating filter and deep-engine model-test rules are
+all covered by `skills/tests_in_repo.md` (repo-only).
 
 ## Test file structure
 

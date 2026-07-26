@@ -18,7 +18,7 @@ daslang supports three execution tiers: interpreter → AOT (to C++) → JIT (LL
 
 ### AOT C++ emitter location
 
-The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (a visitor written in daslang). The old `src/ast/ast_aot_cpp.cpp` (repo-only) was deleted by commit `581363ebc`. When codegen output changes shape, edit `daslib/aot_cpp.das` and rebuild `libDaScriptAot`.
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (a visitor written in daslang). The old `src/ast/ast_aot_cpp.cpp` was deleted by commit `581363ebc`. When codegen output changes shape, edit `daslib/aot_cpp.das` and rebuild `libDaScriptAot`.
 
 Key helpers used by the emitter:
 
@@ -69,7 +69,7 @@ tests/aot/
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
-## Running AOT Tests (repo-only)
+## Running AOT Tests
 
 ```bash
 # Build the test_aot binary
@@ -79,7 +79,7 @@ cmake --build build --config Release --target test_aot
 bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot
 
 # Run with the regular daslang binary (no AOT, interpreter mode)
-bin/daslang dastest/dastest.das -- --test tests/aot
+bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot
 ```
 
 The `-use-aot` flag enables AOT for sub-compiled test files even when the host binary has stubs. But `test_aot` auto-detects via `is_in_aot()` in `dastest/suite.das`.
@@ -183,7 +183,7 @@ AOT linking works by **semantic hash matching**. The AOT tool generates C++ stub
 
 ### Two-level hashing
 
-Every function has two hash values (see `src/simulate/simulate_fn_hash.cpp`, repo-only):
+Every function has two hash values (see `src/simulate/simulate_fn_hash.cpp`):
 
 1. **`hash`** (own hash) — the function's **SIM node tree** hash. Computed by `getFunctionHash()` which walks the simulated node tree and hashes every node type, constant value, and type descriptor. This captures the function's own behavior.
 
@@ -251,7 +251,7 @@ semantic hash is <runtime_aotHash>
 
 ### Debug printf macros
 
-In `src/simulate/simulate_fn_hash.cpp` (repo-only), two macros control debug output:
+In `src/simulate/simulate_fn_hash.cpp`, two macros control debug output:
 
 ```cpp
 #if 1          // change to 0 to enable
@@ -313,7 +313,7 @@ The AOT tool (`utils/aot/main.das`) can process multiple `.das` files in one inv
 **Diagnosing batch issues**: If single-file AOT generation produces matching hashes but batch doesn't, use the hash comment diagnostics to find the diverging function. You can test single-file generation with:
 
 ```bash
-daslang utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
+daslang.exe utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
 ```
 
 ## libDaScriptAot — Standard Library AOT

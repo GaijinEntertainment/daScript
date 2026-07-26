@@ -178,7 +178,7 @@ Pattern tags inside `qmatch(expr, <pattern>)`:
 
 Result is `QMatchResult` with `.matched : bool` and `.error : QMatchError` — captured bindings live in the pre-declared outer variables, NOT on the result struct. On match failure the bindings are left untouched.
 
-Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
+Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests (repo-only) in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
 
 **Not every probe fits qmatch.** Shapes with cross-statement constraints (e.g., "3 statements with specific types where push target equals res var and recordNames count matches sources count") exceed qmatch's grammar — fall back to hand-rolled `is X / as X` for those. Self-circular file dependencies are also out: `ast_match.das` itself can't use `qmatch` to define its own grammar.
 
@@ -189,7 +189,7 @@ Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ ado
 - **`qmatch`** when the pattern is *daslang source syntax* — `qmatch(that, $e(fa) * $e(fb) + $e(other))`. Operator trees, call shapes, field chains spelled as code.
 - **`match`** when the pattern is *node classes and fields* — `match (e) { if (ExprSwizzle(mask = "xy", value = $v(v))) … }` — or plain value dispatch (`match (op) { if ("*") … }`, enum tables like flatten's `zero_const_of`).
 
-What `match` does that hand-rolled ladders and qmatch don't (all test-pinned in `tests/match/`):
+What `match` does that hand-rolled ladders and qmatch don't (all test-pinned in `tests/match/`, repo-only):
 
 ```das
 match (keySide) {

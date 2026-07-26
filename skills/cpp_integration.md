@@ -347,7 +347,13 @@ virtual ModuleAotType aotRequire(TextWriter & tw) const override {
 
 Real example: `Module_BuiltIn::addTime()` binds `ref_time_ticks`, `get_time_usec`, `get_time_nsec` (declared in `performance_time.h`). The `aotRequire()` must emit `#include "daScript/misc/performance_time.h"` or AOT compilation of any script using these functions will fail.
 
-See `skills/aot_testing.md` for the full AOT pipeline and testing infrastructure.
+Generate the stubs with `bin/daslang -aot input.das output.cpp`, and add `-aot-macros` when
+the script defines macros. If a run later reports `error[50101]: AOT link failed on <fn>`,
+the recorded hash no longer matches the source — regenerate and rebuild.
+
+The daslang repo's own AOT test harness (repo-only: the `test_aot` binary, `tests/aot`
+registration, `libDaScriptAot` regeneration) is covered by `skills/aot_testing.md`,
+which is not shipped — none of it applies to an SDK install.
 
 ### Key AST function flags
 

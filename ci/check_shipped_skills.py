@@ -22,11 +22,11 @@ import re
 import sys
 
 # --- what can never be inside a bundle -------------------------------------------------
-# tests/ is NOT here yet: aot_testing.md still carries 24 refs and is a mixed-audience
-# file awaiting a split. Add tests/ once that lands.
 REPO_PATH = re.compile(
     r"(?<![\w./-])("
     r"src/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|tests/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|tests-cpp/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|doc/source/[A-Za-z0-9_./+*-]*[A-Za-z0-9_+*-]"
     r"|benchmarks/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|modules/[A-Za-z0-9_-]+/(?:src|tests|tutorial|harness)[A-Za-z0-9_./+-]*"
@@ -80,63 +80,99 @@ def check(bundle, ship_list_path):
         if not name.endswith(".md"):
             continue
         path = os.path.join(skills_dir, name)
-        fence = False
-        exempt_section = False
         with open(path, encoding="utf-8", errors="replace") as fh:
-            for lineno, raw in enumerate(fh, 1):
-                if FENCE.match(raw):
-                    fence = not fence
+            lines = fh.readlines()
+
+        # Pass 1: fence state, and which PARAGRAPH each line belongs to. The marker scopes
+        # to the paragraph, not the line: prose wraps, so a marker on the closing line of a
+        # sentence has to cover the path mentioned two lines earlier. Scoping per-line means
+        # authors must reflow sentences to satisfy the gate, which is how a gate gets muted.
+        in_fence = []
+        para_of = []
+        para_marked = {}
+        fence = False
+        para = 0
+        prev_blank = True
+        for raw in lines:
+            if FENCE.match(raw):
+                fence = not fence
+                in_fence.append(True)
+                para_of.append(None)
+                prev_blank = True
+                continue
+            in_fence.append(fence)
+            blank = not raw.strip()
+            if fence:
+                para_of.append(None)
+            elif blank or HEADING.match(raw):
+                para_of.append(None)
+                prev_blank = True
+            else:
+                if prev_blank:
+                    para += 1
+                prev_blank = False
+                para_of.append(para)
+                if "repo-only" in raw.lower():
+                    para_marked[para] = True
+
+        # Pass 2: the checks.
+        exempt_section = False
+        for idx, raw in enumerate(lines):
+            lineno = idx + 1
+            fence = in_fence[idx]
+            if FENCE.match(raw):
+                continue
+            low = raw.lower()
+
+            if not fence and HEADING.match(raw):
+                exempt_section = "repo-only" in low
+                continue
+
+            exempt = (exempt_section or ("repo-only" in low)
+                      or para_marked.get(para_of[idx], False))
+
+            def flag(kind, detail):
+                problems.append((name, lineno, kind, detail))
+
+            # these two are about COMMANDS, so they apply inside fences as well
+            if not exempt:
+                m = PLATFORM_BIN.search(raw)
+                if m:
+                    flag("windows build layout",
+                         "%s -- a bundle has bin/daslang" % m.group(0))
+                m = EXE_CMD.search(raw)
+                if m:
+                    flag("windows-only exe",
+                         "%s.exe -- drop .exe, it is Windows-only" % m.group(1))
+                m = MACHINE_PATH.search(raw)
+                if m:
+                    flag("machine-local path", m.group(0))
+
+            if fence or exempt:
+                continue
+
+            for m in REPO_PATH.finditer(raw):
+                flag("not in bundle", m.group(1))
+
+            if have_list:
+                for m in SKILL_REF.finditer(raw):
+                    if m.group(1) not in ships:
+                        flag("skill not shipped",
+                             "skills/%s is absent from install/skills.list" % m.group(1))
+
+            for m in MD_LINK.finditer(raw):
+                tgt = m.group(1)
+                if re.match(r"^(https?:|mailto:|#|<)", tgt):
                     continue
-                low = raw.lower()
-
-                if not fence and HEADING.match(raw):
-                    exempt_section = "repo-only" in low
+                bare = tgt.split("#")[0]
+                if not bare:
                     continue
-
-                exempt = exempt_section or ("repo-only" in low)
-
-                def flag(kind, detail):
-                    problems.append((name, lineno, kind, detail))
-
-                # these two are about COMMANDS, so they apply inside fences as well
-                if not exempt:
-                    m = PLATFORM_BIN.search(raw)
-                    if m:
-                        flag("windows build layout",
-                             "%s -- a bundle has bin/daslang" % m.group(0))
-                    m = EXE_CMD.search(raw)
-                    if m:
-                        flag("windows-only exe",
-                             "%s.exe -- drop .exe, it is Windows-only" % m.group(1))
-                    m = MACHINE_PATH.search(raw)
-                    if m:
-                        flag("machine-local path", m.group(0))
-
-                if fence or exempt:
-                    continue
-
-                for m in REPO_PATH.finditer(raw):
-                    flag("not in bundle", m.group(1))
-
-                if have_list:
-                    for m in SKILL_REF.finditer(raw):
-                        if m.group(1) not in ships:
-                            flag("skill not shipped",
-                                 "skills/%s is absent from install/skills.list" % m.group(1))
-
-                for m in MD_LINK.finditer(raw):
-                    tgt = m.group(1)
-                    if re.match(r"^(https?:|mailto:|#|<)", tgt):
-                        continue
-                    bare = tgt.split("#")[0]
-                    if not bare:
-                        continue
-                    # Links are authored relative to the skill's own directory
-                    # (`../daslib/x.das`, sibling `other_skill.md`), so try that FIRST;
-                    # fall back to bundle-root-relative, which some skills also use.
-                    if not any(os.path.exists(os.path.join(base, bare))
-                               for base in (skills_dir, bundle)):
-                        flag("dead link", tgt)
+                # Links are authored relative to the skill's own directory
+                # (`../daslib/x.das`, sibling `other_skill.md`), so try that FIRST;
+                # fall back to bundle-root-relative, which some skills also use.
+                if not any(os.path.exists(os.path.join(base, bare))
+                           for base in (skills_dir, bundle)):
+                    flag("dead link", tgt)
 
     if not problems:
         return 0
