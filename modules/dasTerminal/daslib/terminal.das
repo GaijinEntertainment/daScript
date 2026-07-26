@@ -1049,6 +1049,32 @@ def public terminal_launch_argv(arguments : array<string> const;
     return <- terminal
 }
 
+def public terminal_launch_argv_env(arguments : array<string> const;
+                                    working_directory : string;
+                                    environment : array<string> const;
+                                    columns : int = 80; rows : int = 25) : Terminal {
+    //! Like terminal_launch_argv, with extra KEY=VALUE entries merged over the
+    //! inherited environment. Secrets belong here, never on the command line.
+    var inscope terminal <- terminal_create(columns, rows)
+    var inscope pty <- _pty_launch_argv_env(arguments,
+        working_directory, length(working_directory), environment, columns, rows)
+    move(terminal.transport) <| pty
+    return <- terminal
+}
+
+def public spawn_detached(arguments : array<string> const;
+                          working_directory : string;
+                          environment : array<string> const;
+                          blk : block<(pid : int; error : string#) : void>) : int {
+    //! Spawns a plain process that OUTLIVES the caller: no console, broken out
+    //! of the caller's job object, own process group. The block receives the
+    //! pid (0 = failed) and an error text; a non-zero pid with a non-empty
+    //! error is a degraded success (job breakaway denied - the child would
+    //! still die with the caller's job).
+    return _spawn_detached(arguments, working_directory,
+        length(working_directory), environment, blk)
+}
+
 def public terminal_feed_bytes(var terminal : Terminal; bytes : array<uint8> const) {
     if (empty(bytes)) return
     terminal.revision++
