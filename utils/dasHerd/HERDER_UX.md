@@ -1,0 +1,193 @@
+# dasHerd rich client UX contract
+
+Status: working design; each section carries its own discussion status.
+Measured baseline and trigger forensics: `herder_perf_state` and
+`herder_ui_events` live commands, added 2026-07-24.
+
+## Principles
+
+- The user's selection is sacred. Nothing re-targets the selected
+  repository, worktree, file, tab, or scroll position except an explicit
+  user action on that surface. Automatic events may mark and count, never
+  navigate. (This is the Attention-panel rule from
+  `AGENT_REVIEW_WORKFLOWS.md` generalized to every async arrival.)
+- Content is stale-while-revalidate everywhere: last-good content stays
+  visible and interactive during any refresh; replacement is atomic per
+  logical unit (one worktree's files, one review result, one prepared
+  document).
+- Every async surface states what it is doing in a reserved place that
+  does not move content when it appears. Busy is a glyph plus a short
+  phrase in the owning window's status line; app-wide state lives in the
+  chrome, not inside work surfaces.
+- Icons carry state; words carry identity. A row's noun stays text; its
+  state (running, dirty, failed, staged) becomes a glyph with a hover
+  tip. No icon without a tooltip; no state-word where a glyph will do.
+- Terminal text is for terminals. Watcher plumbing (git observation
+  tasks) is activity telemetry, not a peer of the user's sessions.
+
+## Notification model
+
+Discussion status: slice 1 implemented
+
+Three channels, never mixed:
+
+1. **App chrome (menu-bar right cluster)** — connection state, active
+   background work count, pending Attention count, and the latest error
+   with a dismiss control. Fixed position, appears/disappears without
+   moving any window content. Clicking the Attention bell opens the
+   Sessions window; clicking the error's close glyph dismisses it.
+2. **Per-window status line** — each Git window keeps its reserved
+   bottom line: severity glyph + text. Loading and errors replace the
+   summary text only, never insert rows above the document.
+3. **Attention panel** — agent handoff only (focus sets, bundles), as
+   specified in `AGENT_REVIEW_WORKFLOWS.md`. Arrival never navigates.
+
+Errors no longer render inline inside the Terminal window; the copy /
+send-to-agent context actions move with them to the chrome cluster.
+
+## Iconography
+
+Discussion status: glyph language settled for slice 1; grows per surface
+
+From the `imgui_icons` set (amber, tooltip mandatory):
+
+| State/action | Glyph |
+|---|---|
+| Watcher connected / disconnected | `link` / `unlink` |
+| Background work active | `clock` (+ count) |
+| Attention pending | `bell` (+ count) |
+| Error | `warning`; dismiss via `close` |
+| Session running / ok-exit / failed-exit / terminating / starting | `play` / `check` / `warning` / `stop` / `clock` |
+| Refresh action | `refresh` |
+| Terminate action | `stop` |
+| Copy SHA (existing) | `duplicate` |
+| Stage / unstage (existing) | `check` / `minus` |
+| Focus visible / hidden (existing) | `visible` / `hidden` |
+| Repository header | `folder` |
+| Add repository | `add` |
+| Relaunch session | `refresh` |
+
+Planned next: worktree dirty markers (dot + count as text is fine),
+branch glyph (`merge`) on ref labels, `gear` for Settings, `search`
+where search lands.
+
+## Busy and progress language
+
+Discussion status: slice 1 implemented; richer progress later
+
+- The observer's five streams (refresh, review, history, commit files,
+  refs) each surface as busy only in the window that shows their result;
+  the chrome cluster shows the aggregate count.
+- Delay is dominated by git process time; the job of the UI is to make
+  waiting legible, not to hide it. No spinners over content; no modal
+  waits.
+- Later: per-stream elapsed time in the status line once a stream runs
+  longer than ~1s (the data is already in `herder_perf_state`).
+
+## Sessions vs watcher tasks
+
+Discussion status: slice 1 implemented
+
+The Sessions window lists interactive sessions only (agents, shells).
+Watcher plumbing kinds (`git-*`, `worktree-create`) are hidden behind a
+View toggle ("Show watcher task sessions", default off) — they remain
+fully inspectable, and Git failures still attach their task terminal
+automatically. Session rows carry a state glyph. Automatic attaches
+never target plumbing kinds and never re-aim the Git surfaces
+(committed as 6a48bc7ee).
+
+## Workflow scenarios and layout
+
+Discussion status: scenario model settled 2026-07-24; presets implemented
+
+The layout serves three scenarios, in frequency order:
+
+1. **Session.** The user lives in agent terminal sessions — several at
+   once — exactly like a coding-agent chat. File inspection is
+   occasional and pointed: the agent links a file in the terminal, or
+   the human points the agent at code, project structure, or a diff.
+   The terminal is the spine; the inspector is a companion.
+2. **PR review.** A dedicated chunk of work: File Inspector side by
+   side with the terminal, plus the PR changelist for what is going
+   out. This is where Diff/View earns its depth.
+3. **Topology.** Multiple branches, merges, PRs brought into existing
+   worktrees — the Tree escalation surface per `GIT_TOPOLOGY_PLAN.md`.
+   Rare; reached deliberately, never the default.
+
+Two dock presets in the View menu. Each preset is a **profile**: the
+user's rearrangements are snapshotted into that preset's own ini
+(`dasHerd.layout.<name>.ini` beside the global configuration) when
+switching away, and restored when switching back; the factory builder
+runs only when a preset has no saved profile. Reset Layout returns the
+active preset to factory. The last-used preset is restored on startup.
+
+```text
+Session preset                      Review preset
++--------+------------------+----+  +------+-----------+----------+---------+
+| Repos  |                  | FI |  | Rail |  Terminal | File     | Change- |
+|        |    Terminal      | +  |  |      |           | Inspector| list +  |
++--------+                  | CL |  |      |           | (Diff/   | Activity|
+| Sess/  |                  |    |  |      |           |  View)   |         |
+| Attn   |                  |    |  |      |           |          |         |
++--------+------------------+----+  +------+-----------+----------+---------+
+```
+
+- **Project** is the full project-structure view (folders + every
+  tracked and untracked-but-not-ignored file of the selected worktree),
+  not just changed files. It lives as the fourth Git Activity
+  perspective (PR / History / Tree / Project) — project structure is a
+  Git perspective, not a separate window, and it shares the selection
+  and inspector flow. Click opens the file in the inspector (clean
+  files open straight in View); right-click sends a whole-file focus to
+  the session agent.
+- Changelist and Activity share one column in Review; in Session they
+  tab behind the inspector.
+- The terminal file-link handoff (agent links `path:line` in terminal
+  prose → click opens the inspector; PLAN.md T3) is the scenario-1
+  headline feature after this slice.
+
+## Session launcher
+
+Discussion status: PROPOSED
+
+Replace the modal "Start Codex debug session" popup with a dockable
+launcher pane (per `WORKTREES_AND_TASK_TERMINALS.md` section 3: shell
+or agent, new/resume, worktree, argument preview). The modal blocks
+inspection of the very worktree state the launch depends on.
+
+## Context menus and hints
+
+Discussion status: PROPOSED
+
+- Every right-click surface gets exactly one context menu; entries are
+  verbs with objects ("Copy error", "Look at that") — no bare nouns.
+- Hover tips on rows appear only for truncated content or glyph-only
+  controls; no tooltip that repeats the visible text.
+- The Look-at-that flow stays as specified in
+  `AGENT_REVIEW_WORKFLOWS.md`.
+
+## Slices
+
+1. Notification chrome + status glyphs + sessions/tasks split +
+   session-state glyphs. (implemented with this doc)
+2. Layout redo per the settled section above; icon adoption on rows and
+   action buttons (refresh/terminate/add). (implemented; Project moved
+   into Git Activity 2026-07-25)
+3. Launcher pane (implemented as the dockable New Session pane);
+   context-menu sweep; per-stream elapsed telemetry in status lines.
+
+## Decision log
+
+- 2026-07-24: Selection is never re-targeted by automatic events; the
+  attach ghost (task auto-attach following session origin) is the
+  canonical violation and is fixed.
+- 2026-07-24: Watcher task sessions are activity, not sessions; hidden
+  by default behind a View toggle.
+- 2026-07-24: One app-chrome notification cluster in the menu bar;
+  per-window status lines keep surface-local state; the Attention panel
+  remains agent-handoff-only.
+- 2026-07-25: Worktree Files stopped being its own dock window and
+  became the Project perspective inside Git Activity — project
+  structure is a Git perspective sharing the selection and inspector
+  flow, and its busy/error state reports through the Git Activity
+  status line like every other perspective.

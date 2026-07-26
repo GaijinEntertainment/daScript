@@ -7,6 +7,8 @@
 #include "need_dasGLFW.h"
 #include "aot_dasGLFW.h"
 
+#include <atomic>
+
 #if defined(_WIN32)
 // Win32 native handles are available on every Windows toolchain (MSVC,
 // clang-cl, clang-mingw, gcc-mingw).
@@ -289,7 +291,18 @@ namespace das {
 
     static thread_local das_map<void *, GlfwChainState> g_GlfwChain;
 
+    // Breaks prev-pointer cycles left by historical install/restore interleaving
+    // (chain prev -> ImGui callback -> ImGui prev -> chain dispatcher -> ...).
+    static thread_local int g_ChainDispatchDepth = 0;
+    struct ChainDepthGuard {
+        bool blocked;
+        ChainDepthGuard() : blocked(g_ChainDispatchDepth >= 4) { ++g_ChainDispatchDepth; }
+        ~ChainDepthGuard() { --g_ChainDispatchDepth; }
+    };
+
     void DasGlfw_ChainCursorPosDispatch ( GLFWwindow * w, double x, double y ) {
+        ChainDepthGuard depth;
+        if ( depth.blocked ) return;
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
         auto & st = it->second;
@@ -303,6 +316,8 @@ namespace das {
     }
 
     void DasGlfw_ChainMouseButtonDispatch ( GLFWwindow * w, int button, int action, int mods ) {
+        ChainDepthGuard depth;
+        if ( depth.blocked ) return;
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
         auto & st = it->second;
@@ -316,6 +331,8 @@ namespace das {
     }
 
     void DasGlfw_ChainScrollDispatch ( GLFWwindow * w, double xoff, double yoff ) {
+        ChainDepthGuard depth;
+        if ( depth.blocked ) return;
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
         auto & st = it->second;
@@ -329,6 +346,8 @@ namespace das {
     }
 
     void DasGlfw_ChainKeyDispatch ( GLFWwindow * w, int key, int scancode, int action, int mods ) {
+        ChainDepthGuard depth;
+        if ( depth.blocked ) return;
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
         auto & st = it->second;
@@ -342,6 +361,8 @@ namespace das {
     }
 
     void DasGlfw_ChainCharDispatch ( GLFWwindow * w, unsigned int codepoint ) {
+        ChainDepthGuard depth;
+        if ( depth.blocked ) return;
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
         auto & st = it->second;
@@ -354,46 +375,90 @@ namespace das {
         }
     }
 
+    // === Real-input gate ===
+    // GLFW-facing entries for REAL OS input, separate from the Chain*Dispatch
+    // functions that DasGlfw_Post* (synthetic) call directly. This split is what
+    // lets set_user_control mute real input without touching synth delivery: the
+    // shared-entry design let the chain keep a stale route into a captured
+    // ImGui callback after the backend detached, so real wheel events leaked
+    // through the user-control lock.
+    static std::atomic<bool> g_GlfwRealInputMuted{false};
+
+    void DasGlfw_SetRealInputMuted ( bool muted ) {
+        g_GlfwRealInputMuted.store(muted, std::memory_order_relaxed);
+    }
+
+    bool DasGlfw_IsRealInputMuted () {
+        return g_GlfwRealInputMuted.load(std::memory_order_relaxed);
+    }
+
+    static void DasGlfw_RealCursorPos ( GLFWwindow * w, double x, double y ) {
+        if ( DasGlfw_IsRealInputMuted() ) return;
+        DasGlfw_ChainCursorPosDispatch(w, x, y);
+    }
+    static void DasGlfw_RealMouseButton ( GLFWwindow * w, int button, int action, int mods ) {
+        if ( DasGlfw_IsRealInputMuted() ) return;
+        DasGlfw_ChainMouseButtonDispatch(w, button, action, mods);
+    }
+    static void DasGlfw_RealScroll ( GLFWwindow * w, double xoff, double yoff ) {
+        if ( DasGlfw_IsRealInputMuted() ) return;
+        DasGlfw_ChainScrollDispatch(w, xoff, yoff);
+    }
+    static void DasGlfw_RealKey ( GLFWwindow * w, int key, int scancode, int action, int mods ) {
+        if ( DasGlfw_IsRealInputMuted() ) return;
+        DasGlfw_ChainKeyDispatch(w, key, scancode, action, mods);
+    }
+    static void DasGlfw_RealChar ( GLFWwindow * w, unsigned int codepoint ) {
+        if ( DasGlfw_IsRealInputMuted() ) return;
+        DasGlfw_ChainCharDispatch(w, codepoint);
+    }
+
     // Idempotent dispatcher install: always re-calls glfwSet*Callback so a
     // non-self previous is captured as the chain's "prev" (preserves whatever
     // ImGui_ImplGlfw or other backend installed). Self-reinstalls are no-ops
-    // for prev.
+    // for prev; the legacy shared-entry dispatchers are also excluded so a
+    // stale slot from an older install can never become its own prev.
     static void ensure_chain_cursor_pos_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
-        auto previous = glfwSetCursorPosCallback(w, DasGlfw_ChainCursorPosDispatch);
-        if ( previous && previous != &DasGlfw_ChainCursorPosDispatch ) {
+        auto previous = glfwSetCursorPosCallback(w, DasGlfw_RealCursorPos);
+        if ( previous && previous != &DasGlfw_RealCursorPos
+            && previous != &DasGlfw_ChainCursorPosDispatch ) {
             st.prev_cursor_pos = previous;
         }
         st.installed_cursor_pos = true;
     }
     static void ensure_chain_mouse_button_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
-        auto previous = glfwSetMouseButtonCallback(w, DasGlfw_ChainMouseButtonDispatch);
-        if ( previous && previous != &DasGlfw_ChainMouseButtonDispatch ) {
+        auto previous = glfwSetMouseButtonCallback(w, DasGlfw_RealMouseButton);
+        if ( previous && previous != &DasGlfw_RealMouseButton
+            && previous != &DasGlfw_ChainMouseButtonDispatch ) {
             st.prev_mouse_button = previous;
         }
         st.installed_mouse_button = true;
     }
     static void ensure_chain_scroll_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
-        auto previous = glfwSetScrollCallback(w, DasGlfw_ChainScrollDispatch);
-        if ( previous && previous != &DasGlfw_ChainScrollDispatch ) {
+        auto previous = glfwSetScrollCallback(w, DasGlfw_RealScroll);
+        if ( previous && previous != &DasGlfw_RealScroll
+            && previous != &DasGlfw_ChainScrollDispatch ) {
             st.prev_scroll = previous;
         }
         st.installed_scroll = true;
     }
     static void ensure_chain_key_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
-        auto previous = glfwSetKeyCallback(w, DasGlfw_ChainKeyDispatch);
-        if ( previous && previous != &DasGlfw_ChainKeyDispatch ) {
+        auto previous = glfwSetKeyCallback(w, DasGlfw_RealKey);
+        if ( previous && previous != &DasGlfw_RealKey
+            && previous != &DasGlfw_ChainKeyDispatch ) {
             st.prev_key = previous;
         }
         st.installed_key = true;
     }
     static void ensure_chain_char_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
-        auto previous = glfwSetCharCallback(w, DasGlfw_ChainCharDispatch);
-        if ( previous && previous != &DasGlfw_ChainCharDispatch ) {
+        auto previous = glfwSetCharCallback(w, DasGlfw_RealChar);
+        if ( previous && previous != &DasGlfw_RealChar
+            && previous != &DasGlfw_ChainCharDispatch ) {
             st.prev_char = previous;
         }
         st.installed_char = true;
@@ -488,6 +553,7 @@ namespace das {
     Module_dasGLFW::~Module_dasGLFW() {
         Module_dasGLFW::g_Callbacks = das_map<void *, GlswCallbacks>{};
         g_GlfwChain = das_map<void *, GlfwChainState>{};
+        g_GlfwRealInputMuted.store(false, std::memory_order_relaxed);
     }
 
 	void Module_dasGLFW::initMain () {
@@ -531,6 +597,10 @@ namespace das {
             SideEffects::worstDefault,"DasGlfw_PostKey");
         addExtern<DAS_BIND_FUN(DasGlfw_PostChar)>(*this,lib,"glfw_post_char",
             SideEffects::worstDefault,"DasGlfw_PostChar");
+        addExtern<DAS_BIND_FUN(DasGlfw_SetRealInputMuted)>(*this,lib,"glfw_set_real_input_muted",
+            SideEffects::worstDefault,"DasGlfw_SetRealInputMuted");
+        addExtern<DAS_BIND_FUN(DasGlfw_IsRealInputMuted)>(*this,lib,"glfw_is_real_input_muted",
+            SideEffects::accessExternal,"DasGlfw_IsRealInputMuted");
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeWindow)>(*this, lib, "glfwGetNativeWindow",SideEffects::worstDefault, "DAS_glfwGetNativeWindow")
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeDisplay)>(*this, lib, "glfwGetNativeDisplay",SideEffects::worstDefault, "DAS_glfwGetNativeDisplay");

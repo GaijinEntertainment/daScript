@@ -474,3 +474,24 @@ Continue T1 from the working local terminal:
 - 2026-07-19: Keep the full terminal snapshot as an explicit compatibility API,
   but render only a bounded active viewport. The first pass restored about 120
   FPS at 10,000 retained rows and pinned flat interpreter/JIT projection costs.
+- 2026-07-24: A session is a durable entity, not a process run. The watcher
+  persists a herd registry (name, host, agent profile, workspace, lifecycle
+  `running/exited/closed`); the PTY is a linked attribute. Exited sessions stay
+  listed and relaunch via the profile's resume command in the same primary
+  worktree; a watcher restart flips running records to `exited/watcher_restart`;
+  `closed` is an explicit user act.
+- 2026-07-24: Agent profiles are user-editable config (`dasHerd.profiles.json`
+  beside `dasHerd.json`), shipped with `shell`, `claude`, and `codex` defaults:
+  launch argv, resume argv, and an `agent` flag that gates DASHERD env +
+  context/skill injection. A herd-managed agent session may be task-less.
+- 2026-07-24: Workspace is a primary worktree plus satellite repositories.
+  Growth is announce-and-verify (agent declares via the CLI, watcher validates
+  and attaches) or explicit user add; no passive checkout sniffing.
+- 2026-07-24: Worktree/checkout contention is advisory only: flag every
+  non-closed session attending the same canonical worktree path, never enforce.
+- 2026-07-24: Agent-to-human notifications stay free text over the mailbox; the
+  UI surfaces unread counts, no typed status vocabulary.
+- 2026-07-24: Workflow (regular work / assist-PR / review-PR) is a creation
+  template that parameterizes setup only; after birth all sessions are the same
+  kind of thing. New worktrees default to repo-local `.codex/worktrees/<name>`
+  with the path editable in the launcher.

@@ -4,6 +4,7 @@ options rtti
 require dastest/testing_boost public
 require ../watcher_core.das
 require daslib/fio
+require daslib/strings_boost
 require strings
 
 [test]
@@ -66,6 +67,46 @@ def private wait_for(session_id, state : string; timeout_ms : int64) : bool {
         sleep(1u)
     }
     return false
+}
+
+[test]
+def test_watcher_structured_drain(t : T?) {
+    if (get_platform_name() != "windows") return
+    t |> run("structured tasks drain on the short quiet interval") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_drain_test_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        t |> equal(watcher_init(path_join(root, "sessions")), "")
+        let launched = watcher_launch(WatcherLaunchRequest(
+            command_line = "cmd.exe /d /c echo drain-probe", cwd = root,
+            kind = "git-test", timeout_ms = 5000l,
+            drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS))
+        t |> success(launched.ok, launched.error)
+        t |> success(wait_for(launched.session_id, "exited", 5000l),
+            "structured probe exits and drains")
+        var exited_ms = -1l
+        var drained_ms = -1l
+        let events = fread(path_join(path_join(path_join(root, "sessions"),
+            launched.session_id), "events.jsonl"))
+        for (line in split(events, "
+")) {
+            var event = WatcherEvent()
+            if (!sscan_json(line, event)) continue
+            if (event.event == "process_exited") {
+                exited_ms = event.elapsed_ms
+            } elif (event.event == "output_drained") {
+                drained_ms = event.elapsed_ms
+            }
+        }
+        t |> success(exited_ms >= 0l && drained_ms >= exited_ms,
+            "exit and drain events are recorded in order")
+        t |> success(drained_ms - exited_ms < 200l,
+            "short quiet interval drains well under the interactive default")
+        watcher_shutdown()
+    }
 }
 
 [test]

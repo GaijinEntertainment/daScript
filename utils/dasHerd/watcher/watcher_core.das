@@ -14,6 +14,11 @@ require strings public
 require math
 
 let private DEFAULT_DRAIN_QUIET_MS = 250l
+// Structured non-interactive tasks (git observation, capture helpers) parse
+// machine output after exit. Across 1968 logged sessions the pipe outlived the
+// conservative 250ms quiet interval in all but 2; output was always complete
+// at process exit, so a short quiet window only guards ConHost flush latency.
+let public WATCHER_STRUCTURED_DRAIN_QUIET_MS = 40l
 let private MAX_COMMAND_BYTES = 32 * 1024
 let private MAX_INPUT_BYTES = 1024 * 1024
 let private MAX_RAW_HISTORY_BYTES = 8 * 1024 * 1024
@@ -45,13 +50,23 @@ struct public WatcherLaunchRequest {
     worktree_path : string
     purpose : string
     task_context : string
+    // Profile intro_lines joined for the initial launch prompt (agents only).
+    intro_text : string
     agent_url : string
     agent_token : string
     agent_skill_path : string
+    // Durable herd session hosting this PTY (empty for plumbing/legacy launches).
+    herd_session_id : string
+    // Relaunch of a durable session: argv is used verbatim, no task prompt.
+    resume : bool
     columns : int = 100
     rows : int = 30
     timeout_ms : int64
+    // 0 keeps the conservative interactive default (DEFAULT_DRAIN_QUIET_MS).
+    drain_quiet_ms : int64
 }
+
+def public watcher_kind_is_agent(kind : string) : bool => starts_with(kind, "agent-")
 
 def public watcher_target_id_or_local(target_id : string) : string {
     return empty(target_id) ? "local" : target_id
@@ -214,6 +229,7 @@ struct public WatcherSessionInfo {
     purpose : string
     task_context : string
     context_path : string
+    herd_session_id : string
     state : string
     reason : string
     pid : int = 0
@@ -274,6 +290,7 @@ class private WatcherSession {
     purpose : string
     task_context : string
     context_path : string
+    herd_session_id : string
     session_dir : string
     output_path : string
     events_path : string
@@ -287,6 +304,7 @@ class private WatcherSession {
     events_file : FILE const? = null
     started : int64
     timeout_ms : int64
+    drain_quiet_ms : int64
     last_data_ms : int64
     exit_seen_ms : int64 = -1l
     exit_code : int64 = -1l
@@ -398,6 +416,7 @@ def private session_info(session : WatcherSession?) : WatcherSessionInfo {
         worktree_path = session.worktree_path,
         purpose = session.purpose, task_context = session.task_context,
         context_path = session.context_path,
+        herd_session_id = session.herd_session_id,
         state = session.state, reason = session.reason,
         pid = session.pid, exit_code = session.exit_code,
         elapsed_ms = elapsed_ms(session), output_bytes = session.output_bytes,
@@ -433,8 +452,10 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }
-    if (request.kind == "agent-codex") {
-        if (empty(strip(request.task_context))) {
+    if (watcher_kind_is_agent(request.kind)) {
+        // Herd-managed agent sessions may be task-less (human drives from the
+        // terminal); direct agent launches keep requiring an assigned task.
+        if (empty(request.herd_session_id) && empty(strip(request.task_context))) {
             return WatcherLaunchResult(error = "agent task is required")
         }
         if (length(request.task_context) > MAX_COMMAND_BYTES / 2) {
@@ -475,12 +496,14 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         target_id = request.target_id, repository_id = request.repository_id,
         worktree_path = request.worktree_path, purpose = request.purpose,
         task_context = request.task_context,
+        herd_session_id = request.herd_session_id,
         session_dir = session_dir,
         output_path = path_join(session_dir, "output.raw"),
         events_path = path_join(session_dir, "events.jsonl"),
         mailbox_path = path_join(session_dir, "mailbox.jsonl"),
         bundles_path = path_join(session_dir, "bundles.jsonl"),
-        started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms))
+        started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms),
+        drain_quiet_ms = max(0l, request.drain_quiet_ms))
     session.context_path = path_join(session_dir, "context.md")
     session.output_file = fopen(session.output_path, "wb")
     session.events_file = fopen(session.events_path, "wb")
@@ -502,17 +525,18 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         return WatcherLaunchResult(error = "could not write session metadata")
     }
     var session_created_detail = "cwd={request.cwd}; display={visible_command}"
-    if (request.kind == "agent-codex") {
+    if (watcher_kind_is_agent(request.kind)) {
         if (!write_text_file(session.context_path,
                 agent_context_markdown(request, session_id, session.context_path))) {
             unsafe { delete session }
             return WatcherLaunchResult(error = "could not write agent session context")
         }
         session_created_detail += "; context={session.context_path}"
+        ensure_agent_local_instructions(request, session_created_detail)
     }
     append_event(session, "session_created", session_created_detail)
 
-    if (request.kind == "agent-codex") {
+    if (watcher_kind_is_agent(request.kind)) {
         append_event(session, "agent_bootstrap_prepared",
             "context={session.context_path}; skill={request.agent_skill_path}; " +
             "task_bytes={length(request.task_context)}")
@@ -614,8 +638,12 @@ def public watcher_tick(maximum_bytes_per_session : int = 64 * 1024) {
         enforce_timeout(session, now_ms)
         if (status == TerminalPollStatus.closed) {
             finish_drain(session, "pipe_closed")
-        } elif (session.exit_seen_ms >= 0l && now_ms - session.last_data_ms >= DEFAULT_DRAIN_QUIET_MS) {
-            finish_drain(session, "quiet_interval")
+        } else {
+            let quiet_ms = (session.drain_quiet_ms > 0l
+                ? session.drain_quiet_ms : DEFAULT_DRAIN_QUIET_MS)
+            if (session.exit_seen_ms >= 0l && now_ms - session.last_data_ms >= quiet_ms) {
+                finish_drain(session, "quiet_interval")
+            }
         }
     }
 }
@@ -864,6 +892,17 @@ def public watcher_session_artifact_path(session_id : string; name : string) : s
     return path_join(g_sessions[index].session_dir, name)
 }
 
+// A capture path that exists before its producing task session does.
+def public watcher_scratch_artifact_path(name : string) : string {
+    if (empty(g_log_root) || empty(name) || name == "." || name == ".."
+            || find(name, "/") >= 0 || find(name, "\\") >= 0
+            || find(name, ":") >= 0) return ""
+    let scratch_dir = path_join(g_log_root, "_capture")
+    var mkdir_error : string
+    if (!mkdir_rec(scratch_dir, mkdir_error)) return ""
+    return path_join(scratch_dir, name)
+}
+
 def public watcher_prune_completed_sessions(kind : string;
                                             repository_id : string;
                                             worktree_path : string) : int {
@@ -895,6 +934,73 @@ def private powershell_literal(value : string) : string {
     return "'" + replace(value, "'", "''") + "'"
 }
 
+let private DASHERD_LOCAL_MARKER = "<!-- generated by dasHerd; edits will be overwritten -->"
+
+def private agent_local_instructions(request : WatcherLaunchRequest const) : string {
+    return ("{DASHERD_LOCAL_MARKER}\n\n# dasHerd\n\n" +
+        "This worktree hosts dasHerd-managed agent sessions. When the " +
+        "DASHERD_SESSION_ID environment variable is set, this session is one of " +
+        "them: read the session context markdown at DASHERD_CONTEXT_PATH, and " +
+        "use the dasHerd skill at `{request.agent_skill_path}` for coordination " +
+        "— the inbox/outbox mailbox, declaring participating repositories, and " +
+        "Review Bundles. CLI: `utils/dasHerd/dasherd.ps1` " +
+        "(whoami / inbox / outbox / bundle / repository).\n")
+}
+
+// Keep the dropped file out of git status without touching tracked files:
+// register it in the worktree's own info/exclude (per-worktree for linked
+// worktrees, .git/info/exclude for a main checkout). Best-effort.
+def private ensure_git_exclude(worktree_path, pattern : string;
+                               var detail : string&) {
+    let git_marker = path_join(worktree_path, ".git")
+    let marker_stat = stat(git_marker)
+    if (!marker_stat.is_valid) return
+    var git_dir = git_marker
+    if (!marker_stat.is_dir) {
+        let content = strip(fread(git_marker))
+        if (!starts_with(content, "gitdir:")) return
+        git_dir = strip(slice(content, length("gitdir:")))
+        if (!is_absolute(git_dir)) {
+            git_dir = path_join(worktree_path, git_dir)
+        }
+    }
+    let exclude_path = path_join(path_join(git_dir, "info"), "exclude")
+    let existing = fexist(exclude_path) ? fread(exclude_path) : ""
+    for (line in split(existing, "\n")) {
+        if (strip(line) == pattern) return
+    }
+    var mkdir_error : string
+    if (!mkdir_rec(dir_name(exclude_path), mkdir_error)) {
+        detail += "; exclude=mkdir_failed"
+        return
+    }
+    let payload = ((empty(existing) || ends_with(existing, "\n"))
+        ? existing + pattern + "\n" : existing + "\n" + pattern + "\n")
+    if (!write_text_file(exclude_path, payload)) {
+        detail += "; exclude=write_failed"
+    }
+}
+
+// Passive discovery for agents that read CLAUDE.local.md: a marker-guarded
+// pointer at the dasHerd contract, written into the session worktree at agent
+// launch. A hand-written file without our marker is never touched.
+def private ensure_agent_local_instructions(request : WatcherLaunchRequest const;
+                                            var detail : string&) {
+    let local_path = path_join(request.cwd, "CLAUDE.local.md")
+    let existing = fexist(local_path) ? fread(local_path) : ""
+    if (!empty(existing) && find(existing, DASHERD_LOCAL_MARKER) < 0) {
+        detail += "; local_md=kept_user_file"
+        return
+    }
+    let desired = agent_local_instructions(request)
+    if (existing != desired && !write_text_file(local_path, desired)) {
+        detail += "; local_md=write_failed"
+        return
+    }
+    detail += "; local_md={local_path}"
+    ensure_git_exclude(request.cwd, "CLAUDE.local.md", detail)
+}
+
 def private agent_context_markdown(request : WatcherLaunchRequest const;
                                    session_id, context_path : string) : string {
     return ("# dasHerd session\n\n" +
@@ -917,14 +1023,28 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
                               session_id, context_path : string) : array<string> {
     var command_argv := request.argv
     if (empty(command_argv)) command_argv |> push("codex")
-    command_argv |> push("Your assigned debug task is:\n\n{request.task_context}\n\n" +
-        "Read the dasHerd session context at {context_path} before acting. " +
-        "Use the dasHerd skill for session coordination, then begin the assigned task.")
+    // A resume relaunch runs the profile's resume argv verbatim: the agent CLI
+    // restores its own conversation, so re-sending the prompt would duplicate it.
+    if (!request.resume) {
+        var prompt = strip(request.intro_text)
+        if (!empty(strip(request.task_context))) {
+            if (!empty(prompt)) {
+                prompt += "\n\n"
+            }
+            prompt += ("Your assigned debug task is:\n\n{request.task_context}\n\n" +
+                "Read the dasHerd session context at {context_path} before acting. " +
+                "Use the dasHerd skill for session coordination, then begin the assigned task.")
+        }
+        if (!empty(prompt)) {
+            command_argv |> push(prompt)
+        }
+    }
     if (get_platform_name() == "windows") {
         var command = ("$env:DASHERD_URL = {powershell_literal(request.agent_url)}; " +
             "$env:DASHERD_TOKEN = {powershell_literal(request.agent_token)}; " +
             "$env:DASHERD_SESSION_ID = {powershell_literal(session_id)}; " +
             "$env:DASHERD_SESSION_KIND = {powershell_literal(request.purpose)}; " +
+            "$env:DASHERD_HERD_SESSION_ID = {powershell_literal(request.herd_session_id)}; " +
             "$env:DASHERD_CONTEXT_PATH = {powershell_literal(context_path)}; & ")
         var quoted : array<string>
         quoted |> reserve(length(command_argv))
@@ -936,7 +1056,9 @@ def private agent_launch_argv(request : WatcherLaunchRequest const;
     }
     var result <- ["env", "DASHERD_URL={request.agent_url}",
         "DASHERD_TOKEN={request.agent_token}", "DASHERD_SESSION_ID={session_id}",
-        "DASHERD_SESSION_KIND={request.purpose}", "DASHERD_CONTEXT_PATH={context_path}"]
+        "DASHERD_SESSION_KIND={request.purpose}",
+        "DASHERD_HERD_SESSION_ID={request.herd_session_id}",
+        "DASHERD_CONTEXT_PATH={context_path}"]
     result |> push_from(command_argv)
     return <- result
 }
@@ -1067,6 +1189,16 @@ def private append_mailbox_record(var session : WatcherSession?;
     if (session.mailbox_file == null) return
     fwrite(session.mailbox_file, sprint_json(message, false) + "\n")
     fflush(session.mailbox_file)
+}
+
+def public watcher_mailbox_unread_outbox(session_id : string) : int {
+    let index = watcher_find_session(session_id)
+    if (index < 0 || g_sessions[index] == null) return 0
+    var count = 0
+    for (message in g_sessions[index].mailbox) {
+        if (message.direction == "outbox" && message.status == "new") count++
+    }
+    return count
 }
 
 def public watcher_mailbox_session_revision(session_id : string) : int64 {

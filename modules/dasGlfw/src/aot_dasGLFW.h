@@ -41,4 +41,6 @@ namespace das {
     DAS_MOD_API void DasGlfw_ChainAddChar ( GLFWwindow * window, TLambda<void,const GLFWwindow*,unsigned int> func, Context * ctx );
     DAS_MOD_API void DasGlfw_PostKey ( GLFWwindow * window, int key, int scancode, int action, int mods );
     DAS_MOD_API void DasGlfw_PostChar ( GLFWwindow * window, unsigned int codepoint );
+    DAS_MOD_API void DasGlfw_SetRealInputMuted ( bool muted );
+    DAS_MOD_API bool DasGlfw_IsRealInputMuted ();
 }

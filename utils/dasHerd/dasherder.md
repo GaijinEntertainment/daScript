@@ -10,9 +10,20 @@ worktrees may participate, but declare them in the active review bundle. Do not
 infer ownership from dirty files and do not include unrelated pre-existing work.
 
 The watcher injects `DASHERD_URL`, `DASHERD_TOKEN`, `DASHERD_SESSION_ID`,
-`DASHERD_SESSION_KIND`, and `DASHERD_CONTEXT_PATH`. Read the context artifact
-first. Run the repository-owned CLI from any participating worktree by using its
-absolute path when necessary:
+`DASHERD_SESSION_KIND`, `DASHERD_HERD_SESSION_ID`, and `DASHERD_CONTEXT_PATH`.
+Read the context artifact first.
+
+**Prefer the MCP tools** when a `dasherd` MCP server is configured (worktrees
+bootstrapped with `utils/mcp/setup.das` have it): `dasherd_whoami`,
+`dasherd_inbox_list` / `dasherd_inbox_get` / `dasherd_inbox_ack` /
+`dasherd_inbox_complete`, `dasherd_outbox_send` / `dasherd_outbox_reply`,
+`dasherd_bundle_list` / `dasherd_bundle_sync`, `dasherd_repository_list` /
+`dasherd_repository_add`. They read the same `DASHERD_*` environment and avoid
+shell quoting entirely; focus sets and bundle manifests pass as inline JSON
+(`focus_json`, `bundle_json`).
+
+**CLI fallback** — run the repository-owned CLI from any participating
+worktree by using its absolute path when necessary:
 
 ```powershell
 powershell.exe -NoProfile -File <origin>/utils/dasHerd/dasherd.ps1 whoami
@@ -117,6 +128,12 @@ powershell.exe -NoProfile -File <origin>/utils/dasHerd/dasherd.ps1 repository ad
 Use the exact `repository_id` and observed `worktrees[].path` returned by
 `repository list`. If a worktree is not observed yet, register/refresh it and do
 not substitute a similarly named checkout.
+
+`repository add` is also the workspace announce: run it the moment the task
+starts touching an additional repository, checkout, or worktree. The CLI sends
+`DASHERD_HERD_SESSION_ID` with the request, so the watcher attaches the path to
+this session's durable workspace and the human sees it on the session card. An
+already-registered repository is a successful announce, not an error.
 
 ## Human requests and replies
 

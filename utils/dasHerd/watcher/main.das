@@ -115,11 +115,27 @@ def private maybe_collect_gc() {
         "string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
 }
 
+// Children inherit the watcher's environment. When the watcher itself was
+// started from a Claude Code tool shell, the inherited session markers make
+// every launched agent disable transcript persistence (breaking Relaunch via
+// `claude --continue`) and NO_COLOR renders every agent TUI monochrome — the
+// play-session "terminal colors came out wrong". Scrub once at startup; force
+// persistence too since POSIX setenv cannot remove.
+def private sanitize_child_environment() {
+    for (marker in fixed_array("CLAUDE_CODE_CHILD_SESSION", "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT",
+            "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID", "NO_COLOR")) {
+        set_env_variable(marker, "")
+    }
+    set_env_variable("CLAUDE_CODE_FORCE_SESSION_PERSISTENCE", "1")
+}
+
 [export]
 def init() {
     if (!g_args_parsed) {
         parse_watcher_args()
     }
+    sanitize_child_environment()
     if (g_server != null || g_watcher_initialized) {
         print("dasHerd watcher: init called while already initialized\n")
         g_exit_code = 1
@@ -146,6 +162,14 @@ def init() {
         return
     }
     g_repositories_initialized = true
+    let herd_error = herd_init(path_join(g_log_root, "_registry.json"),
+        path_join(dir_name(g_config_path), "dasHerd.profiles.json"))
+    if (!empty(herd_error)) {
+        print("dasHerd watcher: could not initialize herd registry: {herd_error}\n")
+        g_exit_code = 6
+        request_exit()
+        return
+    }
 
     g_server = new DasHerdWatcherServer()
     g_server.token = g_token
@@ -216,6 +240,7 @@ def shutdown() {
             repository_shutdown()
             g_repositories_initialized = false
         }
+        herd_shutdown()
         watcher_shutdown()
         g_watcher_initialized = false
     }
