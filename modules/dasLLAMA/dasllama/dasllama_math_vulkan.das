@@ -3696,6 +3696,7 @@ struct private StreamSlot {
     s1 : int                 // pseudo-stack indices: gate / up / down
     s3 : int
     s2 : int
+    wait_value : uint64      // timeline value of the slot's in-flight transfer-queue fill (0 = none)
 }
 
 // pre-recorded decode-form FFN chain per (gate, up, down) stack triple: GEMV pair, fused
@@ -3915,6 +3916,15 @@ struct private GpuState {
     stream_max_dn_ws : int64
     stream_ready : bool
     stream_reserve : int64        // bytes carved out of weight_budget for the 2 stream slots
+    // dedicated transfer family (phase 5): mirror->slot copies overlap compute, handed off via a
+    // timeline semaphore the next compute submit waits on. -1 = single-queue mode (the old rail).
+    xfer_fam : int = -1
+    xfer_queue : VkQueue
+    xfer_pool : CommandPool
+    xfer_cmd : VkCommandBuffer
+    xfer_sem : VkSemaphore
+    xfer_value : uint64           // last signaled timeline value
+    pend_wait : uint64            // value the NEXT compute submit must wait for (0 = none)
     // deltanet chain state (lazy — first DN dispatch creates it)
     dn_meta : HostBuf             // dn kernel params staging
     dn_meta_dev : uint64
@@ -4002,12 +4012,17 @@ def private find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
-def private make_host_buf(bytes : int64; storage : bool; cached : bool = false) : HostBuf {
+def private make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false) : HostBuf {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = storage
     bci.usage.transfer_src = !storage
     bci.usage.transfer_dst = true   // readback staging targets (y DMA copies land here)
+    if (xfer_shared && g_gpu.xfer_fam >= 0) {
+        // stream mirrors: transfer-queue fills + compute-queue heat slices — CONCURRENT dodges ownership transfers
+        bci.sharingMode = VkSharingMode.CONCURRENT
+        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    }
     var b <- create_buffer(g_gpu.device, bci)   // deliberately never finalized (process-lifetime)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
     let mai = MemoryAllocateInfo(allocationSize = req.size,
@@ -4023,12 +4038,17 @@ def private make_host_buf(bytes : int64; storage : bool; cached : bool = false) 
     return HostBuf(buf = b._vk, mem = m._vk, mapped = mapped, bytes = bytes)
 }
 
-def private make_device_buf(bytes : int64) : uint64 {
+def private make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = true
     bci.usage.transfer_dst = true
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
+    if (xfer_shared && g_gpu.xfer_fam >= 0) {
+        // stream slots: transfer-queue fills + compute-queue reads — CONCURRENT dodges ownership transfers
+        bci.sharingMode = VkSharingMode.CONCURRENT
+        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    }
     var b <- create_buffer(g_gpu.device, bci)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
     // priority 1.0 (default 0.5): under pressure the driver demotes lower-priority (desktop) memory first
@@ -4144,12 +4164,18 @@ def private vk_moe_init : bool {
     if (g_gpu.coopmat_mode == 4 && !g_gpu.has_coopmat2) {
         g_gpu.coopmat_mode = 3   // forced/requested cm2 without the extension: mm
     }
+    // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
+    var xfam = -1
+    if (g_gpu.has_coopmat && get_env_variable("DASLLAMA_VK_XFERQ") != "0"
+            && timeline_semaphore_supported(g_gpu.phys)) {
+        xfam = select_transfer_queue_family(g_gpu.phys)
+    }
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
-        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam)
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam)
         to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load)\n")
     } elif (g_gpu.has_coopmat) {
-        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam)
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
         if (g_gpu.coopmat_mode != 0) {
             let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
             to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles\n")
@@ -4159,6 +4185,28 @@ def private vk_moe_init : bool {
     }
     volkLoadDevice(dev_raw())
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
+    if (xfam >= 0) {
+        g_gpu.xfer_fam = xfam
+        g_gpu.xfer_queue = get_device_queue(g_gpu.device, uint(xfam), 0u)
+        var xpci : CommandPoolCreateInfo
+        xpci.queueFamilyIndex = uint(xfam)
+        xpci.flags.reset_command_buffer = true
+        g_gpu.xfer_pool <- create_command_pool(g_gpu.device, xpci)
+        var xai = VkCommandBufferAllocateInfo()
+        xai.commandPool = boost_value_to_vk(g_gpu.xfer_pool)
+        xai.level = VkCommandBufferLevel.PRIMARY
+        xai.commandBufferCount = 1u
+        var tci = VkSemaphoreTypeCreateInfo()
+        tci.semaphoreType = VkSemaphoreType.TIMELINE
+        tci.initialValue = 0ul
+        var sci = VkSemaphoreCreateInfo()
+        unsafe {
+            vk_check(vkAllocateCommandBuffers(dev_raw(), xai, addr(g_gpu.xfer_cmd)), null)
+            sci.pNext = addr<void?>(tci)
+            vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
+        }
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
+    }
     // WDDM residency shield: allocations chain priority 1.0 (DASLLAMA_VK_MEMPRIO=0 = bisect hatch)
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
         && get_env_variable("DASLLAMA_VK_MEMPRIO") != "0")
@@ -4394,10 +4442,10 @@ def private stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws
 // build a VkStack shell (weight plane buffers only — the GEMV/cls scratch is lazy, see
 // ensure_gemv_scratch). Resident stacks pass their exact plane sizes; streaming pseudo-stacks
 // pass slot capacities and a base of -1 (re-based per layer).
-def private make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64) : int {
+def private make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // q8n has no scale plane (wscap 0) — floor the buffer so its descriptor slot stays valid
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
-                     wqbuf = make_device_buf(wqcap), wsbuf = make_device_buf(max(wscap, 64l)), wsbytes = wscap)
+                     wqbuf = make_device_buf(wqcap, xfer_shared), wsbuf = make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -4436,7 +4484,8 @@ def private ensure_gemv_scratch(si : int) {
 def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, rows : int64; fmt : int) : bool {
     let pb = stack_plane_bytes(n, rows, fmt)
     var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws,
-                         hwq = make_host_buf(pb.wq, false), hws = make_host_buf(max(pb.ws, 64l), false))
+                         hwq = make_host_buf(pb.wq, false, [xfer_shared = true]),
+                         hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true]))
     unsafe {
         par_memcpy(ss.hwq.mapped, reinterpret<void? -const>(wq), pb.wq)
         if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
@@ -4512,6 +4561,10 @@ def vk_drop_model_state {
         return
     }
     vk_check(vkQueueWaitIdle(g_gpu.queue), null)
+    if (g_gpu.xfer_fam >= 0 && g_gpu.xfer_value > 0ul) {
+        xfer_host_wait(g_gpu.xfer_value)   // in-flight transfer-queue copies retire before the sweeps
+    }
+    g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
     // the resident driver's das-side shell first (its VK objects die in the sweeps below)
     if (g_rd != null) {
@@ -6591,8 +6644,24 @@ def private submit_nowait(var raw : VkCommandBuffer) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
     let fence = g_gpu.fence
+    // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
+    var tss = VkTimelineSemaphoreSubmitInfo()
+    var wval = g_gpu.pend_wait
+    var sem = g_gpu.xfer_sem
+    var wstage : VkPipelineStageFlags
+    wstage.transfer = true
+    wstage.compute_shader = true
     unsafe {
         submit.pCommandBuffers = addr(raw)
+        if (wval > 0ul) {
+            tss.waitSemaphoreValueCount = 1u
+            tss.pWaitSemaphoreValues = addr(wval)
+            submit.pNext = addr<void?>(tss)
+            submit.waitSemaphoreCount = 1u
+            submit.pWaitSemaphores = addr(sem)
+            submit.pWaitDstStageMask = addr<uint?>(wstage)
+            g_gpu.pend_wait = 0ul
+        }
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
     }
 }
@@ -8186,9 +8255,9 @@ def private ensure_stream_slots {
     g_gpu.stream_cmd = alloc_cmd()
     g_gpu.stream_slots |> reserve(2)
     for (_slot in range(2)) {
-        let s1 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_gu_wq, g_gpu.stream_max_gu_ws)
-        let s3 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_gu_wq, g_gpu.stream_max_gu_ws)
-        let s2 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_dn_wq, g_gpu.stream_max_dn_ws)
+        let s1 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_gu_wq, g_gpu.stream_max_gu_ws, [xfer_shared = true])
+        let s3 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_gu_wq, g_gpu.stream_max_gu_ws, [xfer_shared = true])
+        let s2 = make_stack_shell(-1l, 0l, 0, g_gpu.stream_max_dn_wq, g_gpu.stream_max_dn_ws, [xfer_shared = true])
         g_gpu.stream_slots |> push(StreamSlot(group = -1, s1 = s1, s3 = s3, s2 = s2))
     }
     g_gpu.stream_ready = true
@@ -8207,12 +8276,30 @@ def private rebase_pseudo(si : int; ss : StreamStack const) {
     g_gpu.stacks[si].fmt = ss.fmt
 }
 
-// async is UNFENCED — the prefetch rides the GPU-idle window, ordered by the next chain's
-// transfer->compute barrier. One shared cmd buffer is safe: a fenced wait always intervenes
-// between copy recordings, so the prior copy has retired off the queue.
+// host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer
+// cmd, and the sync (cold-miss) completion wait
+def private xfer_host_wait(v : uint64) {
+    var wi = VkSemaphoreWaitInfo()
+    var sem = g_gpu.xfer_sem
+    var val = v
+    unsafe {
+        wi.semaphoreCount = 1u
+        wi.pSemaphores = addr(sem)
+        wi.pValues = addr(val)
+        vk_check(vkWaitSemaphores(dev_raw(), wi, 0xFFFFFFFFFFFFFFFFul), null)
+    }
+}
+
+// Transfer family armed: copies ride the dedicated queue signaling the timeline (true overlap;
+// the slot's consumer attaches the GPU-side wait — see vk_moe_ffn_streamed). Single-queue mode
+// keeps the old unfenced rail. Shared cmds are safe: a wait always intervenes between recordings.
 def private copy_stream_group(si, g : int; sync : bool) {
     let slot = g_gpu.stream_slots[si]
-    var raw = g_gpu.stream_cmd
+    let xfer = g_gpu.xfer_fam >= 0
+    if (xfer && g_gpu.xfer_value > 0ul) {
+        xfer_host_wait(g_gpu.xfer_value)   // every prior transfer-queue copy retired
+    }
+    var raw = xfer ? g_gpu.xfer_cmd : g_gpu.stream_cmd
     let rf : VkCommandBufferResetFlags
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
@@ -8226,7 +8313,29 @@ def private copy_stream_group(si, g : int; sync : bool) {
         }
     }
     vk_check(vkEndCommandBuffer(raw), null)
-    if (sync) {
+    if (xfer) {
+        g_gpu.xfer_value++
+        var sig = g_gpu.xfer_value
+        var tss = VkTimelineSemaphoreSubmitInfo()
+        var sem = g_gpu.xfer_sem
+        var submit = VkSubmitInfo()
+        submit.commandBufferCount = 1u
+        submit.signalSemaphoreCount = 1u
+        let nofence : VkFence
+        unsafe {
+            tss.signalSemaphoreValueCount = 1u
+            tss.pSignalSemaphoreValues = addr(sig)
+            submit.pNext = addr<void?>(tss)
+            submit.pCommandBuffers = addr(raw)
+            submit.pSignalSemaphores = addr(sem)
+            vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
+        }
+        if (sync) {
+            xfer_host_wait(g_gpu.xfer_value)
+        }
+        // the consumer still attaches the GPU-side wait — cross-queue visibility by the book
+        g_gpu.stream_slots[si].wait_value = g_gpu.xfer_value
+    } elif (sync) {
         submit_wait(raw)
     } else {
         var submit = VkSubmitInfo()
@@ -8259,6 +8368,11 @@ def private vk_moe_ffn_streamed(g : int; var goutp : float?; offs1 : int64 const
     rebase_pseudo(g_gpu.stream_slots[si].s1, g_gpu.stream_stacks[g * 3])
     rebase_pseudo(g_gpu.stream_slots[si].s3, g_gpu.stream_stacks[g * 3 + 1])
     rebase_pseudo(g_gpu.stream_slots[si].s2, g_gpu.stream_stacks[g * 3 + 2])
+    // the slot's transfer-queue fill hands off here: the next compute submit waits the timeline
+    if (g_gpu.stream_slots[si].wait_value > 0ul) {
+        g_gpu.pend_wait = g_gpu.stream_slots[si].wait_value
+        g_gpu.stream_slots[si].wait_value = 0ul
+    }
     vk_moe_ffn_batch(goutp, offs1, offs3, offs2, nregions, xqp, xsp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
     if (g > 0 && g_gpu.stream_slots[(g - 1) % 2].group != g - 1) {
         copy_stream_group((g - 1) % 2, g - 1, false)
