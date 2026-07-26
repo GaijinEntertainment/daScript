@@ -468,6 +468,16 @@ for presentation, never the correctness oracle.
   review turns on-demand: summoned by the observer or the human when bundle
   deviation warrants it. When the repo setting actually flips, revisit
   skills/babysit.md, which still assumes Copilot feedback arrives on every PR.
+- 2026-07-26: review-by-another-agent/tool graduates from avoided to planned.
+  What makes it safe now: the reviewer is summoned against a declared bundle
+  (reviews a claim, cheapest finding = deviation from the declaration), its
+  output lands in the attention queue as a ranked soft signal (competes for
+  trust, never demands it, never blocks), and escalation stays evidence-shaped
+  — an opinion with a reproduction (failing test) becomes a red lane and
+  summons; what can't be reproduced stays ranked advice. Reviewer sessions get
+  fresh context and the bundle only, never the author's conversation
+  (independence). Deterministic tools (lint, perf_lint, detect-dupe) join the
+  same pipeline one trust rung up: their findings reproduce by construction.
 - 2026-07-21: Proposed preference is local Review Focus first, GitHub second,
   because Review Focus is the shared interaction foundation.
 - 2026-07-21: Adopt local Review Focus first and begin protocol design before
