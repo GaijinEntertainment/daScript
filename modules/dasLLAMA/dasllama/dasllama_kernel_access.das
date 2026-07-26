@@ -14,14 +14,36 @@ require daslib/rtti
 // passed whole as an argument to a call it does not model — lands in `err` so the lens can fail
 // the compile instead of silently under-tracking (the strictness ratchet).
 
+let private ACCESS_DEBUG = false   // flip for macro-time access-derivation prints
+
 struct AccessResult {
     reads : table<string>
     writes : table<string>
     err : string   // non-empty = unanalyzable construct; the lens turns it into a compile error
 }
 
-// write-root of an assignment target: peel subscripts/fields/swizzles down to the base variable
-def private write_root(e : Expression?) : ExprVar? {
+// write-root of an assignment target: peel subscripts/fields/swizzles down to the base variable.
+// In field mode the peel STOPS at the first ExprField whose name is tracked (a class-field
+// buffer) and reports that name; `node` carries the claimable expression either way.
+// an ExprField that names a tracked buffer AND whose base is the kernel class itself — the
+// name check alone collides with float4 component access (`wv.y`), whose names shadow the
+// classic buffer names (x/y/w)
+// bodies are PRE-infer at lens time: buffer fields appear as bare ExprVar names, and member
+// access is a parser-level ExprField with untyped base — so an ExprField counts as a buffer
+// access only when written explicitly as self.<name> (float4 components like `wv.y` shadow the
+// classic buffer names and must NOT match)
+def private is_self_field(ef : ExprField const?; tracked : table<string>) : bool {
+    if (!key_exists(tracked, string(ef.name))) {
+        return false
+    }
+    var base = ef.value
+    if (base is ExprRef2Value) {
+        base = (base as ExprRef2Value).subexpr
+    }
+    return base is ExprVar && (base as ExprVar).name == "self"
+}
+
+def private write_root_name(e : Expression?; tracked : table<string>; fieldMode : bool; var node : Expression const?&) : string {
     var cur = e
     while (true) {
         if (cur is ExprAt) {
@@ -29,7 +51,12 @@ def private write_root(e : Expression?) : ExprVar? {
         } elif (cur is ExprSafeAt) {
             cur = (cur as ExprSafeAt).subexpr
         } elif (cur is ExprField) {
-            cur = (cur as ExprField).value
+            let ef = cur as ExprField
+            if (fieldMode && is_self_field(ef, tracked)) {
+                node = cur
+                return string(ef.name)
+            }
+            cur = ef.value
         } elif (cur is ExprSwizzle) {
             cur = (cur as ExprSwizzle).value
         } elif (cur is ExprRef2Value) {
@@ -38,7 +65,14 @@ def private write_root(e : Expression?) : ExprVar? {
             break
         }
     }
-    return cur is ExprVar ? cur as ExprVar : null
+    if (cur is ExprVar) {
+        let ev = cur as ExprVar
+        if (key_exists(tracked, string(ev.name))) {
+            node = cur
+            return string(ev.name)
+        }
+    }
+    return ""
 }
 
 def private is_setop2(op : das_string) : bool {
@@ -51,24 +85,31 @@ def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op 
 
 class private AccessVisitor : AstVisitor {
     tracked : table<string>
+    fieldMode : bool               // tracked names are class FIELDS (metal): match self.<name>
+                                   // ExprField accesses only (see is_self_field)
     reads : table<string>
     writes : table<string>
     callees : table<string>        // non-intrinsic call names, for the driver's same-module recursion
-    claimed : table<uint64>        // ExprVar nodes already classified as pure-write targets
+    claimed : table<string>        // pure-write target tokens, keyed name:line:column — infer
+                                   // CLONES subtrees during rewrites, so pointer identity misses
     err : string
 
     def is_tracked(name : das_string) : bool => key_exists(tracked, string(name))
 
     // record a write; `also_read` covers read-modify-write forms (+=, ++). A pure store claims
-    // the target node so the generic ExprVar pass does not also count it as a read.
+    // the target node so the generic read pass does not also count it as a read.
     def note_write(target : Expression?; also_read : bool) {
-        var v = write_root(target)
-        if (v == null || !is_tracked(v.name)) {
+        var node : Expression const?
+        let name = write_root_name(target, tracked, fieldMode, node)
+        if (empty(name)) {
             return
         }
-        writes |> insert(string(v.name))
+        writes |> insert(name)
         if (!also_read) {
-            claimed |> insert(intptr(v))
+            claimed |> insert("{name}:{node.at.line}:{node.at.column}")
+        }
+        if (ACCESS_DEBUG) {
+            print("[access-dbg] write {name} at={int(node.at.line)}:{int(node.at.column)} also_read={also_read}\n")
         }
     }
 
@@ -98,41 +139,70 @@ class private AccessVisitor : AstVisitor {
 
     def override preVisitExprCall(expr : ExprCall?) : void {
         let cname = string(expr.name)
-        // dasSpirv intrinsics that take a whole array and write (or only read) through it
-        if (cname == "coopmatStore") {
+        // GPU intrinsics that take a whole array and write (or only read) through it:
+        // dasSpirv coopmat pair + the dasMetal simdgroup pair store through arg 1;
+        // tg_store_float4(dst, idx, v) stores through arg 0
+        if (cname == "coopmatStore" || cname == "simdgroup_store") {
             if (length(expr.arguments) >= 2) {
                 note_write(expr.arguments[1], false)
             }
             return
         }
-        if (cname == "coopmatLoad") {
-            return   // src argument is a plain read — the generic ExprVar pass records it
+        if (cname == "tg_store_float4") {
+            if (!empty(expr.arguments)) {
+                note_write(expr.arguments[0], false)
+            }
+            return
+        }
+        if (cname == "coopmatLoad" || cname == "simdgroup_load") {
+            return   // src argument is a plain read — the generic read pass records it
         }
         callees |> insert(cname)
-        // the ratchet: a tracked global passed WHOLE to a call we do not model could be written
-        // through a var parameter — refuse to guess
+        // the ratchet: a tracked buffer passed WHOLE to a call we do not model could be written
+        // through a var parameter — refuse to guess. In field mode `self` passed whole is the
+        // same hole (a class-method helper could touch any field), and field-mode analysis does
+        // NOT recurse into free callees (bare-name matching would collide with their locals).
         for (a in expr.arguments) {
             var cur = a
             if (cur is ExprRef2Value) {
                 cur = (cur as ExprRef2Value).subexpr
             }
+            let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
             if (cur is ExprVar && is_tracked((cur as ExprVar).name)) {
-                err = "tracked global '{(cur as ExprVar).name}' passed whole to call '{cname}' — teach the intrinsic table or declare [vk_access]"
+                err = "tracked buffer '{(cur as ExprVar).name}' passed whole to call '{cname}' — teach the intrinsic table or {escape}"
+            } elif (fieldMode && cur is ExprField && is_self_field(cur as ExprField, tracked)) {
+                err = "tracked buffer '{(cur as ExprField).name}' passed whole to call '{cname}' — teach the intrinsic table or {escape}"
+            } elif (fieldMode && cur is ExprVar && (cur as ExprVar).name == "self") {
+                err = "'self' passed whole to call '{cname}' — the classifier cannot see through method helpers; use access_force with declared roles"
             }
         }
     }
 
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
-        if (is_tracked(expr.name) && !key_exists(claimed, intptr(expr))) {
+        if (is_tracked(expr.name) && !key_exists(claimed, "{expr.name}:{expr.at.line}:{expr.at.column}")) {
             reads |> insert(string(expr.name))
+            if (ACCESS_DEBUG) {
+                print("[access-dbg] read {expr.name} at={int(expr.at.line)}:{int(expr.at.column)}\n")
+            }
+        }
+        return expr
+    }
+
+    def override visitExprField(var expr : ExprField?) : ExpressionPtr {
+        if (fieldMode && is_self_field(expr, tracked) && !key_exists(claimed, "{expr.name}:{expr.at.line}:{expr.at.column}")) {
+            reads |> insert(string(expr.name))
+            if (ACCESS_DEBUG) {
+                print("[access-dbg] read {expr.name} at={int(expr.at.line)}:{int(expr.at.column)} (field)\n")
+            }
         }
         return expr
     }
 }
 
-def private analyze_one(fn : Function?; tracked : table<string>; var res : AccessResult; var callees : table<string>) {
+def private analyze_one(fn : Function?; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
     var astVisitor = new AccessVisitor()
     astVisitor.tracked := tracked
+    astVisitor.fieldMode = fieldMode
     make_visitor(*astVisitor) $(adapter) {
         visit(fn, adapter)
     }
@@ -153,18 +223,19 @@ def private analyze_one(fn : Function?; tracked : table<string>; var res : Acces
     }
 }
 
-//! Classify which `tracked` globals `fn` reads and writes, recursing into same-module callees
-//! (helpers access the globals directly; passing a tracked global BY ARGUMENT is refused — see
-//! AccessResult.err). Recursion is name-keyed over `mod`'s functions with a visited-set guard.
-def classify_global_access(fn : Function?; mod : Module?; tracked : table<string>) : AccessResult {
+def private classify_access(fn : Function?; mod : Module?; tracked : table<string>; fieldMode : bool) : AccessResult {
     var res : AccessResult
     var pending : table<string>
     var visited : table<string>
     var callees : table<string>
-    analyze_one(fn, tracked, res, callees)
+    analyze_one(fn, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
+    // field mode is intra-body only: free callees are shader intrinsics whose das shims would
+    // false-positive on bare-name matching, and self-helpers hit the ratchet instead
     for (c in keys(callees)) {
-        pending |> insert(c)
+        if (!fieldMode) {
+            pending |> insert(c)
+        }
     }
     while (!empty(pending)) {
         var name = ""
@@ -180,7 +251,7 @@ def classify_global_access(fn : Function?; mod : Module?; tracked : table<string
         var next : table<string>
         mod |> for_each_function(name) $(cfn) {
             if (cfn.name == name) {
-                analyze_one(cfn, tracked, res, next)
+                analyze_one(cfn, tracked, fieldMode, res, next)
             }
         }
         for (c in keys(next)) {
@@ -194,4 +265,18 @@ def classify_global_access(fn : Function?; mod : Module?; tracked : table<string
     delete visited
     delete callees
     return <- res
+}
+
+//! Classify which `tracked` globals `fn` reads and writes, recursing into same-module callees
+//! (helpers access the globals directly; passing a tracked global BY ARGUMENT is refused — see
+//! AccessResult.err). Recursion is name-keyed over `mod`'s functions with a visited-set guard.
+def classify_global_access(fn : Function?; mod : Module?; tracked : table<string>) : AccessResult {
+    return <- classify_access(fn, mod, tracked, false)
+}
+
+//! The field-mode twin for class-shaped kernels (metal): `tracked` names are the class's buffer
+//! FIELDS — pre-infer bodies spell them as bare names (or explicit self.<name>); member access
+//! on anything else (float4 components like wv.y) never matches.
+def classify_field_access(fn : Function?; mod : Module?; tracked : table<string>) : AccessResult {
+    return <- classify_access(fn, mod, tracked, true)
 }
