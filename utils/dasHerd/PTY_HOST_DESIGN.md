@@ -1,8 +1,31 @@
 # Detached PTY host — "a terminal that depends on nothing"
 
-Status: DRAFT for review (2026-07-25). The next block per Boris: drop
-everything and make terminal sessions fully independent. `--continue`
-resume demotes to disaster recovery, never the mechanism.
+Status: CORE LANDED (2026-07-25 night). Remaining: the watcher rework
+below ("What changes where"). `--continue` resume demotes to disaster
+recovery, never the mechanism.
+
+## Resume state for the next session (written before a /clear)
+
+- DONE, committed, tests green (watcher suite 68/68; test_ptyhost 1.9s):
+  spawn_detached + env blocks in dasTerminal; utils/dasHerd/ptyhost/main.das
+  (protocol v1); daspkg release packaging; popen BREAKAWAY_OK fix in
+  src/builtin/module_builtin_fio.cpp; lifecycle test
+  utils/dasHerd/watcher/tests/test_ptyhost.das.
+- NEXT: the watcher rework only — launch-via-host, adoption on startup
+  (sessions resurrect as RUNNING), pumps proxied over the host WS. Client
+  unchanged in v1. Read this doc + utils/dasHerd/HERDER_FIXROUND.md notes
+  40-51 first.
+- Rig state: watcher and rich client are STOPPED (Boris's go). daslang.exe,
+  libDaScriptDyn_runtime.dll, dasModuleTerminal rebuilt with the fixes;
+  release bundle at logs/dasHerd/releases/dasherd-ptyhost (rebuild with
+  `daslang utils/daspkg/main.das -- release --out logs/dasHerd/releases
+  --root utils/dasHerd/ptyhost`, 7s).
+- Standing rules: file Boris's bug reports BEFORE fixing; never restart a
+  watcher with live agent sessions without his go; preflight budget for
+  this branch: at most one full run (none used); branch
+  codex/herder-view-without-diff, ~20 unpushed commits, PR later on his
+  word. Parked after this block: external sessions arc, notes 42/47
+  terminal rendering bugs, WebSocketServer handle leak at client exit.
 
 ## Problem, precisely
 
