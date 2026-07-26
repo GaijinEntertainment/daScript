@@ -500,6 +500,14 @@ Issue intake (live rig, numbering continues):
   owns the console + child on its own, survives watcher/client/upgrade,
   reachable over a versioned IPC channel. Current UI/feature work is
   parked (committed on this branch) until that lands.
+  PROGRESS (same evening): dasTerminal grew spawn_detached (CREATE_NO_WINDOW
+  + job breakaway; DETACHED_PROCESS breaks console apps) and environment
+  blocks on both spawn paths (retires the token-on-command-line item);
+  utils/dasHerd/ptyhost/main.das v1 landed and smoke-proved the whole
+  claim live: host spawned detached, launcher died, host kept journaling;
+  a fresh client authenticated, replayed from byte 0, sent input, got the
+  child's echo with a forwarded env var. Remaining: dastest lifecycle
+  test, watcher launch-via-host + adoption, daspkg release packaging.
 - 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
   ("its not ok to kill my terminal session"). Today PTYs are ConPTY
   children of the watcher and die with it; needs a per-session broker
