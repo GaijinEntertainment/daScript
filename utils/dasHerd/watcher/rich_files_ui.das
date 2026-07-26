@@ -341,6 +341,27 @@ def private populate_external_folder(node_index : int) {
     var order := g_project_nodes[node_index].children
     sort(order) $(a, b) => project_child_before(a, b)
     g_project_nodes[node_index].children <- order
+    // Aggregate the discovered stats up the ancestor chain and re-sort each
+    // level, so Largest/Newest order the portal by its real contents. Runs
+    // once per portal level (populate only fires on empty children).
+    var added_size = 0l
+    var newest = 0l
+    for (child in g_project_nodes[node_index].children) {
+        added_size += g_project_nodes[child].stat_size
+        newest = max(newest, g_project_nodes[child].stat_mtime)
+    }
+    var parent = node_index
+    while (parent >= 0) {
+        g_project_nodes[parent].stat_size += added_size
+        g_project_nodes[parent].stat_mtime = max(
+            g_project_nodes[parent].stat_mtime, newest)
+        if (parent != node_index && !empty(g_project_nodes[parent].children)) {
+            var sibling_order := g_project_nodes[parent].children
+            sort(sibling_order) $(a, b) => project_child_before(a, b)
+            g_project_nodes[parent].children <- sibling_order
+        }
+        parent = g_project_nodes[parent].parent
+    }
 }
 
 def private draw_project_tree() {

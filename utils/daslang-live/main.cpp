@@ -503,7 +503,13 @@ static int run_lifecycle(const string & fn) {
             // before_reload/shutdown never run on a corrupted frame.
             if (ctx) {
                 ctx->restart();
-                call_annotated_list(ctx, g_annotated.before_reload);
+                if (!call_annotated_list(ctx, g_annotated.before_reload)) {
+                    // The hook's exception was already reported under its own
+                    // name; evalWithCatch never clears prior state, so restart
+                    // again or shutdown()'s getException() re-blames the hook
+                    // failure as a shutdown failure.
+                    ctx->restart();
+                }
                 if (fnShutdown) {
                     ctx->evalWithCatch(fnShutdown, nullptr);
                     if (auto ex = ctx->getException()) {
