@@ -1800,13 +1800,21 @@ def private dense_shexp_uploadable(t : Model; l : int64) : bool {
         && dense_plane_ok(t, fmt_at(t.w3_fmt, l)))
 }
 
-// Gather one stack through its format's reader (q8 planes or native kq planes) and hand it to
-// the tier's upload hook with the format tag.
+// The device format of an EXPERT stack: q8 rides the cm2 native-block layout (q8n, fmt 6) when
+// the armed tier asks for it; every other format ships as-is. Upload and dispatch must agree on
+// the answer — both go through this one helper.
+def private moe_gpu_expert_fmt(f : KqFmt) : KqFmt => f == KqFmt.q8 && moe_gpu_expert_q8n() ? KqFmt.q8n : f
+
+// Gather one stack through its format's reader (q8 planes, q8n interleaved blocks, or native kq
+// planes) and hand it to the tier's upload hook with the format tag.
 def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                   mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>;
                                   stream : bool = false) : bool {
     if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    } elif (f == KqFmt.q8n) {
+        moe_gpu_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
+        ws |> resize(0)   // no scale plane — the tier takes an EMPTY ws for fmt 6
     } else {
         let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
             : (f == KqFmt.k5 ? t.kq_repack_mr5
@@ -2742,13 +2750,13 @@ def moe_gpu_upload_resident(t : Model) {
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
+        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
             got++
         }
         if (got < 3) {
@@ -2781,13 +2789,13 @@ def moe_gpu_upload_resident(t : Model) {
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
         if (got < 3) {
@@ -7482,8 +7490,8 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     }
     if (want > 0l) {
         moe_gpu_heat_advise(l, t.we1_offs[l], t.we3_offs[l], t.we2_offs[l],
-            int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)),
-            c.dim, c.n_ff_exp, ids, want)
+            int(moe_gpu_expert_fmt(fmt_at(t.we1_fmt, l))), int(moe_gpu_expert_fmt(fmt_at(t.we3_fmt, l))),
+            int(moe_gpu_expert_fmt(fmt_at(t.we2_fmt, l))), c.dim, c.n_ff_exp, ids, want)
     }
     delete ids
 }
@@ -7748,7 +7756,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 }
             }
             matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
-                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
             prof_add("mm_moe", ts_gu)
         } elif (nhits > 0l) {
             // split-FFN: compacted hit regions (pool coordinates, rows 0..nhits) dispatch async
@@ -7782,7 +7790,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
             }
             let ts_sub = ref_time_ticks()
             matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nhits,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
             prof_add("heat_sub", ts_sub)   // dispatch cost ON the critical path (the split's tax)
             // the missed experts run the CPU groupn chain while the GPU crunches the hits
             var ts_down = ts_gu
@@ -10853,11 +10861,11 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 s.moe_inv[s.moe_bkt[j]] = uint(j)
             }
             matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } elif (fused_gpu) {   // combine off: per-row gout + the park/CPU-reduce path below
             matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {
             if (fused_kq) {   // native-plane: one batched region-list GEMM per projection (never biased)
@@ -11237,10 +11245,10 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
                 s.moe_inv[s.moe_bkt[j]] = uint(j)
             }
             matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
         } else {
             matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
         }
         prof_add("moe_gpu", ts_g1)
         if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
