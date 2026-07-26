@@ -463,6 +463,11 @@ for presentation, never the correctness oracle.
   views are the regular workflow (human in terminals, human directing agents
   into terminals) plus reviewing copilot interaction with an honest
   "this one needs looking into, for reals" escalation instead of forced trust.
+- 2026-07-26: consequence of the observer model — automatic Copilot review on
+  GitHub becomes a redundant firehose; Boris intends to switch it off. Advisory
+  review turns on-demand: summoned by the observer or the human when bundle
+  deviation warrants it. When the repo setting actually flips, revisit
+  skills/babysit.md, which still assumes Copilot feedback arrives on every PR.
 - 2026-07-21: Proposed preference is local Review Focus first, GitHub second,
   because Review Focus is the shared interaction foundation.
 - 2026-07-21: Adopt local Review Focus first and begin protocol design before
