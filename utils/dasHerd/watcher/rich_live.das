@@ -297,6 +297,17 @@ def herder_close_session(input : JsonValue?) : JsonValue? {
     }
     let args = from_JV(input, type<HerderAttachSessionArgs>)
     if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    // Validate before queuing: the watcher's error reply lands async, so an
+    // unknown id (a stray \r from a caller's shell pipeline, say) used to
+    // report ok=true while closing nothing.
+    var known = false
+    for (record in g_client.herd_sessions) {
+        if (record.id == args.herd_id) {
+            known = true
+            break
+        }
+    }
+    if (!known) return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
     g_client->request_herd_close(args.herd_id)
     return JV((ok = true, herd_id = args.herd_id))
 }

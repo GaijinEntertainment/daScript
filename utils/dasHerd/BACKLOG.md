@@ -5,37 +5,34 @@ HERDER_FIXROUND.md; arc designs in PTY_HOST_DESIGN.md and
 AGENT_REVIEW_WORKFLOWS.md. Rule of the round stands: bugs over everything;
 review capacity is the bottleneck the arcs exist to fix.
 
-## Phase 0 — deploy and prove (Boris at the wheel, ~one sitting)
+## Phase 0 — deploy and prove — PROVEN LIVE 2026-07-26 (accidentally)
 
-- Start the rig on the current branch (watcher + rich client). Everything
-  durable launches host-backed from the first session.
-- The proof: restart the watcher under a live agent session; watch it
-  resurrect as running. Retires the note-50 operational rule.
-- Verify the two pending-deploy items from the evening intake:
-  - 40 sessions list (alive on top, dead tinted, delete button)
-  - 41 worktree delete guards (+ resolver-session offer)
-- First dogfood session doubles as intake: file what's broken, don't fix
-  inline.
+The goal-round rig ran the current branch; the watcher died mid-flight
+(ungraceful — a closed stdout pipe) with a live shell AND a live Claude
+Code session in detached hosts. The restarted watcher logged "adopted 2
+detached PTY host session(s)"; both records resurrected running (no
+watcher_restart scar), the client reconnected on its own, and the adopted
+shell echoed input ("SURVIVED-THE-WATCHER"). Remaining for Boris: see it
+with his own eyes once, then the note-50 operational rule retires.
+40/41 are deployed with their round-time verification; dogfood confirms.
 
-## Phase 1 — dogfood bug burn-down (the open notes)
+## Phase 1 — dogfood bug burn-down — DONE 2026-07-26 (goal round)
 
-The new-session terminal cluster first — likely one root (attach-time
-resize/focus/replay), and it makes every fresh session feel broken:
+Every note fixed or verified in-build; per-note detail + proof lives in
+HERDER_FIXROUND.md:
 
-- 42 terminal in a NEW session does not scroll
-- 44 new-session terminal has no keyboard focus until clicked
-- 47 stray-letter column artifacts in a new session's terminal
-
-Then the flow lies and small frictions:
-
-- 48 Project tab "Select a worktree" while a session is selected
-  (session pick IS a worktree pick; the empty-state message lies)
-- 43 herd card click selects then unselects (selection bounce)
-- 46 Sessions & Activity opaque rows (names over ids, click-through,
-  dismiss, drop unresolvable entries)
-- 45 session-card icons need tooltips
-- 49 default layout: Git Changelist docks bottom-right
-  (boris_changelist_dock.png; update setup_layout_preset)
+- 42 FIXED — Claude runs alt-screen + mouse reporting; the widget now
+  forwards wheel/clicks to the child when reporting is active (dasTerminal
+  terminal_encode_mouse + imgui_terminal forwarding; Shift = local).
+- 44 FIXED — focus via the terminal's own model (the tabbing request fell
+  through the InvisibleButton), surviving the checkpoint reset.
+- 47 FIXED — the "stray column" was Sessions-panel text clipped at the
+  window edge; card/context/summary rows now elide to the content region.
+- 43 FIXED — herd-level selection pick; dead-card clicks stick.
+- 48/45/46/49 VERIFIED in the current build (fix-round work, was pending
+  deploy).
+- Drive-by: herder_close_session rail now rejects unknown herd ids
+  instead of ok=true.
 
 Carried remainders that slot here when touched:
 

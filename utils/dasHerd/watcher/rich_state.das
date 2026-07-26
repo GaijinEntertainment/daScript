@@ -420,6 +420,15 @@ var g_selected_repository_id : string
 // Note-9 policy: attaches may re-aim only while the selection is not explicit.
 var g_selection_explicit : bool
 
+// The herd card the user last picked. Cards highlight through this even when
+// their PTY is gone (note 43: a dead-PTY card click used to give no feedback
+// at all, reading as select-then-unselect).
+var g_selected_herd_id = ""
+// Change detector: PTY selections made outside the cards retarget the herd
+// pick exactly once per change, so a dead-card pick is never yanked back by
+// the unchanged live selection.
+var g_herd_pick_seen_selected = ""
+
 // Cross-module window-raise request (same pattern as g_open_terminal_pending):
 // surfaces that can't see SESSIONS_WIN set this; rich_client's frame loop acts.
 var g_open_sessions_pending : bool
@@ -627,7 +636,11 @@ def reset_terminal(columns : int = 100; rows : int = 30) {
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     var inscope created <- terminal_create(columns, rows)
     g_terminal := created
+    // The checkpoint restore right after an attach lands AFTER the note-44
+    // focus handshake ran - a reset must not eat established focus.
+    let was_focused = g_terminal_view.focused
     g_terminal_view = ImGuiTerminalState()
+    g_terminal_view.focused = was_focused
     g_terminal_cache = ImGuiTerminalCache()
 }
 

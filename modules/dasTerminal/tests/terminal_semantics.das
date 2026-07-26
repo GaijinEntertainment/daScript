@@ -1,4 +1,7 @@
 options gen2
+// One big main holding a dozen Terminal locals: the default 16K stack
+// overflowed when the mouse-reporting block joined.
+options stack = 65536
 
 require terminal/terminal
 require strings
@@ -303,6 +306,31 @@ def main {
     assert_snapshots_equal(checkpoint_source_snapshot, checkpoint_copy_snapshot)
     terminal_snapshot_dispose(checkpoint_source_snapshot)
     terminal_snapshot_dispose(checkpoint_copy_snapshot)
+
+    // Mouse reporting: the modes gate the forwarding decision, the encoder
+    // speaks SGR when 1006 is selected and legacy X10 bytes otherwise.
+    var inscope mouse <- terminal_create(80, 24)
+    assert(!terminal_mouse_reporting_active(mouse), "mouse reporting starts off")
+    terminal_feed(mouse, "{esc}[?1003h{esc}[?1006h")
+    assert(terminal_mouse_reporting_active(mouse), "any-motion mode reports")
+    assert(terminal_encode_mouse(mouse, 64, 5, 2, true) == "{esc}[<64;6;3M",
+        "SGR wheel up")
+    assert(terminal_encode_mouse(mouse, 65, 5, 2, true) == "{esc}[<65;6;3M",
+        "SGR wheel down")
+    assert(terminal_encode_mouse(mouse, 0, 5, 2, true) == "{esc}[<0;6;3M",
+        "SGR left press")
+    assert(terminal_encode_mouse(mouse, 0, 5, 2, false) == "{esc}[<0;6;3m",
+        "SGR left release")
+    terminal_feed(mouse, "{esc}[?1006l")
+    assert(terminal_encode_mouse(mouse, 0, 0, 0, true)
+            == "{esc}[M{to_char(32)}{to_char(33)}{to_char(33)}",
+        "legacy left press")
+    assert(terminal_encode_mouse(mouse, 0, 0, 0, false)
+            == "{esc}[M{to_char(35)}{to_char(33)}{to_char(33)}",
+        "legacy release loses button identity")
+    terminal_feed(mouse, "{esc}[?1003l")
+    assert(!terminal_mouse_reporting_active(mouse), "modes reset turns reporting off")
+    terminal_dispose(mouse)
 
     terminal_dispose(checkpoint_copy)
     terminal_dispose(checkpoint_source)

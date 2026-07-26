@@ -101,7 +101,8 @@ def draw_selected_session_context() {
         if (IsItemHovered()) {
             set_tooltip(CONTEXT_ID_TOOLTIP, "{session.id}  |  {purpose}")
         }
-        text_disabled("{purpose} | {session.state} | {base_name(session.worktree_path)}")
+        text_disabled((text = elide_to_avail(
+            "{purpose} | {session.state} | {base_name(session.worktree_path)}")))
         if (IsItemHovered()) {
             set_tooltip(CONTEXT_ORIGIN_TOOLTIP, session.worktree_path)
         }
@@ -135,7 +136,9 @@ def private draw_bundle_rows(session_filter : string) {
             let _ = activate_bundle_focus(bundle)
         }
         BUNDLE_ROW[bundle_index].value = false
-        if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
+        if (!empty(bundle.summary)) {
+            text_disabled((text = elide_to_avail(bundle.summary)))
+        }
         for (participant in bundle.participants) {
             let files = length(participant.files)
             BUNDLE_PARTICIPANT_ROW[g_bundle_participant_row].value = (participant.repository_id
@@ -246,6 +249,7 @@ def private herd_age_label(updated_wall_s : int64) : string {
 def private attach_herd_card(record : HerdSession) {
     if (g_client == null) return
     ui_event("herd-card-attach {record.id}")
+    g_selected_herd_id = record.id
     // A session pick IS a worktree pick (note 48): aim the git surfaces at
     // the card's tree whether or not a terminal can attach.
     if (!empty(record.repository_id) && !empty(record.worktree_path)
@@ -275,9 +279,51 @@ def private attach_herd_card(record : HerdSession) {
     g_focus_terminal_pending = true
 }
 
+def elide_to_avail(value : string) : string {
+    //! Truncates with an ellipsis so the text stops at the content region
+    //! instead of bleeding through the window padding into the neighbouring
+    //! pane (note 47: the "stray one-character column" on the terminal's
+    //! left edge was card text clipped at the window edge, one column past
+    //! where the layout ends).
+    let avail = GetContentRegionAvail().x
+    if (avail <= 0.0f || CalcTextSize(value).x <= avail) return value
+    var low = 0
+    var high = length(value)
+    while (low < high) {
+        let mid = (low + high + 1) / 2
+        if (CalcTextSize(slice(value, 0, mid) + "...").x <= avail) {
+            low = mid
+        } else {
+            high = mid - 1
+        }
+    }
+    // Never end the cut inside a UTF-8 sequence.
+    peek_data(value) $(bytes) {
+        while (low > 0 && low < length(value) && (int(bytes[low]) & 0xc0) == 0x80) {
+            low--
+        }
+    }
+    return low <= 0 ? "..." : slice(value, 0, low) + "..."
+}
+
 def draw_herd_cards() {
     if (g_client == null) return
     let line = GetTextLineHeight()
+    // A PTY selection made outside the cards (task rows, auto-attach)
+    // retargets the herd pick once per change; a dead-card pick survives
+    // because the live selection did not change underneath it (note 43).
+    if (g_client.selected_id != g_herd_pick_seen_selected) {
+        g_herd_pick_seen_selected = g_client.selected_id
+        var owner_id = ""
+        for (record in g_client.herd_sessions) {
+            if (!empty(record.pty_session_id)
+                    && record.pty_session_id == g_client.selected_id) {
+                owner_id = record.id
+                break
+            }
+        }
+        g_selected_herd_id = owner_id
+    }
     var visible = 0
     // Alive sessions first; registry order within each state group. Widget
     // state stays keyed by the registry index, so reordering cannot swap
@@ -341,8 +387,7 @@ def draw_herd_cards() {
             same_line(HERD_CONFLICT_JOIN[index])
         }
         let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
-        HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
-            && record.pty_session_id == g_client.selected_id)
+        HERD_CARD_ROW[index].value = record.id == g_selected_herd_id
         // AllowOverlap or the row swallows clicks aimed at the relaunch
         // icon button drawn over its right-hand side. Dead sessions read
         // muted; alive keep the title tint.
@@ -409,9 +454,9 @@ def draw_herd_cards() {
         let output_hint = (output_wall > 0l
             ? " | output {herd_age_label(output_wall)}" : "")
         text_disabled(HERD_CARD_DETAIL[index],
-            (text = "      {record.profile_id} | {record.workflow} | " +
+            (text = elide_to_avail("      {record.profile_id} | {record.workflow} | " +
                 "{base_name(record.worktree_path)}{satellite_hint} | " +
-                "{herd_age_label(record.updated_wall_s)}{output_hint}"))
+                "{herd_age_label(record.updated_wall_s)}{output_hint}")))
         // The card's own Attention and Review Bundles as subtree children
         // (note 19); zero-count sections never render.
         let attention = session_attention_count(record.pty_session_id)
