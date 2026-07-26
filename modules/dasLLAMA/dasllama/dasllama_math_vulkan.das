@@ -3866,6 +3866,7 @@ struct private GpuState {
     dev_mem : table<uint64; uint64>   // device buffer -> its VkDeviceMemory (rollback destroy needs it)
     dev_mapped : table<uint64; uint64>   // ReBAR: device buffer -> persistent CPU mapping (uploads write direct)
     rebar_type : int = -1         // DL|HV|HC memory type on the full-VRAM heap (-1 = staging path only)
+    has_memprio : bool            // device enabled VK_EXT_memory_priority — allocations chain priority 1.0
     host_mem : table<uint64; uint64>  // host-visible buffer -> memory: every make_host_buf result except
                                       // the process-lifetime pair (staging, profiler readback) — the
                                       // whole-model drop sweeps this
@@ -4030,11 +4031,19 @@ def private make_device_buf(bytes : int64) : uint64 {
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
     var b <- create_buffer(g_gpu.device, bci)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
+    // priority 1.0 (default 0.5): under pressure the driver demotes lower-priority (desktop) memory first
+    var prio = VkMemoryPriorityAllocateInfoEXT()
+    prio.priority = 1.0
     if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
         rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
+        if (g_gpu.has_memprio) {
+            unsafe {
+                rmai.pNext = addr<void?>(prio)
+            }
+        }
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
@@ -4050,8 +4059,13 @@ def private make_device_buf(bytes : int64) : uint64 {
     }
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    let mai = MemoryAllocateInfo(allocationSize = req.size,
+    var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
+    if (g_gpu.has_memprio) {
+        unsafe {
+            mai.next = addr<void?>(prio)
+        }
+    }
     var m <- allocate_memory(g_gpu.device, mai)
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
     g_gpu.dev_mem |> insert(b._vk, m._vk)
@@ -4145,6 +4159,12 @@ def private vk_moe_init : bool {
     }
     volkLoadDevice(dev_raw())
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
+    // WDDM residency shield: allocations chain priority 1.0 (DASLLAMA_VK_MEMPRIO=0 = bisect hatch)
+    g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
+        && get_env_variable("DASLLAMA_VK_MEMPRIO") != "0")
+    if (g_gpu.has_memprio) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: memory-priority residency shield armed\n")
+    }
     let sg = subgroup_properties(g_gpu.phys).subgroupSize
     if (sg < 32u) {
         // the gid-mapped quant kernels reduce with xor masks up to 16 (q8k amax spans 32 lanes)
