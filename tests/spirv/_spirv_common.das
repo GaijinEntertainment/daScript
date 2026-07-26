@@ -2163,6 +2163,107 @@ def public coopmat_emitter_opcodes : table<uint> {
     return <- s
 }
 
+// ===== cooperative matrix v2 (SPV_NV_cooperative_matrix2 + SPV_NV_tensor_addressing): the q8_0
+// decode-in-load GEMM shape llama.cpp's cm2 mul_mm runs. WORKGROUP-scope tiles (A f16 64x16 from
+// gguf-native 34-byte blocks through a [spirv_decode] function, B f16 16x32 through the (1,0)
+// transpose view, f16 accumulator), per-K-tile OpTensorLayoutSliceNV, a clamp Constant (zero-pad)
+// layout for the inputs + a clamp Undefined layout for the store, coopmatClamp's ±65504 f16 overflow
+// guard (OpCooperativeMatrixLengthKHR + a hand-emitted OpPhi loop), and the PhysicalStorageBuffer64
+// addressing model with Aligned loads inside the decode function. =====
+struct Cm2BlockQ8 {
+    d : float16
+    qs : uint16[16]     // 16 u16 lanes = 32 packed int8 quants; 34 bytes total, gguf-native
+}
+
+var @ssbo @binding = 0 cm2_a : array<Cm2BlockQ8>
+var @ssbo @binding = 1 cm2_b : array<float16>
+var @ssbo @binding = 2 cm2_c : array<float>
+var @ssbo @binding = 3 cm2_meta : array<uint>
+
+[spirv_decode, unused_argument(bc)]
+def cm2_decode_q8(blk : Cm2BlockQ8; bc, cib : uint2) : float16 {
+    // cib.y = the element's position inside the 1x32 block; each u16 lane packs two signed bytes
+    let s = uint(blk.qs[int((cib.y & 30u) >> 1u)])
+    let sh = 24 - int(cib.y & 1u) * 8
+    let q = (int(s) << sh) >> 24
+    return blk.d * float16(float(q))
+}
+
+[compute_shader(local_size_x=128, name="coopmat2_spv"), marker(no_coverage)]
+def coopmat2_kernel {
+    let m = cm2_meta[0u]
+    let n = cm2_meta[1u]
+    let kk = cm2_meta[2u]
+    let ti = gl_WorkGroupID.x
+    let tj = gl_WorkGroupID.y
+    var tla : tensorLayout2DPad
+    tensorLayoutCreate(tla)
+    tensorLayoutSetBlockSize(tla, 1u, 32u)          // the q8_0 block; dims stay in ELEMENTS, strides in BLOCKS
+    tensorLayoutSetDimension(tla, m, kk)
+    tensorLayoutSetStride(tla, kk / 32u, 1u)
+    var tlb : tensorLayout2DPad
+    tensorLayoutCreate(tlb)
+    tensorLayoutSetDimension(tlb, n, kk)
+    tensorLayoutSetStride(tlb, kk, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, m, n)
+    tensorLayoutSetStride(tlo, n, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var a : coopmatWgA_f16_64x16
+    var b : coopmatWgB_f16_16x32
+    var acc : coopmatWgAcc_f16_64x32
+    var k = 0u
+    while (k < kk) {
+        coopmatLoadTensorDecode(a, cm2_a, 0u, tla, ti * 64u, 64u, k, 16u, @@cm2_decode_q8)
+        coopmatLoadTensor(b, cm2_b, 0u, tlb, tj * 32u, 32u, k, 16u, tv)
+        acc = coopmatMulAdd(a, b, acc)
+        k += 16u
+    }
+    coopmatClamp(acc, -65504.0, 65504.0)
+    var accw : coopmatWgAcc_f32_64x32
+    coopmatConvert(accw, acc)
+    coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 64u, 64u, tj * 32u, 32u)
+}
+
+def public coopmat2_words : array<uint> {
+    return clone_to_move(coopmat2_spv)
+}
+
+// The cm2 fixture adds the tensor-addressing type/builder opcodes, the tensor-addressed coopmat
+// load/store, OpCooperativeMatrixLengthKHR, and OpPhi (coopmatClamp's hand-emitted element loop is
+// the emitter's ONLY OpPhi — das loops lower through Function-storage locals). The decode function's
+// bit unpacking makes the shift/mask family census-visible for the first time (test_bitwise exercises
+// them but is not a census fixture), and the tensor-view type's HasDimensions operand is the first
+// censused OpConstantFalse. The NV capabilities + the two extensions + the PhysicalStorageBuffer64
+// addressing model all ride already-declared opcodes.
+def public coopmat2_emitter_opcodes : table<uint> {
+    var s <- coopmat_emitter_opcodes()
+    for (op in [
+        SpvOp.TypeTensorLayoutNV,
+        SpvOp.TypeTensorViewNV,
+        SpvOp.CreateTensorLayoutNV,
+        SpvOp.CreateTensorViewNV,
+        SpvOp.TensorLayoutSetDimensionNV,
+        SpvOp.TensorLayoutSetStrideNV,
+        SpvOp.TensorLayoutSetBlockSizeNV,
+        SpvOp.TensorLayoutSliceNV,
+        SpvOp.CooperativeMatrixLoadTensorNV,
+        SpvOp.CooperativeMatrixStoreTensorNV,
+        SpvOp.CooperativeMatrixLengthKHR,
+        SpvOp.Phi,
+        SpvOp.BitwiseAnd,
+        SpvOp.ShiftLeftLogical,
+        SpvOp.ShiftRightArithmetic,
+        SpvOp.ShiftRightLogical,
+        SpvOp.ConstantFalse
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
 var @ssbo @binding = 0 sd_a : array<uint>
 var @ssbo @binding = 1 sd_b : array<uint>
 var @ssbo @binding = 2 sd_y : array<int>

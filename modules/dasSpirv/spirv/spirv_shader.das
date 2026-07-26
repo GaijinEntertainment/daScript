@@ -248,3 +248,17 @@ class SpirvMissShader : SpirvShader {
 class SpirvClosestHitShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.ClosestHit
 }
+
+// [spirv_decode] — marks a daslang function as a cm2 DECODE function (SPV_NV_cooperative_matrix2):
+// referenced via @@name from coopmatLoadTensorDecode and emitted as a real SPIR-V function with the
+// rigid (PhysicalStorageBuffer block pointer, uint[2], uint[2]) signature. Marker only — signature
+// validation happens at emission (register_decode_func); the body stays CPU-callable, so reference
+// math can call the exact decode the GPU runs.
+[function_macro(name="spirv_decode")]
+class SpirvDecodeAnnotation : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        // pin against the CPU auto-inliner: the emitter must see the body as authored
+        func.moreFlags.neverInline = true
+        return true
+    }
+}

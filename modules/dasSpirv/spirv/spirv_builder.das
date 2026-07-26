@@ -206,6 +206,71 @@ def public ensure_cooperative_matrix(var m : SpirvModule) {
     m.type_pool |> insert("cap_coopmat", 1u)
 }
 
+// cm2 (SPV_NV_cooperative_matrix2 + SPV_NV_tensor_addressing): tensor-addressed cooperative-matrix
+// loads/stores — workgroup-scope tiles, tensor layout/view objects, block loads with DECODE functions.
+// Pulls the KHR coopmat base (VulkanMemoryModel + 1.6 floor) plus the NV capability set glslang
+// declares for a cm2 shader, including PhysicalStorageBufferAddresses: decode functions take
+// PhysicalStorageBuffer pointers, and generate_spirv switches the ADDRESSING model to
+// PhysicalStorageBuffer64 when this pool key is present (the "cap_coopmat" pattern, one level up).
+def public ensure_cooperative_matrix2(var m : SpirvModule) {
+    ensure_cooperative_matrix(m)
+    return if ((m.type_pool?["cap_cm2"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.PhysicalStorageBufferAddresses))
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixTensorAddressingNV))
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixBlockLoadsNV))
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.TensorAddressingNV))
+    var nm <- string_words("SPV_NV_cooperative_matrix2")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm)
+    delete nm
+    var nm2 <- string_words("SPV_NV_tensor_addressing")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm2)
+    delete nm2
+    m.type_pool |> insert("cap_cm2", 1u)
+}
+
+// OpTypeTensorLayoutNV — the cm2 address-mapping object type: `dim` dimensions, `clamp` out-of-bounds
+// mode (SpvTensorClampMode: 0 = Undefined for the aligned fast path, 1 = Constant zero-fill for
+// guarded edges). Both operands are <id>s of uint constants, like the coopmat type's. Deduped.
+def public type_tensor_layout(var m : SpirvModule; dim : uint; clamp : uint) : uint {
+    ensure_cooperative_matrix2(m)
+    let key = "tlayout{dim}_{clamp}"
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let dim_id = const_uint(m, dim)
+    let clamp_id = const_uint(m, clamp)
+    let id = alloc_id(m)
+    emit(m, SEC_TYPES, SpvOp.TypeTensorLayoutNV, id, dim_id, clamp_id)
+    m.type_pool |> insert(key, id)
+    return id
+}
+
+// OpTypeTensorViewNV — the cm2 element-permutation object type (`perm` = one uint per dimension;
+// (1,0) is the transpose view a KxN B-tile loads from an NxK-major panel through). `has_dims` is a
+// bool-constant <id> operand; the permutation entries are uint-constant <id>s. Deduped on the tuple.
+def public type_tensor_view(var m : SpirvModule; dim : uint; has_dims : bool; perm : array<uint>) : uint {
+    ensure_cooperative_matrix2(m)
+    let key = build_string() $(var w) {
+        w |> write("tview{dim}_{has_dims}")
+        for (p in perm) {
+            w |> write("_{p}")
+        }
+    }
+    let ex = m.type_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let dim_id = const_uint(m, dim)
+    let hd_id = const_bool(m, has_dims)
+    let id = alloc_id(m)
+    var ops <- [id, dim_id, hd_id]
+    ops |> reserve(3 + length(perm))
+    for (p in perm) {
+        ops |> push(const_uint(m, p))
+    }
+    emit_n(m, SEC_TYPES, SpvOp.TypeTensorViewNV, ops)
+    delete ops
+    m.type_pool |> insert(key, id)
+    return id
+}
+
 def public type_int(var m : SpirvModule; width, signedness : uint) : uint {
     let key = "i{width}_{signedness}"
     let ex = m.type_pool?[key] ?? 0u

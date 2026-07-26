@@ -12,6 +12,7 @@ require spirv_builder
 require spirv_types
 require spirv_grammar
 require spirv_reflect
+require strings
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
@@ -91,6 +92,7 @@ struct LocalVar {
     ptr_id     : uint    // OpVariable result-id (Function storage)
     value_type : uint    // SPIR-V type-id of the pointee
     is_opaque  : bool    // an opaque handle (rayQueryEXT): declared but never zero-initialized -- no OpStore of an OpConstantNull (opaque types have no constants)
+    storage    : SpvStorageClass = SpvStorageClass.Function     // almost always Function; PhysicalStorageBuffer for a cm2 decode function's block-pointer parameter (chains + loads through it are PSB-classed and Aligned)
 }
 
 struct EmitCtx {
@@ -132,6 +134,8 @@ struct EmitCtx {
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
+    decode_funcs  : table<uint64; DecodeFn>     // intptr(Function) -> registered cm2 decode function ([spirv_decode], referenced via @@ from coopmatLoadTensorDecode)
+    decode_order  : array<uint64>               // decode_funcs keys in stable emission order (first-reference order)
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -151,6 +155,20 @@ struct UserFunc {
 struct CallTemp {
     ptr_id     : uint
     value_type : uint
+}
+
+// A cm2 DECODE function ([spirv_decode], SPV_NV_cooperative_matrix2): emitted as a real OpFunction
+// with the rigid (PhysicalStorageBuffer block pointer, uint[2], uint[2]) signature and referenced by
+// id as OpCooperativeMatrixLoadTensorNV's DecodeFunc operand. Ids pre-allocate at registration so the
+// load arm can reference the not-yet-emitted body (bodies follow the user functions).
+struct DecodeFn {
+    fn      : Function const?
+    fn_id   : uint          // OpFunction result id (0 when !valid)
+    type_id : uint          // OpTypeFunction id
+    ret_type : uint         // the tile component type (f16 / f32 / s8)
+    block_type : uint       // the std430-packed Block struct the PSB pointer points at
+    block_ptr_type : uint   // OpTypePointer PhysicalStorageBuffer <block_type>
+    valid   : bool
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -471,30 +489,147 @@ def private is_subpass_input_type(t : TypeDecl?) : bool {
     return "{t.structType.name}" == "subpassInput"
 }
 
+// Parse a WORKGROUP-scope cm2 marker name: coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}. The caller
+// already verified the "coopmatWg" prefix. Name-parsed (not a table) so adding a tile shape is one
+// struct declaration in spirv_builtins.das. One peek_data pass; `good` fails the parse closed.
+def private coopmat_wg_info(n : string) : tuple<ok : bool; is_float : bool; signed : bool; comp_width : uint; rows : uint; cols : uint; use : uint> {
+    var ok = false
+    var isf = false
+    var w = 0
+    var r = 0
+    var cc = 0
+    var use = 0u
+    peek_data(n) $(bytes) {
+        let ln = length(bytes)
+        var i = 9                      // past "coopmatWg"
+        var good = true
+        if (i + 2 < ln && bytes[i] == uint8('A') && bytes[i + 1] == uint8('c') && bytes[i + 2] == uint8('c')) {
+            use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR)
+            i += 3
+        } elif (i < ln && bytes[i] == uint8('A')) {
+            use = uint(SpvCooperativeMatrixUse.MatrixAKHR)
+            i++
+        } elif (i < ln && bytes[i] == uint8('B')) {
+            use = uint(SpvCooperativeMatrixUse.MatrixBKHR)
+            i++
+        } else {
+            good = false
+        }
+        if (good && i < ln && bytes[i] == uint8('_')) {
+            i++
+        } else {
+            good = false
+        }
+        if (good && i < ln) {
+            isf = bytes[i] == uint8('f')
+            if (!isf && bytes[i] != uint8('s')) {
+                good = false
+            }
+            i++
+        } else {
+            good = false
+        }
+        while (good && i < ln && bytes[i] != uint8('_')) {
+            let c = int(bytes[i]) - '0'
+            if (c < 0 || c > 9) {
+                good = false
+            } else {
+                w = w * 10 + c
+                i++
+            }
+        }
+        if (good && i < ln && bytes[i] == uint8('_') && (w == 8 || w == 16 || w == 32)) {
+            i++
+        } else {
+            good = false
+        }
+        while (good && i < ln && bytes[i] != uint8('x')) {
+            let c = int(bytes[i]) - '0'
+            if (c < 0 || c > 9) {
+                good = false
+            } else {
+                r = r * 10 + c
+                i++
+            }
+        }
+        if (good && i < ln && bytes[i] == uint8('x') && r > 0) {
+            i++
+        } else {
+            good = false
+        }
+        var any = false
+        while (good && i < ln) {
+            let c = int(bytes[i]) - '0'
+            if (c < 0 || c > 9) {
+                good = false
+            } else {
+                cc = cc * 10 + c
+                i++
+                any = true
+            }
+        }
+        ok = good && any && cc > 0
+    }
+    return (ok = ok, is_float = isf, signed = !isf, comp_width = uint(w), rows = uint(r), cols = uint(cc), use = use)
+}
+
 // A cooperative-matrix local is recognized by its marker struct name (coopmatA_f16_16x16, ...). Returns
 // the OpTypeCooperativeMatrixKHR parameters declare_local_var + the coopmat call arms need: the component
-// type (float vs signed int + width) and the tile's rows/cols/use (SpvCooperativeMatrixUse). Scope is
-// always Subgroup. v1 tiles: f16xf16->f32 (16x16x16) and the native s8xs8->s32 int path (16x16x32, where
-// A is 16x32 / B is 32x16 / accumulator 16x16 — the Q8-weight path, no dequant).
-def private coopmat_info(t : TypeDecl?) : tuple<ok : bool; is_float : bool; signed : bool; comp_width : uint; rows : uint; cols : uint; use : uint> {
-    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, is_float = false, signed = false, comp_width = 0u, rows = 0u, cols = 0u, use = 0u)
+// type (float vs signed int + width), the tile's rows/cols/use (SpvCooperativeMatrixUse), and the SCOPE —
+// Subgroup for the KHR v1 tiles below, Workgroup for the name-parsed cm2 coopmatWg* markers (whole-wg
+// tiles, driver-managed staging). v1 tiles: f16xf16->f32 (16x16x16) and the native s8xs8->s32 int path
+// (16x16x32, where A is 16x32 / B is 32x16 / accumulator 16x16 — the Q8-weight path, no dequant).
+def private coopmat_info(t : TypeDecl?) : tuple<ok : bool; is_float : bool; signed : bool; comp_width : uint; rows : uint; cols : uint; use : uint; scope : uint> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (ok = false, is_float = false, signed = false, comp_width = 0u, rows = 0u, cols = 0u, use = 0u, scope = 0u)
     let n = "{t.structType.name}"
-    if (n == "coopmatA_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR))
-    if (n == "coopmatB_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR))
-    if (n == "coopmatAcc_f32_16x16") return (ok = true, is_float = true, signed = false, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
-    if (n == "coopmatAcc_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
-    if (n == "coopmatA_s8_16x32") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 16u, cols = 32u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR))
-    if (n == "coopmatB_s8_32x16") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 32u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR))
-    if (n == "coopmatAcc_s32_16x16") return (ok = true, is_float = false, signed = true, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR))
-    return (ok = false, is_float = false, signed = false, comp_width = 0u, rows = 0u, cols = 0u, use = 0u)
+    let sg = uint(SpvScope.Subgroup)
+    if (n == "coopmatA_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR), scope = sg)
+    if (n == "coopmatB_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR), scope = sg)
+    if (n == "coopmatAcc_f32_16x16") return (ok = true, is_float = true, signed = false, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR), scope = sg)
+    if (n == "coopmatAcc_f16_16x16") return (ok = true, is_float = true, signed = false, comp_width = 16u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR), scope = sg)
+    if (n == "coopmatA_s8_16x32") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 16u, cols = 32u, use = uint(SpvCooperativeMatrixUse.MatrixAKHR), scope = sg)
+    if (n == "coopmatB_s8_32x16") return (ok = true, is_float = false, signed = true, comp_width = 8u, rows = 32u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixBKHR), scope = sg)
+    if (n == "coopmatAcc_s32_16x16") return (ok = true, is_float = false, signed = true, comp_width = 32u, rows = 16u, cols = 16u, use = uint(SpvCooperativeMatrixUse.MatrixAccumulatorKHR), scope = sg)
+    if (n |> starts_with("coopmatWg")) {
+        let wg = coopmat_wg_info(n)
+        if (wg.ok) return (ok = true, is_float = wg.is_float, signed = wg.signed, comp_width = wg.comp_width, rows = wg.rows, cols = wg.cols, use = wg.use, scope = uint(SpvScope.Workgroup))
+    }
+    return (ok = false, is_float = false, signed = false, comp_width = 0u, rows = 0u, cols = 0u, use = 0u, scope = 0u)
 }
 
 // Materialize the OpTypeCooperativeMatrixKHR for a coopmat marker type (0 if `t` is not a coopmat).
+// A Workgroup-scope (cm2) tile additionally pulls the SPV_NV_cooperative_matrix2 capability set.
 def private coopmat_type_of(var m : SpirvModule; t : TypeDecl?) : uint {
     let ci = coopmat_info(t)
     if (!ci.ok) return 0u
+    if (ci.scope == uint(SpvScope.Workgroup)) {
+        ensure_cooperative_matrix2(m)
+    }
     let comp = ci.is_float ? type_float(m, ci.comp_width) : type_int(m, ci.comp_width, ci.signed ? 1u : 0u)
-    return type_cooperative_matrix(m, comp, uint(SpvScope.Subgroup), ci.rows, ci.cols, ci.use)
+    return type_cooperative_matrix(m, comp, ci.scope, ci.rows, ci.cols, ci.use)
+}
+
+// cm2 tensor layout/view marker -> its OpTypeTensorLayoutNV / OpTypeTensorViewNV id (0 = not one).
+// tensorLayout2D = clamp Undefined (aligned fast path), tensorLayout2DPad = clamp Constant (OOB
+// reads yield zero — the guarded edge path); tensorView2Dt = the (1,0) transpose permutation.
+def private tensor_object_type_of(var m : SpirvModule; t : TypeDecl?) : tuple<id : uint; is_view : bool> {
+    if (t == null || t.baseType != Type.tStructure || t.structType == null) return (id = 0u, is_view = false)
+    let n = "{t.structType.name}"
+    if (n == "tensorLayout2D") return (id = type_tensor_layout(m, 2u, uint(SpvTensorClampMode.Undefined)), is_view = false)
+    if (n == "tensorLayout2DPad") return (id = type_tensor_layout(m, 2u, uint(SpvTensorClampMode.Constant)), is_view = false)
+    if (n == "tensorView2D") {
+        var p <- [0u, 1u]
+        let id = type_tensor_view(m, 2u, false, p)
+        delete p
+        return (id = id, is_view = true)
+    }
+    if (n == "tensorView2Dt") {
+        var p <- [1u, 0u]
+        let id = type_tensor_view(m, 2u, false, p)
+        delete p
+        return (id = id, is_view = true)
+    }
+    return (id = 0u, is_view = false)
 }
 
 // Exactly the type set emit_type lowers without panicking: a scalar/vector (scalar_class >= 0), bool,
@@ -1746,6 +1881,27 @@ def private root_global_of(e : ExpressionPtr) : Variable const? {
     return null
 }
 
+// The LOCAL/argument twin of root_global_of: peel to the underlying ExprVar and return its Variable
+// when it is a local, argument, or block var (null otherwise). Lets root_storage_of read a memory
+// local's storage class — a cm2 decode function's block parameter is PhysicalStorageBuffer, not Function.
+def private root_local_var_of(e : ExpressionPtr) : Variable const? {
+    if (e == null) return null
+    let ev = e ?as ExprVar
+    if (ev != null) {
+        if (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return ev.variable
+        return null
+    }
+    let at = e ?as ExprAt
+    if (at != null) return root_local_var_of(at.subexpr)
+    let fld = e ?as ExprField
+    if (fld != null) return root_local_var_of(fld.value)
+    let sw = e ?as ExprSwizzle
+    if (sw != null) return root_local_var_of(sw.value)
+    let r2v = e ?as ExprRef2Value
+    if (r2v != null) return root_local_var_of(r2v.subexpr)
+    return null
+}
+
 // ===== atomic call name + operand class -> SPIR-V opcode =====
 // cls: 0 = signed int, 1 = unsigned int, 2 = float. atomicMin/Max pick the signed (SMin/SMax) or
 // unsigned (UMin/UMax) opcode by the operand's signedness; the rest are sign-agnostic. atomicAdd is
@@ -2606,6 +2762,19 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
         ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = rqid, value_type = rqt, is_opaque = true))
         return
     }
+    // A cm2 tensor LAYOUT/VIEW object (tensorLayout2D, tensorView2Dt, ...): a Function-storage local
+    // holding the opaque address-mapping value. Like rayQueryEXT it has no zero constant (is_opaque
+    // skips the OpConstantNull init) — tensorLayoutCreate / tensorViewCreate stores the first value.
+    if (bt == Type.tStructure && v._type.structType != null) {
+        let to = tensor_object_type_of(m, v._type)
+        if (to.id != 0u) {
+            let tpt = type_pointer(m, SpvStorageClass.Function, to.id)
+            let tid = alloc_id(m)
+            emit(m, SEC_FUNCS, SpvOp.Variable, tpt, tid, uint(SpvStorageClass.Function))
+            ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = tid, value_type = to.id, is_opaque = true))
+            return
+        }
+    }
     // A cooperative-matrix OBJECT (coopmatA_f16_16x16, ...): a subgroup tile in a Function-storage local,
     // recognized by its marker name. Unlike rayQueryEXT it holds a LOADABLE value (coopmatLoad fills it,
     // coopmatMulAdd reads it and produces one), so it is NOT is_opaque -- the normal value rail applies and
@@ -2726,11 +2895,13 @@ class SpirvEmit : AstVisitor {
     e2id    : table<uint64; uint>        // intptr(Expression) -> rvalue SSA result-id
     e2ptr   : table<uint64; uint>        // intptr(Expression) -> lvalue pointer result-id
     e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
+    e2align : table<uint64; uint>        // intptr(Expression) -> Aligned literal for the OpLoad (set only for PhysicalStorageBuffer-rooted chains — PSB loads REQUIRE the Aligned memory operand)
     ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
     for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
     copy_dst : uint64                    // intptr(ExprCopy.left) while that destination subtree is walked
     suppress_bounds_arg : bool = false   // next node is a `.[]` call's __context__/__lineinfo__ tail — elide
+    suppress_fn_addr : bool = false      // next node is coopmatLoadTensorDecode's trailing @@decode — read structurally by the cm2 load arm, not lowered
     errs    : array<string>
 
     // coerce a visited child to an rvalue id: a value passes through; a pointer is OpLoad'd here (the
@@ -2747,7 +2918,14 @@ class SpirvEmit : AstVisitor {
             }
             var bm & = unsafe(*m)
             let res = alloc_id(bm)
-            emit(bm, SEC_FUNCS, SpvOp.Load, pty, res, pid)
+            if (key_exists(e2align, k)) {
+                // a PhysicalStorageBuffer-rooted pointer: the load must carry Aligned <literal>
+                var lops <- [pty, res, pid, uint(SpvMemoryAccess.Aligned), e2align?[k] ?? 4u]
+                emit_n(bm, SEC_FUNCS, SpvOp.Load, lops)
+                delete lops
+            } else {
+                emit(bm, SEC_FUNCS, SpvOp.Load, pty, res, pid)
+            }
             return res
         }
         errs |> push("internal: no rvalue available for {e.__rtti}")
@@ -2872,13 +3050,17 @@ class SpirvEmit : AstVisitor {
         return (gi = agi, img = img_id, ok = true)
     }
     // The storage class of the memory an addressable expression chains into: the root global's for a
-    // global-rooted chain, Function for one rooted at a `var` local (its OpVariable is Function-storage).
+    // global-rooted chain; for one rooted at a local it is that local's OWN storage — Function for every
+    // ordinary `var` local, PhysicalStorageBuffer for a cm2 decode function's block parameter.
     // An OpAccessChain result type must name the storage class it chains INTO, so a field of a struct
     // local and a field of an SSBO element cannot share one default.
     def root_storage_of(e : ExpressionPtr) : SpvStorageClass {
         let rv = root_global_of(e)
         let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
-        return rgi.var_id != 0u ? rgi.storage : SpvStorageClass.Function
+        if (rgi.var_id != 0u) return rgi.storage
+        let lv = root_local_var_of(e)
+        if (lv != null) return (ctx.local_vars?[intptr(lv)] ?? LocalVar()).storage
+        return SpvStorageClass.Function
     }
 
     def ptr_of(e : ExpressionPtr) : tuple<id : uint; pty : uint> {
@@ -3010,6 +3192,34 @@ class SpirvEmit : AstVisitor {
         }
         errs |> push("{who}: the buffer argument must be an @ssbo or @workgroup array")
         return 0u
+    }
+    // cm2: slice a (r0, nr, c0, nc) window off a tensor-layout local for one tensor load/store. Loads
+    // the CURRENT layout value and emits OpTensorLayoutSliceNV — the base local is NOT modified, so
+    // per-K-tile slicing inside a loop reuses one layout. Returns the sliced layout value id (0 = error).
+    def cm2_sliced_layout(tl_arg : ExpressionPtr; a_r0, a_nr, a_c0, a_nc : ExpressionPtr; who : string) : uint {
+        var bm & = unsafe(*m)
+        let to = tensor_object_type_of(bm, tl_arg._type)
+        if (to.id == 0u || to.is_view) {
+            errs |> push("{who}: the layout argument must be a tensorLayout2D / tensorLayout2DPad local")
+            return 0u
+        }
+        let lp = coop_local_ptr(tl_arg)
+        if (lp.id == 0u) {
+            errs |> push("{who}: could not resolve the tensor-layout local")
+            return 0u
+        }
+        let cur = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, to.id, cur, lp.id)
+        let v0 = value_of(a_r0)
+        let v1 = value_of(a_nr)
+        let v2 = value_of(a_c0)
+        let v3 = value_of(a_nc)
+        if (v0 == 0u || v1 == 0u || v2 == 0u || v3 == 0u) return 0u
+        let res = alloc_id(bm)
+        var ops <- [to.id, res, cur, v0, v1, v2, v3]
+        emit_n(bm, SEC_FUNCS, SpvOp.TensorLayoutSliceNV, ops)
+        delete ops
+        return res
     }
 
     // The `committed` flag of a ray-query accessor: GLSL's bool literal (true = the committed hit).
@@ -3320,6 +3530,11 @@ class SpirvEmit : AstVisitor {
                 emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, base.id, idx)
                 e2ptr[k] = res
                 e2pty[k] = pointee
+                if (storage == SpvStorageClass.PhysicalStorageBuffer && scalar_class(result_expr._type.baseType) >= 0) {
+                    // the Aligned literal must be a POWER OF TWO — the std430 alignment, not the size
+                    // (a 3-lane vector's size is 6/12, its alignment 8/16)
+                    e2align[k] = uint(block_scalar_align(result_expr._type.baseType, BlockLayoutRules.std430))
+                }
                 return
             }
             errs |> push("indexing is only supported on a global ssbo array, a local fixed array, or an array field inside a @uniform/@push_constant/@ssbo block")
@@ -3706,8 +3921,10 @@ class SpirvEmit : AstVisitor {
         // its member types under std430 (tight, width-aware strides), everything else under std140.
         // MUST stay in lockstep with build_block_struct — the stride is part of the type-dedup key,
         // so a rules mismatch here yields a DIFFERENT OpTypeArray than the struct's member type and
-        // the OpAccessChain result type no longer matches (spirv-val failure).
-        let rules = storage == SpvStorageClass.StorageBuffer ? BlockLayoutRules.std430 : BlockLayoutRules.std140
+        // the OpAccessChain result type no longer matches (spirv-val failure). A cm2 decode function's
+        // PhysicalStorageBuffer block is laid out std430 too (register_decode_func builds it that way).
+        let rules = ((storage == SpvStorageClass.StorageBuffer || storage == SpvStorageClass.PhysicalStorageBuffer)
+            ? BlockLayoutRules.std430 : BlockLayoutRules.std140)
         // matrices come back through emit_type -> type_matrix correctly; only tStructure and
         // tFixedArray need the layout-aware path.
         if (ft.baseType == Type.tStructure && ft.structType != null) {
@@ -3782,6 +3999,10 @@ class SpirvEmit : AstVisitor {
                 emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, base.id, const_uint(bm, uint(midx)))
                 e2ptr[k] = res
                 e2pty[k] = pointee
+                if (storage == SpvStorageClass.PhysicalStorageBuffer && scalar_class(expr._type.baseType) >= 0) {
+                    // power-of-two Aligned literal — std430 alignment, not size (see the ExprAt twin)
+                    e2align[k] = uint(block_scalar_align(expr._type.baseType, BlockLayoutRules.std430))
+                }
                 return expr
             }
             // member of a local struct VALUE (e.g. `let inst = instances[i]; inst.pos_scale`): the let
@@ -3893,6 +4114,26 @@ class SpirvEmit : AstVisitor {
     def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
         suppress_bounds_arg = (expr.name == ".[]" && length(expr.arguments) > 3 &&
             (arg == expr.arguments[2] || arg == expr.arguments[3]))
+        // the trailing @@decode argument of coopmatLoadTensorDecode is read STRUCTURALLY by the cm2
+        // load arm (registered as a DecodeFunc operand) — it never lowers to a value, so the @@
+        // fail-closed guard must not fire on it. Set ONLY when the argument actually is an ExprAddr
+        // (a non-@@ trailing arg gets the arm's own clean error, and the flag can never leak onto an
+        // unrelated later @@). Generic stub -> match the ORIGIN name. Assigned per argument, like
+        // suppress_bounds_arg above, so it also self-clears on the next visited argument.
+        suppress_fn_addr = false
+        if (last && expr.func != null) {
+            let r2v = arg ?as ExprRef2Value
+            let da = r2v != null ? r2v.subexpr : arg
+            if (da is ExprAddr) {
+                var co = expr.func
+                while (co.fromGeneric != null) {
+                    co = co.fromGeneric
+                }
+                if ("{co.name}" == "coopmatLoadTensorDecode") {
+                    suppress_fn_addr = true
+                }
+            }
+        }
     }
     // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
     // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
@@ -4264,6 +4505,240 @@ class SpirvEmit : AstVisitor {
             var sops <- [dst.id, res]
             emit_n(bm, SEC_FUNCS, SpvOp.Store, sops)
             delete sops
+            return expr
+        }
+        // ----- cm2 (SPV_NV_cooperative_matrix2 + SPV_NV_tensor_addressing): tensor layout/view objects
+        // and tensor-addressed coopmat load/store. Compute-only, like the KHR coopmat arms above. The
+        // layout/view stubs have untyped params, so they are GENERIC — match the origin name.
+        if (origin_name == "tensorLayoutCreate" || origin_name == "tensorViewCreate") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{origin_name} is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 1) {
+                errs |> push("{origin_name} expects (dst)")
+                return expr
+            }
+            let want_view = origin_name == "tensorViewCreate"
+            let to = tensor_object_type_of(bm, expr.arguments[0]._type)
+            if (to.id == 0u || to.is_view != want_view) {
+                errs |> push("{origin_name}: the argument must be a {want_view ? "tensorView2D / tensorView2Dt" : "tensorLayout2D / tensorLayout2DPad"} local")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            if (dst.id == 0u) {
+                errs |> push("{origin_name}: could not resolve the destination local")
+                return expr
+            }
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, want_view ? SpvOp.CreateTensorViewNV : SpvOp.CreateTensorLayoutNV, to.id, res)
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        if (origin_name == "tensorLayoutSetDimension" || origin_name == "tensorLayoutSetStride"
+                || origin_name == "tensorLayoutSetBlockSize") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{origin_name} is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 3) {
+                errs |> push("{origin_name} expects (layout, v0, v1)")
+                return expr
+            }
+            let to = tensor_object_type_of(bm, expr.arguments[0]._type)
+            if (to.id == 0u || to.is_view) {
+                errs |> push("{origin_name}: the first argument must be a tensorLayout2D / tensorLayout2DPad local")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            if (dst.id == 0u) {
+                errs |> push("{origin_name}: could not resolve the tensor-layout local")
+                return expr
+            }
+            let v0 = value_of(expr.arguments[1])
+            let v1 = value_of(expr.arguments[2])
+            if (v0 == 0u || v1 == 0u) return expr
+            let cur = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, to.id, cur, dst.id)
+            let op = (origin_name == "tensorLayoutSetDimension" ? SpvOp.TensorLayoutSetDimensionNV
+                : (origin_name == "tensorLayoutSetStride" ? SpvOp.TensorLayoutSetStrideNV : SpvOp.TensorLayoutSetBlockSizeNV))
+            let res = alloc_id(bm)
+            var tops <- [to.id, res, cur, v0, v1]
+            emit_n(bm, SEC_FUNCS, op, tops)
+            delete tops
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        // coopmatLoadTensor(dst, src, base, tl, r0, nr, c0, nc [, view]) / …Decode(…, @@fn) /
+        // coopmatStoreTensor(mat, dst, base, tl, r0, nr, c0, nc [, view]): slice the window off the
+        // layout, then OpCooperativeMatrix{Load,Store}TensorNV at &buf[base]. The Object operand of a
+        // load is the tile's CURRENT value (elements a clamped/skipped load leaves in place). The
+        // decode form registers the @@-referenced [spirv_decode] function and passes it as the
+        // DecodeFunc tensor-addressing operand — dequant-in-load for block-quantized sources.
+        if (origin_name == "coopmatLoadTensor" || origin_name == "coopmatLoadTensorDecode"
+                || origin_name == "coopmatStoreTensor") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{origin_name} is only valid in a compute shader")
+                return expr
+            }
+            let is_store = origin_name == "coopmatStoreTensor"
+            let is_decode = origin_name == "coopmatLoadTensorDecode"
+            let argc = length(expr.arguments)
+            if (is_decode ? argc != 9 : (argc != 8 && argc != 9)) {
+                errs |> push("{origin_name} expects ({is_store ? "mat, dst" : "dst, src"}, base, layout, r0, nr, c0, nc{is_decode ? ", @@decode" : " [, view]"})")
+                return expr
+            }
+            let ci = coopmat_info(expr.arguments[0]._type)
+            if (!ci.ok) {
+                errs |> push("{origin_name}: the first argument must be a coopmat local")
+                return expr
+            }
+            let idx = value_of(expr.arguments[2])
+            if (idx == 0u) return expr
+            let sptr = coop_buf_ptr(expr.arguments[1], idx, origin_name)
+            if (sptr == 0u) return expr
+            let sliced = cm2_sliced_layout(expr.arguments[3], expr.arguments[4], expr.arguments[5],
+                expr.arguments[6], expr.arguments[7], origin_name)
+            if (sliced == 0u) return expr
+            var ta_mask = 0u
+            var ta_extra = 0u
+            if (is_decode) {
+                let da0 = expr.arguments[8]
+                let r2v = da0 ?as ExprRef2Value
+                let da = r2v != null ? r2v.subexpr : da0
+                let fa = da ?as ExprAddr
+                if (fa == null || fa.func == null) {
+                    errs |> push("coopmatLoadTensorDecode: the last argument must be @@<decode function>")
+                    return expr
+                }
+                if (!function_has_annotation(fa.func, "spirv_decode")) {
+                    errs |> push("coopmatLoadTensorDecode: '{fa.func.name}' must be annotated [spirv_decode]")
+                    return expr
+                }
+                let fid = register_decode_func(bm, *ctx, fa.func, errs)
+                if (fid == 0u) return expr
+                ta_mask = uint(SpvTensorAddressingOperands.DecodeFunc)
+                ta_extra = fid
+            } elif (argc == 9) {
+                let vo = tensor_object_type_of(bm, expr.arguments[8]._type)
+                if (vo.id == 0u || !vo.is_view) {
+                    errs |> push("{origin_name}: the trailing argument must be a tensorView2D / tensorView2Dt local")
+                    return expr
+                }
+                let vp = coop_local_ptr(expr.arguments[8])
+                if (vp.id == 0u) return expr
+                let vv = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, vo.id, vv, vp.id)
+                ta_mask = uint(SpvTensorAddressingOperands.TensorView)
+                ta_extra = vv
+            }
+            if (is_store) {
+                let obj = coop_local_val(expr.arguments[0])
+                if (obj == 0u) {
+                    errs |> push("coopmatStoreTensor: the first argument must be a coopmat value")
+                    return expr
+                }
+                var ops <- [sptr, obj, sliced, uint(SpvMemoryAccess.None), ta_mask]
+                if (ta_extra != 0u) {
+                    ops |> push(ta_extra)
+                }
+                emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixStoreTensorNV, ops)
+                delete ops
+            } else {
+                let dst = coop_local_ptr(expr.arguments[0])
+                if (dst.id == 0u || dst.pty == 0u) {
+                    errs |> push("{origin_name}: the first argument must be a coopmat local")
+                    return expr
+                }
+                let cur_obj = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, dst.pty, cur_obj, dst.id)
+                let res = alloc_id(bm)
+                var ops <- [dst.pty, res, sptr, cur_obj, sliced, uint(SpvMemoryAccess.None), ta_mask]
+                if (ta_extra != 0u) {
+                    ops |> push(ta_extra)
+                }
+                emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixLoadTensorNV, ops)
+                delete ops
+                emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            }
+            return expr
+        }
+        // coopmatClamp(mat, lo, hi): per-element FClamp over a float accumulator tile — the
+        // f16-accumulate ±65504 overflow guard. OpCooperativeMatrixLengthKHR bounds a hand-emitted
+        // structured loop that AccessChains each element of the Function-storage tile local.
+        if (origin_name == "coopmatClamp") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatClamp is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 3) {
+                errs |> push("coopmatClamp expects (mat, lo, hi)")
+                return expr
+            }
+            let ci = coopmat_info(expr.arguments[0]._type)
+            if (!ci.ok || !ci.is_float) {
+                errs |> push("coopmatClamp: the first argument must be a float coopmat local")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            if (dst.id == 0u || dst.pty == 0u) {
+                errs |> push("coopmatClamp: could not resolve the coopmat local")
+                return expr
+            }
+            let lo32 = value_of(expr.arguments[1])
+            let hi32 = value_of(expr.arguments[2])
+            if (lo32 == 0u || hi32 == 0u) return expr
+            let comp_t = type_float(bm, ci.comp_width)
+            var lo = lo32
+            var hi = hi32
+            if (ci.comp_width != 32u) {
+                lo = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.FConvert, comp_t, lo, lo32)
+                hi = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.FConvert, comp_t, hi, hi32)
+            }
+            let glsl = ensure_glsl_ext(bm, *ctx)
+            let ut = type_uint(bm)
+            let len = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.CooperativeMatrixLengthKHR, ut, len, dst.pty)
+            // structured loop: pre -> hdr (phi i) -> body -> cont -> hdr; merge exits. The fresh `pre`
+            // block exists so the phi has a KNOWN entry predecessor (the current block's label id is
+            // not tracked); `inext` is forward-referenced by the phi from the back edge, which OpPhi allows.
+            let pre = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Branch, pre)
+            emit(bm, SEC_FUNCS, SpvOp.Label, pre)
+            let hdr = alloc_id(bm)
+            let body = alloc_id(bm)
+            let cont = alloc_id(bm)
+            let merge = alloc_id(bm)
+            let iv = alloc_id(bm)
+            let inext = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Branch, hdr)
+            emit(bm, SEC_FUNCS, SpvOp.Label, hdr)
+            var phi <- [ut, iv, const_uint(bm, 0u), pre, inext, cont]
+            emit_n(bm, SEC_FUNCS, SpvOp.Phi, phi)
+            delete phi
+            let bt = type_bool(bm)
+            let cnd = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ULessThan, bt, cnd, iv, len)
+            emit(bm, SEC_FUNCS, SpvOp.LoopMerge, merge, cont, 0u)
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cnd, body, merge)
+            emit(bm, SEC_FUNCS, SpvOp.Label, body)
+            let ept = type_pointer(bm, SpvStorageClass.Function, comp_t)
+            let ep = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.AccessChain, ept, ep, dst.id, iv)
+            let ev = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.Load, comp_t, ev, ep)
+            let cl = alloc_id(bm)
+            var cops2 <- [comp_t, cl, glsl, uint(GLSLstd450.FClamp), ev, lo, hi]
+            emit_n(bm, SEC_FUNCS, SpvOp.ExtInst, cops2)
+            delete cops2
+            emit(bm, SEC_FUNCS, SpvOp.Store, ep, cl)
+            emit(bm, SEC_FUNCS, SpvOp.Branch, cont)
+            emit(bm, SEC_FUNCS, SpvOp.Label, cont)
+            emit(bm, SEC_FUNCS, SpvOp.IAdd, ut, inext, iv, const_uint(bm, 1u))
+            emit(bm, SEC_FUNCS, SpvOp.Branch, hdr)
+            emit(bm, SEC_FUNCS, SpvOp.Label, merge)
             return expr
         }
         // barrier(): control + shared-memory barrier (OpControlBarrier at Workgroup execution+memory
@@ -5487,6 +5962,10 @@ class SpirvEmit : AstVisitor {
         errs |> push("addr is not supported in SPIR-V shaders")
     }
     def override preVisitExprAddr(expr : ExprAddr?) : void {
+        if (suppress_fn_addr) {
+            suppress_fn_addr = false
+            return
+        }
         errs |> push("function address (@@) is not supported in SPIR-V shaders")
     }
     def override preVisitExprConstPtr(expr : ExprConstPtr?) : void {
@@ -5686,8 +6165,24 @@ def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool
     while (forigin.fromGeneric != null) {
         forigin = forigin.fromGeneric
     }
+    // a [spirv_decode] function is emitted by the cm2 DECODE rail (PSB block pointer + uint[2]
+    // coordinate params), never as a plain user function — the das-typed signature would register wrong
+    if (function_has_annotation(forigin, "spirv_decode")) return false
     let mn = "{forigin._module.name}"
     return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins" || mn == "shader_lingua_franca")
+}
+
+// True iff `f` (or its generic origin) carries the named function annotation (e.g. [spirv_decode]).
+def private function_has_annotation(f : Function const?; nm : string) : bool {
+    if (f == null) return false
+    var fo = f
+    while (fo.fromGeneric != null) {
+        fo = fo.fromGeneric
+    }
+    for (ad in fo.annotations) {
+        if (ad != null && ad.annotation != null && "{ad.annotation.name}" == nm) return true
+    }
+    return false
 }
 
 // Is this parameter WRITTEN THROUGH by the callee -- a Function pointer parameter fed by the
@@ -5756,6 +6251,114 @@ def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Funct
     delete ptypes
     ctx.user_funcs |> insert(intptr(f), uf)
     ctx.user_order |> push(intptr(f))
+}
+
+// Validate + register a cm2 decode function (first reference wins; later loads reuse the id). The
+// SPV_NV_cooperative_matrix2 DecodeFunc contract is rigid: (block : <struct>; blockCoord,
+// coordInBlock : uint2) returning the tile component type. The block param lowers to a
+// PhysicalStorageBuffer pointer at the std430 packing (build_block_struct, Block-decorated — a gguf
+// q8_0 {d : float16; qs : uint16[16]} lands at offsets 0/2, 34 bytes); uint2 coords lower as uint[2]
+// ARRAYS (the spec's shape — .x/.y reads become OpCompositeExtract, valid on arrays).
+def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Function const?; var errors : array<string>) : uint {
+    if (key_exists(ctx.decode_funcs, intptr(f))) {
+        let ex = ctx.decode_funcs?[intptr(f)] ?? DecodeFn()
+        return ex.valid ? ex.fn_id : 0u
+    }
+    var df = DecodeFn(fn = f, valid = true)
+    ensure_cooperative_matrix2(m)
+    let rbt = f.result.baseType
+    if (rbt == Type.tFloat16) {
+        df.ret_type = type_float(m, 16u)
+    } elif (rbt == Type.tFloat) {
+        df.ret_type = type_float(m, 32u)
+    } elif (rbt == Type.tInt8) {
+        df.ret_type = type_int(m, 8u, 1u)
+    } else {
+        errors |> push("decode function '{f.name}': result must be float16, float, or int8 (the tile's component type)")
+        df.valid = false
+    }
+    if (length(f.arguments) != 3) {
+        errors |> push("decode function '{f.name}': signature must be (block : <struct>; blockCoord, coordInBlock : uint2)")
+        df.valid = false
+    } else {
+        let a0 = f.arguments[0]._type
+        if (a0 == null || a0.baseType != Type.tStructure || a0.structType == null) {
+            errors |> push("decode function '{f.name}': the first parameter must be the block struct")
+            df.valid = false
+        } else {
+            let blk = build_block_struct(m, "{f.name} block", a0.structType, true, errors, BlockLayoutRules.std430)
+            if (!blk.ok) {
+                df.valid = false
+            } else {
+                df.block_type = blk.type_id
+                df.block_ptr_type = type_pointer(m, SpvStorageClass.PhysicalStorageBuffer, blk.type_id)
+            }
+        }
+        for (i in range(1, 3)) {
+            let at = f.arguments[i]._type
+            if (at == null || at.baseType != Type.tUInt2) {
+                errors |> push("decode function '{f.name}': parameter {i + 1} must be uint2 (the tensor coordinates)")
+                df.valid = false
+            }
+        }
+    }
+    if (df.valid) {
+        df.fn_id = alloc_id(m)
+        let arr2 = type_array(m, type_uint(m), 2)
+        var ps <- [df.block_ptr_type, arr2, arr2]
+        df.type_id = type_function(m, df.ret_type, ps)
+        delete ps
+    }
+    ctx.decode_funcs |> insert(intptr(f), df)
+    ctx.decode_order |> push(intptr(f))
+    return df.valid ? df.fn_id : 0u
+}
+
+// Emit one registered decode function: OpFunction with the PSB block pointer decorated Aliased
+// (PhysicalStorageBuffer function parameters require Aliased or Restrict; the same block is decoded
+// by many invocations), the two uint[2] coordinate params bound as SSA values, then the das body via
+// the normal walk — reads through the block param chain as PhysicalStorageBuffer and load Aligned
+// (LocalVar.storage + e2align carry that through ptr_of/value_of).
+def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : DecodeFn; var errors : array<string>) {
+    let f = unsafe(reinterpret<FunctionPtr>(df.fn))   // read-only emission; strip pointee const
+    emit(m, SEC_FUNCS, SpvOp.Function, df.ret_type, df.fn_id, 0u, df.type_id)
+    let p0 = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.FunctionParameter, df.block_ptr_type, p0)
+    emit(m, SEC_DECOR, SpvOp.Decorate, p0, uint(SpvDecoration.Aliased))
+    ctx.local_vars |> insert(intptr(f.arguments[0]), LocalVar(ptr_id = p0, value_type = df.block_type,
+        is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
+    let arr2 = type_array(m, type_uint(m), 2)
+    var coord_pids : uint[2]
+    for (i in range(1, 3)) {
+        let pid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.FunctionParameter, arr2, pid)
+        coord_pids[i - 1] = pid
+    }
+    let id_label = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Label, id_label)
+    // The das body types the coords as uint2, but the spec-mandated params are uint[2] ARRAYS —
+    // rebuild each as a uvec2 SSA value at entry and bind THAT, so any vector op in the body
+    // (not just .x/.y extracts) lowers against the type the AST believes in.
+    let ut = type_uint(m)
+    let uv2 = type_vector(m, ut, 2)
+    for (i in range(1, 3)) {
+        let e0 = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e0, coord_pids[i - 1], 0u)
+        let e1 = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e1, coord_pids[i - 1], 1u)
+        let vid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, uv2, vid, e0, e1)
+        ctx.locals |> insert(intptr(f.arguments[i]), vid)
+    }
+    ctx.terminated = false
+    collect_locals(m, ctx, f.body, errors)
+    alloc_call_temps(m, ctx, f, errors)
+    drive_emit(m, ctx, f, errors)
+    if (!ctx.terminated) {
+        errors |> push("decode function '{f.name}': not every control-flow path returns a value")
+        emit(m, SEC_FUNCS, SpvOp.Unreachable)
+    }
+    emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
 }
 
 // Mini-visitor: collect the user-function call targets directly invoked from one function body
@@ -6102,6 +6705,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
             emit_user_function(m, ctx, uf, errors)
         }
     }
+    // cm2 decode functions (registered by the coopmatLoadTensorDecode arm during the body walk)
+    for (key in ctx.decode_order) {
+        let df = ctx.decode_funcs?[key] ?? DecodeFn()
+        if (df.valid) {
+            emit_decode_function(m, ctx, df, errors)
+        }
+    }
 
     // The EntryPoint lands in its own section, so it is emitted LAST, once every body has been walked.
     // Two things are only final by now: the module version (a body may raise it -- an
@@ -6126,9 +6736,12 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
 
     // The memory model, now that the body is walked: a cooperative-matrix module pulled
     // VulkanMemoryModel (spirv-val requires it once CooperativeMatrixKHR is declared), which mandates the
-    // Vulkan memory model; every other shader keeps Logical GLSL450.
+    // Vulkan memory model; every other shader keeps Logical GLSL450. A cm2 module (tensor addressing /
+    // decode functions — the "cap_cm2" pool key, which also declared PhysicalStorageBufferAddresses)
+    // additionally switches the ADDRESSING model to PhysicalStorageBuffer64, exactly as glslang does.
     let mem_model = (m.type_pool?["cap_coopmat"] ?? 0u) != 0u ? SpvMemoryModel.Vulkan : SpvMemoryModel.GLSL450
-    emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(mem_model))
+    let addr_model = (m.type_pool?["cap_cm2"] ?? 0u) != 0u ? SpvAddressingModel.PhysicalStorageBuffer64 : SpvAddressingModel.Logical
+    emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(addr_model), uint(mem_model))
 
     var ep <- [uint(execution_model(stage)), id_main]
     var nm <- string_words("main")
