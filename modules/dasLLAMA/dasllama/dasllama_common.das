@@ -2400,6 +2400,25 @@ def moe_gpu_upload_resident(t : Model) {
                 && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())) {
         return   // tier absent or nothing requested
     }
+    // size the tier's streamed-slot reserve from THIS model's largest expert layer — a fixed
+    // reserve wastes VRAM or asserts on big-expert geometries (GLM Air, Qwen1.5-MoE); must
+    // precede the first upload (the tier carves the reserve at its lazy init)
+    if (t.config.n_expert > 0l) {
+        var sgu = 0l
+        var sdn = 0l
+        for (sl in range64(t.config.n_layers + t.config.n_layer_nextn)) {
+            if (sl < t.config.n_layer_dense_lead || int64(length(t.we1_offs)) <= sl
+                    || t.we1_offs[sl] < 0l || t.we2_offs[sl] < 0l || t.we3_offs[sl] < 0l) {
+                continue
+            }
+            let sne = t.config.n_expert
+            let snfe = t.config.n_ff_exp
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we1_fmt, sl))))
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we3_fmt, sl))))
+            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(fmt_at(t.we2_fmt, sl))))
+        }
+        set_moe_gpu_stream_need(sgu > 0l ? 2l * sgu + sdn : 0l)
+    }
     // dense models that fully fit: try the whole-stack resident driver FIRST — it subsumes every
     // rail below (all planes + classifier resident, one-submit device prefill + mirror decode).
     // Any decline (shape, fit, placement) falls through to the per-op rails unchanged.

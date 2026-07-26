@@ -3379,10 +3379,10 @@ let private FFN_META_BYTES = 64l           // act/requant params (element count,
                                            // + the combine's [n, k, r0, r1] at words 4..7
 let private COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid entries x 4B)
 let private CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
-let private STREAM_RESERVE = 1_100_000_000l  // VRAM reserved out of the weight budget for the two
-                                             // streaming slots when DASLLAMA_GPU_MOE_STREAM is on
-                                             // (35B kq measured: 2 x 532.7MB slots = 1065MB;
-                                             // ensure_stream_slots asserts actual <= reserve)
+let private STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — used only when
+                                             // the loader never reported the model's exact need
+                                             // (moe_gpu_stream_need; big-expert geometries like
+                                             // GLM Air exceed this constant by design)
 
 // deltanet chain capacities (npos chunks over DN_WINDOW windows, state carried device-side).
 // Maxima match qwen35 (ds 128, 32 v-heads, conv dim 8192, dconv 4) — vk_moe_dn asserts them
@@ -3713,6 +3713,7 @@ struct private GpuState {
     stream_max_dn_wq : int64
     stream_max_dn_ws : int64
     stream_ready : bool
+    stream_reserve : int64        // bytes carved out of weight_budget for the 2 stream slots
     // deltanet chain state (lazy — first DN dispatch creates it)
     dn_meta : HostBuf             // dn kernel params staging
     dn_meta_dev : uint64
@@ -3968,8 +3969,15 @@ def private vk_moe_init : bool {
             to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {int64(mb.heapBudget[best]) / 1000000l} MB (used {int64(mb.heapUsage[best]) / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
         }
     }
-    if (gpu_want_moe_stream() > 0l) {
-        g_gpu.weight_budget = max(g_gpu.weight_budget - STREAM_RESERVE, 0l)   // room for the 2 slots
+    // stream-slot carve: exact loader-reported need, else the legacy constant (direct-upload paths)
+    if (gpu_want_moe_stream() != 0l) {
+        let need = moe_gpu_stream_need()
+        if (need > 0l) {
+            g_gpu.stream_reserve = 2l * need
+        } elif (gpu_want_moe_stream() > 0l) {
+            g_gpu.stream_reserve = STREAM_RESERVE
+        }
+        g_gpu.weight_budget = max(g_gpu.weight_budget - g_gpu.stream_reserve, 0l)
     }
     // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
     if (get_env_variable("DASLLAMA_VK_REBAR") != "0") {
@@ -7778,7 +7786,8 @@ def private ensure_stream_slots {
     g_gpu.stream_ready = true
     let slot_bytes = 2l * (g_gpu.stream_max_gu_wq + g_gpu.stream_max_gu_ws) + g_gpu.stream_max_dn_wq + g_gpu.stream_max_dn_ws
     // reserve was carved from the weight budget at init — overcommit here silently hits the WDDM paging cliff
-    assert(2l * slot_bytes <= STREAM_RESERVE, "dasLLAMA vulkan tier: stream slots exceed STREAM_RESERVE")
+    let reserve = g_gpu.stream_reserve > 0l ? g_gpu.stream_reserve : STREAM_RESERVE
+    assert(2l * slot_bytes <= reserve, "dasLLAMA vulkan tier: stream slots exceed the carved stream reserve")
     to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill engaged ({length(g_gpu.stream_stacks) / 3} layers, slot {slot_bytes} bytes x 2)\n")
 }
 

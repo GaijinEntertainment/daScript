@@ -2163,6 +2163,17 @@ def public set_moe_gpu_total_layers(n : int64) {
     g_moe_gpu_total_layers = n
 }
 
+var private g_moe_gpu_stream_need = 0l
+
+//! Loader contract: worst-case streamed-slot bytes of THIS model (2x gate/up + down device
+//! planes of the largest expert layer, via moe_gpu_plane_bytes). The tier carves its stream
+//! reserve from this instead of a fixed guess; 0 = unknown (tier falls back to its constant).
+def public set_moe_gpu_stream_need(bytes : int64) {
+    g_moe_gpu_stream_need = bytes
+}
+
+def public moe_gpu_stream_need() : int64 => g_moe_gpu_stream_need
+
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
 def public set_moe_gpu_model_support(reason : string) {
