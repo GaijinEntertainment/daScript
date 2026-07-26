@@ -316,6 +316,15 @@ imgui_mouse_* bypass commands while input is detached.
 - 8+4a terminal: watcher-side scrollback retention → client viewport,
   wheel scroll, then the color/palette fix (after 30b makes it
   provable). Search lands here too (13).
+  - 13 FIRST SLICE DONE (2026-07-25): File Inspector View mode has
+    find — case-insensitive, incremental (rebuilds per keystroke),
+    prev/next with wraparound, "N of M" counter, amber "no matches";
+    jumps reuse the focus-scroll rail (row * line_height). Verified
+    live: "th" in rich_state.das → "1 of 154" scrolled exactly to
+    "require math"; next → "2 of 154" deep-jump. Diff-mode search
+    deferred: the aligned panes need a text-line -> display-row map
+    before jumps can land right. Terminal + history search still open
+    with the scrollback work.
 - DONE 16 project view (2026-07-25): cached tree model; folder/file/
   hidden color tiers; dirty * propagating up folders from repository
   status; four sort modes cycling on a header button (stat-backed

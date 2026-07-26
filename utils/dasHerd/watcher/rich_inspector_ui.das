@@ -317,10 +317,91 @@ def draw_side_by_side_diff() {
     g_inspector.diff_scroll_jump_pending = false
 }
 
+var g_search_matches : array<int>
+var g_search_current : int
+var g_search_identity : string
+
+// Find matches (case-insensitive) in the view text; one peek pass assigns a
+// 0-based line to each match offset.
+def private rebuild_inspector_search(text, query : string) {
+    delete g_search_matches
+    g_search_current = 0
+    return if (empty(query) || empty(text))
+    let hay = to_lower(text)
+    let needle = to_lower(query)
+    var inscope offsets : array<int>
+    var start = 0
+    while (true) {
+        let at = find(hay, needle, start)
+        break if (at < 0)
+        offsets |> push(at)
+        start = at + max(1, length(needle))
+    }
+    return if (empty(offsets))
+    peek_data(hay) $(arr) {
+        var line = 0
+        var next = 0
+        for (index in range(length(arr))) {
+            if (next < length(offsets) && index == offsets[next]) {
+                g_search_matches |> push(line)
+                next++
+            }
+            if (int(arr[index]) == '\n') line++
+        }
+    }
+}
+
+def private inspector_search_jump() {
+    return if (empty(g_search_matches) || g_search_current < 0
+        || g_search_current >= length(g_search_matches))
+    let row = g_search_matches[g_search_current]
+    g_focus_view_scroll_y = (float(row) * max(GetTextLineHeight(),
+        g_inspector.view.key.line_height))
+    g_focus_view_scroll_pending = true
+}
+
+// View-mode search (note 13). Diff panes align virtual rows, so a text-line
+// jump would land wrong there — diff search waits on a line->row map.
+def private draw_inspector_search() {
+    SetNextItemWidth(220.0f)
+    let _changed = input_text_growable(INSPECTOR_SEARCH, (text = "Find"))
+    let query = strip(INSPECTOR_SEARCH.value)
+    let identity = "{g_inspector.revision}:{g_inspector.installed_file_path}:{query}"
+    if (identity != g_search_identity) {
+        g_search_identity = identity
+        rebuild_inspector_search(g_inspector.view_source, query)
+        if (!empty(g_search_matches)) inspector_search_jump()
+    }
+    let matches = length(g_search_matches)
+    same_line()
+    if (small_button(INSPECTOR_SEARCH_PREV, (text = "<", enabled = matches > 1))) {
+        g_search_current = (g_search_current + matches - 1) % matches
+        inspector_search_jump()
+    }
+    same_line()
+    if (small_button(INSPECTOR_SEARCH_NEXT, (text = ">", enabled = matches > 1))) {
+        g_search_current = (g_search_current + 1) % matches
+        inspector_search_jump()
+    }
+    if (!empty(query)) {
+        same_line()
+        if (matches > 0) {
+            text_disabled(INSPECTOR_SEARCH_COUNT,
+                (text = "{g_search_current + 1} of {matches}"))
+        } else {
+            text_colored(INSPECTOR_SEARCH_NONE,
+                (color = token_warning_color(), text = "no matches"))
+        }
+    }
+}
+
 def draw_file_view() {
     if (!g_inspector.view_prepared) {
         draw_binary_preview()
         return
+    }
+    if (g_inspector.resolved_language != "markdown") {
+        draw_inspector_search()
     }
     child(FILE_VIEW_PANE, (text = "file view", size = float2(0.0f, 0.0f),
             child_flags = ImGuiChildFlags.None,
@@ -732,6 +813,7 @@ def draw_file_inspector_window() {
 def inspector_ui_init() {
     DIFF_SYNTAX.value = 0
     DIFF_CONTEXT.value = 0
+    INSPECTOR_SEARCH.capacity = 256
 }
 
 def draw_file_inspector_dock() {
