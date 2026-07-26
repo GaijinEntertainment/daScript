@@ -78,8 +78,9 @@ def q8_moe_groupn {
         let wb0 = vk_meta[4u + r * 2u] + row * nb
         let xb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        // uint4 loads, 16-block span/pass: lane's vec4 is 4 words of block bi0+lane/2 (a block is
-        // 2 vec4s) — 512B/warp in flight, one shuffle per pass (probe: +4-12% DRAM vs scalar)
+        // uint4 loads, 2 lanes per block (a block is 2 vec4s): subgroupSize/2 blocks per pass,
+        // 512B/warp in flight, one shuffle per pass (probe: +4-12% DRAM vs scalar)
+        let bpp = gl_SubgroupSize / 2u
         var acc = 0.0
         var bi0 = 0u
         while (bi0 < nb) {
@@ -96,7 +97,7 @@ def q8_moe_groupn {
                     acc += float(idot) * float(vk_ws[wb0 + b]) * vk_xs[xb0 + b]
                 }
             }
-            bi0 += 16u
+            bi0 += bpp
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
@@ -3928,6 +3929,11 @@ def private vk_moe_init : bool {
     volkLoadDevice(dev_raw())
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
     let sg = subgroup_properties(g_gpu.phys).subgroupSize
+    if (sg < 32u) {
+        // the gid-mapped quant kernels reduce with xor masks up to 16 (q8k amax spans 32 lanes)
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: subgroupSize {sg} < 32 — tier disabled\n")
+        return false
+    }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
     // env wins outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); else live budget - reserve
     g_gpu.weight_budget = WEIGHT_CAP
