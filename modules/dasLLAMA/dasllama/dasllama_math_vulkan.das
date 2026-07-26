@@ -8103,13 +8103,16 @@ def private heat_stream_src(base : int64; fmt : int) : int {
 def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe : int64) {
     ensure_batch_state()   // advise records its slice copies into batch_cmd
     var pool = HeatPool(ege = n * nfe)
-    let kq = !vk_fmt_b32(f1)
     let src1 = heat_stream_src(b1, f1)
     let src3 = heat_stream_src(b3, f3)
     let src2 = heat_stream_src(b2, f2)
     let want = gpu_want_heat()
-    if (src1 < 0 || src3 < 0 || src2 < 0 || (!vk_fmt_b32(f3) != kq) || (!vk_fmt_b32(f2) != kq) || want <= 0l) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: heat cache skips layer {l} (no stream mirrors)\n")
+    // gate/up share one act image; down is free — the mid-step form follows IT (the mixed-triple rail)
+    if (src1 < 0 || src3 < 0 || src2 < 0 || vk_fmt_b32(f3) != vk_fmt_b32(f1) || want <= 0l) {
+        let why = (want <= 0l ? "want 0"
+            : (src1 < 0 || src3 < 0 || src2 < 0 ? "no mirror src {src1}/{src3}/{src2} for b {b1}/{b3}/{b2} fmt {f1}/{f3}/{f2}"
+            : "gate/up form mismatch fmt {f1}/{f3}"))
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: heat cache skips layer {l} ({why})\n")
         g_gpu.heat_pools[l] <- pool
         return
     }
