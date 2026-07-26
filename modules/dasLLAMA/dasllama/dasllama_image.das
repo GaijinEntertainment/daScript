@@ -10,6 +10,7 @@ require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serial
 require daslib/archive
 require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
 require dasllama/dasllama_common
+require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
