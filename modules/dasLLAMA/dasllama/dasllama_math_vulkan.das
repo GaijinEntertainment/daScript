@@ -5554,15 +5554,35 @@ var private g_rdq_tail = 0.0lf
 var private g_rdq_role : double[16]
 
 def private rdq_sample {
-    let merged = !empty(g_rd.layers) && g_rd.layers[0].kv_merged
-    let rpl = (g_rd.qk_norm ? 16 : 15) - (merged ? 1 : 0)
-    if (g_rdq_n != uint(2 + int(g_rd.n_layers) * rpl + 2)) {
+    // stamp count follows each layer's own kv_merged (K-quant ggufs mix formats per layer)
+    var want = 4   // anchor + prologue + fin_rq + cls
+    let base_rpl = g_rd.qk_norm ? 16 : 15
+    for (L in g_rd.layers) {
+        want += base_rpl - (L.kv_merged ? 1 : 0)
+    }
+    if (g_rdq_n != uint(want)) {
         return   // deep graphs overflow PFQ_CAP — no aggregation
     }
     g_rdq_pro += pfq_us(1u)
-    for (l in range64(g_rd.n_layers)) {
-        for (s in range(rpl)) {
-            g_rdq_role[s] += pfq_us(uint(2l + l * int64(rpl)) + uint(s))
+    // k+v always aggregate into ONE "kv" slot (merged = 1 stamp, split = 2) — the role table
+    // stays uniform for merged, unmerged, and mixed models
+    var qi = 2u
+    for (L in g_rd.layers) {
+        g_rdq_role[0] += pfq_us(qi)
+        g_rdq_role[1] += pfq_us(qi + 1u)
+        g_rdq_role[2] += pfq_us(qi + 2u)
+        qi += 3u
+        if (!L.kv_merged) {
+            g_rdq_role[2] += pfq_us(qi)
+            qi++
+        }
+        var s = 3
+        var rest = base_rpl - 4   // qkn? rope attn rq_a wo ar1 rq_f gate up actrq down ar2
+        while (rest > 0) {
+            g_rdq_role[s] += pfq_us(qi)
+            s++
+            qi++
+            rest--
         }
     }
     g_rdq_tail += pfq_us(g_rdq_n - 2u) + pfq_us(g_rdq_n - 1u)
@@ -5574,17 +5594,13 @@ def private rdq_sample {
     if (g_rdq_count % 32l == 0l) {
         let n = double(g_rdq_count)
         var names : array<string>
-        if (g_rd.qk_norm && merged) {
+        if (g_rd.qk_norm) {
             names <- ["rq_x", "q", "kv", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
-        } elif (g_rd.qk_norm) {
-            names <- ["rq_x", "q", "k", "v", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
-        } elif (merged) {
-            names <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
         } else {
-            names <- ["rq_x", "q", "k", "v", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+            names <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
         }
         let rs = build_string() $(w) {
-            for (s in range(rpl)) {
+            for (s in range(length(names))) {
                 w |> write("{names[s]} {int(g_rdq_role[s] / n)} ")
             }
         }
