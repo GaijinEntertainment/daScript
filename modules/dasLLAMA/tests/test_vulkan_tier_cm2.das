@@ -406,3 +406,57 @@ def test_vulkan_moe_ffn_cm2_streamed(t : T?) {
         }
     }
 }
+
+// arena arm: the resident driver's fmt-6 rails at the seam — a q8n plane placed with an EMPTY
+// scale plane into the fmt-6 arena (the ws-floor guards), read back by the q8n GEMV over the
+// arena block index. Q8_0 activations, so the chain is int-exact like the decode arm.
+[test]
+def test_vulkan_arena_cm2(t : T?) {
+    t |> run("vulkan cm2 arena: q8n place + arena GEMV == CPU reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            if (!moe_gpu_expert_q8n()) {
+                feint("no Vulkan device or no NV_cooperative_matrix2; cm2 arena untestable here\n")
+                return
+            }
+            var wq : array<int8>
+            var ws : array<float>
+            fill_stack(wq, ws, NFE, N, 13l, false)
+            var wqb : array<uint8>
+            var no_ws : array<uint8>
+            pack_q8n(wq, ws, NFE, N, wqb)
+            if (!vk_arena_reserve(6, NFE * (N / 32l))) {
+                feint("fmt-6 arena reserve refused (no device); skipping\n")
+                return
+            }
+            let blk = vk_arena_place(wqb, no_ws, N, NFE, 6)
+            t |> success(blk >= 0l, "q8n arena placement accepted an empty scale plane")
+            var xq : array<int8>
+            var xs : array<float>
+            fill_acts(xq, xs, 1l)
+            var y : array<float>
+            y |> resize(int(NFE))
+            vk_arena_gemv(y, blk, N, NFE, 6, xq, xs)
+            let nb = int(N / 32l)
+            var md = 0.0
+            var mr = 0.0
+            for (r in range(int(NFE))) {
+                var acc = 0.0
+                for (b in range(nb)) {
+                    var dd = 0
+                    for (j in range(32)) {
+                        dd += int(wq[r * int(N) + b * 32 + j]) * int(xq[b * 32 + j])
+                    }
+                    acc += float(dd) * ws[r * nb + b] * xs[b]
+                }
+                md = max(md, abs(y[r] - acc))
+                mr = max(mr, abs(acc))
+            }
+            t |> success(mr > 0.0, "arena arm produced non-trivial outputs")
+            t |> success(md <= float(REL_TOL) * mr,
+                "q8n arena GEMV within tolerance (maxdiff {md} vs {float(REL_TOL) * mr} bar, maxref {mr})")
+        } else {
+            feint("dasVulkan not installed; vulkan cm2 tier untestable here\n")
+        }
+    }
+}

@@ -1940,7 +1940,10 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64) : int64 {
     var wq : array<uint8>
     var ws : array<uint8>
-    if (f == KqFmt.q8) {
+    if (f == KqFmt.q8n) {
+        moe_gpu_gather_stack_q8n(t, woff, n, rows, rows, mr, kgroup, wbias, wq)
+        // no scale plane — the tier takes an EMPTY ws for fmt 6
+    } elif (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, rows, mr, kgroup, wbias, wq, ws)
     } else {
         let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
@@ -1954,7 +1957,30 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     return blk
 }
 
-def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => rows * (n / (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
+def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
+    rows * (n / (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
+
+// cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
+// Promotion is per activation-group: members sharing one B-side image must agree on its form,
+// so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
+def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
+    var fq = fmt_at(t.wq_fmt, l)
+    var fk = fmt_at(t.wk_fmt, l)
+    var fv = fmt_at(t.wv_fmt, l)
+    if (fq == KqFmt.q8 && fk == KqFmt.q8 && fv == KqFmt.q8 && moe_gpu_expert_q8n()) {
+        fq = KqFmt.q8n
+        fk = KqFmt.q8n
+        fv = KqFmt.q8n
+    }
+    var f1 = fmt_at(t.w1_fmt, l)
+    var f3 = fmt_at(t.w3_fmt, l)
+    if (f1 == KqFmt.q8 && f3 == KqFmt.q8 && moe_gpu_expert_q8n()) {
+        f1 = KqFmt.q8n
+        f3 = KqFmt.q8n
+    }
+    return (fq = fq, fk = fk, fv = fv, fo = moe_gpu_expert_fmt(fmt_at(t.wo_fmt, l)),
+            f1 = f1, f3 = f3, f2 = moe_gpu_expert_fmt(fmt_at(t.w2_fmt, l)))
+}
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
@@ -1989,7 +2015,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {
         return false
     }
     let neox = c.rope_neox
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
+    let cls_fmt = moe_gpu_expert_fmt(c.shared_weights ? t.emb_fmt : t.wcls_fmt)
     // reject non-uniform per-layer geometry (the recorder assumes fixed dims across layers)
     for (l in range64(c.n_layers)) {
         if (layer_hidden(t, l) != hid0 || layer_head_size(c, l) != hs || layer_kv_dim(c, l) != kvd
@@ -2003,13 +2029,14 @@ def resident_upload(t : Model; seq_cap : int64) : bool {
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
     planes |> reserve(int(c.n_layers * 7l + 1l))
     for (l in range64(c.n_layers)) {
-        planes |> push((n = dim, rows = qd, f = fmt_at(t.wq_fmt, l)))
-        planes |> push((n = dim, rows = kvd, f = fmt_at(t.wk_fmt, l)))
-        planes |> push((n = dim, rows = kvd, f = fmt_at(t.wv_fmt, l)))
-        planes |> push((n = qd, rows = dim, f = fmt_at(t.wo_fmt, l)))
-        planes |> push((n = dim, rows = hid0, f = fmt_at(t.w1_fmt, l)))
-        planes |> push((n = dim, rows = hid0, f = fmt_at(t.w3_fmt, l)))
-        planes |> push((n = hid0, rows = dim, f = fmt_at(t.w2_fmt, l)))
+        let lf = resident_layer_fmts(t, l)
+        planes |> push((n = dim, rows = qd, f = lf.fq))
+        planes |> push((n = dim, rows = kvd, f = lf.fk))
+        planes |> push((n = dim, rows = kvd, f = lf.fv))
+        planes |> push((n = qd, rows = dim, f = lf.fo))
+        planes |> push((n = dim, rows = hid0, f = lf.f1))
+        planes |> push((n = dim, rows = hid0, f = lf.f3))
+        planes |> push((n = hid0, rows = dim, f = lf.f2))
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     for (pl in planes) {
@@ -2038,21 +2065,21 @@ def resident_upload(t : Model; seq_cap : int64) : bool {
     }
     // place every plane, wire each layer
     for (l in range64(c.n_layers)) {
-        let bq = resident_place(t, fmt_at(t.wq_fmt, l), t.wq_offs[l], dim, qd, mr, kg, wb)
-        let bk = resident_place(t, fmt_at(t.wk_fmt, l), t.wk_offs[l], dim, kvd, mr, kg, wb)
-        let bv = resident_place(t, fmt_at(t.wv_fmt, l), t.wv_offs[l], dim, kvd, mr, kg, wb)
-        let bo = resident_place(t, fmt_at(t.wo_fmt, l), t.wo_offs[l], qd, dim, mr, kg, wb)
-        let b1 = resident_place(t, fmt_at(t.w1_fmt, l), t.w1_offs[l], dim, hid0, mr, kg, wb)
-        let b3 = resident_place(t, fmt_at(t.w3_fmt, l), t.w3_offs[l], dim, hid0, mr, kg, wb)
-        let b2 = resident_place(t, fmt_at(t.w2_fmt, l), t.w2_offs[l], hid0, dim, mr, kg, wb)
+        let lf = resident_layer_fmts(t, l)
+        let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, qd, mr, kg, wb)
+        let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, kvd, mr, kg, wb)
+        let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, kvd, mr, kg, wb)
+        let bo = resident_place(t, lf.fo, t.wo_offs[l], qd, dim, mr, kg, wb)
+        let b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid0, mr, kg, wb)
+        let b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid0, mr, kg, wb)
+        let b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
         if (bq < 0l || bk < 0l || bv < 0l || bo < 0l || b1 < 0l || b3 < 0l || b2 < 0l) {
             to_log(LOG_WARNING, "dasLLAMA: resident driver — arena placement failed at layer {l}, declining\n")
             return false
         }
         rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2,
-            int(fmt_at(t.wq_fmt, l)), int(fmt_at(t.wk_fmt, l)), int(fmt_at(t.wv_fmt, l)), int(fmt_at(t.wo_fmt, l)),
-            int(fmt_at(t.w1_fmt, l)), int(fmt_at(t.w3_fmt, l)), int(fmt_at(t.w2_fmt, l)))
+            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2))
     }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) {

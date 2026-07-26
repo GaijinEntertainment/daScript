@@ -971,8 +971,7 @@ def kq_moe_batch_q40_cmf16 {
 
 // ===== the cm2 (NV_cooperative_matrix2) prefill twin =====
 // Mode 4, fmt-6 q8n stacks: 34B blocks decoded IN-LOAD, wg-scope tensor tiles, f16 activations.
-// Geometry = the P5a winner (n2x256): two 64-wide token tiles per 256-inv wg, token tiles fastest;
-// layout dimensions bound every access to the region — edge tiles clamp/discard, no guard code.
+// P5a winner geometry (n2x256); layout dims bound every access — edge tiles clamp, no guard code.
 
 struct VkBlockQ8N {
     d : float16
@@ -1211,6 +1210,20 @@ def q8_moe_actf16 {
         vk_xf16[e + 1u] = float16(act_mul(vk_y[e + 1u], vk_upf[e + 1u], gelu))
         vk_xf16[e + 2u] = float16(act_mul(vk_y[e + 2u], vk_upf[e + 2u], gelu))
         vk_xf16[e + 3u] = float16(act_mul(vk_y[e + 3u], vk_upf[e + 3u], gelu))
+    }
+}
+
+// the arena cm2 chain's activation feed: straight f32 -> f16 rows for the twin's B side — the
+// resident prefill's quant-role stand-in (no quantize on the fmt-6 route). Meta word 0 carries
+// the element count (always a 32-multiple, so the 4-wide guard is exact).
+[compute_shader(local_size_x=256, name="rd_f16cvt_spv")]
+def rd_f16cvt {
+    let e = gl_GlobalInvocationID.x * 4u
+    if (e < vk_meta[0u]) {
+        vk_xf16[e] = float16(vk_upf[e])
+        vk_xf16[e + 1u] = float16(vk_upf[e + 1u])
+        vk_xf16[e + 2u] = float16(vk_upf[e + 2u])
+        vk_xf16[e + 3u] = float16(vk_upf[e + 3u])
     }
 }
 
@@ -3530,6 +3543,14 @@ def private q8_batch_aligned(d, cnt : int64) : bool
 
 def private q8_batch_pipe_for(d, cnt : int64) : Pipeline
     => q8_batch_pipe(q8_batch_tile_for(d, cnt), q8_batch_aligned(d, cnt))
+
+// resident prefill GEMM pipe: a fmt-6 role rides the cm2 twin, everything else the q8 tile router
+def private pf_gemm_pipe(fmt6 : bool; d, cnt : int64) : Pipeline {
+    if (fmt6) {
+        return weak_copy(g_gpu.batch_cm2)
+    }
+    return q8_batch_pipe_for(d, cnt)
+}
 let private BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let private BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
 let private BATCH_HS_BYTES = 8_388_608l    // ... its scale plane
@@ -3750,6 +3771,7 @@ struct private GpuState {
     gemv_q8n : Pipeline           // the q8n native-block decode GEMV (mode 4's fmt-6 groupn twin)
     xf16_pipeline : Pipeline      // cm2 chain: Q8_0 activation image -> f16 plane
     actf16_pipeline : Pipeline    // cm2 chain: act(g)*u -> f16 hidden plane (the actrq stand-in)
+    f16cvt_pipeline : Pipeline    // arena cm2 chain: f32 rows -> f16 plane (the quant-role stand-in)
     actrq_pipeline : Pipeline   // fused act(g)*u + q8_0 requant of the hidden rows
     gemv_k4 : Pipeline          // native K-quant GEMVs (per-format decode kernels)
     gemv_k5 : Pipeline
@@ -4232,6 +4254,7 @@ def private vk_moe_init : bool {
             g_gpu.gemv_q8n <- make_kernel_pipe("q8n_moe_groupn", q8n_moe_groupn_spv)
             g_gpu.xf16_pipeline <- make_kernel_pipe("q8_moe_xf16", q8_moe_xf16_spv)
             g_gpu.actf16_pipeline <- make_kernel_pipe("q8_moe_actf16", q8_moe_actf16_spv)
+            g_gpu.f16cvt_pipeline <- make_kernel_pipe("rd_f16cvt", rd_f16cvt_spv)
         }
     }
     g_gpu.actrq_pipeline <- make_kernel_pipe("q8_moe_actrq", q8_moe_actrq_spv)
@@ -4642,7 +4665,8 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     }
     let bb = arena_block_bytes(fmt)
     let qbytes = cap_blocks * bb.wq
-    let sbytes = cap_blocks * bb.ws
+    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
+    let sbytes = max(cap_blocks * bb.ws, 64l)
     // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
     var lp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
@@ -4673,7 +4697,9 @@ def private arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; f
         a.blocks += need
         let bb = arena_block_bytes(fmt)
         upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
-        upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+        if (bb.ws > 0l) {
+            upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+        }
         return blk
     }
 }
@@ -4690,10 +4716,11 @@ def vk_arena_reserve(fmt : int; cap_blocks : int64) : bool {
 //! Arena seam: place + upload one [rows x n] tensor from the loader's gathered device-layout
 //! planes. Returns its block index (what the meta's weight base wants), or -1 if exhausted.
 def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64 {
-    if (!vk_moe_init() || empty(wq) || empty(ws)) {
+    // q8n (fmt 6) carries its scale inside the interleaved plane — an EMPTY ws is its contract
+    if (!vk_moe_init() || empty(wq) || (empty(ws) && fmt != 6)) {
         return -1l
     }
-    return arena_place(unsafe(addr(wq[0])), unsafe(addr(ws[0])), n, rows, fmt)
+    return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)
 }
 
 // Bindings 0/1 are the arena planes; 2-5 are per-dispatch scratch, written exactly as
@@ -5076,6 +5103,7 @@ struct private RDec {
     pf_q, pf_kv, pf_v, pf_attn, pf_aq, pf_as : uint64
     pf_gate, pf_up, pf_ffnout, pf_xb2 : uint64
     pf_cos : uint64               // [MAX_NPOS x hs] rope rows
+    pf_xf, pf_af, pf_hf : uint64  // cm2 (fmt-6) f16 twin feeds: xb rows, attn rows, hidden rows
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -5356,6 +5384,14 @@ def private fill_quant_meta(hb : HostBuf; nblocks : int64) {
         var mp = reinterpret<uint?>(hb.mapped)
         mp[10] = 0u
         mp[18] = uint(nblocks)
+    }
+}
+
+// the f32->f16 convert's meta (arena cm2 chain): word 0 = element count
+def private fill_cvt_meta(hb : HostBuf; elems : int64) {
+    unsafe {
+        var mp = reinterpret<uint?>(hb.mapped)
+        mp[0] = uint(elems)
     }
 }
 
@@ -5924,6 +5960,16 @@ def private pf_setup {
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
+    // fmt-6 (cm2) groups feed the twin f16 rows instead of q8 images
+    var any6 = false
+    for (L in g_rd.layers) {
+        any6 = any6 || L.fq == 6 || L.fo == 6 || L.f1 == 6 || L.f2 == 6
+    }
+    if (any6) {
+        g_rd.pf_xf = make_device_buf(np * dim * 2l)
+        g_rd.pf_af = make_device_buf(np * qd * 2l)
+        g_rd.pf_hf = make_device_buf(np * hid * 2l)
+    }
     let nsets = int(g_rd.n_layers * PF_ROLES + 2l)   // + prologue, final quantize of the last row
     g_rd.pf_sets |> resize(nsets)
     g_rd.pf_meta |> resize(nsets)
@@ -5937,19 +5983,40 @@ def private pf_setup {
         let b = int(l * PF_ROLES)
         let pq = arena_planes(L.fq); let pk = arena_planes(L.fk); let pv = arena_planes(L.fv)
         let po = arena_planes(L.fo); let p1 = arena_planes(L.f1); let p3 = arena_planes(L.f3); let p2 = arena_planes(L.f2)
-        // 0 quant_xb: pf_xb -> pf_xq/pf_xs
-        pf_bind(b + 0, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 0].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l,
+        // fmt-6 groups run on the f16 twin plane at binding 3 (idle binding-4 bits are lens-ignored)
+        let qkv6 = L.fq == 6
+        let xqb = qkv6 ? g_rd.pf_xf : g_rd.pf_xq
+        let xsb = qkv6 ? g_rd.dummy : g_rd.pf_xs
+        let xqn = qkv6 ? np * dim * 2l : np * dim
+        let xsn = qkv6 ? 256l : np * (dim / 32l) * 4l
+        let wo6 = L.fo == 6
+        let aqb = wo6 ? g_rd.pf_af : g_rd.pf_aq
+        let asb = wo6 ? g_rd.dummy : g_rd.pf_as
+        let aqn = wo6 ? np * qd * 2l : np * qd
+        let asn = wo6 ? 256l : np * (qd / 32l) * 4l
+        let gu6 = L.f1 == 6
+        let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
+        let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
+        let gqn = gu6 ? np * dim * 2l : np * dim
+        let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
+        let dn6 = L.f2 == 6
+        let hqb = dn6 ? g_rd.pf_hf : g_gpu.hq_dev
+        let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
+        let hqn = dn6 ? np * hid * 2l : np * hid
+        let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
+        // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
+        pf_bind(b + 0, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 0].buf, xqb, xsb, g_rd.dummy,
+            np * dim * 4l, 256l, BATCH_META_BYTES, xqn, xsn, 256l,
             fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // 1/2/3 q/k/v batch GEMM: arena planes, pf_xq/pf_xs act, -> pf_q / pf_kv(k@0) / pf_kv(v@np*kvd)
-        pf_bind(b + 1, pq.wq, pq.ws, g_rd.pf_meta[b + 1].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_q,
-            pq.wqb, pq.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * qd * 4l,
+        pf_bind(b + 1, pq.wq, pq.ws, g_rd.pf_meta[b + 1].buf, xqb, xsb, g_rd.pf_q,
+            pq.wqb, pq.wsb, BATCH_META_BYTES, xqn, xsn, np * qd * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
-        pf_bind(b + 2, pk.wq, pk.ws, g_rd.pf_meta[b + 2].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_kv,
-            pk.wqb, pk.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * 2l * kvd * 4l,
+        pf_bind(b + 2, pk.wq, pk.ws, g_rd.pf_meta[b + 2].buf, xqb, xsb, g_rd.pf_kv,
+            pk.wqb, pk.wsb, BATCH_META_BYTES, xqn, xsn, np * 2l * kvd * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
-        pf_bind(b + 3, pv.wq, pv.ws, g_rd.pf_meta[b + 3].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_v,
-            pv.wqb, pv.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * kvd * 4l,
+        pf_bind(b + 3, pv.wq, pv.ws, g_rd.pf_meta[b + 3].buf, xqb, xsb, g_rd.pf_v,
+            pv.wqb, pv.wsb, BATCH_META_BYTES, xqn, xsn, np * kvd * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_VST))
         // 4 rope+store: q@0 in place, Kmir@1, Vmir@3, cos@4, kv@5
         pf_bind(b + 4, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 4].buf, g_rd.v_mirror, g_rd.pf_cos, g_rd.pf_kv,
@@ -5959,36 +6026,36 @@ def private pf_setup {
         pf_bind(b + 5, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 5].buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.pf_attn,
             np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, 64l, np * qd * 4l,
             fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
-        // 6 quant_at: pf_attn -> pf_aq/pf_as
-        pf_bind(b + 6, g_rd.pf_attn, g_rd.dummy, g_rd.pf_meta[b + 6].buf, g_rd.pf_aq, g_rd.pf_as, g_rd.dummy,
-            np * qd * 4l, 256l, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, 256l,
+        // 6 quant_at: pf_attn -> pf_aq/pf_as (fmt 6: f16 convert -> pf_af)
+        pf_bind(b + 6, g_rd.pf_attn, g_rd.dummy, g_rd.pf_meta[b + 6].buf, aqb, asb, g_rd.dummy,
+            np * qd * 4l, 256l, BATCH_META_BYTES, aqn, asn, 256l,
             fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
         // 7 wo GEMM -> pf_xb2
-        pf_bind(b + 7, po.wq, po.ws, g_rd.pf_meta[b + 7].buf, g_rd.pf_aq, g_rd.pf_as, g_rd.pf_xb2,
-            po.wqb, po.wsb, BATCH_META_BYTES, np * qd, np * (qd / 32l) * 4l, np * dim * 4l,
+        pf_bind(b + 7, po.wq, po.ws, g_rd.pf_meta[b + 7].buf, aqb, asb, g_rd.pf_xb2,
+            po.wqb, po.wsb, BATCH_META_BYTES, aqn, asn, np * dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
         // 8 addr_ffn: x += xb2, xb = rms_ffn
         pf_bind(b + 8, g_rd.pf_x, g_rd.pf_xb2, g_rd.pf_meta[b + 8].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
             np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
             fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
-        // 9 quant_xb2: pf_xb -> pf_xq
-        pf_bind(b + 9, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 9].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, 256l,
+        // 9 quant_xb2: pf_xb -> pf_xq (fmt 6: f16 convert -> pf_xf)
+        pf_bind(b + 9, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 9].buf, gqb, gsb, g_rd.dummy,
+            np * dim * 4l, 256l, BATCH_META_BYTES, gqn, gsn, 256l,
             fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // 10/11 gate/up GEMM
-        pf_bind(b + 10, p1.wq, p1.ws, g_rd.pf_meta[b + 10].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_gate,
-            p1.wqb, p1.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l,
+        pf_bind(b + 10, p1.wq, p1.ws, g_rd.pf_meta[b + 10].buf, gqb, gsb, g_rd.pf_gate,
+            p1.wqb, p1.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
-        pf_bind(b + 11, p3.wq, p3.ws, g_rd.pf_meta[b + 11].buf, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_up,
-            p3.wqb, p3.wsb, BATCH_META_BYTES, np * dim, np * (dim / 32l) * 4l, np * hid * 4l,
+        pf_bind(b + 11, p3.wq, p3.ws, g_rd.pf_meta[b + 11].buf, gqb, gsb, g_rd.pf_up,
+            p3.wqb, p3.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
-        // 12 actrq: up@0, ffn_meta@2, hq@3, hs@4, gate@5
-        pf_bind(b + 12, g_rd.pf_up, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_gate,
-            np * hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, np * hid * 4l,
+        // 12 actrq: up@0, ffn_meta@2, hq@3, hs@4, gate@5 (fmt 6: actf16 -> pf_hf@3)
+        pf_bind(b + 12, g_rd.pf_up, g_rd.dummy, g_gpu.ffn_meta_dev, hqb, hsb, g_rd.pf_gate,
+            np * hid * 4l, 256l, FFN_META_BYTES, dn6 ? hqn : BATCH_HQ_BYTES, dn6 ? hsn : BATCH_HS_BYTES, np * hid * 4l,
             fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
         // 13 down GEMM: hq/hs act -> pf_ffnout
-        pf_bind(b + 13, p2.wq, p2.ws, g_rd.pf_meta[b + 13].buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
-            p2.wqb, p2.wsb, BATCH_META_BYTES, np * hid, np * (hid / 32l) * 4l, np * dim * 4l,
+        pf_bind(b + 13, p2.wq, p2.ws, g_rd.pf_meta[b + 13].buf, hqb, hsb, g_rd.pf_ffnout,
+            p2.wqb, p2.wsb, BATCH_META_BYTES, hqn, hsn, np * dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
         // 14 addr_next: x += ffnout, xb = rms_att[l+1]|final
         pf_bind(b + 14, g_rd.pf_x, g_rd.pf_ffnout, g_rd.pf_meta[b + 14].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
@@ -6102,17 +6169,22 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             let last = w0 + wlen >= npos
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
-            fill_ffn_meta(hid, wlen * hid / 32l, false)   // actrq over the window's rows
+            fill_ffn_meta(wlen * hid, wlen * hid / 32l, false)   // act(rq|f16) over the window's rows
             // fill metas
             let mA = @(idx : int; n, d, blk : int64; fmt : int) {
                 fill_arena_batch_meta(g_rd.pf_meta[idx], n, d, blk, wlen, fmt)
             }
             let mQ = @(idx : int; blocks : int64) { fill_quant_meta(g_rd.pf_meta[idx], blocks) }
+            let mC = @(idx : int; elems : int64) { fill_cvt_meta(g_rd.pf_meta[idx], elems) }
             let mR = @(idx : int; woff : int64; add : bool) { fill_addrms_meta(g_rd.pf_meta[idx], dim, woff, add) }
             for (l in range64(g_rd.n_layers)) {
                 var L & = g_rd.layers[l]
                 let b = int(l * PF_ROLES)
-                invoke(mQ, b + 0, wlen * dim / 32l)
+                if (L.fq == 6) {
+                    invoke(mC, b + 0, wlen * dim)
+                } else {
+                    invoke(mQ, b + 0, wlen * dim / 32l)
+                }
                 invoke(mA, b + 1, dim, qd, L.bq, L.fq)
                 invoke(mA, b + 2, dim, kvd, L.bk, L.fk)
                 invoke(mA, b + 3, dim, kvd, L.bv, L.fv)
@@ -6131,10 +6203,18 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 var ma = reinterpret<uint?>(g_rd.pf_meta[b + 5].mapped)
                 ma[0] = uint(wlen); ma[1] = uint(g_rd.n_heads); ma[2] = uint(kvd); ma[3] = uint(g_rd.head_size); ma[4] = uint(g_rd.kv_mul)
                 ma[5] = uint(l * g_rd.seq_cap * kvd); ma[6] = uint(l * g_rd.seq_cap * kvd); ma[7] = uint(w0)
-                invoke(mQ, b + 6, wlen * qd / 32l)
+                if (L.fo == 6) {
+                    invoke(mC, b + 6, wlen * qd)
+                } else {
+                    invoke(mQ, b + 6, wlen * qd / 32l)
+                }
                 invoke(mA, b + 7, qd, dim, L.bo, L.fo)
                 invoke(mR, b + 8, (l * 2l + 1l) * dim, true)
-                invoke(mQ, b + 9, wlen * dim / 32l)
+                if (L.f1 == 6) {
+                    invoke(mC, b + 9, wlen * dim)
+                } else {
+                    invoke(mQ, b + 9, wlen * dim / 32l)
+                }
                 invoke(mA, b + 10, dim, hid, L.b1, L.f1)
                 invoke(mA, b + 11, dim, hid, L.b3, L.f3)
                 invoke(mA, b + 13, hid, dim, L.b2, L.f2)
@@ -6167,10 +6247,16 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 0], uint((wlen * dim / 4l + 255l) / 256l), h)
-                rd_dispatch(raw, q8_batch_pipe_for(qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, 0), h)
-                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, 0), h)
-                rd_dispatch(raw, q8_batch_pipe_for(kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, 0), h)
+                // fmt-6 (cm2) roles: f32->f16 convert feeds the decode-in-load twin; the fill's fmt
+                // must match the dispatched pipe's tile rule, so both key off the same group flag
+                let fq6 = g_rd.layers[l].fq == 6
+                let fo6 = g_rd.layers[l].fo == 6
+                let gu6 = g_rd.layers[l].f1 == 6
+                let dn6 = g_rd.layers[l].f2 == 6
+                rd_dispatch(raw, weak_copy(fq6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 0], uint((wlen * dim / 4l + 255l) / 256l), h)
+                rd_dispatch(raw, pf_gemm_pipe(fq6, qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, fq6 ? 6 : 0), h)
+                rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, fq6 ? 6 : 0), h)
+                rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, fq6 ? 6 : 0), h)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 if (g_rd.qk_norm) {
@@ -6179,14 +6265,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 }
                 rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg, h)
                 rd_dispatch(raw, weak_copy(fa128 ? g_gpu.da_b128_pipeline : g_gpu.da_b_pipeline), g_rd.pf_sets[b + 5], attnwg, h)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 6], uint((wlen * qd / 4l + 255l) / 256l), h)
-                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, 0), h)
+                rd_dispatch(raw, weak_copy(fo6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 6], uint((wlen * qd / 4l + 255l) / 256l), h)
+                rd_dispatch(raw, pf_gemm_pipe(fo6, dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, fo6 ? 6 : 0), h)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[b + 9], uint((wlen * dim / 4l + 255l) / 256l), h)
-                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, 0), h)
-                rd_dispatch(raw, q8_batch_pipe_for(hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, 0), h)
-                rd_dispatch(raw, g_gpu.actrq_pipeline, g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
-                rd_dispatch(raw, q8_batch_pipe_for(dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, 0), h)
+                rd_dispatch(raw, weak_copy(gu6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 9], uint((wlen * dim / 4l + 255l) / 256l), h)
+                rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, gu6 ? 6 : 0), h)
+                rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, gu6 ? 6 : 0), h)
+                rd_dispatch(raw, weak_copy(dn6 ? g_gpu.actf16_pipeline : g_gpu.actrq_pipeline), g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
+                rd_dispatch(raw, pf_gemm_pipe(dn6, dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, dn6 ? 6 : 0), h)
                 rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h)
             }
             if (last) {
@@ -6241,11 +6327,11 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert((f3 != 0) == (f1 != 0), "dasLLAMA vulkan arena: gate/up form mismatch — one activation image")
+    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch — one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
-    let xunit = f1 != 0 ? 256l : 32l
-    let dkq = f2 != 0
+    let xunit = fmt_unit(f1)
+    let dkq = !vk_fmt_b32(f2)
     fill_af_meta(g_gpu.af_meta_g, n, nfe, blk1)
     fill_af_meta(g_gpu.af_meta_u, n, nfe, blk3)
     fill_af_meta(g_gpu.af_meta_d, nfe, n, blk2)
@@ -6278,9 +6364,13 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 // dispatch workgroup count. Mirrors fill_batch_meta for one region [0, npos).
 def private fill_arena_batch_meta(hb : HostBuf; n, d, blk, npos : int64; fmt : int) : uint {
     let tile = fmt == 0 ? q8_batch_tile_for(d, npos) : BATCH_TILE
-    let wtiles = (d + tile - 1l) / tile
-    let rtiles = (npos + tile - 1l) / tile
+    // the cm2 twin tiles 64 weight-rows x 128 tokens per workgroup (fill_batch_meta's rule)
+    let tile_d = fmt == 6 ? 64l : tile
+    let tile_c = fmt == 6 ? 128l : tile
+    let wtiles = (d + tile_d - 1l) / tile_d
+    let rtiles = (npos + tile_c - 1l) / tile_c
     let total = rtiles * wtiles
+    assert((8l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch meta exceeds capacity")
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
         mp[0] = uint(n)
@@ -6353,7 +6443,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = fmt != 0 ? 256l : 32l
+    let unit = fmt_unit(fmt)   // q8 AND q8n take 32-block Q8_0 activations
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
@@ -6986,7 +7076,7 @@ def private record_dense_cmd(si : int; nwg : uint; y_bytes : int64; axq_bytes, a
 //! the FFN arm; activations arrive pre-quantized in the plane's own form.
 def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d, nrows : int64; fmt : int) {
     let si = find_stack(woff, fmt)
-    let xunit = fmt != 0 ? 256l : 32l
+    let xunit = fmt_unit(fmt)
     ensure_batch_state()
     ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
     var chunk = min(BATCH_XQ_BYTES / n, BATCH_XS_BYTES / ((n / xunit) * 4l))
