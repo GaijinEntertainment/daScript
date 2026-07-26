@@ -1,5 +1,23 @@
 # Porting the kernel-access lens to Metal
 
+> **IMPLEMENTED** (2026-07). The lensed classes derive the
+> read/write axis from their bodies (declarations deleted); un-lensed classes keep declared
+> roles, now cross-checked against the same derivation by the census lint. The migration was
+> validated at compile time — deriving while every declaration was still present made each of
+> the 592 roles an assertion; two stale hand roles surfaced (a scatter-writer declaring
+> `readwrite`, and a `readwrite` left from an older in-place implementation the field comment
+> still described), and one hand pattern was made structural: owners of alias views used to
+> carry the buffer-level union by hand (`readwrite` on a read-only view whose alias sibling is
+> written) — alias views now derive and stage their OWN access, and the tracker's
+> buffer-identity keying unions the views naturally. Deviations from
+> the plan below, learned the hard way: bodies are PRE-infer at `[structure_macro]` time, so
+> field accesses are bare `ExprVar` names and member access is parser-level `ExprField` with
+> untyped bases — a name-only `ExprField` match collides with float4 components (`wv.y` vs a
+> buffer named `y`); the field mode therefore matches bare names + explicit `self.<name>` only,
+> does NOT recurse into free callees (intrinsic shims' locals would collide), and refuses
+> `self` passed whole. Claims are keyed by source location, not node pointer (infer clones
+> subtrees). The runtime trace-diff oracle was superseded by the compile-time cross-check.
+
 The Vulkan tier no longer hand-writes hazard masks: a compile-time lens derives each kernel's
 per-binding read/write access from its body, descriptor sets declare region bits where their
 buffers are named, and the dispatch helper composes the two. This doc is the map for doing the

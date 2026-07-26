@@ -10,6 +10,7 @@ require daslib/rtti
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
 require das_metal   // nolint:STYLE030 — MetalBuffer/MetalComputeEncoder are referenced only inside qmacro_type(type<...>), which STYLE030 can't see; the require is load-bearing for macro-time type resolution
+require dasllama_kernel_access   // the shared body-walk classifier (field mode) — @role's read/write axis is DERIVED
 
 // The dasLLAMA Metal kernel-dispatch lens. [metal_dispatch] reads a [metal_kernel] class's
 // @ssbo/@uniform field annotations and generates the enc_* dispatch builder that the hand-
@@ -23,6 +24,10 @@ struct private BufField {
     name : string
     binding : int
     role : string
+    hzrole : string  // the direction hz staging emits — resolved role, or an alias view's OWN
+                     // derived access (the tracker keys ranges by buffer, so staging both views
+                     // unions naturally; hand-written builders encoded that union on the owner)
+    ssbo : bool      // @ssbo (vs @uniform) — only ssbo fields join the access derivation
     off : string     // @off = "<param>" — bind at a caller-passed uint64 offset ("" = 0)
     rng : string     // @span = "<a*b*4>" product over params — exact hz length ("" = whole buffer)
 }
@@ -211,9 +216,35 @@ def private param_type(tok : string; var ok : bool&) : TypeDecl? {
 
 def private role_ok(role : string) : bool {
     // alias = a second view of a buffer another field already declares (hazard lives there);
-    // weight = never written during a step (untracked by design); "" = undeclared (ratchet)
+    // weight = never written during a step (untracked by design); "" = derived from the body.
+    // read/write/readwrite stay legal as cross-checked overrides of the derivation.
     return (role == "" || role == "read" || role == "write" || role == "readwrite" ||
         role == "weight" || role == "alias")
+}
+
+// the [metal_kernel] method of a lensed class — the body the access classifier walks
+def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) : Function? {
+    var kfn : Function?
+    mod |> for_each_function("") $(fn) {
+        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == "metal_kernel") {
+                    nmatch++
+                    if (kfn == null) {
+                        kfn = fn
+                    }
+                }
+            }
+        }
+    }
+    return kfn
+}
+
+// derived direction of one tracked field off the classifier result
+def private derived_role(res : AccessResult; name : string) : string {
+    let r = key_exists(res.reads, name)
+    let w = key_exists(res.writes, name)
+    return w ? (r ? "readwrite" : "write") : (r ? "read" : "")
 }
 
 [structure_macro(name = metal_dispatch)]
@@ -289,21 +320,101 @@ class MetalDispatch : AstStructureAnnotation {
                 return false
             }
             let role = find_arg(field.annotation, "role") ?as tString ?? ""
-            // the strictness ratchet: every @ssbo on a lensed class declares its hazard role —
-            // an undeclared buffer is a compile error, not a silently-untracked bind
-            if (is_ssbo && empty(role)) {
-                errors := "[metal_dispatch] {fn_name}: @ssbo field '{field.name}' has no @role (read/write/readwrite/weight/alias)"
-                return false
-            }
             if (!role_ok(role)) {
                 errors := "[metal_dispatch] {fn_name}: field '{field.name}' has unknown @role '{role}' (read/write/readwrite/weight/alias)"
                 return false
             }
             let off = find_arg(field.annotation, "off") ?as tString ?? ""
             let rangeStr = find_arg(field.annotation, "span") ?as tString ?? ""
-            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, off = off, rng = rangeStr))
+            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, off = off, rng = rangeStr))
         }
         sort(bufs) $(a, b) => a.binding < b.binding
+
+        // The read/write axis is DERIVED from the kernel body (shared classifier, field mode).
+        // A declared read/write/readwrite is a cross-checked assertion (mismatch = compile
+        // error); weight/alias stay declared — frame policy and hazard ownership are not kernel
+        // facts — but a body WRITE to either is refused. access_force=true restores the fully
+        // declared contract (every @ssbo must carry a @role) when a body is unanalyzable.
+        let accessForce = find_arg(args, "access_force") ?as tBool ?? false
+        for (bf in bufs) {   // default: staging follows the (declared or later-derived) role
+            bf.hzrole = bf.role
+        }
+        if (accessForce) {
+            for (bf in bufs) {
+                if (bf.ssbo && empty(bf.role)) {
+                    errors := "[metal_dispatch] {fn_name}: access_force=true — @ssbo field '{bf.name}' must declare a @role"
+                    return false
+                }
+            }
+        } else {
+            var tracked : table<string>
+            for (bf in bufs) {
+                if (bf.ssbo) {
+                    tracked |> insert(bf.name)
+                }
+            }
+            var nmatch = 0
+            let kfn = find_kernel_fn(st, compiling_module(), nmatch)
+            if (kfn == null) {
+                errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method on {st.name} to derive buffer access from (access_force=true to declare instead)"
+                delete tracked
+                return false
+            }
+            if (nmatch != 1) {
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — expected exactly one"
+                delete tracked
+                return false
+            }
+            var res <- classify_field_access(kfn, compiling_module(), tracked)
+            if (!empty(res.err)) {
+                errors := "[metal_dispatch] {fn_name}: {res.err} (or access_force=true + declared roles)"
+                delete res
+                delete tracked
+                return false
+            }
+            for (bf in bufs) {
+                if (!bf.ssbo) continue
+                let dr = derived_role(res, bf.name)
+                let decl = bf.role
+                if (decl == "weight") {
+                    // a written weight is a contract violation
+                    if (key_exists(res.writes, bf.name)) {
+                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='weight' but the kernel body writes it"
+                        delete res
+                        delete tracked
+                        return false
+                    }
+                } elif (decl == "alias") {
+                    // an alias view stages its OWN derived access: the tracker keys ranges by
+                    // buffer, so both views' staging unions into the buffer-level truth (a write
+                    // through the alias must not go unstaged just because the sibling is read-only)
+                    bf.hzrole = derived_role(res, bf.name)
+                } elif (empty(decl)) {
+                    if (empty(dr)) {
+                        errors := "[metal_dispatch] {fn_name}: @ssbo field '{bf.name}' is never accessed by the kernel body — declare @role (weight/alias) or drop the binding"
+                        delete res
+                        delete tracked
+                        return false
+                    }
+                    bf.role = dr
+                    bf.hzrole = dr
+                } elif (decl != dr) {
+                    let drName = empty(dr) ? "unused" : dr
+                    var rk <- [for (k in keys(res.reads)); k]
+                    var wk <- [for (k in keys(res.writes)); k]
+                    sort(rk)   // keys() order is unspecified — sorted for deterministic diagnostics
+                    sort(wk)
+                    errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but the body derives '{drName}' — fix whichever is wrong (access_force=true to override) [derived reads: {join(rk, ",")} writes: {join(wk, ",")}]"
+                    delete rk
+                    delete wk
+                    delete res
+                    delete tracked
+                    return false
+                }
+            }
+            delete res
+            delete tracked
+        }
 
         // Emit the dispatch sequence, mirroring the hand-written enc_ builder exactly: binds in
         // binding order, then all hz_reads, then all hz_writes (hz staging is order-free — the
@@ -318,12 +429,12 @@ class MetalDispatch : AstStructureAnnotation {
             body |> push(mk_kn_buffer(at, "b{bf.name}", bf.binding, bf.off))
         }
         for (bf in bufs) {
-            if (bf.role == "read" || bf.role == "readwrite") {
+            if (bf.hzrole == "read" || bf.hzrole == "readwrite") {
                 body |> push(mk_hz(at, "hz_read", bf))
             }
         }
         for (bf in bufs) {
-            if (bf.role == "write" || bf.role == "readwrite") {
+            if (bf.hzrole == "write" || bf.hzrole == "readwrite") {
                 body |> push(mk_hz(at, "hz_write", bf))
             }
         }
@@ -409,6 +520,20 @@ class MetalManualDispatchCensus : AstPassMacro {
             delete v
         }
         for_each_structure(mod) $(var st) {
+            // lensed classes DERIVE the read/write axis from the kernel body ([metal_dispatch]
+            // enforces derivability there); a bare @ssbo is only an error on un-lensed classes,
+            // whose hand-written builders still consume declared intent
+            var lensed = false
+            for (ann in st.annotations) {
+                if (ann.annotation.name == "metal_dispatch") {
+                    lensed = true
+                }
+            }
+            // un-lensed classes: the declared roles are the hand-written builders' contract —
+            // cross-check them against the same body derivation the lens uses, so every
+            // declaration in the module is machine-verified, not trust-me
+            var kfn : Function?
+            var tracked : table<string>
             for (field in st.fields) {
                 var is_ssbo = false
                 for (annDecl in field.annotation) {
@@ -417,13 +542,40 @@ class MetalManualDispatchCensus : AstPassMacro {
                     }
                 }
                 continue if (!is_ssbo)
+                if (!lensed) {
+                    tracked |> insert("{field.name}")
+                }
                 let role = find_arg(field.annotation, "role") ?as tString ?? ""
                 if (empty(role)) {
-                    macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — the scheduling rail needs every buffer's hazard intent declared")
+                    if (!lensed) {
+                        macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — un-lensed classes declare their hazard intent")
+                    }
                 } elif (!role_ok(role)) {
                     macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has unknown @role '{role}' (read/write/readwrite/weight/alias)")
                 }
             }
+            if (!lensed && !empty(tracked)) {
+                var nmatch = 0
+                kfn = find_kernel_fn(st, mod, nmatch)
+                if (kfn != null && nmatch == 1) {
+                    var res <- classify_field_access(kfn, mod, tracked)
+                    if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is
+                        for (field in st.fields) {
+                            let role = find_arg(field.annotation, "role") ?as tString ?? ""
+                            continue if (role != "read" && role != "write" && role != "readwrite")
+                            let r = key_exists(res.reads, "{field.name}")
+                            let w = key_exists(res.writes, "{field.name}")
+                            let dr = w ? (r ? "readwrite" : "write") : (r ? "read" : "")
+                            if (dr != role) {
+                                let drName = empty(dr) ? "unused" : dr
+                                macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' — fix the stale declaration")
+                            }
+                        }
+                    }
+                    delete res
+                }
+            }
+            delete tracked
         }
         return true
     }
