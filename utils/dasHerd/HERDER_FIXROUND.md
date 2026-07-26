@@ -493,6 +493,13 @@ Issue intake (live rig, numbering continues):
   vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
   edge). Looks like a stale/displaced grid column surviving the
   attach-time resize, un-clipped; fades as output overwrites
+- 51: BLOCK PIVOT (Boris, 2026-07-25): --continue resume is a crutch, not
+  the answer. Next block, ahead of external sessions and everything else:
+  redesign PTY hosting until a terminal session "does not depend on
+  anything, and yet can be communicated to" — detached ConPTY host that
+  owns the console + child on its own, survives watcher/client/upgrade,
+  reachable over a versioned IPC channel. Current UI/feature work is
+  parked (committed on this branch) until that lands.
 - 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
   ("its not ok to kill my terminal session"). Today PTYs are ConPTY
   children of the watcher and die with it; needs a per-session broker
