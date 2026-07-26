@@ -42,8 +42,8 @@ enum QuantMode {
 }
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40 = superblock plane pairs (a file mixes formats PER TENSOR — tags ride per layer);
-//! q51 = native Q5_1, per-32-BLOCK planes + Q8_0-form activations (rows % 32, expert stacks only).
+//! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes;
+//! q8n = q8 as gguf-native 34B interleaved blocks (ONE plane, the cm2 GPU-tier tag, never disk).
 enum KqFmt : uint8 {
     q8
     k4
@@ -51,6 +51,7 @@ enum KqFmt : uint8 {
     k6
     q40
     q51
+    q8n
 }
 
 // The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
@@ -331,6 +332,8 @@ typedef GatherStackFn = function<(t : Model; woff : int64; n, rows, slice_rows :
 typedef GatherStackKqFn = function<(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                     repacked : bool; mr : int64;
                                     var wq : array<uint8>; var ws : array<uint8>) : void>
+typedef GatherStackQ8nFn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                     mr, kgroup, wbias : int64; var wq : array<uint8>) : void>
 
 var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
@@ -338,15 +341,18 @@ var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
+var private g_layout_gather_q8n : GatherStackQ8nFn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn;
+                          gsq8n : GatherStackQ8nFn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
     g_layout_repack_q51 = rq51
     g_layout_gather = gs
     g_layout_gather_kq = gskq
+    g_layout_gather_q8n = gsq8n
     g_layout_hooks_set = true
 }
 
@@ -386,6 +392,12 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
                                     repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                     mr, kgroup, wbias : int64; var wq : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
 }
 
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {

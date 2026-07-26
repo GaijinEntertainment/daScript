@@ -3621,7 +3621,8 @@ struct private GpuState {
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
-    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4 (default), 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile
+    has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
+    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
     @do_not_delete stacks : array<VkStack>
     // the resident driver's weight arenas, one per format present (see the arena section). Separate
@@ -3917,7 +3918,8 @@ def private vk_moe_init : bool {
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
-    // fastest-supported default (mm); DASLLAMA_COOPMAT overrides, "sdot4" pins the int-dot fallback
+    g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
+    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
     g_gpu.coopmat_mode = g_gpu.has_coopmat ? 3 : 0
     if (g_gpu.has_coopmat) {
         let mode = get_env_variable("DASLLAMA_COOPMAT")
@@ -3929,12 +3931,21 @@ def private vk_moe_init : bool {
             g_gpu.coopmat_mode = 2
         } elif (mode == "mm") {
             g_gpu.coopmat_mode = 3
+        } elif (mode == "cm2" && g_gpu.has_coopmat2) {
+            g_gpu.coopmat_mode = 4
         }
     }
     if (g_coopmat_mode_force >= 0) {
         g_gpu.coopmat_mode = g_gpu.has_coopmat ? g_coopmat_mode_force : 0
     }
-    if (g_gpu.has_coopmat) {
+    if (g_gpu.coopmat_mode == 4 && !g_gpu.has_coopmat2) {
+        g_gpu.coopmat_mode = 3   // forced/requested cm2 without the extension: mm
+    }
+    if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
+        // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load)\n")
+    } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam)
         if (g_gpu.coopmat_mode != 0) {
             let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
@@ -4415,18 +4426,24 @@ def private vk_kq_schema_id(fmt : int) : int {
     return 0
 }
 
+// fmt space here = int(KqFmt): 0 q8, 6 q8n (both 32-elem blocks), 1-4 the kq lattice + q40
+def private vk_fmt_b32(fmt : int) : bool => fmt == 0 || fmt == 6
+
 def private arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == 0) {
         return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
+    }
+    if (fmt == 6) {
+        return (wq = Q8N_BPB, ws = 0l)        // q8n: one interleaved 34B plane, scale inside
     }
     // decoded scale row: [f16 d][f16 dmin][8 sc][8 mn]
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = KQ_DEV_SSB)
 }
 
 def private arena_blocks_for(n, rows : int64; fmt : int) : int64 {
-    assert(fmt == 0 || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
-    assert(fmt != 0 || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
-    return rows * (n / (fmt == 0 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
+    assert(vk_fmt_b32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
+    assert(!vk_fmt_b32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
+    return rows * (n / (vk_fmt_b32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
 // Reserve one format's arena up front. Sizing is a decision, not a walk: the resident driver knows

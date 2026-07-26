@@ -53,6 +53,10 @@ let KQ_DEV_SSB = 20l
 let Q51_QPB = 20l
 let Q51_SPB = 4l
 
+//! q8n: the same q8 weights as gguf-native 34B interleaved blocks ({f16 d; int8 qs[32]}) —
+//! ONE plane (no separate scale plane), the cm2 decode-in-load device layout.
+let Q8N_BPB = 34l
+
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
 //! Q6_K, 40 = Q4_0). The ONE stride source for every fmt-branched kq walker/kernel/repack —
 //! an unknown id panics instead of silently walking another format's stride.

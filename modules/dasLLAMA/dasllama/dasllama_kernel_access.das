@@ -140,9 +140,9 @@ class private AccessVisitor : AstVisitor {
     def override preVisitExprCall(expr : ExprCall?) : void {
         let cname = string(expr.name)
         // GPU intrinsics that take a whole array and write (or only read) through it:
-        // dasSpirv coopmat pair + the dasMetal simdgroup pair store through arg 1;
-        // tg_store_float4(dst, idx, v) stores through arg 0
-        if (cname == "coopmatStore" || cname == "simdgroup_store") {
+        // dasSpirv coopmat pair (+ the cm2 tensor-addressed forms) + the dasMetal simdgroup
+        // pair store through arg 1; tg_store_float4(dst, idx, v) stores through arg 0
+        if (cname == "coopmatStore" || cname == "simdgroup_store" || cname == "coopmatStoreTensor") {
             if (length(expr.arguments) >= 2) {
                 note_write(expr.arguments[1], false)
             }
@@ -154,7 +154,8 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
-        if (cname == "coopmatLoad" || cname == "simdgroup_load") {
+        if (cname == "coopmatLoad" || cname == "simdgroup_load"
+                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode") {
             return   // src argument is a plain read — the generic read pass records it
         }
         callees |> insert(cname)
