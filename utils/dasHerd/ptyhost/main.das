@@ -79,12 +79,28 @@ var private g_stamp = HostStamp()
 var private g_stamp_path : string
 var private g_journal_path : string
 var private g_journal : file
+// Liveness primitive: held open for the host's whole life. Windows CRT
+// handles carry no FILE_SHARE_DELETE, so remove() on this path FAILS while
+// the host lives and succeeds the instant it dies - crash included. "I'm
+// alive: file locked; I died: no longer locked."
+var private g_lock_path : string
+var private g_lock : file
+// Post-mortem log. The host runs CREATE_NO_WINDOW - stdout evaporates into
+// a hidden conhost - so this file is the only place events can go.
+var private g_log : file
+var private g_log_started : int64
 var private g_shutdown_requested = false
 var private g_child_exit_wall_ms : int64
 // The one terminal this host exists for (smart_ptr; released at exit).
 var private g_pty : Pty
 
 def private wall_ms : int64 => int64(get_clock()) * 1000l
+
+def private host_log(text : string) {
+    if (g_log == null) return
+    fwrite(g_log, "[+{get_time_nsec(g_log_started) / 1000000l}ms] {text}\n")
+    fflush(g_log)
+}
 
 def private save_stamp {
     // Same durability boundary as the herd registry: write the temp fully,
@@ -126,6 +142,7 @@ class PtyHostServer : HvWebServer {
 
     def override onWsOpen(channel : WebSocketChannel; url : string#) {
         clients |> push(new HostClient(channel = channel))
+        host_log("client connected ({length(clients)} attached)")
     }
 
     def override onWsClose(channel : WebSocketChannel) {
@@ -140,6 +157,7 @@ class PtyHostServer : HvWebServer {
                 index++
             }
         }
+        host_log("client disconnected ({length(clients)} attached)")
     }
 
     def find_client(channel : WebSocketChannel) : int {
@@ -232,49 +250,61 @@ class PtyHostServer : HvWebServer {
         if (index < 0) return
         if (incoming.op == "hello") {
             if (incoming.token != token) {
+                host_log("client rejected: bad token")
                 send_error(channel, "bad token")
                 return
             }
             if (incoming.protocol != PROTOCOL_VERSION) {
+                host_log("client rejected: protocol {incoming.protocol}")
                 send_error(channel, "protocol {incoming.protocol} unsupported; host speaks {PROTOCOL_VERSION}")
                 return
             }
             clients[index].authorized = true
+            host_log("client authorized")
             send_stat(channel)
             return
         }
         if (!clients[index].authorized) {
+            host_log("client op '{incoming.op}' rejected: hello first")
             send_error(channel, "hello first")
             return
         }
         if (incoming.op == "attach") {
             clients[index].offset = max(0l, incoming.from_byte)
             clients[index].attached = true
+            host_log("client attached from_byte={clients[index].offset} journal_bytes={g_stamp.journal_bytes}")
             send(channel, "\{\"type\":\"attached\",\"from_byte\":{clients[index].offset}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             stream_journal_from(clients[index])
         } elif (incoming.op == "input") {
             if (g_pty == null || g_stamp.exited) {
+                host_log("input rejected: child is not running")
                 send_error(channel, "child is not running")
                 return
             }
             var inscope bytes : array<uint8>
             if (base64_decode(incoming.base64, bytes) >= 0 && !empty(bytes)) {
+                host_log("input {length(bytes)} bytes")
                 let _ = _pty_write(g_pty, bytes)
             }
         } elif (incoming.op == "resize") {
             if (g_pty != null && incoming.columns > 0 && incoming.rows > 0) {
+                host_log("resize {incoming.columns}x{incoming.rows}")
                 let _ = _pty_resize(g_pty, incoming.columns, incoming.rows)
             }
         } elif (incoming.op == "stat") {
+            // Deliberately unlogged: the watcher polls stat every 500ms.
             send_stat(channel)
         } elif (incoming.op == "terminate") {
             if (g_pty != null && !g_stamp.exited) {
+                host_log("terminate requested exit_code={incoming.exit_code}")
                 let _ = _pty_terminate(g_pty, int(incoming.exit_code))
             }
         } elif (incoming.op == "shutdown") {
+            host_log("shutdown requested")
             g_shutdown_requested = true
         } else {
+            host_log("unknown operation '{incoming.op}'")
             send_error(channel, "unknown operation")
         }
     }
@@ -289,6 +319,13 @@ struct HostWsMessage {
     columns : int
     rows : int
     exit_code : int64
+}
+
+def private release_lock {
+    if (g_lock == null) return
+    fclose(g_lock)
+    g_lock = null
+    let _ = remove(g_lock_path)
 }
 
 def private append_journal(bytes : array<uint8>) {
@@ -333,9 +370,25 @@ def main : int {
     }
     g_journal_path = path_join(config.journal, "{config.session}.raw")
     g_stamp_path = path_join(config.journal, "{config.session}.host.json")
+    g_lock_path = path_join(config.journal, "{config.session}.lock")
+    g_log_started = ref_time_ticks()
+    g_log = fopen(path_join(config.journal, "{config.session}.log"), "ab")
+    host_log("start session={config.session} port={config.port} cwd={config.cwd} " +
+        "{columns}x{rows} linger_ms={linger_ms} child_tokens={length(config.child)} " +
+        "wall_s={int64(get_clock())}")
+    g_lock = fopen(g_lock_path, "wb")
+    if (g_lock == null) {
+        host_log("could not hold {g_lock_path}")
+        to_log(LOG_ERROR, "dasherd-ptyhost: could not hold {g_lock_path}\n")
+        return 3
+    }
+    fwrite(g_lock, "held by session {config.session}\n")
+    fflush(g_lock)
+    host_log("lock held {g_lock_path}")
     // Append: a relaunched host for the same session continues the stream.
     g_journal = fopen(g_journal_path, "ab")
     if (g_journal == null) {
+        host_log("could not open journal {g_journal_path}")
         to_log(LOG_ERROR, "dasherd-ptyhost: could not open {g_journal_path}\n")
         return 3
     }
@@ -362,10 +415,13 @@ def main : int {
         g_stamp.error = (empty(launch_error)
             ? "child failed to launch" : launch_error)
         save_stamp()
+        host_log("child launch failed: {g_stamp.error}")
         to_log(LOG_ERROR, "dasherd-ptyhost: launch failed: {g_stamp.error}\n")
+        release_lock()
         return 4
     }
     g_stamp.child_pid = _pty_process_id(g_pty)
+    host_log("child launched pid={g_stamp.child_pid}")
 
     var server = new PtyHostServer(token = token)
     server->init(config.port)
@@ -375,10 +431,13 @@ def main : int {
         g_stamp.exited = true
         save_stamp()
         let _ = _pty_terminate(g_pty, 1)
+        host_log("{g_stamp.error}; exiting")
         to_log(LOG_ERROR, "dasherd-ptyhost: {g_stamp.error}\n")
+        release_lock()
         return 5
     }
     save_stamp()
+    host_log("listening on 127.0.0.1:{config.port}")
     to_log(LOG_INFO, "dasherd-ptyhost: session {config.session} child {g_stamp.child_pid} on 127.0.0.1:{config.port}\n")
 
     var inscope chunk : array<uint8>
@@ -399,6 +458,7 @@ def main : int {
                 g_stamp.drained = true
                 save_stamp()
                 server->broadcast_stat()
+                host_log("output drained (pipe closed) journal_bytes={g_stamp.journal_bytes}")
             }
             if (!g_stamp.exited && _pty_process_exited(g_pty)) {
                 g_stamp.exited = true
@@ -406,12 +466,14 @@ def main : int {
                 g_child_exit_wall_ms = wall_ms()
                 save_stamp()
                 server->broadcast_stat()
+                host_log("child exited code={g_stamp.exit_code}")
             }
         }
         // Linger keys on exit alone: while this host holds the HPCON, ConPTY
         // may never close the read pipe, so `drained` cannot gate the exit
         // (observed live: exited=true with drained=false for minutes).
         if (g_stamp.exited && wall_ms() - g_child_exit_wall_ms > linger_ms) {
+            host_log("linger elapsed {linger_ms}ms after child exit")
             break
         }
         if (wall_ms() - last_stamp >= STAMP_PERIOD_MS) {
@@ -423,6 +485,7 @@ def main : int {
 
     if (!g_stamp.exited) {
         // Shutdown op with a live child: the child dies with the host's job.
+        host_log("terminating live child with the host")
         let _ = _pty_terminate(g_pty, 1)
         g_stamp.exited = true
         g_stamp.exit_code = _pty_exit_code(g_pty)
@@ -431,6 +494,8 @@ def main : int {
     // when the pipe never reported closure before the shutdown op arrived.
     g_stamp.drained = true
     save_stamp()
+    host_log("host exit: shutdown={g_shutdown_requested} exit_code={g_stamp.exit_code} " +
+        "journal_bytes={g_stamp.journal_bytes}")
     server->stop()
     server->cleanup()
     unsafe {
@@ -441,5 +506,10 @@ def main : int {
     }
     fclose(g_journal)
     g_journal = null
+    release_lock()
+    if (g_log != null) {
+        fclose(g_log)
+        g_log = null
+    }
     return 0
 }

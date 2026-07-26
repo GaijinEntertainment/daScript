@@ -18,8 +18,13 @@ var private g_last_stat = ""
 
 class private ProbeClient : HvWebSocketClient {
     token : string
+    protocol : int = 1
+    send_hello : bool = true
+    last_error : string
     def override onOpen {
-        send("\{\"op\":\"hello\",\"token\":{sprint_json(token, false)},\"protocol\":1\}")
+        if (send_hello) {
+            send("\{\"op\":\"hello\",\"token\":{sprint_json(token, false)},\"protocol\":{protocol}\}")
+        }
     }
     def override onClose {}
     def override onMessage(msg : string#) {
@@ -31,6 +36,8 @@ class private ProbeClient : HvWebSocketClient {
             }
         } elif (find(msg, "\"type\":\"attached\"") >= 0) {
             g_attached_seen = true
+        } elif (find(msg, "\"type\":\"error\"") >= 0) {
+            last_error = string(msg)
         }
     }
     def override onMessageFrame(msg : string#; byte_count : int; opcode : ws_opcode) {
@@ -130,6 +137,44 @@ def test_ptyhost_lifecycle(t : T?) {
                 $() => find(g_output_text, "PTYHOST-OK:from-test-env") >= 0,
             "child echoed input with the forwarded env var: {slice(g_output_text, max(0, length(g_output_text) - 400))}")
 
+        // Stage 3.5: liveness lock + adversarial clients. The lock is HELD -
+        // remove() must fail while the host lives; that failing remove IS the
+        // watcher's dead-or-alive probe.
+        let lock_path = path_join(journal_dir, "t1.lock")
+        t |> success(fexist(lock_path) && !remove(lock_path),
+            "host holds its liveness lock (remove fails while alive)")
+        var bad_token = new ProbeClient(token = "wrong-token")
+        t |> equal(bad_token->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
+        t |> success(pump_until(bad_token, 10000l)
+                $() => find(bad_token.last_error, "bad token") >= 0,
+            "wrong token is rejected: {bad_token.last_error}")
+        bad_token->close()
+        bad_token->cleanup()
+        unsafe {
+            delete bad_token
+        }
+        var bad_protocol = new ProbeClient(token = "t1token", protocol = 99)
+        t |> equal(bad_protocol->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
+        t |> success(pump_until(bad_protocol, 10000l)
+                $() => find(bad_protocol.last_error, "unsupported") >= 0,
+            "wrong protocol is rejected: {bad_protocol.last_error}")
+        bad_protocol->close()
+        bad_protocol->cleanup()
+        unsafe {
+            delete bad_protocol
+        }
+        var no_hello = new ProbeClient(token = "t1token", send_hello = false)
+        t |> equal(no_hello->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
+        no_hello->send_input("dir\r\n")
+        t |> success(pump_until(no_hello, 10000l)
+                $() => find(no_hello.last_error, "hello first") >= 0,
+            "pre-auth ops are rejected: {no_hello.last_error}")
+        no_hello->close()
+        no_hello->cleanup()
+        unsafe {
+            delete no_hello
+        }
+
         // Stage 4: terminate the child; the host stamps the exit.
         client->send("\{\"op\":\"terminate\",\"exit_code\":0\}")
         t |> success(pump_until(client, 15000l) $() {
@@ -151,6 +196,25 @@ def test_ptyhost_lifecycle(t : T?) {
         t |> success(find(final_stamp, "\"exited\":true") >= 0
                 && find(final_stamp, "\"drained\":true") >= 0,
             "final stamp records exited + drained: {final_stamp}")
+
+        // Stage 6: death releases the lock, and the log tells the story.
+        var lock_released = false
+        let release_started = ref_time_ticks()
+        while (get_time_nsec(release_started) / 1000000l < 10000l) {
+            if (!fexist(lock_path)) {
+                lock_released = true
+                break
+            }
+            sleep(20u)
+        }
+        t |> success(lock_released, "clean exit removed the liveness lock")
+        let host_log_text = fread(path_join(journal_dir, "t1.log"))
+        t |> success(find(host_log_text, "child launched pid=") >= 0
+                && find(host_log_text, "client authorized") >= 0
+                && find(host_log_text, "client rejected: bad token") >= 0
+                && find(host_log_text, "shutdown requested") >= 0
+                && find(host_log_text, "host exit:") >= 0,
+            "host log recorded launch, auth, rejection, and shutdown: {host_log_text}")
         client->close()
         client->cleanup()
         unsafe {

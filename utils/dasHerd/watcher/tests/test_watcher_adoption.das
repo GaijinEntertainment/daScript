@@ -4,6 +4,7 @@ options rtti
 require dastest/testing_boost public
 require ../watcher_core.das
 require ../herd_sessions.das
+require dashv/dashv_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -27,6 +28,34 @@ def private pump_until(timeout_ms : int64; blk : block<() : bool>) : bool {
         sleep(5u)
     }
     return false
+}
+
+// Just enough of the host stamp to reach a host from a test.
+struct private ProbeStamp {
+    port : int
+    token : string
+}
+
+// Connects to a host with its stamp credentials and orders it to die -
+// simulating a host crash underneath a live watcher.
+class private HostKiller : HvWebSocketClient {
+    token : string
+    shutdown_sent : bool
+    def override onOpen {
+        send("\{\"op\":\"hello\",\"token\":{sprint_json(token, false)},\"protocol\":1\}")
+    }
+    def override onClose {}
+    def override onMessage(msg : string#) {
+        if (find(msg, "\"type\":\"stat\"") >= 0 && !shutdown_sent) {
+            shutdown_sent = true
+            send("\{\"op\":\"shutdown\"\}")
+        }
+    }
+}
+
+class private PortBlocker : HvWebServer {
+    def override onInit {}
+    def override onTick {}
 }
 
 [test]
@@ -73,6 +102,8 @@ def test_watcher_host_adoption(t : T?) {
         t |> success(pump_until(15000l)
                 $() => find(watcher_output_text(session_id), "ADOPT-A") >= 0,
             "child echoed through the detached host")
+        t |> success(fexist(path_join(ptyhost_root, "{session_id}.lock")),
+            "host holds its liveness lock")
         var before_restart = WatcherSessionInfo()
         t |> success(watcher_get_session_info(session_id, before_restart))
 
@@ -119,6 +150,11 @@ def test_watcher_host_adoption(t : T?) {
                 $() => fexist(path_join(path_join(ptyhost_root, "archive"),
                     "{session_id}.host.json")),
             "released host archived its discovery stamp")
+        t |> success(fexist(path_join(path_join(ptyhost_root, "archive"),
+                "{session_id}.log")),
+            "host log archived beside the journal")
+        t |> success(!fexist(path_join(ptyhost_root, "{session_id}.lock")),
+            "liveness lock left no debris")
         watcher_shutdown()
         herd_shutdown()
     }
@@ -146,9 +182,13 @@ def test_watcher_host_adoption(t : T?) {
         persisted.argv <- ["cmd.exe", "/q"]
         t |> success(fwrite(path_join(session_dir, "session.json"),
             sprint_json(persisted, true)))
-        // Mailbox history: hf_3 posted then acknowledged, hf_5 posted once.
+        // Mailbox history: hf_3 posted then acknowledged, hf_5 posted once —
+        // interleaved with a truncated-write line and plain corruption, which
+        // restore must skip without losing the valid records around them.
         let mailbox_lines = ("\{\"id\":\"hf_3\",\"session_id\":\"{session_id}\",\"direction\":\"outbox\",\"sender\":\"agent_session:{session_id}\",\"kind\":\"note\",\"subject\":\"first\",\"status\":\"new\",\"revision\":4\}\n" +
+            "\{\"id\":\"hf_4\",\"session_id\":\"{session_id}\",\"direc\n" +
             "\{\"id\":\"hf_3\",\"session_id\":\"{session_id}\",\"direction\":\"outbox\",\"sender\":\"agent_session:{session_id}\",\"kind\":\"note\",\"subject\":\"first\",\"status\":\"acknowledged\",\"revision\":6\}\n" +
+            "not json at all\n" +
             "\{\"id\":\"hf_5\",\"session_id\":\"{session_id}\",\"direction\":\"inbox\",\"sender\":\"human:local\",\"kind\":\"note\",\"subject\":\"second\",\"status\":\"new\",\"revision\":7\}\n")
         t |> success(fwrite(path_join(session_dir, "mailbox.jsonl"), mailbox_lines))
         let journal_text = "dead-host-journal-content\r\n"
@@ -185,6 +225,109 @@ def test_watcher_host_adoption(t : T?) {
         t |> success(posted.ok, posted.error)
         t |> success(posted.message_id != "hf_3" && posted.message_id != "hf_5",
             "restored id counters prevent duplicate mailbox ids")
+        watcher_shutdown()
+    }
+    t |> run("a host dying under a live watcher fails that one session only") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_hostdeath_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        let ptyhost_root = path_join(root, "ptyhosts")
+        var inscope host_prefix <- [test_compiler(),
+            path_join(get_das_root(), "utils/dasHerd/ptyhost/main.das"), "--"]
+        t |> equal(watcher_init(path_join(root, "sessions")), "")
+        t |> equal(watcher_configure_ptyhosts(ptyhost_root, host_prefix), "")
+
+        var inscope request = WatcherLaunchRequest(cwd = root,
+            display_name = "doomed host", kind = "shell",
+            herd_session_id = "h_doomed", columns = 100, rows = 30)
+        request.argv <- ["cmd.exe", "/q"]
+        let launched = watcher_launch(request)
+        t |> success(launched.ok, launched.error)
+        let session_id = launched.session_id
+
+        var inscope stamp = ProbeStamp()
+        t |> success(sscan_json(fread(path_join(ptyhost_root,
+            "{session_id}.host.json")), stamp), "stamp is readable")
+        var killer = new HostKiller(token = stamp.token)
+        t |> equal(killer->init("ws://127.0.0.1:{stamp.port}/"), 0)
+        t |> success(pump_until(15000l) $() {
+                killer->process_event_que()
+                var info = WatcherSessionInfo()
+                return (watcher_get_session_info(session_id, info)
+                    && info.state == "failed" && info.drained)
+            }, "watcher marked the session failed after the host died")
+        var info = WatcherSessionInfo()
+        t |> success(watcher_get_session_info(session_id, info))
+        t |> equal(info.reason, "host_disconnected")
+        killer->close()
+        killer->cleanup()
+        unsafe {
+            delete killer
+        }
+        watcher_shutdown()
+    }
+    t |> run("a bind collision retries onto the next port") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_bindretry_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        let ptyhost_root = path_join(root, "ptyhosts")
+        var inscope host_prefix <- [test_compiler(),
+            path_join(get_das_root(), "utils/dasHerd/ptyhost/main.das"), "--"]
+        t |> equal(watcher_init(path_join(root, "sessions")), "")
+        t |> equal(watcher_configure_ptyhosts(ptyhost_root, host_prefix), "")
+
+        // Learn where the port cursor is by launching once, then squat on the
+        // NEXT port so the following launch must retry past the blocker.
+        var inscope first_request = WatcherLaunchRequest(cwd = root,
+            display_name = "cursor probe", kind = "shell",
+            herd_session_id = "h_probe", columns = 100, rows = 30)
+        first_request.argv <- ["cmd.exe", "/q"]
+        let first = watcher_launch(first_request)
+        t |> success(first.ok, first.error)
+        var inscope first_stamp = ProbeStamp()
+        t |> success(sscan_json(fread(path_join(ptyhost_root,
+            "{first.session_id}.host.json")), first_stamp))
+
+        var blocker = new PortBlocker()
+        blocker->init(first_stamp.port + 1)
+        let _bind = blocker->set_bind_host("127.0.0.1")
+        t |> equal(blocker->start(), 0, "test blocker occupies the next port")
+
+        var inscope second_request = WatcherLaunchRequest(cwd = root,
+            display_name = "collision victim", kind = "shell",
+            herd_session_id = "h_victim", columns = 100, rows = 30)
+        second_request.argv <- ["cmd.exe", "/q"]
+        let second = watcher_launch(second_request)
+        t |> success(second.ok, second.error)
+        var inscope second_stamp = ProbeStamp()
+        t |> success(sscan_json(fread(path_join(ptyhost_root,
+            "{second.session_id}.host.json")), second_stamp))
+        t |> equal(second_stamp.port, first_stamp.port + 2,
+            "launch skipped the occupied port")
+        var info = WatcherSessionInfo()
+        t |> success(watcher_get_session_info(second.session_id, info))
+        t |> equal(info.state, "running")
+
+        blocker->stop()
+        blocker->cleanup()
+        unsafe {
+            delete blocker
+        }
+        let _t1 = watcher_terminate(first.session_id, "test_cleanup")
+        let _t2 = watcher_terminate(second.session_id, "test_cleanup")
+        t |> success(pump_until(20000l) $() {
+                var first_info = WatcherSessionInfo()
+                var second_info = WatcherSessionInfo()
+                return (watcher_get_session_info(first.session_id, first_info)
+                    && watcher_get_session_info(second.session_id, second_info)
+                    && first_info.drained && second_info.drained)
+            }, "both hosts folded on terminate")
         watcher_shutdown()
     }
 }

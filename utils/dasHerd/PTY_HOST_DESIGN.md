@@ -191,18 +191,27 @@ rich client federates.
 - Deferred consciously: cross-box sessions (satellites/bundles spanning
   boxes) — the federation seam lives in the client, later.
 
-## Next hardening block (queued, go on Boris's word)
+## Hardening block (LANDED 2026-07-26)
 
-- **Host log file** `<session>.log` beside the journal — the host currently
-  cannot log at all (spawned CREATE_NO_WINDOW; stdout evaporates into the
-  hidden conhost). Log config at start, every connect/auth/attach with
-  offsets, every op, child exit, stamp transitions, shutdown reason.
-  Everything should log like crazy; this one especially.
-- **Lock-file liveness** `<session>.lock`, held exclusively for the host's
-  lifetime: "alive = file locked; died = lock released". Race-free,
-  crash-proof, works over ssh exec; replaces the connect-timeout probe as
-  the adoption deadness test. Stamp stays the metadata record.
-- **Underlying test coverage** (UI can wait; the underlying stuff tests and
-  logs everything, because reasons): bind-retry/port-exhaustion, degraded
-  breakaway, corrupt-jsonl restore, bad-token / wrong-protocol /
-  mid-replay-disconnect adversarial cases against the host.
+- **Host log file** `<session>.log` beside the journal (the host runs
+  CREATE_NO_WINDOW — stdout evaporates; this file is the only witness).
+  Logs start config, lock acquisition, child launch/exit, every
+  connect/auth/attach with offsets, every op except the 500ms stat poll,
+  drain/linger transitions, and the exit summary. Archived with the
+  journal.
+- **Lock-file liveness** `<session>.lock`, held open for the host's
+  lifetime. Windows CRT handles carry no FILE_SHARE_DELETE, so `remove()`
+  fails while the host lives and succeeds the instant it dies — crash
+  included; removing a dead host's lock IS the cleanup. Adoption probes
+  the lock before connecting (dead-fold dropped ~2s → ~20ms); the connect
+  timeout stays as the alive-but-wedged fallback. Clean exit deletes the
+  lock; the archive sweep removes crash leftovers.
+- **Test coverage landed**: bad token / wrong protocol / pre-auth ops
+  rejected (host-side), lock held-while-alive + released-on-exit, log
+  content, corrupt-jsonl restore lines skipped, host death under a live
+  watcher fails that one session only (`host_disconnected`), bind
+  collision retries onto the next port. Suite 73/73.
+- **Not covered, documented**: port-exhaustion (impractical to occupy 200
+  ports) and degraded job breakaway (popen jobs now permit breakaway, so
+  denial cannot be simulated in-tree); both fail loudly at launch by
+  construction.

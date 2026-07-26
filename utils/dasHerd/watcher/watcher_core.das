@@ -635,6 +635,19 @@ def private host_stamp_path(session_id : string) : string {
     return path_join(g_ptyhost_dir, "{session_id}.host.json")
 }
 
+def private host_lock_path(session_id : string) : string {
+    return path_join(g_ptyhost_dir, "{session_id}.lock")
+}
+
+// The host holds its .lock open for its whole life; Windows CRT handles carry
+// no FILE_SHARE_DELETE, so remove() fails while the host lives and succeeds
+// the instant it dies - crash included. Removing a dead host's lock here is
+// the cleanup, not a side effect.
+def private host_lock_held(session_id : string) : bool {
+    let lock_path = host_lock_path(session_id)
+    return fexist(lock_path) && !remove(lock_path)
+}
+
 def private archive_host_files(var session : WatcherSession?) {
     // Once the journal is replicated into the watcher (ring + registry fold),
     // the stamp and journal move aside so the next adoption scan stays clean.
@@ -655,6 +668,15 @@ def private archive_host_files(var session : WatcherSession?) {
         if (rename(journal_path, archived_journal)) {
             session.output_path = archived_journal
         }
+    }
+    let log_path = path_join(g_ptyhost_dir, "{session.id}.log")
+    if (fexist(log_path)) {
+        let _ = rename(log_path, path_join(archive_dir, "{session.id}.log"))
+    }
+    // A crashed host leaves its lock file behind unlockable; sweep it.
+    let lock_path = host_lock_path(session.id)
+    if (fexist(lock_path)) {
+        let _ = remove(lock_path)
     }
 }
 
@@ -986,12 +1008,14 @@ def private adopt_host_session(stamp : WatcherHostStamp) : bool {
         numeric_id_suffix(slice(stamp.session, find(stamp.session, "_") + 1), ""))
     var inscope model <- terminal_create(columns, rows)
     session.terminal := model
-    // A lingering-but-alive host serves the replay itself; only an unreachable
-    // one falls back to reading the journal file directly.
+    // The lock probe answers dead-or-alive instantly and race-free; only a
+    // held lock is worth the connect handshake (whose timeout stays as the
+    // fallback for a host that is alive but wedged).
     let attach_from = max(0l, stamp.journal_bytes - int64(MAX_RAW_HISTORY_BYTES))
     var link = new WatcherHostLink(token = stamp.token, attach_from = attach_from)
     var adopted_live = false
-    if (link->init("ws://127.0.0.1:{stamp.port}/") == 0) {
+    if (host_lock_held(stamp.session)
+            && link->init("ws://127.0.0.1:{stamp.port}/") == 0) {
         let handshake_started = ref_time_ticks()
         while (!link.attached && !link.closed && empty(link.last_error)
                 && get_time_nsec(handshake_started) / 1000000l < HOST_ADOPT_HANDSHAKE_TIMEOUT_MS) {
