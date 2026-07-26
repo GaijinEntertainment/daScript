@@ -797,10 +797,12 @@ def q51_tune_family() : string {
         run_q51_gemv(v._1, hfx, hq, hs, mr, yh)
         ok = close_to_q51_ref(hfx, yh, mr, maxdiff) && ok
         if (!ok) {
+            // best = "" rejects the family; the shared cleanup past the loop frees everything
+            // (deleting tvs HERE, mid-iteration, is the locked-array trap)
             print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
             delete sq; delete ss; delete hq; delete hs
-            delete sfx; delete hfx; delete tvs; delete y; delete yh
-            return ""
+            best = ""
+            break
         }
         var dt = 2147483647
         for (_rep in range(3)) {
@@ -1528,7 +1530,11 @@ def tune_mode_run : bool {
         print("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
         if (empty(w)) {
-            kok = false
+            // gate failure (the broken perm is named above): record the always-correct
+            // reference body so the scope still COMPLETES — a missing key re-tunes every start
+            let wok = tune_manifest_set(entry, "reference")
+            print("{entry} winner: reference (gate-failure fallback) {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
+            kok = kok && wok
         } else {
             let wok = tune_manifest_set(entry, w)
             print("{entry} winner: {w} {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
@@ -1539,7 +1545,10 @@ def tune_mode_run : bool {
     let qw = q51_tune_family()
     print("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
     if (empty(qw)) {
-        kok = false
+        // same gate-failure fallback as the kq loop: complete the scope on the reference body
+        let qok = tune_manifest_set("q51q8_gemv_gen", "reference")
+        print("q51q8_gemv_gen winner: reference (gate-failure fallback) {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
+        kok = kok && qok
     } else {
         let qok = tune_manifest_set("q51q8_gemv_gen", qw)
         print("q51q8_gemv_gen winner: {qw} {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
