@@ -107,7 +107,7 @@ A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-si
 Use it for:
 - **Syntax highlighting** — `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
 - **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
-- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
+- **Editor extensions** — `tree-sitter-daslang/zed-daslang/` includes a Zed extension
 
 Build the grammar:
 ```sh

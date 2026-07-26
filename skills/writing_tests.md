@@ -1,69 +1,12 @@
 # Testing Conventions (dastest)
 
-Tests use the `dastest` framework. Test files live in `tests/` with per-module subfolders.
+Tests use the `dastest` framework, which ships with the SDK under `dastest/`. Everything
+below applies wherever you write tests — in your own project or in the daslang repo.
 
-## AOT registration (REQUIRED for new test directories)
-
-The full `test_aot` binary runs EVERY test under `tests/` with AOT enabled (`fail_on_no_aot`).
-It builds+runs on the NIGHTLY CI cron and in `preflight --full` — per-PR CI only builds the
-`tests/language` subset (`test_aot_subset`) as a compile gate, so a missing registration
-passes PR CI and fails the nightly. Creating a new test directory ⇒ register it in
-`tests/aot/CMakeLists.txt` (5-step pattern in `skills/aot_testing.md` § "Registering a New
-Test Directory"), or the nightly/preflight fails with `error[50101]: AOT link failed`.
-
-If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put
-`options no_aot` IN THE FILE **and** exclude it from the directory's AOT glob, with a
-comment + issue link on both. Glob exclusion alone is NOT enough — test_aot still *runs*
-the file and trips 50101 on its missing stubs; `options no_aot` is what makes the runtime
-skip AOT linking for it. (2026-06-11: in-file `options no_aot` currently fails in the AOT
-hash itself — fix incoming on master; until it lands, interp-only tests are gated by the
-directory filter below instead.)
-
-## The `tests/.das_test` directory filter — and its root-path caveat
-
-`tests/.das_test` is a daslang script dastest compiles per run; its `can_visit_folder`
-pinvoke gates whole directories per mode — e.g. `no_aot/`, `ast/`, `ast_match/` are
-skipped under `--use-aot`, module dirs (dasSQLITE, dasPUGIXML…) skip when the
-module isn't built in. **The filter is looked up only at the `--test` ROOT path** —
-`--test tests` finds and applies it, but `--test tests/flatten` looks for
-`tests/flatten/.das_test` (absent) and walks into `no_aot/` unfiltered, producing
-false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests`
-(CI's form) or target individual files — never a subtree that contains gated dirs.
-
-## Per-folder sweep gating (`tests/.das_test`)
-
-`tests/.das_test` defines `can_visit_folder(folder_name, result)` — dastest consults it
-per subfolder during file collection (only for the `.das_test` at the `--test <root>`
-argument; directly naming a child folder bypasses it). It gates folders on module
-availability (`dasHV`, `dasSQLITE`, …) and on sweep mode by scanning argv — `--use-aot`
-skips `ast`, `ast_match`, `no_aot`; `-jit` skips only `gc` (heap_collect can't see heap
-pointers whose only reference is a local in a jitted frame — native-stack locals are
-invisible to the collector, so GC-semantics tests are interp-only; the other former `-jit`
-skips were lifted once `jit_enabled` started triggering daslib/quote lowering). Two traps:
-a whole-folder JIT/AOT failure usually means a missing entry here, NOT a per-file fix; and
-the `jit_cache_all_tests` prewarm target (utils/CMakeLists.txt — local-use only since CI's
-isolated-parallel JIT sweep mints the dll cache itself) does NOT consult it — its
-`--exclude` list mirrors the skips manually and must be updated in the same change.
-Per-function `[no_jit]` is the finer-grained alternative when only some functions in a
-kept folder can't JIT — put it on the function whose CODE diverges under JIT, not just the
-`[test]` wrapper (JITted callees replace their SimNode bodies, so an interpreted wrapper
-still calls jitted workers). Beware Release-blind divergence: memory bugs (double-free,
-reuse-after-collect) only trip the Debug memory_model.h assert, so a green local Release
-sweep does NOT prove a lifted skip is sound — Debug CI is the oracle.
-
-## Deep-engine model tests (dasLLAMA and friends)
-
-Two hard-won rules for tests that drive a deep JIT engine chain (`forward`/`forward_prefill`/
-`generate`):
-
-1. **The test file is the program root under dastest**, so `options stack = 524288` in the test
-   file DOES apply (the "main-module-only" rule works in your favor). Without it, driving the
-   engine directly trips `stack overflow` deep in the module (reported at some engine function's
-   entry line).
-2. **Keep heavy helpers free of `T?`** — a `T?` param keeps the helper off the JIT (dastest's
-   class), so its engine calls run on the interpreter stack. Structure like `test_parity.das`:
-   plain private functions do the model work and return values/arrays; the `[test]` run-lambda
-   only asserts. (`modules/dasLLAMA/tests/test_mtp.das` hit both failure modes before landing on this.)
+Working inside the daslang repository? Its own harness is a separate concern and no part
+of it applies to an SDK install, so none of it is shipped here — AOT registration for new
+test directories, the `tests/.das_test` gating filter and deep-engine model-test rules are
+all covered by `skills/tests_in_repo.md` (repo-only).
 
 ## Test file structure
 
@@ -121,8 +64,8 @@ Always use the dastest API (`t |> equal(...)`, `t |> success(...)`, `t |> failur
 **Why?** `assert`/`verify` crash the process on failure, giving no detailed report.
 The dastest API records failures with file/line info and continues running other tests.
 
-**Exception:** Files under `tests/` that use `expect` directives (compilation-failure tests)
-are designed to trigger compiler errors — these do NOT use `[test]` or `t : T?` at all.
+**Exception:** files that use `expect` directives (compilation-failure tests) are designed
+to trigger compiler errors — these do NOT use `[test]` or `t : T?` at all.
 
 ## Threading `t : T?` through helpers
 
@@ -139,13 +82,28 @@ Use `ii`, `idx`, `val`, `sptr` etc. instead.
 
 - `options no_unused_function_arguments = false` — suppress warnings for test params
 - `options no_unused_block_arguments = false` — suppress warnings for block params
-- Shared test helpers go in `_common.das` module files (e.g., `tests/linq/_common.das`)
+- Shared test helpers go in `_common.das` module files, kept in the same directory as the
+  tests that require them. A require path cannot contain a hyphen, so a test living in a
+  hyphenated directory must require its siblings by bare name.
 
 ## Running tests
 
-- Single file: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/linq/test_linq_aggregation.das`
-- Directory: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/linq/`
-- All tests: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/`
+```bash
+# one file
+bin/daslang dastest/dastest.das -- --test path/to/test_something.das
+# a directory
+bin/daslang dastest/dastest.das -- --test path/to/tests/
+```
+
+The SDK ships dastest's own suite at `dastest/tests/`, which doubles as a worked example:
+
+```bash
+bin/daslang dastest/dastest.das -- --test dastest/tests
+```
+
+Useful flags: `--failures-only` to quieten passing output, `--color`, `--timeout <seconds>`,
+and `--isolated-mode` to run each file in its own process (slower, but survives a crash in
+one file).
 
 ## Testing non-copyable types
 

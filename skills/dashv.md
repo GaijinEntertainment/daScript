@@ -4,7 +4,7 @@ Read this before writing or editing any `.das` that serves HTTP, streams SSE, ma
 HTTP requests, or tests a server. `dasHV` wraps [libhv](https://github.com/ithewei/libhv);
 the high-level das layer is `dashv/dashv_boost`, the native bindings are the `dashv` module.
 Worked example end-to-end: `utils/dasllama-server/` (an OpenAI-compatible server) and
-`tests/dasHV/`, both in the daslang repo.
+`tests/dasHV/` (repo-only), both in the daslang repo.
 
 ```das
 require dashv/dashv_boost public   // HvWebServer, HvWebSocketClient, with_http_request, get_body_bytes
@@ -106,7 +106,7 @@ with_http_request() <| $(var req) {
 
 ## Testing — `with_test_server` (runs the server on its own thread/context)
 
-`tests/dasHV/_dashv_test_common.das` provides the harness. It spawns the server on `new_thread()`
+`tests/dasHV/_dashv_test_common.das` (repo-only) provides the harness. It spawns the server on `new_thread()`
 (**a separate context**), waits until it's up, runs your block with `base_url`, then stops + joins:
 
 ```das

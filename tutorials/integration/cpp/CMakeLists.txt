@@ -205,21 +205,6 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_23
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/23_handle_registry.cpp
 )
 
-# Install C++ integration tutorial source files
-file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.inc
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das_project
-)
-install(FILES ${CPP_INTEGRATION_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/cpp
-)
-
-# Install standalone CMakeLists.txt for building tutorials against the installed SDK.
-install(FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/CMakeLists.standalone.cmake
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/cpp
-    RENAME CMakeLists.txt
-)
+# NOTE: the install rules for these sources deliberately live in
+# tutorials/CMakeLists.txt, NOT here — see the matching note in
+# integration/c/CMakeLists.txt.

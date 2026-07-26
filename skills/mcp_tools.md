@@ -68,7 +68,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 
 **`shutdown` tool.** Shuts down the MCP server process. Claude Code auto-restarts it, picking up code changes to `.das` tool files. Tool registration changes (adding/removing tools) still require a manual MCP restart.
 
-**Configuration.** Configure `.mcp.json` with `"command"` pointing at the daslang binary (`bin/Release/daslang.exe` on Windows MSVC, `build/daslang` on Linux/macOS, `bin/daslang` for the installed SDK), `"args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and Claude Code permissions.
+**Configuration.** Configure `.mcp.json` with `"command"` pointing at the daslang binary (`bin/daslang` on Windows MSVC, `build/daslang` on Linux/macOS, `bin/daslang` for the installed SDK), `"args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and Claude Code permissions.
 
 **Fresh checkouts / worktrees.** `.mcp.json`, `sgconfig.yml`, `bin/`, and the tree-sitter grammar lib are all gitignored, so a new `git worktree add` (or clone) has no daslang MCP at all. Bootstrap it with `daslang utils/mcp/setup.das -- --root <worktree>` — it builds a worktree-local binary (+ grammar), copies the platform `sgconfig.yml`, and merges a `daslang` entry into `.mcp.json` (adds no new secrets; existing servers, including any secret env blocks, are preserved as-is). `--no-build` skips the build. Restart the session to pick it up.
 

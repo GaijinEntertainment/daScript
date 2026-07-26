@@ -1,6 +1,6 @@
 # daslang Project Overview
 
-Read this skill once at the start of significant work in or with daslang — it's the why and the design lens that informs how every other skill makes its trade-offs. The full long-form rationale lives in `doc/source/reference/design_philosophy.rst`.
+Read this skill once at the start of significant work in or with daslang — it's the why and the design lens that informs how every other skill makes its trade-offs. The full long-form rationale lives in `skills/design_philosophy.md` (the same file daslang.io renders as [Design Philosophy](https://daslang.io/doc/reference/design_philosophy.html)).
 
 ## What is daslang
 

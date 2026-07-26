@@ -121,6 +121,43 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/_assets/
     PATTERN "*.py" EXCLUDE
 )
 
+# Install the C / C++ integration tutorial sources + their standalone recipes.
+# These are UNCONDITIONAL on purpose: DAS_TUTORIAL_DISABLED means "don't build the
+# tutorial executables", not "don't ship the tutorial sources". The rules used to
+# live inside the two include()d files below, which coupled the two.
+file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das_project
+)
+install(FILES ${C_INTEGRATION_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
+)
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/CMakeLists.standalone.cmake
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
+    RENAME CMakeLists.txt
+)
+
+file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das_project
+)
+install(FILES ${CPP_INTEGRATION_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/cpp
+)
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/CMakeLists.standalone.cmake
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/cpp
+    RENAME CMakeLists.txt
+)
+
 if (NOT ${DAS_TUTORIAL_DISABLED})
     include(integration/c/CMakeLists.txt)
     include(integration/cpp/CMakeLists.txt)

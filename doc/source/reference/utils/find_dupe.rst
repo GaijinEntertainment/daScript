@@ -289,7 +289,7 @@ Implementation
 See also
 ========
 
-* :ref:`utils_detect_dupe` --- the cluster-producing pipeline whose
+* :ref:`detect-dupe <utils_detect_dupe>` --- the cluster-producing pipeline whose
   JSON ``find_dupe`` consumes.
 * :ref:`utils_mcp` --- the MCP server that wraps both tools.
 * :ref:`utils_daspkg` --- the package manager that fetches

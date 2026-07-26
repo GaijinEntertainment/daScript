@@ -97,9 +97,9 @@ the server, each with the same ``[tune_policy(missing = "auto")]`` and reading
 the same manifest: ``ask`` (a one-shot ``--prompt`` → completion, reporting
 ttft and prefill/decode t/s) and ``wav2txt`` (an ``--file`` audio → transcript,
 reporting decode/transcribe time and the real-time factor). Whichever of the
-three you run first tunes the box; the rest are then instant. See :ref:`tune`
-for the framework, and ``modules/dasLLAMA/tune_for_this_box.md`` for the
-measurement discipline.
+three you run first tunes the box; the rest are then instant. See
+:ref:`Kernel tuning <tune>` for the framework, and
+``modules/dasLLAMA/tune_for_this_box.md`` for the measurement discipline.
 
 
 Endpoints

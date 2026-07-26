@@ -141,5 +141,4 @@ def strip_trailing_doc(line : string) : string {
 
 - Engine: `daslib/regex.das`
 - Compile-time reader macro: `daslib/regex_boost.das`
-- Tutorial: `doc/source/reference/tutorials/31_regex.rst`
-- Generated stdlib reference: `doc/source/stdlib/generated/regex.rst`, `regex_boost.rst`
+- Tutorial — runnable: `tutorials/language/31_regex.das`; prose version: [31. Regex](https://daslang.io/doc/reference/tutorials/31_regex.html)

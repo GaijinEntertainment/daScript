@@ -28,7 +28,10 @@ Every `Feature` has:
 - `fCreatedAt` — creation source location
 - `fOwner` / `fOwnerTrackId` — which Channel/LockBox holds this Feature
 
-### Key files
+### Key files (repo-only)
+
+The `include/` headers ship in the SDK; the `src/` files below do not — they are
+daslang's own implementation, listed here for anyone working in the repo.
 
 | File | What |
 |---|---|

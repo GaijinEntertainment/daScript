@@ -318,7 +318,7 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
 
 ## Verification loop
 
-1. **Compile-check** — `bin/Release/daslang.exe -compile-only <file>.das`
+1. **Compile-check** — `bin/daslang -compile-only <file>.das`
    exits 0. Syntax and type errors surface here.
 2. **Listen** — run the ported pattern for 8-16 seconds. Compare to a
    mental image of the strudel.cc playback (or load the strudel.cc

@@ -154,11 +154,16 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
         PATTERN "*.das"
     )
 
+    # sfx_lab reads sounds/<name>.sfx via get_das_root() (batch_drums.das,
+    # batch_synth.das, export_drums.das), so the .sfx inputs and the lab's
+    # .das_package are runtime data, not build output — ship them with the scripts.
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daStrudel/
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daStrudel
         FILES_MATCHING
         PATTERN "*.das"
         PATTERN "*.md"
+        PATTERN "*.sfx"
+        PATTERN ".das_package"
     )
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/media/

@@ -42,7 +42,7 @@ The post-migration rules above are correct as of daslang 0.6.x.
 
 ### Pre-set `_type` on emitted `ExprVar` (and similar nodes) that flow into typed positions
 
-`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1138](src/ast/ast.cpp#L1138): `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
+`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1138](src/ast/ast.cpp#L1138), repo-only: `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
 
 Don't rely on the typer's later local-variable-resolution pass to fix this — its generic-instantiation pass runs **first** and commits to `auto`, cascading errors up through every downstream consumer.
 
@@ -84,7 +84,7 @@ Each macro-bearing module is `simulate`d into its **own context** at compile tim
 The practical pattern: to contribute macro-time state into module A's registry, the contributing code must **compile into A's context** — i.e. **A `require`s the contributor**, pulling its definitions in. Direction is *consumer → contributor*, never contributor-self-registers-into-consumer. (Example: the linq_fold engine's `splice_patterns` table lives in linq_fold's macro context, so a source adapter for an external module is pulled in via `linq_fold` requiring the adapter file — not the module registering itself.)
 
 This forces a hard `require` even when the dependency is logically optional / inverted (core requiring an external module). Make it conditional with two pieces (both available):
-- an **optional require** — `require ?<guard> <target>` (gen2) requires `<target>` only when module `<guard>` is available, and skips silently otherwise (a plain top-level `require` resolves at module-resolution time, *before* `static_if`, so `static_if` alone can't gate it — this is what the `?guard` form solves). See `doc/source/reference/language/modules.rst` "Optional requires".
+- an **optional require** — `require ?<guard> <target>` (gen2) requires `<target>` only when module `<guard>` is available, and skips silently otherwise (a plain top-level `require` resolves at module-resolution time, *before* `static_if`, so `static_if` alone can't gate it — this is what the `?guard` form solves). See [Modules](https://daslang.io/doc/reference/language/modules.html) § "Optional requires".
 - a **`static_if (typeinfo builtin_module_exists(<guard>))`** guard around the registration call and any dispatcher branch that names the contributor's symbols (the `static_if` drops its untaken branch before name resolution, so the symbols resolve only when the module is present).
 
 Note adapters can still *emit* code referencing the contributor's symbols by name (resolved at the user's splice site, like linq_fold_decs emitting `for_each_archetype` without requiring decs) — that's orthogonal to *registering* into the consumer's macro state, which is the part bound by the context model.
@@ -178,7 +178,7 @@ Pattern tags inside `qmatch(expr, <pattern>)`:
 
 Result is `QMatchResult` with `.matched : bool` and `.error : QMatchError` — captured bindings live in the pre-declared outer variables, NOT on the result struct. On match failure the bindings are left untouched.
 
-Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
+Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests (repo-only) in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
 
 **Not every probe fits qmatch.** Shapes with cross-statement constraints (e.g., "3 statements with specific types where push target equals res var and recordNames count matches sources count") exceed qmatch's grammar — fall back to hand-rolled `is X / as X` for those. Self-circular file dependencies are also out: `ast_match.das` itself can't use `qmatch` to define its own grammar.
 
@@ -189,7 +189,7 @@ Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ ado
 - **`qmatch`** when the pattern is *daslang source syntax* — `qmatch(that, $e(fa) * $e(fb) + $e(other))`. Operator trees, call shapes, field chains spelled as code.
 - **`match`** when the pattern is *node classes and fields* — `match (e) { if (ExprSwizzle(mask = "xy", value = $v(v))) … }` — or plain value dispatch (`match (op) { if ("*") … }`, enum tables like flatten's `zero_const_of`).
 
-What `match` does that hand-rolled ladders and qmatch don't (all test-pinned in `tests/match/`):
+What `match` does that hand-rolled ladders and qmatch don't (all test-pinned in `tests/match/`, repo-only):
 
 ```das
 match (keySide) {

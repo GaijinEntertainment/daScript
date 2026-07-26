@@ -153,19 +153,7 @@ if(TARGET libDasModuleStbImage)
     endif()
 endif()
 
-# Install C integration tutorial source files
-file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das_project
-)
-install(FILES ${C_INTEGRATION_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
-)
-
-# Install standalone CMakeLists.txt for building tutorials against the installed SDK.
-install(FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/CMakeLists.standalone.cmake
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
-    RENAME CMakeLists.txt
-)
+# NOTE: the install rules for these sources deliberately live in
+# tutorials/CMakeLists.txt, NOT here. This file is include()d only when
+# DAS_TUTORIAL_DISABLED is off, so keeping them here made "don't build the
+# tutorial executables" silently also mean "don't ship the tutorial sources".

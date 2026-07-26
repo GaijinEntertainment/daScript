@@ -25,6 +25,23 @@ The current ship list lives in [install/skills.list](../install/skills.list) —
 
 The CMake install rule (in root `CMakeLists.txt`) reads the manifest with `file(STRINGS ...)` and `install(FILES ...)` for each named basename. Missing files trigger `FATAL_ERROR` at configure time, so a typo in `install/skills.list` fails loudly.
 
+**Closure invariant.** A shipped skill may only reference `skills/<other>.md` when that other skill also ships — otherwise the SDK carries a dead link. The rule cuts both ways: a genuinely repo-only skill (`tests_in_repo.md`, `tutorials.md`, `documentation_rst.md`, `preflight.md`, `make_pr.md`, …) stays **off** the list, and a shipped skill pointing at one either gets reworded or marks the line `repo-only` (see below) rather than dragging it in. Enforced per-PR by the same `ci/check_shipped_skill_refs.awk` as the path rule — it takes the ship list via `-v shipped=`, so a skill sitting on disk but absent from `install/skills.list` is still caught.
+
+**Repo-internal paths must be marked `repo-only`.** A shipped skill that says "see
+`src/ast/ast_infer_type.cpp`" is a dead end in the SDK: `src/`, `tests/`, `benchmarks/`
+and `modules/*/src` are never bundled. Shipping them is not the answer — saying so is,
+so the reader skips the line instead of hunting a path that isn't there. Add the token
+`repo-only` either to the line itself (one-off prose mentions) or to the heading of a
+section that is entirely repo internals — a heading marker exempts that section only
+and resets at the next heading, so a mid-file internals section can't leak its
+exemption through the rest of the page. Enforced per-PR by
+`ci/check_shipped_skill_refs.awk`, run from `ci/smoke_test_bundle.sh` (the
+`bundle_smoke` job in `build.yml`). Fenced code blocks are exempt: they quote tool
+output verbatim and that text must stay accurate. `tests/` is not yet in the pattern —
+that class is still being sorted into inline-the-snippet vs quarantine.
+
+**Keep `install/skills.list` ASCII-only, comments included.** `file(STRINGS)` treats non-ASCII bytes as separators, so an em-dash inside a comment splits that line and the tail is read as a skill filename — the `FATAL_ERROR` then names a nonsense path. The call passes `ENCODING UTF-8` to blunt this, but plain ASCII is the reliable answer.
+
 ## What belongs in install instructions
 
 **Include (SDK-user-facing):**

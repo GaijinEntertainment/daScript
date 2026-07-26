@@ -2,7 +2,7 @@
 
 Read before touching `modules/dasLLVM/daslib/llvm_tune.das`, adding a `[tune]` kernel family,
 wiring a library into a per-box tune scope, or giving an app a tune policy. Full user-facing
-reference: `doc/source/reference/tune.rst`. Worked application: `modules/dasLLAMA/tune_for_this_box.md`.
+reference: `skills/tune.md`. Worked application: `modules/dasLLAMA/tune_for_this_box.md`.
 
 ## What it is
 
@@ -46,12 +46,12 @@ hand-copy trap). Several libraries share one file: tuners UPSERT their own keys
   a queue already created during JIT/tune startup. `set_jobque_threads_cap`, by contrast, takes the
   spawned-worker cap, so code targeting N total lanes passes `N-1` before the first queue use.
 - **Gates:** cross-box artifacts (`policies.tune_frozen` — set by the `-aot` driver and dastest's AST serializer) are fully tune-free, and AOT-consuming runs (`policies.aot`) only when the JIT is off (a stamp changes the semantic hash → AOT link fails; under `-jit` the JIT supersedes AOT bodies, stamps stay live). `aot_module` is NOT a tune signal (it means "module-shaped compile" — dastest sets it on every test compile and the serializer needs it). `-exe` (`jit_exe_mode`) still STAMPS (an exe next to a sidecar ships those winners; else the generic fallback) and still emits the status `[init]` (the artifact self-reports via `tune_status()`/`log_tune_status`), but the policy rail is dead. Split as `tune_aot_gate()` vs `tune_exe_gate()`. **daspkg release** applies untuned-does-not-start at BUILD time: the release-deps JSON carries `tune_scopes` (per-key completeness via `tune_scopes_status(prog)` — AST-walked, see the trap below); daspkg runs incomplete scopes' tuners, REBUILDS, and ships the sidecar beside the exe as `<bundle>.tune.json` touched newer than the exe (older = stale = ignored).
-- **Shared macro-module globals are PER-REQUIRING-MODULE COPIES.** llvm_exe calling an llvm_tune function reads llvm_exe's *copy* of `g_scopes` (empty) — the same trap as the `[llvm_code]` generator registry ("the right table copy"). Anything another macro module must read goes through the AST (annotations/stamps), files, or env — never a shared global. That's why `tune_scopes_status(prog)` walks `[tune_scope]` structure annotations + `[tune]` functions instead of the bank, and why `collect_status` reads stamps off the AST. **Emission half (fixed 2026-07-12):** a native `-exe` carrying any `[llvm_code]` kernel computes the target flags WITH host features and targets the host machine — decided ONCE before the flag pass in `run_jit` (`exe_host_cpu`) and used at `init_jit_target_flags`/`init_jit`/`write_exe` alike; generic flags would make every feature-gated generator decline to its reference body (the 11-15× dasLLAMA release regression), and flags/machine must never diverge (host-F16C flags on a generic machine lower fp16 to libcalls msvcrt never links). Kernel-free exes stay generic/redistributable. Artifact witness: `g_target_host_features` + the `llvm_code_selftest::host_features` probe (tests/jit_tests/exe_host_cpu.das).
+- **Shared macro-module globals are PER-REQUIRING-MODULE COPIES.** llvm_exe calling an llvm_tune function reads llvm_exe's *copy* of `g_scopes` (empty) — the same trap as the `[llvm_code]` generator registry ("the right table copy"). Anything another macro module must read goes through the AST (annotations/stamps), files, or env — never a shared global. That's why `tune_scopes_status(prog)` walks `[tune_scope]` structure annotations + `[tune]` functions instead of the bank, and why `collect_status` reads stamps off the AST. **Emission half (fixed 2026-07-12):** a native `-exe` carrying any `[llvm_code]` kernel computes the target flags WITH host features and targets the host machine — decided ONCE before the flag pass in `run_jit` (`exe_host_cpu`) and used at `init_jit_target_flags`/`init_jit`/`write_exe` alike; generic flags would make every feature-gated generator decline to its reference body (the 11-15× dasLLAMA release regression), and flags/machine must never diverge (host-F16C flags on a generic machine lower fp16 to libcalls msvcrt never links). Kernel-free exes stay generic/redistributable. Artifact witness: `g_target_host_features` + the `llvm_code_selftest::host_features` probe (`tests/jit_tests/exe_host_cpu.das`, repo-only).
 - **`stamp_llvm_code` records `tune_suffix`/`tune_from`** as extra `[llvm_code]` args — generators ignore unknown args by contract, and `tune_status` reads that stamped truth back off the AST (no macro-state bank).
 
 ## The dasLLAMA tuner (the worked consumer)
 
-`modules/dasLLAMA/harness/dasllama_tuner.das` is the scope tuner — a wrapper spawning
+`modules/dasLLAMA/harness/dasllama_tuner.das` (repo-only) is the scope tuner — a wrapper spawning
 `gen_tune_probe.das` (the `[tune]` generator grid) then `tune_kernels.das` (the `[tuned]`
 loop-hint grid + the `"runtime"` knob snapshot), both upserting the one env-pointed sidecar.
 `tune_kernels` records explicit shipped-fallback entries for kernels it doesn't sweep yet
@@ -68,7 +68,7 @@ map (sweep it, or record its shipped fallback).
 
 ## Testing
 
-`modules/dasLLVM/tests/llvm_tune_scope.das` is the end-to-end pattern: spawn the app as child daslang
+`modules/dasLLVM/tests/llvm_tune_scope.das` (repo-only) is the end-to-end pattern: spawn the app as child daslang
 processes across the policy flavors, use the `llvm_code_selftest::add_plus_k` generator (emits
 `a+b+k`) so the RESULT is a fingerprint of the stamped perm. The tuner is a seconds-fast fake
 that upserts via `tune_manifest_set`. Two scopes sharing the one sidecar prove the upsert

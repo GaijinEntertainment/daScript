@@ -154,8 +154,10 @@ def create_test_upload_file(path : string) {
 }
 
 def cleanup_upload_dir(dir : string) {
-    // Remove any files that might have been saved
-    remove("{dir}/testfile.txt")
+    // Must match the name the server saves under (see saved_path below) — the
+    // underscore was missing, so the file survived, remove(dir) failed on a
+    // non-empty dir, and _upload_test/_testfile.txt ended up committed.
+    remove("{dir}/_testfile.txt")
     remove(dir)
 }
 

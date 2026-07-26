@@ -318,7 +318,11 @@ addInterop<new_and_init, void *, vec4f>(*this, lib, "new_and_init",
     SideEffects::none, "new_and_init");
 ```
 
-## C++ Codebase Notes
+## C++ Codebase Notes (repo-only)
+
+Where things live inside daslang's own `src/` tree. The SDK ships `include/` but not
+`src/`, so these paths only resolve in a daslang checkout — skip this section if you
+are embedding the SDK rather than working on the compiler.
 
 - Main type inference: `src/ast/ast_infer_type.cpp` (implementation) + `include/daScript/ast/ast_infer_type.h` (class declarations for `CaptureLambda` and `InferTypes`)
 - Builtin runtime functions: `src/builtin/module_builtin_runtime.cpp`
@@ -343,7 +347,13 @@ virtual ModuleAotType aotRequire(TextWriter & tw) const override {
 
 Real example: `Module_BuiltIn::addTime()` binds `ref_time_ticks`, `get_time_usec`, `get_time_nsec` (declared in `performance_time.h`). The `aotRequire()` must emit `#include "daScript/misc/performance_time.h"` or AOT compilation of any script using these functions will fail.
 
-See `skills/aot_testing.md` for the full AOT pipeline and testing infrastructure.
+Generate the stubs with `bin/daslang -aot input.das output.cpp`, and add `-aot-macros` when
+the script defines macros. If a run later reports `error[50101]: AOT link failed on <fn>`,
+the recorded hash no longer matches the source — regenerate and rebuild.
+
+The daslang repo's own AOT test harness (repo-only: the `test_aot` binary, `tests/aot`
+registration, `libDaScriptAot` regeneration) is covered by `skills/aot_testing.md`,
+which is not shipped — none of it applies to an SDK install.
 
 ### Key AST function flags
 
@@ -376,7 +386,7 @@ tp << "leaked " << count << " handles\n";
 
 Applies to permanent diagnostics AND temporary debug prints — don't
 leave `fprintf` scaffolding in the tree even if you plan to remove it.
-Canonical patterns: `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`)
+Canonical patterns (repo-only): `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`)
 and `include/daScript/ast/ast_handle.h` (`dumpHandleLeaks<T>`).
 
 ## C-string builtins: guard `!str || !*str`
