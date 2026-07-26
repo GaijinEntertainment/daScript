@@ -514,6 +514,9 @@ def draw_sha_copy_icon(hash, row_id : string;
 
 def draw_pr_review(repository : RepositorySnapshot const;
                    worktree : WorktreeState const) {
+    let base = (!empty(worktree.review_base_ref)
+        ? worktree.review_base_ref : "detecting base...")
+    draw_perspective_banner("PR", "{worktree.branch}  ->  {base}")
     var commit_row = 0
     let sha_width = (CalcTextSize("000000000").x
         + GetFrameHeightWithSpacing() + 8.0f)
@@ -620,7 +623,28 @@ def draw_history_commits(repository : RepositorySnapshot const;
             commit_indices |> push(index)
         }
     }
+    // The branch/base delimiter (note 22): rows above it are outgoing (the PR
+    // view's review set); the first row outside that set starts base history.
+    var inscope outgoing : table<string>
+    for (commit in repository.review_commits) {
+        if (commit.worktree_path == worktree.path) {
+            outgoing |> insert(commit.hash)
+        }
+    }
+    var boundary_row = -1
+    if (!empty(outgoing)) {
+        for (position, index in count(), commit_indices) {
+            if (!key_exists(outgoing, repository.history_commits[index].hash)) {
+                boundary_row = position
+                break
+            }
+        }
+    }
+    if (boundary_row == 0) {
+        boundary_row = -1
+    }
     let count = length(commit_indices)
+    let total = count + (boundary_row >= 0 ? 1 : 0)
     let sha_width = (CalcTextSize("000000000").x
         + GetFrameHeightWithSpacing() + 8.0f)
     let table_flags = (ImGuiTableFlags.Resizable | ImGuiTableFlags.RowBg |
@@ -634,9 +658,23 @@ def draw_history_commits(repository : RepositorySnapshot const;
         table_setup_column("Title", ImGuiTableColumnFlags.WidthStretch, 0.72f)
         table_setup_column("Author", ImGuiTableColumnFlags.WidthStretch, 0.28f)
         table_headers_row()
-        list_clipper(count) $(start, end_) {
+        list_clipper(total) $(start, end_) {
             for (row in range(start, end_)) {
-                let commit = repository.history_commits[commit_indices[row]]
+                if (boundary_row >= 0 && row == boundary_row) {
+                    let base = (!empty(worktree.review_base_ref)
+                        ? worktree.review_base_ref : "base")
+                    table_next_row()
+                    table_set_column_index(0)
+                    text_disabled(HISTORY_BASE_MARK, (text = "base"))
+                    table_set_column_index(1)
+                    text_colored(HISTORY_BASE_TEXT,
+                        (color = token_branch_color(),
+                            text = "^ outgoing on {worktree.branch}    v {base}"))
+                    continue
+                }
+                let commit_row = ((boundary_row >= 0 && row > boundary_row)
+                    ? row - 1 : row)
+                let commit = repository.history_commits[commit_indices[commit_row]]
                 let selected_commit = !empty(g_requested_history_commit) ? g_requested_history_commit : worktree.history_commit
                 table_next_row()
                 table_set_column_index(0)
@@ -667,8 +705,21 @@ def draw_history_commits(repository : RepositorySnapshot const;
     }
 }
 
+// Loud active-perspective line (note 22): only the selected tab's body runs,
+// so one shared widget set renders exactly once per frame.
+def draw_perspective_banner(name, context : string) {
+    text_colored(PERSPECTIVE_BADGE,
+        (color = token_warning_color(), text = name))
+    same_line(PERSPECTIVE_JOIN)
+    text_colored(PERSPECTIVE_CONTEXT,
+        (color = token_branch_color(), text = context))
+    separator(PERSPECTIVE_SEPARATOR)
+}
+
 def draw_history_review(repository : RepositorySnapshot const;
                         worktree : WorktreeState const) {
+    draw_perspective_banner("HISTORY",
+        "{worktree.branch} - outgoing first, then base")
     ensure_history(repository, worktree, worktree.branch)
     draw_history_commits(repository, worktree)
 }
@@ -864,6 +915,7 @@ def draw_tree_commits(repository : RepositorySnapshot const;
 
 def draw_tree_review(repository : RepositorySnapshot const;
                      worktree : WorktreeState const) {
+    draw_perspective_banner("TREE", worktree.branch)
     if (g_client != null) {
         let identity = "{repository.record.id}\n{worktree.path}"
         if (g_client.last_refs_identity != identity) {
@@ -1062,6 +1114,7 @@ def draw_git_activity_window() {
                         }
                         tab_item(GIT_PROJECT_TAB.PUBLIC, (text = "Project", closable = false,
                             flags = ImGuiTabItemFlags.None)) {
+                            draw_perspective_banner("PROJECT", worktree.path)
                             draw_project_files()
                         }
                     }

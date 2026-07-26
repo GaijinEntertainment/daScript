@@ -316,6 +316,15 @@ imgui_mouse_* bypass commands while input is detached.
   Live-verified: colored rows, claim markers on both occupied
   worktrees, both context items, dead-PTY navigation no longer
   surfaces "unknown session".
+- DONE 22 perspective indication (2026-07-25): every Git Activity tab
+  opens with a loud banner — perspective name in the warning accent,
+  context in the branch tint (PR shows "branch -> base", History
+  "branch - outgoing first, then base", Tree the branch, Project the
+  worktree path). The History table inserts a branch/base delimiter
+  row where the outgoing (review-set) commits end and base history
+  begins, list_clipper-safe via a +1 visual-row mapping. Verified
+  live on the HISTORY banner; the delimiter sits below the fold on a
+  177-ahead branch (deterministic row math against the review set).
 - 20 token color language (one shared palette module feeds 18/20/22).
   - 20 FOUNDATION DONE (2026-07-25): rich_tokens.das names every token
     color once (sha/branch/pid/path dir-sep-name/warning/error/
