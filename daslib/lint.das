@@ -388,8 +388,57 @@ class LintVisitor : AstVisitor {
         validate_argument(arg, "LINT013", "block argument")
     }
 
+    // --- LINT017: int64/uint64 cast of a call that has a long_ counterpart ---
+
+    def lint017_long_twin(fname : string; icall : ExprCall?) : string {
+        // Receiver-gated, so a same-named user overload or the fixed-array `length` generic in daslib/builtin.das (which has no long_ twin) stays silent.
+        let nargs = length(icall.arguments)
+        if (nargs == 0 || icall.arguments[0]._type == null) return ""
+        let bt = icall.arguments[0]._type.baseType
+        if (fname == "length" && (bt == Type.tArray || bt == Type.tTable || bt == Type.tString)) return "long_length"
+        if (fname == "capacity" && (bt == Type.tArray || bt == Type.tTable)) return "long_capacity"
+        if (fname == "count" && (bt == Type.tArray || bt == Type.tIterator)) return "long_count"
+        if (fname == "find_index" && bt == Type.tArray && nargs == 2) return "long_find_index"
+        if ((fname == "fread" || fname == "fwrite") && nargs == 2) return "long_{fname}"
+        return ""
+    }
+
+    def check_lint017_long_cast(expr : ExprCall?) : void {
+        if (noLint || genericDepth > 0
+            || (expr.name != "int64" && expr.name != "uint64")
+            || length(expr.arguments) != 1) return
+        let inner = expr.arguments[0]
+        if (!(inner is ExprCall)) return
+        let icall = inner as ExprCall
+        let iname = string(icall.func != null && icall.func.fromGeneric != null
+            ? icall.func.fromGeneric.name
+            : icall.name)
+        let twin = lint017_long_twin(iname, icall)
+        if (empty(twin)) return
+        lint_error("LINT017: {expr.name}({iname}(...)) computes a 32-bit result and widens it, so it still wraps past 2^31; call {twin}(...) instead", expr.at)
+    }
+
+    // --- LINT018: narrowing the size argument of memcpy / memcmp ---
+
+    def check_lint018_mem_size_narrowing(expr : ExprCall?) : void {
+        if (noLint || genericDepth > 0
+            || (expr.name != "memcpy" && expr.name != "memcmp")
+            || length(expr.arguments) != 3) return
+        let size = expr.arguments[2]
+        if (!(size is ExprCall)) return
+        let scall = size as ExprCall
+        if (scall.name != "int" || length(scall.arguments) != 1) return
+        let src = scall.arguments[0]._type
+        if (src == null) return
+        let bt = src.baseType
+        if (bt != Type.tInt64 && bt != Type.tUInt64 && bt != Type.tUInt) return
+        lint_error("LINT018: int(...) truncates the {expr.name} size above 2^31; {expr.name} has uint/int64/uint64 overloads, so drop the cast", expr.at)
+    }
+
     def override preVisitExprCall(expr : ExprCall?) : void {
         check_string_push_clone(expr)
+        check_lint017_long_cast(expr)
+        check_lint018_mem_size_narrowing(expr)
     }
 
     // `assume name = <block>` keeps a template block at the alias-definition site; every use of
