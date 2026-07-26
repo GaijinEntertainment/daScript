@@ -84,9 +84,27 @@ def draw_selected_session_context() {
     if (g_client == null || empty(g_client.selected_id)) return
     for (session in g_client.sessions) {
         if (session.id != g_client.selected_id) continue
-        let purpose = !empty(session.purpose) ? to_upper(session.purpose) : to_upper(session.kind)
-        text("{purpose}  {session.id}")
-        text_disabled("Origin: {session.worktree_path}")
+        // Names over plumbing ids (note 46): prefer the herd card's name,
+        // then the display name; the raw session id lives in the tooltip.
+        var title = session.display_name
+        for (record in g_client.herd_sessions) {
+            if (record.pty_session_id == session.id) {
+                title = record.name
+                break
+            }
+        }
+        if (empty(title)) {
+            title = session.id
+        }
+        let purpose = !empty(session.purpose) ? session.purpose : session.kind
+        text("{title}")
+        if (IsItemHovered()) {
+            set_tooltip(CONTEXT_ID_TOOLTIP, "{session.id}  |  {purpose}")
+        }
+        text_disabled("{purpose} | {session.state} | {base_name(session.worktree_path)}")
+        if (IsItemHovered()) {
+            set_tooltip(CONTEXT_ORIGIN_TOOLTIP, session.worktree_path)
+        }
         if (!empty(session.task_context)) {
             text_wrapped((text = session.task_context))
         }
@@ -226,8 +244,32 @@ def private herd_age_label(updated_wall_s : int64) : string {
 }
 
 def private attach_herd_card(record : HerdSession) {
-    if (g_client == null || empty(record.pty_session_id)) return
+    if (g_client == null) return
     ui_event("herd-card-attach {record.id}")
+    // A session pick IS a worktree pick (note 48): aim the git surfaces at
+    // the card's tree whether or not a terminal can attach.
+    if (!empty(record.repository_id) && !empty(record.worktree_path)
+            && (g_selected_repository_id != record.repository_id
+                || g_selected_worktree_path != record.worktree_path)) {
+        g_selected_repository_id = record.repository_id
+        g_selected_worktree_path = record.worktree_path
+        g_selection_explicit = true
+        g_client->refresh_repository(record.repository_id)
+        g_client->request_repository_review(record.repository_id,
+            record.worktree_path)
+    }
+    // Attach only while the PTY still exists on the watcher. A stale id
+    // bounces ("unknown session") and the auto-attach yanks the selection
+    // straight back (note 43).
+    if (empty(record.pty_session_id)) return
+    var pty_exists = false
+    for (session in g_client.sessions) {
+        if (session.id == record.pty_session_id) {
+            pty_exists = true
+            break
+        }
+    }
+    if (!pty_exists) return
     g_client->attach_session(record.pty_session_id)
     g_open_terminal_pending = true
     g_focus_terminal_pending = true
@@ -262,18 +304,40 @@ def draw_herd_cards() {
             }
         }
         icon(profile_agent ? "bolt" : "chevron-right", line)
+        if (IsItemHovered()) {
+            set_tooltip(HERD_ICON_TOOLTIP, profile_agent
+                ? "Agent session (profile '{record.profile_id}')"
+                : "Shell session (profile '{record.profile_id}')")
+        }
         same_line(HERD_ICON_JOIN[index])
         var state_glyph = "clock"
+        var state_hint = "never launched"
         if (record.state == "running") {
             state_glyph = "play"
+            state_hint = "running"
         } elif (record.state == "exited") {
-            state_glyph = (record.launch_count == 0 ? "clock"
-                : (record.exit_code == 0l ? "check" : "warning"))
+            if (record.launch_count == 0) {
+                state_glyph = "clock"
+                state_hint = "created, never launched"
+            } elif (record.exit_code == 0l) {
+                state_glyph = "check"
+                state_hint = "exited cleanly"
+            } else {
+                state_glyph = "warning"
+                state_hint = "exited with code {record.exit_code}"
+            }
         }
         icon(state_glyph, line)
+        if (IsItemHovered()) {
+            set_tooltip(HERD_ICON_TOOLTIP, state_hint)
+        }
         same_line(HERD_STATE_JOIN[index])
         if (record.conflicted) {
             icon("warning", line)
+            if (IsItemHovered()) {
+                set_tooltip(HERD_ICON_TOOLTIP,
+                    "Another session attends this worktree")
+            }
             same_line(HERD_CONFLICT_JOIN[index])
         }
         let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
@@ -509,7 +573,8 @@ def draw_session_list() {
         }
         if (visible_sessions == 0) {
             text_disabled(NO_SESSION_LABEL,
-                (text = g_show_exited ? "No sessions" : "No active sessions"))
+                (text = g_show_exited ? "No sessions"
+                    : "No running terminals (tasks and exited are hidden)"))
         }
     }
     text_disabled("Exited sessions are retained and hidden by default.")
@@ -543,21 +608,28 @@ def draw_session_list() {
             draw_attention_rows("")
         }
     }
-    // Error history (note 28): the chrome shows only the latest error; the
-    // ring keeps what was dismissed. Hidden while empty.
+    // Error history (note 28, reshaped per note 46): collapsed by default,
+    // scrollable, clearable. The ring keeps dismissed chrome errors.
     if (!empty(g_error_history)) {
         separator()
-        text("Errors ({length(g_error_history)})")
-        same_line()
-        if (small_button(ERRORS_CLEAR, (text = "clear"))) {
-            g_error_history |> clear()
-            g_error_history_wall |> clear()
-        }
-        for (error_index in range(length(g_error_history))) {
-            // Newest last in storage; show newest first.
-            let ring = length(g_error_history) - 1 - error_index
-            text_disabled(ERROR_HISTORY_ROW[error_index],
-                (text = "{herd_age_label(g_error_history_wall[ring])}  {g_error_history[ring]}"))
+        collapsing_header(ERRORS_HEADER,
+                "Errors ({length(g_error_history)})###SessionErrors",
+                false, ImGuiTreeNodeFlags.None) {
+            if (small_button(ERRORS_CLEAR, (text = "clear"))) {
+                g_error_history |> clear()
+                g_error_history_wall |> clear()
+            }
+            child(ERRORS_CHILD, (text = "errors",
+                    size = float2(0.0f, 120.0f),
+                    child_flags = ImGuiChildFlags.Borders,
+                    window_flags = ImGuiWindowFlags.None)) {
+                for (error_index in range(length(g_error_history))) {
+                    // Newest last in storage; show newest first.
+                    let ring = length(g_error_history) - 1 - error_index
+                    text_disabled(ERROR_HISTORY_ROW[error_index],
+                        (text = "{herd_age_label(g_error_history_wall[ring])}  {g_error_history[ring]}"))
+                }
+            }
         }
     }
 }

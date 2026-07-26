@@ -713,8 +713,16 @@ def public repository_working_preview_path(worktree_path : string;
 }
 
 def private find_worktree(runtime : RepositoryRuntime?; path : string) : int {
+    // Canonical compare: herd records, session origins, and git output can
+    // disagree on slash direction and drive-letter case for the same tree
+    // ("D:/work" vs "D:/Work" seen live); exact equality silently missed.
+    let wanted = (get_platform_name() == "windows"
+        ? to_lower(normalized_path(path)) : normalized_path(path))
     for (index in range(length(runtime.snapshot.worktrees))) {
-        if (runtime.snapshot.worktrees[index].path == path) return index
+        let candidate = (get_platform_name() == "windows"
+            ? to_lower(normalized_path(runtime.snapshot.worktrees[index].path))
+            : normalized_path(runtime.snapshot.worktrees[index].path))
+        if (candidate == wanted) return index
     }
     return -1
 }

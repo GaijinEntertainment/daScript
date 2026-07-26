@@ -187,12 +187,22 @@ def draw_repositories_window() {
                 let dirty_label = dirty > 0 ? "  *{dirty}" : ""
                 if (g_client->herd_worktree_conflicted(worktree.path)) {
                     icon("warning", GetTextLineHeight())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP,
+                            "Two or more sessions attend this worktree")
+                    }
                     same_line(WORKTREE_CONFLICT_JOIN[row])
                 }
                 let active_herd = active_herd_for_worktree(worktree.path)
                 if (active_herd >= 0) {
-                    icon(g_client.herd_sessions[active_herd].state == "running"
-                        ? "play" : "clock", GetTextLineHeight())
+                    let claim_running = (g_client.herd_sessions[active_herd].state
+                        == "running")
+                    icon(claim_running ? "play" : "clock", GetTextLineHeight())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP, (claim_running
+                            ? "Session '{g_client.herd_sessions[active_herd].name}' is running here"
+                            : "Session '{g_client.herd_sessions[active_herd].name}' is attached here (not running)"))
+                    }
                     same_line(WORKTREE_ACTIVE_JOIN[row])
                 }
                 // Transparent label keeps the row id + snapshot text; the
@@ -1179,7 +1189,7 @@ def git_ui_init() {
 }
 
 def draw_repositories_dock() {
-    dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Repositories & Worktrees", closable = true,
+    dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Git Repositories & Worktrees###Repositories", closable = true,
             flags = ImGuiWindowFlags.None)) {
         window_zoom_scope("repositories") {
             draw_repositories_window()

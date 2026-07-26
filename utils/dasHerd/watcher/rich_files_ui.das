@@ -406,7 +406,15 @@ def private draw_project_tree() {
         }
     }
     if (row == 0 && !g_worktree_files_loading) {
-        text_disabled("Select a worktree to browse its files")
+        // Say what is actually missing (note 48): selection, a failed
+        // listing, and an empty tree are three different states.
+        if (empty(g_selected_worktree_path)) {
+            text_disabled("Select a worktree to browse its files")
+        } elif (!empty(g_worktree_files_error)) {
+            text_disabled("File list failed: {g_worktree_files_error}")
+        } else {
+            text_disabled("No files listed - Refresh re-reads the worktree")
+        }
     }
 }
 

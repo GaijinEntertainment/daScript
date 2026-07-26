@@ -106,8 +106,13 @@ def draw_terminal_window() {
                 - GetStyle().ItemSpacing.y))
     with_font(g_terminal_font) {
         if (g_focus_terminal_pending) {
-            set_keyboard_focus_here()
-            g_focus_terminal_pending = false
+            // The window raise lands a frame after open; focusing the input
+            // while the window is still unfocused is a no-op that used to eat
+            // the request (note 44). Hold the flag until the raise arrives.
+            if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
+                set_keyboard_focus_here()
+                g_focus_terminal_pending = false
+            }
         }
         let result <- imgui_terminal("watcher", g_terminal, g_terminal_view,
             g_terminal_cache, terminal_style)

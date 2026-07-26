@@ -39,8 +39,10 @@ require ./rich_launcher_ui.das
 require ./rich_files_ui.das
 require ./rich_live.das
 
-// Session preset: the terminal is the spine; the inspector and Git
-// surfaces share a modest right column (HERDER_UX.md scenarios).
+// Session preset: sessions own the left (sessions-first); ALL git surfaces
+// live on the right — repositories on top, Activity/Inspector tabbed in the
+// middle, Changelist at the bottom (notes 49 and the external-sessions
+// layout call: "worktree stuff moves to the right").
 def private setup_session_layout(dock_id : uint) {
     DockBuilderRemoveNode(dock_id)
     DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
@@ -50,23 +52,24 @@ def private setup_session_layout(dock_id : uint) {
     var center_id : uint = 0u
     var right_id : uint = 0u
     var repositories_id : uint = 0u
-    var sessions_id : uint = 0u
+    var changelist_id : uint = 0u
     DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.18f, left_id, center_id)
-    DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.45f,
-        sessions_id, repositories_id)
     DockBuilderSplitNode(center_id, ImGuiDir.Right, 0.32f, right_id, center_id)
-    DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
-    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
-    DockBuilderDockWindow("File Inspector", right_id)
-    DockBuilderDockWindow("Git Changelist", right_id)
+    DockBuilderSplitNode(right_id, ImGuiDir.Up, 0.28f, repositories_id, right_id)
+    DockBuilderSplitNode(right_id, ImGuiDir.Down, 0.45f, changelist_id, right_id)
+    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", left_id)
+    DockBuilderDockWindow("Git Repositories & Worktrees###Repositories", repositories_id)
     DockBuilderDockWindow("Git Activity", right_id)
+    DockBuilderDockWindow("File Inspector", right_id)
     DockBuilderDockWindow("Settings", right_id)
+    DockBuilderDockWindow("Git Changelist", changelist_id)
     DockBuilderDockWindow("Terminal", center_id)
     DockBuilderFinish(dock_id)
     TERMINAL_WIN.pending_raise = true
 }
 
-// Review preset: terminal and inspector side by side, one Git column.
+// Review preset: terminal and inspector side by side; same sessions-left /
+// git-right shape as the session preset.
 def private setup_review_layout(dock_id : uint) {
     DockBuilderRemoveNode(dock_id)
     DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
@@ -75,20 +78,19 @@ def private setup_review_layout(dock_id : uint) {
     var left_id : uint = 0u
     var work_id : uint = 0u
     var repositories_id : uint = 0u
-    var sessions_id : uint = 0u
     var git_column_id : uint = 0u
     var activity_id : uint = 0u
     var changelist_id : uint = 0u
     var terminal_id : uint = 0u
     DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.14f, left_id, work_id)
-    DockBuilderSplitNode(left_id, ImGuiDir.Down, 0.45f,
-        sessions_id, repositories_id)
     DockBuilderSplitNode(work_id, ImGuiDir.Right, 0.24f, git_column_id, work_id)
-    DockBuilderSplitNode(git_column_id, ImGuiDir.Down, 0.55f,
+    DockBuilderSplitNode(git_column_id, ImGuiDir.Up, 0.28f,
+        repositories_id, git_column_id)
+    DockBuilderSplitNode(git_column_id, ImGuiDir.Down, 0.5f,
         changelist_id, activity_id)
     DockBuilderSplitNode(work_id, ImGuiDir.Left, 0.40f, terminal_id, work_id)
-    DockBuilderDockWindow("Repositories & Worktrees", repositories_id)
-    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", sessions_id)
+    DockBuilderDockWindow("Sessions & Activity###SessionsActivity", left_id)
+    DockBuilderDockWindow("Git Repositories & Worktrees###Repositories", repositories_id)
     DockBuilderDockWindow("Git Activity", activity_id)
     DockBuilderDockWindow("Git Changelist", changelist_id)
     DockBuilderDockWindow("Terminal", terminal_id)
@@ -279,7 +281,7 @@ def private register_commands() {
     register_herd_command("session.powershell", "Session", "PowerShell here",
         command_binding("session.powershell", ImGuiKey.P, primary = true, shift = true),
         @@command_powershell)
-    register_herd_command("view.repositories", "View", "Repositories & Worktrees",
+    register_herd_command("view.repositories", "View", "Git Repositories & Worktrees",
         CommandBinding(), @@() { open_dock_window(REPOSITORIES_WIN); })
     register_herd_command("view.sessions", "View", "Sessions & Activity",
         command_binding("view.sessions", ImGuiKey.S, primary = true, shift = true),
@@ -371,7 +373,7 @@ def draw_main_menu() {
         }
         menu(VIEW_MENU, (text = "View", enabled = true)) {
             if (menu_label(VIEW_REPOSITORIES,
-                    (text = "Repositories & Worktrees", selected = REPOSITORIES_WIN.open,
+                    (text = "Git Repositories & Worktrees", selected = REPOSITORIES_WIN.open,
                         shortcut = herd_command_shortcut("view.repositories")))) {
                 let _ = run_herd_command("view.repositories")
             }

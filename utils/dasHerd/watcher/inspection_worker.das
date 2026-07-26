@@ -282,6 +282,15 @@ def private prepare_worker_main(var jobs : Channel?&;
                 kind = InspectorPrepareEventKind.started,
                 generation = job.generation))
             let started_at = ref_time_ticks()
+            // The job is a temporary reference into channel/sender memory; the
+            // sender's context is free to GC-relocate its strings while this
+            // thread is deep in a tree-sitter parse. Clone every string the
+            // job carries into THIS context before any long work (live crash:
+            // ts_decode_utf8 read past a freed buffer mid-highlight).
+            let patch_text = clone_string(job.patch)
+            let job_view_text = clone_string(job.view_text)
+            let view_base64 = clone_string(job.view_base64)
+            let language = clone_string(job.language)
             var failure = ""
             var parsed = GitParsedPatch()
             var old_document = TextSourceDocument()
@@ -298,7 +307,7 @@ def private prepare_worker_main(var jobs : Channel?&;
             var preview_height = 0
             var preview_error = ""
             let failed = catch_prepare_panic(failure) {
-                var prepared_patch <- git_parse_unified_patch(job.patch)
+                var prepared_patch <- git_parse_unified_patch(patch_text)
                 if (prepared_patch.error == "diff contains no text hunks"
                         && job.view_available) {
                     prepared_patch.error = ""
@@ -307,8 +316,8 @@ def private prepare_worker_main(var jobs : Channel?&;
                     failure = prepared_patch.error
                 } else {
                     if (!prepared_patch.binary) {
-                        if (job.view_available || !empty(job.view_text)) {
-                            view_source = job.view_text
+                        if (job.view_available || !empty(job_view_text)) {
+                            view_source = job_view_text
                         } else {
                             view_source = prepared_patch.new_text
                         }
@@ -319,10 +328,10 @@ def private prepare_worker_main(var jobs : Channel?&;
                         preview_error = "Binary preview is empty"
                     } elif (job.view_byte_count < 0) {
                         preview_error = "Binary transport reported an invalid byte count"
-                    } elif (empty(job.view_base64)) {
+                    } elif (empty(view_base64)) {
                         preview_error = "Binary preview bytes are unavailable for this comparison"
                     } else {
-                        let decoded = base64_decode(job.view_base64,
+                        let decoded = base64_decode(view_base64,
                             decoded_view_bytes)
                         if (decoded < 0 || decoded != job.view_byte_count) {
                             preview_error = "Binary transport failed exact-byte validation"
@@ -344,9 +353,9 @@ def private prepare_worker_main(var jobs : Channel?&;
                     let old_source = inspector_reconstruct_old_source(
                         view_source, prepared_patch)
                     var full_old <- tree_sitter_source_document(
-                        old_source, job.language, job.generation)
+                        old_source, language, job.generation)
                     var full_new <- tree_sitter_source_document(
-                        view_source, job.language, job.generation)
+                        view_source, language, job.generation)
                     var prepared_old <- inspector_project_full_syntax(
                         full_old, prepared_patch.old_aligned_text,
                         prepared_patch.rows, true, job.generation)
@@ -382,7 +391,7 @@ def private prepare_worker_main(var jobs : Channel?&;
                                 line_index = line, kind = TextSourceLineMarkKind.added))
                         }
                         view_document <- full_new
-                        if (job.language == "markdown") {
+                        if (language == "markdown") {
                             var prepared_markdown <- md_parse(view_source)
                             if (!prepared_markdown.ok) {
                                 failure = (empty(prepared_markdown.error)
