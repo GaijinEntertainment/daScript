@@ -10,7 +10,11 @@ A Copilot round is complete only when all of these are true:
 2. Every corresponding review conversation is resolved, including rejected suggestions.
 3. A fresh query reports zero unresolved review threads. Paginate if GraphQL reports `hasNextPage`; never mistake the first page for the complete set.
 4. Copilot's latest review `commit_id` equals the PR's current `headRefOid`.
-5. That current-tip review produced no new comments.
+5. That current-tip review's comments were ALL handled — **the terminal state is a review
+   where NOTHING GOT ACCEPTED** (zero comments, or every comment rejected with evidence,
+   replied, resolved, and NO push made). **YOU DO NOT MERGE ON COPILOT RUNNING OUT — you
+   merge on a round you judged and closed without ceding anything.** Chasing a zero-comment
+   review by accepting-and-repushing is the anti-pattern this rule exists to kill.
 
 **Any push invalidates items 4-5.** Re-request Copilot after every push without exception, including formatting, documentation, generated-file, merge-conflict, and CI-only fixes. Do not rely on `review_on_push`.
 
@@ -58,21 +62,40 @@ If a check goes red:
 
 ## 3. Triaging review comments — discuss BEFORE acting
 
-When a review lands (especially Copilot — fast, often verbose), **don't auto-execute**. Pull the comments, classify each one, and surface to the user with a verdict per comment. Get user sign-off before changing code or text for an accepted/uncertain suggestion; clear rejections need no edit and may be closed immediately.
+# ⛔ THE REVIEWER IS THE TOOL. YOU ARE THE JUDGE. ⛔
+
+**CLAUDE is trusted with Copilot — Copilot is NOT trusted with Claude.** Copilot is a
+noise-generator that sometimes surfaces a real bug. Your job is to EXTRACT the signal and
+THROW AWAY the rest, not to appease the tool by fixing what it prints. This instruction has
+been given REPEATEDLY and ignored REPEATEDLY — that stops here.
+
+# THE ACCEPTANCE BAR IS EXACTLY TWO ITEMS. THERE IS NO THIRD.
+
+1. **AN ACTUAL BUG** — reachable in shipped use, at real scale, with a real consequence.
+2. **AN ACTUAL FACTUAL ERROR IN PROSE** — a doc/comment/diagnostic that states something UNTRUE.
+
+**EVERYTHING ELSE IS A REJECT. NO EXCEPTIONS. NOT ONE.**
+- ❌ NOT nits. Not "incomplete sentence", not "could be clearer", not style symmetry.
+- ❌ NOT bugs that never happen. A leak on a compile-failing error path is NOT A BUG —
+  the process is already dying. Cleanup "consistency" on a dead branch is NOT A BUG.
+- ❌ NOT guards against asteroid hits. Overflows past plausible hardware, impossible states,
+  "what if the module differs" when it provably doesn't — REJECT.
+- ❌ NOT "make it structural" tightening of something already proven correct in context.
+- ❌ NOT hygiene/determinism cosmetics — sorted diagnostics, micro-allocs beside bigger ones.
+- ❌ NOT repo-divergent "better ways".
+- ❌ NOT "cheap to fix". CHEAP IS NOT A REASON. Every accepted nit hands Copilot a fresh
+  diff and BUYS THE NEXT ROUND. The drip is self-inflicted.
+
+**AN ALL-REJECT ROUND IS THE EXPECTED, HEALTHY, NORMAL OUTCOME.** Each reject costs one
+evidence sentence. If you find yourself accepting more than the rare genuine bug per PR,
+you are being farmed by the tool.
 
 Fetch the comments:
 ```bash
 gh api repos/<owner>/<repo>/pulls/<PR>/comments | jq '.[] | {id, path, line: (.line // .original_line), body}'
 ```
 
-**Be conservative — default to reject.** Only ACCEPT a comment when it is a **real bug**, a **real issue**, or **factually incorrect** doc/comment text. REJECT everything else:
-- a failure with no realistic path in shipped use
-- an overflow/resource limit that cannot be reached within plausible hardware and process lifetime
-- an over-defensive guard (protecting a case that can't occur)
-- a suggestion that diverges from how the rest of the repo already does it
-- prose / wording nits — wording has to be **way off or factually wrong** to be worth a change
-
-Rejecting is the common case, not the exception. Give the user a concise per-comment verdict:
+Give the user a concise per-comment verdict:
 
 | Verdict | Means | Action |
 |---|---|---|
@@ -177,7 +200,8 @@ Each fix iteration: triage → discuss → fix → gate → amend → force-push
 |---|---|---|
 | Watch PR | `gh pr checks`, `gh api .../comments`, `gh api .../reviews` | Surface as soon as Copilot comments, CI fails, or both CI + Copilot are done |
 | CI fail | `gh pr checks`, `gh run view --log-failed` | Fix own, fix obvious pre-existing, ask about unclear |
-| Triage comments | `gh api .../pulls/<PR>/comments` | **Default reject**; require realistic reachability, scale, and impact. Prose-only round → resolve and land |
+| Triage comments | `gh api .../pulls/<PR>/comments` | **YOU are the judge, Copilot is the tool.** Accept ONLY actual bugs + actual factual prose errors — no nits, no never-happens bugs, no asteroid guards. All-reject rounds are the NORM |
+| Terminal state | a judged round with NOTHING accepted (zero comments, or all rejected + resolved, no push) | Never merge on "Copilot ran out" via accept-and-repush cycles |
 | Re-run gates | Focused tests + directly applicable format/generator/doc checks | Full preflight once before initial PR push; CI handles complete reruns after review fixes |
 | Amend/push | `git commit --amend --no-edit`, `git push --force-with-lease` | Keep squashed branch squashed |
 | Reply | `mcp__github__add_reply_to_pull_request_comment` | Every addressed comment gets a reply |
