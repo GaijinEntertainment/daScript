@@ -55,7 +55,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
-| `skills/writing_tests.md` | Writing or editing test files under `tests/` |
+| `skills/writing_tests.md` | Writing or editing any dastest test (ships in the SDK; applies everywhere) |
+| `skills/tests_in_repo.md` | Adding/moving tests **in this repo** — AOT registration for a new `tests/` dir, the `tests/.das_test` gating filter, deep-engine model-test rules. Repo-only; deliberately not shipped |
 | `skills/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` (doctest, leak guards, ctest wiring) |
 | `skills/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
@@ -69,6 +70,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
 | `skills/external_module_debugging.md` | Working on an external daslang module (dasImgui, dasPUGIXML, dasSQLITE, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
 | `skills/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
+| `skills/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the audience decision (SDK vs repo-only), the shipping gate, and the review checklist for what the gate can't check |
 | `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
 | `skills/llvm_tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, per-box manifests, the runtime-tune-and-re-exec model, the AOT/-exe gates, adding a kernel family (`modules/dasLLVM/daslib/llvm_tune.das`) |
 | `skills/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
@@ -115,6 +117,14 @@ When you discover something new about daslang syntax, semantics, or conventions 
 **Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
 
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
+
+### Writing a new skill
+
+Read `skills/writing_skills.md` first — it carries the full checklist. The three things that matter most:
+
+1. **Decide the audience before writing.** Skills named in `install/skills.list` are copied verbatim into the SDK bundle, where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**. A skill that mixes SDK-usable content with repo plumbing serves neither audience and is painful to split later. Ship it and push repo bits into a `(repo-only)` section, or keep the whole file repo-only and leave it off the list.
+2. **Never fix an audience mismatch by shipping `src/` or `tests/`.** Mark the line `repo-only` instead (works on a line, or on a heading to cover a whole section). `python3 ci/check_shipped_skills.py <bundle> install/skills.list` enforces this per-PR via `ci/smoke_test_bundle.sh`; it also catches `bin/Release/…` paths, `daslang.exe` invocations, machine-local paths, dead relative links, and references to skills that aren't shipped.
+3. **Register it in all the places.** `skills/<name>.md`, plus a row in the top-level `CLAUDE.md` table; if shipped, also `install/skills.list` **and** a row in `install/CLAUDE.md`. A skill with no trigger row is a skill nobody opens.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 

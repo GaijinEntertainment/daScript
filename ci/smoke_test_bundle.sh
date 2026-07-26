@@ -174,9 +174,21 @@ run_check "mcp.das (empty stdin)" bash -c \
 # of shipping it -- src/ and tests/ are never going in the bundle -- so the check
 # demands the line be marked `repo-only` instead.
 echo
-echo "Shipped-skill references:"
-printf '  %-30s ' "no unmarked repo paths"
-if SKILL_REFS="$(awk -f "$CI_DIR/check_shipped_skill_refs.awk" "$BUNDLE"/skills/*.md 2>&1)"; then
+echo "Shipped skills:"
+printf '  %-30s ' "references resolve in bundle"
+# The ship list is read from the REPO manifest, not the bundle, so a skill sitting on disk
+# but missing from install/skills.list is still caught. Skipped rather than failed when no
+# python3 is present, so this script stays runnable on a bare box.
+# Probe by EXECUTING, not by `command -v`: Windows ships a WindowsApps python3 shim that
+# is on PATH but exits "Permission denied" until the user installs from the Store.
+PY=""
+for cand in python3 python py; do
+    if "$cand" -c "pass" >/dev/null 2>&1; then PY="$cand"; break; fi
+done
+if [[ -z "$PY" ]]; then
+    echo "SKIP (no python3)"
+elif SKILL_REFS="$("$PY" "$CI_DIR/check_shipped_skills.py" "$BUNDLE" \
+                        "$CI_DIR/../install/skills.list" 2>&1)"; then
     echo "OK"
     PASS=$((PASS + 1))
 else

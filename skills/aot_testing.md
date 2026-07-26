@@ -69,7 +69,7 @@ tests/aot/
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
-## Running AOT Tests
+## Running AOT Tests (repo-only)
 
 ```bash
 # Build the test_aot binary
@@ -79,7 +79,7 @@ cmake --build build --config Release --target test_aot
 bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot
 
 # Run with the regular daslang binary (no AOT, interpreter mode)
-bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot
+bin/daslang dastest/dastest.das -- --test tests/aot
 ```
 
 The `-use-aot` flag enables AOT for sub-compiled test files even when the host binary has stubs. But `test_aot` auto-detects via `is_in_aot()` in `dastest/suite.das`.
@@ -313,7 +313,7 @@ The AOT tool (`utils/aot/main.das`) can process multiple `.das` files in one inv
 **Diagnosing batch issues**: If single-file AOT generation produces matching hashes but batch doesn't, use the hash comment diagnostics to find the diverging function. You can test single-file generation with:
 
 ```bash
-daslang.exe utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
+daslang utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
 ```
 
 ## libDaScriptAot — Standard Library AOT

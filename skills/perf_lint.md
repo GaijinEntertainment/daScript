@@ -76,7 +76,7 @@ def good_example() {
 
 ### 5. Update documentation
 
-Add the rule to `doc/source/reference/language/perf_lint.rst` with a brief example.
+Add the rule to `doc/source/reference/language/perf_lint.rst` with a brief example (repo-only).
 
 ## Visitor State
 

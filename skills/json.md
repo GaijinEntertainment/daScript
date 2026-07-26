@@ -219,6 +219,6 @@ Don't reach for this until you've ruled out modeling the data as a struct/varian
 - Tutorial — read this first for runnable examples of every pattern: [tutorials/language/30_json.das](tutorials/language/30_json.das)
 - Prose walkthrough of that same tutorial, docs style: [30. JSON](https://daslang.io/doc/reference/tutorials/30_json.html)
 - daslib sources: [daslib/json.das](daslib/json.das), [daslib/json_boost.das](daslib/json_boost.das)
-- Tests with usage patterns: [tests/json/test_sprint_json.das](tests/json/test_sprint_json.das), [tests/json/test_sscan_json.das](tests/json/test_sscan_json.das)
+- Tests with usage patterns (repo-only): `tests/json/test_sprint_json.das`, `tests/json/test_sscan_json.das`
 - Real custom `JV` overloads: [daslib/dap.das](daslib/dap.das), [daslib/refactor.das](daslib/refactor.das)
 - Real `sprint_json` users: [utils/daspkg/lockfile.das](utils/daspkg/lockfile.das), [daslib/debug.das](daslib/debug.das), [utils/mcp/protocol_core.das](utils/mcp/protocol_core.das)

@@ -120,4 +120,4 @@ If you're rolling your own expansion (don't, unless `parse_file_list` doesn't fi
 - `skills/filesystem.md` — `fio` path/filename helpers (`base_name`, `dir_name`, `path_join`, `relative_result`).
 - `skills/regex.md` — when you need full regex (lookarounds, named groups, repetition counts) instead of glob.
 - `tutorials/language/54_glob.das` — runnable tutorial demonstrating all four functions and the two-flavor distinction.
-- `doc/source/stdlib/generated/fio.rst` — generated stdlib reference for the fio module (search for "Glob and pattern matching").
+- [fio stdlib reference](https://daslang.io/doc/stdlib/generated/fio.html) — generated reference for the fio module (search for "Glob and pattern matching").

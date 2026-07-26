@@ -19,22 +19,22 @@ Instead of restarting, use:
 
 `daslang-live.exe` is a live-reloading application host. It compiles and runs a daScript file, then watches for file changes and hot-reloads the script without restarting the process. It also exposes a REST API for remote control.
 
-**Binary:** `bin/Release/daslang-live.exe`
+**Binary:** `bin/daslang-live`
 
 ## Running
 
 ```bash
 # Live-reload mode (recommended for development)
-bin/Release/daslang-live.exe path/to/main.das
+bin/daslang-live path/to/main.das
 
 # With a project file
-bin/Release/daslang-live.exe -project path/to/project.das_project path/to/main.das
+bin/daslang-live -project path/to/project.das_project path/to/main.das
 
 # Standalone mode (same as daslang.exe — if script only has main())
-bin/Release/daslang-live.exe path/to/main.das
+bin/daslang-live path/to/main.das
 ```
 
-Scripts can also run standalone with `bin/Release/daslang.exe path/to/main.das` — the same `main.das` works in both hosts. Under `daslang.exe`, `is_live_mode()` returns `false`, the REST API does not start, and `[before_reload]`/`[after_reload]` annotations are ignored.
+Scripts can also run standalone with `bin/daslang path/to/main.das` — the same `main.das` works in both hosts. Under `daslang.exe`, `is_live_mode()` returns `false`, the REST API does not start, and `[before_reload]`/`[after_reload]` annotations are ignored.
 
 ## Mode Detection
 

@@ -2,7 +2,8 @@
 
 Read this skill before writing or editing `.das` code that builds, splits, or normalizes a file path, or that touches the filesystem (existence checks, listing directories, copy/rename/remove, temp files). Path & filename operations **MUST** use `fio` helpers — never hand-rolled `rfind`/`slice` on `/` and `\`. The C++ implementations are platform-aware; manual splitting silently breaks on Windows separators, trailing slashes, and the no-separator edge case.
 
-Runnable examples: [tests/fio/fio_utils.das](tests/fio/fio_utils.das), [tutorials/dasAudio/02_playing_files.das](tutorials/dasAudio/02_playing_files.das).
+Runnable example: [tutorials/dasAudio/02_playing_files.das](tutorials/dasAudio/02_playing_files.das).
+In the daslang repo, see also `tests/fio/fio_utils.das` (repo-only).
 
 ## `require`
 

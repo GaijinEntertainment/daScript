@@ -106,7 +106,7 @@ self->style_warning("STYLExxx: description; suggested fix", expr.at)
 Create `utils/lint/tests/styleXXX_rule_name.das` with a bad example and a good example. Test through the standalone runner:
 
 ```bash
-bin/Release/daslang.exe utils/lint/main.das -- utils/lint/tests/styleXXX_rule_name.das --style-only
+bin/daslang utils/lint/main.das -- utils/lint/tests/styleXXX_rule_name.das --style-only
 ```
 
 ### 5. Suppression
@@ -133,7 +133,7 @@ The MCP `lint` tool (`utils/mcp/tools/lint_tool.das`) calls `style_lint_collect(
 ## Standalone Usage
 
 ```bash
-bin/Release/daslang.exe utils/lint/main.das -- file1.das [file2.das ...] [--quiet] [--style-only] [--postfix-conditionals]
+bin/daslang utils/lint/main.das -- file1.das [file2.das ...] [--quiet] [--style-only] [--postfix-conditionals]
 ```
 
 ## Known Limitations

@@ -8,7 +8,7 @@ The **recommended approach** is `-load_module <path>` (repeatable). The older **
 
 Each external module ships a `.das_module` descriptor (e.g. `C:/packages/dasImgui/.das_module`) whose `initialize(project_path)` callback registers native paths like `register_native_path("imgui", "imgui_widgets_builtin", "<P>/widgets/imgui_widgets_builtin.das")`. daslang only fires those callbacks when it discovers the module — either by scanning `<project_root>/modules/<name>/` or via an explicit `-load_module <path>`.
 
-So running `daslang.exe path/to/your-module/main.das` directly fails with `missing prerequisite 'imgui'` — daslang has no module-discovery hook firing, and the `.das_module` `initialize()` never runs.
+So running `daslang path/to/your-module/main.das` directly fails with `missing prerequisite 'imgui'` — daslang has no module-discovery hook firing, and the `.das_module` `initialize()` never runs.
 
 Running via `daspkg install` works but cuts off the live edit loop: every `.das` or C++ change needs a reinstall.
 
@@ -19,19 +19,19 @@ Pass `-load_module <path>` to daslang.exe / daslang-live.exe. The path is the mo
 ### daslang.exe CLI
 
 ```sh
-daslang.exe -load_module C:/packages/dasImgui your_script.das
+daslang -load_module C:/packages/dasImgui your_script.das
 ```
 
 For multiple modules:
 
 ```sh
-daslang.exe -load_module C:/packages/dasImgui -load_module C:/packages/dasHV your_script.das
+daslang -load_module C:/packages/dasImgui -load_module C:/packages/dasHV your_script.das
 ```
 
 ### daslang-live
 
 ```sh
-daslang-live.exe -load_module C:/packages/dasImgui your_script.das
+daslang-live -load_module C:/packages/dasImgui your_script.das
 ```
 
 ### MCP tools (preferred — keeps everything inside the editor)
@@ -84,7 +84,7 @@ Before `-load_module`, the canonical workaround was to create a throwaway direct
 ```cmd
 mkdir C:\IMGUI_DEMO\modules
 mklink /J C:\IMGUI_DEMO\modules\dasImgui C:\packages\dasImgui
-daslang.exe -project_root C:/IMGUI_DEMO your_script.das
+daslang -project_root C:/IMGUI_DEMO your_script.das
 ```
 
 `mklink /J` creates a directory junction — same effect as a symlink for daslang's purposes and doesn't need admin.
@@ -104,7 +104,7 @@ For most workflows `-load_module` is shorter and avoids the per-module mklink st
 Recommended:
 
 ```cmd
-daslang.exe -load_module C:/packages/dasImgui ^
+daslang -load_module C:/packages/dasImgui ^
   C:/packages/dasImgui/examples/imgui_demo/harness_layout.das
 ```
 
@@ -122,7 +122,7 @@ Junction fallback (only when you need to exercise the modules/* scan path):
 ```cmd
 mkdir C:\IMGUI_DEMO\modules
 mklink /J C:\IMGUI_DEMO\modules\dasImgui C:\packages\dasImgui
-daslang.exe -project_root C:/IMGUI_DEMO C:/packages/dasImgui/examples/imgui_demo/harness_layout.das
+daslang -project_root C:/IMGUI_DEMO C:/packages/dasImgui/examples/imgui_demo/harness_layout.das
 ```
 
 ## Gotchas

@@ -25,15 +25,7 @@ The current ship list lives in [install/skills.list](../install/skills.list) —
 
 The CMake install rule (in root `CMakeLists.txt`) reads the manifest with `file(STRINGS ...)` and `install(FILES ...)` for each named basename. Missing files trigger `FATAL_ERROR` at configure time, so a typo in `install/skills.list` fails loudly.
 
-**Closure invariant.** A shipped skill may only reference `skills/<other>.md` when that other skill also ships — otherwise the SDK carries a dead link. When you add a skill, grep it for `skills/*.md` and either ship every target or reword the reference. The rule cuts both ways: a genuinely repo-only skill (`tutorials.md`, `documentation_rst.md`, `preflight.md`, `make_pr.md`, …) stays **off** the list, and a shipped skill pointing at one gets reworded rather than dragging it in. Check with:
-
-```sh
-grep -vE '^\s*#|^\s*$' install/skills.list | sort > /tmp/shipped.txt
-for s in $(cat /tmp/shipped.txt); do
-  grep -ohE 'skills/[a-z_0-9]+\.md' "skills/$s" | sed 's|skills/||' | sort -u |
-    while read r; do grep -qx "$r" /tmp/shipped.txt || echo "$s -> $r"; done
-done
-```
+**Closure invariant.** A shipped skill may only reference `skills/<other>.md` when that other skill also ships — otherwise the SDK carries a dead link. The rule cuts both ways: a genuinely repo-only skill (`tests_in_repo.md`, `tutorials.md`, `documentation_rst.md`, `preflight.md`, `make_pr.md`, …) stays **off** the list, and a shipped skill pointing at one either gets reworded or marks the line `repo-only` (see below) rather than dragging it in. Enforced per-PR by the same `ci/check_shipped_skill_refs.awk` as the path rule — it takes the ship list via `-v shipped=`, so a skill sitting on disk but absent from `install/skills.list` is still caught.
 
 **Repo-internal paths must be marked `repo-only`.** A shipped skill that says "see
 `src/ast/ast_infer_type.cpp`" is a dead end in the SDK: `src/`, `tests/`, `benchmarks/`
