@@ -2367,6 +2367,26 @@ class StyleLintVisitor : AstVisitor {
                 && !expr.subexpr.genFlags.generated) {
             style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at)
         }
+        // ===== STYLE036 — type contract that cannot act on a resolved cast type =====
+        if (!expr.genFlags.generated && expr.castType != null) {
+            let inert = style036_inert_contract(expr.castType)
+            if (!empty(inert)) {
+                let tail = inert == "-const" ? "; drop it, along with any 'const' it was meant to cancel" : "; drop it"
+                style_warning("STYLE036: '{inert}' does nothing on the already-resolved cast type {describe(expr.castType)}{tail}", expr.at)
+            }
+        }
+    }
+
+    def style036_inert_contract(t : TypeDecl?) : string {
+        // Substitution contracts: infer clears them when a generic binds (ast_typedecl.cpp:223,422), so one still set on a concrete target was never consumed — but an auto/unresolved-alias target has simply not been substituted yet (linq's `reinterpret<ARGT -const>` does strip const).
+        if (t.isAutoOrAlias) return ""
+        if (t.flags.removeConstant) return "-const"
+        if (t.flags.removeRef) return "-&"
+        if (t.flags.removeDim) return "-[]"
+        if (t.flags.removeTemporary) return "-#"
+        if (t.flags.explicitConst) return "==const"
+        if (t.flags.explicitRef) return "==&"
+        return ""
     }
 
     def override preVisitExprAt(expr : ExprAt?) : void {

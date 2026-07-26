@@ -1303,7 +1303,7 @@ class private DAgent : DapiDebugAgent {
                         return
                     }
                 }
-                frame.state |> emplace <| (uid = STATE_VARS + uint64(length(frame.state)), name = category, vars = [ variable])
+                frame.state |> emplace <| (uid = STATE_VARS + uint64(long_length(frame.state)), name = category, vars = [ variable])
             }
         })
     }

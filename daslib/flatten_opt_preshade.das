@@ -606,7 +606,7 @@ def private regroup_to_share(var blk : ExprBlock?; no_fast_math : bool) : bool {
 def private alias_source(e : Expression const?) : ExpressionPtr {
     if (e == null) return null
     if (e is ExprRef2Value) return alias_source((e as ExprRef2Value).subexpr)
-    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+    return e is ExprVar ? unsafe(reinterpret<Expression?>(e)) : null
 }
 
 def private eliminate_aliases(var blk : ExprBlock?) : bool {
