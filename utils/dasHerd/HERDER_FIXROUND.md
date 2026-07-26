@@ -493,6 +493,11 @@ Issue intake (live rig, numbering continues):
   vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
   edge). Looks like a stale/displaced grid column surviving the
   attach-time resize, un-clipped; fades as output overwrites
+- 48: Project tab says "Select a worktree to browse its files" while a
+  session is attached and selected. Rule: selecting or creating a session
+  selects its primary worktree (a session pick IS a deliberate worktree
+  pick; set the explicit flag), so Project/Changelist immediately point
+  at the session's tree
 
 Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
