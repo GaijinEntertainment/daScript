@@ -349,7 +349,15 @@ def draw_herd_cards() {
                 break
             }
         }
-        icon(profile_agent ? "bolt" : "chevron-right", line)
+        // Dead cards dim wholesale - glyphs included - so alive-vs-asleep
+        // reads at a glance instead of from the words.
+        let card_alive = record.state == "running"
+        let dead_tint = token_state_color(record.state)
+        if (card_alive) {
+            icon(profile_agent ? "bolt" : "chevron-right", line)
+        } else {
+            icon_tinted(profile_agent ? "bolt" : "chevron-right", line, dead_tint)
+        }
         if (IsItemHovered()) {
             set_tooltip(HERD_ICON_TOOLTIP, profile_agent
                 ? "Agent session (profile '{record.profile_id}')"
@@ -373,13 +381,24 @@ def draw_herd_cards() {
                 state_hint = "exited with code {record.exit_code}"
             }
         }
-        icon(state_glyph, line)
+        if (card_alive) {
+            icon(state_glyph, line)
+        } else {
+            icon_tinted(state_glyph, line, dead_tint)
+        }
         if (IsItemHovered()) {
             set_tooltip(HERD_ICON_TOOLTIP, state_hint)
         }
         same_line(HERD_STATE_JOIN[index])
         if (record.conflicted) {
-            icon("warning", line)
+            // Amber only where it is actionable: a LIVE session in a
+            // contested worktree. On dead cards the advisory dims with the
+            // rest so alive-at-a-glance survives.
+            if (card_alive) {
+                icon("warning", line)
+            } else {
+                icon_tinted("warning", line, dead_tint)
+            }
             if (IsItemHovered()) {
                 set_tooltip(HERD_ICON_TOOLTIP,
                     "Another session attends this worktree")
