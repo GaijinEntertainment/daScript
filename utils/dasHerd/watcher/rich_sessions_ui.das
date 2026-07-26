@@ -29,6 +29,7 @@ require ./rich_state.das
 require ./rich_net.das
 require ./rich_focus.das
 require ./rich_inspector_ui.das
+require ./rich_commands.das
 
 var SESSION_ROW : table<int; ToggleState>
 
@@ -326,6 +327,12 @@ def draw_session_list() {
     let connection = g_client != null && g_client.connected ? "connected" : "disconnected"
     text("Watcher: {connection}")
     same_line()
+    if (icon_button(NEW_SESSION_BUTTON, (glyph = "add",
+            tip = "New Session for the selected worktree",
+            size = GetTextLineHeight()))) {
+        let _ = run_herd_command("session.new")
+    }
+    same_line(NEW_SESSION_JOIN)
     if (icon_button(REFRESH_SESSIONS, (glyph = "refresh",
             tip = "Refresh the session list",
             size = GetTextLineHeight())) && g_client != null) {

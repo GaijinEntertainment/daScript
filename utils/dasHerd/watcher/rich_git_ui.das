@@ -27,12 +27,22 @@ require math
 require strings
 require ./rich_state.das
 require ./rich_net.das
+require ./rich_commands.das
+require ./herd_sessions.das
 require ./rich_inspector_ui.das
 require ./rich_files_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
 var WORKTREE_CONFLICT_JOIN : table<int; EmptyMarkerState>
+
+var WORKTREE_ACTIVE_JOIN : table<int; EmptyMarkerState>
+
+var WORKTREE_POPUP : table<int; PopupContextItemState>
+
+var WORKTREE_MENU_NEW_SESSION : table<int; ToggleState>
+
+var WORKTREE_MENU_OPEN_SESSION : table<int; ToggleState>
 
 var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
@@ -98,6 +108,43 @@ var ACTIVITY_ERROR_COPY : ToggleState
 
 var ACTIVITY_ERROR_SEND : ToggleState
 
+// Index of a non-closed herd session claiming this worktree, or -1. A running
+// session prefers over an exited one so the marker reflects the live claimant.
+def private active_herd_for_worktree(worktree_path : string) : int {
+    if (g_client == null) return -1
+    let canonical = herd_canonical_worktree(worktree_path)
+    var found = -1
+    for (index, record in count(), g_client.herd_sessions) {
+        if (record.state != "closed"
+                && herd_canonical_worktree(record.worktree_path) == canonical) {
+            if (record.state == "running") return index
+            if (found < 0) {
+                found = index
+            }
+        }
+    }
+    return found
+}
+
+// Worktree -> session navigation (note 18): raise Sessions and attach the
+// claiming session's terminal when it has one.
+def private navigate_to_herd(record_index : int) {
+    return if (g_client == null || record_index < 0
+        || record_index >= length(g_client.herd_sessions))
+    let record & = unsafe(g_client.herd_sessions[record_index])
+    g_open_sessions_pending = true
+    // Attach only when the PTY is still alive in the watcher's session list;
+    // a registry entry can outlive its PTY (watcher restart), and the Sessions
+    // card offers Relaunch for those.
+    for (session in g_client.sessions) {
+        if (session.id == record.pty_session_id) {
+            g_client->attach_session(record.pty_session_id, false)
+            g_open_terminal_pending = true
+            return
+        }
+    }
+}
+
 def draw_repositories_window() {
     text_disabled("Target: Local")
     separator()
@@ -139,8 +186,21 @@ def draw_repositories_window() {
                     icon("warning", GetTextLineHeight())
                     same_line(WORKTREE_CONFLICT_JOIN[row])
                 }
+                let active_herd = active_herd_for_worktree(worktree.path)
+                if (active_herd >= 0) {
+                    icon(g_client.herd_sessions[active_herd].state == "running"
+                        ? "play" : "clock", GetTextLineHeight())
+                    same_line(WORKTREE_ACTIVE_JOIN[row])
+                }
+                // Transparent label keeps the row id + snapshot text; the
+                // overlay draws MAIN / slash-tinted branch / amber dirty in
+                // the shared token palette (notes 18/20).
                 let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
-                if (selectable(WORKTREE_ROW[row], (text = row_label))) {
+                var row_clicked = false
+                with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
+                    row_clicked = selectable(WORKTREE_ROW[row], (text = row_label))
+                }
+                if (row_clicked) {
                     ui_event("worktree-row-click {worktree.path}")
                     g_selected_repository_id = repository.record.id
                     g_selected_worktree_path = worktree.path
@@ -153,6 +213,51 @@ def draw_repositories_window() {
                     GIT_ACTIVITY_WIN.open = true
                 }
                 WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
+                {
+                    let row_min = GetItemRectMin()
+                    let row_max = GetItemRectMax()
+                    let text_y = row_min.y + max(0.0f,
+                        (row_max.y - row_min.y - GetTextLineHeight()) * 0.5f)
+                    let x0 = row_min.x + GetStyle().FramePadding.x
+                    if (worktree.is_main) {
+                        with_window_drawlist() $(var dl) {
+                            dl |> add_text(float2(x0, text_y),
+                                GetColorU32(token_title_color()), "MAIN")
+                        }
+                    }
+                    let branch_x = x0 + CalcTextSize(prefix).x
+                    let right_limit = git_visible_row_right(row_max.x)
+                    draw_git_path_text(branch, float2(branch_x, text_y),
+                        float2(right_limit, row_max.y), false)
+                    if (dirty > 0) {
+                        with_window_drawlist() $(var dl) {
+                            dl |> add_text(
+                                float2(branch_x + CalcTextSize(branch).x, text_y),
+                                GetColorU32(token_warning_color()), dirty_label)
+                        }
+                    }
+                }
+                popup_context_item(WORKTREE_POPUP[row],
+                        (str_id = "worktree:{worktree.path}",
+                         flags = ImGuiPopupFlags.MouseButtonRight)) {
+                    if (menu_item(WORKTREE_MENU_NEW_SESSION[row],
+                            (text = "New Session here...", shortcut = "",
+                             enabled = g_client != null && g_client.connected))) {
+                        // Select this worktree, then the shared command opens
+                        // the launcher preselected from the selection.
+                        g_selected_repository_id = repository.record.id
+                        g_selected_worktree_path = worktree.path
+                        g_selection_explicit = true
+                        let _ = run_herd_command("session.new")
+                    }
+                    if (active_herd >= 0) {
+                        if (menu_item(WORKTREE_MENU_OPEN_SESSION[row],
+                                (text = "Open session '{g_client.herd_sessions[active_herd].name}'",
+                                 shortcut = "", enabled = true))) {
+                            navigate_to_herd(active_herd)
+                        }
+                    }
+                }
                 if (worktree.is_main) separator(WORKTREE_SEPARATOR[row])
                 row++
             }

@@ -397,6 +397,10 @@ var g_selected_repository_id : string
 // Note-9 policy: attaches may re-aim only while the selection is not explicit.
 var g_selection_explicit : bool
 
+// Cross-module window-raise request (same pattern as g_open_terminal_pending):
+// surfaces that can't see SESSIONS_WIN set this; rich_client's frame loop acts.
+var g_open_sessions_pending : bool
+
 var g_agent_source_worktree_path : string
 
 var g_agent_source_repository_id : string

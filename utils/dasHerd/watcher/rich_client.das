@@ -534,6 +534,11 @@ def update() {
         TERMINAL_WIN.open = true
         TERMINAL_WIN.pending_raise = true
     }
+    if (g_open_sessions_pending) {
+        g_open_sessions_pending = false
+        SESSIONS_WIN.open = true
+        SESSIONS_WIN.pending_raise = true
+    }
     if (g_dock_reset_pending) {
         g_dock_reset_pending = false
         DOCK_ROOT.pending_reset = true

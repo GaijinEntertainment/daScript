@@ -303,8 +303,20 @@ imgui_mouse_* bypass commands while input is detached.
   columns; name filter + include-subfolders flat results. Verified
   live: 8439-file model, 21 dirty nodes on exactly the changed chains,
   filter and sort driven through the rails.
-- 18 repositories readability; 20 token color language (one shared
-  palette module feeds 18/20/22).
+- DONE 18 repositories readability (2026-07-25, also closes the
+  never-landed Wave 1 notes 1 and 2): worktree rows draw MAIN in the
+  title tint, branches slash-segmented in the path palette, dirty
+  counts amber; a play/clock marker shows the claiming (running/
+  parked) herd session with a right-click "Open session '<name>'"
+  that raises Sessions and attaches only when the PTY is still alive
+  (a registry entry can outlive its PTY across a watcher restart);
+  right-click also offers "New Session here..." (note 2) which
+  selects the worktree and routes through the session.new command;
+  the Sessions header gained the "add" new-session icon (note 1).
+  Live-verified: colored rows, claim markers on both occupied
+  worktrees, both context items, dead-PTY navigation no longer
+  surfaces "unknown session".
+- 20 token color language (one shared palette module feeds 18/20/22).
   - 20 FOUNDATION DONE (2026-07-25): rich_tokens.das names every token
     color once (sha/branch/pid/path dir-sep-name/warning/error/
     added/deleted/title/muted/state) and rich_state re-exports it to
