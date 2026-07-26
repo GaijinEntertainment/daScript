@@ -1,0 +1,1 @@
+Sets an environment variable in the current process (the `setenv`/`_putenv` family). The change is visible to subsequent `get_env_variable` calls and inherited by child processes spawned afterwards (`popen`, `spawn_argv`); it does not affect the parent shell.

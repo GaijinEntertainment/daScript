@@ -1,0 +1,1 @@
+Sets the OS priority of the calling thread on the jobque `JobPriority` scale, -2 (Minimum) .. 2 (Maximum), clamped. The dispatch caller is load-bearing in team mode — only it publishes chains, so a descheduled caller idles every lane; queue creation already runs it at High (+1), and this exposes the remaining notch (and the rest of the scale) to scripts.

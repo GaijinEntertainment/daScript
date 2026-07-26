@@ -1,0 +1,1 @@
+Per-caller team-mode override: with team mode off for this OS thread, `team_parallel_*` calls run inline on the caller while other threads keep publishing to the shared worker team. New OS threads default to enabled.
