@@ -1,0 +1,15 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasherd-ptyhost")
+    package_description("Detached PTY host: owns one ConPTY + child + journal, survives watcher/client death, serves protocol v1 on loopback")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    release_name("dasherd-ptyhost")
+}
