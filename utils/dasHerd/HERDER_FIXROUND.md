@@ -290,9 +290,20 @@ imgui_mouse_* bypass commands while input is detached.
 
 - 3+11+5 launcher: modal dialog, explicit run-here vs create-new,
   claimed-worktree awareness (ties to conflict advisory).
-- 7+19+26+28+29 sessions panel: session subtree (terminal link,
-  attention, bundles, errors as children), no zero-count sections,
-  needs-me + output-age signals (watcher activity telemetry).
+- MOSTLY DONE 7+19+28+29 sessions panel (2026-07-25): each herd card
+  now carries its own Attention (N) / Review bundles (N) children
+  (mailbox/bundle session_id joined to the card's pty_session_id via
+  shared row renderers with frame-global widget indices); the global
+  sections render only UNOWNED items and only when non-empty — the
+  perpetual "(0)" sections are gone. Cards show "output <age>" from
+  client-witnessed output_bytes deltas beside the registry age (29).
+  A client-side error ring (note 28, cap 20) keeps every error
+  transition the chrome dismissed, shown as an Errors (N) section
+  with clear, hidden while empty. Verified live: zero-count sections
+  vanished, panel clean; per-card children reuse the verified
+  fallback renderers and light up with live agent data. REMAINING 26:
+  "agent needs me" (blocked-at-prompt) needs watcher-side terminal
+  heuristics — pairs with the note-25 multiple-terminals work.
 - 8+4a terminal: watcher-side scrollback retention → client viewport,
   wheel scroll, then the color/palette fix (after 30b makes it
   provable). Search lands here too (13).

@@ -401,6 +401,18 @@ var g_selection_explicit : bool
 // surfaces that can't see SESSIONS_WIN set this; rich_client's frame loop acts.
 var g_open_sessions_pending : bool
 
+// Output-age tracking (note 29): wall time of the last observed output_bytes
+// delta per session. Only a witnessed CHANGE records a time — the first
+// sighting after connect proves nothing about freshness.
+var g_session_output_seen : table<string; int64>
+var g_session_output_wall : table<string; int64>
+
+// Client error ring (note 28): the menu chrome shows only the latest error;
+// dismissed ones land here (newest last, capped).
+var g_error_history : array<string>
+var g_error_history_wall : array<int64>
+var g_last_seen_error : string
+
 var g_agent_source_worktree_path : string
 
 var g_agent_source_repository_id : string

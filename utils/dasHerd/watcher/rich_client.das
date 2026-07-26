@@ -468,6 +468,30 @@ def update() {
     // Keep the transport alive outside that gate so heartbeats, controller
     // renewal, and queued PTY output continue until the window is restored.
     if (g_client != null) g_client->pump()
+    if (g_client != null) {
+        // Error ring (note 28): capture every transition to a new error text.
+        if (g_client.error != g_last_seen_error) {
+            g_last_seen_error = g_client.error
+            if (!empty(g_client.error)) {
+                g_error_history |> push(g_client.error)
+                g_error_history_wall |> push(int64(get_clock()))
+                while (length(g_error_history) > 20) {
+                    g_error_history |> erase(0)
+                    g_error_history_wall |> erase(0)
+                }
+            }
+        }
+        // Output age (note 29): stamp only witnessed output_bytes deltas.
+        for (session in g_client.sessions) {
+            let seen = g_session_output_seen?[session.id] ?? -1l
+            if (seen != session.output_bytes) {
+                if (seen >= 0l) {
+                    g_session_output_wall[session.id] = int64(get_clock())
+                }
+                g_session_output_seen[session.id] = session.output_bytes
+            }
+        }
+    }
     if (g_submit_stamp != 0l
             && get_time_nsec(g_submit_stamp) / 1000000l >= 200l) {
         if (g_client != null && g_client.controls

@@ -71,6 +71,12 @@ var BUNDLE_PARTICIPANT_ROW : table<int; ToggleState>
 
 var BUNDLE_FILE_ROW : table<int; ToggleState>
 
+var HERD_ATT_HEADER : table<int; NarrativeState>
+
+var HERD_BUNDLE_HEADER : table<int; NarrativeState>
+
+var ERROR_HISTORY_ROW : table<int; NarrativeState>
+
 def draw_selected_session_context() {
     if (g_client == null || empty(g_client.selected_id)) return
     for (session in g_client.sessions) {
@@ -85,58 +91,117 @@ def draw_selected_session_context() {
     }
 }
 
-def draw_review_bundles() {
-    text("Review bundles ({g_client != null ? length(g_client.bundles) : 0})")
-    child(REVIEW_BUNDLES_CHILD, (text = "review bundles", size = float2(0.0f, 150.0f),
-            child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
-        if (g_client == null || empty(g_client.bundles)) {
-            text_disabled("The agent has not declared a review bundle yet.")
-            return
+// Frame-local row counters shared by the per-card subtrees and the unowned
+// fallback sections — widget indices must stay unique across both.
+var g_bundle_participant_row : int
+var g_bundle_file_row : int
+var g_attention_target_row : int
+
+// session_filter "" draws every bundle EXCEPT card-owned ones (the fallback
+// section); a session id draws that card's own bundles (note 19 subtree).
+def private draw_bundle_rows(session_filter : string) {
+    return if (g_client == null)
+    for (bundle_index in range(length(g_client.bundles))) {
+        let bundle & = unsafe(g_client.bundles[bundle_index])
+        if (empty(session_filter)) {
+            continue if (herd_owns_pty(bundle.session_id))
+        } elif (bundle.session_id != session_filter) {
+            continue
         }
-        var participant_row = 0
-        var file_row = 0
-        for (bundle_index in range(length(g_client.bundles))) {
-            let bundle & = unsafe(g_client.bundles[bundle_index])
-            BUNDLE_ROW[bundle_index].value = false
-            if (selectable(BUNDLE_ROW[bundle_index],
-                    (text = "[{to_upper(bundle.status)}] {bundle.title}##{bundle.id}"))) {
-                let _ = activate_bundle_focus(bundle)
+        BUNDLE_ROW[bundle_index].value = false
+        if (selectable(BUNDLE_ROW[bundle_index],
+                (text = "[{to_upper(bundle.status)}] {bundle.title}##{bundle.id}"))) {
+            let _ = activate_bundle_focus(bundle)
+        }
+        BUNDLE_ROW[bundle_index].value = false
+        if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
+        for (participant in bundle.participants) {
+            let files = length(participant.files)
+            BUNDLE_PARTICIPANT_ROW[g_bundle_participant_row].value = (participant.repository_id
+                == g_selected_repository_id && participant.worktree_path
+                == g_selected_worktree_path)
+            if (selectable(BUNDLE_PARTICIPANT_ROW[g_bundle_participant_row],
+                    (text = "  {participant.role}  {participant.worktree_path}  ({files} files)##{bundle.id}:{g_bundle_participant_row}"))) {
+                if (!activate_bundle_focus(bundle, participant.repository_id,
+                        participant.worktree_path)) {
+                    select_bundle_participant(participant)
+                }
             }
-            BUNDLE_ROW[bundle_index].value = false
-            if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
-            for (participant in bundle.participants) {
-                let files = length(participant.files)
-                BUNDLE_PARTICIPANT_ROW[participant_row].value = (participant.repository_id
-                    == g_selected_repository_id && participant.worktree_path
-                    == g_selected_worktree_path)
-                if (selectable(BUNDLE_PARTICIPANT_ROW[participant_row],
-                        (text = "  {participant.role}  {participant.worktree_path}  ({files} files)##{bundle.id}:{participant_row}"))) {
+            g_bundle_participant_row++
+            for (file in participant.files) {
+                BUNDLE_FILE_ROW[g_bundle_file_row].value = false
+                if (selectable(BUNDLE_FILE_ROW[g_bundle_file_row],
+                        (text = "      {file.role}  {file.path}##{bundle.id}:file:{g_bundle_file_row}"))) {
                     if (!activate_bundle_focus(bundle, participant.repository_id,
-                            participant.worktree_path)) {
+                            participant.worktree_path, file.path)) {
                         select_bundle_participant(participant)
+                        g_client->inspect_file(participant.repository_id,
+                            participant.worktree_path, file.path,
+                            "working", "full", "")
+                        FILE_INSPECTOR_WIN.open = true
+                        FILE_INSPECTOR_WIN.pending_raise = true
                     }
                 }
-                participant_row++
-                for (file in participant.files) {
-                    BUNDLE_FILE_ROW[file_row].value = false
-                    if (selectable(BUNDLE_FILE_ROW[file_row],
-                            (text = "      {file.role}  {file.path}##{bundle.id}:file:{file_row}"))) {
-                        if (!activate_bundle_focus(bundle, participant.repository_id,
-                                participant.worktree_path, file.path)) {
-                            select_bundle_participant(participant)
-                            g_client->inspect_file(participant.repository_id,
-                                participant.worktree_path, file.path,
-                                "working", "full", "")
-                            FILE_INSPECTOR_WIN.open = true
-                            FILE_INSPECTOR_WIN.pending_raise = true
-                        }
-                    }
-                    BUNDLE_FILE_ROW[file_row].value = false
-                    file_row++
-                }
+                BUNDLE_FILE_ROW[g_bundle_file_row].value = false
+                g_bundle_file_row++
             }
         }
     }
+}
+
+def private draw_attention_rows(session_filter : string) {
+    return if (g_client == null)
+    for (message_index in range(length(g_client.mailbox))) {
+        let message & = unsafe(g_client.mailbox[message_index])
+        if (message.direction != "outbox") continue
+        if (empty(session_filter)) {
+            continue if (herd_owns_pty(message.session_id))
+        } elif (message.session_id != session_filter) {
+            continue
+        }
+        ATTENTION_MESSAGE_ROW[message_index].value = false
+        if (selectable(ATTENTION_MESSAGE_ROW[message_index],
+                (text = "{message.subject}##{message.id}"))
+                && !empty(message.focus.targets)) {
+            activate_focus_target(message, 0)
+        }
+        ATTENTION_MESSAGE_ROW[message_index].value = false
+        let selected_message = message.id == g_active_focus_message
+        for (target_index in range(length(message.focus.targets))) {
+            let target & = unsafe(message.focus.targets[target_index])
+            let target_repository = watcher_focus_repository(message.focus, target)
+            let repository_hint = (!empty(target.repository_id)
+                ? "[{target_repository}] " : "")
+            ATTENTION_TARGET_ROW[g_attention_target_row].value = (selected_message
+                && target_index == g_active_focus_target)
+            if (selectable(ATTENTION_TARGET_ROW[g_attention_target_row],
+                    (text = "  {repository_hint}{target.file_path}##{message.id}:{target_index}"))) {
+                activate_focus_target(message, target_index)
+            }
+            g_attention_target_row++
+        }
+    }
+}
+
+def private session_bundle_count(session_id : string) : int {
+    var count = 0
+    if (g_client != null && !empty(session_id)) {
+        for (bundle in g_client.bundles) {
+            if (bundle.session_id == session_id) count++
+        }
+    }
+    return count
+}
+
+def private session_attention_count(session_id : string) : int {
+    var count = 0
+    if (g_client != null && !empty(session_id)) {
+        for (message in g_client.mailbox) {
+            if (message.direction == "outbox"
+                    && message.session_id == session_id) count++
+        }
+    }
+    return count
 }
 
 def pending_attention_count() : int {
@@ -246,10 +311,28 @@ def draw_herd_cards() {
         }
         let satellite_hint = (!empty(record.satellites)
             ? "  +{length(record.satellites)} repos" : "")
+        // Output age (note 29): time since the terminal actually produced
+        // bytes, beside the registry age.
+        let output_wall = g_session_output_wall?[record.pty_session_id] ?? 0l
+        let output_hint = (output_wall > 0l
+            ? " | output {herd_age_label(output_wall)}" : "")
         text_disabled(HERD_CARD_DETAIL[index],
             (text = "      {record.profile_id} | {record.workflow} | " +
                 "{base_name(record.worktree_path)}{satellite_hint} | " +
-                "{herd_age_label(record.updated_wall_s)}"))
+                "{herd_age_label(record.updated_wall_s)}{output_hint}"))
+        // The card's own Attention and Review Bundles as subtree children
+        // (note 19); zero-count sections never render.
+        let attention = session_attention_count(record.pty_session_id)
+        if (attention > 0) {
+            text(HERD_ATT_HEADER[index], (text = "      Attention ({attention})"))
+            draw_attention_rows(record.pty_session_id)
+        }
+        let bundles = session_bundle_count(record.pty_session_id)
+        if (bundles > 0) {
+            text(HERD_BUNDLE_HEADER[index],
+                (text = "      Review bundles ({bundles})"))
+            draw_bundle_rows(record.pty_session_id)
+        }
     }
     if (visible == 0) {
         text_disabled(NO_HERD_LABEL,
@@ -324,6 +407,9 @@ def private herd_owns_pty(session_id : string) : bool {
 }
 
 def draw_session_list() {
+    g_bundle_participant_row = 0
+    g_bundle_file_row = 0
+    g_attention_target_row = 0
     let connection = g_client != null && g_client.connected ? "connected" : "disconnected"
     text("Watcher: {connection}")
     same_line()
@@ -391,41 +477,51 @@ def draw_session_list() {
         }
     }
     text_disabled("Exited sessions are retained and hidden by default.")
-    separator()
-    draw_review_bundles()
-    separator()
-    let attention_count = pending_attention_count()
-    text("Attention ({attention_count})")
-    text_disabled("Agent notes never navigate until you click them.")
-    child(ATTENTION_CHILD, (text = "attention", size = float2(0.0f, 0.0f),
-            child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
-        if (g_client != null) {
-            var target_row = 0
-            for (message_index in range(length(g_client.mailbox))) {
-                let message & = unsafe(g_client.mailbox[message_index])
-                if (message.direction != "outbox") continue
-                ATTENTION_MESSAGE_ROW[message_index].value = false
-                if (selectable(ATTENTION_MESSAGE_ROW[message_index],
-                        (text = "{message.subject}##{message.id}"))
-                        && !empty(message.focus.targets)) {
-                    activate_focus_target(message, 0)
-                }
-                ATTENTION_MESSAGE_ROW[message_index].value = false
-                let selected_message = message.id == g_active_focus_message
-                for (target_index in range(length(message.focus.targets))) {
-                    let target & = unsafe(message.focus.targets[target_index])
-                    let target_repository = watcher_focus_repository(message.focus, target)
-                    let repository_hint = (!empty(target.repository_id)
-                        ? "[{target_repository}] " : "")
-                    ATTENTION_TARGET_ROW[target_row].value = (selected_message
-                        && target_index == g_active_focus_target)
-                    if (selectable(ATTENTION_TARGET_ROW[target_row],
-                            (text = "  {repository_hint}{target.file_path}##{message.id}:{target_index}"))) {
-                        activate_focus_target(message, target_index)
-                    }
-                    target_row++
-                }
-            }
+    // Fallback sections (note 19): only items whose session has no live card,
+    // and only when there ARE any — zero-count sections never render.
+    var unowned_bundles = 0
+    var unowned_attention = 0
+    if (g_client != null) {
+        for (bundle in g_client.bundles) {
+            if (!herd_owns_pty(bundle.session_id)) unowned_bundles++
+        }
+        for (message in g_client.mailbox) {
+            if (message.direction == "outbox"
+                    && !herd_owns_pty(message.session_id)) unowned_attention++
+        }
+    }
+    if (unowned_bundles > 0) {
+        separator()
+        text("Review bundles ({unowned_bundles})")
+        child(REVIEW_BUNDLES_CHILD, (text = "review bundles", size = float2(0.0f, 150.0f),
+                child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
+            draw_bundle_rows("")
+        }
+    }
+    if (unowned_attention > 0) {
+        separator()
+        text("Attention ({unowned_attention})")
+        text_disabled("Agent notes never navigate until you click them.")
+        child(ATTENTION_CHILD, (text = "attention", size = float2(0.0f, 0.0f),
+                child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
+            draw_attention_rows("")
+        }
+    }
+    // Error history (note 28): the chrome shows only the latest error; the
+    // ring keeps what was dismissed. Hidden while empty.
+    if (!empty(g_error_history)) {
+        separator()
+        text("Errors ({length(g_error_history)})")
+        same_line()
+        if (small_button(ERRORS_CLEAR, (text = "clear"))) {
+            g_error_history |> clear()
+            g_error_history_wall |> clear()
+        }
+        for (error_index in range(length(g_error_history))) {
+            // Newest last in storage; show newest first.
+            let ring = length(g_error_history) - 1 - error_index
+            text_disabled(ERROR_HISTORY_ROW[error_index],
+                (text = "{herd_age_label(g_error_history_wall[ring])}  {g_error_history[ring]}"))
         }
     }
 }
