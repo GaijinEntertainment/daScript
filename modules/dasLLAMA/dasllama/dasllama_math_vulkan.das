@@ -4278,6 +4278,14 @@ def vk_drop_model_state {
     g_gpu.dev_mapped |> clear()
     g_vk_upload_us = 0l   // per-model upload diagnostics — a reloaded model reports its own numbers
     g_vk_upload_bytes = 0l
+    g_rdq_n = 0u          // decode-role profiler likewise — averages must not span models
+    g_rdq_count = 0l
+    g_rdq_total = 0.0lf
+    g_rdq_pro = 0.0lf
+    g_rdq_tail = 0.0lf
+    for (i in range(16)) {
+        g_rdq_role[i] = 0.0lf
+    }
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
