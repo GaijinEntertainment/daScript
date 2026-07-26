@@ -186,8 +186,20 @@ def private save_registry : string {
     if (!mkdir_rec(dir_name(g_registry_path), error)) {
         return "could not create herd registry directory: {error}"
     }
-    if (!fwrite(g_registry_path, sprint_json(file, true))) {
-        return "could not write {g_registry_path}"
+    // Durability boundary: never overwrite the registry in place — a kill or
+    // full disk mid-write must not truncate it. Write the temp fully, then
+    // swap (remove + rename; Windows _wrename cannot replace). A crash leaves
+    // either file COMPLETE, and herd_init recovers the temp when only the
+    // swap was cut.
+    let temp_path = "{g_registry_path}.tmp"
+    if (!fwrite(temp_path, sprint_json(file, true))) {
+        return "could not write {temp_path}"
+    }
+    if (fexist(g_registry_path) && !remove(g_registry_path)) {
+        return "could not replace {g_registry_path}"
+    }
+    if (!rename(temp_path, g_registry_path)) {
+        return "could not swap {temp_path} into place"
     }
     return ""
 }
@@ -198,6 +210,14 @@ def public herd_init(registry_path, profiles_path : string) : string {
     delete g_herd
     g_next_herd_id = 0
     g_herd_revision++
+    if (!fexist(registry_path)) {
+        // A crash between save_registry's remove and rename leaves only the
+        // completed temp — adopt it.
+        let temp_path = "{registry_path}.tmp"
+        if (fexist(temp_path)) {
+            let _ = rename(temp_path, registry_path)
+        }
+    }
     if (!fexist(registry_path)) return ""
     var inscope file = HerdRegistryFile()
     if (!sscan_json(fread(registry_path), file)) return "invalid herd registry JSON"
