@@ -62,7 +62,9 @@ def private herd_http(post : bool; path, body : string) : string {
         return make_tool_result("dasherd watcher unreachable at {herd_base_url()} — " +
             "is the watcher running, and are DASHERD_URL/DASHERD_TOKEN set?", true)
     }
-    if (status != 200) {
+    // Any 2xx is success — POST /api/v1/mailbox answers 201 Created, and the
+    // strict ==200 check made outbox_send/outbox_reply fail on acceptance.
+    if (status < 200 || status >= 300) {
         return make_tool_result("watcher returned HTTP {status}: {text}", true)
     }
     return make_tool_result(text)
