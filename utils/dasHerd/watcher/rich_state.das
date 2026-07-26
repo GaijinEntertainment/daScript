@@ -80,6 +80,29 @@ struct WatcherHerdLaunchedMessage {
     session_id : string
 }
 
+struct WatcherWorktreeDeleteResult {
+    @rename = "type" _type : string
+    ok : bool
+    reason : string
+    detail : string
+    repository_id : string
+    worktree_path : string
+}
+
+struct WatcherHerdDeleteKept {
+    path : string
+    repository_id : string
+    reason : string
+    detail : string
+}
+
+struct WatcherHerdDeleteResult {
+    @rename = "type" _type : string
+    herd_session_id : string
+    removed : array<string>
+    kept : array<WatcherHerdDeleteKept>
+}
+
 struct WatcherMailboxMessageEnvelope {
     @rename = "type" _type : string
     session_id : string
@@ -397,6 +420,15 @@ var g_selected_repository_id : string
 // Note-9 policy: attaches may re-aim only while the selection is not explicit.
 var g_selection_explicit : bool
 
+// The herd card the user last picked. Cards highlight through this even when
+// their PTY is gone (note 43: a dead-PTY card click used to give no feedback
+// at all, reading as select-then-unselect).
+var g_selected_herd_id = ""
+// Change detector: PTY selections made outside the cards retarget the herd
+// pick exactly once per change, so a dead-card pick is never yanked back by
+// the unchanged live selection.
+var g_herd_pick_seen_selected = ""
+
 // Cross-module window-raise request (same pattern as g_open_terminal_pending):
 // surfaces that can't see SESSIONS_WIN set this; rich_client's frame loop acts.
 var g_open_sessions_pending : bool
@@ -499,6 +531,33 @@ def settings_load() {
 var g_submit_stamp : int64
 var g_submit_session : string
 
+// Say requests that arrive while an Enter is still pending: sending their text
+// immediately would merge it into the prior paste and garble both commands, so
+// they wait here until the frame loop flushes the pending \r.
+struct PendingSay {
+    text : string
+    submit : bool
+    session : string
+}
+var g_input_queue : array<PendingSay>
+
+// A blocked worktree delete (in_use / dirty / main / error). The frame loop
+// opens the block modal when active; "dirty" adds the offer to launch a
+// resolver session briefed with the blocking state.
+struct WorktreeDeleteBlock {
+    active : bool
+    repository_id : string
+    worktree_path : string
+    reason : string
+    detail : string
+}
+var g_worktree_delete_block = WorktreeDeleteBlock()
+
+// Deferred launcher open for the resolver offer: open_popup from inside the
+// block modal would nest the launcher under the popup being closed, so the
+// button preps the launcher fields and the frame loop opens it at root level.
+var g_launch_resolver_pending = false
+
 // Real-input forensics: per-frame counters of wheel/click events that reached
 // ImGui IO. With user control locked these must stay flat — a moving counter
 // is a leak through the lock (note 38).
@@ -577,7 +636,11 @@ def reset_terminal(columns : int = 100; rows : int = 30) {
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     var inscope created <- terminal_create(columns, rows)
     g_terminal := created
+    // The checkpoint restore right after an attach lands AFTER the note-44
+    // focus handshake ran - a reset must not eat established focus.
+    let was_focused = g_terminal_view.focused
     g_terminal_view = ImGuiTerminalState()
+    g_terminal_view.focused = was_focused
     g_terminal_cache = ImGuiTerminalCache()
 }
 

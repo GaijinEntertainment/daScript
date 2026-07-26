@@ -155,6 +155,46 @@ def test_herd_registry(t : T?) {
             "closing the other attendees clears the advisory flag")
         herd_shutdown()
     }
+    t |> run("delete removes records under guard; worktree-user lookup respects state") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_herd_delete_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        t |> equal(herd_init(path_join(root, "_registry.json"),
+            path_join(root, "profiles.json")), "")
+        var error : string
+        let herd_id = herd_create(HerdCreateRequest(name = "victim",
+            profile_id = "shell", worktree_path = root), error)
+        t |> success(!empty(herd_id), error)
+        t |> equal(herd_worktree_user(root), "victim",
+            "a non-closed session claims its worktree")
+        t |> equal(herd_worktree_user(root, herd_id), "",
+            "the exclusion id frees the lookup")
+
+        var inscope removed = HerdSession()
+        t |> success(!empty(herd_delete("nope", removed)),
+            "unknown ids are rejected")
+        t |> equal(herd_link_pty(herd_id, "pty_live"), "")
+        t |> success(!empty(herd_delete(herd_id, removed)),
+            "running sessions never delete")
+        var pty_to_terminate : string
+        t |> equal(herd_close(herd_id, pty_to_terminate), "")
+        t |> equal(herd_worktree_user(root), "",
+            "closed sessions do not hold the worktree")
+        t |> equal(herd_delete(herd_id, removed), "")
+        t |> equal(removed.name, "victim")
+        t |> equal(removed.worktree_path, herd_display_worktree(root))
+        var inscope record = HerdSession()
+        t |> success(!herd_get(herd_id, record), "deleted records are gone")
+        // Deletion is durable: a restart must not resurrect the record.
+        herd_shutdown()
+        t |> equal(herd_init(path_join(root, "_registry.json"),
+            path_join(root, "profiles.json")), "")
+        t |> success(!herd_get(herd_id, record), "deletion survives a restart")
+        herd_shutdown()
+    }
     t |> run("profile intro lines ride the initial launch request") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_herd_intro_")
         if (!(temp is value)) {

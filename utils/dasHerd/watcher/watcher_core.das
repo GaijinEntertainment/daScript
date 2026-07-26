@@ -7,9 +7,12 @@ options indenting = 4
 module watcher_core shared public
 
 require terminal/terminal public
+require dashv/dashv_boost
 require daslib/fio public
 require daslib/json_boost public
 require daslib/strings_boost
+require daslib/base64
+require daslib/random
 require strings public
 require math
 
@@ -25,6 +28,17 @@ let private MAX_RAW_HISTORY_BYTES = 8 * 1024 * 1024
 let private RAW_HISTORY_TRIM_SLACK = 1024 * 1024
 let private WATCHER_GC_STRING_PRESSURE_BYTES = 64ul * 1024ul * 1024ul
 let private WATCHER_GC_HEAP_PRESSURE_BYTES = 128ul * 1024ul * 1024ul
+
+// Detached PTY hosts (PTY_HOST_DESIGN.md): durable herd sessions run their
+// ConPTY inside a dasherd-ptyhost process the watcher merely talks to.
+let private HOST_PROTOCOL_VERSION = 1
+let private HOST_PORT_BASE = 9700
+let private HOST_PORT_SPAN = 200
+let private HOST_PORT_ATTEMPTS = 8
+let private HOST_STAMP_TIMEOUT_MS = 10000l
+let private HOST_HANDSHAKE_TIMEOUT_MS = 10000l
+let private HOST_ADOPT_HANDSHAKE_TIMEOUT_MS = 3000l
+let private HOST_STAT_POLL_MS = 500l
 
 def public watcher_gc_reason(string_used, string_total,
                              heap_used, heap_total : uint64) : string {
@@ -278,6 +292,115 @@ struct public WatcherTerminalCheckpoint {
     rows : int
 }
 
+// Mirror of the dasherd-ptyhost discovery stamp (ptyhost/main.das HostStamp).
+struct private WatcherHostStamp {
+    version : int
+    session : string
+    port : int
+    token : string
+    child_pid : int
+    journal_bytes : int64
+    exited : bool
+    exit_code : int64 = -1l
+    drained : bool
+    error : string
+}
+
+struct private HostStatMessage {
+    @rename = "type" _type : string
+    child_pid : int
+    journal_bytes : int64
+    exited : bool
+    exit_code : int64 = -1l
+    drained : bool
+    error : string
+}
+
+class private WatcherHostLink : HvWebSocketClient {
+    token : string
+    attach_from : int64
+    authorized : bool
+    attach_sent : bool
+    attached : bool
+    closed : bool
+    stat_seen : bool
+    stat_child_pid : int
+    stat_journal_bytes : int64
+    stat_exited : bool
+    stat_exit_code : int64 = -1l
+    stat_drained : bool
+    last_error : string
+    received : array<uint8>
+    pending_ops : array<string>
+
+    def override onOpen {
+        send("\{\"op\":\"hello\",\"token\":{sprint_json(token, false)},\"protocol\":{HOST_PROTOCOL_VERSION}\}")
+    }
+
+    def override onClose {
+        closed = true
+    }
+
+    def override onMessage(msg : string#) {
+        var incoming = HostStatMessage()
+        if (!sscan_json(string(msg), incoming)) return
+        if (incoming._type == "stat") {
+            stat_seen = true
+            stat_child_pid = incoming.child_pid
+            stat_journal_bytes = incoming.journal_bytes
+            stat_exited = incoming.exited
+            stat_exit_code = incoming.exit_code
+            stat_drained = incoming.drained
+            if (!authorized) {
+                authorized = true
+                for (op in pending_ops) {
+                    send(op)
+                }
+                pending_ops |> clear()
+            }
+            if (!attach_sent) {
+                attach_sent = true
+                send("\{\"op\":\"attach\",\"from_byte\":{attach_from}\}")
+            }
+        } elif (incoming._type == "attached") {
+            attached = true
+        } elif (incoming._type == "error") {
+            last_error = incoming.error
+        }
+    }
+
+    def override onMessageFrame(msg : string#; byte_count : int; opcode : ws_opcode) {
+        if (opcode != ws_opcode.WS_OPCODE_BINARY) {
+            onMessage(msg)
+            return
+        }
+        if (byte_count <= 0) return
+        let offset = length(received)
+        received |> resize_no_init(offset + byte_count)
+        unsafe {
+            memcpy(addr(received[offset]), reinterpret<void?>(msg), byte_count)
+        }
+    }
+
+    def queue_or_send(op : string) : bool {
+        // Ops issued between connect and the hello acknowledgement queue and
+        // flush in order; the host rejects anything before authorization.
+        if (closed) return false
+        if (!authorized) {
+            pending_ops |> push(op)
+            return true
+        }
+        send(op)
+        return true
+    }
+
+    def operator delete {
+        delete received
+        delete pending_ops
+        delete super.self
+    }
+}
+
 class private WatcherSession {
     id : string
     command_line : string
@@ -325,6 +448,13 @@ class private WatcherSession {
     input_line_bytes : int
     input_escape_state : int
     pending_notifications : array<WatcherPendingNotification>
+    // Detached-host transport (null = classic in-process ConPTY session).
+    host : WatcherHostLink?
+    host_port : int
+    host_stamp_path : string
+    host_last_stat_ms : int64
+    host_shutdown_sent : bool
+    host_archived : bool
     def operator delete {
         if (output_file != null) {
             fflush(output_file)
@@ -345,6 +475,13 @@ class private WatcherSession {
             fflush(bundles_file)
             fclose(bundles_file)
             bundles_file = null
+        }
+        if (host != null) {
+            let _closed = host->close()
+            unsafe {
+                delete host
+            }
+            host = null
         }
         terminal_dispose(terminal)
         delete raw_history
@@ -375,6 +512,9 @@ var private g_next_mailbox_id = 0
 var private g_mailbox_revision : int64
 var private g_next_bundle_id = 0
 var private g_bundle_revision : int64
+var private g_ptyhost_dir : string
+var private g_ptyhost_prefix : array<string>
+var private g_host_port_cursor = 0
 
 def private elapsed_ms(session : WatcherSession?) : int64 {
     return get_time_nsec(session.started) / 1000000l
@@ -400,6 +540,24 @@ def private append_event(var session : WatcherSession?; event, detail : string) 
         pid = session.pid, controller_id = session.controller_id), false) + "\n"
     fwrite(session.events_file, line)
     fflush(session.events_file)
+}
+
+def public watcher_running_worktree_user(worktree_path : string) : string {
+    //! Display name of a RUNNING PTY session whose cwd/worktree is this path,
+    //! or "". Exited task sessions don't hold the tree.
+    let full = get_full_file_name(worktree_path)
+    let wanted = get_platform_name() == "windows" ? to_lower(full) : full
+    for (session in g_sessions) {
+        if (session == null || session.state != "running"
+                || empty(session.worktree_path)) continue
+        let candidate = get_full_file_name(session.worktree_path)
+        let canonical = (get_platform_name() == "windows"
+            ? to_lower(candidate) : candidate)
+        if (canonical == wanted) {
+            return empty(session.display_name) ? session.id : session.display_name
+        }
+    }
+    return ""
 }
 
 def public watcher_record_event(session_id, event, detail : string) : bool {
@@ -446,6 +604,479 @@ def public watcher_accepts_input(session_id : string) : bool {
     let index = watcher_find_session(session_id)
     return (index >= 0 && g_sessions[index] != null &&
         g_sessions[index].state == "running" && !g_sessions[index].drained)
+}
+
+def public watcher_configure_ptyhosts(ptyhost_dir : string;
+                                      launcher_prefix : array<string>) : string {
+    //! Enables launch-via-host for durable (herd) sessions. ``ptyhost_dir``
+    //! holds per-session journals and discovery stamps; ``launcher_prefix`` is
+    //! the host command (release bundle exe, or interpreter + script + "--").
+    //! Never configured = every launch stays a classic in-process ConPTY.
+    g_ptyhost_dir = ""
+    delete g_ptyhost_prefix
+    if (empty(ptyhost_dir)) return ""
+    var error : string
+    if (!mkdir_rec(ptyhost_dir, error)) return error
+    g_ptyhost_dir = ptyhost_dir
+    g_ptyhost_prefix := launcher_prefix
+    return ""
+}
+
+def private read_host_stamp(path : string; var stamp : WatcherHostStamp) : bool {
+    if (!fexist(path)) return false
+    return sscan_json(fread(path), stamp)
+}
+
+def private host_journal_path(session_id : string) : string {
+    return path_join(g_ptyhost_dir, "{session_id}.raw")
+}
+
+def private host_stamp_path(session_id : string) : string {
+    return path_join(g_ptyhost_dir, "{session_id}.host.json")
+}
+
+def private host_lock_path(session_id : string) : string {
+    return path_join(g_ptyhost_dir, "{session_id}.lock")
+}
+
+// The host holds its .lock open for its whole life; Windows CRT handles carry
+// no FILE_SHARE_DELETE, so remove() fails while the host lives and succeeds
+// the instant it dies - crash included. Removing a dead host's lock here is
+// the cleanup, not a side effect.
+def private host_lock_held(session_id : string) : bool {
+    let lock_path = host_lock_path(session_id)
+    return fexist(lock_path) && !remove(lock_path)
+}
+
+def private archive_host_files(var session : WatcherSession?) {
+    // Once the journal is replicated into the watcher (ring + registry fold),
+    // the stamp and journal move aside so the next adoption scan stays clean.
+    // Best-effort: a file the (dying) host still holds is picked up by the
+    // next watcher start instead.
+    if (session.host_archived) return
+    session.host_archived = true
+    let archive_dir = path_join(g_ptyhost_dir, "archive")
+    var mkdir_error : string
+    if (!mkdir_rec(archive_dir, mkdir_error)) return
+    let stamp_path = host_stamp_path(session.id)
+    if (fexist(stamp_path)) {
+        let _ = rename(stamp_path, path_join(archive_dir, "{session.id}.host.json"))
+    }
+    let journal_path = host_journal_path(session.id)
+    if (fexist(journal_path)) {
+        let archived_journal = path_join(archive_dir, "{session.id}.raw")
+        if (rename(journal_path, archived_journal)) {
+            session.output_path = archived_journal
+        }
+    }
+    let log_path = path_join(g_ptyhost_dir, "{session.id}.log")
+    if (fexist(log_path)) {
+        let _ = rename(log_path, path_join(archive_dir, "{session.id}.log"))
+    }
+    // A crashed host leaves its lock file behind unlockable; sweep it.
+    let lock_path = host_lock_path(session.id)
+    if (fexist(lock_path)) {
+        let _ = remove(lock_path)
+    }
+}
+
+def private session_process_exited(session : WatcherSession?) : bool {
+    return (session.host != null ? session.host.stat_exited
+        : terminal_process_exited(session.terminal))
+}
+
+def private session_exit_code(session : WatcherSession?) : int64 {
+    return (session.host != null ? session.host.stat_exit_code
+        : terminal_exit_code(session.terminal))
+}
+
+def private session_transport_error(session : WatcherSession?) : string {
+    if (session.host == null) return terminal_transport_error(session.terminal)
+    if (!empty(session.host.last_error)) return session.host.last_error
+    return session.host.closed ? "host connection lost" : ""
+}
+
+def private session_write_bytes_host(var session : WatcherSession?;
+                                     bytes : array<uint8> const) : bool {
+    if (empty(bytes)) return true
+    return session.host->queue_or_send(
+        "\{\"op\":\"input\",\"base64\":\"{base64_encode(bytes)}\"\}")
+}
+
+def private session_write_text(var session : WatcherSession?; text : string) : bool {
+    if (session.host == null) return terminal_write(session.terminal, text)
+    var inscope bytes : array<uint8>
+    let count = length(text)
+    if (count > 0) {
+        bytes |> resize_no_init(count)
+        peek_data(text) $(view) {
+            unsafe {
+                memcpy(addr(bytes[0]), addr(view[0]), count)
+            }
+        }
+    }
+    return session_write_bytes_host(session, bytes)
+}
+
+def private launch_session_host(var session : WatcherSession?;
+                                child_argv : array<string> const;
+                                cwd : string; columns, rows : int) : string {
+    var seed = random_seed(int(ref_time_ticks()))
+    let token = "{random_uint(seed)}-{random_uint(seed)}-{random_uint(seed)}-{random_uint(seed)}"
+    session.host_stamp_path = host_stamp_path(session.id)
+    var last_error = "no free ptyhost port"
+    for (attempt in range(HOST_PORT_ATTEMPTS)) {
+        let port = HOST_PORT_BASE + ((g_host_port_cursor + attempt) % HOST_PORT_SPAN)
+        if (fexist(session.host_stamp_path)) {
+            // A previous attempt's bind-failure stamp must not satisfy the
+            // wait loop below.
+            let _ = remove(session.host_stamp_path)
+        }
+        var inscope host_argv := g_ptyhost_prefix
+        host_argv |> reserve(length(host_argv) + 12 + length(child_argv) * 2)
+        host_argv |> push_from(["--session", session.id, "--port", "{port}",
+            "--journal", g_ptyhost_dir, "--cwd", cwd,
+            "--columns", "{columns}", "--rows", "{rows}"])
+        for (argument in child_argv) {
+            host_argv |> push("--child")
+            host_argv |> push(argument)
+        }
+        var spawn_pid = 0
+        var spawn_error = ""
+        let _spawned = spawn_detached(host_argv, "", ["DASHERD_HOST_TOKEN={token}"]) $(pid, launch_error) {
+            spawn_pid = pid
+            spawn_error := launch_error
+        }
+        if (spawn_pid == 0) return "could not spawn ptyhost: {spawn_error}"
+        if (!empty(spawn_error)) {
+            // Degraded breakaway: the host would die with the watcher's job -
+            // the exact guarantee this architecture exists to provide.
+            return "ptyhost spawn degraded: {spawn_error}"
+        }
+        var stamp = WatcherHostStamp()
+        var stamp_seen = false
+        let stamp_started = ref_time_ticks()
+        while (get_time_nsec(stamp_started) / 1000000l < HOST_STAMP_TIMEOUT_MS) {
+            if (read_host_stamp(session.host_stamp_path, stamp)) {
+                stamp_seen = true
+                break
+            }
+            sleep(5u)
+        }
+        if (!stamp_seen) return "ptyhost produced no discovery stamp"
+        if (!empty(stamp.error)) {
+            last_error = stamp.error
+            continue if (find(stamp.error, "could not bind") >= 0)
+            return stamp.error
+        }
+        var link = new WatcherHostLink(token = token, attach_from = 0l)
+        if (link->init("ws://127.0.0.1:{port}/") != 0) {
+            unsafe {
+                delete link
+            }
+            last_error = "could not connect to ptyhost on port {port}"
+            continue
+        }
+        let handshake_started = ref_time_ticks()
+        while (!link.attached && !link.closed && empty(link.last_error)
+                && get_time_nsec(handshake_started) / 1000000l < HOST_HANDSHAKE_TIMEOUT_MS) {
+            link->process_event_que()
+            sleep(2u)
+        }
+        if (!link.attached) {
+            let handshake_error = (!empty(link.last_error)
+                ? link.last_error : "ptyhost handshake timeout")
+            let _closed = link->close()
+            unsafe {
+                delete link
+            }
+            return handshake_error
+        }
+        g_host_port_cursor = (port - HOST_PORT_BASE + 1) % HOST_PORT_SPAN
+        session.host = link
+        session.host_port = port
+        session.pid = link.stat_child_pid
+        return ""
+    }
+    return last_error
+}
+
+def private pump_host_session(var session : WatcherSession?; now_ms : int64) {
+    var link = session.host
+    link->process_event_que()
+    if (!empty(link.received)) {
+        session.last_data_ms = now_ms
+        session.output_bytes += int64(length(link.received))
+        retain_raw_output(session, link.received)
+        if (session.output_file != null) {
+            let _ = fwrite(session.output_file, link.received)
+            fflush(session.output_file)
+        }
+        terminal_feed_bytes(session.terminal, link.received)
+        link.received |> clear()
+        // Parser auto-replies (DA / DSR / CPR) must still reach the child.
+        var inscope replies : array<array<uint8>>
+        terminal_drain_replies_bytes(session.terminal, replies)
+        for (reply in replies) {
+            let _ = session_write_bytes_host(session, reply)
+        }
+    }
+    if (session.pid == 0 && link.stat_child_pid != 0) {
+        session.pid = link.stat_child_pid
+        session.status_revision++
+    }
+    observe_exit(session, now_ms)
+    enforce_timeout(session, now_ms)
+    if (link.closed) {
+        if (!session.drained) {
+            // The host vanished mid-stream: that one session is lost (the
+            // failure matrix's "host dies" row), never the whole herd.
+            if (session.state == "running" || session.state == "terminating") {
+                session.state = "failed"
+                session.reason = "host_disconnected"
+                session.status_revision++
+                append_event(session, "transport_error", "host_disconnected")
+            }
+            finish_drain(session, "host_disconnected")
+        }
+        if (session.host_shutdown_sent) {
+            archive_host_files(session)
+        }
+        return
+    }
+    if (!session.drained && link.stat_seen
+            && session.output_bytes >= link.stat_journal_bytes) {
+        if (link.stat_drained) {
+            finish_drain(session, "host_drained")
+        } elif (session.exit_seen_ms >= 0l) {
+            // The host never observes pipe closure while it holds the HPCON,
+            // so the exit fold reuses the direct path's quiet interval.
+            let quiet_ms = (session.drain_quiet_ms > 0l
+                ? session.drain_quiet_ms : DEFAULT_DRAIN_QUIET_MS)
+            if (now_ms - session.last_data_ms >= quiet_ms) {
+                finish_drain(session, "quiet_interval")
+            }
+        }
+    }
+    if (session.drained && session.exit_seen_ms >= 0l && !session.host_shutdown_sent) {
+        // Journal fully replicated: release the host instead of letting it
+        // linger. The stamp archives once the host acknowledges by exiting.
+        session.host_shutdown_sent = true
+        link->send("\{\"op\":\"shutdown\"\}")
+        append_event(session, "host_released", "journal_bytes={session.output_bytes}")
+    }
+    if (!session.drained && link.authorized
+            && now_ms - session.host_last_stat_ms >= HOST_STAT_POLL_MS) {
+        session.host_last_stat_ms = now_ms
+        link->send("\{\"op\":\"stat\"\}")
+    }
+}
+
+def private numeric_id_suffix(value, prefix : string) : int {
+    if (!starts_with(value, prefix)) return 0
+    return to_int(slice(value, length(prefix)))
+}
+
+// Replays the session's persisted jsonl records after adoption so mailbox and
+// bundle state (and their global id counters) survive a watcher restart.
+def private restore_session_records(var session : WatcherSession?) {
+    if (fexist(session.events_path)) {
+        for (line in split(fread(session.events_path), "\n")) {
+            continue if (empty(strip(line)))
+            var event = WatcherEvent()
+            if (sscan_json(line, event)) {
+                session.event_sequence = max(session.event_sequence, event.sequence)
+            }
+        }
+    }
+    if (fexist(session.mailbox_path)) {
+        for (line in split(fread(session.mailbox_path), "\n")) {
+            continue if (empty(strip(line)))
+            var message = WatcherMailboxMessage()
+            continue if (!sscan_json(line, message))
+            g_next_mailbox_id = max(g_next_mailbox_id, numeric_id_suffix(message.id, "hf_"))
+            g_mailbox_revision = max(g_mailbox_revision, message.revision)
+            session.mailbox_revision = max(session.mailbox_revision, message.revision)
+            var found = -1
+            for (index in range(length(session.mailbox))) {
+                if (session.mailbox[index].id == message.id) {
+                    found = index
+                    break
+                }
+            }
+            if (found >= 0) {
+                session.mailbox[found] := message
+            } else {
+                session.mailbox |> emplace(message)
+            }
+        }
+    }
+    if (fexist(session.bundles_path)) {
+        for (line in split(fread(session.bundles_path), "\n")) {
+            continue if (empty(strip(line)))
+            var bundle = WatcherReviewBundle()
+            continue if (!sscan_json(line, bundle))
+            g_next_bundle_id = max(g_next_bundle_id, numeric_id_suffix(bundle.id, "rb_"))
+            g_bundle_revision = max(g_bundle_revision, bundle.revision)
+            session.bundles_revision = max(session.bundles_revision, bundle.revision)
+            var found = -1
+            for (index in range(length(session.bundles))) {
+                if (session.bundles[index].id == bundle.id) {
+                    found = index
+                    break
+                }
+            }
+            if (found >= 0) {
+                session.bundles[found] := bundle
+            } else {
+                session.bundles |> emplace(bundle)
+            }
+        }
+    }
+}
+
+// Loads the journal tail of a dead host into the replay ring and the screen
+// model. Returns the journal's total size (the session's final output_bytes).
+def private seed_ring_from_journal(var session : WatcherSession?) : int64 {
+    let journal = host_journal_path(session.id)
+    let journal_stat = stat(journal)
+    if (!journal_stat.is_valid) return 0l
+    let total = int64(journal_stat.size)
+    let from = max(0l, total - int64(MAX_RAW_HISTORY_BYTES))
+    session.raw_history_start = from
+    fopen(journal, "rb") $(reader) {
+        if (reader == null) return
+        var inscope chunk : array<uint8>
+        chunk |> resize(64 * 1024)
+        var skipped = 0l
+        while (skipped < from) {
+            let remaining = from - skipped
+            let want = int(remaining > int64(64 * 1024) ? int64(64 * 1024) : remaining)
+            if (want < length(chunk)) chunk |> resize(want)
+            let got = fread(reader, chunk)
+            if (got <= 0) break
+            skipped += int64(got)
+            if (length(chunk) < 64 * 1024) chunk |> resize(64 * 1024)
+        }
+        while (true) {
+            let got = fread(reader, chunk)
+            if (got <= 0) break
+            if (got < length(chunk)) chunk |> resize(got)
+            retain_raw_output(session, chunk)
+            if (length(chunk) < 64 * 1024) chunk |> resize(64 * 1024)
+        }
+    }
+    session.output_bytes = session.raw_history_start + int64(length(session.raw_history))
+    terminal_feed_bytes(session.terminal, session.raw_history)
+    return total
+}
+
+def private adopt_host_session(stamp : WatcherHostStamp) : bool {
+    let session_dir = path_join(g_log_root, stamp.session)
+    let request_path = path_join(session_dir, "session.json")
+    if (!fexist(request_path)) return false
+    var inscope persisted = WatcherLaunchRequest()
+    if (!sscan_json(fread(request_path), persisted)) return false
+    var visible_command = persisted.display_name
+    if (empty(visible_command)) {
+        visible_command = (!empty(persisted.command_line)
+            ? persisted.command_line : join(persisted.argv, " "))
+    }
+    let columns = clamp(persisted.columns > 0 ? persisted.columns : 120, 20, 400)
+    let rows = clamp(persisted.rows > 0 ? persisted.rows : 36, 5, 512)
+    var session = new WatcherSession(id = stamp.session,
+        command_line = visible_command, cwd = persisted.cwd,
+        display_name = persisted.display_name, kind = persisted.kind,
+        target_id = watcher_target_id_or_local(persisted.target_id),
+        repository_id = persisted.repository_id,
+        worktree_path = persisted.worktree_path, purpose = persisted.purpose,
+        task_context = persisted.task_context,
+        herd_session_id = persisted.herd_session_id,
+        session_dir = session_dir,
+        output_path = host_journal_path(stamp.session),
+        events_path = path_join(session_dir, "events.jsonl"),
+        mailbox_path = path_join(session_dir, "mailbox.jsonl"),
+        bundles_path = path_join(session_dir, "bundles.jsonl"),
+        started = ref_time_ticks(), timeout_ms = 0l, drain_quiet_ms = 0l)
+    session.context_path = path_join(session_dir, "context.md")
+    session.host_stamp_path = host_stamp_path(stamp.session)
+    session.events_file = fopen(session.events_path, "ab")
+    session.mailbox_file = fopen(session.mailbox_path, "ab")
+    session.bundles_file = fopen(session.bundles_path, "ab")
+    restore_session_records(session)
+    g_next_session_id = max(g_next_session_id,
+        numeric_id_suffix(slice(stamp.session, find(stamp.session, "_") + 1), ""))
+    var inscope model <- terminal_create(columns, rows)
+    session.terminal := model
+    // The lock probe answers dead-or-alive instantly and race-free; only a
+    // held lock is worth the connect handshake (whose timeout stays as the
+    // fallback for a host that is alive but wedged).
+    let attach_from = max(0l, stamp.journal_bytes - int64(MAX_RAW_HISTORY_BYTES))
+    var link = new WatcherHostLink(token = stamp.token, attach_from = attach_from)
+    var adopted_live = false
+    if (host_lock_held(stamp.session)
+            && link->init("ws://127.0.0.1:{stamp.port}/") == 0) {
+        let handshake_started = ref_time_ticks()
+        while (!link.attached && !link.closed && empty(link.last_error)
+                && get_time_nsec(handshake_started) / 1000000l < HOST_ADOPT_HANDSHAKE_TIMEOUT_MS) {
+            link->process_event_que()
+            sleep(2u)
+        }
+        adopted_live = link.attached
+    }
+    if (adopted_live) {
+        session.host = link
+        session.host_port = stamp.port
+        session.pid = link.stat_child_pid
+        session.output_bytes = attach_from
+        session.raw_history_start = attach_from
+        session.state = "running"
+        session.status_revision++
+        append_event(session, "session_adopted", ("live_host; port={stamp.port}; " +
+            "journal_bytes={stamp.journal_bytes}; from_byte={attach_from}"))
+    } else {
+        let _closed = link->close()
+        unsafe {
+            delete link
+        }
+        let journal_total = seed_ring_from_journal(session)
+        session.pid = stamp.child_pid
+        session.exit_code = stamp.exited ? stamp.exit_code : -1l
+        session.state = stamp.exited ? "exited" : "failed"
+        session.reason = stamp.exited ? "process_exited" : "host_lost"
+        session.exit_seen_ms = 0l
+        session.drained = true
+        session.status_revision++
+        append_event(session, "session_adopted", ("dead_host; exited={stamp.exited}; " +
+            "exit_code={stamp.exit_code}; journal_bytes={journal_total}"))
+        archive_host_files(session)
+    }
+    g_sessions |> push(session)
+    return true
+}
+
+def public watcher_adopt_hosts : int {
+    //! Scans ptyhost discovery stamps: sessions of live hosts resurrect as
+    //! RUNNING; dead hosts fold their recorded exit into an exited session
+    //! (replay served from the journal tail) and archive their files. Runs
+    //! before herd_init so registry records keep their running state. Returns
+    //! the number of sessions adopted.
+    if (empty(g_ptyhost_dir) || empty(g_log_root)) return 0
+    var inscope stamp_files : array<string>
+    dir(g_ptyhost_dir) $(name) {
+        if (ends_with(name, ".host.json")) {
+            stamp_files |> push(clone_string(name))
+        }
+    }
+    var adopted = 0
+    for (stamp_file in stamp_files) {
+        var stamp = WatcherHostStamp()
+        continue if (!read_host_stamp(path_join(g_ptyhost_dir, stamp_file), stamp)
+            || empty(stamp.session) || stamp.version != HOST_PROTOCOL_VERSION
+            || watcher_find_session(stamp.session) >= 0)
+        if (adopt_host_session(stamp)) adopted++
+    }
+    return adopted
 }
 
 def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult {
@@ -505,11 +1136,21 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         started = ref_time_ticks(), timeout_ms = max(0l, request.timeout_ms),
         drain_quiet_ms = max(0l, request.drain_quiet_ms))
     session.context_path = path_join(session_dir, "context.md")
-    session.output_file = fopen(session.output_path, "wb")
+    // Durable herd sessions run in a detached ptyhost when one is configured;
+    // ephemeral plumbing (git captures, task terminals) stays in-process.
+    let host_backed = (!empty(request.herd_session_id)
+        && !empty(g_ptyhost_dir) && !empty(g_ptyhost_prefix)
+        && (watcher_kind_is_agent(request.kind) || !empty(request.argv)))
+    if (host_backed) {
+        // The host journal IS the raw output record - no duplicate local copy.
+        session.output_path = host_journal_path(session_id)
+    } else {
+        session.output_file = fopen(session.output_path, "wb")
+    }
     session.events_file = fopen(session.events_path, "wb")
     session.mailbox_file = fopen(session.mailbox_path, "wb")
     session.bundles_file = fopen(session.bundles_path, "wb")
-    if (session.output_file == null || session.events_file == null
+    if ((!host_backed && session.output_file == null) || session.events_file == null
             || session.mailbox_file == null || session.bundles_file == null) {
         unsafe { delete session }
         return WatcherLaunchResult(error = "could not open session logs")
@@ -536,32 +1177,54 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     }
     append_event(session, "session_created", session_created_detail)
 
+    var inscope child_argv : array<string>
     if (watcher_kind_is_agent(request.kind)) {
         append_event(session, "agent_bootstrap_prepared",
             "context={session.context_path}; skill={request.agent_skill_path}; " +
             "task_bytes={length(request.task_context)}")
-        var inscope argv <- agent_launch_argv(request, session_id, session.context_path)
-        var inscope launched <- terminal_launch_argv(argv, request.cwd, columns, rows)
-        session.terminal := launched
-    } elif (!empty(request.argv)) {
-        var inscope launched <- terminal_launch_argv(request.argv, request.cwd, columns, rows)
-        session.terminal := launched
+        child_argv <- agent_launch_argv(request, session_id, session.context_path)
     } else {
-        var inscope launched <- terminal_launch(request.command_line, request.cwd, columns, rows)
-        session.terminal := launched
+        child_argv := request.argv
     }
-    if (terminal_process_id(session.terminal) == 0) {
-        session.state = "failed"
-        session.reason = terminal_transport_error(session.terminal)
-        if (empty(session.reason)) { session.reason = "terminal launch failed" }
-        session.drained = true
-        session.status_revision++
-        append_event(session, "launch_failed", session.reason)
+    if (host_backed) {
+        // The screen model lives here; the ConPTY lives in the host process.
+        var inscope model <- terminal_create(columns, rows)
+        session.terminal := model
+        let host_error = launch_session_host(session, child_argv, request.cwd,
+            columns, rows)
+        if (!empty(host_error)) {
+            session.state = "failed"
+            session.reason = host_error
+            session.drained = true
+            session.status_revision++
+            append_event(session, "launch_failed", session.reason)
+        } else {
+            session.state = "running"
+            session.status_revision++
+            append_event(session, "launched",
+                "pid={session.pid}; host_port={session.host_port}")
+        }
     } else {
-        session.pid = terminal_process_id(session.terminal)
-        session.state = "running"
-        session.status_revision++
-        append_event(session, "launched", "pid={terminal_process_id(session.terminal)}")
+        if (!empty(child_argv)) {
+            var inscope launched <- terminal_launch_argv(child_argv, request.cwd, columns, rows)
+            session.terminal := launched
+        } else {
+            var inscope launched <- terminal_launch(request.command_line, request.cwd, columns, rows)
+            session.terminal := launched
+        }
+        if (terminal_process_id(session.terminal) == 0) {
+            session.state = "failed"
+            session.reason = terminal_transport_error(session.terminal)
+            if (empty(session.reason)) { session.reason = "terminal launch failed" }
+            session.drained = true
+            session.status_revision++
+            append_event(session, "launch_failed", session.reason)
+        } else {
+            session.pid = terminal_process_id(session.terminal)
+            session.state = "running"
+            session.status_revision++
+            append_event(session, "launched", "pid={terminal_process_id(session.terminal)}")
+        }
     }
     g_sessions |> push(session)
     if (session.state == "failed") {
@@ -571,9 +1234,9 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
 }
 
 def private observe_exit(var session : WatcherSession?; now_ms : int64) {
-    if (session.exit_seen_ms >= 0l || !terminal_process_exited(session.terminal)) return
+    if (session.exit_seen_ms >= 0l || !session_process_exited(session)) return
     session.exit_seen_ms = now_ms
-    session.exit_code = terminal_exit_code(session.terminal)
+    session.exit_code = session_exit_code(session)
     if (session.state != "failed") {
         session.state = "exited"
     }
@@ -610,6 +1273,10 @@ def public watcher_tick(maximum_bytes_per_session : int = 64 * 1024) {
     for (session in g_sessions) {
         if (session == null) continue
         let now_ms = elapsed_ms(session)
+        if (session.host != null) {
+            pump_host_session(session, now_ms)
+            continue
+        }
         if (session.drained) {
             // Pipe closure can race slightly ahead of the process handle. Keep
             // observing lifecycle/timeout state after output is fully drained.
@@ -925,7 +1592,10 @@ def public watcher_prune_completed_sessions(kind : string;
 def private input_session(var session : WatcherSession?; text : string; client_id : int) : string {
     if (session.controller_id != 0 && session.controller_id != client_id) return "controller lease is held by another client"
     if (session.state != "running" || session.drained) return "session is not running"
-    if (!terminal_write(session.terminal, text)) return terminal_transport_error(session.terminal)
+    if (!session_write_text(session, text)) {
+        let error = session_transport_error(session)
+        return empty(error) ? "input write failed" : error
+    }
     session.input_bytes += int64(length(text))
     return ""
 }
@@ -986,6 +1656,12 @@ def private ensure_git_exclude(worktree_path, pattern : string;
 // launch. A hand-written file without our marker is never touched.
 def private ensure_agent_local_instructions(request : WatcherLaunchRequest const;
                                             var detail : string&) {
+    // A launch without a cwd would resolve the drop into the WATCHER's own
+    // working directory — skip rather than litter it.
+    if (empty(request.cwd)) {
+        detail += "; local_md=skipped_no_cwd"
+        return
+    }
     let local_path = path_join(request.cwd, "CLAUDE.local.md")
     let existing = fexist(local_path) ? fread(local_path) : ""
     if (!empty(existing) && find(existing, DASHERD_LOCAL_MARKER) < 0) {
@@ -1093,7 +1769,7 @@ def private flush_pending_notifications(var session : WatcherSession?) {
     var delivered = 0
     while (delivered < length(session.pending_notifications)) {
         let pending & = unsafe(session.pending_notifications[delivered])
-        if (!terminal_write(session.terminal, pending.text)) break
+        if (!session_write_text(session, pending.text)) break
         session.input_bytes += int64(length(pending.text))
         if (!empty(pending.message_id)) {
             let _ = watcher_mailbox_set_notification(session.id, pending.message_id)
@@ -1485,6 +2161,10 @@ def public watcher_bundles_json(session_id : string) : string {
 def private resize_session(var session : WatcherSession?; columns, rows, client_id : int) : string {
     if (session.controller_id != 0 && session.controller_id != client_id) return "controller lease is held by another client"
     terminal_resize(session.terminal, clamp(columns, 20, 400), clamp(rows, 5, 512))
+    if (session.host != null) {
+        let _ = session.host->queue_or_send(("\{\"op\":\"resize\"," +
+            "\"columns\":{session.terminal.columns},\"rows\":{session.terminal.rows}\}"))
+    }
     append_event(session, "resized", "{session.terminal.columns}x{session.terminal.rows}")
     return ""
 }
@@ -1498,11 +2178,17 @@ def public watcher_resize(session_id : string; columns : int; rows : int;
 
 def private terminate_session(var session : WatcherSession?; detail : string) : string {
     if ((session.state != "running" && session.state != "terminating")
-            || terminal_process_exited(session.terminal)) return ""
+            || session_process_exited(session)) return ""
     session.reason = detail
     session.state = "terminating"
     session.status_revision++
-    if (!terminal_terminate(session.terminal)) return terminal_transport_error(session.terminal)
+    if (session.host != null) {
+        if (!session.host->queue_or_send("\{\"op\":\"terminate\",\"exit_code\":1\}")) {
+            return "host connection lost"
+        }
+    } elif (!terminal_terminate(session.terminal)) {
+        return terminal_transport_error(session.terminal)
+    }
     append_event(session, "terminate_requested", detail)
     return ""
 }
@@ -1585,7 +2271,15 @@ def public watcher_update_key(session_id : string) : string {
 def public watcher_shutdown(terminate_running : bool = false) {
     for (session in g_sessions) {
         if (session == null) continue
-        if (terminate_running && !terminal_process_exited(session.terminal)) {
+        if (session.host != null) {
+            // Default shutdown leaves hosts (and their children) running -
+            // that survival is the entire point of the detached architecture.
+            if (terminate_running && !session.host.closed) {
+                let _t = session.host->queue_or_send("\{\"op\":\"terminate\",\"exit_code\":1\}")
+                let _s = session.host->queue_or_send("\{\"op\":\"shutdown\"\}")
+                session.host->process_event_que()
+            }
+        } elif (terminate_running && !terminal_process_exited(session.terminal)) {
             let _ = terminal_terminate(session.terminal)
         }
         if (session.output_file != null) {

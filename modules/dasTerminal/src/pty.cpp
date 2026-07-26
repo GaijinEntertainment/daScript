@@ -1,6 +1,7 @@
 #include "pty.h"
 
 #include <algorithm>
+#include <cwctype>
 #include <vector>
 
 #if defined(_WIN32)
@@ -145,6 +146,58 @@ std::string escapeWindowsArgument(const std::string & argument) {
     return result;
 }
 
+// Merged environment block: every inherited entry whose KEY is not overridden,
+// then the extras, double-NUL terminated. Key comparison is case-insensitive
+// (Windows environment semantics). Returns false only on conversion failure.
+bool buildEnvironmentBlock(const std::vector<std::string> & extras,
+                           std::wstring & block, std::string & error) {
+    std::vector<std::wstring> wide_extras;
+    wide_extras.reserve(extras.size());
+    for (const auto & entry : extras) {
+        std::wstring wide = utf8ToWide(entry, error);
+        if (wide.empty()) {
+            error = "environment entry is empty or not valid UTF-8: " + entry;
+            return false;
+        }
+        if (wide.find(L'=') == std::wstring::npos || wide.front() == L'=') {
+            error = "environment entry is not KEY=VALUE: " + entry;
+            return false;
+        }
+        wide_extras.push_back(std::move(wide));
+    }
+    auto keyOf = [](const std::wstring & entry) {
+        std::wstring key = entry.substr(0, entry.find(L'='));
+        for (auto & ch : key) ch = towupper(ch);
+        return key;
+    };
+    block.clear();
+    LPWCH inherited = GetEnvironmentStringsW();
+    if (inherited) {
+        for (LPWCH cursor = inherited; *cursor;) {
+            const std::wstring entry(cursor);
+            cursor += entry.size() + 1;
+            bool overridden = false;
+            for (const auto & extra : wide_extras) {
+                if (keyOf(extra) == keyOf(entry)) {
+                    overridden = true;
+                    break;
+                }
+            }
+            if (!overridden) {
+                block.append(entry);
+                block.push_back(L'\0');
+            }
+        }
+        FreeEnvironmentStringsW(inherited);
+    }
+    for (const auto & extra : wide_extras) {
+        block.append(extra);
+        block.push_back(L'\0');
+    }
+    block.push_back(L'\0');
+    return true;
+}
+
 std::string buildWindowsCommandLine(const std::vector<std::string> & arguments) {
     std::string result;
     for (const std::string & argument : arguments) {
@@ -274,11 +327,22 @@ bool ConPtyProcess::launch(const PtyProcessOptions & options, std::string & erro
         return false;
     }
 
+    std::wstring environment_block;
+    if (!options.environment.empty()
+            && !buildEnvironmentBlock(options.environment, environment_block, error)) {
+        DeleteProcThreadAttributeList(startup.lpAttributeList);
+        closeHandle(input_read);
+        closeHandle(output_write);
+        closePty();
+        return false;
+    }
     PROCESS_INFORMATION process = {};
     const BOOL created = CreateProcessW(
         nullptr, mutable_command.data(), nullptr, nullptr, FALSE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
-        nullptr, directory.empty() ? nullptr : directory.c_str(),
+        environment_block.empty()
+            ? nullptr : static_cast<LPVOID>(environment_block.data()),
+        directory.empty() ? nullptr : directory.c_str(),
         &startup.StartupInfo, &process);
     const DWORD create_error = GetLastError();
     DeleteProcThreadAttributeList(startup.lpAttributeList);
@@ -439,6 +503,67 @@ std::unique_ptr<PtyProcess> launchPtyProcess(
     return std::unique_ptr<PtyProcess>(process.release());
 }
 
+uint32_t spawnDetachedProcess(
+    const std::vector<std::string> & arguments,
+    const std::string & working_directory,
+    const std::vector<std::string> & environment,
+    std::string & error) {
+    error.clear();
+    if (arguments.empty()) {
+        error = "detached spawn argument array is empty";
+        return 0;
+    }
+    const std::string command_line = buildWindowsCommandLine(arguments);
+    std::wstring command = utf8ToWide(command_line, error);
+    std::wstring directory = utf8ToWide(working_directory, error);
+    if (command.empty() || (!working_directory.empty() && directory.empty())) {
+        if (error.empty()) error = "detached spawn command conversion failed";
+        return 0;
+    }
+    std::wstring environment_block;
+    if (!environment.empty()
+            && !buildEnvironmentBlock(environment, environment_block, error)) {
+        return 0;
+    }
+    std::vector<wchar_t> mutable_command(command.begin(), command.end());
+    mutable_command.push_back(L'\0');
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof(startup);
+    // CREATE_NO_WINDOW, not DETACHED_PROCESS: the child gets its own hidden
+    // console (working std handles - PowerShell and friends break without
+    // one) that it owns outright, so it still survives the caller.
+    const DWORD base_flags = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+        | CREATE_UNICODE_ENVIRONMENT;
+    LPVOID env_ptr = environment_block.empty()
+        ? nullptr : static_cast<LPVOID>(environment_block.data());
+    PROCESS_INFORMATION process = {};
+    BOOL created = CreateProcessW(
+        nullptr, mutable_command.data(), nullptr, nullptr, FALSE,
+        base_flags | CREATE_BREAKAWAY_FROM_JOB, env_ptr,
+        directory.empty() ? nullptr : directory.c_str(), &startup, &process);
+    if (!created && GetLastError() == ERROR_ACCESS_DENIED) {
+        // The caller's job forbids breakaway. Spawn anyway so work can
+        // proceed, but say so: the child will die with that job, which
+        // defeats detachment - the caller decides whether that is fatal.
+        created = CreateProcessW(
+            nullptr, mutable_command.data(), nullptr, nullptr, FALSE,
+            base_flags, env_ptr,
+            directory.empty() ? nullptr : directory.c_str(), &startup, &process);
+        if (created) {
+            error = "job breakaway denied; the detached process remains in "
+                "the caller's job and will die with it";
+        }
+    }
+    if (!created) {
+        if (error.empty()) error = windowsError("CreateProcessW(detached)");
+        return 0;
+    }
+    const uint32_t pid = process.dwProcessId;
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return pid;
+}
+
 } // namespace das_terminal
 
 #else
@@ -449,6 +574,13 @@ std::unique_ptr<PtyProcess> launchPtyProcess(
     const PtyProcessOptions &, std::string & error) {
     error = "PTY transport is not implemented on this platform";
     return std::unique_ptr<PtyProcess>();
+}
+
+uint32_t spawnDetachedProcess(
+    const std::vector<std::string> &, const std::string &,
+    const std::vector<std::string> &, std::string & error) {
+    error = "detached spawn is not implemented on this platform";
+    return 0;
 }
 
 } // namespace das_terminal

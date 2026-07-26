@@ -79,6 +79,82 @@ das::smart_ptr<PtyHandle> builtin_pty_launch_argv(
     return pty;
 }
 
+das::smart_ptr<PtyHandle> builtin_pty_launch_argv_env(
+    const das::TArray<char *> & arguments,
+    const char * working_directory, int32_t directory_count,
+    const das::TArray<char *> & environment,
+    int32_t columns, int32_t rows, das::Context * context,
+    das::LineInfoArg * at) {
+    das::smart_ptr<PtyHandle> pty = das::make_smart<PtyHandle>();
+    if (!arguments.size) {
+        pty->error = "PTY argument array is empty";
+        return pty;
+    }
+    PtyProcessOptions options;
+    options.arguments.reserve(arguments.size);
+    for (uint32_t index = 0; index != arguments.size; ++index) {
+        const char * value = arguments[index];
+        if (!value) {
+            context->throw_error_at(at, "PTY argument %u is null", index);
+            return pty;
+        }
+        options.arguments.emplace_back(value);
+    }
+    options.environment.reserve(environment.size);
+    for (uint32_t index = 0; index != environment.size; ++index) {
+        const char * value = environment[index];
+        if (!value) {
+            context->throw_error_at(at, "PTY environment entry %u is null", index);
+            return pty;
+        }
+        options.environment.emplace_back(value);
+    }
+    if (working_directory && directory_count > 0)
+        options.working_directory.assign(
+            working_directory, static_cast<size_t>(directory_count));
+    options.columns = columns;
+    options.rows = rows;
+    pty->process = launchPtyProcess(options, pty->error);
+    return pty;
+}
+
+int32_t builtin_spawn_detached(
+    const das::TArray<char *> & arguments,
+    const char * working_directory, int32_t directory_count,
+    const das::TArray<char *> & environment,
+    const das::TBlock<void, int32_t, das::TTemporary<const char *>> & result_blk,
+    das::Context * context, das::LineInfoArg * at) {
+    std::vector<std::string> argument_list;
+    argument_list.reserve(arguments.size);
+    for (uint32_t index = 0; index != arguments.size; ++index) {
+        const char * value = arguments[index];
+        if (!value) {
+            context->throw_error_at(at, "detached spawn argument %u is null", index);
+            return 0;
+        }
+        argument_list.emplace_back(value);
+    }
+    std::vector<std::string> environment_list;
+    environment_list.reserve(environment.size);
+    for (uint32_t index = 0; index != environment.size; ++index) {
+        const char * value = environment[index];
+        if (!value) {
+            context->throw_error_at(at, "detached spawn environment entry %u is null", index);
+            return 0;
+        }
+        environment_list.emplace_back(value);
+    }
+    std::string directory;
+    if (working_directory && directory_count > 0)
+        directory.assign(working_directory, static_cast<size_t>(directory_count));
+    std::string error;
+    const uint32_t pid = spawnDetachedProcess(
+        argument_list, directory, environment_list, error);
+    das::das_invoke<void>::invoke<int32_t, const char *>(
+        context, at, result_blk, static_cast<int32_t>(pid), error.c_str());
+    return static_cast<int32_t>(pid);
+}
+
 int32_t builtin_pty_read(
     const das::smart_ptr<PtyHandle> & pty, das::TArray<uint8_t> & bytes,
     int32_t maximum_bytes, das::Context * context, das::LineInfoArg * at) {
@@ -186,6 +262,16 @@ public:
             "das_terminal::builtin_pty_launch_argv")
                 ->args({"arguments", "working_directory", "directory_count",
                     "columns", "rows", "context", "at"});
+        addExtern<DAS_BIND_FUN(das_terminal::builtin_pty_launch_argv_env)>(*this, lib,
+            "_pty_launch_argv_env", SideEffects::modifyExternal,
+            "das_terminal::builtin_pty_launch_argv_env")
+                ->args({"arguments", "working_directory", "directory_count",
+                    "environment", "columns", "rows", "context", "at"});
+        addExtern<DAS_BIND_FUN(das_terminal::builtin_spawn_detached)>(*this, lib,
+            "_spawn_detached", SideEffects::modifyExternal,
+            "das_terminal::builtin_spawn_detached")
+                ->args({"arguments", "working_directory", "directory_count",
+                    "environment", "result_blk", "context", "at"});
         addExtern<DAS_BIND_FUN(das_terminal::builtin_pty_read)>(*this, lib,
             "_pty_read", SideEffects::modifyArgumentAndExternal,
             "das_terminal::builtin_pty_read")

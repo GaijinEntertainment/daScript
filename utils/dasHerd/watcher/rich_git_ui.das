@@ -31,6 +31,7 @@ require ./rich_commands.das
 require ./herd_sessions.das
 require ./rich_inspector_ui.das
 require ./rich_files_ui.das
+require ./rich_sessions_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
@@ -43,6 +44,8 @@ var WORKTREE_POPUP : table<int; PopupContextItemState>
 var WORKTREE_MENU_NEW_SESSION : table<int; ToggleState>
 
 var WORKTREE_MENU_OPEN_SESSION : table<int; ToggleState>
+
+var WORKTREE_MENU_DELETE : table<int; ToggleState>
 
 var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
@@ -184,18 +187,29 @@ def draw_repositories_window() {
                 let dirty_label = dirty > 0 ? "  *{dirty}" : ""
                 if (g_client->herd_worktree_conflicted(worktree.path)) {
                     icon("warning", GetTextLineHeight())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP,
+                            "Two or more sessions attend this worktree")
+                    }
                     same_line(WORKTREE_CONFLICT_JOIN[row])
                 }
                 let active_herd = active_herd_for_worktree(worktree.path)
                 if (active_herd >= 0) {
-                    icon(g_client.herd_sessions[active_herd].state == "running"
-                        ? "play" : "clock", GetTextLineHeight())
+                    let claim_running = (g_client.herd_sessions[active_herd].state
+                        == "running")
+                    icon(claim_running ? "play" : "clock", GetTextLineHeight())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP, (claim_running
+                            ? "Session '{g_client.herd_sessions[active_herd].name}' is running here"
+                            : "Session '{g_client.herd_sessions[active_herd].name}' is attached here (not running)"))
+                    }
                     same_line(WORKTREE_ACTIVE_JOIN[row])
                 }
                 // Transparent label keeps the row id + snapshot text; the
                 // overlay draws MAIN / slash-tinted branch / amber dirty in
                 // the shared token palette (notes 18/20).
                 let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
+                WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 var row_clicked = false
                 with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
                     row_clicked = selectable(WORKTREE_ROW[row], (text = row_label))
@@ -212,7 +226,6 @@ def draw_repositories_window() {
                     GIT_CHANGELIST_WIN.pending_raise = true
                     GIT_ACTIVITY_WIN.open = true
                 }
-                WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 {
                     let row_min = GetItemRectMin()
                     let row_max = GetItemRectMax()
@@ -255,6 +268,39 @@ def draw_repositories_window() {
                                 (text = "Open session '{g_client.herd_sessions[active_herd].name}'",
                                  shortcut = "", enabled = true))) {
                             navigate_to_herd(active_herd)
+                        }
+                    }
+                    if (menu_item(WORKTREE_MENU_DELETE[row],
+                            (text = "Delete worktree...", shortcut = "",
+                             enabled = g_client != null && g_client.connected
+                                && !worktree.is_main))) {
+                        // Client-side pre-guards give the block dialog without
+                        // a round trip; the watcher re-checks on the request.
+                        let change_count = (worktree.staged + worktree.unstaged
+                            + worktree.untracked + worktree.conflicted)
+                        if (active_herd >= 0) {
+                            g_worktree_delete_block = WorktreeDeleteBlock(
+                                active = true,
+                                repository_id = repository.record.id,
+                                worktree_path = worktree.path,
+                                reason = "in_use",
+                                detail = "in use by session " +
+                                    "'{g_client.herd_sessions[active_herd].name}'")
+                        } elif (change_count > 0) {
+                            g_worktree_delete_block = WorktreeDeleteBlock(
+                                active = true,
+                                repository_id = repository.record.id,
+                                worktree_path = worktree.path,
+                                reason = "dirty",
+                                detail = "{worktree.staged} staged, " +
+                                    "{worktree.unstaged} unstaged, " +
+                                    "{worktree.untracked} untracked, " +
+                                    "{worktree.conflicted} conflicted")
+                        } else {
+                            g_confirm_repository = repository.record.id
+                            open_destructive_confirm("worktree_delete",
+                                worktree.path,
+                                "Delete worktree {worktree.path}?")
                         }
                     }
                 }
@@ -1143,7 +1189,7 @@ def git_ui_init() {
 }
 
 def draw_repositories_dock() {
-    dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Repositories & Worktrees", closable = true,
+    dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Git Repositories & Worktrees###Repositories", closable = true,
             flags = ImGuiWindowFlags.None)) {
         window_zoom_scope("repositories") {
             draw_repositories_window()

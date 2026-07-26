@@ -59,10 +59,11 @@ def token_muted_color(alpha : float = 1.0f) : float4 {
 }
 
 def token_state_color(state : string; alpha : float = 1.0f) : float4 {
-    //! Session/worktree lifecycle words: running green, exited muted,
-    //! closed dim, anything conflicted/attention amber.
+    //! Session/worktree lifecycle words: running green, exited grey and
+    //! clearly darker (alive-at-a-glance), closed dimmer still, anything
+    //! conflicted/attention amber.
     if (state == "running" || state == "interactive") return token_added_color(alpha)
-    if (state == "exited") return token_muted_color(alpha)
-    if (state == "closed") return token_muted_color(alpha * 0.7f)
+    if (state == "exited") return float4(0.47f, 0.50f, 0.56f, alpha)
+    if (state == "closed") return float4(0.38f, 0.40f, 0.45f, alpha)
     return token_warning_color(alpha)
 }

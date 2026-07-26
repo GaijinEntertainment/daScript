@@ -14,6 +14,7 @@ require ./repository_core.das public
 require ./herd_sessions.das public
 require ./file_inspection.das
 require daslib/json_boost
+require daslib/strings_boost
 require daslib/base64
 require strings
 
@@ -261,6 +262,24 @@ def private query_value(url, key : string) : string {
     return ""
 }
 
+def private query_value_raw(url, key : string) : string {
+    let query = find(url, "?")
+    if (query < 0) return ""
+    let wanted = key + "="
+    let url_length = length(url)
+    var position = query + 1
+    while (position < url_length) {
+        let amp = find(url, "&", position)
+        let end = amp < 0 ? url_length : amp
+        if (starts_with(slice(url, position, end), wanted)) {
+            return slice(url, position + length(wanted), end)
+        }
+        if (amp < 0) break
+        position = amp + 1
+    }
+    return ""
+}
+
 class DasHerdWatcherServer : HvWebServer {
     token : string
     agent_url : string
@@ -278,7 +297,13 @@ class DasHerdWatcherServer : HvWebServer {
     next_client_id : int
 
     def authorized(url : string) : bool {
-        return !empty(token) && query_value(url, "token") == token
+        if (empty(token)) return false
+        // The browser panel sends the token percent-ENCODED (URLSearchParams
+        // decodes, encodeURIComponent re-encodes); the native clients and the
+        // printed control URL splice it RAW. A token containing '%' or '+'
+        // satisfies only one spelling — accept both interpretations.
+        return (query_value(url, "token") == token
+            || query_value_raw(url, "token") == token)
     }
 
     def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status {
@@ -1573,6 +1598,78 @@ class DasHerdWatcherServer : HvWebServer {
                 send_error(channel, satellite_error)
                 return
             }
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "worktree_delete") {
+            var reason : string
+            var detail : string
+            var ok = false
+            let herd_user = herd_worktree_user(incoming.worktree_path)
+            let running_user = (empty(herd_user)
+                ? watcher_running_worktree_user(incoming.worktree_path) : herd_user)
+            if (!empty(running_user)) {
+                reason = "in_use"
+                detail = "in use by session '{running_user}'"
+            } else {
+                ok = repository_remove_worktree(incoming.repository_id,
+                    incoming.worktree_path, reason, detail)
+            }
+            send(channel, "\{\"type\":\"worktree_delete_result\",\"ok\":{ok}," +
+                "\"reason\":{sprint_json(reason, false)}," +
+                "\"detail\":{sprint_json(detail, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "herd_delete") {
+            var inscope removed = HerdSession()
+            let delete_error = herd_delete(incoming.herd_session_id, removed)
+            if (!empty(delete_error)) {
+                send_error(channel, delete_error)
+                return
+            }
+            // The record is gone; now try each of its worktrees under the
+            // same guards as a direct worktree delete. Blocked ones stay on
+            // disk and are reported with the reason.
+            var inscope targets : array<tuple<string; string>>
+            if (!empty(removed.worktree_path)) {
+                targets |> push(removed.repository_id => removed.worktree_path)
+            }
+            for (entry in removed.satellites) {
+                if (!empty(entry.worktree_path)) {
+                    targets |> push(entry.repository_id => entry.worktree_path)
+                }
+            }
+            var inscope removed_parts : array<string>
+            var inscope kept_parts : array<string>
+            for (target in targets) {
+                var reason : string
+                var detail : string
+                var ok = false
+                let herd_user = herd_worktree_user(target._1)
+                let running_user = (empty(herd_user)
+                    ? watcher_running_worktree_user(target._1) : herd_user)
+                if (!empty(running_user)) {
+                    reason = "in_use"
+                    detail = "in use by session '{running_user}'"
+                } else {
+                    ok = repository_remove_worktree(target._0, target._1,
+                        reason, detail)
+                }
+                if (ok) {
+                    removed_parts |> push(sprint_json(target._1, false))
+                } else {
+                    kept_parts |> push("\{\"path\":{sprint_json(target._1, false)}"
+                        + ",\"repository_id\":{sprint_json(target._0, false)}"
+                        + ",\"reason\":{sprint_json(reason, false)}"
+                        + ",\"detail\":{sprint_json(detail, false)}\}")
+                }
+            }
+            let removed_list = join(removed_parts, ",")
+            let kept_list = join(kept_parts, ",")
+            send(channel, "\{\"type\":\"herd_delete_result\"," +
+                "\"herd_session_id\":{sprint_json(incoming.herd_session_id, false)}," +
+                "\"removed\":[{removed_list}],\"kept\":[{kept_list}]\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+            send_sessions(channel)
             send_herd_sessions(client, true)
         } elif (incoming.op == "attach") {
             if (watcher_find_session(incoming.session_id) < 0) {

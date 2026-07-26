@@ -25,6 +25,18 @@ das::smart_ptr<PtyHandle> builtin_pty_launch_argv(
     const char * working_directory, int32_t directory_count,
     int32_t columns, int32_t rows, das::Context * context,
     das::LineInfoArg * at);
+das::smart_ptr<PtyHandle> builtin_pty_launch_argv_env(
+    const das::TArray<char *> & arguments,
+    const char * working_directory, int32_t directory_count,
+    const das::TArray<char *> & environment,
+    int32_t columns, int32_t rows, das::Context * context,
+    das::LineInfoArg * at);
+int32_t builtin_spawn_detached(
+    const das::TArray<char *> & arguments,
+    const char * working_directory, int32_t directory_count,
+    const das::TArray<char *> & environment,
+    const das::TBlock<void, int32_t, das::TTemporary<const char *>> & result_blk,
+    das::Context * context, das::LineInfoArg * at);
 int32_t builtin_pty_read(
     const das::smart_ptr<PtyHandle> & pty, das::TArray<uint8_t> & bytes,
     int32_t maximum_bytes, das::Context * context, das::LineInfoArg * at);

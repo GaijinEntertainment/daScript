@@ -234,6 +234,7 @@ $repoB = Join-Path $fixtureRoot 'repo-b'
 $agentWorktree = Join-Path $fixtureRoot 'repo-a-agent'
 $fakeBin = Join-Path $fixtureRoot 'fake-bin'
 $watcherSessions = Join-Path $logRoot 'sessions'
+$ptyhostRoot = Join-Path $logRoot 'ptyhosts'
 $watcherStdout = Join-Path $logRoot 'watcher.stdout.log'
 $watcherStderr = Join-Path $logRoot 'watcher.stderr.log'
 $script:harnessLog = Join-Path $logRoot 'harness.log'
@@ -265,7 +266,8 @@ try {
     $env:PATH = "$fakeBin;$oldPath"
     $watcherArgs = @('-jit', 'utils/dasHerd/watcher/main.das', '--',
         "--port=$port", "--token=$token", "--log-root=$watcherSessions",
-        "--config=$configPath", '--exit-after-ms=60000')
+        "--config=$configPath", "--ptyhost-root=$ptyhostRoot",
+        '--exit-after-ms=60000')
     $watcher = Start-Process -FilePath $DaslangPath -ArgumentList $watcherArgs `
         -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $watcherStdout `
         -RedirectStandardError $watcherStderr -PassThru
@@ -472,8 +474,12 @@ try {
         'client_attached', 'controller_claimed', 'controller_claim_rejected',
         'controller_released', 'client_detached', 'bundle_synced',
         'bundle_attention_created', 'bundle_attention_updated') 'agent session'
-    $rawOutput = [Text.Encoding]::UTF8.GetString(
-        (Read-SharedBytes (Join-Path $agentDir 'output.raw')))
+    # Herd-managed agent sessions run in a detached PTY host: the raw stream
+    # is the host journal, not a watcher-side output.raw.
+    $agentJournal = Join-Path $ptyhostRoot "$($agentLaunch.session_id).raw"
+    Assert-Protocol (Test-Path -LiteralPath $agentJournal) `
+        'agent session has no detached-host journal'
+    $rawOutput = [Text.Encoding]::UTF8.GetString((Read-SharedBytes $agentJournal))
     Assert-Protocol ($rawOutput -match [regex]::Escape($agentLaunch.session_id)) `
         'fake Codex did not receive the watcher-assigned session id'
     Assert-Protocol ($rawOutput -match 'fake-codex\|debug\|') `
@@ -491,11 +497,18 @@ try {
         $_.event -eq 'launched'
     } | Select-Object -First 1)
     $launchedPid = [regex]::Match(
-        [string]$launchedEvent[0].detail, '^pid=(\d+)$')
-    Assert-Protocol $launchedPid.Success 'launch event did not retain the root process id'
+        [string]$launchedEvent[0].detail, '^pid=(\d+); host_port=\d+$')
+    Assert-Protocol $launchedPid.Success `
+        'launch event did not retain the root process id and host port'
     $agentProcessTree = @(Get-ProcessTreeIds ([int]$launchedPid.Groups[1].Value))
     Assert-Protocol ($agentProcessTree.Count -gt 1) `
         'fake Codex did not have a descendant process for termination coverage'
+    # Detached hosting in effect: the session has a live host discovery stamp.
+    # (ParentProcessId still chains watcher->host->agent - breakaway detaches
+    # the JOB, not parentage - so a process-tree check cannot prove this.)
+    $agentStamp = Join-Path $ptyhostRoot "$($agentLaunch.session_id).host.json"
+    Assert-Protocol (Test-Path -LiteralPath $agentStamp) `
+        'agent session has no live host discovery stamp'
     Invoke-Json POST $baseUrl $token '/api/v1/terminate' @{
         session_id = $agentLaunch.session_id
     } | Out-Null
@@ -508,6 +521,16 @@ try {
     }
     Assert-Protocol ($remainingProcessTree.Count -eq 0) `
         "terminate left session process descendants running: $remainingProcessTree"
+    # After the exit folds back, the watcher releases the host and archives
+    # its discovery stamp - lingering hosts would leak between test runs.
+    $archivedStamp = Join-Path (Join-Path $ptyhostRoot 'archive') `
+        "$($agentLaunch.session_id).host.json"
+    for ($attempt = 0; $attempt -lt 150 -and
+            -not (Test-Path -LiteralPath $archivedStamp); $attempt++) {
+        Start-Sleep -Milliseconds 100
+    }
+    Assert-Protocol (Test-Path -LiteralPath $archivedStamp) `
+        'host stamp did not archive after terminate and drain'
 
     Set-TestStage 'launch-agent-in-existing-worktree'
     Send-WebSocketJson $ws1 @{
@@ -579,6 +602,26 @@ try {
     if ($null -ne $watcher -and -not $watcher.HasExited) {
         Stop-Process -Id $watcher.Id -Force
         [void]$watcher.WaitForExit(5000)
+    }
+    # Detached hosts survive the watcher by design; on failure paths the fold
+    # never ran, so shut lingering hosts down through their own protocol.
+    if (Test-Path -LiteralPath $ptyhostRoot) {
+        foreach ($stampFile in @(Get-ChildItem -LiteralPath $ptyhostRoot `
+                -Filter '*.host.json' -ErrorAction SilentlyContinue)) {
+            try {
+                $stamp = Get-Content -LiteralPath $stampFile.FullName -Raw |
+                    ConvertFrom-Json
+                $hostSocket = New-Object Net.WebSockets.ClientWebSocket
+                [void]($hostSocket.ConnectAsync(
+                    [uri]"ws://127.0.0.1:$($stamp.port)/",
+                    [Threading.CancellationToken]::None).GetAwaiter().GetResult())
+                Send-WebSocketJson $hostSocket @{
+                    op = 'hello'; token = [string]$stamp.token; protocol = 1
+                }
+                Send-WebSocketJson $hostSocket @{ op = 'shutdown' }
+                Close-WebSocket $hostSocket
+            } catch { }
+        }
     }
     if ($success) {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force

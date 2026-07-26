@@ -30,6 +30,7 @@ require ./rich_net.das
 require ./rich_focus.das
 require ./rich_inspector_ui.das
 require ./rich_commands.das
+require ./rich_tokens.das
 
 var SESSION_ROW : table<int; ToggleState>
 
@@ -54,6 +55,8 @@ var HERD_MENU_RELAUNCH : table<int; ToggleState>
 var HERD_MENU_RENAME : table<int; ToggleState>
 
 var HERD_MENU_CLOSE : table<int; ToggleState>
+
+var HERD_MENU_DELETE : table<int; ToggleState>
 
 var HERD_RELAUNCH_BUTTON : table<int; ClickState>
 
@@ -81,9 +84,28 @@ def draw_selected_session_context() {
     if (g_client == null || empty(g_client.selected_id)) return
     for (session in g_client.sessions) {
         if (session.id != g_client.selected_id) continue
-        let purpose = !empty(session.purpose) ? to_upper(session.purpose) : to_upper(session.kind)
-        text("{purpose}  {session.id}")
-        text_disabled("Origin: {session.worktree_path}")
+        // Names over plumbing ids (note 46): prefer the herd card's name,
+        // then the display name; the raw session id lives in the tooltip.
+        var title = session.display_name
+        for (record in g_client.herd_sessions) {
+            if (record.pty_session_id == session.id) {
+                title = record.name
+                break
+            }
+        }
+        if (empty(title)) {
+            title = session.id
+        }
+        let purpose = !empty(session.purpose) ? session.purpose : session.kind
+        text("{title}")
+        if (IsItemHovered()) {
+            set_tooltip(CONTEXT_ID_TOOLTIP, "{session.id}  |  {purpose}")
+        }
+        text_disabled((text = elide_to_avail(
+            "{purpose} | {session.state} | {base_name(session.worktree_path)}")))
+        if (IsItemHovered()) {
+            set_tooltip(CONTEXT_ORIGIN_TOOLTIP, session.worktree_path)
+        }
         if (!empty(session.task_context)) {
             text_wrapped((text = session.task_context))
         }
@@ -114,7 +136,9 @@ def private draw_bundle_rows(session_filter : string) {
             let _ = activate_bundle_focus(bundle)
         }
         BUNDLE_ROW[bundle_index].value = false
-        if (!empty(bundle.summary)) text_disabled((text = bundle.summary))
+        if (!empty(bundle.summary)) {
+            text_disabled((text = elide_to_avail(bundle.summary)))
+        }
         for (participant in bundle.participants) {
             let files = length(participant.files)
             BUNDLE_PARTICIPANT_ROW[g_bundle_participant_row].value = (participant.repository_id
@@ -223,18 +247,98 @@ def private herd_age_label(updated_wall_s : int64) : string {
 }
 
 def private attach_herd_card(record : HerdSession) {
-    if (g_client == null || empty(record.pty_session_id)) return
+    if (g_client == null) return
     ui_event("herd-card-attach {record.id}")
+    g_selected_herd_id = record.id
+    // A session pick IS a worktree pick (note 48): aim the git surfaces at
+    // the card's tree whether or not a terminal can attach.
+    if (!empty(record.repository_id) && !empty(record.worktree_path)
+            && (g_selected_repository_id != record.repository_id
+                || g_selected_worktree_path != record.worktree_path)) {
+        g_selected_repository_id = record.repository_id
+        g_selected_worktree_path = record.worktree_path
+        g_selection_explicit = true
+        g_client->refresh_repository(record.repository_id)
+        g_client->request_repository_review(record.repository_id,
+            record.worktree_path)
+    }
+    // Attach only while the PTY still exists on the watcher. A stale id
+    // bounces ("unknown session") and the auto-attach yanks the selection
+    // straight back (note 43).
+    if (empty(record.pty_session_id)) return
+    var pty_exists = false
+    for (session in g_client.sessions) {
+        if (session.id == record.pty_session_id) {
+            pty_exists = true
+            break
+        }
+    }
+    if (!pty_exists) return
     g_client->attach_session(record.pty_session_id)
     g_open_terminal_pending = true
     g_focus_terminal_pending = true
 }
 
+def elide_to_avail(value : string) : string {
+    //! Truncates with an ellipsis so the text stops at the content region
+    //! instead of bleeding through the window padding into the neighbouring
+    //! pane (note 47: the "stray one-character column" on the terminal's
+    //! left edge was card text clipped at the window edge, one column past
+    //! where the layout ends).
+    let avail = GetContentRegionAvail().x
+    if (avail <= 0.0f || CalcTextSize(value).x <= avail) return value
+    var low = 0
+    var high = length(value)
+    while (low < high) {
+        let mid = (low + high + 1) / 2
+        if (CalcTextSize(slice(value, 0, mid) + "...").x <= avail) {
+            low = mid
+        } else {
+            high = mid - 1
+        }
+    }
+    // Never end the cut inside a UTF-8 sequence.
+    peek_data(value) $(bytes) {
+        while (low > 0 && low < length(value) && (int(bytes[low]) & 0xc0) == 0x80) {
+            low--
+        }
+    }
+    return low <= 0 ? "..." : slice(value, 0, low) + "..."
+}
+
 def draw_herd_cards() {
     if (g_client == null) return
     let line = GetTextLineHeight()
+    // A PTY selection made outside the cards (task rows, auto-attach)
+    // retargets the herd pick once per change; a dead-card pick survives
+    // because the live selection did not change underneath it (note 43).
+    if (g_client.selected_id != g_herd_pick_seen_selected) {
+        g_herd_pick_seen_selected = g_client.selected_id
+        var owner_id = ""
+        for (record in g_client.herd_sessions) {
+            if (!empty(record.pty_session_id)
+                    && record.pty_session_id == g_client.selected_id) {
+                owner_id = record.id
+                break
+            }
+        }
+        g_selected_herd_id = owner_id
+    }
     var visible = 0
-    for (index in range(length(g_client.herd_sessions))) {
+    // Alive sessions first; registry order within each state group. Widget
+    // state stays keyed by the registry index, so reordering cannot swap
+    // per-card identity when a session exits.
+    var inscope order : array<int>
+    order |> reserve(length(g_client.herd_sessions))
+    for (registry_index in range(length(g_client.herd_sessions))) {
+        order |> push(registry_index)
+    }
+    sort(order) $(a, b) {
+        let a_rank = g_client.herd_sessions[a].state == "running" ? 0 : 1
+        let b_rank = g_client.herd_sessions[b].state == "running" ? 0 : 1
+        return a_rank != b_rank ? a_rank < b_rank : a < b
+    }
+    for (index in order) {
         let record & = unsafe(g_client.herd_sessions[index])
         if (record.state == "closed") continue
         visible++
@@ -245,29 +349,75 @@ def draw_herd_cards() {
                 break
             }
         }
-        icon(profile_agent ? "bolt" : "chevron-right", line)
+        // Dead cards dim wholesale - glyphs included - so alive-vs-asleep
+        // reads at a glance instead of from the words.
+        let card_alive = record.state == "running"
+        let dead_tint = token_state_color(record.state)
+        if (card_alive) {
+            icon(profile_agent ? "bolt" : "chevron-right", line)
+        } else {
+            icon_tinted(profile_agent ? "bolt" : "chevron-right", line, dead_tint)
+        }
+        if (IsItemHovered()) {
+            set_tooltip(HERD_ICON_TOOLTIP, profile_agent
+                ? "Agent session (profile '{record.profile_id}')"
+                : "Shell session (profile '{record.profile_id}')")
+        }
         same_line(HERD_ICON_JOIN[index])
         var state_glyph = "clock"
+        var state_hint = "never launched"
         if (record.state == "running") {
             state_glyph = "play"
+            state_hint = "running"
         } elif (record.state == "exited") {
-            state_glyph = (record.launch_count == 0 ? "clock"
-                : (record.exit_code == 0l ? "check" : "warning"))
+            if (record.launch_count == 0) {
+                state_glyph = "clock"
+                state_hint = "created, never launched"
+            } elif (record.exit_code == 0l) {
+                state_glyph = "check"
+                state_hint = "exited cleanly"
+            } else {
+                state_glyph = "warning"
+                state_hint = "exited with code {record.exit_code}"
+            }
         }
-        icon(state_glyph, line)
+        if (card_alive) {
+            icon(state_glyph, line)
+        } else {
+            icon_tinted(state_glyph, line, dead_tint)
+        }
+        if (IsItemHovered()) {
+            set_tooltip(HERD_ICON_TOOLTIP, state_hint)
+        }
         same_line(HERD_STATE_JOIN[index])
         if (record.conflicted) {
-            icon("warning", line)
+            // Amber only where it is actionable: a LIVE session in a
+            // contested worktree. On dead cards the advisory dims with the
+            // rest so alive-at-a-glance survives.
+            if (card_alive) {
+                icon("warning", line)
+            } else {
+                icon_tinted("warning", line, dead_tint)
+            }
+            if (IsItemHovered()) {
+                set_tooltip(HERD_ICON_TOOLTIP,
+                    "Another session attends this worktree")
+            }
             same_line(HERD_CONFLICT_JOIN[index])
         }
         let unread_hint = record.unread_outbox > 0 ? "  [{record.unread_outbox}]" : ""
-        HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
-            && record.pty_session_id == g_client.selected_id)
+        HERD_CARD_ROW[index].value = record.id == g_selected_herd_id
         // AllowOverlap or the row swallows clicks aimed at the relaunch
-        // icon button drawn over its right-hand side.
-        if (selectable(HERD_CARD_ROW[index],
+        // icon button drawn over its right-hand side. Dead sessions read
+        // muted; alive keep the title tint.
+        var card_clicked = false
+        with_style((ImGuiCol.Text, record.state == "running"
+                ? token_title_color() : token_state_color(record.state))) {
+            card_clicked = selectable(HERD_CARD_ROW[index],
                 (text = "{record.name}{unread_hint}##herd:{record.id}",
-                 flags = ImGuiSelectableFlags.AllowOverlap))) {
+                 flags = ImGuiSelectableFlags.AllowOverlap))
+        }
+        if (card_clicked) {
             attach_herd_card(record)
         }
         if (IsItemHovered()) {
@@ -301,6 +451,12 @@ def draw_herd_cards() {
                 open_destructive_confirm("herd_close", record.id,
                     "Close session '{record.name}' and terminate its PTY?")
             }
+            if (menu_item(HERD_MENU_DELETE[index], (text = "Delete session...",
+                    shortcut = "", enabled = record.state != "running"))) {
+                open_destructive_confirm("herd_delete", record.id,
+                    "Delete session '{record.name}' and remove its worktrees? " +
+                    "Worktrees in use or with uncommitted changes are kept.")
+            }
         }
         if (record.state == "exited") {
             same_line(HERD_ACTION_JOIN[index])
@@ -317,9 +473,9 @@ def draw_herd_cards() {
         let output_hint = (output_wall > 0l
             ? " | output {herd_age_label(output_wall)}" : "")
         text_disabled(HERD_CARD_DETAIL[index],
-            (text = "      {record.profile_id} | {record.workflow} | " +
+            (text = elide_to_avail("      {record.profile_id} | {record.workflow} | " +
                 "{base_name(record.worktree_path)}{satellite_hint} | " +
-                "{herd_age_label(record.updated_wall_s)}{output_hint}"))
+                "{herd_age_label(record.updated_wall_s)}{output_hint}")))
         // The card's own Attention and Review Bundles as subtree children
         // (note 19); zero-count sections never render.
         let attention = session_attention_count(record.pty_session_id)
@@ -343,6 +499,9 @@ def draw_herd_cards() {
 var g_confirm_kind : string
 var g_confirm_target : string
 var g_confirm_text : string
+// Second capture slot for kinds whose action needs a repository id beside the
+// target (worktree_delete); captured at open time like the target.
+var g_confirm_repository : string
 
 // Destructive actions (note 27) route through one confirmation modal. The
 // target is captured at open time and re-checked at confirm so a selection
@@ -366,6 +525,11 @@ def draw_destructive_confirm_popup() {
                 }
             } elif (g_confirm_kind == "herd_close") {
                 g_client->request_herd_close(g_confirm_target)
+            } elif (g_confirm_kind == "herd_delete") {
+                g_client->request_herd_delete(g_confirm_target)
+            } elif (g_confirm_kind == "worktree_delete") {
+                g_client->request_worktree_delete(g_confirm_repository,
+                    g_confirm_target)
             }
             close_current_popup(CONFIRM_DIALOG)
         }
@@ -473,7 +637,8 @@ def draw_session_list() {
         }
         if (visible_sessions == 0) {
             text_disabled(NO_SESSION_LABEL,
-                (text = g_show_exited ? "No sessions" : "No active sessions"))
+                (text = g_show_exited ? "No sessions"
+                    : "No running terminals (tasks and exited are hidden)"))
         }
     }
     text_disabled("Exited sessions are retained and hidden by default.")
@@ -507,21 +672,28 @@ def draw_session_list() {
             draw_attention_rows("")
         }
     }
-    // Error history (note 28): the chrome shows only the latest error; the
-    // ring keeps what was dismissed. Hidden while empty.
+    // Error history (note 28, reshaped per note 46): collapsed by default,
+    // scrollable, clearable. The ring keeps dismissed chrome errors.
     if (!empty(g_error_history)) {
         separator()
-        text("Errors ({length(g_error_history)})")
-        same_line()
-        if (small_button(ERRORS_CLEAR, (text = "clear"))) {
-            g_error_history |> clear()
-            g_error_history_wall |> clear()
-        }
-        for (error_index in range(length(g_error_history))) {
-            // Newest last in storage; show newest first.
-            let ring = length(g_error_history) - 1 - error_index
-            text_disabled(ERROR_HISTORY_ROW[error_index],
-                (text = "{herd_age_label(g_error_history_wall[ring])}  {g_error_history[ring]}"))
+        collapsing_header(ERRORS_HEADER,
+                "Errors ({length(g_error_history)})###SessionErrors",
+                false, ImGuiTreeNodeFlags.None) {
+            if (small_button(ERRORS_CLEAR, (text = "clear"))) {
+                g_error_history |> clear()
+                g_error_history_wall |> clear()
+            }
+            child(ERRORS_CHILD, (text = "errors",
+                    size = float2(0.0f, 120.0f),
+                    child_flags = ImGuiChildFlags.Borders,
+                    window_flags = ImGuiWindowFlags.None)) {
+                for (error_index in range(length(g_error_history))) {
+                    // Newest last in storage; show newest first.
+                    let ring = length(g_error_history) - 1 - error_index
+                    text_disabled(ERROR_HISTORY_ROW[error_index],
+                        (text = "{herd_age_label(g_error_history_wall[ring])}  {g_error_history[ring]}"))
+                }
+            }
         }
     }
 }

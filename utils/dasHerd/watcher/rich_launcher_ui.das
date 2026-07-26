@@ -259,6 +259,16 @@ def launcher_ui_init() {
     LAUNCHER_WORKFLOW.value = 0
 }
 
+def prepare_resolver_launcher(repository_id, worktree_path, task_brief : string) {
+    //! Launcher prefill for the blocked-worktree-delete offer: run in the
+    //! blocked worktree with the blocking state as the agent's task.
+    prepare_launcher(repository_id, worktree_path)
+    LAUNCHER_NAME.pending_value = "resolve {base_name(worktree_path)}"
+    LAUNCHER_NAME.has_pending = true
+    LAUNCHER_TASK.pending_value = task_brief
+    LAUNCHER_TASK.has_pending = true
+}
+
 // The launcher is a MODAL dialog (note 3): while it is up the rest of the UI
 // dims and ignores input — it is not a dockable pane.
 def open_launcher_modal() {

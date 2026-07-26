@@ -106,8 +106,17 @@ def draw_terminal_window() {
                 - GetStyle().ItemSpacing.y))
     with_font(g_terminal_font) {
         if (g_focus_terminal_pending) {
-            set_keyboard_focus_here()
-            g_focus_terminal_pending = false
+            // The window raise lands a frame after open; focusing while the
+            // window is still unfocused is a no-op that used to eat the
+            // request (note 44). Hold the flag until the raise arrives, then
+            // set the terminal's OWN focus model: the widget is an
+            // InvisibleButton, and SetKeyboardFocusHere's tabbing request
+            // falls through it onto the next tab stop (the zoom button) -
+            // proven by snapshot, the -5% button ended up focus=true.
+            if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
+                g_terminal_view.focused = true
+                g_focus_terminal_pending = false
+            }
         }
         let result <- imgui_terminal("watcher", g_terminal, g_terminal_view,
             g_terminal_cache, terminal_style)

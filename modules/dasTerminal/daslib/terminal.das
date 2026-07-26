@@ -1049,6 +1049,30 @@ def public terminal_launch_argv(arguments : array<string> const;
     return <- terminal
 }
 
+def public terminal_launch_argv_env(arguments : array<string> const;
+                                    working_directory : string;
+                                    environment : array<string> const;
+                                    columns : int = 80; rows : int = 25) : Terminal {
+    //! Like terminal_launch_argv, with extra KEY=VALUE entries merged over the
+    //! inherited environment. Secrets belong here, never on the command line.
+    var inscope terminal <- terminal_create(columns, rows)
+    var inscope pty <- _pty_launch_argv_env(arguments,
+        working_directory, length(working_directory), environment, columns, rows)
+    move(terminal.transport) <| pty
+    return <- terminal
+}
+
+def public spawn_detached(arguments : array<string> const;
+                          working_directory : string;
+                          environment : array<string> const;
+                          blk : block<(pid : int; error : string#) : void>) : int {
+    //! Spawns a plain process that OUTLIVES the caller: no console, own group,
+    //! broken out of the caller's job. The block gets pid (0 = failed) + error;
+    //! non-zero pid WITH error = degraded (breakaway denied, dies with the job).
+    return _spawn_detached(arguments, working_directory,
+        length(working_directory), environment, blk)
+}
+
 def public terminal_feed_bytes(var terminal : Terminal; bytes : array<uint8> const) {
     if (empty(bytes)) return
     terminal.revision++
@@ -1334,6 +1358,31 @@ def public terminal_encode_key(terminal : Terminal const;
     var inscope bytes : array<uint8>
     terminal_encode_key_bytes(terminal, event, bytes)
     return string(bytes)
+}
+
+def public terminal_mouse_reporting_active(terminal : Terminal const) : bool {
+    //! True when the child asked for mouse events (button/drag/any-motion). A
+    //! UI host should then forward wheel/clicks instead of consuming them -
+    //! alt-screen TUIs (Claude Code, vim) scroll their own transcript with them.
+    return (terminal.modes.mouse_button_reporting
+        || terminal.modes.mouse_drag_reporting
+        || terminal.modes.mouse_any_reporting)
+}
+
+def public terminal_encode_mouse(terminal : Terminal const;
+                                 button : int; column, row : int;
+                                 down : bool) : string {
+    //! One encoded mouse event. `button`: 0/1/2 = left/middle/right, 64/65 =
+    //! wheel up/down (wheel only presses); `column`/`row` are 0-based cells.
+    //! SGR (1006) when the child selected it, else legacy X10 bytes (clamped).
+    let cx = column + 1
+    let cy = row + 1
+    if (terminal.modes.sgr_mouse_encoding) {
+        return "{to_char(27)}[<{button};{cx};{cy}{down ? "M" : "m"}"
+    }
+    // Legacy release loses button identity (3 = release); wheel sends no release.
+    let cb = (down ? button : 3) + 32
+    return "{to_char(27)}[M{to_char(cb)}{to_char(min(cx + 32, 255))}{to_char(min(cy + 32, 255))}"
 }
 
 def public terminal_encode_paste_bytes(terminal : Terminal const; text : string;

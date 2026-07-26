@@ -449,3 +449,148 @@ the UI currently substitutes text or a wrong-shaped glyph):
 No intermediate PR — no users yet. The whole fix round (Waves 0-4)
 lands on this branch, then one PR for historical record, then the big
 review happens on that PR.
+
+## Review round (2026-07-25, post-merge of PR #3567)
+
+Full-tree review: personal pass on watcher core/server/net + 3 agent
+passes (git/inspector/files UI, sessions/launcher/terminal, C++/glue).
+9 verified defects fixed in commits 872fe420d + c6e285d74 (token
+dual-spelling auth, empty-cwd guard, worktree-row highlight, portal
+re-list, say-queue garbling, output-age table growth, glfw chain
+dispatch UAF, daslang-live is_reload, CMake stale-module sweep
+deleting standalone-module artifacts).
+
+## Block: external sessions (2026-07-25 evening)
+
+Goal (Boris): "external sessions" — a session whose terminal lives OUTSIDE
+the herder (like the dev session building dasHerd itself), claimed from the
+outside, attached to worktree(s), coordination-only (mailbox/bundles/claims;
+no terminal view, no lease, no input), and able to OUTLIVE the herder across
+watcher restarts. Follow-up: "Repositories and worktrees" migrates to the
+right side as "Git repositories and worktrees"; the left side is sessions,
+sessions-first.
+
+Issue intake (live rig, numbering continues):
+- 40: sessions list: alive on top, dead in a different color, delete button
+  for session + associated worktrees — IMPLEMENTED, pending deploy
+- 41: worktree delete from the git panel — in-use = hard block; uncommitted
+  changes = block + offer to launch a resolver session briefed with the
+  blocking state — IMPLEMENTED, pending deploy
+- 42: terminal in a NEW session does not scroll — FIXED (2026-07-26 goal
+  round). Root cause proven from the session journal: Claude Code runs on
+  the ALTERNATE screen (?1049h — no terminal scrollback by design) and
+  enables mouse reporting (?1000/1002/1003/1006h); in a real terminal the
+  wheel goes TO Claude, which scrolls its own transcript. Our widget only
+  did local scrollback scrolling (empty on alt screen). Fix: dasTerminal
+  grew terminal_mouse_reporting_active + terminal_encode_mouse (SGR/X10);
+  imgui_terminal forwards wheel + clicks to the child when reporting is
+  active (Shift reserves local scroll/selection; Ctrl+wheel stays zoom).
+  Live-proven: wheel over the claude session scrolled ITS transcript
+  ("Jump to bottom (ctrl+End)" indicator on screen). Shell sessions were
+  never broken (wheel 0->9 over 56 history rows on the same build).
+- 43: herd card click selects then unselects (cc-color-probe3 clicked while
+  "Towards 0.6.4 release" attached; selection bounces back) — FIXED
+  (2026-07-26). The dead-PTY attach guard from the fix round stopped the
+  selection yank but left the click with ZERO feedback (the highlight was
+  bound to pty==selected_id, which never changes for a dead PTY). Cards now
+  highlight through a herd-level pick (g_selected_herd_id); PTY selections
+  made outside the cards retarget it once per change. Proven both ways:
+  dead-card pick sticks, live-card pick transfers and attaches.
+- 44: after creating a new session the terminal opens but has no keyboard
+  focus — a mouse click is needed before typing. FIXED (2026-07-26),
+  two layers: (a) SetKeyboardFocusHere's tabbing request falls through
+  the terminal's InvisibleButton onto the next tab stop (snapshot showed
+  the -5% zoom button holding focus) — focus now goes through the
+  terminal's own model (g_terminal_view.focused); (b) the attach-time
+  checkpoint restore rebuilt ImGuiTerminalState AFTER the handshake ran
+  — reset_terminal now carries focus over. Proven: real keystrokes
+  land in a fresh session with no click; snapshot focused=true
+- 45: the icons left of each session card (profile / state / conflict) have
+  no tooltips — unexplained glyphs. VERIFIED FIXED on deploy
+  (2026-07-26): tooltips landed with the fix round; hover probe shows
+  HERD_ICON_TOOLTIP hover=true value="Agent session (profile 'claude')"
+- 46: Sessions & Activity shows opaque rows — "REGULAR s2563..." entries and
+  an error list ("unknown session", "4m ago") that is not clickable, not
+  scrollable, not hideable, purpose unclear. Needs names over raw ids,
+  click-through, dismiss/collapse, and dropping entries whose session no
+  longer resolves. LANDED IN BUILD (2026-07-26 audit): names-over-ids in
+  the context panel and cards, attention rows show subjects and
+  click-navigate, errors are a collapsed/scrollable/clearable ring,
+  zero-count sections gone; the "unknown session" error source (dead-PTY
+  attach) fixed under 43. Boris re-test decides any residue
+- 47: visual artifacts in a NEW session's terminal — stray letters in a
+  one-character column outside the text flow (Boris saw red "S"s stacked
+  vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
+  edge). Looks like a stale/displaced grid column surviving the
+  attach-time resize, un-clipped; fades as output overwrites. FIXED
+  (2026-07-26): not the emulator — the "column" was Sessions-panel card
+  text clipped at the WINDOW edge (one character into the padding, flush
+  against the terminal border; bbox z=739 vs window edge 690 in the
+  snapshot). Card detail/context/summary rows now elide to the content
+  region (elide_to_avail). Screenshot-verified before/after
+- 51: BLOCK PIVOT (Boris, 2026-07-25): --continue resume is a crutch, not
+  the answer. Next block, ahead of external sessions and everything else:
+  redesign PTY hosting until a terminal session "does not depend on
+  anything, and yet can be communicated to" — detached ConPTY host that
+  owns the console + child on its own, survives watcher/client/upgrade,
+  reachable over a versioned IPC channel. Current UI/feature work is
+  parked (committed on this branch) until that lands.
+  PROGRESS (same evening): dasTerminal grew spawn_detached (CREATE_NO_WINDOW
+  + job breakaway; DETACHED_PROCESS breaks console apps) and environment
+  blocks on both spawn paths (retires the token-on-command-line item);
+  utils/dasHerd/ptyhost/main.das v1 landed and smoke-proved the whole
+  claim live: host spawned detached, launcher died, host kept journaling;
+  a fresh client authenticated, replayed from byte 0, sent input, got the
+  child's echo with a forwarded env var. Remaining: dastest lifecycle
+  test, watcher launch-via-host + adoption, daspkg release packaging.
+  LANDED (2026-07-26): all of it — lifecycle test, release packaging, and
+  the watcher rework (launch-via-host for herd sessions, pumps proxied
+  over the host WS, adoption on startup with sessions resurrecting as
+  RUNNING, herd registry fold of dead hosts' exit stamps). Suite 71/71
+  incl. test_watcher_adoption.das proving restart survival end-to-end.
+  Decisions + the ConPTY drained-never-fires finding: PTY_HOST_DESIGN.md.
+- 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
+  ("its not ok to kill my terminal session"). Today PTYs are ConPTY
+  children of the watcher and die with it; needs a per-session broker
+  process that owns the ConPTY and outlives the watcher (tmux-server
+  model), with restart = re-discover + re-attach. Operationally until
+  then: the watcher only restarts when no agent session is running or
+  Boris explicitly says go. RESOLVED BY ARCHITECTURE (2026-07-26): herd
+  sessions run in detached hosts; watcher restart adopts them back as
+  running (see 51 / PTY_HOST_DESIGN.md). The operational rule stays until
+  the rework is deployed to the live rig and proven there
+- 49: default layout — Git Changelist docks bottom-right as its own pane
+  under the Git Activity + File Inspector tab stack (per Boris's live
+  arrangement, captured in boris_changelist_dock.png); update
+  setup_layout_preset so dock reset / fresh install lands there.
+  VERIFIED (2026-07-26): the preset already lands this shape; dock reset
+  proven live (right column: Repositories / Git Activity+Inspector /
+  Changelist bottom at y=1043)
+- 48: VERIFIED FIXED on deploy (2026-07-26): a session pick aims the git
+  surfaces (attach_herd_card), the Project tab kicks the files request on
+  entry (8490 files on direct perspective switch), and the empty state
+  distinguishes no-selection / failed / empty. Original: Project tab says
+  "Select a worktree to browse its files" while a
+  session is attached and selected. Rule: selecting or creating a session
+  selects its primary worktree (a session pick IS a deliberate worktree
+  pick; set the explicit flag), so Project/Changelist immediately point
+  at the session's tree. Evidence: the header above that empty-state
+  ALREADY shows "PROJECT D:/Work/..." (the path), and visiting History or
+  Tree populates Project — so (1) the files request is not kicked on
+  Project tab entry, and (2) the empty-state message lies (state is
+  not-requested, not no-selection)
+
+Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
+- token in child command line: fix is env-block support in dasTerminal
+  spawn (pass DASHERD_* via CreateProcess lpEnvironment instead of a
+  powershell -Command prefix). Harden later, way later.
+- lease heartbeat starvation under multi-second frame stalls (client
+  pumps ~1s, server timeout 5s) — observation, no repro.
+- diff BEFORE/AFTER one-frame scroll desync when the AFTER pane drives
+  the wheel — cosmetic, inherent child draw order.
+- ImGui Install/RestoreCallbacks vs chain prev caches can strand a das
+  glfw_chain_add_* listener after mute/unmute — latent, zero in-tree
+  callers; touching the interleave risks regressing note 38.
+- mcp_supervisor.py cannot answer ping while a tool call blocks
+  (single-threaded stdin loop); mcp_main.das query values not
+  URL-encoded (watcher-generated ids/tokens are URL-safe).

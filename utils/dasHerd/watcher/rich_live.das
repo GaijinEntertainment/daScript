@@ -297,6 +297,17 @@ def herder_close_session(input : JsonValue?) : JsonValue? {
     }
     let args = from_JV(input, type<HerderAttachSessionArgs>)
     if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    // Validate before queuing: the watcher's error reply lands async, so an
+    // unknown id (a stray \r from a caller's shell pipeline, say) used to
+    // report ok=true while closing nothing.
+    var known = false
+    for (record in g_client.herd_sessions) {
+        if (record.id == args.herd_id) {
+            known = true
+            break
+        }
+    }
+    if (!known) return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
     g_client->request_herd_close(args.herd_id)
     return JV((ok = true, herd_id = args.herd_id))
 }
@@ -305,6 +316,26 @@ struct HerderTerminalInputArgs {
     text : string
     submit : bool
     expect_session : string
+}
+
+// A second say inside the prior say's ~200ms Enter window would merge both
+// texts into one paste (single global submit slot). Queue it; the frame loop
+// feeds the queue only after the pending \r has flushed.
+def private queue_or_send_input(text : string; submit : bool) {
+    if (g_submit_stamp != 0l || !empty(g_input_queue)) {
+        g_input_queue |> push(PendingSay(text = clone_string(text), submit = submit,
+            session = clone_string(g_client.selected_id)))
+        return
+    }
+    if (!empty(text)) {
+        g_client->send_input(text)
+        if (submit) {
+            g_submit_stamp = ref_time_ticks()
+            g_submit_session = g_client.selected_id
+        }
+    } elif (submit) {
+        g_client->send_input("\r")
+    }
 }
 
 [live_command(description = "Type into the attached session's terminal. Args: text, submit (true appends Enter), optional expect_session (reject if another session is attached). Requires the controller lease.")]
@@ -329,15 +360,7 @@ def herder_terminal_input(input : JsonValue?) : JsonValue? {
     // The Enter must arrive OUTSIDE the text's paste window or Ink-based TUIs
     // (Claude Code) keep it as part of the paste: text now, \r deferred ~200ms
     // via the frame loop. A lone submit (empty text) sends immediately.
-    if (!empty(args.text)) {
-        g_client->send_input(args.text)
-        if (args.submit) {
-            g_submit_stamp = ref_time_ticks()
-            g_submit_session = g_client.selected_id
-        }
-    } elif (args.submit) {
-        g_client->send_input("\r")
-    }
+    queue_or_send_input(args.text, args.submit)
     return JV((ok = true, bytes = length(args.text) + (args.submit ? 1 : 0),
         session_id = g_client.selected_id))
 }
@@ -428,9 +451,7 @@ def herder_session_say(input : JsonValue?) : JsonValue? {
     delete g_say_baseline
     g_say_baseline <- split(g_terminal_view.screen_text, "\n")
     g_say_revision = g_terminal_view.content_revision
-    g_client->send_input(args.text)
-    g_submit_stamp = ref_time_ticks()
-    g_submit_session = g_client.selected_id
+    queue_or_send_input(args.text, true)
     return JV((ok = true, session_id = g_client.selected_id,
         baseline_revision = g_say_revision))
 }
