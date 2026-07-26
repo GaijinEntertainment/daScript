@@ -4923,12 +4923,13 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
-        // sdot4: packed 4x8-bit signed integer dot product (dp4a) — OpSDot on two uint words with
-        // the PackedVectorFormat4x8Bit LITERAL as the trailing operand (not an id). Pulls the
-        // DotProduct + DotProductInput4x8BitPacked caps + SPV_KHR_integer_dot_product.
-        if (name == "sdot4") {
+        // sdot4/usdot4: packed 4x8-bit integer dot product (dp4a) — OpSDot/OpSUDot on two uint
+        // words with the PackedVectorFormat4x8Bit LITERAL as the trailing operand (not an id).
+        // Pulls the DotProduct + DotProductInput4x8BitPacked caps + SPV_KHR_integer_dot_product.
+        // usdot4(a unsigned, b signed) swaps into OpSUDot's (V1 signed, V2 unsigned) operand order.
+        if (name == "sdot4" || name == "usdot4") {
             if (length(expr.arguments) != 2) {
-                errs |> push("sdot4 expects 2 arguments")
+                errs |> push("{name} expects 2 arguments")
                 return expr
             }
             let wa = value_of(expr.arguments[0])
@@ -4937,8 +4938,10 @@ class SpirvEmit : AstVisitor {
             ensure_integer_dot_product(bm, *ctx)
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
-            var ops <- [rt, res, wa, wb, uint(SpvPackedVectorFormat.PackedVectorFormat4x8Bit)]
-            emit_n(bm, SEC_FUNCS, SpvOp.SDot, ops)
+            var ops <- (name == "usdot4"
+                ? [rt, res, wb, wa, uint(SpvPackedVectorFormat.PackedVectorFormat4x8Bit)]
+                : [rt, res, wa, wb, uint(SpvPackedVectorFormat.PackedVectorFormat4x8Bit)])
+            emit_n(bm, SEC_FUNCS, name == "usdot4" ? SpvOp.SUDot : SpvOp.SDot, ops)
             delete ops
             e2id[k] = res
             return expr

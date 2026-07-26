@@ -2141,6 +2141,7 @@ def public coopmat_f16acc_words : array<uint> {
 def public sdot_emitter_opcodes : table<uint> {
     var s <- storage816_emitter_opcodes()
     s |> insert(uint(SpvOp.SDot))
+    s |> insert(uint(SpvOp.SUDot))
     return <- s
 }
 
@@ -2271,7 +2272,8 @@ var @ssbo @binding = 2 sd_y : array<int>
 [compute_shader(local_size_x=64, name="sdot_spv"), marker(no_coverage)]
 def sdot_kernel {
     let gi = gl_GlobalInvocationID.x
-    sd_y[gi] = sdot4(sd_a[gi], sd_b[gi]) + sdot4(sd_a[gi], 0x01010101u)
+    // usdot4's second (SIGNED) arg is a unique constant so the test can pin the operand swap
+    sd_y[gi] = sdot4(sd_a[gi], sd_b[gi]) + sdot4(sd_a[gi], 0x01010101u) + usdot4(sd_a[gi], 0x02020202u)
 }
 
 def public sdot_words : array<uint> {

@@ -435,6 +435,49 @@ namespace das
         return float4(v.s[4].toFloat(), v.s[5].toFloat(), v.s[6].toFloat(), v.s[7].toFloat());
     }
 
+    // The idot family — the lattice's first compute ops: exact integer dot products over the
+    // 8-bit vectors. idot4 = per-dword-lane 4x i8 (or u8) x i8 MACs accumulated into int32
+    // lanes (the sdot/udot/vpdpbusd hardware shape); idot = the full 16-lane reduce the quant
+    // kernels accumulate per block. Results are ALWAYS signed; operand signedness selects the
+    // overload (the OpSDot / OpSUDot split). Names carry the signedness so AOT emits verbatim.
+    __forceinline int4 das_idot4_ss ( int4 acc, byte16 a, byte16 b ) {
+        int32_t * r = &acc.x;
+        for ( int i = 0; i != 4; ++i )
+            for ( int j = 0; j != 4; ++j )
+                r[i] += int32_t(a.s[i * 4 + j]) * int32_t(b.s[i * 4 + j]);
+        return acc;
+    }
+    __forceinline int4 das_idot4_us ( int4 acc, ubyte16 a, byte16 b ) {
+        int32_t * r = &acc.x;
+        for ( int i = 0; i != 4; ++i )
+            for ( int j = 0; j != 4; ++j )
+                r[i] += int32_t(a.s[i * 4 + j]) * int32_t(b.s[i * 4 + j]);
+        return acc;
+    }
+    __forceinline int4 das_idot4z_ss ( byte16 a, byte16 b ) {
+        return das_idot4_ss(int4(0, 0, 0, 0), a, b);
+    }
+    __forceinline int4 das_idot4z_us ( ubyte16 a, byte16 b ) {
+        return das_idot4_us(int4(0, 0, 0, 0), a, b);
+    }
+    __forceinline int32_t das_idot_ss ( byte16 a, byte16 b ) {
+        int32_t s = 0;
+        for ( int i = 0; i != 16; ++i ) s += int32_t(a.s[i]) * int32_t(b.s[i]);
+        return s;
+    }
+    __forceinline int32_t das_idot_us ( ubyte16 a, byte16 b ) {
+        int32_t s = 0;
+        for ( int i = 0; i != 16; ++i ) s += int32_t(a.s[i]) * int32_t(b.s[i]);
+        return s;
+    }
+    // byte table select (tbl1/pshufb): out[i] = lut[idx[i] & 15] — indices masked to the
+    // 16-entry table so every input is total (pshufb's bit-7 zeroing never engages)
+    __forceinline byte16 das_shuffle_b16 ( byte16 lut, ubyte16 idx ) {
+        byte16 r;
+        for ( int i = 0; i != 16; ++i ) r.s[i] = lut.s[idx.s[i] & 15];
+        return r;
+    }
+
     template <typename TO, typename TOE, typename FROM, typename FE>
     __forceinline TO das_sv_cvt_sat ( FROM v ) {
         TO r;

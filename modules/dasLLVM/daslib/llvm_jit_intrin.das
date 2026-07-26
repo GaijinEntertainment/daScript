@@ -75,6 +75,10 @@ let g_intrin_lookup <- {
         "$::ubyte4" => @@intrinsic_builtin_lattice_vec,
         "$::ubyte8" => @@intrinsic_builtin_lattice_vec,
         "$::ubyte16" => @@intrinsic_builtin_lattice_vec,
+    // the idot family (integer dots on the 8-bit lattice) + the byte table select
+        "$::idot4" => @@intrinsic_lattice_idot4,
+        "$::idot" => @@intrinsic_lattice_idot,
+        "$::shuffle" => @@intrinsic_lattice_shuffle,
     // saturating narrows (clamp+trunc — backends select sqxtn/packs natively)
         "$::short2_sat" => @@intrinsic_builtin_lattice_sat,
         "$::short3_sat" => @@intrinsic_builtin_lattice_sat,
@@ -1241,6 +1245,65 @@ def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
         return build_vector_expf(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp", ctx.builder, expr, arguments)
+}
+
+// ===== the idot family: exact integer dots on the 8-bit lattice =====
+// Generic widen-multiply IR — correct on every target, backends' dot combines pick up native
+// forms where the silicon has them (the _sat precedent); per-ISA strengthening = later wave.
+def private idot_products(var ctx : JitCtx; expr : ExprCallFunc?; a, b : LLVMOpaqueValue?; aIdx : int) : LLVMOpaqueValue? {   // nolint:LINT014 — shared by the idot intrinsics
+    let v16i32 = LLVMVectorType(ctx.types.t_int32, 16u)
+    let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
+    var wa = aUnsigned ? LLVMBuildZExt(ctx.builder, a, v16i32, "") : LLVMBuildSExt(ctx.builder, a, v16i32, "")
+    var wb = LLVMBuildSExt(ctx.builder, b, v16i32, "")
+    return LLVMBuildMul(ctx.builder, wa, wb, "idot_prod")
+}
+
+def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    var prod = idot_products(ctx, expr, arguments[0], arguments[1], 0)
+    let v16i32 = LLVMVectorType(ctx.types.t_int32, 16u)
+    let id = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+    var tys <- [v16i32]
+    var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, tys) : null
+    if (decl == null) {
+        failed_E(expr, "idot: llvm.vector.reduce.add unavailable on this LLVM")
+        return null
+    }
+    var ftyp = LLVMFunctionType(ctx.types.t_int32, [v16i32])
+    var fargs <- [prod]
+    return LLVMBuildCall2(ctx.builder, ftyp, decl, fargs, "idot")
+}
+
+def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    let hasAcc = length(arguments) == 3
+    let aIdx = hasAcc ? 1 : 0
+    var prod = idot_products(ctx, expr, arguments[aIdx], arguments[aIdx + 1], aIdx)
+    // per-dword-lane partial sums: stride-4 shuffles of the products, summed pairwise
+    var p0 = LLVMBuildShuffleVector(ctx.builder, ctx.types, prod, prod, [0, 4, 8, 12], "")
+    var p1 = LLVMBuildShuffleVector(ctx.builder, ctx.types, prod, prod, [1, 5, 9, 13], "")
+    var p2 = LLVMBuildShuffleVector(ctx.builder, ctx.types, prod, prod, [2, 6, 10, 14], "")
+    var p3 = LLVMBuildShuffleVector(ctx.builder, ctx.types, prod, prod, [3, 7, 11, 15], "")
+    var s = LLVMBuildAdd(ctx.builder, LLVMBuildAdd(ctx.builder, p0, p1, ""), LLVMBuildAdd(ctx.builder, p2, p3, ""), "idot4")
+    if (hasAcc) {
+        s = LLVMBuildAdd(ctx.builder, arguments[0], s, "idot4_acc")
+    }
+    return s
+}
+
+// dynamic table select: idx masked to 16 entries, then 16 dynamically-indexed lane reads —
+// generic IR every backend accepts; tbl1/pshufb single-op forms = the later per-ISA wave
+[unused_argument(expr)]
+def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+    let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
+    var m15elems <- [for (_i in range(16)); LLVMConstInt(ctx.types.t_int8, 15ul, 0)]
+    var m15 = LLVMConstVector(array_data_ptr(m15elems), 16u)
+    var idx = LLVMBuildAnd(ctx.builder, arguments[1], m15, "shuffle_idx")
+    var vres = LLVMGetUndef(v16i8)
+    for (i in range(16)) {
+        var lane = LLVMBuildExtractElement(ctx.builder, idx, ctx.types.ConstI32(uint64(i)), "")
+        var val = LLVMBuildExtractElement(ctx.builder, arguments[0], lane, "")
+        vres = LLVMBuildInsertElement(ctx.builder, vres, val, ctx.types.ConstI32(uint64(i)), "")
+    }
+    return vres
 }
 
 def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

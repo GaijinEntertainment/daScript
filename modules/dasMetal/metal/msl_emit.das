@@ -48,6 +48,7 @@ struct private MslCtx {
     builtins_used : table<string>               // referenced builtin globals (gl_*)
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
+    helpers : table<string>                     // preamble helper functions referenced by lowered calls
     self_name : string
 }
 
@@ -747,6 +748,13 @@ let private MSL_BITCASTS : table<string> <- {
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
 }
 
+// shader_lingua_franca's packed 4x8-bit integer dots — MSL has no dp4a builtin, so each lowers
+// to a preamble helper (single evaluation of the operands; the Metal compiler vectorizes freely)
+let private MSL_DOT_HELPERS : table<string; string> <- {
+    "sdot4" => "static inline int __das_sdot4(uint a, uint b) \{\n    char4 va = as_type<char4>(a), vb = as_type<char4>(b);\n    return int(va.x) * int(vb.x) + int(va.y) * int(vb.y) + int(va.z) * int(vb.z) + int(va.w) * int(vb.w);\n\}",
+    "usdot4" => "static inline int __das_usdot4(uint a, uint b) \{\n    uchar4 va = as_type<uchar4>(a);\n    char4 vb = as_type<char4>(b);\n    return int(va.x) * int(vb.x) + int(va.y) * int(vb.y) + int(va.z) * int(vb.z) + int(va.w) * int(vb.w);\n\}"
+}
+
 // simdgroup intrinsics, the math whitelist, + the ctor/convert/saturating-narrow family are the
 // only calls with a VALUE lowering (metal_builtins declares the simd set for float/int/uint; the
 // identity stub bodies never matter here — only the call AST is read)
@@ -782,6 +790,17 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.bitcast.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
         return "as_type<{msl_type_name(ec._type)}>({v})"
+    }
+    if (key_exists(MSL_DOT_HELPERS, cname)) {
+        if (na != 2) {
+            err(ctx, ec.at, "{cname} takes exactly two arguments")
+            return "/*call {cname}*/"
+        }
+        let a = emit_value(ctx, ec.arguments[0])
+        let b = emit_value(ctx, ec.arguments[1])
+        ctx.helpers |> insert(cname)
+        note(ctx, "call.{cname}")
+        return "__das_{cname}({a}, {b})"
     }
     if (cname == "min" || cname == "max") {
         if (na != 2) {
@@ -1544,8 +1563,14 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
 
     note(ctx, "preamble")
     note(ctx, "kernel_sig")
+    var helper_text = ""
+    if (!empty(ctx.helpers)) {
+        var hs <- [for (h in keys(ctx.helpers)); MSL_DOT_HELPERS?[h] ?? ""]
+        hs |> sort()    // table iteration order is hash-based — pin the emitted order
+        helper_text = join(hs, "\n") + "\n"
+    }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\nkernel void {kernel_entry_name(fn, cfg)}(",
+        "#include <metal_stdlib>\nusing namespace metal;\n{helper_text}kernel void {kernel_entry_name(fn, cfg)}(",
         join(params, ",\n        "),
         ") \{\n",
         empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
