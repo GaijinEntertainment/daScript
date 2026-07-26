@@ -405,11 +405,33 @@ imgui_mouse_* bypass commands while input is detached.
 
 ## Icon-set expansion (dasImgui, consult Claude Design)
 
-Existing set covers refresh/stop/add/folder/search/gear/prev/next.
-Likely new needs: file glyph (vs folder), dirty badge/dot, sort-mode
-cycle, filter, confirm/danger, collapse/expand-all, send/submit.
+Existing set covers refresh/stop/add/folder/search/gear/prev/next,
+plus play/clock/check/warning/bolt/chevron-right/bell/link/unlink/
+close/edit in use across dasHerd.
 Run the proposed additions past Claude Design (daslang.io Forge design
 system) before drawing them; regen the icon catalog after.
+
+PROPOSAL (ready for the consult, 2026-07-25 — every entry is a place
+the UI currently substitutes text or a wrong-shaped glyph):
+- file: Project rows borrow "edit" for files today; a document glyph
+  pairs with the existing folder.
+- repo-portal: the "(repo)" text tag on nested-repository folders
+  wants a small badge glyph (folder + branch node?).
+- dirty-dot: the amber "*N" works but a small dot/badge form would
+  read cleaner in narrow rows (worktrees, Project).
+- sort-cycle: the Project header sort is a text button ("Sort:
+  Folders first"); one glyph with a mode sub-mark.
+- filter: the Project filter row and future search fields.
+- confirm / danger: the destructive-confirm modal buttons are plain
+  text; a danger accent glyph for Terminate/Close affordances.
+- send: "Send to session agent" context items and future outbox.
+- keyboard: the Shortcuts tab and capture state.
+- terminal: session cards and the worktree->session jump currently
+  borrow play/clock; a terminal glyph distinguishes "has a terminal"
+  from lifecycle state.
+- agent-lock: the SYNTH LOCK / [AGENT CONTROL] states borrow
+  "warning"; a dedicated takeover glyph reads less like an error.
+- expand-all / collapse-all: Project tree QoL.
 
 ## Sequencing (settled 2026-07-25)
 
