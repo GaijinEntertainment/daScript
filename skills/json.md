@@ -217,7 +217,7 @@ Don't reach for this until you've ruled out modeling the data as a struct/varian
 ## Reference
 
 - Tutorial — read this first for runnable examples of every pattern: [tutorials/language/30_json.das](tutorials/language/30_json.das)
-- RST companion: [doc/source/reference/tutorials/30_json.rst](doc/source/reference/tutorials/30_json.rst); auto-generated module docs at `doc/source/stdlib/handmade/module-json.rst` and `module-json_boost.rst`
+- Prose walkthrough of that same tutorial, docs style: [30. JSON](https://daslang.io/doc/reference/tutorials/30_json.html)
 - daslib sources: [daslib/json.das](daslib/json.das), [daslib/json_boost.das](daslib/json_boost.das)
 - Tests with usage patterns: [tests/json/test_sprint_json.das](tests/json/test_sprint_json.das), [tests/json/test_sscan_json.das](tests/json/test_sscan_json.das)
 - Real custom `JV` overloads: [daslib/dap.das](daslib/dap.das), [daslib/refactor.das](daslib/refactor.das)

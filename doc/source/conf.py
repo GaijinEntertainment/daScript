@@ -33,6 +33,10 @@ sys.path.insert(0, os.path.abspath('.'))
 extensions = [
   'daslang',
   'sphinx_sitemap',
+  # Parses the markdown skills under skills/ that are pulled in via
+  # `.. include:: ... :parser: myst_parser.sphinx_`. Those pages keep ONE source
+  # file, read both by daslang.io and by the SDK bundle (install/skills.list).
+  'myst_parser',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

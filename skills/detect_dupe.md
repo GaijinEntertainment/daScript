@@ -1,6 +1,6 @@
 # detect-dupe — duplicate-function detection
 
-Read this skill before doing duplicate-detection work — building a corpus, asking "does this function already exist?", wiring a CI gate. The full user-facing reference lives at `doc/source/reference/utils/detect_dupe.rst`.
+Read this skill before doing duplicate-detection work — building a corpus, asking "does this function already exist?", wiring a CI gate. The full user-facing reference — every flag, in tables — lives beside this one at `skills/detect_dupe_reference.md` (the same file daslang.io renders as [detect-dupe](https://daslang.io/doc/reference/utils/detect_dupe.html)).
 
 ## When to use this
 
@@ -131,7 +131,7 @@ git diff --name-only master | grep '\.das$' | \
         --import-functions tests_baseline.json --against-from-stdin
 ```
 
-Full flag reference: `bin/daslang utils/detect-dupe/main.das -- -?` or `doc/source/reference/utils/detect_dupe.rst`.
+Full flag reference: `bin/daslang utils/detect-dupe/main.das -- -?` or `skills/detect_dupe_reference.md`.
 
 ## Limitations
 

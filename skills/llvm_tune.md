@@ -2,7 +2,7 @@
 
 Read before touching `modules/dasLLVM/daslib/llvm_tune.das`, adding a `[tune]` kernel family,
 wiring a library into a per-box tune scope, or giving an app a tune policy. Full user-facing
-reference: `doc/source/reference/tune.rst`. Worked application: `modules/dasLLAMA/tune_for_this_box.md`.
+reference: `skills/tune.md`. Worked application: `modules/dasLLAMA/tune_for_this_box.md`.
 
 ## What it is
 
@@ -51,7 +51,7 @@ hand-copy trap). Several libraries share one file: tuners UPSERT their own keys
 
 ## The dasLLAMA tuner (the worked consumer)
 
-`modules/dasLLAMA/harness/dasllama_tuner.das` is the scope tuner — a wrapper spawning
+`modules/dasLLAMA/harness/dasllama_tuner.das` (repo-only) is the scope tuner — a wrapper spawning
 `gen_tune_probe.das` (the `[tune]` generator grid) then `tune_kernels.das` (the `[tuned]`
 loop-hint grid + the `"runtime"` knob snapshot), both upserting the one env-pointed sidecar.
 `tune_kernels` records explicit shipped-fallback entries for kernels it doesn't sweep yet
@@ -68,7 +68,7 @@ map (sweep it, or record its shipped fallback).
 
 ## Testing
 
-`modules/dasLLVM/tests/llvm_tune_scope.das` is the end-to-end pattern: spawn the app as child daslang
+`modules/dasLLVM/tests/llvm_tune_scope.das` (repo-only) is the end-to-end pattern: spawn the app as child daslang
 processes across the policy flavors, use the `llvm_code_selftest::add_plus_k` generator (emits
 `a+b+k`) so the RESULT is a fingerprint of the stamped perm. The tuner is a seconds-fast fake
 that upserts via `tune_manifest_set`. Two scopes sharing the one sidecar prove the upsert

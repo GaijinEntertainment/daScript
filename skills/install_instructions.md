@@ -35,6 +35,19 @@ for s in $(cat /tmp/shipped.txt); do
 done
 ```
 
+**Repo-internal paths must be marked `repo-only`.** A shipped skill that says "see
+`src/ast/ast_infer_type.cpp`" is a dead end in the SDK: `src/`, `tests/`, `benchmarks/`
+and `modules/*/src` are never bundled. Shipping them is not the answer — saying so is,
+so the reader skips the line instead of hunting a path that isn't there. Add the token
+`repo-only` either to the line itself (one-off prose mentions) or to the heading of a
+section that is entirely repo internals — a heading marker exempts that section only
+and resets at the next heading, so a mid-file internals section can't leak its
+exemption through the rest of the page. Enforced per-PR by
+`ci/check_shipped_skill_refs.awk`, run from `ci/smoke_test_bundle.sh` (the
+`bundle_smoke` job in `build.yml`). Fenced code blocks are exempt: they quote tool
+output verbatim and that text must stay accurate. `tests/` is not yet in the pattern —
+that class is still being sorted into inline-the-snippet vs quarantine.
+
 **Keep `install/skills.list` ASCII-only, comments included.** `file(STRINGS)` treats non-ASCII bytes as separators, so an em-dash inside a comment splits that line and the tail is read as a skill filename — the `FATAL_ERROR` then names a nonsense path. The call passes `ENCODING UTF-8` to blunt this, but plain ASCII is the reliable answer.
 
 ## What belongs in install instructions

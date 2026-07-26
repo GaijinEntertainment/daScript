@@ -1,3 +1,7 @@
 sphinx==7.2.6
 sphinx-rtd-theme==2.0.0
 sphinx-sitemap==2.6.0
+# Lets Sphinx parse the markdown skills under skills/ directly, so a page like
+# reference/design_philosophy has ONE source that both daslang.io and the shipped
+# SDK read. 2.0.0 is the last line supporting sphinx 7.x.
+myst-parser==2.0.0

@@ -63,7 +63,7 @@ Two hard-won rules for tests that drive a deep JIT engine chain (`forward`/`forw
 2. **Keep heavy helpers free of `T?`** — a `T?` param keeps the helper off the JIT (dastest's
    class), so its engine calls run on the interpreter stack. Structure like `test_parity.das`:
    plain private functions do the model work and return values/arrays; the `[test]` run-lambda
-   only asserts. (`modules/dasLLAMA/tests/test_mtp.das` hit both failure modes before landing on this.)
+   only asserts. (`modules/dasLLAMA/tests/test_mtp.das`, repo-only, hit both failure modes before landing on this.)
 
 ## Test file structure
 

@@ -27,6 +27,10 @@ fi
 BUNDLE="$(cd "$1" 2>/dev/null && pwd -P)" \
     || { echo "ERROR: bundle dir not found or not enterable: $1" >&2; exit 2; }
 
+# Resolved BEFORE the `cd "$BUNDLE"` below: the shipped-skill checker lives beside
+# this script in the repo, which is not part of the bundle.
+CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 # Two exe naming conventions exist:
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
 #     daslang-live, das-fmt): platform-natural suffix (.exe on Windows,
@@ -163,6 +167,23 @@ echo
 echo "Runtime launch:"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
+
+# Shipped skills must not send the reader to a path the bundle does not contain.
+# This is the same class of bug as the utils/mcp/setup.das miss: the docs promised
+# something the install rules never delivered. Here the right answer is the reverse
+# of shipping it -- src/ and tests/ are never going in the bundle -- so the check
+# demands the line be marked `repo-only` instead.
+echo
+echo "Shipped-skill references:"
+printf '  %-30s ' "no unmarked repo paths"
+if SKILL_REFS="$(awk -f "$CI_DIR/check_shipped_skill_refs.awk" "$BUNDLE"/skills/*.md 2>&1)"; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL"
+    printf '%s\n' "$SKILL_REFS" | sed 's/^/    /'
+    FAIL=$((FAIL + 1))
+fi
 
 echo
 echo "==================================================================="

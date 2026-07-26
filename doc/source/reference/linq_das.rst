@@ -8,7 +8,8 @@ C#-style LINQ query syntax (``%linq!``)
 ``%linq! … %%`` inline reader macro. A query is a purely mechanical,
 compile-time rewrite into a ``_fold(...)`` chain, so it rides the same fused
 execution engine as the pipe-form LINQ operators (see
-:ref:`linq_fold_patterns`) with no runtime cost over the hand-written chain.
+:ref:`LINQ-fold patterns <linq_fold_patterns>`) with no runtime cost over the
+hand-written chain.
 
 .. code-block:: das
 

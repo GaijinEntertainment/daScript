@@ -318,7 +318,11 @@ addInterop<new_and_init, void *, vec4f>(*this, lib, "new_and_init",
     SideEffects::none, "new_and_init");
 ```
 
-## C++ Codebase Notes
+## C++ Codebase Notes (repo-only)
+
+Where things live inside daslang's own `src/` tree. The SDK ships `include/` but not
+`src/`, so these paths only resolve in a daslang checkout — skip this section if you
+are embedding the SDK rather than working on the compiler.
 
 - Main type inference: `src/ast/ast_infer_type.cpp` (implementation) + `include/daScript/ast/ast_infer_type.h` (class declarations for `CaptureLambda` and `InferTypes`)
 - Builtin runtime functions: `src/builtin/module_builtin_runtime.cpp`
@@ -376,7 +380,7 @@ tp << "leaked " << count << " handles\n";
 
 Applies to permanent diagnostics AND temporary debug prints — don't
 leave `fprintf` scaffolding in the tree even if you plan to remove it.
-Canonical patterns: `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`)
+Canonical patterns (repo-only): `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`)
 and `include/daScript/ast/ast_handle.h` (`dumpHandleLeaks<T>`).
 
 ## C-string builtins: guard `!str || !*str`

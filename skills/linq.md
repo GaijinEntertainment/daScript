@@ -120,7 +120,7 @@ table key by probing the table instead of hashing, and inserts straight into the
 result with no intermediate array. `%linq!` queries dispatch table sources automatically
 (`from kv in tab`). Slot order is unspecified — don't write order-sensitive expectations over
 table chains. The 3-arg `to_table(it, keyBlock, elementSelectorBlock)` ToDictionary form also
-exists (tier-2 only). Full pattern reference: `doc/source/reference/linq_fold_patterns.rst`.
+exists (tier-2 only). Full pattern reference: `skills/linq_fold_patterns.md`.
 
 ## Don't mix styles
 

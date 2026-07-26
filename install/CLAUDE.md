@@ -58,6 +58,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | Skill file | Read BEFORE... |
 |---|---|
 | `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
+| `skills/design_philosophy.md` | The long-form **why** behind daslang — origins, the deliberate trade-offs, the performance model, and why the language is shaped the way it is |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
@@ -76,6 +77,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/memory_leak_detection.md` | Diagnosing leaks (`--das-profiler-leaks`, `--track-smart-ptr`, `GC APP LEAK`, `HandleRegistry`) |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leaks |
 | `skills/detect_dupe.md` | Duplicate-function detection (corpus, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |
+| `skills/detect_dupe_reference.md` | The long-form detect-dupe reference `detect_dupe.md` points at — every flag, in tables |
 | `skills/find_dupe.md` | AI-judging a detect-dupe report via Claude (MCP tools `judge_duplicates`/`find_dupe`, CLI under `utils/find-dupe/`, needs `ANTHROPIC_API_KEY`); cost guardrails (`--dry-run`, `--max-clusters`, `--positives-only`) |
 | `skills/linq.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |
 | `skills/decs.md` | Programming with `daslib/decs` / `decs_boost` — entities, components, queries, `[decs_template]`, stages, bulk creation, `from_decs` linq bridge |
@@ -88,10 +90,15 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/strudel_port.md` | Porting strudel.cc patterns into `dasStrudel` |
 | `skills/aot_testing.md` | Writing AOT tests, `Module::aotRequire()`, or diagnosing an `error[50101] AOT link failed` hash mismatch |
 | `skills/llvm_tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`--tune`, per-box manifests, the runtime-tune-and-re-exec model, the AOT/`-exe` gates |
+| `skills/tune.md` | The long-form `[tune]` reference that `llvm_tune.md` points at — the full permutation/scope/policy surface |
+| `skills/profiler.md` | Runtime profiling and `--das-profiler-leaks` — the full guide `memory_leak_detection.md` points at |
+| `skills/linq_fold_patterns.md` | Which chain shapes `_fold(...)` recognizes — the full pattern reference `linq.md` points at |
 | `skills/perf_lint.md` | Adding or interpreting `PERF*` rules in `daslib/perf_lint.das` |
 | `skills/style_lint.md` | Adding or interpreting `STYLE*` rules in `daslib/style_lint.das` |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
+
+**`repo-only` marks paths that are not in this SDK.** The skills are shared with the daslang repository, so a few of them point at daslang's own sources (`src/…`, `tests/…`) when explaining internals. Any such line — or the heading of a whole section of them — carries the token `repo-only`. Those paths do not exist in this bundle and never will; skip them. Everything not marked that way resolves inside the SDK.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 

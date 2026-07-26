@@ -202,6 +202,6 @@ Supports nested structs, enums, arrays, tables, tuples, variants, vector types (
   - [tutorials/dasPUGIXML/04_serialization.das](tutorials/dasPUGIXML/04_serialization.das) — `to_XML`/`from_XML` round-trip
   - [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das) — `from_xml_node` LINQ source (typed rows from attributes)
 - daslib helpers (the source of truth for the EDSL): [modules/dasPUGIXML/daslib/PUGIXML_boost.das](modules/dasPUGIXML/daslib/PUGIXML_boost.das)
-- C++ binding (for adding new functions): [modules/dasPUGIXML/src/dasPUGIXML.h](modules/dasPUGIXML/src/dasPUGIXML.h), `dasPUGIXML.cpp`
+- C++ binding, for adding new functions (repo-only): [modules/dasPUGIXML/src/dasPUGIXML.h](modules/dasPUGIXML/src/dasPUGIXML.h), `dasPUGIXML.cpp`
 - Tests with patterns: [tests/dasPUGIXML/](tests/dasPUGIXML/) — `test_pugixml_core.das`, `test_pugixml_mutation.das`, `test_pugixml_boost.das`, `test_serial_*.das`
 - Auto-generated RST: `doc/source/stdlib/handmade/function-pugixml-*.rst`, `structure_annotation-pugixml-*.rst`, `Variable-pugixml-*.rst`

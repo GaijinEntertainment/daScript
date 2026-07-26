@@ -300,4 +300,4 @@ Components serialize through the type-info `serializer` callback that `make_comp
 - Tests as worked examples: [tests/decs/](tests/decs/) — `test_queries.das`, `test_create_update_remove.das`, `test_bulk_create.das`, `test_optional_values.das`, `test_default_values.das`, `test_stages.das`, `test_serialize.das`
 - Linq bridge test: [tests/linq/test_linq_from_decs.das](tests/linq/test_linq_from_decs.das)
 - Linq operators reference: [skills/linq.md](skills/linq.md)
-- Bulk-create benchmark: [benchmarks/decs/bench_bulk_create.das](benchmarks/decs/bench_bulk_create.das)
+- Bulk-create benchmark (repo-only): [benchmarks/decs/bench_bulk_create.das](benchmarks/decs/bench_bulk_create.das)

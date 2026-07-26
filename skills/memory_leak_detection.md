@@ -4,16 +4,16 @@ daslang ships six distinct leak-detection mechanisms, each narrow. This skill
 is the master index — read it first, pick the right tool, then dive into the
 per-mechanism details (or the dedicated skill for #5, `jobque_debugging.md`).
 
-The user-facing version lives at
-`doc/source/reference/utils/memory_leak_detection.rst` and covers the same
-material in docs style.
+A docs-style rendering of this same material is published at
+[Memory Leak Detection](https://daslang.io/doc/reference/utils/memory_leak_detection.html);
+it adds nothing you will not find here, so stay in this file.
 
 ## Quick decision tree
 
 | Symptom | Tool |
 |---|---|
 | daslang run exits 0 but prints `GC COMPILE LEAK` / `GC APP LEAK` | **#3 gc_node** (`skills/gc_migration.md`) |
-| Script leaks a daslang `new Foo()` / `array<T>` / table, want per-alloc call stack | **#1 `--das-profiler-leaks`** (`doc/source/reference/utils/profiler.rst`) |
+| Script leaks a daslang `new Foo()` / `array<T>` / table, want per-alloc call stack | **#1 `--das-profiler-leaks`** (`skills/profiler.md`) |
 | Long-running run keeps growing, or want per-context heap dump at exit | **#2 `-track-allocations -heap-report`** (single dash) |
 | Know a specific smart_ptr id is misbehaving, want debug-break on every addRef/delRef | **#4 `--track-smart-ptr <hexId>`** |
 | Script uses channels/jobs/lockboxes, `DumpJobQueLeaks` printed survivors | **#5 `--track-job-status`** (`skills/jobque_debugging.md`) |
@@ -62,7 +62,7 @@ stack to find the scope that owns the memory and failed to free it.
 **Don't:** enable this for a shipping build. Every allocation clones the
 shadow call stack — it's a debug tool.
 
-See `doc/source/reference/utils/profiler.rst` for the full guide (also covers
+See `skills/profiler.md` for the full guide (also covers
 the performance profiler mode).
 
 ---
@@ -241,7 +241,7 @@ alive — look for forgotten captures.
 
 **Type names** come from `typeName<T>::name()` — for handle types this is
 wired via `MAKE_EXTERNAL_TYPE_FACTORY(Name, hv::Name)` in
-`modules/dasHV/src/dasHV.h`. Any new handle type introduced via
+`modules/dasHV/src/dasHV.h` (repo-only). Any new handle type introduced via
 `addHandleAnnotation<T>` that does NOT have a `typeName<T>` specialization
 fails to compile (by design — compile-time enforcement of a readable name).
 
@@ -321,8 +321,8 @@ Common non-leaks that look like leaks:
 
 ## Cross-references
 
-- `doc/source/reference/utils/profiler.rst` — user-facing guide for #1.
-- `doc/source/reference/utils/memory_leak_detection.rst` — user-facing version of this skill.
+- `skills/profiler.md` — the full guide for #1 (ships in the SDK).
+- This file is the master index; the docs-site rendering of it adds nothing extra.
 - `skills/jobque_debugging.md` — full workflow for #5.
 - `skills/gc_migration.md` — background for #3 and `ast_gc_guard`.
 - `include/daScript/misc/handle_registry.h` — dasHV handle infrastructure (#6).
