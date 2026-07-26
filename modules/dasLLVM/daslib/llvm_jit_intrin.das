@@ -4,6 +4,9 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options relaxed_pointer_const
 options unsafe_table_lookup = false
+// intrinsic emitters carry per-function lowering contracts (gates, exactness preconditions,
+// saturation bounds) that don't compress to the 3-line cap — keep them at the emitters
+options _comment_hygiene = false
 
 module llvm_jit_intrin shared private
 
