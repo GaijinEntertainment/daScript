@@ -670,13 +670,21 @@ ENDFOREACH()
 # the host artifacts a wasm cross-compile (daspkg release wasm) needs. A later
 # desktop configure still cleans genuinely-disabled modules.
 IF(NOT EMSCRIPTEN)
-    FILE(GLOB_RECURSE _all_shared_modules CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
-    FOREACH(_sm ${_all_shared_modules})
-        GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
-        IF(NOT TARGET ${_sm_name})
-            MESSAGE(STATUS "Removing stale ${_sm}")
-            FILE(REMOVE "${_sm}")
+    FOREACH(_module ${_modules})
+        # Standalone (daspkg / nested-repo) modules build their own .shared_module
+        # out-of-tree; those basenames are never targets here, so the stale test
+        # below would delete a perfectly live artifact on every reconfigure.
+        IF(EXISTS "${PROJECT_SOURCE_DIR}/modules/${_module}/.daspkg_standalone")
+            CONTINUE()
         ENDIF()
+        FILE(GLOB_RECURSE _mod_shared_modules "${PROJECT_SOURCE_DIR}/modules/${_module}/*.shared_module")
+        FOREACH(_sm ${_mod_shared_modules})
+            GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
+            IF(NOT TARGET ${_sm_name})
+                MESSAGE(STATUS "Removing stale ${_sm}")
+                FILE(REMOVE "${_sm}")
+            ENDIF()
+        ENDFOREACH()
     ENDFOREACH()
 ENDIF()
 

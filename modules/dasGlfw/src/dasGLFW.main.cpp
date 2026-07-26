@@ -300,14 +300,23 @@ namespace das {
         ~ChainDepthGuard() { --g_ChainDispatchDepth; }
     };
 
+    // Every dispatch loop below re-finds the map node each step: a listener can
+    // erase this window's chain mid-dispatch (glfwDestroyWindow, chain_clear),
+    // so no reference into g_GlfwChain may be held across a lambda call.
     void DasGlfw_ChainCursorPosDispatch ( GLFWwindow * w, double x, double y ) {
         ChainDepthGuard depth;
         if ( depth.blocked ) return;
-        auto it = g_GlfwChain.find(w);
-        if ( it == g_GlfwChain.end() ) return;
-        auto & st = it->second;
-        if ( st.prev_cursor_pos ) st.prev_cursor_pos(w, x, y);
-        for ( auto & e : st.cursor_pos_chain ) {
+        {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) return;
+            if ( it->second.prev_cursor_pos ) it->second.prev_cursor_pos(w, x, y);
+        }
+        for ( size_t i = 0; ; ++i ) {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) break;
+            auto & chain = it->second.cursor_pos_chain;
+            if ( i >= chain.size() ) break;
+            auto e = chain[i];
             if ( e.context ) {
                 das_invoke_lambda<void>::invoke<GLFWwindow *, double, double>(
                     e.context, nullptr, e.lambda, w, x, y);
@@ -318,11 +327,17 @@ namespace das {
     void DasGlfw_ChainMouseButtonDispatch ( GLFWwindow * w, int button, int action, int mods ) {
         ChainDepthGuard depth;
         if ( depth.blocked ) return;
-        auto it = g_GlfwChain.find(w);
-        if ( it == g_GlfwChain.end() ) return;
-        auto & st = it->second;
-        if ( st.prev_mouse_button ) st.prev_mouse_button(w, button, action, mods);
-        for ( auto & e : st.mouse_button_chain ) {
+        {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) return;
+            if ( it->second.prev_mouse_button ) it->second.prev_mouse_button(w, button, action, mods);
+        }
+        for ( size_t i = 0; ; ++i ) {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) break;
+            auto & chain = it->second.mouse_button_chain;
+            if ( i >= chain.size() ) break;
+            auto e = chain[i];
             if ( e.context ) {
                 das_invoke_lambda<void>::invoke<GLFWwindow *, int, int, int>(
                     e.context, nullptr, e.lambda, w, button, action, mods);
@@ -333,11 +348,17 @@ namespace das {
     void DasGlfw_ChainScrollDispatch ( GLFWwindow * w, double xoff, double yoff ) {
         ChainDepthGuard depth;
         if ( depth.blocked ) return;
-        auto it = g_GlfwChain.find(w);
-        if ( it == g_GlfwChain.end() ) return;
-        auto & st = it->second;
-        if ( st.prev_scroll ) st.prev_scroll(w, xoff, yoff);
-        for ( auto & e : st.scroll_chain ) {
+        {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) return;
+            if ( it->second.prev_scroll ) it->second.prev_scroll(w, xoff, yoff);
+        }
+        for ( size_t i = 0; ; ++i ) {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) break;
+            auto & chain = it->second.scroll_chain;
+            if ( i >= chain.size() ) break;
+            auto e = chain[i];
             if ( e.context ) {
                 das_invoke_lambda<void>::invoke<GLFWwindow *, double, double>(
                     e.context, nullptr, e.lambda, w, xoff, yoff);
@@ -348,11 +369,17 @@ namespace das {
     void DasGlfw_ChainKeyDispatch ( GLFWwindow * w, int key, int scancode, int action, int mods ) {
         ChainDepthGuard depth;
         if ( depth.blocked ) return;
-        auto it = g_GlfwChain.find(w);
-        if ( it == g_GlfwChain.end() ) return;
-        auto & st = it->second;
-        if ( st.prev_key ) st.prev_key(w, key, scancode, action, mods);
-        for ( auto & e : st.key_chain ) {
+        {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) return;
+            if ( it->second.prev_key ) it->second.prev_key(w, key, scancode, action, mods);
+        }
+        for ( size_t i = 0; ; ++i ) {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) break;
+            auto & chain = it->second.key_chain;
+            if ( i >= chain.size() ) break;
+            auto e = chain[i];
             if ( e.context ) {
                 das_invoke_lambda<void>::invoke<GLFWwindow *, int, int, int, int>(
                     e.context, nullptr, e.lambda, w, key, scancode, action, mods);
@@ -363,11 +390,17 @@ namespace das {
     void DasGlfw_ChainCharDispatch ( GLFWwindow * w, unsigned int codepoint ) {
         ChainDepthGuard depth;
         if ( depth.blocked ) return;
-        auto it = g_GlfwChain.find(w);
-        if ( it == g_GlfwChain.end() ) return;
-        auto & st = it->second;
-        if ( st.prev_char ) st.prev_char(w, codepoint);
-        for ( auto & e : st.char_chain ) {
+        {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) return;
+            if ( it->second.prev_char ) it->second.prev_char(w, codepoint);
+        }
+        for ( size_t i = 0; ; ++i ) {
+            auto it = g_GlfwChain.find(w);
+            if ( it == g_GlfwChain.end() ) break;
+            auto & chain = it->second.char_chain;
+            if ( i >= chain.size() ) break;
+            auto e = chain[i];
             if ( e.context ) {
                 das_invoke_lambda<void>::invoke<GLFWwindow *, unsigned int>(
                     e.context, nullptr, e.lambda, w, codepoint);

@@ -643,7 +643,10 @@ static int run_lifecycle(const string & fn) {
         }
     }
 
-    // Shutdown
+    // Shutdown — the real one, not a reload teardown. The flag stays true from
+    // the last reload otherwise, and shutdown()-time checks like glfw_live's
+    // live_destroy_window skip their final cleanup.
+    if (dll_set_is_reload) dll_set_is_reload(false);
     if (ctx && fnShutdown) {
         ctx->evalWithCatch(fnShutdown, nullptr);
         if (auto ex = ctx->getException()) {
