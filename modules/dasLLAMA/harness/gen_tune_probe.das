@@ -799,6 +799,7 @@ def q51_tune_family() : string {
         if (!ok) {
             print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
             delete sq; delete ss; delete hq; delete hs
+            delete sfx; delete hfx; delete tvs; delete y; delete yh
             return ""
         }
         var dt = 2147483647
@@ -815,6 +816,8 @@ def q51_tune_family() : string {
         }
         delete sq; delete ss; delete hq; delete hs
     }
+    delete sfx
+    delete hfx
     delete tvs
     delete y
     delete yh
