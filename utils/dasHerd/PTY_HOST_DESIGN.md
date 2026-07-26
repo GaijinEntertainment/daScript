@@ -162,3 +162,47 @@ exe-relative. Consequences, all load-bearing:
    upgrade unit owning every terminal).
 3. **Linger** after child exit (draft: 24h or until adopted+drained).
 4. Whether v1 already lets the rich client attach straight to a host.
+
+## Remote boxes: watcher-per-box (decided 2026-07-26)
+
+The ssh story is topology, not transport, and the deciding weight is GIT: a
+local watcher reaching out to remote hosts would drag every git surface
+(changelist, history, captures, inspection, worktree ops, path identity)
+through ssh. Instead we copy tmux: **one watcher per box**, its sessions,
+hosts, git layer, registry, and mailbox all box-local and unchanged; the
+rich client federates.
+
+- **The client owns a watcher list** — each entry: name, how to reach it
+  (local port, or an ssh target yielding a forwarded loopback port), token
+  source. A remote watcher behind a forwarded port is indistinguishable
+  from the local one: same protocol, same reattach.
+- **ssh has exactly two jobs**, both boring: the tunnel (no watcher port is
+  ever exposed; tokens stay loopback secrets on both ends) and the control
+  channel (deploy bundle, start/stop/upgrade the watcher, fetch its token).
+  Remote watcher restarts are safe because their sessions sit in detached
+  hosts — the terminal arc was the prerequisite.
+- **ssh drop = client reconnect with backoff**, nothing more. Sessions,
+  hosts, git, mailbox keep running remotely (tmux model: the server is
+  remote, the client is disposable).
+- **Agent MCP stays box-local**: DASHERD_URL points at that box's watcher
+  over loopback. No reverse tunnels.
+- This topology keeps watcher<->host loopback-only forever, which is what
+  makes the pump's "link closed = host died" assumption permanently valid.
+- Deferred consciously: cross-box sessions (satellites/bundles spanning
+  boxes) — the federation seam lives in the client, later.
+
+## Next hardening block (queued, go on Boris's word)
+
+- **Host log file** `<session>.log` beside the journal — the host currently
+  cannot log at all (spawned CREATE_NO_WINDOW; stdout evaporates into the
+  hidden conhost). Log config at start, every connect/auth/attach with
+  offsets, every op, child exit, stamp transitions, shutdown reason.
+  Everything should log like crazy; this one especially.
+- **Lock-file liveness** `<session>.lock`, held exclusively for the host's
+  lifetime: "alive = file locked; died = lock released". Race-free,
+  crash-proof, works over ssh exec; replaces the connect-timeout probe as
+  the adoption deadness test. Stamp stays the metadata record.
+- **Underlying test coverage** (UI can wait; the underlying stuff tests and
+  logs everything, because reasons): bind-retry/port-exhaustion, degraded
+  breakaway, corrupt-jsonl restore, bad-token / wrong-protocol /
+  mid-replay-disconnect adversarial cases against the host.
