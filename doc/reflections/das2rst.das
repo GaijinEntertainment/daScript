@@ -184,6 +184,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report|tag_array|tag_table)%%),
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%),
         group_by_regex("16/8-bit lattice converts", mod, %regex~(short2_sat|short3_sat|short4_sat|ushort2_sat|ushort3_sat|ushort4_sat|byte2_sat|byte3_sat|byte4_sat|byte8_sat|ubyte2_sat|ubyte3_sat|ubyte4_sat|ubyte8_sat|half8_lo|half8_hi)$%%),
+        group_by_regex("16/8-bit lattice integer dots", mod, %regex~(idot|idot4|shuffle)$%%),
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%),
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_building_documentation|is_reporting_compilation_errors)%%),

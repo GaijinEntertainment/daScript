@@ -249,37 +249,8 @@ var gl_SubgroupInvocationID : uint      // BuiltIn SubgroupLocalInvocationId (In
 var gl_NumSubgroups         : uint      // BuiltIn NumSubgroups (Input) — subgroups per workgroup
 var gl_SubgroupID           : uint      // BuiltIn SubgroupId (Input) — this subgroup's index within the workgroup
 
-// ===== 8-bit pack/unpack (GL_EXT_shader_explicit_arithmetic_types_int8 spellings) =====
-// unpack8 reinterprets one 32-bit scalar as four 8-bit lanes (input signedness picks the byte4 /
-// ubyte4 result — das cannot overload on return type, same trick the GLSL extension uses);
-// pack32 is the inverse. Lowers to a single OpBitcast. The q8 idiom: `unpack8(pack)` then widen
-// via `int4(b4)` (OpSConvert) — sign extension for free, replacing manual shift-pair dances.
-// Real CPU bodies (byte4/ubyte4 are bit-layout-identical to the packed 32-bit scalar, lane 0 low),
-// so CPU == GPU exactly, like packHalf2x16.
-def public unpack8(x : int) : byte4 {
-    return unsafe(reinterpret<byte4>(x))
-}
-
-def public unpack8(x : uint) : ubyte4 {
-    return unsafe(reinterpret<ubyte4>(x))
-}
-
-def public pack32(v : byte4) : int {
-    return unsafe(reinterpret<int>(v))
-}
-
-def public pack32(v : ubyte4) : uint {
-    return unsafe(reinterpret<uint>(v))
-}
-
-// ===== packed integer dot product (VK_KHR_shader_integer_dot_product) =====
-// sdot4 dots two uints as 4+4 SIGNED int8 lanes (dp4a). Lowers to OpSDot with the
-// PackedVectorFormat4x8Bit literal; real CPU body, so CPU == GPU exactly.
-def public sdot4(a, b : uint) : int {
-    let av = int4(unpack8(int(a)))
-    let bv = int4(unpack8(int(b)))
-    return av.x * bv.x + av.y * bv.y + av.z * bv.z + av.w * bv.w
-}
+// unpack8/pack32/sdot4/usdot4 live in daslib/shader_lingua_franca (re-exported above) — the
+// emitter lowers them by name: OpBitcast for the packs, OpSDot/OpSUDot for the dots.
 
 // ===== mesh + task shader minimum intrinsics (VK_EXT_mesh_shader) =====
 // SetMeshOutputsEXT(vertex_count, primitive_count): the mesh-shader prologue. The SPV_EXT_mesh_shader

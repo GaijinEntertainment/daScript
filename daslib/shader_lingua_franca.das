@@ -331,3 +331,37 @@ def public packHalf2x16(v : float2) : uint {
 def public unpackHalf2x16(bits : uint) : float2 {
     return float2(unsafe(reinterpret<half2>(bits)))
 }
+
+// ===== 8-bit pack/unpack (GL_EXT_shader_explicit_arithmetic_types_int8 spellings) =====
+// unpack8 splits one 32-bit scalar into four 8-bit lanes (input signedness picks byte4/ubyte4 —
+// no return-type overloading, the GLSL extension's own trick); pack32 inverts. Real CPU bodies.
+def public unpack8(x : int) : byte4 {
+    return unsafe(reinterpret<byte4>(x))
+}
+
+def public unpack8(x : uint) : ubyte4 {
+    return unsafe(reinterpret<ubyte4>(x))
+}
+
+def public pack32(v : byte4) : int {
+    return unsafe(reinterpret<int>(v))
+}
+
+def public pack32(v : ubyte4) : uint {
+    return unsafe(reinterpret<uint>(v))
+}
+
+// ===== packed 4x8-bit integer dot products (dp4a class) =====
+// sdot4: 4+4 SIGNED int8 lanes; usdot4: a UNSIGNED x b SIGNED (quant shape, ARM usdot order).
+// Real CPU bodies so CPU == GPU exactly; SPIR-V lowers to OpSDot/OpSUDot, MSL to as_type helpers.
+def public sdot4(a, b : uint) : int {
+    let av = int4(unpack8(int(a)))
+    let bv = int4(unpack8(int(b)))
+    return av.x * bv.x + av.y * bv.y + av.z * bv.z + av.w * bv.w
+}
+
+def public usdot4(a, b : uint) : int {
+    let av = int4(uint4(unpack8(a)))
+    let bv = int4(unpack8(int(b)))
+    return av.x * bv.x + av.y * bv.y + av.z * bv.z + av.w * bv.w
+}

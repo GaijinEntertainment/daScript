@@ -46,6 +46,16 @@ forms (``short4_sat(i4)``, ``byte8_sat(s8)``, clamping to the target range). The
 converts to and from float per arity (``half4(f4)`` rounds each lane, ``float4(h4)`` is exact)
 plus ``half8(lo, hi)`` / ``half8_lo`` / ``half8_hi`` packing against two ``float4``.
 
+The one exception to storage-only is the 16-lane 8-bit forms, which carry exact integer
+dot-product intrinsics — the hardware dot4 class (NEON ``sdot``/``usdot``, AVX-VNNI
+``vpdpbusd``): ``idot4(a, b)`` dots ``byte16`` operands in groups of four lanes into ``int4``,
+``idot4(acc, a, b)`` accumulates, and ``idot(a, b)`` reduces all 16 lanes to one ``int``. The
+first operand may instead be ``ubyte16`` (lanes zero-extended, the quantized-kernel shape); the
+result is always signed and exact — no lane sum can overflow ``int``. ``shuffle(lut, idx)``
+selects bytes from a 16-entry table (``lut[idx & 15]`` per lane, the ``tbl``/``pshufb``
+semantic). For shader code, the packed single-group forms ``sdot4``/``usdot4`` (two ``uint``
+words as 4+4 8-bit lanes) live in ``daslib/shader_lingua_franca`` and lower to native GPU ops.
+
 Beyond ``xyzw`` (which stays capped at 4 lanes), all vectors support OpenCL-style ``.s``
 swizzles — ``s`` followed by one hex lane digit per output lane, repeats allowed: ``v.s0``,
 ``v.s3210``, ``b16.sf``, ``h8.s0246``. The 8/16-lane forms add ``.lo`` / ``.hi`` for their

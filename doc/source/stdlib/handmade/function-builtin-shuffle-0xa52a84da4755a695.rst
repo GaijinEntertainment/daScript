@@ -1,0 +1,1 @@
+Per-lane byte table select: lane `i` of the result is `lut[idx[i] & 15]` — the NEON `tbl1` / SSE `pshufb` semantic with the index masked to the 16-entry table. The masking makes out-of-range indices wrap instead of zeroing, so the operation is total.

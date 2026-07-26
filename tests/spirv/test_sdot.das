@@ -36,6 +36,31 @@ def private has_extension(words : array<uint>; want : string) : bool {
     return found
 }
 
+// OpConstant is [type_id, result_id, value] — return the result id of the (single-word) constant
+// with the given value, 0 when absent
+def private const_id_of(words : array<uint>; value : uint) : uint {
+    var id = 0u
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (id != 0u || opcode != uint(SpvOp.Constant) || n != 3) return
+        if (w[s + 2] == value) {
+            id = w[s + 1]
+        }
+    }
+    return id
+}
+
+// first instruction of the given opcode: return its operand word at index i (0 when absent)
+def private op_operand_at(words : array<uint>; op : SpvOp; i : int) : uint {
+    var v = 0u
+    var seen = false
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (seen || opcode != uint(op) || i >= n) return
+        seen = true
+        v = w[s + i]
+    }
+    return v
+}
+
 [test]
 def test_sdot4(t : T?) {
     t |> run("sdot4 -> OpSDot shape + caps + extension; spirv-val clean") <| @(t : T?) {
@@ -45,6 +70,14 @@ def test_sdot4(t : T?) {
         // the PackedVectorFormat4x8Bit LITERAL rides at operand index 4
         t |> success(op_has_operand_at(words, SpvOp.SDot, 4, uint(SpvPackedVectorFormat.PackedVectorFormat4x8Bit)),
             "PackedVectorFormat4x8Bit literal at operand 4")
+        // usdot4(a unsigned, b signed) -> one OpSUDot with the same trailing literal, and the
+        // SIGNED arg (the unique 0x02020202 constant) swapped into V1 (operand index 2)
+        t |> equal(count_op(words, SpvOp.SUDot), 1)
+        t |> success(op_has_operand_at(words, SpvOp.SUDot, 4, uint(SpvPackedVectorFormat.PackedVectorFormat4x8Bit)),
+            "PackedVectorFormat4x8Bit literal at operand 4 (SUDot)")
+        let sconst = const_id_of(words, 0x02020202u)
+        t |> success(sconst != 0u, "signed-operand constant present")
+        t |> success(op_operand_at(words, SpvOp.SUDot, 2) == sconst, "signed arg lands in OpSUDot V1")
         // capability pair, once each
         for (cap in [SpvCapability.DotProduct, SpvCapability.DotProductInput4x8BitPacked]) {
             t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(cap)), "capability {uint(cap)} present")

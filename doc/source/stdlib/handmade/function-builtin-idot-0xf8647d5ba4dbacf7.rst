@@ -1,0 +1,1 @@
+Exact integer dot product of all 16 signed int8 lanes: widens each lane pair to 32-bit, multiplies, and sums into a single `int`. The 16-lane companion of the per-group `idot4`; cannot overflow (the extreme case is `16 * (-128 * -128)`, far inside `int` range).

@@ -535,6 +535,15 @@ ADD_SVEC_SPLAT(VTYPE,ETYPE,uint32_t) ADD_SVEC_CTOR_##N(VTYPE,ETYPE,uint32_t)
         addExtern<DAS_BIND_FUN(das_half8_pack)>(*this, lib, "half8", SideEffects::none, "das_half8_pack");
         addExtern<DAS_BIND_FUN(das_half8_lo)>(*this, lib, "half8_lo", SideEffects::none, "das_half8_lo");
         addExtern<DAS_BIND_FUN(das_half8_hi)>(*this, lib, "half8_hi", SideEffects::none, "das_half8_hi");
+        // the idot family — the lattice's first compute ops (exact integer dots; results
+        // always signed, operand signedness selects the overload — the OpSDot/OpSUDot split)
+        addExtern<DAS_BIND_FUN(das_idot4_ss)>(*this, lib, "idot4", SideEffects::none, "das_idot4_ss")->args({"acc","a","b"});
+        addExtern<DAS_BIND_FUN(das_idot4_us)>(*this, lib, "idot4", SideEffects::none, "das_idot4_us")->args({"acc","a","b"});
+        addExtern<DAS_BIND_FUN(das_idot4z_ss)>(*this, lib, "idot4", SideEffects::none, "das_idot4z_ss")->args({"a","b"});
+        addExtern<DAS_BIND_FUN(das_idot4z_us)>(*this, lib, "idot4", SideEffects::none, "das_idot4z_us")->args({"a","b"});
+        addExtern<DAS_BIND_FUN(das_idot_ss)>(*this, lib, "idot", SideEffects::none, "das_idot_ss")->args({"a","b"});
+        addExtern<DAS_BIND_FUN(das_idot_us)>(*this, lib, "idot", SideEffects::none, "das_idot_us")->args({"a","b"});
+        addExtern<DAS_BIND_FUN(das_shuffle_b16)>(*this, lib, "shuffle", SideEffects::none, "das_shuffle_b16")->args({"lut","idx"});
 #undef ADD_SVEC_CVT
 #undef ADD_SVEC_CVT_SAT
     }

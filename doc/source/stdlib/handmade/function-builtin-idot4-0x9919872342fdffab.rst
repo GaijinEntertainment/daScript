@@ -1,0 +1,1 @@
+Packed integer dot product in groups of four: lane `i` of the result is the exact sum `a[4i]*b[4i] + ... + a[4i+3]*b[4i+3]`, each product computed at 32-bit. This is the hardware dot4 shape (NEON `sdot`, AVX-VNNI `vpdpbssd`, SPIR-V `OpSDot`); the JIT lowers it to a widen-multiply form that the backends pattern-match to the native instruction where available.
