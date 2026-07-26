@@ -497,7 +497,11 @@ Issue intake (live rig, numbering continues):
   session is attached and selected. Rule: selecting or creating a session
   selects its primary worktree (a session pick IS a deliberate worktree
   pick; set the explicit flag), so Project/Changelist immediately point
-  at the session's tree
+  at the session's tree. Evidence: the header above that empty-state
+  ALREADY shows "PROJECT D:/Work/..." (the path), and visiting History or
+  Tree populates Project — so (1) the files request is not kicked on
+  Project tab entry, and (2) the empty-state message lies (state is
+  not-requested, not no-selection)
 
 Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
