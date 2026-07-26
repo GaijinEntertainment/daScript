@@ -107,6 +107,8 @@ DAS_CPP_TUTORIAL(integration_cpp_18 "${TUT_DIR}/18_dynamic_scripts.cpp")
 
 DAS_CPP_TUTORIAL(integration_cpp_21 "${TUT_DIR}/21_threading.cpp")
 DAS_CPP_TUTORIAL(integration_cpp_22 "${TUT_DIR}/22_namespace_integration.cpp")
+# 23 needs daScript/misc/handle_registry.h, which the SDK installs.
+DAS_CPP_TUTORIAL(integration_cpp_23 "${TUT_DIR}/23_handle_registry.cpp")
 
 ###########################################################
 # Tutorial 13 — AOT

@@ -86,6 +86,10 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/dashv.md` | Any `.das` that serves HTTP, streams SSE, makes outbound HTTP requests, or tests a server — `HvWebServer` routes (`GET`/`POST`/`STREAM`/…), buffered vs streaming responses, the SSE writer ops, the client API (`GET`/`POST`/`request`/`with_http_request`/`get_body_bytes`), the `with_test_server` harness, and the per-context / `options stack` gotchas |
 | `skills/gc_migration.md` | Migrating older code (external repos, archived projects) from `smart_ptr<T>` AST patterns to gc_node |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into `dasStrudel` |
+| `skills/aot_testing.md` | Writing AOT tests, `Module::aotRequire()`, or diagnosing an `error[50101] AOT link failed` hash mismatch |
+| `skills/llvm_tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`--tune`, per-box manifests, the runtime-tune-and-re-exec model, the AOT/`-exe` gates |
+| `skills/perf_lint.md` | Adding or interpreting `PERF*` rules in `daslib/perf_lint.das` |
+| `skills/style_lint.md` | Adding or interpreting `STYLE*` rules in `daslib/style_lint.das` |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 

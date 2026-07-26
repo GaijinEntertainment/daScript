@@ -2,6 +2,20 @@
 # CMake reads this list and copies each named file from skills/ to the SDK
 # under <DAS_INSTALL_DOCDIR>/skills/. Single source of truth: top-level skills/.
 # Edit this list when adding a user-facing (vs repo-internal) skill.
+#
+# INVARIANT: if a skill on this list references `skills/<other>.md`, that other
+# skill must be on the list too, or the SDK ships a dangling link. The
+# aot_testing / llvm_tune / perf_lint / style_lint entries below are here for
+# exactly that reason (cross-referenced from cpp_integration, writing_tests,
+# daspkg, das_macros, and strings). The invariant cuts both ways: a repo-only
+# skill stays off the list and any shipped skill pointing at it gets reworded
+# instead -- that is why tutorials.md is absent (it would drag in
+# documentation_rst.md, and onward).
+#
+# Keep this file ASCII-only, comments included: CMake's file(STRINGS) treats
+# non-ASCII bytes as separators, so an em-dash inside a comment splits the line
+# and the tail gets read as a skill filename.
+aot_testing.md
 clargs_usage.md
 cpp_integration.md
 das_formatting.md
@@ -22,12 +36,15 @@ imgui_ui_debugging.md
 jobque_debugging.md
 json.md
 linq.md
+llvm_tune.md
 mcp_tools.md
 memory_leak_detection.md
+perf_lint.md
 project_overview.md
 regex.md
 sql.md
 strings.md
 strudel_port.md
+style_lint.md
 writing_tests.md
 xml.md

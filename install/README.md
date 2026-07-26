@@ -77,7 +77,7 @@ A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Us
   ```sh
   sg run -p "symbol_name" -l daslang
   ```
-- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
+- **Editor extensions** — `tree-sitter-daslang/zed-daslang/` includes a Zed extension
 
 ## MCP Server (AI Tool Integration)
 

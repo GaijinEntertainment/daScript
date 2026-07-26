@@ -126,6 +126,13 @@ utils/**/modules/
 examples/games/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h
+# dasHV tutorials 04/05 create these under get_das_root() at run time and clean
+# them up on exit; they are run artifacts, never fixtures.
+tutorials/dasHV/_upload_test/
+tutorials/dasHV/_static_test/
+tutorials/dasHV/_testfile.txt
+# dasAudio tutorial 07 writes its wav outputs beside the tutorial source.
+tutorials/dasAudio/_tutorial_*.wav
 # shared-module PDBs — Release now emits /Z7+/DEBUG side PDBs for every module
 # (was an enumerated list; the glob covers the modules that only started getting PDBs)
 modules/**/*.pdb

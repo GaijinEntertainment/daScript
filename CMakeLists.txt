@@ -821,7 +821,6 @@ FLEX(src/parser/ds_lexer.lpp)
 FLEX(src/parser/ds2_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 BISON(src/parser/ds2_parser.ypp)
-FLEX(utils/dasFsormatter/ds_lexer.lpp)
 BISON(utils/dasFormatter/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
@@ -1799,12 +1798,17 @@ install(FILES
 install(FILES ${PROJECT_SOURCE_DIR}/install/README.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/GETTING_STARTED.md DESTINATION ${DAS_INSTALL_DOCDIR})
+# Release notes — a versioned bundle with no changelog leaves users diffing binaries.
+install(FILES ${PROJECT_SOURCE_DIR}/CHANGELIST.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 
 # Skills shipped to the SDK — the manifest install/skills.list names which
 # files from skills/ get copied into the install tree under skills/. Keeps
 # top-level skills/ as the single source of truth (no install/skills/ mirror).
-file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW)
+# ENCODING UTF-8: without it file(STRINGS) treats non-ASCII bytes as separators,
+# so a stray em-dash in a comment splits the line and the tail is read as a
+# filename, failing the check below with a nonsense path.
+file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW ENCODING UTF-8)
 set(SHIPPED_SKILLS "")
 foreach(LINE IN LISTS SHIPPED_SKILLS_RAW)
     string(STRIP "${LINE}" LINE)
@@ -1848,6 +1852,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/requirefix/testdata/
 #   cpp_main.das    — cpp/agnostic-subset entry point
 #   mcp_core.das    — transport-neutral core protocol_core requires
 #   protocol_core.das + registry_das.das + registry_cpp.das — shared dispatch + tool registry
+#   setup.das       — bootstrap for a fresh tree; the installed README and the
+#                     shipped skills/mcp_tools.md both document running it, so it
+#                     must ship (it was missing through 0.6.4)
+#   mcp_supervisor.py — the stdio supervisor setup.das writes into .mcp.json
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/main.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_main.das
@@ -1856,6 +1864,8 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/registry_das.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/registry_cpp.das
     ${PROJECT_SOURCE_DIR}/utils/mcp/cpp_search_config.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/setup.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/mcp_supervisor.py
     ${PROJECT_SOURCE_DIR}/utils/mcp/daslang-mcp-msvc.cmd
     ${PROJECT_SOURCE_DIR}/utils/mcp/README.md
     DESTINATION utils/mcp
@@ -1868,9 +1878,15 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
     DESTINATION utils/mcp
 )
+# The installed test_tools.das drives two non-.das fixtures — _fixture_cpp_outline.h
+# (cpp_outline) and _pretend_root/modules/pretend_mod/.das_module (project_root) — so a
+# bare "*.das" filter ships the suite in a state where those cases cannot run.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     DESTINATION utils/mcp/tests
-    FILES_MATCHING PATTERN "*.das"
+    FILES_MATCHING
+        PATTERN "*.das"
+        PATTERN "*.h"
+        PATTERN ".das_module"
 )
 
 # Install LSP server (Claude Code plugin: push diagnostics after every edit +
@@ -1909,8 +1925,13 @@ file(GLOB DAS_BENCHCTL_FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/*.das)
 install(FILES ${DAS_BENCHCTL_FILES} DESTINATION utils/benchctl)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/benchctl)
 
-# Install lint (unified linter)
+# Install lint (unified linter) + its rule-coverage suite, so a shipped SDK can
+# self-check the linter the same way run_utils_tests does in-tree.
 install(FILES ${PROJECT_SOURCE_DIR}/utils/lint/main.das DESTINATION utils/lint)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/lint/tests/
+    DESTINATION utils/lint/tests
+    FILES_MATCHING PATTERN "*.das"
+)
 
 # Install hygiene (comment/doc hygiene checker)
 file(GLOB DAS_HYGIENE_FILES ${PROJECT_SOURCE_DIR}/utils/hygiene/*.das)
@@ -1974,9 +1995,20 @@ install(FILES
     DESTINATION utils/das-fmt
 )
 
-# Install daspkg examples
+# Install daspkg examples. Whole-dir install, so exclude everything daspkg
+# generates in a working tree — modules/ (fetched deps), the lock file, build
+# output and shared modules would otherwise all land in the bundle.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
-    DESTINATION examples/daspkg
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daspkg
+    PATTERN "modules" EXCLUDE
+    PATTERN "_build" EXCLUDE
+    PATTERN ".daspkg_cache" EXCLUDE
+    PATTERN ".daspkg_tmp" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "_aot_generated" EXCLUDE
+    PATTERN "daspkg.lock" EXCLUDE
+    PATTERN ".daspkg.log" EXCLUDE
+    PATTERN "*.shared_module" EXCLUDE
 )
 
 # Install daslive examples
@@ -1994,6 +2026,9 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
 # Install game examples with their full directory structure.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/games/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/games
+    PATTERN "modules" EXCLUDE
+    PATTERN "_build" EXCLUDE
+    PATTERN "*.shared_module" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE
     PATTERN ".daspkg_tmp" EXCLUDE
     PATTERN ".daspkg.log" EXCLUDE
@@ -2062,13 +2097,37 @@ install(FILES ${DAS_DEBUGAPI_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/debugapi
 )
 
-file(GLOB DAS_GRAPHICS_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/graphics/*.das
-    ${PROJECT_SOURCE_DIR}/examples/graphics/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/graphics/README.md
-)
-install(FILES ${DAS_GRAPHICS_EXAMPLES}
+# Each per-example subdir (furier/, path_tracer_lab/, physarum_lab/) is a daspkg
+# -project-root: its own .das_package names the package and points release_main at the
+# shared source one level up, so those manifests are load-bearing for the cross-compile
+# path and must ship beside the .das. modules/ holds the daspkg-installed dasImgui dep
+# (a gitignored build artifact), so it stays excluded.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/graphics/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
+    FILES_MATCHING
+        PATTERN "*.das"
+        PATTERN ".das_package"
+        PATTERN ".gitignore"
+        PATTERN "README.md"
+    PATTERN "modules" EXCLUDE
+    PATTERN ".daspkg_cache" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "_aot_generated" EXCLUDE
+)
+
+# Install the SQL benchmark lanes. The installed examples/README.md documents this
+# folder and links its README, so it has to ship; the DuckDB/PostgreSQL providers are
+# daspkg-installed into modules/ from the folder's .das_package at run time (the SQLite
+# lane and the array baseline work against the bundled dasSQLITE alone).
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/benchmarks/
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/benchmarks
+    FILES_MATCHING
+        PATTERN "*.das"
+        PATTERN "*.md"
+        PATTERN ".das_package"
+    PATTERN "modules" EXCLUDE
+    PATTERN ".daspkg_cache" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
 )
 
 # Install node-editor example
@@ -2278,6 +2337,11 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     install(FILES
         tree-sitter-daslang/queries/highlights.scm
         DESTINATION tree-sitter-daslang/queries
+    )
+    # The Zed extension — the installed install/README.md points users at this
+    # directory, so it has to travel with the bundle.
+    install(DIRECTORY tree-sitter-daslang/zed-daslang/
+        DESTINATION tree-sitter-daslang/zed-daslang
     )
     # Install platform-specific sgconfig.yml for ast-grep (used by grep_usage and outline MCP tools)
     install(FILES "${SGCONFIG_TEMPLATE}" DESTINATION . RENAME sgconfig.yml)

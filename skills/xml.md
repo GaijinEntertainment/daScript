@@ -191,7 +191,7 @@ Supports nested structs, enums, arrays, tables, tuples, variants, vector types (
 - **No escape past the RAII block** — `xml_document?` and any `xml_node` derived from it are valid only inside the block. Returning them past the block exit is use-after-free.
 - **Missing attributes don't error**: `root["does_not_exist"] as int` returns `0`. Use the `is` test if you need to distinguish "missing" from "zero".
 - **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, the module is disabled — flip `DAS_PUGIXML_DISABLED=OFF` (`CLAUDE.md` § "Build Configurations").
-- **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in the install rule — see `skills/tutorials.md`.
+- **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in its install rule, not just `*.das` — the dasPUGIXML rule in `tutorials/CMakeLists.txt` globs both for exactly this reason. Data-only files are the easy thing to forget.
 
 ## Reference
 

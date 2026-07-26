@@ -27,15 +27,19 @@ fi
 BUNDLE="$(cd "$1" 2>/dev/null && pwd -P)" \
     || { echo "ERROR: bundle dir not found or not enterable: $1" >&2; exit 2; }
 
-# Two exe naming conventions coexist in the bundle:
+# Two exe naming conventions exist:
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
 #     daslang-live, das-fmt): platform-natural suffix (.exe on Windows,
-#     none on Linux/macOS).
+#     none on Linux/macOS). These are the ONLY binaries the bundle contains,
+#     because only `add_executable` targets can carry an install(TARGETS) rule.
 #   * DASEXE_SUFFIX — for binaries built via `daslang -exe` (aot, benchctl,
-#     dascov, daspkg, dastest, detect-dupe, hygiene, mcp): ALWAYS `.exe`
-#     on every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe`
-#     to the output path"). On Linux the bundle has `daslang` + `mcp.exe`
-#     side by side.
+#     dascov, daspkg, dastest, detect-dupe, hygiene, jit, lint, mcp): ALWAYS
+#     `.exe` on every platform (utils/CMakeLists.txt: "daslang -exe appends
+#     `.exe` to the output path"). utils/CMakeLists.txt builds these with
+#     add_custom_command into <repo>/bin, so install(TARGETS) cannot reach them
+#     and NONE of them ship — the bundle runs each from source instead
+#     (`daslang utils/<name>/main.das`), which is what COMPILE_TESTS covers.
+#     The suffix is kept here for the `dasexe` row kind below.
 # Use `-f` (file-exists) rather than `-x` (executable bit) — Windows Git-Bash
 # doesn't see the +x bit on Linux ELF binaries even when this script runs
 # locally on a Linux-bundle for cross-platform repro.
@@ -59,6 +63,10 @@ cd "$BUNDLE"
 #
 # Add a row when a new util ships a .das entry point. The list is intentionally
 # explicit (no glob) so removing a util is a deliberate one-line change.
+# EVERY installed .das entry point belongs here. The list was previously missing
+# five of them, which is how `utils/mcp/setup.das` shipped absent from the bundle
+# through 0.6.4 while both the installed README and skills/mcp_tools.md documented
+# running it: nothing ever compiled it, so nothing noticed.
 COMPILE_TESTS=(
     "aot|utils/aot/main.das"
     "benchctl|utils/benchctl/main.das"
@@ -66,21 +74,27 @@ COMPILE_TESTS=(
     "dascov|utils/dascov/main.das"
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"
+    "fix-lint-errors|utils/fix-lint-errors/main.das"
     "hygiene|utils/hygiene/main.das"
+    "jit|utils/jit/main.das"
     "lint|utils/lint/main.das"
     "mcp|utils/mcp/main.das"
+    "mcp-cpp|utils/mcp/cpp_main.das"
+    "mcp-setup|utils/mcp/setup.das"
+    "requirefix|utils/requirefix/main.das"
 )
 
 # Tools intentionally NOT in COMPILE_TESTS:
 #   find-dupe — require chain needs the `anthropic/anthropic` daspkg package
 #               fetched at runtime + ANTHROPIC_API_KEY.
 
-# Prebuilt exes that `cmake --install` should drop into bin/ when build flags
-# allow it (DAS_LLVM, DAS_SQLITE, DAS_HV gates). Each row is `name|kind` where
-# kind is `dasexe` (daslang -exe output, always .exe) or `cpp` (cmake
-# add_executable, platform suffix). Presence-checked only — we don't run them
-# with `--help` because daslang itself intercepts `--help` and prints its own
-# usage even after the `--` separator, swallowing the script's CLI surface.
+# Prebuilt exes `cmake --install` drops into bin/. Only cmake add_executable
+# targets qualify (see the DASEXE_SUFFIX note above — the `daslang -exe` utils are
+# custom-command outputs and never install), so every row here is kind `cpp`;
+# `dasexe` stays supported for the day one of them gains an install(PROGRAMS) rule.
+# Presence-checked only — we don't run them with `--help` because daslang itself
+# intercepts `--help` and prints its own usage even after the `--` separator,
+# swallowing the script's CLI surface.
 EXE_PRESENCE_TESTS=(
     "das-fmt|cpp"
     "daslang-live|cpp"

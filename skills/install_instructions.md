@@ -25,6 +25,18 @@ The current ship list lives in [install/skills.list](../install/skills.list) —
 
 The CMake install rule (in root `CMakeLists.txt`) reads the manifest with `file(STRINGS ...)` and `install(FILES ...)` for each named basename. Missing files trigger `FATAL_ERROR` at configure time, so a typo in `install/skills.list` fails loudly.
 
+**Closure invariant.** A shipped skill may only reference `skills/<other>.md` when that other skill also ships — otherwise the SDK carries a dead link. When you add a skill, grep it for `skills/*.md` and either ship every target or reword the reference. The rule cuts both ways: a genuinely repo-only skill (`tutorials.md`, `documentation_rst.md`, `preflight.md`, `make_pr.md`, …) stays **off** the list, and a shipped skill pointing at one gets reworded rather than dragging it in. Check with:
+
+```sh
+grep -vE '^\s*#|^\s*$' install/skills.list | sort > /tmp/shipped.txt
+for s in $(cat /tmp/shipped.txt); do
+  grep -ohE 'skills/[a-z_0-9]+\.md' "skills/$s" | sed 's|skills/||' | sort -u |
+    while read r; do grep -qx "$r" /tmp/shipped.txt || echo "$s -> $r"; done
+done
+```
+
+**Keep `install/skills.list` ASCII-only, comments included.** `file(STRINGS)` treats non-ASCII bytes as separators, so an em-dash inside a comment splits that line and the tail is read as a skill filename — the `FATAL_ERROR` then names a nonsense path. The call passes `ENCODING UTF-8` to blunt this, but plain ASCII is the reliable answer.
+
 ## What belongs in install instructions
 
 **Include (SDK-user-facing):**
