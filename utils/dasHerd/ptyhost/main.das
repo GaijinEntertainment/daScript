@@ -408,8 +408,10 @@ def main : int {
         let _ = _pty_terminate(g_pty, 1)
         g_stamp.exited = true
         g_stamp.exit_code = _pty_exit_code(g_pty)
-        g_stamp.drained = true
     }
+    // Once the host stops serving, the journal is final by definition - even
+    // when the pipe never reported closure before the shutdown op arrived.
+    g_stamp.drained = true
     save_stamp()
     server->stop()
     server->cleanup()

@@ -829,12 +829,16 @@ namespace das {
             return -1;
         }
         SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
-        // Create job object to kill entire process tree on timeout
+        // Create job object to kill entire process tree on timeout.
+        // BREAKAWAY_OK lets a descendant that explicitly requests
+        // CREATE_BREAKAWAY_FROM_JOB (spawn_detached) opt OUT of the subtree;
+        // everything that doesn't ask still dies with the job.
         HANDLE hJob = CreateJobObjectA(NULL, NULL);
         if ( hJob ) {
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
             memset(&jeli, 0, sizeof(jeli));
-            jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            jeli.BasicLimitInformation.LimitFlags =
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
             SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
         }
         STARTUPINFOA si;
@@ -1168,7 +1172,11 @@ namespace das {
             if ( hJob ) {
                 JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
                 memset(&jeli, 0, sizeof(jeli));
-                jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                // BREAKAWAY_OK: a descendant that explicitly requests
+                // CREATE_BREAKAWAY_FROM_JOB (spawn_detached) may leave the
+                // kill-on-close subtree; everything else still dies with it.
+                jeli.BasicLimitInformation.LimitFlags =
+                    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
                 SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
             }
         }

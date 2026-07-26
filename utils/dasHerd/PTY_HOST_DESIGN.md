@@ -32,10 +32,21 @@ exactly three things:
    / stat / terminate{reason}. Nothing else. Protocol v1 is forever — a new
    watcher must always speak old hosts.
 
-Spawned **detached**: `DETACHED_PROCESS` + breakaway from any inherited job
-(`CREATE_BREAKAWAY_FROM_JOB`; if the spawning environment forbids breakaway,
-spawn through a one-shot intermediary). No inherited console, no inherited
-job, no parent-death ties. The watcher becomes a *client* of the host.
+Spawned **detached**: `CREATE_NO_WINDOW` (NOT `DETACHED_PROCESS` — console
+apps such as PowerShell break with no console at all; a hidden conhost of
+its own keeps std handles working AND survives the caller) plus
+`CREATE_BREAKAWAY_FROM_JOB` and a new process group. No inherited console,
+no inherited job, no parent-death ties. The watcher becomes a *client* of
+the host.
+
+Two job-object facts learned live: the spawn falls back to no-breakaway
+with a reported warning when the caller's job forbids it — treat that
+warning as fatal for host spawns, the host would die with the job. And
+daslang's own `popen_argv` job needed `JOB_OBJECT_LIMIT_BREAKAWAY_OK`
+added (src/builtin/module_builtin_fio.cpp) so a popen descendant that
+explicitly requests breakaway can leave the kill-on-close subtree — that
+is what lets the lifecycle test (dastest → popen launcher → detached
+host) prove spawner-death survival.
 
 ## Discovery and adoption
 
