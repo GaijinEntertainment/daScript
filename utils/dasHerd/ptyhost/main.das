@@ -60,6 +60,10 @@ struct HostStamp {
     version : int = PROTOCOL_VERSION
     session : string
     port : int
+    // Adoption credential: a restarted watcher discovers the host through this
+    // stamp and must authenticate. Same-user local file, same trust model as
+    // the watcher token on its own stdout.
+    token : string
     host_pid : int
     child_pid : int
     started_wall_s : int64
@@ -198,6 +202,14 @@ class PtyHostServer : HvWebServer {
         }
     }
 
+    def broadcast_stat {
+        // Pushed on child exit / drain so the watcher observes lifecycle
+        // transitions promptly instead of on its next poll.
+        for (client in clients) {
+            if (client != null && client.authorized) send_stat(client.channel)
+        }
+    }
+
     def broadcast_output(bytes : array<uint8>) {
         if (empty(bytes)) return
         for (client in clients) {
@@ -329,6 +341,7 @@ def main : int {
     }
     g_stamp.session = config.session
     g_stamp.port = config.port
+    g_stamp.token = token
     // host_pid stays 0: das has no own-pid accessor yet, and liveness is
     // decided by connecting to the port, never by pid probing.
     g_stamp.started_wall_s = int64(get_clock())
@@ -384,16 +397,21 @@ def main : int {
                 // Only pipe closure authoritatively ends the stream: the root
                 // process can exit while descendants still hold the console.
                 g_stamp.drained = true
+                save_stamp()
+                server->broadcast_stat()
             }
             if (!g_stamp.exited && _pty_process_exited(g_pty)) {
                 g_stamp.exited = true
                 g_stamp.exit_code = _pty_exit_code(g_pty)
                 g_child_exit_wall_ms = wall_ms()
                 save_stamp()
+                server->broadcast_stat()
             }
         }
-        if (g_stamp.exited && g_stamp.drained
-                && wall_ms() - g_child_exit_wall_ms > linger_ms) {
+        // Linger keys on exit alone: while this host holds the HPCON, ConPTY
+        // may never close the read pipe, so `drained` cannot gate the exit
+        // (observed live: exited=true with drained=false for minutes).
+        if (g_stamp.exited && wall_ms() - g_child_exit_wall_ms > linger_ms) {
             break
         }
         if (wall_ms() - last_stamp >= STAMP_PERIOD_MS) {

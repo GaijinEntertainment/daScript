@@ -225,15 +225,21 @@ def public herd_init(registry_path, profiles_path : string) : string {
         return "unsupported herd registry version {file.version}"
     }
     g_next_herd_id = file.next_id
-    // The watcher owns every PTY, so none of them survived the restart.
+    // In-process PTYs never survive a restart; host-backed ones do when their
+    // detached host was re-attached (watcher_adopt_hosts runs before this).
     var orphaned = 0
     var healed = 0
     for (record in file.sessions) {
         if (record.state == "running") {
-            record.state = "exited"
-            record.reason = "watcher_restart"
-            record.updated_wall_s = wall_seconds()
-            orphaned++
+            var info = WatcherSessionInfo()
+            let adopted = (watcher_get_session_info(record.pty_session_id, info)
+                && info.state == "running")
+            if (!adopted) {
+                record.state = "exited"
+                record.reason = "watcher_restart"
+                record.updated_wall_s = wall_seconds()
+                orphaned++
+            }
         }
         // Heal records saved before path spellings were canonicalized.
         let display_path = herd_display_worktree(record.worktree_path)

@@ -25,6 +25,7 @@ var private g_port = 9191
 var private g_token : string
 var private g_log_root : string
 var private g_config_path : string
+var private g_ptyhost_root : string
 var private g_last_memory_log_at = 0l
 var private g_last_gc_at = 0l
 var private g_started_at = 0l
@@ -59,7 +60,24 @@ def private parse_watcher_args() {
     g_log_root = option_value("--log-root=",
         path_join(get_das_root(), "logs/dasHerd/watcher/sessions"))
     g_config_path = option_value("--config=", repository_default_config_path())
+    g_ptyhost_root = option_value("--ptyhost-root=",
+        path_join(get_das_root(), "logs/dasHerd/ptyhosts"))
     g_exit_after_ms = max(0l, int64(to_int(option_value("--exit-after-ms=", "0"))))
+}
+
+// The detached PTY host command: the released AOT bundle when present (its
+// files never collide with a tree rebuild), else the current interpreter
+// running the host script - the dev fallback.
+def private ptyhost_launcher_prefix : array<string> {
+    let bundle = path_join(get_das_root(),
+        "logs/dasHerd/releases/dasherd-ptyhost/dasherd-ptyhost.exe")
+    if (fexist(bundle)) return <- [bundle]
+    var compiler = path_join(get_das_root(), "bin/Release/daslang.exe")
+    if (!fexist(compiler)) {
+        let args <- get_command_line_arguments()
+        compiler = empty(args) ? "daslang.exe" : args[0]
+    }
+    return <- [compiler, path_join(get_das_root(), "utils/dasHerd/ptyhost/main.das"), "--"]
 }
 
 // Log das-managed memory independently of process RSS. All formatting temporaries die before
@@ -154,6 +172,17 @@ def init() {
         return
     }
     g_watcher_initialized = true
+    var inscope host_prefix <- ptyhost_launcher_prefix()
+    let ptyhost_error = watcher_configure_ptyhosts(g_ptyhost_root, host_prefix)
+    if (!empty(ptyhost_error)) {
+        print("dasHerd watcher: ptyhost root unusable ({ptyhost_error}); " +
+            "durable sessions fall back to in-process PTYs\n")
+    } else {
+        let adopted = watcher_adopt_hosts()
+        if (adopted > 0) {
+            print("dasHerd watcher: adopted {adopted} detached PTY host session(s)\n")
+        }
+    }
     let repository_error = repository_init(g_config_path, get_das_root())
     if (!empty(repository_error)) {
         print("dasHerd watcher: could not initialize repositories: {repository_error}\n")

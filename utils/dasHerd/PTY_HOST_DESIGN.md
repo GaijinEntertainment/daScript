@@ -1,31 +1,52 @@
 # Detached PTY host — "a terminal that depends on nothing"
 
-Status: CORE LANDED (2026-07-25 night). Remaining: the watcher rework
-below ("What changes where"). `--continue` resume demotes to disaster
-recovery, never the mechanism.
+Status: LANDED (2026-07-26) — host core AND the watcher rework. Durable
+herd sessions launch via detached hosts, watcher restart adopts them back
+as RUNNING (proven by test_watcher_adoption.das). `--continue` resume is
+disaster recovery only (machine death).
 
-## Resume state for the next session (written before a /clear)
+## Rig / branch state
 
-- DONE, committed, tests green (watcher suite 68/68; test_ptyhost 1.9s):
-  spawn_detached + env blocks in dasTerminal; utils/dasHerd/ptyhost/main.das
-  (protocol v1); daspkg release packaging; popen BREAKAWAY_OK fix in
-  src/builtin/module_builtin_fio.cpp; lifecycle test
-  utils/dasHerd/watcher/tests/test_ptyhost.das.
-- NEXT: the watcher rework only — launch-via-host, adoption on startup
-  (sessions resurrect as RUNNING), pumps proxied over the host WS. Client
-  unchanged in v1. Read this doc + utils/dasHerd/HERDER_FIXROUND.md notes
-  40-51 first.
-- Rig state: watcher and rich client are STOPPED (Boris's go). daslang.exe,
-  libDaScriptDyn_runtime.dll, dasModuleTerminal rebuilt with the fixes;
-  release bundle at logs/dasHerd/releases/dasherd-ptyhost (rebuild with
+- Watcher and rich client are STOPPED (Boris's go). Release bundle at
+  logs/dasHerd/releases/dasherd-ptyhost is current (rebuild:
   `daslang utils/daspkg/main.das -- release --out logs/dasHerd/releases
   --root utils/dasHerd/ptyhost`, 7s).
 - Standing rules: file Boris's bug reports BEFORE fixing; never restart a
   watcher with live agent sessions without his go; preflight budget for
   this branch: at most one full run (none used); branch
-  codex/herder-view-without-diff, ~20 unpushed commits, PR later on his
-  word. Parked after this block: external sessions arc, notes 42/47
-  terminal rendering bugs, WebSocketServer handle leak at client exit.
+  codex/herder-view-without-diff, unpushed commits, PR on his word.
+  Parked after this block: external sessions arc, notes 42/47 terminal
+  rendering bugs, WebSocketServer handle leak at client exit.
+
+## Landed decisions (2026-07-26, the watcher rework)
+
+- **Host-backed iff `herd_session_id` is set** (and a ptyhost root is
+  configured): durable sessions get hosts; plumbing launches (git captures,
+  task terminals) stay in-process ConPTY — survival there is pointless
+  overhead.
+- **Token rides the discovery stamp** — adoption after restart must
+  authenticate, and the stamp is the discovery record. Same-user local
+  file; same trust model as the watcher token on its own stdout.
+- **Host pushes a stat on exit/drain transitions** (v1-compatible; the
+  watcher still polls at 500ms as backstop).
+- **The host journal IS the session's raw output** — host-backed sessions
+  write no watcher-side output.raw; replay offsets equal journal offsets.
+- **ConPTY never signals pipe closure while the host holds the HPCON**
+  (observed live: exited=true, drained=false for minutes). Hence: the
+  watcher folds exit via the direct path's quiet interval, and the host's
+  linger gate keys on exit alone.
+- **Host release + archive**: once the exit folds and the journal is fully
+  replicated, the watcher sends `shutdown`; when the host obliges (link
+  closes), stamp+journal move to `ptyhosts/archive/`. Stamps of hosts that
+  died with no watcher fold at the next adoption scan.
+- **Watcher-side adoption restores mailbox/bundles/events** from the
+  session-dir jsonl records (newest-per-id wins; id counters bumped past
+  restored maxima).
+- Deferred hardening (unchanged from before): agent env still rides the
+  powershell wrapper argv, so DASHERD_TOKEN is visible in the host's
+  command line exactly as it was in the ConPTY child's; the host's own
+  env also leaks DASHERD_HOST_TOKEN to the child. Move to the host's
+  DASHERD_CHILD_* env forwarding later, way later.
 
 ## Problem, precisely
 
@@ -81,15 +102,22 @@ host) prove spawner-death survival.
   registry session resurrects as **running**, not `watcher_restart`), fold
   dead hosts' exit stamps into the registry, then archive their stamps.
 
-## What changes where
+## What changed where (landed 2026-07-26)
 
-- **watcher_core launch path** — spawns a host and connects, instead of
-  calling ConPtyProcess directly. The per-session read pump becomes an IPC
-  tail. Resize/input/terminate proxy through the host connection.
-- **Raw history / replay** — served from the host journal (watcher proxies;
-  checkpoint/restore byte offsets keep working, same numbers).
-- **herd_tick observe-exit** — from host stat + exit stamps instead of
-  process handles.
+- **watcher_core launch path** — for herd sessions, spawns a host
+  (`spawn_detached`, port scan 9700+ with bind-failure retry via the
+  stamp) and connects as a WS client; the per-session read pump is an IPC
+  tail feeding a transport-less local `Terminal` screen model
+  (`terminal_feed_bytes`; parser auto-replies forwarded back as input).
+  Resize/input/terminate proxy through the host connection.
+- **Raw history / replay** — the ring is fed from the host stream;
+  checkpoint/restore byte offsets equal journal offsets, same numbers.
+- **observe-exit** — from host stat (pushed on transitions + 500ms poll);
+  drain folds on the quiet interval since ConPTY never closes the pipe
+  under a live HPCON.
+- **Adoption on startup** — `watcher_adopt_hosts()` before `herd_init()`:
+  live hosts re-attach (registry records stay **running**); dead hosts
+  fold their exit stamp into an exited, replayable session and archive.
 - **Rich client** — unchanged in v1 (still talks to the watcher). Direct
   client→host attach is a natural v2, and is also the bridge to external
   sessions (an external session is just a host the watcher never spawned).

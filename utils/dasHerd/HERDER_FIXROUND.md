@@ -508,13 +508,22 @@ Issue intake (live rig, numbering continues):
   a fresh client authenticated, replayed from byte 0, sent input, got the
   child's echo with a forwarded env var. Remaining: dastest lifecycle
   test, watcher launch-via-host + adoption, daspkg release packaging.
+  LANDED (2026-07-26): all of it — lifecycle test, release packaging, and
+  the watcher rework (launch-via-host for herd sessions, pumps proxied
+  over the host WS, adoption on startup with sessions resurrecting as
+  RUNNING, herd registry fold of dead hosts' exit stamps). Suite 71/71
+  incl. test_watcher_adoption.das proving restart survival end-to-end.
+  Decisions + the ConPTY drained-never-fires finding: PTY_HOST_DESIGN.md.
 - 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
   ("its not ok to kill my terminal session"). Today PTYs are ConPTY
   children of the watcher and die with it; needs a per-session broker
   process that owns the ConPTY and outlives the watcher (tmux-server
   model), with restart = re-discover + re-attach. Operationally until
   then: the watcher only restarts when no agent session is running or
-  Boris explicitly says go
+  Boris explicitly says go. RESOLVED BY ARCHITECTURE (2026-07-26): herd
+  sessions run in detached hosts; watcher restart adopts them back as
+  running (see 51 / PTY_HOST_DESIGN.md). The operational rule stays until
+  the rework is deployed to the live rig and proven there
 - 49: default layout — Git Changelist docks bottom-right as its own pane
   under the Git Activity + File Inspector tab stack (per Boris's live
   arrangement, captured in boris_changelist_dock.png); update
