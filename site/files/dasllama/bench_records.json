@@ -85,16 +85,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":819.20553410117259,
-            "stddev":13.841548919677734
+            "tok_s":875.35419976053322,
+            "stddev":2.7784712314605713
           },
           "tg128":{
-            "tok_s":64.715896081636217,
-            "stddev":0.048071339726448059
+            "tok_s":64.72437621415898,
+            "stddev":0.040281064808368683
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -287,16 +287,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":143.51014794316262,
-            "stddev":1.8688379526138306
+            "tok_s":145.24479853842553,
+            "stddev":2.0622482299804688
           },
           "tg128":{
-            "tok_s":14.490425807153695,
-            "stddev":0.0076773958280682564
+            "tok_s":14.494149035860834,
+            "stddev":0.0089524462819099426
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob"
@@ -489,16 +489,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":322.18006934471111,
-            "stddev":0.82716661691665649
+            "tok_s":327.5913902343861,
+            "stddev":0.31570258736610413
           },
           "tg128":{
-            "tok_s":33.410355402218116,
-            "stddev":1.4616864919662476
+            "tok_s":33.322471759728664,
+            "stddev":1.4384109973907471
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -753,16 +753,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":975.31116002164924,
-            "stddev":3.4707350730895996
+            "tok_s":979.87508768904149,
+            "stddev":2.6294610500335693
           },
           "tg128":{
-            "tok_s":52.005009558973953,
-            "stddev":0.034262686967849731
+            "tok_s":52.569869735164204,
+            "stddev":0.016571598127484322
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob"
@@ -893,16 +893,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":945.41748437426793,
-            "stddev":46.733753204345703
+            "tok_s":997.93734441589118,
+            "stddev":2.0523719787597656
           },
           "tg128":{
-            "tok_s":88.562698339367302,
-            "stddev":0.38233613967895508
+            "tok_s":88.383526781953094,
+            "stddev":0.11967682093381882
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob"
@@ -1095,16 +1095,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":839.13387512511383,
-            "stddev":21.282266616821289
+            "tok_s":847.21132532574086,
+            "stddev":19.207096099853516
           },
           "tg128":{
-            "tok_s":86.164890040423458,
-            "stddev":0.10428550839424133
+            "tok_s":85.955085255674334,
+            "stddev":0.03312971442937851
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
@@ -1297,16 +1297,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":129.39743550833799,
-            "stddev":1.3800555467605591
+            "tok_s":133.55806498041031,
+            "stddev":0.20453563332557678
           },
           "tg128":{
-            "tok_s":19.304210236321975,
-            "stddev":0.90736830234527588
+            "tok_s":20.336549004550896,
+            "stddev":0.29257255792617798
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob"
@@ -1422,7 +1422,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -1435,18 +1435,18 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":145.5225534096127,
-            "stddev":3.3315732479095459
+            "tok_s":145.22715739540519,
+            "stddev":1.6870996952056885
           },
           "tg128":{
-            "tok_s":26.857309113264865,
-            "stddev":0.020655548200011253
+            "tok_s":29.650997621160815,
+            "stddev":0.0072771967388689518
           }
         },
         "source":"official",
-        "sha":"fa582726c",
+        "sha":"ba189967a",
         "version":"0.6.3",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
       },
       {
@@ -1468,16 +1468,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":899.61722962438034,
-            "stddev":9.0033988952636719
+            "tok_s":928.10501848796173,
+            "stddev":2.8307809829711914
           },
           "tg128":{
-            "tok_s":61.190055986399486,
-            "stddev":2.7236282825469971
+            "tok_s":60.979481778717954,
+            "stddev":2.6481883525848389
           }
         },
         "source":"official",
-        "sha":"ac877ceec",
+        "sha":"96fb2ce5a",
         "version":"0.6.3",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob"
@@ -1488,7 +1488,7 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -1501,12 +1501,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":121.574889,
-            "stddev":1.220269
+            "tok_s":120.801356,
+            "stddev":1.9510719999999999
           },
           "tg128":{
-            "tok_s":28.001379,
-            "stddev":0.165078
+            "tok_s":28.13842,
+            "stddev":0.083889000000000005
           }
         },
         "source":"official",
@@ -1519,7 +1519,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -1532,12 +1532,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":117.53891299999999,
-            "stddev":0.30272300000000002
+            "tok_s":116.29980399999999,
+            "stddev":1.495479
           },
           "tg128":{
-            "tok_s":27.623059999999999,
-            "stddev":0.135772
+            "tok_s":27.924748999999998,
+            "stddev":0.114244
           }
         },
         "source":"official",
@@ -1581,7 +1581,7 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-24",
+        "date":"2026-07-25",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -1594,18 +1594,18 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":146.13302847294537,
-            "stddev":2.7106833457946777
+            "tok_s":141.1932187899329,
+            "stddev":2.3289098739624023
           },
           "tg128":{
-            "tok_s":26.879369133334116,
-            "stddev":0.0233466736972332
+            "tok_s":29.649276116916724,
+            "stddev":0.0063768005929887295
           }
         },
         "source":"official",
-        "sha":"fa582726c",
+        "sha":"ba189967a",
         "version":"0.6.3",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest)",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
       }
     ],
