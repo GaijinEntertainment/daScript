@@ -1348,7 +1348,19 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         }
     }
 
-    let main_ret = LLVMBuildCall2(builder, g_fn_types[start_fn_name], LLVMGetNamedFunction(g_mod, start_fn_name), main_params, "")
+    // Route main through the runtime's catch boundary (jit_run_main_guarded) — a das panic must
+    // PRINT and exit nonzero, not unwind out of the bare entry with no message. The guard owns
+    // the void/int/bool result mapping (0/1/2).
+    let guard_type = LLVMFunctionType(types.t_int32,
+        fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType(), types.t_int32))
+    var guard_fn = LLVMGetNamedFunction(g_mod, "jit_run_main_guarded")
+    if (guard_fn == null) {
+        guard_fn = LLVMAddFunctionWithType(g_mod, "jit_run_main_guarded", guard_type)
+    }
+    let guard_kind = no_return ? 0 : (bool_return ? 2 : 1)
+    let start_ptr = LLVMBuildPointerCast(builder, LLVMGetNamedFunction(g_mod, start_fn_name), types.LLVMVoidPtrType(), "")
+    var guard_params <- fixed_array(global_context, start_ptr, types.ConstI32(uint64(guard_kind)))
+    let main_ret = LLVMBuildCall2(builder, guard_type, guard_fn, guard_params, "main_rc")
     // Drain debug agents, modules, AOT library, env — the interpreter's teardown minus the handle-leak
     // dump. Without it the static g_DebugAgents map dtor races ref_count_mutex at exit (#2583).
     let shutdown_fn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
@@ -1357,16 +1369,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         shutdown_fn = LLVMAddFunctionWithType(g_mod, "jit_shutdown", shutdown_fn_type)
     }
     LLVMBuildCall2(builder, shutdown_fn_type, shutdown_fn, array<LLVMValueRef>(), "")
-    if (no_return) {
-        LLVMBuildRet(builder, types.ConstI32(uint64(0)))
-    } elif (bool_return) {
-        // bool main → exit code: true → 0 (success), false → 1 (failure).
-        let exit_code = LLVMBuildSelect(builder, main_ret,
-            types.ConstI32(uint64(0)), types.ConstI32(uint64(1)), "main_exit")
-        LLVMBuildRet(builder, exit_code)
-    } else {
-        LLVMBuildRet(builder, main_ret)
-    }
+    LLVMBuildRet(builder, main_ret)
     to_log(LOG_INFO, "LLVM JIT: standalone exe entry point generated '{start_fn_name}', {length(funcs)} functions\n")
     return (fn = main_fn, link_whole_lib = needs_whole_lib)
 }

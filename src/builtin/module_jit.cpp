@@ -1634,6 +1634,30 @@ DAS_API void jit_run_web_lifecycle ( das::Context * ctx, void * updateFn,
 #endif
 }
 
+// Standalone-exe main guard: the generated entry (llvm_exe.das) routes das main through this
+// so a runtime exception prints and exits nonzero instead of unwinding out of the entry with
+// no message (hosted runs get this boundary from their runWithCatch call sites; a bare exe
+// had none — fix for the silent-exit-127 class). resultKind: 0 = void main, 1 = int main
+// (value = exit code), 2 = bool main (true -> 0, false -> 1).
+DAS_API int32_t jit_run_main_guarded ( das::Context * ctx, void * mainFn, int32_t resultKind ) {
+    int32_t rc = 0;
+    bool ok = ctx->runWithCatch([&]() {
+        if ( resultKind == 1 ) {
+            rc = ((int32_t(*)(das::Context*))mainFn)(ctx);
+        } else if ( resultKind == 2 ) {
+            rc = ((bool(*)(das::Context*))mainFn)(ctx) ? 0 : 1;
+        } else {
+            ((void(*)(das::Context*))mainFn)(ctx);
+        }
+    });
+    if ( !ok ) {
+        das::TextPrinter tp;
+        tp << "EXCEPTION: " << (ctx->getException() ? ctx->getException() : "unknown") << "\n";
+        return 1;
+    }
+    return rc;
+}
+
 DAS_API void das_ensure_environment () {
     das::daScriptEnvironment::ensure();
 }
