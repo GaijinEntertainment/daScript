@@ -682,6 +682,148 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
 }
 
 // one kq family's test pass: every variant of the format's OWN grid against the scalar oracle
+// ===== the q51 GEMV family (self-anchored, sdot-only grid) =====
+
+struct Q51Fixture {
+    n, d : int64
+    nb : int64
+    qq : array<uint8>       // disk-order 20B/block quant plane
+    qs : array<uint8>       // disk-order 4B/block f16 (d, m) scale plane
+    xq : array<int8>
+    xs : array<float>
+    xbs : array<int>        // per-32 activation sums (the q51 gemv contract)
+    yref : array<float>
+}
+
+def build_q51_fixture(n, d : int64) : Q51Fixture {
+    var fx = Q51Fixture(n = n, d = d, nb = n / 32l)
+    fx.qq |> resize(int(d * fx.nb * 20l))
+    fx.qs |> resize(int(d * fx.nb * 4l))
+    // valid small f16 scale bit patterns (d, m) cycled per block; quant/qh bytes an LCG walk
+    let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
+    var seed = 0x12345
+    for (i in range64(length(fx.qq))) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff
+        fx.qq[i] = uint8(seed >> 16)
+    }
+    for (r in range64(d)) {
+        for (bi in range64(fx.nb)) {
+            let sb = (r * fx.nb + bi) * 4l
+            let dv = f16s[int(r * 3l + bi) % 8]
+            let mv = f16s[int(r * 5l + bi * 7l + 3l) % 8]
+            fx.qs[sb] = uint8(dv & 255)
+            fx.qs[sb + 1l] = uint8(dv >> 8)
+            fx.qs[sb + 2l] = uint8(mv & 255)
+            fx.qs[sb + 3l] = uint8(mv >> 8)
+        }
+    }
+    var xrow : array<float>
+    xrow |> resize(int(n))
+    for (i in range64(n)) {
+        xrow[i] = float((i * 13l) % 37l) * 0.05 - 0.9
+    }
+    fx.xq |> resize(int(n))
+    fx.xs |> resize(int(fx.nb))
+    quantize_q8_0_into(xrow, n, fx.xq, fx.xs, 0l, 0l)
+    delete xrow
+    fx.xbs |> resize(int(fx.nb))
+    for (bi in range64(fx.nb)) {
+        var s = 0
+        for (j in range64(32l)) {
+            s += int(fx.xq[bi * 32l + j])
+        }
+        fx.xbs[bi] = s
+    }
+    fx.yref |> resize(int(d))
+    unsafe {
+        for (r in range64(d)) {
+            fx.yref[r] = dot_q51q8_scalar(addr(fx.qq[0]) + r * fx.nb * 20l, addr(fx.qs[0]) + r * fx.nb * 4l,
+                                          addr(fx.xq[0]), addr(fx.xs[0]), n)
+        }
+    }
+    return <- fx
+}
+
+def run_q51_gemv(gemv; fx : Q51Fixture; qq : array<uint8>; qs : array<uint8>; mr : int64; var y : array<float>) {
+    unsafe {
+        invoke(gemv, addr(y[0]), addr(qq[0]), addr(qs[0]), addr(fx.xq[0]), addr(fx.xs[0]), addr(fx.xbs[0]), fx.n, 0l, (fx.d / mr) * mr)
+    }
+}
+
+def close_to_q51_ref(fx : Q51Fixture; y : array<float>; mr : int64; var maxdiff : float&) : bool {
+    var mag = 0.0
+    let rows = int((fx.d / mr) * mr)
+    for (i in range(rows)) {
+        mag = max(mag, abs(fx.yref[i]))
+    }
+    let tol = max(1.0e-3, mag * 5.0e-5)
+    var ok = true
+    for (i in range(rows)) {
+        let df = abs(y[i] - fx.yref[i])
+        maxdiff = max(maxdiff, df)
+        ok = ok && df <= tol
+    }
+    return ok
+}
+
+// reference walks the layout companion's resolve (grp1/disk in the tuner process)
+def private q51_mr_of(sfx : string) : int64 => sfx == "mr8" ? 8l : (sfx == "mr4" ? 4l : int64(q51q8_layout_gen()))
+
+// The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
+// planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
+def q51_tune_family() : string {
+    var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
+    var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
+    var tvs <- q51q8_gemv_gen_variants()
+    var best = ""
+    var bestDt = 2147483647
+    var y : array<float>
+    y |> resize(int(sfx.d))
+    var yh : array<float>
+    yh |> resize(int(hfx.d))
+    for (v in tvs) {
+        let mr = q51_mr_of(v._0)
+        var sq := sfx.qq
+        var ss := sfx.qs
+        var hq := hfx.qq
+        var hs := hfx.qs
+        unsafe {
+            repack_q51_grp(addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
+            repack_q51_grp(addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
+        }
+        var maxdiff = 0.0
+        run_q51_gemv(v._1, sfx, sq, ss, mr, y)
+        var ok = close_to_q51_ref(sfx, y, mr, maxdiff)
+        run_q51_gemv(v._1, hfx, hq, hs, mr, yh)
+        ok = close_to_q51_ref(hfx, yh, mr, maxdiff) && ok
+        if (!ok) {
+            print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
+            delete sq; delete ss; delete hq; delete hs
+            delete sfx; delete hfx; delete tvs; delete y; delete yh
+            return ""
+        }
+        var dt = 2147483647
+        for (_rep in range(3)) {
+            let t0 = ref_time_ticks()
+            run_q51_gemv(v._1, sfx, sq, ss, mr, y)
+            dt = min(dt, get_time_usec(t0))
+        }
+        let gb = double(sfx.d * sfx.nb * 24l) / double(max(dt, 1)) / 1000.0lf
+        print("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
+        if (dt < bestDt) {
+            bestDt = dt
+            best = v._0
+        }
+        delete sq; delete ss; delete hq; delete hs
+    }
+    delete sfx
+    delete hfx
+    delete tvs
+    delete y
+    delete yh
+    return best
+}
+
 def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
     var tvs <- kq_tile_variants(fmt)
     var gtab <- kq_gemv_variants_by_suffix(fmt)
@@ -1392,6 +1534,16 @@ def tune_mode_run : bool {
             print("{entry} winner: {w} {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
             kok = kok && wok
         }
+    }
+    let q51_t0 = ref_time_ticks()
+    let qw = q51_tune_family()
+    print("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
+    if (empty(qw)) {
+        kok = false
+    } else {
+        let qok = tune_manifest_set("q51q8_gemv_gen", qw)
+        print("q51q8_gemv_gen winner: {qw} {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
+        kok = kok && qok
     }
     let confirm_t0 = ref_time_ticks()
     let ok = confirm_and_write(vs[merged]._0) && kok

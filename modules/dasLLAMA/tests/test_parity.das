@@ -652,15 +652,15 @@ def test_parity_gemma4_26b(t : T?) {
     }
 }
 
-// gemma-4-26B-A4B-it Q4_K_M — the Q5_0 loader gate: the llama.cpp Q4_K_M MoE recipe bumps
-// ffn_down / ffn_down_exps on layers 3+ to Q5_0 (32 tensors), which load via the exact
-// Q5_0->Q8 transcode (byte-level gates in test_gguf_quant.das); the Q4_K/Q6_K rest ride the
-// native kq planes. Oracle simple_ids per-file (harness/parity.sh, 2026-07-15). Capped at 15
-// tokens — the same irreducible top-8 router near-tie as the Q8_0 arm above: at step 15 the
-// oracle derails out of the counting pattern while dasLLAMA keeps counting, so the divergence
-// sits on the oracle's own coin-flip, not a forward bug.
+// gemma-4-26B-A4B-it Q4_K_M — the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29
+// layers (Q8_0 on one), riding the native q51 planes (the grp<mr> GEMV family since the Wave-2
+// q51 emitter); the Q4_K gate_up stacks ride the kq planes. Oracle simple_ids per-file
+// (harness/parity.sh, 2026-07-15). Capped at 12 tokens — the same irreducible top-8 router
+// near-tie as the Q8_0 arm above: at step 12 the top-2 gap is 0.4-1.5 (vs >6 at confident
+// steps; measured 2026-07-25 on both the disk-order and grp q51 paths, which land on opposite
+// sides of the flip), so the divergence sits on a router coin-flip, not a forward bug.
 let GEMMA4_26B_Q4KM_GEN <- [236743l, 236800l, 236778l, 236770l, 236764l, 236743l, 236800l, 236778l, 236778l, 236764l,
-                            236743l, 236800l, 236778l, 236800l, 236764l]
+                            236743l, 236800l]
 
 [test]
 def test_parity_gemma4_26b_q4km(t : T?) {
