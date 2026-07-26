@@ -488,6 +488,11 @@ Issue intake (live rig, numbering continues):
   scrollable, not hideable, purpose unclear. Needs names over raw ids,
   click-through, dismiss/collapse, and dropping entries whose session no
   longer resolves
+- 47: visual artifacts in a NEW session's terminal — stray letters in a
+  one-character column outside the text flow (Boris saw red "S"s stacked
+  vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
+  edge). Looks like a stale/displaced grid column surviving the
+  attach-time resize, un-clipped; fades as output overwrites
 
 Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
