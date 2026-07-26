@@ -30,6 +30,7 @@ require ./rich_net.das
 require ./rich_focus.das
 require ./rich_inspector_ui.das
 require ./rich_commands.das
+require ./rich_tokens.das
 
 var SESSION_ROW : table<int; ToggleState>
 
@@ -54,6 +55,8 @@ var HERD_MENU_RELAUNCH : table<int; ToggleState>
 var HERD_MENU_RENAME : table<int; ToggleState>
 
 var HERD_MENU_CLOSE : table<int; ToggleState>
+
+var HERD_MENU_DELETE : table<int; ToggleState>
 
 var HERD_RELAUNCH_BUTTON : table<int; ClickState>
 
@@ -234,7 +237,20 @@ def draw_herd_cards() {
     if (g_client == null) return
     let line = GetTextLineHeight()
     var visible = 0
-    for (index in range(length(g_client.herd_sessions))) {
+    // Alive sessions first; registry order within each state group. Widget
+    // state stays keyed by the registry index, so reordering cannot swap
+    // per-card identity when a session exits.
+    var inscope order : array<int>
+    order |> reserve(length(g_client.herd_sessions))
+    for (registry_index in range(length(g_client.herd_sessions))) {
+        order |> push(registry_index)
+    }
+    sort(order) $(a, b) {
+        let a_rank = g_client.herd_sessions[a].state == "running" ? 0 : 1
+        let b_rank = g_client.herd_sessions[b].state == "running" ? 0 : 1
+        return a_rank != b_rank ? a_rank < b_rank : a < b
+    }
+    for (index in order) {
         let record & = unsafe(g_client.herd_sessions[index])
         if (record.state == "closed") continue
         visible++
@@ -264,10 +280,16 @@ def draw_herd_cards() {
         HERD_CARD_ROW[index].value = (!empty(record.pty_session_id)
             && record.pty_session_id == g_client.selected_id)
         // AllowOverlap or the row swallows clicks aimed at the relaunch
-        // icon button drawn over its right-hand side.
-        if (selectable(HERD_CARD_ROW[index],
+        // icon button drawn over its right-hand side. Dead sessions read
+        // muted; alive keep the title tint.
+        var card_clicked = false
+        with_style((ImGuiCol.Text, record.state == "running"
+                ? token_title_color() : token_state_color(record.state))) {
+            card_clicked = selectable(HERD_CARD_ROW[index],
                 (text = "{record.name}{unread_hint}##herd:{record.id}",
-                 flags = ImGuiSelectableFlags.AllowOverlap))) {
+                 flags = ImGuiSelectableFlags.AllowOverlap))
+        }
+        if (card_clicked) {
             attach_herd_card(record)
         }
         if (IsItemHovered()) {
@@ -300,6 +322,12 @@ def draw_herd_cards() {
                     shortcut = "", enabled = true))) {
                 open_destructive_confirm("herd_close", record.id,
                     "Close session '{record.name}' and terminate its PTY?")
+            }
+            if (menu_item(HERD_MENU_DELETE[index], (text = "Delete session...",
+                    shortcut = "", enabled = record.state != "running"))) {
+                open_destructive_confirm("herd_delete", record.id,
+                    "Delete session '{record.name}' and remove its worktrees? " +
+                    "Worktrees in use or with uncommitted changes are kept.")
             }
         }
         if (record.state == "exited") {
@@ -343,6 +371,9 @@ def draw_herd_cards() {
 var g_confirm_kind : string
 var g_confirm_target : string
 var g_confirm_text : string
+// Second capture slot for kinds whose action needs a repository id beside the
+// target (worktree_delete); captured at open time like the target.
+var g_confirm_repository : string
 
 // Destructive actions (note 27) route through one confirmation modal. The
 // target is captured at open time and re-checked at confirm so a selection
@@ -366,6 +397,11 @@ def draw_destructive_confirm_popup() {
                 }
             } elif (g_confirm_kind == "herd_close") {
                 g_client->request_herd_close(g_confirm_target)
+            } elif (g_confirm_kind == "herd_delete") {
+                g_client->request_herd_delete(g_confirm_target)
+            } elif (g_confirm_kind == "worktree_delete") {
+                g_client->request_worktree_delete(g_confirm_repository,
+                    g_confirm_target)
             }
             close_current_popup(CONFIRM_DIALOG)
         }

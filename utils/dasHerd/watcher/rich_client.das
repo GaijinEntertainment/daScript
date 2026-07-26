@@ -215,6 +215,49 @@ def private command_new_session() {
     open_launcher_modal()
 }
 
+def private draw_worktree_block_popup() {
+    if (g_worktree_delete_block.active) {
+        g_worktree_delete_block.active = false
+        open_popup(WORKTREE_BLOCK_DIALOG)
+    }
+    popup_modal(WORKTREE_BLOCK_DIALOG.PUBLIC, (text = "Cannot delete worktree",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+        text(WORKTREE_BLOCK_PATH, (text = g_worktree_delete_block.worktree_path))
+        if (g_worktree_delete_block.reason == "in_use") {
+            text(WORKTREE_BLOCK_WHY,
+                (text = "A session is working here: {g_worktree_delete_block.detail}"))
+            text_disabled(WORKTREE_BLOCK_HINT,
+                (text = "Close or delete that session first."))
+        } elif (g_worktree_delete_block.reason == "dirty") {
+            text(WORKTREE_BLOCK_WHY, (text = "Uncommitted changes block deletion:"))
+            text_disabled(WORKTREE_BLOCK_DETAIL,
+                (text = g_worktree_delete_block.detail))
+            if (button(WORKTREE_BLOCK_LAUNCH,
+                    (text = "Launch session to resolve..."))) {
+                g_selected_repository_id = g_worktree_delete_block.repository_id
+                g_selected_worktree_path = g_worktree_delete_block.worktree_path
+                g_selection_explicit = true
+                prepare_resolver_launcher(g_worktree_delete_block.repository_id,
+                    g_worktree_delete_block.worktree_path,
+                    "The user wants to DELETE the worktree " +
+                    "{g_worktree_delete_block.worktree_path}, but it has " +
+                    "uncommitted changes:\n{g_worktree_delete_block.detail}\n" +
+                    "Review the changes and resolve them: commit (and push) " +
+                    "what should be kept, discard what should not. Do not " +
+                    "delete the worktree yourself. When the tree is clean, " +
+                    "report what you did and finish.")
+                g_launch_resolver_pending = true
+                close_current_popup(WORKTREE_BLOCK_DIALOG)
+            }
+        } else {
+            text(WORKTREE_BLOCK_WHY, (text = g_worktree_delete_block.detail))
+        }
+        if (button(WORKTREE_BLOCK_CLOSE, (text = "Close"))) {
+            close_current_popup(WORKTREE_BLOCK_DIALOG)
+        }
+    }
+}
+
 def private command_powershell() {
     return if (g_client == null || !g_client.connected)
     g_client->launch("powershell.exe -NoLogo -NoProfile", g_selected_worktree_path,
@@ -598,6 +641,10 @@ def update() {
         g_dock_reset_pending = false
         DOCK_ROOT.pending_reset = true
     }
+    if (g_launch_resolver_pending) {
+        g_launch_resolver_pending = false
+        open_launcher_modal()
+    }
     draw_main_menu()
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
@@ -631,6 +678,7 @@ def update() {
     }
     draw_herd_rename_popup()
     draw_destructive_confirm_popup()
+    draw_worktree_block_popup()
     draw_launcher_modal()
     herd_commands_drain()
     harness_end_frame()

@@ -473,6 +473,40 @@ def public herd_close(herd_id : string; var pty_to_terminate : string&) : string
     return save_registry()
 }
 
+def public herd_delete(herd_id : string; var removed : HerdSession) : string {
+    //! Removes the record entirely (unlike herd_close, which keeps it as
+    //! history). The caller gets the removed record so it can attempt guarded
+    //! removal of the session's worktrees. Running sessions never delete.
+    let index = herd_find(herd_id)
+    if (index < 0) return "unknown herd session"
+    if (g_herd[index].state == "running") {
+        return "session is running; close it before deleting"
+    }
+    removed := g_herd[index]
+    g_herd |> erase(index)
+    g_herd_revision++
+    return save_registry()
+}
+
+def public herd_worktree_user(worktree_path : string; exclude_herd_id : string = "") : string {
+    //! Name of a non-closed session attending this worktree (primary or
+    //! satellite), or "" when the worktree is free. Drives the hard block on
+    //! worktree deletion.
+    let canonical = herd_canonical_worktree(worktree_path)
+    for (record in g_herd) {
+        if (record.id == exclude_herd_id || record.state == "closed") continue
+        if (herd_canonical_worktree(record.worktree_path) == canonical) {
+            return record.name
+        }
+        for (entry in record.satellites) {
+            if (herd_canonical_worktree(entry.worktree_path) == canonical) {
+                return record.name
+            }
+        }
+    }
+    return ""
+}
+
 def public herd_rename(herd_id, name : string) : string {
     if (empty(strip(name))) return "session name is required"
     let index = herd_find(herd_id)

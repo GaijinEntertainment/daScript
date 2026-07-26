@@ -719,6 +719,72 @@ def private find_worktree(runtime : RepositoryRuntime?; path : string) : int {
     return -1
 }
 
+def private git_capture(argv : array<string>; var output : string&) : int {
+    // Synchronous git for the guarded worktree-delete path only: fast plumbing
+    // calls on a user click, never the polling rails. 30s cap so a wedged git
+    // (index lock) can't hang the watcher tick forever.
+    output = ""
+    return unsafe(popen_argv(argv, 30.0, $(file) {
+        if (file != null) {
+            output = unsafe(fread_to_eof(file))
+        }
+    }))
+}
+
+def public repository_remove_worktree(repository_id, worktree_path : string;
+                                      var reason : string&;
+                                      var detail : string&) : bool {
+    //! Guarded removal. reason on failure: "unknown" | "main" | "dirty" |
+    //! "error"; for "dirty" the detail carries `git status --porcelain` so the
+    //! client can brief a resolver session.
+    reason = ""
+    detail = ""
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        reason = "unknown"
+        detail = "unknown repository"
+        return false
+    }
+    var runtime = g_repositories[repository_index]
+    let checkout = runtime.snapshot.record.checkout_path
+    if (to_lower(normalized_path(worktree_path)) == to_lower(normalized_path(checkout))) {
+        reason = "main"
+        detail = "the main checkout cannot be deleted"
+        return false
+    }
+    let worktree_index = find_worktree(runtime, worktree_path)
+    if (worktree_index >= 0 && runtime.snapshot.worktrees[worktree_index].is_main) {
+        reason = "main"
+        detail = "the main checkout cannot be deleted"
+        return false
+    }
+    var status_text : string
+    let status_exit = git_capture(["git", "-C", worktree_path,
+        "status", "--porcelain"], status_text)
+    if (status_exit != 0) {
+        reason = "error"
+        detail = "git status exited {status_exit}"
+        return false
+    }
+    if (!empty(strip(status_text))) {
+        reason = "dirty"
+        detail = (length(status_text) > 2000
+            ? slice(status_text, 0, 2000) + "\n..." : status_text)
+        return false
+    }
+    var remove_text : string
+    let remove_exit = git_capture(["git", "-C", checkout,
+        "worktree", "remove", worktree_path], remove_text)
+    if (remove_exit != 0) {
+        reason = "error"
+        detail = (empty(strip(remove_text))
+            ? "git worktree remove exited {remove_exit}" : strip(remove_text))
+        return false
+    }
+    let _ = repository_refresh(repository_id)
+    return true
+}
+
 def public repository_review(repository_id : string; worktree_path : string) : string {
     let repository_index = find_repository(repository_id)
     if (repository_index < 0 || g_repositories[repository_index] == null) {

@@ -402,6 +402,24 @@ def private append_event(var session : WatcherSession?; event, detail : string) 
     fflush(session.events_file)
 }
 
+def public watcher_running_worktree_user(worktree_path : string) : string {
+    //! Display name of a RUNNING PTY session whose cwd/worktree is this path,
+    //! or "". Exited task sessions don't hold the tree.
+    let full = get_full_file_name(worktree_path)
+    let wanted = get_platform_name() == "windows" ? to_lower(full) : full
+    for (session in g_sessions) {
+        if (session == null || session.state != "running"
+                || empty(session.worktree_path)) continue
+        let candidate = get_full_file_name(session.worktree_path)
+        let canonical = (get_platform_name() == "windows"
+            ? to_lower(candidate) : candidate)
+        if (canonical == wanted) {
+            return empty(session.display_name) ? session.id : session.display_name
+        }
+    }
+    return ""
+}
+
 def public watcher_record_event(session_id, event, detail : string) : bool {
     let index = watcher_find_session(session_id)
     if (index < 0 || g_sessions[index] == null || empty(event)) return false

@@ -80,6 +80,29 @@ struct WatcherHerdLaunchedMessage {
     session_id : string
 }
 
+struct WatcherWorktreeDeleteResult {
+    @rename = "type" _type : string
+    ok : bool
+    reason : string
+    detail : string
+    repository_id : string
+    worktree_path : string
+}
+
+struct WatcherHerdDeleteKept {
+    path : string
+    repository_id : string
+    reason : string
+    detail : string
+}
+
+struct WatcherHerdDeleteResult {
+    @rename = "type" _type : string
+    herd_session_id : string
+    removed : array<string>
+    kept : array<WatcherHerdDeleteKept>
+}
+
 struct WatcherMailboxMessageEnvelope {
     @rename = "type" _type : string
     session_id : string
@@ -508,6 +531,23 @@ struct PendingSay {
     session : string
 }
 var g_input_queue : array<PendingSay>
+
+// A blocked worktree delete (in_use / dirty / main / error). The frame loop
+// opens the block modal when active; "dirty" adds the offer to launch a
+// resolver session briefed with the blocking state.
+struct WorktreeDeleteBlock {
+    active : bool
+    repository_id : string
+    worktree_path : string
+    reason : string
+    detail : string
+}
+var g_worktree_delete_block = WorktreeDeleteBlock()
+
+// Deferred launcher open for the resolver offer: open_popup from inside the
+// block modal would nest the launcher under the popup being closed, so the
+// button preps the launcher fields and the frame loop opens it at root level.
+var g_launch_resolver_pending = false
 
 // Real-input forensics: per-frame counters of wheel/click events that reached
 // ImGui IO. With user control locked these must stay flat — a moving counter

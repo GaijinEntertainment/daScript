@@ -31,6 +31,7 @@ require ./rich_commands.das
 require ./herd_sessions.das
 require ./rich_inspector_ui.das
 require ./rich_files_ui.das
+require ./rich_sessions_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
@@ -43,6 +44,8 @@ var WORKTREE_POPUP : table<int; PopupContextItemState>
 var WORKTREE_MENU_NEW_SESSION : table<int; ToggleState>
 
 var WORKTREE_MENU_OPEN_SESSION : table<int; ToggleState>
+
+var WORKTREE_MENU_DELETE : table<int; ToggleState>
 
 var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
@@ -255,6 +258,39 @@ def draw_repositories_window() {
                                 (text = "Open session '{g_client.herd_sessions[active_herd].name}'",
                                  shortcut = "", enabled = true))) {
                             navigate_to_herd(active_herd)
+                        }
+                    }
+                    if (menu_item(WORKTREE_MENU_DELETE[row],
+                            (text = "Delete worktree...", shortcut = "",
+                             enabled = g_client != null && g_client.connected
+                                && !worktree.is_main))) {
+                        // Client-side pre-guards give the block dialog without
+                        // a round trip; the watcher re-checks on the request.
+                        let change_count = (worktree.staged + worktree.unstaged
+                            + worktree.untracked + worktree.conflicted)
+                        if (active_herd >= 0) {
+                            g_worktree_delete_block = WorktreeDeleteBlock(
+                                active = true,
+                                repository_id = repository.record.id,
+                                worktree_path = worktree.path,
+                                reason = "in_use",
+                                detail = "in use by session " +
+                                    "'{g_client.herd_sessions[active_herd].name}'")
+                        } elif (change_count > 0) {
+                            g_worktree_delete_block = WorktreeDeleteBlock(
+                                active = true,
+                                repository_id = repository.record.id,
+                                worktree_path = worktree.path,
+                                reason = "dirty",
+                                detail = "{worktree.staged} staged, " +
+                                    "{worktree.unstaged} unstaged, " +
+                                    "{worktree.untracked} untracked, " +
+                                    "{worktree.conflicted} conflicted")
+                        } else {
+                            g_confirm_repository = repository.record.id
+                            open_destructive_confirm("worktree_delete",
+                                worktree.path,
+                                "Delete worktree {worktree.path}?")
                         }
                     }
                 }

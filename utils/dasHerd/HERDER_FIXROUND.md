@@ -460,6 +460,30 @@ re-list, say-queue garbling, output-age table growth, glfw chain
 dispatch UAF, daslang-live is_reload, CMake stale-module sweep
 deleting standalone-module artifacts).
 
+## Block: external sessions (2026-07-25 evening)
+
+Goal (Boris): "external sessions" — a session whose terminal lives OUTSIDE
+the herder (like the dev session building dasHerd itself), claimed from the
+outside, attached to worktree(s), coordination-only (mailbox/bundles/claims;
+no terminal view, no lease, no input), and able to OUTLIVE the herder across
+watcher restarts. Follow-up: "Repositories and worktrees" migrates to the
+right side as "Git repositories and worktrees"; the left side is sessions,
+sessions-first.
+
+Issue intake (live rig, numbering continues):
+- 40: sessions list: alive on top, dead in a different color, delete button
+  for session + associated worktrees — IMPLEMENTED, pending deploy
+- 41: worktree delete from the git panel — in-use = hard block; uncommitted
+  changes = block + offer to launch a resolver session briefed with the
+  blocking state — IMPLEMENTED, pending deploy
+- 42: terminal in a NEW session does not scroll
+- 43: herd card click selects then unselects (cc-color-probe3 clicked while
+  "Towards 0.6.4 release" attached; selection bounces back)
+- 44: after creating a new session the terminal opens but has no keyboard
+  focus — a mouse click is needed before typing
+- 45: the icons left of each session card (profile / state / conflict) have
+  no tooltips — unexplained glyphs
+
 Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
   spawn (pass DASHERD_* via CreateProcess lpEnvironment instead of a
