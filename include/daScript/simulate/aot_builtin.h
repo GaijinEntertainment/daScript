@@ -84,6 +84,13 @@ namespace das {
     DAS_API int builtin_array_capacity ( const Array & arr );
     DAS_API int64_t builtin_array_long_size ( const Array & arr );
     DAS_API int64_t builtin_array_long_capacity ( const Array & arr );
+    // string length lives in the base module (alongside empty), not in strings: it is
+    // reachable with no require, so its declaration has to be in the header AOT output
+    // always includes. The 32-bit forms panic instead of silently wrapping.
+    DAS_API int builtin_string_length ( const char * str, Context * context );
+    DAS_API int64_t builtin_string_long_length ( const char * str );
+    DAS_API int32_t builtin_ext_string_length ( const string & str );
+    DAS_API int64_t builtin_ext_string_long_length ( const string & str );
     DAS_API int builtin_array_lock_count ( const Array & arr );
     DAS_API void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );

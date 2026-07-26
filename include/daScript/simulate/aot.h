@@ -295,6 +295,35 @@ namespace das {
         memcpy(left, right, size);
     }
 
+    // unsigned and 64-bit size spellings. das has no implicit promotion, so a size
+    // that is already uint/int64/uint64 could otherwise only reach memcpy through an
+    // int(...) narrowing cast at the call site -- which truncates above 2GB. Each
+    // spelling gets its own overload, plus the same const-source twin as above.
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( void * left, void * right, uint32_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( void * left, void * right, int64_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( void * left, void * right, uint64_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( const void * left, const void * right, uint32_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( const void * left, const void * right, int64_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline int das_memcmp ( const void * left, const void * right, uint64_t size ) { return memcmp(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, void * right, uint32_t size ) { memcpy(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, void * right, int64_t size ) { memcpy(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, void * right, uint64_t size ) { memcpy(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, const void * right, uint32_t size ) { memcpy(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, const void * right, int64_t size ) { memcpy(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memcpy ( void * left, const void * right, uint64_t size ) { memcpy(left, right, size_t(size)); }
+
     // Suppress null argument with size = 0
     DAS_SUPPRESS_UB
     __forceinline void das_memset8 ( void * left, uint8_t value, int size ) {

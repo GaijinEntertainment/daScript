@@ -203,10 +203,6 @@ namespace das
         return -1;
     }
 
-    int builtin_string_length ( const char *str, Context * context ) {
-        return stringLengthSafe ( *context, str );
-    }
-
     char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
         if ( !str || length<=0 ) return nullptr;
         const int32_t strLen = int32_t(stringLengthSafe(*context, str));
@@ -694,10 +690,6 @@ namespace das
         return memcmp ( str.data() + sz - slen, substr, slen )==0;
     }
 
-    int32_t builtin_ext_string_length(const string & str) {
-        return int32_t(str.length());
-    }
-
     void builtin_resize_string(string & str, int32_t newLength) {
         str.resize(newLength);
     }
@@ -1003,16 +995,12 @@ namespace das
                 SideEffects::none, "builtin_string_rfind1")->args({"str","substr","start","context"});
             addExtern<DAS_BIND_FUN(builtin_string_rfind2)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_string_rfind2")->args({"str","substr"});
-            addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
-                SideEffects::none, "builtin_string_length")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
                 SideEffects::none, "builtin_string_reverse")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
                 SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string")->args({"str","ch"});
             addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
                 SideEffects::modifyArgumentAndExternal, "builtin_resize_string")->args({"str","new_length"});
-            addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
-                SideEffects::none, "builtin_ext_string_length")->arg("str");
             addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
                 SideEffects::none, "builtin_string_toupper")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
