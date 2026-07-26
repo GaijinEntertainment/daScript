@@ -5564,8 +5564,7 @@ def private rdq_sample {
         return   // deep graphs overflow PFQ_CAP — no aggregation
     }
     g_rdq_pro += pfq_us(1u)
-    // k+v always aggregate into ONE "kv" slot (merged = 1 stamp, split = 2) — the role table
-    // stays uniform for merged, unmerged, and mixed models
+    // k+v aggregate into ONE "kv" slot (merged = 1 stamp, split = 2) — uniform incl. mixed models
     var qi = 2u
     for (L in g_rd.layers) {
         g_rdq_role[0] += pfq_us(qi)
