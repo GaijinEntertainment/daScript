@@ -4113,14 +4113,22 @@ class SpirvEmit : AstVisitor {
             (arg == expr.arguments[2] || arg == expr.arguments[3]))
         // the trailing @@decode argument of coopmatLoadTensorDecode is read STRUCTURALLY by the cm2
         // load arm (registered as a DecodeFunc operand) — it never lowers to a value, so the @@
-        // fail-closed guard must not fire on it. Generic stub -> match the ORIGIN name.
+        // fail-closed guard must not fire on it. Set ONLY when the argument actually is an ExprAddr
+        // (a non-@@ trailing arg gets the arm's own clean error, and the flag can never leak onto an
+        // unrelated later @@). Generic stub -> match the ORIGIN name. Assigned per argument, like
+        // suppress_bounds_arg above, so it also self-clears on the next visited argument.
+        suppress_fn_addr = false
         if (last && expr.func != null) {
-            var co = expr.func
-            while (co.fromGeneric != null) {
-                co = co.fromGeneric
-            }
-            if ("{co.name}" == "coopmatLoadTensorDecode") {
-                suppress_fn_addr = true
+            let r2v = arg ?as ExprRef2Value
+            let da = r2v != null ? r2v.subexpr : arg
+            if (da is ExprAddr) {
+                var co = expr.func
+                while (co.fromGeneric != null) {
+                    co = co.fromGeneric
+                }
+                if ("{co.name}" == "coopmatLoadTensorDecode") {
+                    suppress_fn_addr = true
+                }
             }
         }
     }
@@ -6317,13 +6325,28 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     ctx.local_vars |> insert(intptr(f.arguments[0]), LocalVar(ptr_id = p0, value_type = df.block_type,
         is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
     let arr2 = type_array(m, type_uint(m), 2)
+    var coord_pids : uint[2]
     for (i in range(1, 3)) {
         let pid = alloc_id(m)
         emit(m, SEC_FUNCS, SpvOp.FunctionParameter, arr2, pid)
-        ctx.locals |> insert(intptr(f.arguments[i]), pid)
+        coord_pids[i - 1] = pid
     }
     let id_label = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.Label, id_label)
+    // The das body types the coords as uint2, but the spec-mandated params are uint[2] ARRAYS —
+    // rebuild each as a uvec2 SSA value at entry and bind THAT, so any vector op in the body
+    // (not just .x/.y extracts) lowers against the type the AST believes in.
+    let ut = type_uint(m)
+    let uv2 = type_vector(m, ut, 2)
+    for (i in range(1, 3)) {
+        let e0 = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e0, coord_pids[i - 1], 0u)
+        let e1 = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e1, coord_pids[i - 1], 1u)
+        let vid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, uv2, vid, e0, e1)
+        ctx.locals |> insert(intptr(f.arguments[i]), vid)
+    }
     ctx.terminated = false
     collect_locals(m, ctx, f.body, errors)
     alloc_call_temps(m, ctx, f, errors)
