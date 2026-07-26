@@ -60,13 +60,26 @@ job, no parent-death ties. The watcher becomes a *client* of the host.
   client→host attach is a natural v2, and is also the bridge to external
   sessions (an external session is just a host the watcher never spawned).
 
-## Operational hard lesson folded in
+## Deployment: `daspkg release` (Boris's call, 2026-07-25)
 
-Hosts must NOT run from `bin/Release` — today's builds died on LNK1104 file
-locks from live processes, and a rebuild must never collide with a running
-session. Each host launches from a **copied runtime snapshot** (version-
-stamped dir of daslang.exe + DLLs + the host script); upgrades lay down a
-new snapshot and never touch a running one.
+The host ships as a **released bundle**, not a script on the dev runtime:
+`daspkg release` produces `<bundle>/dasherd-ptyhost.exe` via `daslang -exe`
+(AOT standalone) plus only the `.shared_module` dylibs it transitively
+requires (dasTerminal, dasHV), copied into the bundle and resolved
+exe-relative. Consequences, all load-bearing:
+
+- **No dependency on `bin/Release`** — a running host locks only its own
+  bundle's files; rebuilding the tree can never LNK1104 against a live
+  session (today's failure mode, eliminated by construction).
+- **Versioned by directory** — one bundle per host protocol version; the
+  watcher spawns from the bundle matching the version it speaks; running
+  hosts keep their bundle until their session ends; upgrades lay down a new
+  bundle beside the old.
+- **AOT-clean requirement** — the host script and its requires must pass
+  the `-exe` gate (no `options no_aot` anywhere in its graph); one more
+  reason the host stays tiny and boring.
+- `.das_package` under `utils/dasHerd/ptyhost/` declares `release_main`,
+  `release_name("dasherd-ptyhost")`, and the forced shared modules.
 
 ## Failure matrix
 
