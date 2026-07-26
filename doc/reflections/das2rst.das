@@ -214,12 +214,12 @@ def document_module_fio(_root : string) {
     var mod = [get_module("fio_core"), find_module("fio")]
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
-        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
+        group_by_regex("File manipulation", mod, %regex~(f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),
         group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
-        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|spawn_argv|popen_argv|popen_argv_pipe|popen_timed_out|run_and_capture|get_env_variable|sanitize_command_line|has_env_variable)$%%),
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|spawn_argv|popen_argv|popen_argv_pipe|popen_timed_out|run_and_capture|get_env_variable|set_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
     documents("File input output library", mod, "fio.rst", groups)
@@ -598,7 +598,7 @@ def document_module_jobque(_root : string) {
         group_by_regex("Channel, JobStatus, Lockbox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%),
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|get_total_hw_cores|is_job_que_shutting_down|is_job_que_available|count_jobque_leaks)$%%),
         group_by_regex("Event tracing", mod, %regex~(jobque_trace_start|jobque_trace_stop|jobque_trace_save|jobque_trace_tag|jobque_trace_category|jobque_trace_marker_name|jobque_trace_marker)$%%),
-        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_threads_cap|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one)$%%),
+        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|set_jobque_threads_cap|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one)$%%),
         group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|create_job_que|destroy_job_que)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     )
@@ -1316,9 +1316,9 @@ def document_module_toml(_root : string) {
 def document_module_logger(_root : string) {
     var mod = find_module("logger")
     var groups <- array<DocGroup>(
-        group_by_regex("Setup", mod, %regex~.*(logger_init|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
+        group_by_regex("Setup", mod, %regex~.*(logger_init|logger_init_tee|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
         group_by_regex("Level filters", mod, %regex~.*(logger_set_min_level|logger_get_min_level|logger_set_category_level|logger_clear_category_levels)$%%),
-        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_flush|logger_close)$%%),
+        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_flush|logger_close)$%%),
         group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
         group_by_regex("Stdout hook", mod, %regex~.*(logger_install_hook)$%%)
     )
