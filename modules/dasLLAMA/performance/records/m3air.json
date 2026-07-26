@@ -1,0 +1,536 @@
+[
+  {
+    "gguf":"gemma-4-12B-it-Q4_K_M.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":100.97115328922374,
+            "stddev":1.7873423099517822
+          },
+          "tg128":{
+            "tok_s":7.8333252328284075,
+            "stddev":0.88699245452880859
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":28.956483645555597,
+            "stddev":3.1418001651763916
+          },
+          "tg128":{
+            "tok_s":7.4960761787972814,
+            "stddev":0.76559114456176758
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":29.880225897130799,
+            "stddev":2.1334660053253174
+          },
+          "tg128":{
+            "tok_s":7.6750191940622274,
+            "stddev":0.60467171669006348
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":103.708094,
+            "stddev":4.3914
+          },
+          "tg128":{
+            "tok_s":8.3106170000000006,
+            "stddev":1.455527
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":25.364999999999998,
+            "stddev":1.7168650000000001
+          },
+          "tg128":{
+            "tok_s":6.1513090000000004,
+            "stddev":0.73337200000000002
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":25.974782000000001,
+            "stddev":0.84883799999999998
+          },
+          "tg128":{
+            "tok_s":6.709549,
+            "stddev":0.82885299999999995
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      }
+    ],
+    "arch":"gemma4",
+    "quant":"q8",
+    "params_b":11.907350576000001,
+    "active_b":11.906580480000001,
+    "size_bytes":7381382944
+  },
+  {
+    "gguf":"gemma-4-E4B-it-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":292.79426500629523,
+            "stddev":6.5493507385253906
+          },
+          "tg128":{
+            "tok_s":15.354024790266644,
+            "stddev":0.88078784942626953
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":84.608683927594484,
+            "stddev":1.5926010608673096
+          },
+          "tg128":{
+            "tok_s":13.397975409053112,
+            "stddev":0.31448334455490112
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":84.456365830897226,
+            "stddev":1.3959729671478271
+          },
+          "tg128":{
+            "tok_s":13.218078331498578,
+            "stddev":0.10669740289449692
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":275.61049500000001,
+            "stddev":1.3684400000000001
+          },
+          "tg128":{
+            "tok_s":15.687388,
+            "stddev":0.39765800000000001
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":64.515848000000005,
+            "stddev":0.87568599999999996
+          },
+          "tg128":{
+            "tok_s":11.345897000000001,
+            "stddev":0.30775400000000003
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":90.621729000000002,
+            "stddev":2.0014129999999999
+          },
+          "tg128":{
+            "tok_s":11.300974999999999,
+            "stddev":0.303452
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      }
+    ],
+    "arch":"gemma4",
+    "quant":"q8",
+    "params_b":7.5180692899999997,
+    "active_b":4.5888307199999998,
+    "size_bytes":8031242688
+  },
+  {
+    "gguf":"gpt-oss-20b-mxfp4.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":74.602090557434138,
+            "stddev":13.963406562805176
+          },
+          "tg128":{
+            "tok_s":20.780198219575535,
+            "stddev":1.0819443464279175
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":87.286046075953166,
+            "stddev":1.563582181930542
+          },
+          "tg128":{
+            "tok_s":24.927380506005022,
+            "stddev":0.24361743032932281
+          }
+        },
+        "source":"official",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":51.539298000000002,
+            "stddev":2.2384590000000002
+          },
+          "tg128":{
+            "tok_s":20.245643000000001,
+            "stddev":2.353748
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m3air",
+        "threads":4,
+        "date":"2026-07-26",
+        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M3",
+          "arch":"arm64",
+          "os":"macOS 26.4.1",
+          "perf_cores":4,
+          "total_cores":8,
+          "ram_gb":16,
+          "gpu":"Apple M3 (10-core)"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":51.101740999999997,
+            "stddev":1.3099419999999999
+          },
+          "tg128":{
+            "tok_s":21.541964,
+            "stddev":2.0518269999999998
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack"
+      }
+    ],
+    "arch":"gpt-oss",
+    "quant":"q8",
+    "params_b":20.914757183999999,
+    "active_b":4.1862758400000004,
+    "size_bytes":12109566560
+  }
+]
