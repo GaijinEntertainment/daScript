@@ -244,6 +244,17 @@ def private normalized_path(path : string) : string {
     return get_full_file_name(path)
 }
 
+def public repository_same_worktree_identity(left, right : string) : bool {
+    //! One path identity for guard checks: full-name normalized, case folded
+    //! only on Windows - a case-sensitive filesystem holds case-differing
+    //! paths apart (the same platform gate find_worktree uses).
+    let left_identity = (get_platform_name() == "windows"
+        ? to_lower(normalized_path(left)) : normalized_path(left))
+    let right_identity = (get_platform_name() == "windows"
+        ? to_lower(normalized_path(right)) : normalized_path(right))
+    return left_identity == right_identity
+}
+
 def private repository_id(target_id, path : string) : string {
     let identity_path = get_platform_name() == "windows" ? to_lower(path) : path
     return "{target_id}:{identity_path}"
@@ -755,13 +766,7 @@ def public repository_remove_worktree(repository_id, worktree_path : string;
     }
     var runtime = g_repositories[repository_index]
     let checkout = runtime.snapshot.record.checkout_path
-    // Case-insensitive only on Windows, matching find_worktree's platform
-    // gate - a case-sensitive filesystem holds case-differing paths apart.
-    let wanted_identity = (get_platform_name() == "windows"
-        ? to_lower(normalized_path(worktree_path)) : normalized_path(worktree_path))
-    let checkout_identity = (get_platform_name() == "windows"
-        ? to_lower(normalized_path(checkout)) : normalized_path(checkout))
-    if (wanted_identity == checkout_identity) {
+    if (repository_same_worktree_identity(worktree_path, checkout)) {
         reason = "main"
         detail = "the main checkout cannot be deleted"
         return false
