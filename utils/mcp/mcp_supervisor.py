@@ -260,10 +260,17 @@ def _pick_binary(repo_root: str) -> str | None:
     `bin/Release/daslang.exe`) otherwise runs the stale one, whose DAS_BUILD_ID
     no longer matches the tree's dynamic modules — every `require` of a native
     module fails and the server never answers a single tool call.
-    DASLANG_MCP_BIN in the environment pins an explicit binary (bisect hatch)."""
+    DASLANG_MCP_BIN in the environment pins an explicit binary (bisect hatch); a
+    pin that does not exist is announced and ignored rather than handed on, since
+    it would otherwise surface as a bare FileNotFoundError at spawn — or, worse,
+    get written into .mcp.json — instead of naming the bad path."""
     pinned = os.environ.get("DASLANG_MCP_BIN")
     if pinned:
-        return pinned
+        if os.path.exists(pinned):
+            return pinned
+        _log(f"DASLANG_MCP_BIN points at a missing path, ignoring it: {pinned}")
+        print(f"WARNING: DASLANG_MCP_BIN={pinned} does not exist — falling back to auto-pick",
+              file=sys.stderr, flush=True)
     exe = ".exe" if IS_WINDOWS else ""
     found = [c for c in (os.path.join(repo_root, rel + exe) for rel in BIN_CANDIDATES)
              if os.path.exists(c)]

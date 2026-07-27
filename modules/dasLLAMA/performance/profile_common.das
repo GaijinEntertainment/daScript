@@ -930,8 +930,18 @@ let private BENCH_ENV_VARS = fixed_array(
     "DASLLAMA_THREADS", "DASLLAMA_TRUTH_REFRESH", "DASLLAMA_VK_FA", "DASLLAMA_VK_HAZARD_PARANOID",
     "DASLLAMA_VK_HAZARD_TRACE", "DASLLAMA_VK_MEMPRIO", "DASLLAMA_VK_REBAR", "DASLLAMA_VK_XFERQ")
 
+// quote on anything a shell reads as syntax, not just spaces — full cross-shell escaping is not
+// well-defined (cmd and POSIX disagree on the rules), so widen the trigger rather than pretend
 def private shell_quote(s : string) : string {
-    return find(s, " ") < 0 ? s : "\"{s}\""
+    var bare = !empty(s)
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            bare = bare && (is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/'
+                || c == '\\' || c == ':' || c == '=' || c == '-' || c == '+' || c == ',')
+        }
+    }
+    return bare ? s : "\"{s}\""
 }
 
 //! The run's REAL invocation, from the process argv — binary, interpreter flags, script and args
