@@ -3704,8 +3704,7 @@ var private g_mm_smalld = -1l
 
 def private mm_small_d : int64 {
     if (g_mm_smalld < 0l) {
-        let e = get_env_variable("DASLLAMA_MM_SMALLD")
-        g_mm_smalld = empty(e) ? 64l : int64(to_int(e))
+        g_mm_smalld = env_int64("DASLLAMA_MM_SMALLD", 64l)
     }
     return g_mm_smalld
 }
@@ -4352,7 +4351,7 @@ def private vk_moe_init : bool {
     }
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
-    if (g_gpu.has_coopmat && get_env_variable("DASLLAMA_VK_XFERQ") != "0"
+    if (g_gpu.has_coopmat && env_flag("DASLLAMA_VK_XFERQ", true)
             && timeline_semaphore_supported(g_gpu.phys)) {
         xfam = select_transfer_queue_family(g_gpu.phys)
     }
@@ -4395,7 +4394,7 @@ def private vk_moe_init : bool {
     }
     // WDDM residency shield: allocations chain priority 1.0 (DASLLAMA_VK_MEMPRIO=0 = bisect hatch)
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
-        && get_env_variable("DASLLAMA_VK_MEMPRIO") != "0")
+        && env_flag("DASLLAMA_VK_MEMPRIO", true))
     if (g_gpu.has_memprio) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: memory-priority residency shield armed\n")
     }
@@ -4578,14 +4577,14 @@ def private upload_region_at(dst : uint64; dst_off : int64; src : uint8 const?; 
     let t0 = ref_time_ticks()
     if (key_exists(g_gpu.dev_mapped, dst)) {
         unsafe {
-            par_memcpy(reinterpret<void?>(g_gpu.dev_mapped[dst] + uint64(dst_off)), reinterpret<void? -const>(src), total)
+            par_memcpy(reinterpret<void?>(g_gpu.dev_mapped[dst] + uint64(dst_off)), reinterpret<void?>(src), total)
         }
     } else {
         var off = 0l
         while (off < total) {
             let chunk = min(total - off, STAGING_BYTES)
             unsafe {
-                par_memcpy(g_gpu.staging.mapped, reinterpret<void? -const>(src + off), chunk)
+                par_memcpy(g_gpu.staging.mapped, reinterpret<void?>(src + off), chunk)
             }
             staged_upload(dst, dst_off + off, chunk)
             off += chunk
@@ -4675,9 +4674,9 @@ def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int
                          hwq = make_host_buf(pb.wq, false, [xfer_shared = true]),
                          hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true]))
     unsafe {
-        par_memcpy(ss.hwq.mapped, reinterpret<void? -const>(wq), pb.wq)
+        par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
         if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
-            par_memcpy(ss.hws.mapped, reinterpret<void? -const>(ws), pb.ws)
+            par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
         }
     }
     if (length(g_gpu.stream_stacks) % 3 == 2) {   // walk order gate/up/down: this one is a down
@@ -5268,7 +5267,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         mp[6] = uint(npairs)
         mp[7] = uint(pos * kv_dim)   // K mirror row offset (f32 elements)
         mp[8] = uint(pos * kv_dim)   // V mirror row offset
-        memcpy(g_gpu.rks_scal.mapped, addr<void? -const>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
+        memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q enters the kernel via vk_y (binding 5) = rks_q_dev — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
@@ -6001,7 +6000,7 @@ var private g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail di
 
 def private vk_fuse_on : bool {
     if (g_vk_fuse < 0) {
-        g_vk_fuse = get_env_variable("DASLLAMA_VK_FUSE") == "0" ? 0 : 1
+        g_vk_fuse = env_flag("DASLLAMA_VK_FUSE", true) ? 1 : 0
     }
     return g_vk_fuse != 0
 }
@@ -6271,8 +6270,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     }
     let kvd = g_rd.kv_dim
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void? -const>(x[0]), g_rd.dim * 4l)
-        memcpy(g_rd.cos_host.mapped, addr<void? -const>(cossin[0]), g_rd.head_size * 4l)
+        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.head_size * 4l)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             let row = uint(l * g_rd.seq_cap * kvd + pos * kvd)
@@ -6711,8 +6710,8 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     fill_af_meta(g_gpu.af_meta_d, nfe, n, blk2)
     fill_ffn_meta(nfe, nfe / (dkq ? 256l : 32l), is_gelu)
     unsafe {
-        memcpy(g_gpu.af_xq.mapped, addr<void? -const>(xq[0]), n)
-        memcpy(g_gpu.af_xs.mapped, addr<void? -const>(xs[0]), (n / xunit) * 4l)
+        memcpy(g_gpu.af_xq.mapped, addr<void?>(xq[0]), n)
+        memcpy(g_gpu.af_xs.mapped, addr<void?>(xs[0]), (n / xunit) * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -6830,8 +6829,8 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         mp[3] = 0u          // y base row
         mp[4] = uint(blk)   // THE arena base — a stack-relative offset in the per-op tier
         mp[5] = 0u          // activation block base
-        memcpy(a.xq.mapped, reinterpret<void? -const>(xqp), n)   // one int8 quant per weight
-        memcpy(a.xs.mapped, reinterpret<void? -const>(xsp), nb * 4l)
+        memcpy(a.xq.mapped, reinterpret<void?>(xqp), n)   // one int8 quant per weight
+        memcpy(a.xs.mapped, reinterpret<void?>(xsp), nb * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -7009,8 +7008,8 @@ def private fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_
     assert(xq_bytes <= XQ_BYTES, "dasLLAMA vulkan tier: dispatch exceeds scratch capacity")
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     unsafe {
-        memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void? -const>(xqp), xq_bytes)
-        memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void? -const>(xsp), (xq_bytes / unit) * 4l)
+        memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
+        memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void?>(xsp), (xq_bytes / unit) * 4l)
     }
 }
 
@@ -7206,8 +7205,8 @@ def private upload_batch_acts(xqp : int8 const?; xsp : float const?; r0, rows, n
     let xs_bytes = rows * (n / xunit) * 4l
     unsafe {
         var sp = reinterpret<uint8?>(g_gpu.staging.mapped)
-        par_memcpy(g_gpu.staging.mapped, reinterpret<void? -const>(xqp + r0 * n), xq_bytes)
-        par_memcpy(reinterpret<void?>(sp + BATCH_XQ_BYTES), reinterpret<void? -const>(xsp + r0 * (n / xunit)), xs_bytes)
+        par_memcpy(g_gpu.staging.mapped, reinterpret<void?>(xqp + r0 * n), xq_bytes)
+        par_memcpy(reinterpret<void?>(sp + BATCH_XQ_BYTES), reinterpret<void?>(xsp + r0 * (n / xunit)), xs_bytes)
     }
 }
 
@@ -7399,8 +7398,8 @@ def private vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : i
             "dasLLAMA vulkan tier: combined output exceeds capacity")
         unsafe {
             var cp = reinterpret<uint8?>(g_gpu.comb_stage.mapped)
-            par_memcpy(g_gpu.comb_stage.mapped, reinterpret<void? -const>(wp), nrows * 4l)
-            par_memcpy(reinterpret<void?>(cp + COMB_WI_BYTES), reinterpret<void? -const>(invp), nrows * 4l)
+            par_memcpy(g_gpu.comb_stage.mapped, reinterpret<void?>(wp), nrows * 4l)
+            par_memcpy(reinterpret<void?>(cp + COMB_WI_BYTES), reinterpret<void?>(invp), nrows * 4l)
         }
     }
     let chunk = ffn_chunk_rows(n, nfe, xunit_in, xunit_mid)
@@ -7675,12 +7674,12 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
         sp[1] = 1.0 / sqrt(float(ds))
-        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), cd * dconv * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), ds * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), cd * taps * 4l)
-        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), nvh * ds * ds * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void?>(convw), cd * dconv * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void?>(wnormp), ds * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void?>(ap), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void?>(dtp), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void?>(histp), cd * taps * 4l)
+        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void?>(stp), nvh * ds * ds * 4l)
     }
     var qkv_region = fixed_array(woq, 0l, 0l)
     var z_region = fixed_array(woz, 0l, 0l)
@@ -7703,8 +7702,8 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         upload_batch_acts(xqp, xsp, r0, rows, dim, 32l)
         unsafe {
             var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
-            par_memcpy(reinterpret<void?>(sp + DN_SM_BETA), reinterpret<void? -const>(bp + r0 * nvh), rows * nvh * 4l)
-            par_memcpy(reinterpret<void?>(sp + DN_SM_G), reinterpret<void? -const>(gp + r0 * nvh), rows * nvh * 4l)
+            par_memcpy(reinterpret<void?>(sp + DN_SM_BETA), reinterpret<void?>(bp + r0 * nvh), rows * nvh * 4l)
+            par_memcpy(reinterpret<void?>(sp + DN_SM_G), reinterpret<void?>(gp + r0 * nvh), rows * nvh * 4l)
         }
         fill_dn_meta(rows, cd, kd, di, nvh, nkh, ds, dconv, r0 == 0l ? 1 : 2, rows * di / 32l)
         let ts1 = ref_time_ticks()
@@ -7853,12 +7852,12 @@ def private dnd_cold_upload(st : DnStep; stp : float const?; histp : float const
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
         sp[1] = 1.0 / sqrt(float(ds))
-        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), cd * dconv * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), ds * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), cd * taps * 4l)
-        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), st.state_bytes)
+        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void?>(convw), cd * dconv * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void?>(wnormp), ds * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void?>(ap), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void?>(dtp), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void?>(histp), cd * taps * 4l)
+        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void?>(stp), st.state_bytes)
     }
     let raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
@@ -7895,8 +7894,8 @@ def private vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo
     fill_stack_acts(s_qkv, xqp, xsp, dim)   // the z GEMV set shares this image
     unsafe {
         var bg = reinterpret<float?>(g_gpu.dnd_bg.mapped)
-        memcpy(reinterpret<void?>(bg), reinterpret<void? -const>(bp), nvh * 4l)
-        memcpy(reinterpret<void?>(bg + nvh), reinterpret<void? -const>(gp), nvh * 4l)
+        memcpy(reinterpret<void?>(bg), reinterpret<void?>(bp), nvh * 4l)
+        memcpy(reinterpret<void?>(bg + nvh), reinterpret<void?>(gp), nvh * 4l)
         bg[2l * nvh] = float(st.parity)
     }
     let ts1 = ref_time_ticks()
@@ -8135,8 +8134,8 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         sp[0] = eps
         sp[1] = scale
         if (qknorm) {
-            memcpy(reinterpret<void?>(sp + AT_SM_RMSQ), reinterpret<void? -const>(rmsqp), hs * 4l)
-            memcpy(reinterpret<void?>(sp + AT_SM_RMSK), reinterpret<void? -const>(rmskp), hs * 4l)
+            memcpy(reinterpret<void?>(sp + AT_SM_RMSQ), reinterpret<void?>(rmsqp), hs * 4l)
+            memcpy(reinterpret<void?>(sp + AT_SM_RMSK), reinterpret<void?>(rmskp), hs * 4l)
         }
     }
     var q_region = fixed_array(woq, 0l, 0l)
@@ -8168,8 +8167,8 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         upload_batch_acts(xqp, xsp, r0, rows, dim, xunit)
         unsafe {
             var sp = reinterpret<float?>(g_gpu.at_smalls.mapped)
-            par_memcpy(reinterpret<void?>(sp + AT_SM_COS), reinterpret<void? -const>(cosp + r0 * half), rows * half * 4l)
-            par_memcpy(reinterpret<void?>(sp + AT_SM_COS + rows * half), reinterpret<void? -const>(sinp + r0 * half), rows * half * 4l)
+            par_memcpy(reinterpret<void?>(sp + AT_SM_COS), reinterpret<void?>(cosp + r0 * half), rows * half * 4l)
+            par_memcpy(reinterpret<void?>(sp + AT_SM_COS + rows * half), reinterpret<void?>(sinp + r0 * half), rows * half * 4l)
         }
         fill_at_meta(rows, r0, qd, kv_dim, hs, half, n_heads, n_kv, kv_mul,
             rows * qd / (fo != 0 ? 256l : 32l), gated, qknorm)
@@ -8894,9 +8893,9 @@ def private vk_bake_tag : string {
     if (!vulkan_moe_gpu_arm()) {
         return ""
     }
-    let cm = get_env_variable("DASLLAMA_COOPMAT")
-    let vb = get_env_variable("DASLLAMA_GPU_VRAM_MB")
-    return ("m{cm == "" ? "auto" : cm} b{vb == "" ? "auto" : vb}"
+    let cm = env_str("DASLLAMA_COOPMAT", "auto")
+    let vb = env_str("DASLLAMA_GPU_VRAM_MB", "auto")
+    return ("m{cm} b{vb}"
         + " l{gpu_want_moe_layers()} s{gpu_want_moe_stream()}"
         + " r{gpu_want_dn() ? 1 : 0}{gpu_want_attn() ? 1 : 0}{gpu_want_dnd() ? 1 : 0}{gpu_want_shexp() ? 1 : 0}{gpu_want_qkv() ? 1 : 0}{gpu_want_cls() ? 1 : 0}")
 }

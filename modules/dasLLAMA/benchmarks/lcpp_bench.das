@@ -328,7 +328,7 @@ def main() {
             var maxlen = 0l
             for (tx in texts) {
                 var ids <- encode(tk, tx, false)
-                maxlen = max(maxlen, int64(length(ids)))
+                maxlen = max(maxlen, long_length(ids))
                 toks |> emplace(ids)
             }
             delete texts
@@ -370,7 +370,7 @@ def main() {
                     var rep_gen = 0l
                     for (pi in range(length(toks))) {
                         var rs <- make_run_state(c)
-                        let pl = int64(length(toks[pi]))
+                        let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         let t0 = ref_time_ticks()
                         if (mtp_on) {
@@ -411,7 +411,7 @@ def main() {
                     // the report is pure decode (or pure draft+verify on the on arm). Running it
                     // per arm is the point: the off/on bucket delta is what attributes the draft.
                     var ps <- make_run_state(c)
-                    let pl0 = int64(length(toks[0]))
+                    let pl0 = long_length(toks[0])
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()
                     if (mtp_on) {

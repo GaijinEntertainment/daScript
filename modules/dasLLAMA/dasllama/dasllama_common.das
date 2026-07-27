@@ -438,7 +438,7 @@ def vulkan_bake_slice_begin {
 //! Disarm after a successful flavor load; a partially-consumed plan means the walk diverged
 //! (the slicer already declined to live gathers — correct, just slower) and is worth a rebake.
 def vulkan_bake_slice_end(t : Model) {
-    if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != int64(length(t.vkplan))) {
+    if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != long_length(t.vkplan)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers — the image is stale for this run's shape, consider rebaking\n")
     }
     g_vk_bake = VkBakeMode.off
@@ -463,7 +463,7 @@ def private vk_bake_append(a : array<uint8>) : int64 {
     g_vk_bake_blob |> resize(need)
     if (abytes > 0l) {
         unsafe {
-            memcpy(addr<void?>(g_vk_bake_blob[off]), addr<void? -const>(a[0]), int(abytes))
+            memcpy(addr<void?>(g_vk_bake_blob[off]), addr<void?>(a[0]), abytes)
         }
     }
     return off
@@ -474,7 +474,7 @@ def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uin
         return
     }
     var e = VkPlanEntry(fmt = fmt, woff = woff, n = n, rows = rows,
-                        wq_bytes = int64(length(wq)), ws_bytes = int64(length(ws)))
+                        wq_bytes = long_length(wq), ws_bytes = long_length(ws))
     e.wq_off = vk_bake_append(wq)
     e.ws_off = vk_bake_append(ws)
     g_vk_bake_plan |> push(e)
@@ -486,7 +486,7 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
         return false
     }
     // plan divergence DECLINES to live gathers mid-walk (seamless: matched entries were byte-identical)
-    if (g_vk_bake_cursor >= int64(length(t.vkplan))) {
+    if (g_vk_bake_cursor >= long_length(t.vkplan)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} — regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
@@ -503,10 +503,10 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     unsafe {
         // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
         if (e.wq_bytes > 0l) {
-            memcpy(addr(wq[0]), addr<void? -const>(t.vkblob[e.wq_off]), int(e.wq_bytes))
+            memcpy(addr(wq[0]), addr<void?>(t.vkblob[e.wq_off]), e.wq_bytes)
         }
         if (e.ws_bytes > 0l) {
-            memcpy(addr(ws[0]), addr<void? -const>(t.vkblob[e.ws_off]), int(e.ws_bytes))
+            memcpy(addr(ws[0]), addr<void?>(t.vkblob[e.ws_off]), e.ws_bytes)
         }
     }
     return true
@@ -1468,10 +1468,10 @@ def load_checkpoint(path : string) : Model {
 // Read one big 2D weight tensor into the active representation: transcode straight from disk when
 // the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
 // and quantize into the shared blob. `fmt` != q8 routes into that native K-quant plane pair.
+
 // ===== conversion-time accounting =====
-// Every big tensor rides load_big and its branches ARE the conversion kinds, so bucketing here is
-// what answers "where does gguf -> image time actually go". Armed by DASLLAMA_CONV_PROF; the cost
-// when armed is one clock pair per tensor, and the whole thing compiles to a dead branch when off.
+// load_big's branches ARE the conversion kinds, so bucketing here answers "where does gguf -> image
+// time go". DASLLAMA_CONV_PROF arms it: one clock pair per tensor, a dead branch when off.
 
 struct private ConvBucket {
     nsec : int64
@@ -2687,7 +2687,7 @@ def moe_gpu_upload_resident(t : Model) {
         var sgu = 0l
         var sdn = 0l
         for (sl in range64(t.config.n_layers + t.config.n_layer_nextn)) {
-            if (sl < t.config.n_layer_dense_lead || int64(length(t.we1_offs)) <= sl
+            if (sl < t.config.n_layer_dense_lead || long_length(t.we1_offs) <= sl
                     || t.we1_offs[sl] < 0l || t.we2_offs[sl] < 0l || t.we3_offs[sl] < 0l) {
                 continue
             }
@@ -3080,10 +3080,9 @@ def moe_gpu_upload_resident(t : Model) {
     }
 }
 
-//! Load a llama-architecture GGUF into the split layout at the requested precision — straight
-//! into `mode`'s storage (pre-quantized tensors transcode block-for-block; a Q8/Q4 load never
-//! holds the dense fp32 weights). Embedding + norms stay fp32 in fblob; vocab derives from
-//! token_embd (some files omit llama.vocab_size).
+//! Load a llama-architecture GGUF into the split layout at the requested precision — straight into
+//! `mode`'s storage (pre-quantized tensors transcode block-for-block; a Q8/Q4 load never holds the
+//! dense fp32 weights). Norms stay fp32 in fblob; vocab derives from token_embd.
 var private g_weights_epoch = 0l
 
 //! Monotonic count of model loads this process. Weight caches keyed by HOST ADDRESS flush when it
@@ -3289,13 +3288,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
                 panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported — use the full -MTP file")
             }
-            // DeepSeek-V3-style MTP (glm4moe) SHARES the trunk's embedding and classifier with the
-            // draft head — that is what "shared_head" names. The HF checkpoint serializes the shared
-            // reference, so the GGUF materializes copies: on GLM-4.5-Air nextn.embed_tokens is
-            // byte-identical to token_embd and nextn.shared_head_head is output.weight at a coarser
-            // quant (q4k vs the trunk's q6k — cos 0.9973 across the whole vocab). The head drafts
-            // through the TRUNK's tables (same weights, better classifier) and the copies never
-            // load; a shape disagreement would mean it is NOT that sharing, so fail closed there.
+            // glm4moe's MTP shares the trunk's embedding and classifier with the draft head, and the
+            // GGUF materializes copies of both — so draft through the TRUNK's tables and skip them.
+            // A shape disagreement means it is NOT that sharing, so fail closed.
             let nemb = gguf_find_tensor(m, "blk.{layers}.nextn.embed_tokens.weight")
             let nhead = gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight")
             if ((nemb >= 0 && m.tensors[nemb].n_elem != vocab * dim)
@@ -9256,12 +9251,9 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 2l
         return true
     }
-    // Reject — but the verify ALREADY produced everything a plain step would: row 0's logits are
-    // the plain result for `tok` (softcap + suppress mirrored by construction) and row 0's KV is
-    // correct. Re-forwarding discards work we did. The ONLY thing the re-forward is genuinely
-    // needed for is rolling recurrent state that the verify advanced past the draft — an arch with
-    // none consumes the verify's own outputs and skips it. (The head's KV row pos holds the
-    // rejected draft; the next step drafts at that same row and rewrites it, as before.)
+    // Reject — but the verify already produced what a plain step would: row 0's logits and KV are
+    // correct, so re-forwarding discards real work. The re-forward is only needed to roll back
+    // recurrent state the verify advanced past the draft; an arch without any skips it.
     if (c.recr_mask == 0ul) {
         copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
         // forward_prefill's tail stashed the LAST row's h — the draft's, now discarded — so re-seed
@@ -9328,10 +9320,9 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
 
 // ----- forward section profiler (decode AND prefill feed the same buckets) -----
 // Measurement is UNCONDITIONAL and negligible vs the matmuls; reset() starts a window, report() dumps it.
-// Prefill pass-threading thresholds (M1 Max ~90us dispatch, runtime knobs, 0 = always thread).
-// Batch widths at or below this are speculative-verify shaped and follow the DECODE path's
-// dispatch policy rather than the prefill work threshold — see prefill_attention. Covers the spec
-// depths real engines run (llama.cpp field configs are n=1..3, vLLM's GLM recipe is 1).
+
+// Batch widths at or below this are speculative-verify shaped, so they follow the DECODE dispatch
+// policy, not the prefill work threshold — see prefill_attention (lcpp runs n=1..3, vLLM's GLM 1).
 let private ATTN_NARROW_NPOS = 8l
 
 var g_attn_par_threshold = 100_000l
@@ -10069,11 +10060,7 @@ def private prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, st
                               is_sliding : bool; sliding_window : int64; attn_softcap : float;
                               sinksp : float const?) {   // this layer's per-head sink logits; null = no sinks
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-    // A NARROW batch is a speculative verify, i.e. decode-shaped work: attention_std_decode threads
-    // over heads UNCONDITIONALLY at npos=1, so npos=2 — strictly more work per head — must not fall
-    // under the prefill work threshold and run single-threaded. Without this a 2-row MTP verify lost
-    // all 16 lanes on attention (profiled: attn 2% -> 38%, dispatches 1472 -> 109, inline 0 -> 799).
-    // Real prefills keep the work-based threshold; the width bound covers any plausible spec depth.
+    // narrow batches are decode-shaped: under the prefill work threshold they lose every lane
     let attn_par = npos <= ATTN_NARROW_NPOS || npos * maxctx * n_heads >= g_attn_par_threshold
     let kdt = s.kv_dtype_k
     let vdt = s.kv_dtype_v

@@ -44,6 +44,8 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+| `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
+| `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 
 ## Metal backend
 
@@ -90,6 +92,10 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 |---|---|---|---|
 | `DASLLAMA_COOPMAT` | number | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | number | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
+| `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
+| `DASLLAMA_VK_FUSE` | flag | on | Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B. |
+| `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
+| `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash-attention kernel; 0 falls back to the chunked path. |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
@@ -134,6 +140,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `PROBE_PATH` | path | D:/_wcliff.bin | Scratch file the write-cliff probe writes; put it on the drive under test. |
+| `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |

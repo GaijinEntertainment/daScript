@@ -41,14 +41,14 @@ def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
 
 def private metal_blob_layout_ok(t : Model) : bool {
     let c = t.config
-    if (int64(length(t.wq_offs)) < c.n_layers) {
+    if (long_length(t.wq_offs) < c.n_layers) {
         return false
     }
     // a pure-MoE file (qwen3moe) carries no dense FFN arrays — its expert stacks bind instead
-    let has_ffn = int64(length(t.w1_offs)) >= c.n_layers
-    let has_exps = (c.moe && int64(length(t.we1_offs)) >= c.n_layers &&
-        int64(length(t.we2_offs)) >= c.n_layers && int64(length(t.we3_offs)) >= c.n_layers)
-    let has_dn = c.recr_mask != 0ul && int64(length(t.dnqkv_offs)) >= c.n_layers
+    let has_ffn = long_length(t.w1_offs) >= c.n_layers
+    let has_exps = (c.moe && long_length(t.we1_offs) >= c.n_layers &&
+        long_length(t.we2_offs) >= c.n_layers && long_length(t.we3_offs) >= c.n_layers)
+    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= c.n_layers
     if (!has_ffn && !has_exps) {
         return false
     }

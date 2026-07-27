@@ -938,10 +938,7 @@ def private shell_quote(s : string) : string {
 //! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
 //! and silently drops anything the arg parser did not model.
 def bench_cmd_line() : string {
-    var parts : array<string>
-    for (a in get_command_line_arguments()) {
-        parts |> push(shell_quote(a))
-    }
+    var parts <- [for (a in get_command_line_arguments()); shell_quote(a)]
     let line = join(parts, " ")
     delete parts
     return line
@@ -950,12 +947,9 @@ def bench_cmd_line() : string {
 //! The set members of [[BENCH_ENV_VARS]] that are actually set, as a copy-pasteable `K=V ...`
 //! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
 def bench_env_line() : string {
-    var parts : array<string>
-    for (name in BENCH_ENV_VARS) {
-        if (has_env_variable(name)) {
-            parts |> push("{name}={shell_quote(get_env_variable(name))}")
-        }
-    }
+    var parts <- [for (name in BENCH_ENV_VARS);
+        "{name}={shell_quote(get_env_variable(name))}";
+        where has_env_variable(name)]
     let line = join(parts, " ")
     delete parts
     return line

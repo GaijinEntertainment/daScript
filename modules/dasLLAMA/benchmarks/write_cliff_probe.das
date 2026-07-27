@@ -11,18 +11,15 @@ options gen2
 require daslib/fio
 require strings
 require math
+require dasllama/dasllama_env
 
 let CHUNK_MB = 16l
 let WINDOW_CHUNKS = 32l   // one report line per 512 MB
 
-def private env_or(name : string; dflt : int64) : int64 {
-    return has_env_variable(name) ? int64(to_int(get_env_variable(name))) : dflt
-}
-
 [export]
 def main() {
-    let gb = max(env_or("PROBE_GB", 50l), 1l)
-    let path = has_env_variable("PROBE_PATH") ? get_env_variable("PROBE_PATH") : "D:/_wcliff.bin"
+    let gb = max(env_int64("PROBE_GB", 50l), 1l)
+    let path = env_str("PROBE_PATH", "D:/_wcliff.bin")
     let chunk_bytes = CHUNK_MB * 1024l * 1024l
     let chunks = max(gb * 1024l / CHUNK_MB, 1l)
     var buf : array<uint8>
