@@ -437,7 +437,7 @@ def public env_markdown() : string {
     let areas <- [EnvArea.engine, EnvArea.metal, EnvArea.vulkan, EnvArea.accelerate,
                   EnvArea.harness, EnvArea.benchmark, EnvArea.profiling, EnvArea.test,
                   EnvArea.example, EnvArea.core]
-    var out = build_string() $(var w) {
+    let out = build_string() $(var w) {
         w |> write("# dasLLAMA environment variables\n\n")
         w |> write("GENERATED from `env_registry()` in `dasllama/dasllama_env.das` — do not edit by hand.\n")
         w |> write("Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read anywhere\n")

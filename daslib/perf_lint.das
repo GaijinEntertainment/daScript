@@ -282,8 +282,7 @@ class HotBodyScan : AstVisitor {
             return
         }
         return if (panic_depth > 0)
-        // sizing a @scratch buffer is declared intent — at the field, or on the parameter of a
-        // helper that sizes one by reference for its caller (the call site cannot see that)
+        // @scratch = declared intent, at the field or on a by-ref helper's parameter
         let origin = string(expr.func.fromGeneric != null ? expr.func.fromGeneric.name : expr.func.name)
         if (!empty(expr.arguments)
             && ((is_container_sizing(origin) && is_scratch_dest(expr.arguments[0]))
