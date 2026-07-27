@@ -157,7 +157,7 @@ namespace das {
                 size_t rlen = aliasChainExactLen(ch.path);
                 for ( int ci : bit->second ) {
                     auto & C = chains[ci];
-                    size_t n = das::min(rlen, C.path.size());
+                    size_t n = das::min<size_t>(rlen, C.path.size());
                     if ( aliasPathAgree(ch.path, C.path, n) ) uses.push_back(ci);
                 }
             }
@@ -271,7 +271,7 @@ namespace das {
                             } else {
                                 // partial write through an unknown element: touches
                                 // everything its known prefix overlaps, kills nothing
-                                size_t n = das::min(known, C.path.size());
+                                size_t n = das::min<size_t>(known, C.path.size());
                                 if ( aliasPathAgree(ch.path, C.path, n) ) SI.uses.push_back(ci);
                             }
                         }
