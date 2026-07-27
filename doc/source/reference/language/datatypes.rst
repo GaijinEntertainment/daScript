@@ -39,14 +39,19 @@ the element size) and pass by value like other PODs. The fp16 family has closed 
 ``a * b + c`` on ``half4`` yields ``half4``, computed by promoting each lane to ``float``,
 computing, and rounding back — correctly rounded per operation, bit-identical to native fp16
 hardware. Division follows IEEE (``1h / 0h`` is ``inf``; ``NaN != NaN``). ``float16`` literals
-use the ``h`` suffix: ``1.5h``. The integer families are storage + converts only (``byte4 +
-byte4`` is a compile error): widen with the wider ctor (``int4(b4)`` sign-extends,
-``short8(b8)``), narrow with the ctor (C truncation, ``short4(i4)``) or the saturating ``_sat``
-forms (``short4_sat(i4)``, ``byte8_sat(s8)``, clamping to the target range). The fp16 family
-converts to and from float per arity (``half4(f4)`` rounds each lane, ``float4(h4)`` is exact)
-plus ``half8(lo, hi)`` / ``half8_lo`` / ``half8_hi`` packing against two ``float4``.
+use the ``h`` suffix: ``1.5h``. The integer families carry storage, converts, and the integer
+bit surface — but no arithmetic (``byte4 + byte4`` is a compile error): widen with the wider
+ctor (``int4(b4)`` sign-extends, ``short8(b8)``), narrow with the ctor (C truncation,
+``short4(i4)``) or the saturating ``_sat`` forms (``short4_sat(i4)``, ``byte8_sat(s8)``,
+clamping to the target range). The bit surface matches the 32-bit vector families:
+``<< >> & | ^`` and their compound assigns. Shifts take a scalar ``int`` count masked to the
+lane width (``b16 >> 9`` equals ``b16 >> 1``); signed lanes shift right arithmetically,
+unsigned logically; ``<<`` wraps each lane — ``shuffle(lut, nib >> 4)`` is the nibble-unpack
+shape. The fp16 family converts to and from float per arity (``half4(f4)`` rounds each lane,
+``float4(h4)`` is exact) plus ``half8(lo, hi)`` / ``half8_lo`` / ``half8_hi`` packing against
+two ``float4``.
 
-The one exception to storage-only is the 16-lane 8-bit forms, which carry exact integer
+The other exception to storage-only is the 16-lane 8-bit forms, which carry exact integer
 dot-product intrinsics — the hardware dot4 class (NEON ``sdot``/``usdot``, AVX-VNNI
 ``vpdpbusd``): ``idot4(a, b)`` dots ``byte16`` operands in groups of four lanes into ``int4``,
 ``idot4(acc, a, b)`` accumulates, and ``idot(a, b)`` reduces all 16 lanes to one ``int``. The

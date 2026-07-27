@@ -477,6 +477,59 @@ namespace das
         for ( int i = 0; i != 16; ++i ) r.s[i] = lut.s[idx.s[i] & 15];
         return r;
     }
+    // the integer-lattice bit surface (parity with the 32-bit vector families): per-lane
+    // shifts by a scalar count masked to the LANE width (the scalar &31 rule at lane size;
+    // signed >> is arithmetic, unsigned logical; << wraps lanes like the C cast), and the
+    // lane-agnostic bitwise & | ^. Names carry the template args so AOT emits verbatim.
+    template <typename VT, typename ET>
+    __forceinline VT das_sv_shr ( VT v, int32_t count ) {
+        constexpr int bits = int(sizeof(ET) * 8);
+        const int s = count & (bits - 1);
+        constexpr int n = int(sizeof(VT) / sizeof(ET));
+        ET * d = (ET *) &v;
+        for ( int i = 0; i != n; ++i ) d[i] = ET(d[i] >> s);
+        return v;
+    }
+    template <typename VT, typename ET>
+    __forceinline VT das_sv_shl ( VT v, int32_t count ) {
+        constexpr int bits = int(sizeof(ET) * 8);
+        const int s = count & (bits - 1);
+        constexpr int n = int(sizeof(VT) / sizeof(ET));
+        ET * d = (ET *) &v;
+        for ( int i = 0; i != n; ++i ) d[i] = ET(uint32_t(d[i]) << s);
+        return v;
+    }
+    template <typename VT, typename ET>
+    __forceinline void das_sv_set_shr ( VT & v, int32_t count ) { v = das_sv_shr<VT,ET>(v, count); }
+    template <typename VT, typename ET>
+    __forceinline void das_sv_set_shl ( VT & v, int32_t count ) { v = das_sv_shl<VT,ET>(v, count); }
+    template <typename VT>
+    __forceinline VT das_sv_and ( VT a, VT b ) {
+        uint8_t * pa = (uint8_t *) &a;
+        const uint8_t * pb = (const uint8_t *) &b;
+        for ( int i = 0; i != int(sizeof(VT)); ++i ) pa[i] &= pb[i];
+        return a;
+    }
+    template <typename VT>
+    __forceinline VT das_sv_or ( VT a, VT b ) {
+        uint8_t * pa = (uint8_t *) &a;
+        const uint8_t * pb = (const uint8_t *) &b;
+        for ( int i = 0; i != int(sizeof(VT)); ++i ) pa[i] |= pb[i];
+        return a;
+    }
+    template <typename VT>
+    __forceinline VT das_sv_xor ( VT a, VT b ) {
+        uint8_t * pa = (uint8_t *) &a;
+        const uint8_t * pb = (const uint8_t *) &b;
+        for ( int i = 0; i != int(sizeof(VT)); ++i ) pa[i] ^= pb[i];
+        return a;
+    }
+    template <typename VT>
+    __forceinline void das_sv_set_and ( VT & a, VT b ) { a = das_sv_and(a, b); }
+    template <typename VT>
+    __forceinline void das_sv_set_or ( VT & a, VT b ) { a = das_sv_or(a, b); }
+    template <typename VT>
+    __forceinline void das_sv_set_xor ( VT & a, VT b ) { a = das_sv_xor(a, b); }
 
     template <typename TO, typename TOE, typename FROM, typename FE>
     __forceinline TO das_sv_cvt_sat ( FROM v ) {

@@ -544,6 +544,40 @@ ADD_SVEC_SPLAT(VTYPE,ETYPE,uint32_t) ADD_SVEC_CTOR_##N(VTYPE,ETYPE,uint32_t)
         addExtern<DAS_BIND_FUN(das_idot_ss)>(*this, lib, "idot", SideEffects::none, "das_idot_ss")->args({"a","b"});
         addExtern<DAS_BIND_FUN(das_idot_us)>(*this, lib, "idot", SideEffects::none, "das_idot_us")->args({"a","b"});
         addExtern<DAS_BIND_FUN(das_shuffle_b16)>(*this, lib, "shuffle", SideEffects::none, "das_shuffle_b16")->args({"lut","idx"});
+        // the integer-lattice bit surface, parity with addFunctionVecBit on the 32-bit vector
+        // families: per-lane <<//>> by a scalar count (masked to lane width; signed >> is
+        // arithmetic), bitwise & | ^, and the five compound assigns — the JIT overrides all
+        // of them with native vector IR
+#define ADD_SVEC_BITOPS(VTYPE,ETYPE) \
+    addExtern<DAS_BIND_FUN((das_sv_shr<VTYPE,ETYPE>))>(*this, lib, ">>", SideEffects::none, "das_sv_shr<" #VTYPE "," #ETYPE ">")->args({"v","count"}); \
+    addExtern<DAS_BIND_FUN((das_sv_shl<VTYPE,ETYPE>))>(*this, lib, "<<", SideEffects::none, "das_sv_shl<" #VTYPE "," #ETYPE ">")->args({"v","count"}); \
+    addExtern<DAS_BIND_FUN((das_sv_set_shr<VTYPE,ETYPE>))>(*this, lib, ">>=", SideEffects::modifyArgument, "das_sv_set_shr<" #VTYPE "," #ETYPE ">")->args({"v","count"}); \
+    addExtern<DAS_BIND_FUN((das_sv_set_shl<VTYPE,ETYPE>))>(*this, lib, "<<=", SideEffects::modifyArgument, "das_sv_set_shl<" #VTYPE "," #ETYPE ">")->args({"v","count"}); \
+    addExtern<DAS_BIND_FUN((das_sv_and<VTYPE>))>(*this, lib, "&", SideEffects::none, "das_sv_and<" #VTYPE ">")->args({"a","b"}); \
+    addExtern<DAS_BIND_FUN((das_sv_or<VTYPE>))>(*this, lib, "|", SideEffects::none, "das_sv_or<" #VTYPE ">")->args({"a","b"}); \
+    addExtern<DAS_BIND_FUN((das_sv_xor<VTYPE>))>(*this, lib, "^", SideEffects::none, "das_sv_xor<" #VTYPE ">")->args({"a","b"}); \
+    addExtern<DAS_BIND_FUN((das_sv_set_and<VTYPE>))>(*this, lib, "&=", SideEffects::modifyArgument, "das_sv_set_and<" #VTYPE ">")->args({"a","b"}); \
+    addExtern<DAS_BIND_FUN((das_sv_set_or<VTYPE>))>(*this, lib, "|=", SideEffects::modifyArgument, "das_sv_set_or<" #VTYPE ">")->args({"a","b"}); \
+    addExtern<DAS_BIND_FUN((das_sv_set_xor<VTYPE>))>(*this, lib, "^=", SideEffects::modifyArgument, "das_sv_set_xor<" #VTYPE ">")->args({"a","b"});
+        ADD_SVEC_BITOPS(byte2, int8_t);
+        ADD_SVEC_BITOPS(byte3, int8_t);
+        ADD_SVEC_BITOPS(byte4, int8_t);
+        ADD_SVEC_BITOPS(byte8, int8_t);
+        ADD_SVEC_BITOPS(byte16, int8_t);
+        ADD_SVEC_BITOPS(ubyte2, uint8_t);
+        ADD_SVEC_BITOPS(ubyte3, uint8_t);
+        ADD_SVEC_BITOPS(ubyte4, uint8_t);
+        ADD_SVEC_BITOPS(ubyte8, uint8_t);
+        ADD_SVEC_BITOPS(ubyte16, uint8_t);
+        ADD_SVEC_BITOPS(short2, int16_t);
+        ADD_SVEC_BITOPS(short3, int16_t);
+        ADD_SVEC_BITOPS(short4, int16_t);
+        ADD_SVEC_BITOPS(short8, int16_t);
+        ADD_SVEC_BITOPS(ushort2, uint16_t);
+        ADD_SVEC_BITOPS(ushort3, uint16_t);
+        ADD_SVEC_BITOPS(ushort4, uint16_t);
+        ADD_SVEC_BITOPS(ushort8, uint16_t);
+#undef ADD_SVEC_BITOPS
 #undef ADD_SVEC_CVT
 #undef ADD_SVEC_CVT_SAT
     }

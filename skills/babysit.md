@@ -58,6 +58,7 @@ If a check goes red:
 1. Identify the failing job: `gh pr checks <PR>` shows the URL; `gh run view <runID> --log-failed` fetches the log.
 2. Apply the same fix policy as Step 2 in `skills/make_pr.md`: own change → fix it; obvious pre-existing → fix it; non-obvious pre-existing → ask the user.
 3. After the fix, reproduce the failing lane locally when practical and run focused gates for the affected surface. Do not repeat the full preflight; CI is the authoritative complete rerun for the new tip.
+   Distinguish a real red from an infra one first: a runner "shutdown signal" / "operation was canceled" with **no `error:` line** in the build log is a canceled/reclaimed runner, not your code — a fresh push's CI run supersedes it.
 4. Push the fix. CI re-runs automatically. The push invalidates Copilot-dry state, so go **back into the Copilot loop** (Section 1), re-request Copilot on the fix commit, and don't merge until Copilot is dry again and CI is green. There are no exceptions for trivial or CI-only fixes.
 
 ## 3. Triaging review comments — discuss BEFORE acting
