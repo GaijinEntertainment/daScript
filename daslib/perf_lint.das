@@ -177,6 +177,47 @@ def private is_alloc_builtin(n : string) : bool {
     return n == "clone_string"
 }
 
+// Container ops whose destination may be a reused buffer. Matched on the ORIGIN name so every
+// generic instance of push/resize/... resolves to the surface spelling the author wrote.
+def private is_container_sizing(n : string) : bool {
+    return (n == "resize" || n == "resize_no_init" || n == "reserve" || n == "clear"
+            || n == "push" || n == "push_clone" || n == "emplace" || n == "push_from"
+            || n == "push_clone_from" || n == "insert" || n == "erase")
+}
+
+// True when `expr` reaches a struct field marked @scratch — walking through indexing and deref,
+// so `p.kblobs[b]` counts by virtue of kblobs. Sizing such a buffer to the step's geometry is the
+// engine's own allocation strategy, declared once at the field, not an accident at each call site.
+def private is_scratch_dest(var expr : Expression?) : bool {
+    return false if (expr == null)
+    if (expr is ExprField) {
+        var f = expr as ExprField
+        var fd = f.field
+        if (fd != null) {
+            for (a in fd.annotation) {
+                if (a.name == "scratch") return true
+            }
+        }
+        return is_scratch_dest(f.value)
+    }
+    if (expr is ExprRef2Value) return is_scratch_dest((expr as ExprRef2Value.subexpr))
+    if (expr is ExprAt) return is_scratch_dest((expr as ExprAt.subexpr))
+    if (expr is ExprSafeAt) return is_scratch_dest((expr as ExprSafeAt.subexpr))
+    if (expr is ExprCast) return is_scratch_dest((expr as ExprCast.subexpr))
+    return false
+}
+
+// A helper sizing a caller's reused buffer marks the PARAMETER: the destination arrives by ref.
+def private takes_scratch_arg(fn : Function?) : bool {
+    return false if (fn == null)
+    for (arg in fn.arguments) {
+        for (a in arg.annotation) {
+            if (a.name == "scratch") return true
+        }
+    }
+    return false
+}
+
 def private is_env_builtin(n : string) : bool {
     return n == "get_env_variable" || n == "has_env_variable" || n == "set_env_variable"
 }
@@ -234,6 +275,14 @@ class HotBodyScan : AstVisitor {
             return
         }
         return if (panic_depth > 0)
+        // sizing a @scratch buffer is declared intent — at the field, or on the parameter of a
+        // helper that sizes one by reference for its caller (the call site cannot see that)
+        let origin = string(expr.func.fromGeneric != null ? expr.func.fromGeneric.name : expr.func.name)
+        if (!empty(expr.arguments)
+            && ((is_container_sizing(origin) && is_scratch_dest(expr.arguments[0]))
+                || takes_scratch_arg(expr.func))) {
+            return
+        }
         if (is_env_builtin(n)) {
             add_sink(HotBits.env, "{n}()", expr)
         } elif (is_io_builtin(n)) {
@@ -2056,8 +2105,9 @@ class PerfLintVisitor : AstVisitor {
         }
         delete parts
         let esc = "[cold_path] on the callee, // nolint on the line, or DAS_LINT_DISABLE for a whole run"
+        let esc_alloc = "@scratch on the destination field if it is a reused buffer, {esc}"
         if (sink.bit.alloc) {
-            perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc}", at)
+            perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc_alloc}", at)
         } elif (sink.bit.env) {
             perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}{sink_pos}; getenv allocates a string in the context heap on every call — read it once at init and cache the value. To allow it: {esc}", at)
         } else {

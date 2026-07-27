@@ -1493,7 +1493,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
 //! mtp_spec_eval's GPU twin: draft + B=2 same-slab verify, wholly on the metal decode path.
 //! Cold/decline paths fall back to one plain (GPU) forward — output-invariant either way.
 //! Reject is ~free: row0 IS the truth decode, the dn shadow region flips in — no re-forward.
-[no_env, no_io]
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
     let pos = s.n_past
@@ -2031,7 +2031,7 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
 //! The DecodeOverrideFn: runs one token step's whole llama layer stack GPU-resident against the
 //! session's KV mirror. true = done (KV row stored CPU-side too, s.x = final residual, s.logits
 //! when the GPU classifier gates pass); false = declined, the caller runs the CPU layer loop.
-[no_env, no_io]
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool {
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
@@ -2222,7 +2222,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
-[no_env, no_io]
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
         discard_pre()

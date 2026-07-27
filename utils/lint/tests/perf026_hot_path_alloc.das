@@ -15,8 +15,9 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 //   }
 //
 // Good pattern:
-//   size the buffer once at setup, or put the one-time growth behind a
-//   [cold_path] helper so the contract scan stops there.
+//   size the buffer once at setup; declare a reused buffer @scratch at its
+//   field (or at the parameter of a helper that sizes one by reference); or
+//   put a genuinely one-time growth behind a [cold_path] helper.
 //
 // The rule is annotation-gated: nothing is checked until a function carries
 // [hot_path] (all three contracts) or the narrow [no_alloc] / [no_env] /
@@ -24,12 +25,20 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:4
+expect 31208:5
 
 require daslib/perf_lint
 
 struct Blob {
     v : int
+}
+
+// A reused buffer says so once, at the declaration. Sizing it to the current step's geometry is
+// the owner's allocation strategy, not an accident at each call site — and unlike a nolint per
+// line, the statement survives the code moving.
+struct Scratch {
+    @scratch reused : array<float>
+    fresh : array<float>
 }
 
 // 1. allocation written directly in the annotated function
@@ -71,7 +80,25 @@ def good_unannotated(var a : array<int>) {
     a |> push(3)
 }
 
-// 6. new and delete are heap traffic too
+// 6. a @scratch destination is declared intent and stays silent; its unmarked neighbour does not
+[no_alloc]
+def bad_only_the_unmarked_buffer(var sc : Scratch; n : int) {
+    sc.reused |> resize(n)
+    sc.fresh |> resize(n)
+}
+
+// 7. a helper that sizes a caller's buffer BY REFERENCE marks the parameter — the call site
+//    cannot see which field arrived
+def ensure_room(@scratch var a : array<float>; n : int) {
+    a |> resize(n)
+}
+
+[no_alloc]
+def good_scratch_helper(var sc : Scratch; n : int) {
+    ensure_room(sc.reused, n)
+}
+
+// 8. new and delete are heap traffic too
 [no_alloc]
 def bad_new_delete() : int {
     var p = new Blob(v = 7)

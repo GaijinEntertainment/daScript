@@ -5738,7 +5738,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     return metal_prefill_init()
 }
 
-[no_env, no_io]
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
     pf_weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
