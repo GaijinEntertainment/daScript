@@ -597,10 +597,12 @@ still checked.
 LINT017 — 64-bit cast of a call that has a ``long_`` counterpart
 =================================================================
 
-``int64(length(x))`` computes the 32-bit length first and only then widens it,
-so the wrap past 2\ :sup:`31` has already happened by the time the cast runs.
-The cast looks like it buys 64-bit range and buys nothing. Call the ``long_``
-form, which is 64-bit the whole way through.
+``int64(length(x))`` widens a result that is already 32-bit, so the
+2\ :sup:`31` limit is reached inside ``length`` before the cast ever runs — as
+a silent wrap for the unguarded pairs, or as a panic for array, table and
+string length, which carry an always-on guard. Either way the cast looks like
+it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
+64-bit the whole way through.
 
 .. code-block:: das
 

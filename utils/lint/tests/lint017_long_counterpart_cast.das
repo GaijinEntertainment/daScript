@@ -2,9 +2,11 @@ options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT017: int64/uint64 cast of a call that has a long_ counterpart
 //
-// Problem: int64(length(x)) computes the 32-bit length FIRST and only then widens
-// it, so it still wraps past 2^31 — the cast buys nothing. long_length(x) is
-// 64-bit the whole way through.
+// Problem: int64(length(x)) widens a result that is already 32-bit, so the 2^31
+// limit is hit inside length() before the cast ever runs — as a wrap for the
+// unguarded pairs, or as a panic for array/table/string length, which carry an
+// always-on guard. Either way the cast buys nothing; long_length(x) is 64-bit
+// the whole way through.
 //
 // Bad pattern:
 //   let n = int64(length(arr))

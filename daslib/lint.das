@@ -416,7 +416,7 @@ class LintVisitor : AstVisitor {
             : icall.name)
         let twin = lint017_long_twin(iname, icall)
         if (empty(twin)) return
-        lint_error("LINT017: {expr.name}({iname}(...)) computes a 32-bit result and widens it, so it still wraps past 2^31; call {twin}(...) instead", expr.at)
+        lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at)
     }
 
     // --- LINT018: narrowing the size argument of memcpy / memcmp ---
