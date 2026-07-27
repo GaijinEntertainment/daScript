@@ -1143,7 +1143,7 @@ def private gemma2_window_row(t : T?; path : string) {
         trg.config.sliding_window = 160l   // the twin must ride the same shrunk window
         let prompt <- encode(tr, counting_prompt(1, 120), true, false)
         t |> success(long_length(prompt) > 224l,
-            "gemma2-2b/window: prompt depth {length(prompt)} crosses chunk 224")
+            "gemma2-2b/window: prompt depth {long_length(prompt)} crosses chunk 224")
         var cpu_ids : array<int64>
         var gpu_ids : array<int64>
         var served_de = 0l

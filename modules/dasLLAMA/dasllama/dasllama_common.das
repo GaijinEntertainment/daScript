@@ -3531,7 +3531,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (gguf_is_array(m, "{arch}.feed_forward_length")) {
             t.ffn_w <- gguf_int_array(m, bytes, "{arch}.feed_forward_length")
             if (long_length(t.ffn_w) != layers) {
-                panic("dasLLAMA: feed_forward_length array has {length(t.ffn_w)} entries, expected {layers}")
+                panic("dasLLAMA: feed_forward_length array has {long_length(t.ffn_w)} entries, expected {layers}")
             }
             for (w in t.ffn_w) { hidden = max(hidden, w) }
         } elif (gguf_has(m, "{arch}.feed_forward_length")) {
@@ -3595,7 +3595,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_is_array(m, "{arch}.attention.recurrent_layers")) {
                 let rl <- gguf_int_array(m, bytes, "{arch}.attention.recurrent_layers")
                 if (long_length(rl) != layers) {
-                    panic("dasLLAMA: recurrent_layers array has {length(rl)} entries, expected {layers}")
+                    panic("dasLLAMA: recurrent_layers array has {long_length(rl)} entries, expected {layers}")
                 }
                 for (l in range64(layers)) {
                     if (rl[l] != 0l) {
@@ -4839,7 +4839,7 @@ def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = 
 def make_run_state_paged(c : Config; var pool : KVPool) : Session {
     let kv_layers = c.n_layers + c.n_layer_nextn   // + the MTP/NextN draft block's slab
     if (long_length(pool.blob_of) != kv_layers) {
-        panic("make_run_state_paged: pool was built for a different model ({length(pool.blob_of)} layers vs {kv_layers})")
+        panic("make_run_state_paged: pool was built for a different model ({long_length(pool.blob_of)} layers vs {kv_layers})")
     }
     for (l in range64(kv_layers)) {
         if (pool.krow_bytes[pool.blob_of[l]] != kv_row_bytes(pool.kdt, layer_kv_dim(c, l))) {
@@ -12270,7 +12270,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
     if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
@@ -12716,7 +12716,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         return
     }
     if (long_length(tokens) != nrows) {
-        panic("eval_batch: {length(sessions)} sessions but {length(tokens)} tokens — one token per session")
+        panic("eval_batch: {long_length(sessions)} sessions but {long_length(tokens)} tokens — one token per session")
     }
     for (i in range64(nrows)) {
         if (sessions[i] == null) {

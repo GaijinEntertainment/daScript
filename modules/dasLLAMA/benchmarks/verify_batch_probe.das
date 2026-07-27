@@ -123,7 +123,7 @@ def main() {
         }
         let need = plen + WARM_STEPS * 8l + want + 16l
         if (long_length(ids) < need) {
-            print("error: corpus tokenizes to {length(ids)} ids, need {need} — pass a longer --prompts\n")
+            print("error: corpus tokenizes to {long_length(ids)} ids, need {need} — pass a longer --prompts\n")
             delete ids
             delete t
             return

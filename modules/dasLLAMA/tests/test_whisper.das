@@ -668,7 +668,7 @@ def test_gemma4a_audio_oracle(t : T?) {
                             236745, 1164, 4668, 1995, 532, 19764, 236761, 1174, 563, 506,
                             3479, 1056, 27069, 236789, 236751, 24625, 9156, 5452, 3645, 236772]
             t |> success(long_length(segs[0].tokens) >= long_length(expected),
-                "emitted at least {length(expected)} tokens ({length(segs[0].tokens)})")
+                "emitted at least {long_length(expected)} tokens ({long_length(segs[0].tokens)})")
             var mismatches = 0
             for (i in range(min(length(expected), length(segs[0].tokens)))) {
                 if (segs[0].tokens[i] != expected[i]) {

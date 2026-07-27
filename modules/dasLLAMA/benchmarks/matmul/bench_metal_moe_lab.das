@@ -525,7 +525,7 @@ def private want(filter_env, name : string) : bool {
 def private upload_bytes(dev; arr : array<uint8>) {
     var buf = metal_new_buffer_untracked(dev, uint64(long_length(arr)))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), length(arr))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), long_length(arr))
     }
     return buf
 }
