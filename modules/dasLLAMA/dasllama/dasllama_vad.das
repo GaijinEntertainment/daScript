@@ -174,7 +174,7 @@ def load_vad_model(path : string) : VadModel {
 // ===== forward =====
 
 def private sv_ensure(var a : array<float>; n : int64) {
-    if (int64(length(a)) != n) {
+    if (long_length(a) != n) {
         a |> resize(int(n))
     }
 }
@@ -281,7 +281,7 @@ def vad_probs(m : VadModel; samples : array<float> | #) : array<float> {
     var out : array<float>
     var chunk : array<float>
     chunk |> resize(int(SV_CHUNK))
-    let n = int64(length(samples))
+    let n = long_length(samples)
     var start = 0l
     while (start < n) {
         for (i in range64(SV_CHUNK)) {
@@ -329,7 +329,7 @@ def find_speech_timestamps(m : VadModel; samples : array<float> | #; opts : VadO
     let min_speech = sr * int64(opts.min_speech_ms) / 1000l
     let min_silence = sr * int64(opts.min_silence_ms) / 1000l
     let speech_pad = sr * int64(opts.speech_pad_ms) / 1000l
-    let audio_len = int64(length(samples))
+    let audio_len = long_length(samples)
 
     var segs : array<SpeechSegment>
     var triggered = false
@@ -436,7 +436,7 @@ def vad_iter_feed(m : VadModel; var it : VadIter; samples : array<float> | #;
     let speech_pad = sr * int64(it.opts.speech_pad_ms) / 1000l
     it.pending |> push_from(samples)
     var consumed = 0l
-    let total = int64(length(it.pending))
+    let total = long_length(it.pending)
     while (consumed + SV_CHUNK <= total) {
         for (j in range64(SV_CHUNK)) {
             it.chunk[j] = it.pending[consumed + j]

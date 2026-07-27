@@ -328,7 +328,7 @@ def private upload_region(var tab : table<uint64; MetalBuffer?>; src : void?; by
     }
     var buf = metal_new_buffer(g_dev, bytes)
     unsafe {
-        memcpy(metal_buffer_contents(buf), src, int(bytes))
+        memcpy(metal_buffer_contents(buf), src, bytes)
     }
     tab[key] = buf
     return buf
@@ -361,10 +361,10 @@ def metal_q8q8_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp :
     var ybuf = pool_acquire(g_pool, g_dev, uint64(mp * d * 4l))
     unsafe {
         var pq = reinterpret<uint8?>(metal_buffer_contents(xqbuf))
-        memcpy(reinterpret<void?>(pq), reinterpret<void?>(xqp), int(ntok * n))
+        memcpy(reinterpret<void?>(pq), reinterpret<void?>(xqp), ntok * n)
         memset8(reinterpret<void?>(pq + ntok * n), uint8(0), int((mp - ntok) * n))
         var ps = reinterpret<uint8?>(metal_buffer_contents(xsbuf))
-        memcpy(reinterpret<void?>(ps), reinterpret<void?>(xsp), int(ntok * nb * 4l))
+        memcpy(reinterpret<void?>(ps), reinterpret<void?>(xsp), ntok * nb * 4l)
         memset8(reinterpret<void?>(ps + ntok * nb * 4l), uint8(0), int((mp - ntok) * nb * 4l))
     }
     var kdimbuf = uniform_u32(uint(n))
@@ -386,7 +386,7 @@ def metal_q8q8_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp :
     }
     if (ran) {
         unsafe {
-            memcpy(reinterpret<void?>(yp), metal_buffer_contents(ybuf), int(ntok * d * 4l))
+            memcpy(reinterpret<void?>(yp), metal_buffer_contents(ybuf), ntok * d * 4l)
         }
         g_dispatches++
     } else {

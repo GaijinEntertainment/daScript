@@ -4548,14 +4548,14 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, int(bytes))
+        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
         // x is the residual stream: read the updated row back too
         var raw2 = alloc_cmd()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         cmd_copy_whole(raw2, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw2), null)
         submit_wait(raw2)
-        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, int(bytes))
+        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
     }
 }
 
@@ -4720,7 +4720,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, int(qd * 4l))
+        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
     }
 }
 
@@ -4746,7 +4746,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         mp[6] = uint(npairs)
         mp[7] = uint(pos * kv_dim)   // K mirror row offset (f32 elements)
         mp[8] = uint(pos * kv_dim)   // V mirror row offset
-        memcpy(g_gpu.rks_scal.mapped, addr<void? -const>(cossin[0]), int(head_size * 4l))   // cos[half] + sin[half]
+        memcpy(g_gpu.rks_scal.mapped, addr<void? -const>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q enters the kernel via vk_y (binding 5) = rks_q_dev — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
@@ -4761,9 +4761,9 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, int(qd * 4l))
-        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, int(kv_dim * 4l))
-        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, int(kv_dim * 4l))
+        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
+        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
+        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
     }
 }
 
@@ -4936,7 +4936,7 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
 //! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
 def vk_rdec_upload_norms(norms : array<float>) {
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
-    upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), int64(length(norms)) * 4l)
+    upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), long_length(norms) * 4l)
     // norms are the last upload of the resident arm sequence — report the accumulated cost
     if (g_vk_upload_us > 0l) {
         let gbps = double(g_vk_upload_bytes) / (double(g_vk_upload_us) * 1000.0lf)
@@ -4949,7 +4949,7 @@ def vk_rdec_upload_norms(norms : array<float>) {
 //! (or rms_final for the last layer) offsets in the norms buffer (dim-element units).
 def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {
     assert(g_rd != null, "vk_rdec_set_layer before prepare")
-    while (int64(length(g_rd.layers)) <= l) {
+    while (long_length(g_rd.layers) <= l) {
         g_rd.layers |> emplace(RLayer())
     }
     unsafe {
@@ -5633,8 +5633,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     }
     let kvd = g_rd.kv_dim
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void? -const>(x[0]), int(g_rd.dim * 4l))
-        memcpy(g_rd.cos_host.mapped, addr<void? -const>(cossin[0]), int(g_rd.head_size * 4l))
+        memcpy(g_rd.x_host.mapped, addr<void? -const>(x[0]), g_rd.dim * 4l)
+        memcpy(g_rd.cos_host.mapped, addr<void? -const>(cossin[0]), g_rd.head_size * 4l)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             var mr = reinterpret<uint?>(L.m_rope.mapped)
@@ -5644,7 +5644,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
             ma[0] = uint(cnt)
         }
         submit_wait(g_rd.cmd)
-        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, int(g_rd.vocab * 4l))
+        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
     }
     if (vk_prof() && g_rdq_n > 2u) {
         rdq_sample()
@@ -5811,8 +5811,8 @@ def vk_rdec_read_kv_bulk(l : int64; kp : float?; vp : float?; npos : int64) {
             cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
             vk_check(vkEndCommandBuffer(raw), null)
             submit_wait(raw)
-            memcpy(reinterpret<void?>(kp + p0 * kvd), g_rd.kv_readback.mapped, int(bytes))
-            memcpy(reinterpret<void?>(vp + p0 * kvd), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, int(bytes))
+            memcpy(reinterpret<void?>(kp + p0 * kvd), g_rd.kv_readback.mapped, bytes)
+            memcpy(reinterpret<void?>(vp + p0 * kvd), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
         }
         p0 += rows
     }
@@ -5834,8 +5834,8 @@ def vk_rdec_read_kv(l, pos : int64; kp : float?; vp : float?) {
         cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, kvd * 4l, kvd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(reinterpret<void?>(kp), g_rd.kv_readback.mapped, int(kvd * 4l))
-        memcpy(reinterpret<void?>(vp), reinterpret<float?>(g_rd.kv_readback.mapped) + kvd, int(kvd * 4l))
+        memcpy(reinterpret<void?>(kp), g_rd.kv_readback.mapped, kvd * 4l)
+        memcpy(reinterpret<void?>(vp), reinterpret<float?>(g_rd.kv_readback.mapped) + kvd, kvd * 4l)
         free_transient_cmd(raw)
     }
 }
@@ -5973,7 +5973,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             }
             w0 += wlen
         }
-        memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, int(g_rd.vocab * 4l))
+        memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
         // per-role GPU aggregation (q0 start, q1 meta, q2 prologue, rpl/layer, final rq, cls), only when
         // every stamp landed (deep graphs overflow PFQ_CAP). Multi-window prompts: LAST window only.
         // Overlapped levels (q|k|v, gate|up) put the whole level's cost on the LAST member's delta.
@@ -6017,8 +6017,8 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     fill_af_meta(g_gpu.af_meta_d, nfe, n, blk2)
     fill_ffn_meta(nfe, nfe / (dkq ? 256l : 32l), is_gelu)
     unsafe {
-        memcpy(g_gpu.af_xq.mapped, addr<void? -const>(xq[0]), int(n))
-        memcpy(g_gpu.af_xs.mapped, addr<void? -const>(xs[0]), int((n / xunit) * 4l))
+        memcpy(g_gpu.af_xq.mapped, addr<void? -const>(xq[0]), n)
+        memcpy(g_gpu.af_xs.mapped, addr<void? -const>(xs[0]), (n / xunit) * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -6036,7 +6036,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(addr<void?>(y[0]), g_gpu.af_yo_host.mapped, int(n * 4l))
+        memcpy(addr<void?>(y[0]), g_gpu.af_yo_host.mapped, n * 4l)
     }
 }
 
@@ -6107,7 +6107,7 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(addr<void?>(y[0]), g_gpu.batch_y1.mapped, int(npos * d * 4l))
+        memcpy(addr<void?>(y[0]), g_gpu.batch_y1.mapped, npos * d * 4l)
     }
 }
 
@@ -6132,8 +6132,8 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         mp[3] = 0u          // y base row
         mp[4] = uint(blk)   // THE arena base — a stack-relative offset in the per-op tier
         mp[5] = 0u          // activation block base
-        memcpy(a.xq.mapped, reinterpret<void? -const>(xqp), int(n))   // one int8 quant per weight
-        memcpy(a.xs.mapped, reinterpret<void? -const>(xsp), int(nb * 4l))
+        memcpy(a.xq.mapped, reinterpret<void? -const>(xqp), n)   // one int8 quant per weight
+        memcpy(a.xs.mapped, reinterpret<void? -const>(xsp), nb * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -6143,7 +6143,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(reinterpret<void?>(yp), a.y.mapped, int(d * 4l))
+        memcpy(reinterpret<void?>(yp), a.y.mapped, d * 4l)
     }
 }
 
@@ -6291,8 +6291,8 @@ def private fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_
     assert(xq_bytes <= XQ_BYTES, "dasLLAMA vulkan tier: dispatch exceeds scratch capacity")
     let unit = g_gpu.stacks[si].fmt != 0 ? 256l : 32l
     unsafe {
-        memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void? -const>(xqp), int(xq_bytes))
-        memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void? -const>(xsp), int((xq_bytes / unit) * 4l))
+        memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void? -const>(xqp), xq_bytes)
+        memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void? -const>(xsp), (xq_bytes / unit) * 4l)
     }
 }
 
@@ -6424,7 +6424,7 @@ let private PAR_COPY_CHUNK = 2_097_152l
 def private par_memcpy(dst : void?; src : void?; bytes : int64) {
     if (bytes < PAR_COPY_CHUNK * 2l || !is_job_que_available()) {
         unsafe {
-            memcpy(dst, src, int(bytes))
+            memcpy(dst, src, bytes)
         }
         return
     }
@@ -6435,7 +6435,7 @@ def private par_memcpy(dst : void?; src : void?; bytes : int64) {
         unsafe {
             for (c in range(cb, ce)) {
                 let off = int64(c) * PAR_COPY_CHUNK
-                memcpy(reinterpret<void?>(d8 + off), reinterpret<void?>(s8 + off), int(min(PAR_COPY_CHUNK, bytes - off)))
+                memcpy(reinterpret<void?>(d8 + off), reinterpret<void?>(s8 + off), min(PAR_COPY_CHUNK, bytes - off))
             }
         }
     }
@@ -6892,12 +6892,12 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
         sp[1] = 1.0 / sqrt(float(ds))
-        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), int(cd * dconv * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), int(ds * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), int(nvh * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), int(nvh * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), int(cd * taps * 4l))
-        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), int(nvh * ds * ds * 4l))
+        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), cd * dconv * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), ds * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), cd * taps * 4l)
+        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), nvh * ds * ds * 4l)
     }
     var qkv_region = fixed_array(woq, 0l, 0l)
     var z_region = fixed_array(woz, 0l, 0l)
@@ -6940,7 +6940,7 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
     }
     unsafe {
         par_memcpy(reinterpret<void?>(stp), g_gpu.dn_state_host.mapped, nvh * ds * ds * 4l)
-        memcpy(reinterpret<void?>(tailp), g_gpu.dn_tail_host.mapped, int(taps * cd * 4l))
+        memcpy(reinterpret<void?>(tailp), g_gpu.dn_tail_host.mapped, taps * cd * 4l)
     }
 }
 
@@ -7070,12 +7070,12 @@ def private dnd_cold_upload(st : DnStep; stp : float const?; histp : float const
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
         sp[1] = 1.0 / sqrt(float(ds))
-        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), int(cd * dconv * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), int(ds * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), int(nvh * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), int(nvh * 4l))
-        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), int(cd * taps * 4l))
-        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), int(st.state_bytes))
+        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void? -const>(convw), cd * dconv * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void? -const>(wnormp), ds * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void? -const>(ap), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void? -const>(dtp), nvh * 4l)
+        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void? -const>(histp), cd * taps * 4l)
+        memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void? -const>(stp), st.state_bytes)
     }
     let raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
@@ -7112,15 +7112,15 @@ def private vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo
     fill_stack_acts(s_qkv, xqp, xsp, dim)   // the z GEMV set shares this image
     unsafe {
         var bg = reinterpret<float?>(g_gpu.dnd_bg.mapped)
-        memcpy(reinterpret<void?>(bg), reinterpret<void? -const>(bp), int(nvh * 4l))
-        memcpy(reinterpret<void?>(bg + nvh), reinterpret<void? -const>(gp), int(nvh * 4l))
+        memcpy(reinterpret<void?>(bg), reinterpret<void? -const>(bp), nvh * 4l)
+        memcpy(reinterpret<void?>(bg + nvh), reinterpret<void? -const>(gp), nvh * 4l)
         bg[2l * nvh] = float(st.parity)
     }
     let ts1 = ref_time_ticks()
     submit_wait(st.cmd)
     let ts2 = ref_time_ticks()
     unsafe {
-        memcpy(reinterpret<void?>(yp), g_gpu.stacks[s_o].y.mapped, int(dim * 4l))
+        memcpy(reinterpret<void?>(yp), g_gpu.stacks[s_o].y.mapped, dim * 4l)
     }
     st.parity = 1 - st.parity   // the step wrote the other image; it now holds current history
     st.valid = true
@@ -7155,8 +7155,8 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(g_gpu.batch_cmd)
         unsafe {
-            memcpy(reinterpret<void?>(stp), g_gpu.dn_state_host.mapped, int(st.state_bytes))
-            memcpy(reinterpret<void?>(histp), g_gpu.dn_tail_host.mapped, int(st.ring_bytes))
+            memcpy(reinterpret<void?>(stp), g_gpu.dn_state_host.mapped, st.state_bytes)
+            memcpy(reinterpret<void?>(histp), g_gpu.dn_tail_host.mapped, st.ring_bytes)
         }
     }
     st.dirty = false
@@ -7352,8 +7352,8 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         sp[0] = eps
         sp[1] = scale
         if (qknorm) {
-            memcpy(reinterpret<void?>(sp + AT_SM_RMSQ), reinterpret<void? -const>(rmsqp), int(hs * 4l))
-            memcpy(reinterpret<void?>(sp + AT_SM_RMSK), reinterpret<void? -const>(rmskp), int(hs * 4l))
+            memcpy(reinterpret<void?>(sp + AT_SM_RMSQ), reinterpret<void? -const>(rmsqp), hs * 4l)
+            memcpy(reinterpret<void?>(sp + AT_SM_RMSK), reinterpret<void? -const>(rmskp), hs * 4l)
         }
     }
     var q_region = fixed_array(woq, 0l, 0l)
@@ -7506,7 +7506,7 @@ def private vk_moe_ffn_gemv(var goutp : float?; offs1 : int64 const?; offs3 : in
     var pc = ffn_gemv_prep(offs1, offs3, offs2, nregions, xqp, xsp, n, nfe, nrows, f1, f3, f2, is_gelu)
     submit_wait(pc.cmd)
     unsafe {
-        memcpy(reinterpret<void?>(goutp), g_gpu.stacks[pc.s2].y.mapped, int(nrows * n * 4l))
+        memcpy(reinterpret<void?>(goutp), g_gpu.stacks[pc.s2].y.mapped, nrows * n * 4l)
     }
 }
 
@@ -7525,7 +7525,7 @@ def vk_moe_ffn_join(var goutp : float?) {
     assert(g_gpu.ffn_pend_s2 >= 0, "dasLLAMA vulkan tier: async FFN join with nothing in flight")
     wait_fence()
     unsafe {
-        memcpy(reinterpret<void?>(goutp), g_gpu.stacks[g_gpu.ffn_pend_s2].y.mapped, int(g_gpu.ffn_pend_bytes))
+        memcpy(reinterpret<void?>(goutp), g_gpu.stacks[g_gpu.ffn_pend_s2].y.mapped, g_gpu.ffn_pend_bytes)
     }
     g_gpu.ffn_pend_s2 = -1
 }
@@ -7599,9 +7599,9 @@ def vk_moe_qkv(var yq : float?; var yk : float?; var yv : float?; woq, wok, wov 
     submit_wait(qc.cmd)
     unsafe {
         let yp = reinterpret<float?>(g_gpu.stacks[sq].y.mapped)
-        memcpy(reinterpret<void?>(yq), reinterpret<void?>(yp), int(dq * 4l))
-        memcpy(reinterpret<void?>(yk), reinterpret<void?>(yp + dq), int(dk * 4l))
-        memcpy(reinterpret<void?>(yv), reinterpret<void?>(yp + dq + dk), int(dv * 4l))
+        memcpy(reinterpret<void?>(yq), reinterpret<void?>(yp), dq * 4l)
+        memcpy(reinterpret<void?>(yk), reinterpret<void?>(yp + dq), dk * 4l)
+        memcpy(reinterpret<void?>(yv), reinterpret<void?>(yp + dq + dk), dv * 4l)
     }
 }
 
@@ -7933,7 +7933,7 @@ def vk_moe_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float con
     fill_stack_acts(si, xqp, xsp, n)
     submit_wait(g_gpu.stacks[si].cls_cmd)
     unsafe {
-        memcpy(reinterpret<void?>(yp), g_gpu.stacks[si].y.mapped, int(d * 4l))
+        memcpy(reinterpret<void?>(yp), g_gpu.stacks[si].y.mapped, d * 4l)
     }
 }
 

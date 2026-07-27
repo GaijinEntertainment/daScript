@@ -394,7 +394,7 @@ def save_image(var t; path : string; tag : string = "") : bool {
         var scalar_blob <- meta->extractData()
         meta_blob |> push_from(scalar_blob)
         let meta_off = cur
-        let meta_bytes = uint64(length(meta_blob))
+        let meta_bytes = uint64(long_length(meta_blob))
         f |> fwrite(meta_blob)
         cur += meta_bytes
         // pad the file itself to a page multiple (the whole-file bytesNoCopy wrap needs it)
@@ -531,7 +531,7 @@ def load_image(path : string; var t; tag : string = "") : bool {
     var meta_blob : array<uint8>
     meta_blob |> resize(int(meta_bytes))
     unsafe {
-        memcpy(addr(meta_blob[0]), reinterpret<void?>(bp + int64(meta_off)), int(meta_bytes))
+        memcpy(addr(meta_blob[0]), reinterpret<void?>(bp + int64(meta_off)), meta_bytes)
     }
     var meta <- new MemSerializer(meta_blob)
     var rarch = Archive(reading = true, stream = meta)

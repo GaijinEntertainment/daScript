@@ -9,9 +9,7 @@ require dasllama/dasllama_par
 require das_accelerate
 require llvm/daslib/f16_cvt
 require math
-require daslib/fio
 require daslib/math_bits
-require daslib/strings_convert
 
 // The "+AMX" tier: Accelerate BLAS (AMX on M1-M3, SME on M4+) serving the FLOAT-plane batch
 // matmuls only. The AMX arc P0 ceilings put the quant crossover out of reach on M1 (dequant tax
@@ -138,7 +136,7 @@ def private accel_bnns_strips(var yp : float?; hwp : uint16 const?; hxp : uint16
 def private accel_bf16_f16_lane(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     let hwp = f16_plane_ptr(wp, d * n)
     let xcnt = ntok * n
-    if (int64(length(g_hx_scratch)) < xcnt) {
+    if (long_length(g_hx_scratch) < xcnt) {
         g_hx_scratch |> resize(int(xcnt))
     }
     unsafe {
@@ -197,7 +195,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     }
     // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
     let total = d * n
-    if (int64(length(g_wf32_scratch)) < total) {
+    if (long_length(g_wf32_scratch) < total) {
         g_wf32_scratch |> resize(int(total))
     }
     unsafe {

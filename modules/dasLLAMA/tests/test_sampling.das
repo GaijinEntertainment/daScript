@@ -62,7 +62,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque()
             var s = create_session(m, KVDtype.f32)   // frozen f32 oracle — the facade default is f16
-            generate(m, s, GEMMA2_PROMPT, SamplingParams(), int64(length(GEMMA2_GEN))) $(id, piece) {
+            generate(m, s, GEMMA2_PROMPT, SamplingParams(), long_length(GEMMA2_GEN)) $(id, piece) {
                 got |> push(id)
                 return true
             }
@@ -243,6 +243,6 @@ def test_sampling_deterministic(t : T?) {
             delete s2
         }
         delete m
-        t |> success(same(a, b) && int64(length(a)) == n, "reproducible under a fixed seed")
+        t |> success(same(a, b) && long_length(a) == n, "reproducible under a fixed seed")
     }
 }

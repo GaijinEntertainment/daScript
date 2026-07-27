@@ -29,7 +29,7 @@ def story(tk : SpmTokenizer; ids : array<int64>) {
 def main {
     var t <- load_checkpoint(MODEL_PATH)
     let c = t.config
-    let n = int64(length(t.wblob))   // the big 2D weights — the part Q8 actually quantizes
+    let n = long_length(t.wblob)   // the big 2D weights — the part Q8 actually quantizes
     let tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
 
     // 1) reconstruction error over the quantized weights (per-weight Q8 round-trip)
@@ -39,7 +39,7 @@ def main {
     dequantize_q8_0(qt, deq)
     let st = quant_error_stats(t.wblob, deq, n)
     let fp32_bytes = n * 4l
-    let q8_bytes = int64(length(qt.q)) + int64(length(qt.scales)) * 4l
+    let q8_bytes = long_length(qt.q) + long_length(qt.scales) * 4l
     print("=== Q8_0 reconstruction ({n} weights) ===\n")
     print("  mean |err|   {st.mean_abs_err}\n")
     print("  max  |err|   {st.max_abs_err}\n")

@@ -4890,7 +4890,7 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_pf_dev, bytes)
     unsafe {
-        memcpy(metal_buffer_contents(buf), src, int(bytes))
+        memcpy(metal_buffer_contents(buf), src, bytes)
     }
     g_pf_regions[key] = buf
     return buf
@@ -4992,8 +4992,8 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
     }
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (int64(length(s.rope_cos)) < npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) ||
-            (has_dual_rope(c) && int64(length(s.rope_cos_swa)) < npos * (swa_hs / 2l))) {
+    if (long_length(s.rope_cos) < npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) ||
+            (has_dual_rope(c) && long_length(s.rope_cos_swa) < npos * (swa_hs / 2l))) {
         return MetalPrefillDecline.rope_rows
     }
     return MetalPrefillDecline.none
@@ -5924,7 +5924,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 for (l in range64(c.n_layers)) {
                     for (p in range64(npos)) {
                         memcpy(reinterpret<void?>(dst + (l * npos + p) * ple_n),
-                            reinterpret<void const?>(src + p * ple_all + l * ple_n), int(ple_n * 4l))
+                            reinterpret<void const?>(src + p * ple_all + l * ple_n), ple_n * 4l)
                     }
                 }
             }
@@ -5933,12 +5933,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // upload the embedded rows + this prefill's rope table(s) (built for the chunk's GLOBAL
     // positions — build_rope_table takes start_pos; dual-rope: the sliding class's pair too)
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), int(npos * dim * 4l))
-        memcpy(metal_buffer_contents(bcos), addr < void? >(s.rope_cos[0]), int(npos * half * 4l))
-        memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), int(npos * half * 4l))
+        memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), npos * dim * 4l)
+        memcpy(metal_buffer_contents(bcos), addr < void? >(s.rope_cos[0]), npos * half * 4l)
+        memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), npos * half * 4l)
         if (dual_rope) {
-            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), int(npos * half_sw * 4l))
-            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), int(npos * half_sw * 4l))
+            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), npos * half_sw * 4l)
+            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), npos * half_sw * 4l)
         }
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
@@ -6067,7 +6067,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_vocab = gpu_logits ? pf_uniform_u32(uint(c.vocab_size)) : null
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? pf_uniform_f32(c.final_logit_softcap) : null
     // suppressed token ids pin to -1e30 AFTER the cap (gemma4) — the CPU classifier's order
-    let nsupp = int64(length(t.suppress))
+    let nsupp = long_length(t.suppress)
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
@@ -6103,8 +6103,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         // holds the window's embed panel here; the garbage last row reuses row 0
         unsafe {
             var dst = reinterpret<uint8?>(metal_buffer_contents(bwm_emb))
-            memcpy(reinterpret<void?>(dst), addr < void? >(s.x_b[dim]), int((npos - 1l) * dim * 4l))
-            memcpy(reinterpret<void?>(dst + (npos - 1l) * dim * 4l), addr < void? >(s.x_b[0]), int(dim * 4l))
+            memcpy(reinterpret<void?>(dst), addr < void? >(s.x_b[dim]), (npos - 1l) * dim * 4l)
+            memcpy(reinterpret<void?>(dst + (npos - 1l) * dim * 4l), addr < void? >(s.x_b[0]), dim * 4l)
         }
     }
     // ggml-geometry QK/AV (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid;
@@ -6730,8 +6730,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let kvd_l = layer_kv_dim(c, l)
                     let hs_l = layer_head_size(c, l)
                     let koff_l = start_pos * kvd_l * 4l
-                    memcpy(addr < void? >(s.k_b[0]), reinterpret<void?>(kpan + koff_l), int(npos * kvd_l * 4l))
-                    memcpy(addr < void? >(s.v_b[0]), reinterpret<void?>(vpan + koff_l), int(npos * kvd_l * 4l))
+                    memcpy(addr < void? >(s.k_b[0]), reinterpret<void?>(kpan + koff_l), npos * kvd_l * 4l)
+                    memcpy(addr < void? >(s.v_b[0]), reinterpret<void?>(vpan + koff_l), npos * kvd_l * 4l)
                     // tq4 sessions store in the ROTATED basis: the GPU ran attention unrotated,
                     // so rotate the readback rows per head before the codec store (the CPU
                     // prefill's exact discipline — dasllama_common's tq4 store path)
@@ -6764,12 +6764,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
         let ts_rb = ref_time_ticks()
         unsafe {
-            memcpy(addr < void? >(s.x_b[0]), metal_buffer_contents(warm ? bwm_res : bx), int(npos * dim * 4l))
+            memcpy(addr < void? >(s.x_b[0]), metal_buffer_contents(warm ? bwm_res : bx), npos * dim * 4l)
             if (gpu_logits) {
-                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(blog), int(c.vocab_size * 4l))
+                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(blog), c.vocab_size * 4l)
                 if (c.n_layer_nextn > 0l) {
                     // forward_prefill's mtp_h contract — bxf holds the last row's post-final-norm hidden
-                    memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(bxf), int(dim * 4l))
+                    memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(bxf), dim * 4l)
                 }
             }
         }

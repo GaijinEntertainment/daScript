@@ -6,7 +6,6 @@ require dasllama/dasllama_env  // env_int: the shared typed readers + the knob r
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production rope+KV-store MSL (zero copy drift)
-require daslib/fio
 require math
 require strings
 
@@ -23,7 +22,7 @@ require strings
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), int(bytes))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), bytes)
     }
     return buf
 }

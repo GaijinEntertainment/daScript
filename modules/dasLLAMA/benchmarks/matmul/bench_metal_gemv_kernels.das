@@ -4011,7 +4011,7 @@ def private cpu_ref_k6(kq : array<uint8>; ksc : array<uint8>; kd : array<uint8>;
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), int(bytes))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), bytes)
     }
     return buf
 }
@@ -4026,7 +4026,7 @@ def private upload_u32(dev; v : uint) {
 def private download_floats(buf; var dst : array<float>; count : int64) {
     dst |> resize(count)
     unsafe {
-        memcpy(addr < void? >(dst[0]), metal_buffer_contents(buf), int(count * 4l))
+        memcpy(addr < void? >(dst[0]), metal_buffer_contents(buf), count * 4l)
     }
 }
 

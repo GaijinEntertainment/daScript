@@ -1199,7 +1199,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     let mr = kq_layout_of(fmt)
     // bucket mix: a 1-row run (pure gemv tail), whole tiles, tile+tail, and a TB-spanning run
     var cnts <- [1l, 4l, 6l, 13l]
-    let nreg = int64(length(cnts))
+    let nreg = long_length(cnts)
     var nk = 0l
     for (c in cnts) {
         nk += c

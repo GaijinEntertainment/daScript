@@ -211,7 +211,7 @@ def private paged_greedy(tr, trg : Model; prompt : array<int64>; page_rows : int
         var pool <- create_kv_pool_(tr.config, page_rows, KVDtype.f16, KVDtype.f16)
         var sa <- make_run_state_paged(tr.config, pool)
         var sb <- make_run_state_paged(tr.config, pool)
-        let np = int64(length(prompt))
+        let np = long_length(prompt)
         var at = 0l
         while (at < np) {   // alternate page-sized chunks -> physically interleaved block tables
             let hi = min(at + page_rows, np)
@@ -424,12 +424,12 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
         }
         var longest = 0l
         for (p in prompts) {
-            longest = max(longest, int64(length(p)))
+            longest = max(longest, long_length(p))
         }
         var at = 0l
         while (at < longest) {   // alternate page-sized chunks -> physically interleaved block tables
             for (i in range(nb)) {
-                let np = int64(length(prompts[i]))
+                let np = long_length(prompts[i])
                 let hi = min(at + page_rows, np)
                 if (at < hi) {
                     var chunk <- [for (j in range64(at, hi)); prompts[i][j]]
@@ -974,7 +974,7 @@ def test_metal_decode_parity(t : T?) {
                 var deep_p <- encode(trd, counting_prompt(1, 700), true, false)
                 // the guard is load-bearing: a shorter prompt makes every "past 2048" claim below
                 // vacuous (counting to 620 tokenized to only 1860 — the arm silently tested nothing)
-                t |> success(int64(length(deep_p)) >= 2030l, "deep prompt reaches 2030 tokens")
+                t |> success(long_length(deep_p) >= 2030l, "deep prompt reaches 2030 tokens")
                 deep_p |> resize(2030)
                 let dcpu16 <- continuation(trd, trd, deep_p, 40, KVDtype.f16)
                 select_decode_override("metal")
@@ -1001,7 +1001,7 @@ def test_metal_decode_parity(t : T?) {
                     trd3.config.seq_len = min(trd3.config.seq_len, 4224l)
                     var trd3g <- blob_twin(t, path3d, 4224l)
                     var deep_p3 <- encode(trd3, counting_prompt(1, 700), true, false)
-                    t |> success(int64(length(deep_p3)) >= 2030l, "deep partD prompt reaches 2030 tokens")
+                    t |> success(long_length(deep_p3) >= 2030l, "deep partD prompt reaches 2030 tokens")
                     deep_p3 |> resize(2030)
                     let d3cpu <- continuation(trd3, trd3, deep_p3, 40, KVDtype.f16)
                     select_decode_override("metal")

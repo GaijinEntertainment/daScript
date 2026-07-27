@@ -7,7 +7,6 @@ require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production batch attention MSL (zero copy drift)
 require dasllama/dasllama_math   // the q8_0 KV codec (quantize_q8kv_row / cvt_q8kv_to_f32) — the store oracle
-require daslib/fio
 require math
 require strings
 
@@ -969,7 +968,7 @@ def private cpu_sq_attn(kc, vc; q : array<float>; nb, cnt, nheads, head_size, kv
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), int(bytes))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), bytes)
     }
     return buf
 }
@@ -1178,7 +1177,7 @@ def private run_attn_b2_sidebyside(b) {
             est[arm] = ms0
             ygot |> resize(int(nb * qd))
             unsafe {
-                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int(nb * qd * 4l))
+                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), nb * qd * 4l)
             }
             var maxd = 0.0
             for (i in range64(nb * qd)) {
@@ -1408,7 +1407,7 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
             }
             ygot |> resize(int(16l * qd))
             unsafe {
-                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int(int64(nb) * qd * 4l))
+                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int64(nb) * qd * 4l)
             }
             var maxd = 0.0
             for (i in range64(int64(nb) * qd)) {
@@ -1444,7 +1443,7 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
                 continue
             }
             unsafe {
-                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int(int64(nb) * qd * 4l))
+                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int64(nb) * qd * 4l)
             }
             var maxd8 = 0.0
             for (i in range64(int64(nb) * qd)) {
@@ -1480,7 +1479,7 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
                 continue
             }
             unsafe {
-                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int(int64(nb) * qd * 4l))
+                memcpy(addr < void? >(ygot[0]), metal_buffer_contents(ybuf), int64(nb) * qd * 4l)
             }
             var maxd4 = 0.0
             for (i in range64(int64(nb) * qd)) {

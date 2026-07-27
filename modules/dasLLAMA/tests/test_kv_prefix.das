@@ -59,7 +59,7 @@ def test_prefix_accounting(t : T?) {
         release_kv_pages_(w)
         release_kv_pages_(w2)
         prefix_release_(cache, pool)
-        t |> equal(int64(length(pool.free_groups)), pool.capacity_groups)   // accounting to baseline
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups)   // accounting to baseline
         var live = 0
         for (g in range64(pool.capacity_groups)) {
             live += pool.refcnt[g]
@@ -97,7 +97,7 @@ def test_prefix_lru_budget(t : T?) {
         t |> equal(0l, prefix_attach_(cache, pool, w, toks))
         release_kv_pages_(s)
         prefix_release_(cache, pool)
-        t |> equal(int64(length(pool.free_groups)), pool.capacity_groups)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups)
         delete toks
         delete w
         delete s
@@ -183,7 +183,7 @@ def test_prefix_warm_equals_cold(t : T?) {
             // warm tail eval must reproduce the cold single-shot prefill byte for byte
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var prompt <- [for (i in range64(21l)); 2l + i % 40l]
-            let np = int64(length(prompt))
+            let np = long_length(prompt)
             let nsteps = 8l
             var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
             var cache <- create_prefix_cache_()
@@ -258,7 +258,7 @@ def test_prefix_warm_equals_cold(t : T?) {
             release_kv_pages_(warm2)
             release_kv_pages_(cold2)
             prefix_release_(cache, pool)
-            t |> equal(int64(length(pool.free_groups)), pool.capacity_groups)
+            t |> equal(long_length(pool.free_groups), pool.capacity_groups)
             delete tail2
             delete warm2
             delete cold2

@@ -278,14 +278,14 @@ struct ParakeetState {
 // grow-only, reserve-exact (resize alone rounds the backing alloc up to pow2 — 2x waste
 // on the multi-MB encoder scratch)
 def private pk_ensure(var a : array<float>; n : int64) {
-    if (int64(length(a)) < n) {
+    if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
     }
 }
 
 def private pk_ensure(var a : array<int8>; n : int64) {
-    if (int64(length(a)) < n) {
+    if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
     }
@@ -313,7 +313,7 @@ def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : 
 
 def private pk_requant(x : array<float>; n, npos : int64; var xq : array<int8>; var xs : array<float>) {
     let need = npos * n
-    if (int64(length(xq)) < need) {
+    if (long_length(xq) < need) {
         xq |> resize(int(need))
         xs |> resize(int(need / 32l))
     }
@@ -399,7 +399,7 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
     if (woff % 32l != 0l) {
         panic("parakeet q8: GEMM weight at {woff} is not 32-aligned")
     }
-    if (int64(length(scratch)) < n) {
+    if (long_length(scratch) < n) {
         scratch |> reserve(n)
         scratch |> resize(n)
     }
@@ -627,7 +627,7 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
 //! valid frames only (Bessel n−1, std + 1e-5), applied to all. FRAME-major ``[n_len][n_mel]``.
 def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : ParakeetState) {
-    let n_in = int64(length(samples))
+    let n_in = long_length(samples)
     pk_ensure(st.pre, n_in)
     for (i in range(int(n_in))) {
         st.pre[i] = samples[i]
@@ -657,7 +657,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 
     let n_fft = m.n_fft
     let n_bins = n_fft / 2l + 1l
-    let wsz = int64(length(m.window))
+    let wsz = long_length(m.window)
     let wpad = (n_fft - wsz) / 2l
     let mel_eps = 5.960464477539063e-08lf
     let n_len = st.mel.n_len

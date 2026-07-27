@@ -523,7 +523,7 @@ def public metal_decode_stage_stats() : tuple<steps : int64; setup_us : int64; e
 
 //! (live KV mirrors, resident mirror bytes) — the churn / LRU-cap gates read this.
 def public metal_decode_mirror_stats() : tuple<mirrors : int64; bytes : uint64> {
-    return (mirrors = int64(length(g_mirrors)), bytes = g_mirror_bytes)
+    return (mirrors = long_length(g_mirrors), bytes = g_mirror_bytes)
 }
 
 //! Arm the per-step single-stream decode trace for the next `cap` retired steps (0 disarms) — the
@@ -601,7 +601,7 @@ def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     }
     var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
-        memcpy(metal_buffer_contents(buf), src, int(bytes))
+        memcpy(metal_buffer_contents(buf), src, bytes)
     }
     g_regions[key] = buf
     return buf
@@ -618,10 +618,10 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
     var buf = metal_new_buffer_untracked(g_dev, b0 + b1 + b2)
     unsafe {
         var d = reinterpret<uint8?>(metal_buffer_contents(buf))
-        memcpy(reinterpret<void?>(d), p0, int(b0))
-        memcpy(reinterpret<void?>(d + b0), p1, int(b1))
+        memcpy(reinterpret<void?>(d), p0, b0)
+        memcpy(reinterpret<void?>(d + b0), p1, b1)
         if (b2 > 0ul) {
-            memcpy(reinterpret<void?>(d + (b0 + b1)), p2, int(b2))
+            memcpy(reinterpret<void?>(d + (b0 + b1)), p2, b2)
         }
     }
     g_regions[key] = buf
@@ -649,7 +649,7 @@ def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mappe
             var at = 0l
             while (at < int64(bytes)) {   // memcpy takes int — chunk the >2GB planes
                 let chunk = min(int64(bytes) - at, 1073741824l)
-                memcpy(reinterpret<void?>(d + at), reinterpret<void const?>(s + at), int(chunk))
+                memcpy(reinterpret<void?>(d + at), reinterpret<void const?>(s + at), chunk)
                 at += chunk
             }
         }
@@ -738,9 +738,9 @@ def nc_logits_for(dev : MetalDevice?; s : Session) : MetalBuffer? {
         }
         g_nc_logits |> erase(s.uid)
     }
-    let bytes = (uint64(length(s.logits)) * 4ul + 16383ul) & ~16383ul
+    let bytes = (uint64(long_length(s.logits)) * 4ul + 16383ul) & ~16383ul
     var buf : MetalBuffer?
-    if ((p & 16383ul) == 0ul && uint64(capacity(s.logits)) * 4ul >= bytes) {
+    if ((p & 16383ul) == 0ul && uint64(long_capacity(s.logits)) * 4ul >= bytes) {
         unsafe {
             buf = metal_new_buffer_no_copy(dev, reinterpret<void?>(p), bytes)
         }
@@ -856,7 +856,7 @@ def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
 //! byte-compatible source? A shared layer aliases its source's mirror slab / prefill panel via
 //! kv_row_prefix, so the source must own rows and match l's class geometry exactly.
 def kv_share_ok(t : Model; l : int64) : bool {
-    if (l >= int64(length(t.kv_src))) {   // the MTP draft slab owns its rows
+    if (l >= long_length(t.kv_src)) {   // the MTP draft slab owns its rows
         return true
     }
     let src = t.kv_src[l]
@@ -870,7 +870,7 @@ def kv_share_ok(t : Model; l : int64) : bool {
 
 //! true when layer l reads another layer's KV (no rows of its own — Q-only attention)
 def kv_shared_layer(t : Model; l : int64) : bool {
-    return l < int64(length(t.kv_src)) && t.kv_src[l] != l
+    return l < long_length(t.kv_src) && t.kv_src[l] != l
 }
 
 // Hetero-safe per-layer mirror addressing (gemma4's two kv-head classes): every KV codec is
@@ -1075,9 +1075,9 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
                     let nrows = s.kv_runs[r].j1 - j0
                     let prow = s.kv_runs[r].row0
                     memcpy(reinterpret<void?>(kdst + klb + j0 * krow),
-                        reinterpret<void?>(kbase + prow * krow), int(nrows * krow))
+                        reinterpret<void?>(kbase + prow * krow), nrows * krow)
                     memcpy(reinterpret<void?>(vdst + vlb + j0 * vrow),
-                        reinterpret<void?>(vbase + prow * vrow), int(nrows * vrow))
+                        reinterpret<void?>(vbase + prow * vrow), nrows * vrow)
                 }
             }
         }
@@ -1124,8 +1124,8 @@ def dn_mirror_release(mr : DnMirror) {
 }
 
 def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64> {
-    let sbytes = uint64(length(s.dn_state)) * 4ul
-    let cbytes = uint64(length(s.dn_conv_state)) * 4ul
+    let sbytes = uint64(long_length(s.dn_state)) * 4ul
+    let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
     let rb = sbytes + cbytes
     let total = rb * uint64(regions)
     if (sbytes == 0ul) {
@@ -1171,8 +1171,8 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         // the CPU ran positions [0, pos) — its state is the source of truth; sync it into region 0
         unsafe {
             var dst = reinterpret<uint8?>(metal_buffer_contents(g_dn_mirrors[s.uid].buf))
-            memcpy(reinterpret<void?>(dst), addr<void?>(s.dn_state[0]), int(sbytes))
-            memcpy(reinterpret<void?>(dst + sbytes), addr<void?>(s.dn_conv_state[0]), int(cbytes))
+            memcpy(reinterpret<void?>(dst), addr<void?>(s.dn_state[0]), sbytes)
+            memcpy(reinterpret<void?>(dst + sbytes), addr<void?>(s.dn_conv_state[0]), cbytes)
         }
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = pos
@@ -1261,7 +1261,7 @@ def moe_metal_ok(t : Model) : bool {
                 c.moe_router_bias || c.moe_exps_bias || c.n_ff_shexp > 0l ||
                 c.ffn_act != FfnAct.gelu || t.moe_router_scale_off < 0l || t.moe_down_scale_off < 0l ||
                 t.rms_pre_ffn2_off < 0l || t.rms_post_ffn1_off < 0l || t.rms_post_ffn2_off < 0l ||
-                int64(length(t.w1_offs)) < c.n_layers) {
+                long_length(t.w1_offs) < c.n_layers) {
             return false
         }
     } elif (c.moe_gate != MoeGate.softmax ||
@@ -1772,7 +1772,7 @@ def finish_pending_step {
         let ts_rb = ref_time_ticks()
         unsafe {
             if (g_lp_xb != null) {   // sync CPU-classifier path only — pipe skips it (stale)
-                memcpy(g_lp_xb_dst, metal_buffer_contents(g_lp_xb), int(g_lp_xb_bytes))
+                memcpy(g_lp_xb_dst, metal_buffer_contents(g_lp_xb), g_lp_xb_bytes)
             }
             let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
             let lgp = g_lp_blog != null ? reinterpret<uint8?>(metal_buffer_contents(g_lp_blog)) : null
@@ -1784,13 +1784,13 @@ def finish_pending_step {
                     let rowb_l = g_lp_lrowb[l]
                     let fb = i * g_lp_layers + l
                     memcpy(reinterpret<void?>(kv_layer_kbase(*sp, l, g_lp_seq) + prow * rowb_l),
-                        reinterpret<void?>(ab + (g_lp_koffs[i] + uint64(g_lp_lkbase[fb] + pos * rowb_l))), int(rowb_l))
+                        reinterpret<void?>(ab + (g_lp_koffs[i] + uint64(g_lp_lkbase[fb] + pos * rowb_l))), rowb_l)
                     memcpy(reinterpret<void?>(kv_layer_vbase(*sp, l, g_lp_seq) + prow * rowb_l),
-                        reinterpret<void?>(ab + (g_lp_voffs[i] + uint64(g_lp_lvbase[fb] + pos * rowb_l))), int(rowb_l))
+                        reinterpret<void?>(ab + (g_lp_voffs[i] + uint64(g_lp_lvbase[fb] + pos * rowb_l))), rowb_l)
                 }
                 if (lgp != null) {
                     memcpy(addr < void? >(sp.logits[0]),
-                        reinterpret<void?>(lgp + i * g_lp_vocab * 4l), int(g_lp_vocab * 4l))
+                        reinterpret<void?>(lgp + i * g_lp_vocab * 4l), g_lp_vocab * 4l)
                 }
                 if (key_exists(g_mirrors, sp.uid)) {   // never regress the optimistic commit-time mark
                     let wm0 = g_mirrors[sp.uid].watermark

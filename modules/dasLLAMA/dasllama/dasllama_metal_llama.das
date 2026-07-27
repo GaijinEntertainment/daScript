@@ -138,8 +138,8 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
     // forward() built this position's rope row(s) before the hook (dual-rope both classes; partial rope rot/2 wide)
     let rot = t.config.rope_dim > 0l ? t.config.rope_dim : t.config.head_size
     let swa_hs = t.config.head_size_swa > 0l ? t.config.head_size_swa : t.config.head_size
-    if (int64(length(s.rope_cos)) < rot / 2l ||
-            (has_dual_rope(t.config) && int64(length(s.rope_cos_swa)) < swa_hs / 2l)) {
+    if (long_length(s.rope_cos) < rot / 2l ||
+            (has_dual_rope(t.config) && long_length(s.rope_cos_swa) < swa_hs / 2l)) {
         return MetalDecodeDecline.rope_rows
     }
     return MetalDecodeDecline.none
@@ -548,7 +548,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
             r.u_flcap = uniform_f32(c.final_logit_softcap)
         }
         if (!empty(t.suppress)) {   // gemma4: pin the suppressed ids to -1e30 after the cap
-            r.bytes_supp = uint64(int64(length(t.suppress)) * 4l)
+            r.bytes_supp = uint64(long_length(t.suppress) * 4l)
             r.bsupp = pool_acquire_untracked(g_upool, g_dev, r.bytes_supp)
             unsafe {
                 var sp = reinterpret<uint?>(metal_buffer_contents(r.bsupp))
@@ -595,15 +595,15 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
 // the token-dependent input bytes — the ONLY step state not known at encode time
 def private poke_step(s : Session; r : StepRes) {
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
         if (r.bcos_swa != null) {
-            memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(s.rope_cos_swa[0]), int(r.bytes_tab_sw))
-            memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(s.rope_sin_swa[0]), int(r.bytes_tab_sw))
+            memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(s.rope_cos_swa[0]), r.bytes_tab_sw)
+            memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(s.rope_sin_swa[0]), r.bytes_tab_sw)
         }
         if (r.ple) {   // forward()'s ple_pre_decode filled s.ple_inp before the hook
-            memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), int(r.bytes_ple))
+            memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), r.bytes_ple)
         }
     }
 }
@@ -1107,15 +1107,15 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
             var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
             var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
             memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(kmp + lb + dpos * rowb), int(rowb))
+                reinterpret<void?>(kmp + lb + dpos * rowb), rowb)
             memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(vmp + lb + dpos * rowb), int(rowb))
+                reinterpret<void?>(vmp + lb + dpos * rowb), rowb)
             if (!seam) {
                 if (r.bnc == null) {
-                    memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), int(r.bytes_log))
+                    memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
                 }
                 // the head's own h_nextn — recursive drafting handoff (forward_mtp's contract)
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), int(r.bytes_x))
+                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
             }
         }
         if (!seam) {
@@ -1150,10 +1150,10 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
     }
     mtp_draft_prep(t, s, token, dpos)
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bxb2), addr < void? >(s.mtp_h[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bxb2), addr < void? >(s.mtp_h[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
     }
     encode_draft_step(t, r, !seam)
     let ok = finish_draft_step(t, s, r, seam)
@@ -1410,7 +1410,7 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 32l)
     var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
     unsafe {
-        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), int(bytes_rt))
+        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
     }
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
@@ -1473,14 +1473,14 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
                 for (i in range64(2l)) {
                     let prow = kv_phys_row(s, pos + i)
                     memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(kmp + lb + (pos + i) * rowb), int(rowb))
+                        reinterpret<void?>(kmp + lb + (pos + i) * rowb), rowb)
                     memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(vmp + lb + (pos + i) * rowb), int(rowb))
+                        reinterpret<void?>(vmp + lb + (pos + i) * rowb), rowb)
                 }
             }
             var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
-            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), int(c.vocab_size * 4l))
-            memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), int(c.vocab_size * 4l))
+            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), c.vocab_size * 4l)
+            memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), c.vocab_size * 4l)
         }
     } else {
         to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({err})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
@@ -1520,7 +1520,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         // the warm's row-pos h input is the PRE-draft trunk hidden — the draft overwrites mtp_h
         s.mtp_xb_save |> resize(int(c.dim))
         unsafe {
-            memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), int(c.dim * 4l))
+            memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
         }
         cold = !metal_mtp_draft_forward(t, s, tok, pos)
         if (cold && g_env_mtp_debug == "cold") {
@@ -1562,13 +1562,13 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         r.dn_conv_alt = dm.conv_alt
     }
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.mtp_cat[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.mtp_cat[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
         // warm inputs: embed pair + the saved pre-draft h — bcat is untouched by the trunk pass
         var bc = reinterpret<uint8?>(metal_buffer_contents(r.bcat))
-        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), int(2l * c.dim * 4l))
-        memcpy(reinterpret<void?>(bc + 2l * c.dim * 4l), addr < void? >(s.mtp_xb_save[0]), int(c.dim * 4l))
+        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), 2l * c.dim * 4l)
+        memcpy(reinterpret<void?>(bc + 2l * c.dim * 4l), addr < void? >(s.mtp_xb_save[0]), c.dim * 4l)
     }
     encode_verify_step(t, r, pos)
     let vok = finish_verify_step(t, s, r, pos)
@@ -1576,7 +1576,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
     if (vok && truth == d) {
         unsafe {
             var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + c.dim * 4l), int(c.dim * 4l))
+            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + c.dim * 4l), c.dim * 4l)
         }
         release_step(r)
         s.mtp_h_pos1 = pos + 2l
@@ -1595,8 +1595,8 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         // the watermark and the next step rewrites it
         unsafe {
             var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx), int(c.dim * 4l))
-            memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits[0]), int(c.vocab_size * 4l))
+            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx), c.dim * 4l)
+            memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits[0]), c.vocab_size * 4l)
         }
         release_step(r)
         s.mtp_h_pos1 = pos + 1l
@@ -1727,7 +1727,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         let pos = r.pos
         let cap = r.cap
         unsafe {
-            memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), int(r.bytes_x))
+            memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), r.bytes_x)
             var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
             var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
             let prow = kv_phys_row(s, pos)
@@ -1736,16 +1736,16 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
                 memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(kmp + lb + pos * rowb), int(rowb))
+                    reinterpret<void?>(kmp + lb + pos * rowb), rowb)
                 memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(vmp + lb + pos * rowb), int(rowb))
+                    reinterpret<void?>(vmp + lb + pos * rowb), rowb)
             }
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
-                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), int(r.bytes_log))
+                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
             }
             if (r.gpu_logits && c.n_layer_nextn > 0l) {
                 // forward()'s mtp_h stash contract — bxf holds the post-final-norm hidden this row
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), int(r.bytes_x))
+                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
             }
         }
         if (r.gpu_logits && c.n_layer_nextn > 0l) {
@@ -1760,7 +1760,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         }
         g_us_readback += int64(get_time_usec(ts_rb))
         g_decodes++
-        if (int64(length(g_step_trace)) < g_step_trace_cap) {
+        if (long_length(g_step_trace) < g_step_trace_cap) {
             g_step_trace |> push(MetalDecodeStepTrace(pos = r.pos, mode = r.trace_mode,
                 commit_us = r.t_commit, finish_us = int64(get_time_usec(g_step_trace_t0)),
                 wait_us = wait_us,
@@ -1977,14 +1977,14 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
         r.btok = pool_acquire(g_pool, g_dev, 64ul)
         build_decode_rope_row(t, npos, g_rope_cos_next, g_rope_sin_next)
         unsafe {
-            memcpy(metal_buffer_contents(r.bcos), addr < void? >(g_rope_cos_next[0]), int(r.bytes_tab))
-            memcpy(metal_buffer_contents(r.bsin), addr < void? >(g_rope_sin_next[0]), int(r.bytes_tab))
+            memcpy(metal_buffer_contents(r.bcos), addr < void? >(g_rope_cos_next[0]), r.bytes_tab)
+            memcpy(metal_buffer_contents(r.bsin), addr < void? >(g_rope_sin_next[0]), r.bytes_tab)
         }
         if (r.bcos_swa != null) {
             build_decode_rope_row_swa(t, npos, g_rope_cos_next_swa, g_rope_sin_next_swa)
             unsafe {
-                memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(g_rope_cos_next_swa[0]), int(r.bytes_tab_sw))
-                memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(g_rope_sin_next_swa[0]), int(r.bytes_tab_sw))
+                memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(g_rope_cos_next_swa[0]), r.bytes_tab_sw)
+                memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(g_rope_sin_next_swa[0]), r.bytes_tab_sw)
             }
         }
         encode_step(t, r, true, prev_blog)
@@ -2211,8 +2211,8 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     }
     // dual-rope rows are built per class, each at ITS class's width (gemma4 swa rows = hs_swa/2)
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (int64(length(ws.scr.rope_cos)) < nrows * (c.head_size / 2l) ||
-            (has_dual_rope(c) && int64(length(ws.scr.rope_cos_swa)) < nrows * (swa_hs / 2l))) {
+    if (long_length(ws.scr.rope_cos) < nrows * (c.head_size / 2l) ||
+            (has_dual_rope(c) && long_length(ws.scr.rope_cos_swa) < nrows * (swa_hs / 2l))) {
         return MetalDecodeDecline.rope_rows
     }
     return MetalDecodeDecline.none
@@ -2503,7 +2503,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
     var u_fltot = u_flcap != null ? uniform_u32(uint(nrows * c.vocab_size)) : null
     // suppressed token ids pin to -1e30 after the cap (gemma4) — per live row, the CPU order
-    let nsupp = int64(length(t.suppress))
+    let nsupp = long_length(t.suppress)
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
@@ -2559,14 +2559,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_b_ulays[l] = uniform_u32(uint(blockc ? kv_row_bytes(kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l]))
     }
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), int(nrows * dim * 4l))
-        memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), int(bytes_tab))
-        memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), int(bytes_tab))
+        memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
+        memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), bytes_tab)
+        memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), bytes_tab)
         if (dual_rope) {
-            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), int(bytes_tab_sw))
-            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), int(bytes_tab_sw))
+            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), bytes_tab_sw)
+            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), bytes_tab_sw)
         }
-        memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), int(bytes_rt))
+        memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), bytes_rt)
     }
     g_us_bsetup += int64(get_time_usec(ts_all))
     let ts_enc = ref_time_ticks()

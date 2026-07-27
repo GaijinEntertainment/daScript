@@ -126,7 +126,7 @@ struct Gemma4aState {
 }
 
 def private g4a_ensure(var a : array<float>; n : int64) {
-    if (int64(length(a)) < n) {
+    if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
     }
@@ -667,7 +667,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 //! wide) to ``rows``. Returns the total token count.
 def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : array<float> | #;
                        var rows : array<float>) : int64 {
-    let n_in = int64(length(samples))
+    let n_in = long_length(samples)
     let chunk = 30l * AUDIO_SAMPLE_RATE
     var total = 0l
     var off = 0l
@@ -675,7 +675,7 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
         let len = min(chunk, n_in - off)
         gemma4a_log_mel(enc, samples, off, len, st)
         let n = gemma4a_encode(enc, st)
-        rows |> reserve(int(int64(length(rows)) + n * enc.proj_dim))
+        rows |> reserve(int(long_length(rows) + n * enc.proj_dim))
         for (i in range64(n * enc.proj_dim)) {
             rows |> push(st.out[i])
         }

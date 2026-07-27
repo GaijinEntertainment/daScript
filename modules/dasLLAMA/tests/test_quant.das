@@ -79,7 +79,7 @@ def test_quant(t : T?) {
             src[i] = float(i) + 1.0
         }
         let qt <- quantize_q8_0(src, n)
-        t |> equal(int64(length(qt.scales)), 2l)
+        t |> equal(long_length(qt.scales), 2l)
         var deq : array<float>
         deq |> resize(n)
         dequantize_q8_0(qt, deq)
@@ -101,7 +101,7 @@ def test_quant_q4(t : T?) {
             src[i] = 3.0
         }
         let qt <- quantize_q4_0(src, 32l)
-        t |> equal(int64(length(qt.q)), 16l)  // 32 nibbles packed two per byte
+        t |> equal(long_length(qt.q), 16l)  // 32 nibbles packed two per byte
         var deq : array<float>
         deq |> resize(32)
         dequantize_q4_0(qt, deq)

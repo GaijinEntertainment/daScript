@@ -45,7 +45,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
         return <- out
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let n = int64(length(bytes))
+        let n = long_length(bytes)
         var o = 12l                       // "RIFF" size "WAVE"
         while (o + 8l <= n) {
             let id = rd_u32(bytes, o)
@@ -667,7 +667,7 @@ def test_gemma4a_audio_oracle(t : T?) {
                             236764, 236743, 236770, 236819, 236825, 236819, 236761, 1174, 5889, 236789,
                             236745, 1164, 4668, 1995, 532, 19764, 236761, 1174, 563, 506,
                             3479, 1056, 27069, 236789, 236751, 24625, 9156, 5452, 3645, 236772]
-            t |> success(int64(length(segs[0].tokens)) >= int64(length(expected)),
+            t |> success(long_length(segs[0].tokens) >= long_length(expected),
                 "emitted at least {length(expected)} tokens ({length(segs[0].tokens)})")
             var mismatches = 0
             for (i in range(min(length(expected), length(segs[0].tokens)))) {

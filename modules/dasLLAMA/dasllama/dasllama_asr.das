@@ -242,7 +242,7 @@ def caps(m : AsrModel) : AsrCaps {
                     prompt = false)
     if (m.whisper.multilingual) {
         c.languages <- whisper_lang_list()
-        if (int64(length(c.languages)) > m.whisper.n_lang) {   // 99-lang models predate "yue"
+        if (long_length(c.languages) > m.whisper.n_lang) {   // 99-lang models predate "yue"
             c.languages |> resize(int(m.whisper.n_lang))
         }
     } else {
@@ -320,8 +320,8 @@ def private transcribe_qwen3a(m : AsrModel; var s : AsrSession; samples : array<
     tail |> push(im_start)
     tail |> push_from(encode_(m.dec, "assistant\n", false, false))
 
-    let n_head = int64(length(head))
-    let n_tail = int64(length(tail))
+    let n_head = long_length(head)
+    let n_tail = long_length(tail)
     let npos = n_head + n_audio + n_tail
     var embd : array<float>
     embd |> resize(int(npos * dim))
@@ -376,7 +376,7 @@ def private transcribe_qwen3a(m : AsrModel; var s : AsrSession; samples : array<
         }
         text = slice(full, mark + length("<asr_text>"), length(full))
     }
-    var seg = TranscribeSegment(t0 = 0l, t1 = int64(length(samples)) * 100l / AUDIO_SAMPLE_RATE, text = text)
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE, text = text)
     seg.tokens := toks
     if (!empty(toks)) {
         seg.avg_logprob = float(plog_sum / double(length(toks) + 1))   // + the stop token's plog
@@ -411,8 +411,8 @@ def private transcribe_qwen3omni(m : AsrModel; var s : AsrSession; samples : arr
     tail |> push(im_start)
     tail |> push_from(encode_(m.dec, "assistant\n", false, false))
 
-    let n_head = int64(length(head))
-    let npos = n_head + n_audio + int64(length(tail))
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, m.dec.config.seq_len)
     var embd : array<float>
     embd |> resize(int(npos * dim))
@@ -451,7 +451,7 @@ def private transcribe_qwen3omni(m : AsrModel; var s : AsrSession; samples : arr
     }
     asr_prof_add("q3o.decode", td)
 
-    var seg = TranscribeSegment(t0 = 0l, t1 = int64(length(samples)) * 100l / AUDIO_SAMPLE_RATE,
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(join(raw, "")))
     seg.tokens := toks
     blk |> invoke(seg)
@@ -490,8 +490,8 @@ def private transcribe_canary(m : AsrModel; var s : AsrSession; samples : array<
     tail |> push(im_start)
     tail |> push_from(encode_(m.dec, "assistant\n", false, false))
 
-    let n_head = int64(length(head))
-    let npos = n_head + n_audio + int64(length(tail))
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, m.dec.config.seq_len)
     var embd : array<float>
     embd |> resize(int(npos * dim))
@@ -534,7 +534,7 @@ def private transcribe_canary(m : AsrModel; var s : AsrSession; samples : array<
         eval_(m.dec, s.qctx, one)
     }
 
-    var seg = TranscribeSegment(t0 = 0l, t1 = int64(length(samples)) * 100l / AUDIO_SAMPLE_RATE,
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(join(raw, "")))
     seg.tokens := toks
     if (!empty(toks)) {
@@ -574,8 +574,8 @@ def private transcribe_gemma4a(m : AsrModel; var s : AsrSession; samples : array
     tail |> push_from(encode_(m.dec, "model", false, false))
     tail |> push_from(nl)
 
-    let n_head = int64(length(head))
-    let npos = n_head + n_audio + int64(length(tail))
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, m.dec.config.seq_len)
     var embd : array<float>
     embd |> resize(int(npos * dim))
@@ -622,7 +622,7 @@ def private transcribe_gemma4a(m : AsrModel; var s : AsrSession; samples : array
     if (mark >= 0) {
         text = slice(full, mark + length("<channel|>"), length(full))
     }
-    var seg = TranscribeSegment(t0 = 0l, t1 = int64(length(samples)) * 100l / AUDIO_SAMPLE_RATE,
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(text))
     seg.tokens := toks
     s.detected_lang = "en"
@@ -642,7 +642,7 @@ def private transcribe_parakeet(m : AsrModel; var s : AsrSession; samples : arra
     tp = ref_time_ticks()
     parakeet_tdt_decode(m.pk, s.pkst, tt)
     asr_prof_add("pk.decode_total", tp)
-    var seg = TranscribeSegment(t0 = 0l, t1 = int64(length(samples)) * 100l / AUDIO_SAMPLE_RATE,
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = parakeet_detokenize(m.pk, s.pkst.toks))
     var plog_sum = 0.0lf
     seg.tokens |> reserve(length(s.pkst.toks))

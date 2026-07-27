@@ -2193,9 +2193,9 @@ def public gpu_tier_status : GpuTierStatus {
         reason = g_moe_gpu_unsupported,
         resident_layers = resident,
         streamed_layers = streamed,
-        dn_layers = int64(length(g_moe_gpu_dn_layers)),
-        attn_layers = int64(length(g_moe_gpu_attn_layers)),
-        dense_planes = int64(length(g_moe_gpu_dense_offs)),
+        dn_layers = long_length(g_moe_gpu_dn_layers),
+        attn_layers = long_length(g_moe_gpu_attn_layers),
+        dense_planes = long_length(g_moe_gpu_dense_offs),
         cls_resident = g_moe_gpu_cls_off >= 0l,
         vram_bytes = invoke(g_moe_gpu_vram_report))
 }

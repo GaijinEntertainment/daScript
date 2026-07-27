@@ -523,7 +523,7 @@ def private want(filter_env, name : string) : bool {
 
 // generic (untyped param) — non-Apple builds never compile the Metal-typed body
 def private upload_bytes(dev; arr : array<uint8>) {
-    var buf = metal_new_buffer_untracked(dev, uint64(length(arr)))
+    var buf = metal_new_buffer_untracked(dev, uint64(long_length(arr)))
     unsafe {
         memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), length(arr))
     }
