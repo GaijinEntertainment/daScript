@@ -94,6 +94,159 @@ enum private Perf025Kind {
     unsigned_hex    // "{x}" is hex but string(x) is decimal: drop + ':d' hint
 }
 
+// ---------------------------------------------------------------------------
+// PERF026-028 — hot-path contracts
+// ---------------------------------------------------------------------------
+
+bitfield private HotBits {
+    alloc   // PERF026 — heap traffic (allocate or free)
+    env     // PERF027 — environment lookup
+    io      // PERF028 — console / file I/O
+}
+
+// One marker class serves every annotation; the pass reads the names, not the type.
+class HotPathMarker : AstFunctionAnnotation {
+}
+
+// LineInfo is not storable in an array, so each record carries the node and derives `.at` at warn
+// time — the same trick PERF018/PERF023 use for their candidate stacks.
+struct private HotSink {
+    bit : HotBits
+    what : string
+    @do_not_delete site : ExpressionPtr
+}
+
+struct private HotEdge {
+    @do_not_delete fn : Function?
+    @do_not_delete site : ExpressionPtr   // the call site, which lives in the CALLER's body
+}
+
+// Per-function body-scan results, computed once per function per lint pass and sliced out of two
+// flat arrays — a table of non-copyable summaries would need a clone per lookup.
+struct private HotCache {
+    sinks_at : table<uint64; int2>   // mangled-name hash -> (start, count) into sinks_all
+    edges_at : table<uint64; int2>
+    sinks_all : array<HotSink>
+    edges_all : array<HotEdge>
+}
+
+struct private HotFrame {
+    @do_not_delete fn : Function?
+    parent : int                          // index into the frame array; -1 at the root
+    @do_not_delete site : ExpressionPtr   // where the parent called fn
+    // Deepest call site on this path that is still written in the root's own file. Reaching one
+    // callee from two such sites must report twice, so this is part of the dedup key below —
+    // keying on the function alone would hide every call site after the first.
+    @do_not_delete anchor : ExpressionPtr
+}
+
+def private hot_bits_of(func : Function?) : HotBits {
+    var bits : HotBits
+    for (a in func.annotations) {
+        if (a.annotation.name == "hot_path") {
+            bits = HotBits.alloc | HotBits.env | HotBits.io
+        } elif (a.annotation.name == "no_alloc") {
+            bits.alloc = true
+        } elif (a.annotation.name == "no_env") {
+            bits.env = true
+        } elif (a.annotation.name == "no_io") {
+            bits.io = true
+        }
+    }
+    return bits
+}
+
+def private is_cold_path(func : Function?) : bool {
+    for (a in func.annotations) {
+        if (a.annotation.name == "cold_path") return true
+    }
+    return false
+}
+
+// Every array/table heap op bottoms out in a __builtin_array_* / __builtin_table_* extern, so the
+// prefix (minus the probe/lock forms, which never touch the heap) covers push/reserve/resize/erase/
+// insert/delete without naming one surface generic — and a NEW builtin is caught rather than missed.
+def private is_alloc_builtin(n : string) : bool {
+    if (starts_with(n, "__builtin_array_") || starts_with(n, "__builtin_table_")) {
+        return !(ends_with(n, "_lock") || ends_with(n, "_lock_mutable")
+                 || ends_with(n, "_unlock") || ends_with(n, "_unlock_mutable")
+                 || n == "__builtin_table_find" || n == "__builtin_table_key_exists"
+                 || n == "__builtin_table_get_key" || n == "__builtin_table_keys"
+                 || n == "__builtin_table_values")
+    }
+    return n == "clone_string"
+}
+
+def private is_env_builtin(n : string) : bool {
+    return n == "get_env_variable" || n == "has_env_variable" || n == "set_env_variable"
+}
+
+def private is_io_builtin(n : string) : bool {
+    return (n == "print" || n == "to_log" || n == "fprint" || n == "fopen" || n == "fclose"
+            || n == "fread" || n == "fwrite" || n == "fflush" || n == "popen" || n == "popen_argv")
+}
+
+// Scans one function body: the sinks it performs directly, plus its direct call edges. Indirect
+// calls (ExprInvoke) are unresolvable — annotate the implementations they reach instead. ExprAddr
+// is deliberately NOT an edge: taking a function's address is not calling it.
+class HotBodyScan : AstVisitor {
+    sinks : array<HotSink>
+    edges : array<HotEdge>
+
+    def add_sink(bit : HotBits; what : string; var site : ExpressionPtr) {
+        sinks |> push(HotSink(bit = bit, what = what, site = site))
+    }
+
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        if (expr.func == null) return
+        let n = string(expr.func.name)
+        if (is_env_builtin(n)) {
+            add_sink(HotBits.env, "{n}()", expr)
+        } elif (is_io_builtin(n)) {
+            add_sink(HotBits.io, "{n}()", expr)
+        } elif (is_alloc_builtin(n)) {
+            add_sink(HotBits.alloc, "{n}()", expr)
+        } elif (expr.func.flags.builtIn && expr.func.result != null
+                && expr.func.result.baseType == Type.tString) {
+            add_sink(HotBits.alloc, "{n}() returns a newly allocated string", expr)
+        }
+        edges |> push(HotEdge(fn = expr.func, site = expr))
+    }
+
+    def override preVisitExprNew(var expr : ExprNew?) : void {
+        add_sink(HotBits.alloc, "new", expr)
+    }
+
+    // `new Foo(field = v)` is an ExprAscend (move-to-heap) around a make-struct, not an ExprNew
+    def override preVisitExprAscend(var expr : ExprAscend?) : void {
+        add_sink(HotBits.alloc, "new", expr)
+    }
+
+    def override preVisitExprDelete(var expr : ExprDelete?) : void {
+        add_sink(HotBits.alloc, "delete", expr)
+    }
+
+    def override preVisitExprStringBuilder(var expr : ExprStringBuilder?) : void {
+        add_sink(HotBits.alloc, "string interpolation", expr)
+    }
+
+    // table[key] inserts a default entry when the key is missing, so it allocates on READ too;
+    // the ?[] form (ExprSafeAt) has its own visitor hook and never inserts.
+    def override preVisitExprAt(var expr : ExprAt?) : void {
+        if (expr.subexpr == null || expr.subexpr._type == null) return
+        if (expr.subexpr._type.baseType == Type.tTable) {
+            add_sink(HotBits.alloc, "table index (inserts a default entry when the key is missing)", expr)
+        }
+    }
+
+    // A lambda captures into a heap frame; a plain block does not.
+    def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
+        if (expr.mmFlags.isLambda) {
+            add_sink(HotBits.alloc, "lambda capture frame", expr)
+        }
+    }
+}
+
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
     // variable + loop tracking
@@ -119,6 +272,9 @@ class PerfLintVisitor : AstVisitor {
     // current function being visited (for inferStack reporting)
     @do_not_delete current_function : Function?
     in_template : bool = false
+    // PERF026-028: functions in this module carrying [hot_path] / [no_alloc] / [no_env] / [no_io],
+    // collected during the main pass so the contract scan needs no traversal of its own
+    @do_not_delete hot_roots : array<Function?>
     // PERF006: known-length loop tracking
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
@@ -555,6 +711,10 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         in_template = fn.moreFlags.isTemplate
+        // PERF026-028: a template carries no resolved callees, so only real functions are roots
+        if (!in_template && uint(hot_bits_of(fn)) != 0u) {
+            hot_roots |> push(fn)
+        }
         // PERF023: reset per-function candidate set.
         perf023_candidates |> clear
         perf023_splice_depth = 0
@@ -1794,6 +1954,114 @@ class PerfLintVisitor : AstVisitor {
             }
         }
     }
+
+    // --- PERF026-028: hot-path contract scan ---
+
+    def hot_file_of(at : LineInfo) : string {
+        return at.fileInfo != null ? "{at.fileInfo.name}" : ""
+    }
+
+    def hot_visit_key(fn_hash : uint64; anchor : ExpressionPtr) : uint64 {
+        return fn_hash * 1099511628211ul + intptr(anchor)
+    }
+
+    // Walks fn's body once and slices the result into the shared flat arrays. Every later query
+    // for the same function is a table hit, so a diamond in the call graph costs one walk.
+    def hot_ensure_summary(var fn : Function?; var hc : HotCache) {
+        let h = fn.getMangledNameHash
+        return if (key_exists(hc.sinks_at, h))
+        var scan = new HotBodyScan()
+        make_visitor(*scan) $(adapter) {
+            visit(fn, adapter)
+        }
+        hc.sinks_at |> insert(h, int2(length(hc.sinks_all), length(scan.sinks)))
+        hc.sinks_all |> push_from(scan.sinks)
+        hc.edges_at |> insert(h, int2(length(hc.edges_all), length(scan.edges)))
+        hc.edges_all |> push_from(scan.edges)
+        unsafe { delete scan; }
+    }
+
+    def hot_report(frames : array<HotFrame>; fi : int; sink : HotSink; want : HotBits; root_file : string) {
+        return if (uint(sink.bit & want) == 0u)
+        // Prefer the anchor: a shared sink node has one location, collapsing every caller into one.
+        var at = frames[fi].anchor != null ? frames[fi].anchor.at : sink.site.at
+        // Generic instances mangle their name; the origin reads the way the author wrote the call.
+        var parts : array<string>
+        var pi = fi
+        while (pi >= 0) {
+            var pf = frames[pi].fn
+            parts |> push(string(pf.fromGeneric != null ? pf.fromGeneric.name : pf.name))
+            pi = frames[pi].parent
+        }
+        let chain = build_string() $(var w) {
+            var k = length(parts) - 1
+            while (k >= 0) {
+                w |> write(parts[k])
+                if (k > 0) {
+                    w |> write(" -> ")
+                }
+                k--
+            }
+        }
+        delete parts
+        let esc = "[cold_path] on the callee, // nolint on the line, or DAS_LINT_DISABLE for a whole run"
+        if (sink.bit.alloc) {
+            perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}; hoist it out of the hot path. To allow it: {esc}", at)
+        } elif (sink.bit.env) {
+            perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}; getenv allocates a string in the context heap on every call — read it once at init and cache the value. To allow it: {esc}", at)
+        } else {
+            perf_warning("PERF028: {sink.what} performs I/O on a hot path, via {chain}. To allow it: {esc}", at)
+        }
+    }
+
+    def scan_hot_root(var root : Function?; var hc : HotCache) {
+        let want = hot_bits_of(root)
+        let root_file = hot_file_of(root.at)
+        var frames : array<HotFrame>
+        var visited : table<uint64>
+        frames |> push(HotFrame(fn = root, parent = -1))
+        visited |> insert(hot_visit_key(root.getMangledNameHash, null))
+        // Breadth-first so the reported chain is the shortest route to the sink.
+        var qi = 0
+        while (qi < length(frames)) {
+            var cur = frames[qi]
+            let ci = qi
+            qi++
+            hot_ensure_summary(cur.fn, hc)
+            let h = cur.fn.getMangledNameHash
+            let ss = hc.sinks_at[h]
+            for (si in range(ss.x, ss.x + ss.y)) {
+                hot_report(frames, ci, hc.sinks_all[si], want, root_file)
+            }
+            let es = hc.edges_at[h]
+            for (ei in range(es.x, es.x + es.y)) {
+                var callee = hc.edges_all[ei].fn
+                continue if (callee == null || callee.body == null || callee.flags.builtIn
+                             || callee.moreFlags.isTemplate || callee.moreFlags.stub
+                             || is_cold_path(callee))
+                var site = hc.edges_all[ei].site
+                // the call site lives in the caller's body, so this tests the CALLER's file
+                var anchor = hot_file_of(site.at) == root_file ? site : cur.anchor
+                let key = hot_visit_key(callee.getMangledNameHash, anchor)
+                continue if (key_exists(visited, key))
+                visited |> insert(key)
+                frames |> push(HotFrame(fn = callee, parent = ci, site = site, anchor = anchor))
+            }
+        }
+        delete frames
+        delete visited
+    }
+
+    def hot_path_scan() {
+        return if (empty(hot_roots))
+        var hc : HotCache
+        while (!empty(hot_roots)) {
+            var root = hot_roots[length(hot_roots) - 1]
+            hot_roots |> erase(length(hot_roots) - 1)
+            scan_hot_root(root, hc)
+        }
+        delete hc
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1816,6 +2084,7 @@ def public perf_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_cod
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(prog, astVisitorAdapter)
     }
+    astVisitor->hot_path_scan()
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
@@ -1838,6 +2107,7 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(prog, astVisitorAdapter)
     }
+    astVisitor->hot_path_scan()
     let count = astVisitor.warning_count
     warnings |> push_from(astVisitor.warnings)
     unsafe { delete astVisitor; }
@@ -1854,6 +2124,7 @@ def public perf_lint_collect_issues(prog : ProgramPtr; var issues : array<LintIs
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(prog, astVisitorAdapter)
     }
+    astVisitor->hot_path_scan()
     let count = astVisitor.warning_count
     issues |> push_from(astVisitor.issues)
     unsafe { delete astVisitor; }
@@ -1870,5 +2141,16 @@ class PerfLintMacro : AstPassMacro {
         let disabled <- build_lint_macro_disabled(prog)
         perf_lint(prog, true, disabled)
         return true
+    }
+}
+
+[_macro]
+def private setup {
+    if (is_compiling_macros_in_module("perf_lint")) {
+        add_new_function_annotation("hot_path", new HotPathMarker())
+        add_new_function_annotation("no_alloc", new HotPathMarker())
+        add_new_function_annotation("no_env", new HotPathMarker())
+        add_new_function_annotation("no_io", new HotPathMarker())
+        add_new_function_annotation("cold_path", new HotPathMarker())
     }
 }
