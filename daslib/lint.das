@@ -303,7 +303,8 @@ class LintVisitor : AstVisitor {
     }
 
     def validate_var(v : VariablePtr; can_make_const : bool) {
-        if (v.flags.generated) return
+        // marked_used: a transform consumed the reads (devirtualized block holder), or author intent
+        if (v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
         // skip system vars (`__name`) and compiler-generated names (backtick-mangled, e.g. tuple destructuring)
         if (name |> starts_with("__") || find(name, "`") >= 0) return

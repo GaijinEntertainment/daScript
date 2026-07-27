@@ -2060,6 +2060,10 @@ namespace das {
                                     continue;
                                 }
                                 literal = bit->second.literal;
+                                // the splice eats this read, usually the holder's only one. lint runs
+                                // after the patch slot but before optimize reaps the dead `let`, so it
+                                // would report LINT002 on a variable the user demonstrably uses
+                                v->variable->marked_used = true;
                             }
                         }
                     }
