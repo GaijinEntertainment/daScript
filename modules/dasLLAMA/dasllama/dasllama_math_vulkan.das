@@ -3696,9 +3696,9 @@ def private mm_small_tile : int64 {
     return g_mm_small
 }
 
-// the small-d cutoff. A narrow role (k/v: d = kv_dim) makes ceil(d/128) * ceil(cnt/128) tiles —
-// at d 1024 / cnt 512 that is 32 workgroups for 36 SMs, one starved wave. DASLLAMA_MM_SMALLD
-// raises the cutoff so those roles take the 32-tile's much wider grid instead.
+// the small-d cutoff (DASLLAMA_MM_SMALLD). k/v (d = kv_dim) gets only 32 wgs for 36 SMs at
+// d 1024 / cnt 512 — but widening that grid MEASURES WORSE, so k/v is limited by the L-tile's
+// arithmetic efficiency, not parallelism: pp512 L128 4297 > M64 4101 > sdot4-32 3906.
 var private g_mm_smalld = -1l
 
 def private mm_small_d : int64 {
