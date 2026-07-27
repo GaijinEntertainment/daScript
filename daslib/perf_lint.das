@@ -42,7 +42,11 @@ module perf_lint shared private
 //!
 //! PERF026-028 are annotation-gated: nothing is checked until a function declares a contract.
 //! [cold_path] prunes the walk; @scratch on a field (or on a by-ref helper parameter) declares a
-//! reused buffer whose sizing is intentional. See skills/perf_lint.md. — interpolation already converts to string
+//! reused buffer whose sizing is intentional. See skills/perf_lint.md.
+//!
+//! The five markers are registered compiler-side (src/builtin/module_builtin_runtime.cpp, beside
+//! [clone]), so code under contract requires NOTHING and pays no build time. This module is the
+//! checker, and is deliberately not required by the code it checks — it runs wherever lint runs. — interpolation already converts to string
 
 require daslib/ast_boost
 require strings
@@ -109,10 +113,6 @@ bitfield private HotBits {
     alloc   // PERF026 — heap traffic (allocate or free)
     env     // PERF027 — environment lookup
     io      // PERF028 — console / file I/O
-}
-
-// One marker class serves every annotation; the pass reads the names, not the type.
-class HotPathMarker : AstFunctionAnnotation {
 }
 
 // LineInfo is not storable in an array, so each record carries the node and derives `.at` at warn
@@ -2263,13 +2263,3 @@ class PerfLintMacro : AstPassMacro {
     }
 }
 
-[_macro]
-def private setup {
-    if (is_compiling_macros_in_module("perf_lint")) {
-        add_new_function_annotation("hot_path", new HotPathMarker())
-        add_new_function_annotation("no_alloc", new HotPathMarker())
-        add_new_function_annotation("no_env", new HotPathMarker())
-        add_new_function_annotation("no_io", new HotPathMarker())
-        add_new_function_annotation("cold_path", new HotPathMarker())
-    }
-}

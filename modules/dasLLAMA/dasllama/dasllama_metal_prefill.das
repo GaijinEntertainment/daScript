@@ -4,7 +4,6 @@ options _comment_hygiene = true
 module dasllama_metal_prefill shared public
 
 require math
-require daslib/perf_lint  // PERF026-028: the hot-path contracts below
 require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
 require daslib/fio
 require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry

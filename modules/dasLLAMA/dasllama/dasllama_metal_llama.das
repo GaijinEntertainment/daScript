@@ -4,7 +4,6 @@ options _comment_hygiene = true
 module dasllama_metal_llama shared public
 
 require math
-require daslib/perf_lint  // PERF026-028: the hot-path contracts below
 require daslib/fio
 require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed readers + the knob registry
 require metal/das_metal_boost

@@ -99,6 +99,17 @@ namespace das
         };
     };
 
+    // [hot_path] / [no_alloc] / [no_env] / [no_io] / [cold_path] — markers for the daslang-side
+    // PERF026-028 lint. Declaring a contract must not drag the checker (and daslib/ast behind it)
+    // into every build of the code under contract, so these are registered here and cost nothing;
+    // daslib/perf_lint reads the annotation NAMES off func->annotations wherever lint actually runs.
+    struct HotPathFunctionAnnotation : MarkFunctionAnnotation {
+        HotPathFunctionAnnotation(const string & na) : MarkFunctionAnnotation(na) { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        };
+    };
+
     struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
         RequestJitFunctionAnnotation() : MarkFunctionAnnotation("jit") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -2051,6 +2062,11 @@ namespace das
         addAnnotation(new MacroFunctionAnnotation());
         addAnnotation(new MacroFnFunctionAnnotation());
         addAnnotation(new CloneFunctionAnnotation());
+        addAnnotation(new HotPathFunctionAnnotation("hot_path"));
+        addAnnotation(new HotPathFunctionAnnotation("no_alloc"));
+        addAnnotation(new HotPathFunctionAnnotation("no_env"));
+        addAnnotation(new HotPathFunctionAnnotation("no_io"));
+        addAnnotation(new HotPathFunctionAnnotation("cold_path"));
         addAnnotation(new HintFunctionAnnotation());
         addAnnotation(new RequestJitFunctionAnnotation());
         addAnnotation(new RequestNoJitFunctionAnnotation());

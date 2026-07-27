@@ -5,7 +5,6 @@ options _metal_manual_dispatch = true   // PERMANENT opt-out: this module IS the
 module dasllama_metal_common shared public
 
 require math
-require daslib/perf_lint  // [cold_path] on the one-time bring-up legs
 require strings
 require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/das_metal_boost

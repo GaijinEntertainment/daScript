@@ -4,7 +4,6 @@ options _comment_hygiene = true
 module dasllama_metal_kernels shared public
 
 require math
-require daslib/perf_lint  // [cold_path] on the one-time bring-up legs
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require metal/das_metal_boost

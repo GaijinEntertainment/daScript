@@ -142,6 +142,14 @@ Unlike every other rule here, these three are **annotation-gated**: nothing is c
 function declares a contract. From each annotated root the scan follows **direct** calls
 transitively, so a sink several frames deep is still reported.
 
+**Declaring a contract is free.** The five annotations are registered by the compiler itself as
+metadata-only markers (the same shape as `[clone]`), so a file under contract requires *nothing* — no module compiles, no build time is paid. `@scratch` is a
+field/parameter annotation, which is free-form anyway. The verification lives here, in
+`daslib/perf_lint`, which code under contract does **not** require: the checker is heavy (it pulls
+`ast_boost`, `lint_config`, `toml`, `json`), and lint already runs where lint belongs —
+`utils/lint/main.das`, the MCP `lint` subtool, CI — none of which ever needed the target to require
+`perf_lint`. A plain build stays silent and pays nothing.
+
 | Annotation | Bans |
 |---|---|
 | `[hot_path]` | all three |
@@ -225,19 +233,16 @@ rather than for the lint, so it can carry the optimization meaning later without
 
 ### Cost
 
-Measured on dasLLAMA (`-compile-only examples/dasLLAMA/run.das`, 3 samples each), 18 annotated
-roots over a ~66k-line engine:
+Measured on dasLLAMA (`-compile-only examples/dasLLAMA/run.das`, 5 samples), 18 annotated roots
+over a ~66k-line engine: **5.55s unannotated, 5.60s annotated** — noise. That is the whole point of
+registering the markers C++-side.
 
-| | wall | delta |
-|---|---|---|
-| before the module was required | 5.55s | — |
-| `-no-lint` | 5.79s | +0.24s — **always paid**: the module must compile for `[no_alloc]` to parse |
-| `DAS_LINT_DISABLE=PERF026,PERF027,PERF028` | 5.95s | +0.40s |
-| default | 6.13s | +0.58s (+10%), of which the closure walk is ~0.18s |
+An earlier arrangement had the code under contract `require daslib/perf_lint` so the `[lint_macro]`
+would fire on every build. It cost +0.58s (+10%), and splitting the declarations into a das-side
+leaf module recovered only 0.16s of that — `daslib/ast`, which any das-side annotation module must
+pull to subclass `AstFunctionAnnotation`, is itself ~0.4s. Hence compiler-side registration.
 
-The always-paid share is the annotation module's own compile (`perf_lint` pulls `ast_boost`,
-`lint_config`, `toml`, `json`). Splitting the five annotations into a leaf module would recover
-most of it, at the cost of a second module to require.
+The trade: a plain build no longer fails on a contract violation. Lint does, everywhere lint runs.
 
 ## Visitor gotchas
 

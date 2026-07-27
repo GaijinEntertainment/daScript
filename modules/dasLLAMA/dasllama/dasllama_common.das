@@ -5,7 +5,6 @@ module dasllama_common shared public
 
 require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
-require daslib/perf_lint  // PERF026-028: the hot-path contracts below
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
