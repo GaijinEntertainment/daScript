@@ -7,6 +7,7 @@ module dasllama_metal_common shared public
 require math
 require strings
 require daslib/fio
+require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
@@ -592,10 +593,6 @@ def mirror_release(var mr : KVMirror) {
 //! Release every GPU object the driver holds — mirrors, weight regions, pools, PSOs, queue,
 //! device (the tests' leak-gate rail, same contract as metal_prefill_shutdown). Lazily
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
-
-def env_int(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
 
 
 def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
@@ -1346,6 +1343,7 @@ let HZ_WHOLE = 0xFFFFFFFFFFFFFFFFul   // whole-buffer p1 — for binds whose spa
 
 var g_hz_on = false                 // gating armed for the encoder being built
 var g_hz_paranoid = false           // DASLLAMA_METAL_HAZARD_PARANOID: barrier every dispatch
+var private g_pipe_debug = false    // DASLLAMA_METAL_PIPE_DEBUG, resolved once — the read sits in the per-step path
 var g_hz_strict = false             // DASLLAMA_METAL_HAZARD_STRICT: undeclared dispatch panics
 var g_hz_dirty = false              // an undeclared dispatch ran — the next gate must barrier
 var g_hz_stage : array<MemRange>    // the next dispatch's declared ranges
@@ -1752,7 +1750,7 @@ def finish_pending_step {
     let ge_last = metal_command_buffer_gpu_end_time(g_lp_cbs[length(g_lp_cbs) - 1])
     g_gpu_b_ms += (ge_last - gs0) * 1000.0lf
     g_handoff_b_ms += max(0.0lf, (gs0 - max(g_lp_prev_gpu_end, metal_command_buffer_kernel_end_time(g_lp_cbs[0]))) * 1000.0lf)
-    if (has_env_variable("DASLLAMA_METAL_PIPE_DEBUG")) {   // per-step pipeline trace (first steps + outliers)
+    if (g_pipe_debug) {   // per-step pipeline trace (first steps + outliers)
         let gap_ms = (gs0 - g_lp_prev_gpu_end) * 1000.0lf
         let env_ms = (ge_last - gs0) * 1000.0lf
         if (g_batch_steps < 8l || gap_ms > 1.0lf) {
@@ -1854,6 +1852,7 @@ def metal_common_init : bool {
     }
     g_queue = metal_new_command_queue(g_dev)
     g_attn_single_max = clamp(int64(env_int("DASLLAMA_METAL_ATTN_SINGLE", 64)), ATTN_CHUNK_ROWS, 128l)
+    g_pipe_debug = env_flag("DASLLAMA_METAL_PIPE_DEBUG", false)
     g_hz_paranoid = env_int("DASLLAMA_METAL_HAZARD_PARANOID", 0) != 0
     g_hz_strict = env_int("DASLLAMA_METAL_HAZARD_STRICT", 0) != 0
     return true

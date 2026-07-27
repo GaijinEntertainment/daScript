@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production 32x32 GEMM MSL (the batch-crossover row)
@@ -4091,10 +4092,6 @@ def private time_reps_sk(queue; pso_g; bufs_g; groups_g : uint3; tgmem : uint64;
     return gpu_ms / double(reps)
 }
 
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
 def private want(filter_env, name : string) : bool {
     return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
 }
@@ -4185,7 +4182,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
 }
 
 def private run_lab(b : B?; variants) {
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let refd = 128l
     let bmax = 16l
     var dev = metal_create_system_default_device()

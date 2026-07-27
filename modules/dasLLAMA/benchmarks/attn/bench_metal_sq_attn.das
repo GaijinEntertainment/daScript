@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production batch attention MSL (zero copy drift)
@@ -965,10 +966,6 @@ def private cpu_sq_attn(kc, vc; q : array<float>; nb, cnt, nheads, head_size, kv
     return <- yo
 }
 
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
@@ -1049,7 +1046,7 @@ def private time_pair(queue; pso_a; bufs_a; groups_a : uint3; threads_a : uint; 
 // built flat) vs the lab part/comb variants. Same k/v/q buffers, same CPU oracle,
 // interleaved best-of timing.
 def private run_attn_b2_sidebyside(b) {
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let nheads = 24l
     let head_size = 128l
     let kv_dim = 1024l
@@ -1132,7 +1129,7 @@ def private run_attn_b2_sidebyside(b) {
         // fixed sg budget of 16: beats 32 (16k 1.00 vs 1.05) and the depth-doubling heuristic
         // (64/128 = more entry traffic, shorter loops) — FEWER long-running workers win because
         // the tgmem-resident accumulator loop amortizes; the knob is for re-sweeps
-        let nsgsd = min(nch32, int64(env_or("DASMETAL_LAB_ATTN_NSGS", 16)))
+        let nsgsd = min(nch32, int64(env_int("DASMETAL_LAB_ATTN_NSGS", 16)))
         var nsgsdbuf = upload_u32(dev, uint(nsgsd))
         // rt row: (kbase, vbase, capacity, cnt) — flat single-layer mirror at base 0
         var rte : array<uint>
@@ -1274,7 +1271,7 @@ def private run_attn_b2_sidebyside(b) {
 }
 
 def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds never compile the Metal-typed body
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     // llama-3B geometry
     let nheads = 24l
     let head_size = 128l

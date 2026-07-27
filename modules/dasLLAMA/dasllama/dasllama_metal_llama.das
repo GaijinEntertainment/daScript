@@ -5,6 +5,7 @@ module dasllama_metal_llama shared public
 
 require math
 require daslib/fio
+require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed readers + the knob registry
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
@@ -539,7 +540,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
     // tied-fp32 stays CPU; blob models FORCE GPU logits (no CPU planes); MTP serves — finish_step stashes mtp_h from bxf
-    r.gpu_logits = ((t.metal_blob || (!g_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_skip))) &&
+    r.gpu_logits = ((t.metal_blob || (!g_logits_cpu && g_env_logits && empty(g_skip))) &&
         !tied_f32 &&
         t.wcls_off >= 0l)
     if (r.gpu_logits) {
@@ -1508,7 +1509,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
             cold = kmr.watermark < pos || kmr.cap_rows < pos + 2l
         }
     }
-    if (cold && get_env_variable("DASLLAMA_MTP_DEBUG") == "cold") {   // bring-up bisect: log the failing gate
+    if (cold && g_env_mtp_debug == "cold") {   // bring-up bisect: log the failing gate
         let vok_g = metal_mtp_verify_ok(t, s)
         let dnp = c.recr_mask != 0ul && key_exists(g_dn_mirrors, s.uid) ? g_dn_mirrors[s.uid].pos : -1l
         let wm = key_exists(g_mirrors, s.uid) ? g_mirrors[s.uid].watermark : -1l
@@ -1521,7 +1522,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
             memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), int(c.dim * 4l))
         }
         cold = !metal_mtp_draft_forward(t, s, tok, pos)
-        if (cold && get_env_variable("DASLLAMA_MTP_DEBUG") == "cold") {
+        if (cold && g_env_mtp_debug == "cold") {
             to_log(LOG_INFO, "mtp cold: draft declined at pos={pos}\n")
         }
     }
@@ -1531,7 +1532,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         return false
     }
     var d = parallel_argmax(s.logits, c.vocab_size)
-    if (get_env_variable("DASLLAMA_MTP_DEBUG") == "reject") {   // bring-up bisect: force the reject path
+    if (g_env_mtp_debug == "reject") {   // bring-up bisect: force the reject path
         d = 0l
     }
     s.mtp_drafted++
@@ -2374,7 +2375,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // the mul_mm rail (opt-in, DASLLAMA_METAL_BATCH_MM=1): MEASURED NEGATIVE at M-pad-32 (3B d512
     // -n 32: B=8 145.2 vs GemmB 153.3) — mm's 32x64 tile grids only d/64 threadgroups vs GemmB's
     // 32x32 = 2x occupancy. Kept as the A/B rail for bigger-M futures (B > 16 pads to 64).
-    let use_mm = (use_gemm && get_env_variable("DASLLAMA_METAL_BATCH_MM") == "1" &&
+    let use_mm = (use_gemm && g_env_batch_mm &&
         (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l &&
         (qd_sw % 64l) == 0l && (kvd_sw % 64l) == 0l)
     let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
@@ -2401,14 +2402,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // models stand down to the chunked pair. DASLLAMA_METAL_ATTN_D=0 = the A/B rail to the old path.
     let use_attn_d = (head_size == 128l && !hetero && c.attn_logit_softcap <= 0.0 && c.sliding_window == 0l &&
         !c.attn_sinks &&   // partD's online softmax has no sink seed — sink models take the chunked pair
-        get_env_variable("DASLLAMA_METAL_ATTN_D") != "0")
+        g_env_attn_d)
     let d_nsgs = min((maxcnt + 31l) / 32l, 16l)
     // logits-on-GPU (default ON): the batched final rms + classifier ride the same cb and the
     // CPU tail's classifier (one full weight-plane stream per step — ~6ms of the small-B wall)
     // is skipped via batch_decode_override_logits_done. Gates mirror the single-stream driver's.
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
-    let gpu_logits = ((t.metal_blob || (!g_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_skip))) &&
+    let gpu_logits = ((t.metal_blob || (!g_logits_cpu && g_env_logits && empty(g_skip))) &&
         !tied_f32 && c.n_layer_nextn == 0l &&
         t.wcls_off >= 0l &&
         (cls_fmt != KqFmt.q8 || !use_gemm || (c.vocab_size % (use_mm ? 64l : 32l)) == 0l))
@@ -3273,6 +3274,13 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
 
 
 
+// Knobs resolved once at [init]. They were read per decode step, and get_env_variable allocates
+// its result in the context heap on every call — see PERF027.
+var private g_env_logits = true
+var private g_env_batch_mm = false
+var private g_env_attn_d = true
+var private g_env_mtp_debug = ""
+
 [init]
 def dasllama_metal_llama_register() {
     // registered but dormant: only select_decode_override("metal") (env rail DASLLAMA_PIN_DECODE
@@ -3283,6 +3291,10 @@ def dasllama_metal_llama_register() {
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
     register_metal_servable(@@metal_model_servable_impl)   // load_model's image-flavor gate
+    g_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
+    g_env_batch_mm = env_flag("DASLLAMA_METAL_BATCH_MM", false)
+    g_env_attn_d = env_flag("DASLLAMA_METAL_ATTN_D", true)
+    g_env_mtp_debug = env_str("DASLLAMA_MTP_DEBUG", "")
     if (has_env_variable("DASLLAMA_METAL_DECODE_SKIP")) {
         g_skip = get_env_variable("DASLLAMA_METAL_DECODE_SKIP")
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} — timing-attribution mode, output is GARBAGE\n")

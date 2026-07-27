@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_math_accelerate shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require dasllama/dasllama_par
 require das_accelerate
 require llvm/daslib/f16_cvt
@@ -224,28 +225,25 @@ def dasllama_accelerate_disable() {
     clear_float_batch_override()
 }
 
-def private env_int64(name : string; def_v : int64; min_v : int64) : int64 {
-    let raw : string = get_env_variable(name)
-    if (empty(raw)) {
+// env_int64 with a floor: out-of-range is worth a word, unlike a plain unset knob
+def private env_int64_min(name : string; def_v : int64; min_v : int64) : int64 {
+    let v = env_int64(name, def_v)
+    if (v < min_v) {
+        to_log(LOG_WARNING, "dasLLAMA: {name} must be an integer >= {min_v} — keeping {def_v}\n")
         return def_v
     }
-    let parsed = try_to_int64(raw)
-    if (parsed._is_ok && parsed._value >= min_v) {
-        return parsed._value
-    }
-    to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
-    return def_v
+    return v
 }
 
 [init]
 def private dasllama_math_accelerate_init() {
-    if (get_env_variable("DASLLAMA_ACCEL") != "1") {
+    if (!env_flag("DASLLAMA_ACCEL", false)) {
         return
     }
-    g_accel_min_mmac = env_int64("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
-    dasllama_accelerate_set_f16_strips(env_int64("DASLLAMA_ACCEL_F16_STRIPS", 0l, 0l))
-    if (get_env_variable("DASLLAMA_ACCEL_F16") == "1" && !dasllama_accelerate_set_f16(true)) {
+    g_accel_min_mmac = env_int64_min("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
+    dasllama_accelerate_set_f16_strips(env_int64_min("DASLLAMA_ACCEL_F16_STRIPS", 0l, 0l))
+    if (env_flag("DASLLAMA_ACCEL_F16", false) && !dasllama_accelerate_set_f16(true)) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ACCEL_F16=1 but the BNNS probe failed — f16 lane stays off\n")
     }
-    dasllama_accelerate_enable(env_int64("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
+    dasllama_accelerate_enable(env_int64_min("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
 }

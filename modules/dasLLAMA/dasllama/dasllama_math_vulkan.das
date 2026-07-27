@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_math_vulkan shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require dasllama/dasllama_par
 require dasllama/dasllama_vulkan_lens
 require vulkan
@@ -3349,7 +3350,7 @@ var private g_mm_small = -1l
 
 def private mm_small_tile : int64 {
     if (g_mm_small < 0l) {
-        let e = get_env_variable("DASLLAMA_MM_SMALL")
+        let e = env_str("DASLLAMA_MM_SMALL", "")
         g_mm_small = e == "64" ? 64l : (e == "128" ? 128l : BATCH_TILE)   // else fails closed to sdot4
     }
     return g_mm_small
@@ -3771,7 +3772,7 @@ def vk_submit_count : uint64 => g_vk_submits
 def private vk_prof : bool {
     if (!g_vk_prof_probed) {
         g_vk_prof_probed = true
-        g_vk_prof = get_env_variable("DASLLAMA_GPU_PROF") == "1"
+        g_vk_prof = env_flag("DASLLAMA_GPU_PROF", false)
     }
     return g_vk_prof
 }
@@ -3908,7 +3909,7 @@ def private vk_moe_init : bool {
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.coopmat_mode = 0
     if (g_gpu.has_coopmat) {
-        let mode = get_env_variable("DASLLAMA_COOPMAT")
+        let mode = env_str("DASLLAMA_COOPMAT", "")
         if (mode == "f16") {
             g_gpu.coopmat_mode = 1
         } elif (mode == "int8") {
@@ -3972,7 +3973,7 @@ def private vk_moe_init : bool {
         g_gpu.weight_budget = max(g_gpu.weight_budget - STREAM_RESERVE, 0l)   // room for the 2 slots
     }
     // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
-    if (get_env_variable("DASLLAMA_VK_REBAR") != "0") {
+    if (env_flag("DASLLAMA_VK_REBAR", true)) {
         var rmp : VkPhysicalDeviceMemoryProperties
         vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, rmp)
         for (i in range(int(rmp.memoryTypeCount))) {
@@ -5372,14 +5373,14 @@ var private g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
 
 def private vhz_paranoid : bool {
     if (g_vhz_paranoid < 0) {
-        g_vhz_paranoid = get_env_variable("DASLLAMA_VK_HAZARD_PARANOID") == "1" ? 1 : 0
+        g_vhz_paranoid = env_flag("DASLLAMA_VK_HAZARD_PARANOID", false) ? 1 : 0
     }
     return g_vhz_paranoid != 0
 }
 
 def private vhz_trace : bool {
     if (g_vhz_trace < 0) {
-        g_vhz_trace = get_env_variable("DASLLAMA_VK_HAZARD_TRACE") == "1" ? 1 : 0
+        g_vhz_trace = env_flag("DASLLAMA_VK_HAZARD_TRACE", false) ? 1 : 0
     }
     return g_vhz_trace != 0
 }
@@ -5388,7 +5389,7 @@ var private g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b (flash
 
 def private vk_fa_on : bool {
     if (g_vk_fa < 0) {
-        g_vk_fa = get_env_variable("DASLLAMA_VK_FA") == "0" ? 0 : 1
+        g_vk_fa = env_flag("DASLLAMA_VK_FA", true) ? 1 : 0
     }
     return g_vk_fa != 0
 }

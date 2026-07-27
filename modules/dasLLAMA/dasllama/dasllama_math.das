@@ -6,6 +6,7 @@ module dasllama_math shared public
 require math
 require strings  // to_int: DASLLAMA_CALLER_PRIO env override in setup_dasllama_jobque_
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
+require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
@@ -567,11 +568,7 @@ def setup_dasllama_jobque_() {
     // The dispatch caller is load-bearing in team mode — only it publishes chains, so a
     // descheduled caller idles every lane (4B Q4 32L trace: 13 all-lane holes/token, 1.7% worst).
     // Que creation ran this thread at High; claim the top notch. DASLLAMA_CALLER_PRIO=<-2..2> is the A/B rail.
-    var prio = 2
-    if (has_env_variable("DASLLAMA_CALLER_PRIO")) {
-        prio = to_int(get_env_variable("DASLLAMA_CALLER_PRIO"))
-    }
-    set_current_thread_priority(clamp(prio, -2, 2))
+    set_current_thread_priority(clamp(env_int("DASLLAMA_CALLER_PRIO", 2), -2, 2))
 }
 
 // dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the
@@ -2040,8 +2037,6 @@ def public set_gpu_tier_want(want : GpuTierWant) {
     g_gpu_want = want
 }
 
-def private env_int64(name : string) : int64 => int64(to_int(get_env_variable(name)))
-
 // Noisy mode: the engine says what it did instead of leaving it to be inferred from timings.
 // Lives here (not dasllama_common) so the GPU drivers can report too.
 var private g_noisy = -1
@@ -2052,7 +2047,7 @@ def public set_dasllama_noisy(on : bool) {
 }
 def public dasllama_noisy() : bool {
     if (g_noisy < 0) {
-        g_noisy = get_env_variable("DASLLAMA_NOISY") == "1" ? 1 : 0
+        g_noisy = env_flag("DASLLAMA_NOISY", false) ? 1 : 0
     }
     return g_noisy == 1
 }
@@ -2061,61 +2056,61 @@ def public dasllama_noisy() : bool {
 //! deltanet/attention/dense/shared-expert/classifier rails. qkv and heat stay off (measured
 //! negative and a wash). Any DASLLAMA_GPU_* knob still overrides individually.
 def public gpu_want_auto : bool
-    => has_env_variable("DASLLAMA_GPU") ? get_env_variable("DASLLAMA_GPU") == "1" : g_gpu_want.auto_tier
+    => env_flag("DASLLAMA_GPU", g_gpu_want.auto_tier)
 
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.
 
 // -1 = auto: the upload walk resolves it against n_layers and lets its budget stops place the split
 def public gpu_want_moe_layers : int64
-    => (has_env_variable("DASLLAMA_GPU_MOE_LAYERS") ? env_int64("DASLLAMA_GPU_MOE_LAYERS")
-        : (g_gpu_want.moe_layers != 0l ? g_gpu_want.moe_layers : (gpu_want_auto() ? -1l : 0l)))
+    => env_int64("DASLLAMA_GPU_MOE_LAYERS",
+                 g_gpu_want.moe_layers != 0l ? g_gpu_want.moe_layers : (gpu_want_auto() ? -1l : 0l))
 
 def public gpu_want_moe_stream : int64
-    => (has_env_variable("DASLLAMA_GPU_MOE_STREAM") ? env_int64("DASLLAMA_GPU_MOE_STREAM")
-        : (g_gpu_want.moe_stream != 0l ? g_gpu_want.moe_stream : (gpu_want_auto() ? -1l : 0l)))
+    => env_int64("DASLLAMA_GPU_MOE_STREAM",
+                 g_gpu_want.moe_stream != 0l ? g_gpu_want.moe_stream : (gpu_want_auto() ? -1l : 0l))
 
 def public gpu_want_vram_mb : int64
-    => has_env_variable("DASLLAMA_GPU_VRAM_MB") ? env_int64("DASLLAMA_GPU_VRAM_MB") : g_gpu_want.vram_mb
+    => env_int64("DASLLAMA_GPU_VRAM_MB", g_gpu_want.vram_mb)
 
 def public gpu_want_dn : bool
-    => has_env_variable("DASLLAMA_GPU_DN") ? get_env_variable("DASLLAMA_GPU_DN") == "1" : (g_gpu_want.dn || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DN", g_gpu_want.dn || gpu_want_auto())
 
 def public gpu_want_attn : bool
-    => has_env_variable("DASLLAMA_GPU_ATTN") ? get_env_variable("DASLLAMA_GPU_ATTN") == "1" : (g_gpu_want.attn || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_ATTN", g_gpu_want.attn || gpu_want_auto())
 
 def public gpu_want_dense : bool
-    => has_env_variable("DASLLAMA_GPU_DENSE") ? get_env_variable("DASLLAMA_GPU_DENSE") == "1" : (g_gpu_want.dense || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DENSE", g_gpu_want.dense || gpu_want_auto())
 
 //! Dense-rail sub-arm for gemma-4's parallel dense shared expert (moe_dense_shexp) w1/w3/w2 triple.
 //! Opt-IN: MEASURED a wash-to-loss (3 dispatches each paying acts-up + y-down around a CPU gate)
 //! and the uploads displace 1-2 expert layers. Kept as the upload half of a future FUSED chain.
 def public gpu_want_dense_shexp : bool
-    => get_env_variable("DASLLAMA_GPU_DENSE_SHEXP") == "1"
+    => env_flag("DASLLAMA_GPU_DENSE_SHEXP", false)
 
 //! The dense rail's attention half (per-layer q/o pairs). Opt-OUT (``DASLLAMA_GPU_DENSE_ATTN=0``)
 //! — measured a LOSS on gemma-4 where the shexp triple is a large win, so the two halves need
 //! independent control rather than one DENSE gate.
 def public gpu_want_dense_attn : bool
-    => get_env_variable("DASLLAMA_GPU_DENSE_ATTN") != "0"
+    => env_flag("DASLLAMA_GPU_DENSE_ATTN", true)
 
 def public gpu_want_dnd : bool
-    => has_env_variable("DASLLAMA_GPU_DND") ? get_env_variable("DASLLAMA_GPU_DND") == "1" : (g_gpu_want.dnd || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DND", g_gpu_want.dnd || gpu_want_auto())
 
 def public gpu_want_heat : int64
-    => has_env_variable("DASLLAMA_GPU_HEAT") ? env_int64("DASLLAMA_GPU_HEAT") : g_gpu_want.heat
+    => env_int64("DASLLAMA_GPU_HEAT", g_gpu_want.heat)
 
 def public gpu_want_shexp : bool
-    => has_env_variable("DASLLAMA_GPU_SHEXP") ? get_env_variable("DASLLAMA_GPU_SHEXP") == "1" : (g_gpu_want.shexp || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_SHEXP", g_gpu_want.shexp || gpu_want_auto())
 
 def public gpu_want_qkv : bool
-    => has_env_variable("DASLLAMA_GPU_QKV") ? get_env_variable("DASLLAMA_GPU_QKV") == "1" : g_gpu_want.qkv
+    => env_flag("DASLLAMA_GPU_QKV", g_gpu_want.qkv)
 
 //! Arm-intent for the classifier plane. The UPLOAD is opt-OUT (DASLLAMA_GPU_CLS=0 declines it), so
 //! this is only the stronger "=1 arms the tier by itself" signal — letting the classifier offload be
 //! measured without also offloading expert layers. Unset keeps today's behavior exactly.
 def public gpu_want_cls : bool
-    => get_env_variable("DASLLAMA_GPU_CLS") == "1"
+    => env_flag("DASLLAMA_GPU_CLS", false)
 
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).

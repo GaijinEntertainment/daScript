@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_image shared public
 
 require daslib/fio
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/apply
 require strings
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
@@ -655,7 +656,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
     // metal mode at load time picks the image FLAVOR: blob-only metal when the drivers can
     // serve the config, planar CPU otherwise (flavors are per-config and self-sufficient)
     let want_metal = mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
-    if (mode == QuantMode.q8 && get_env_variable("DASLLAMA_IMAGE") != "0") {
+    if (mode == QuantMode.q8 && env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let ts_img = ref_time_ticks()
         var t = Model()

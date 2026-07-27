@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_audio shared public
 
 require math
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require strings
 require daslib/fio
 require daslib/apply
@@ -978,7 +979,7 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    if (get_env_variable("DASLLAMA_IMAGE") != "0") {
+    if (env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()

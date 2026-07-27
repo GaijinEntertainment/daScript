@@ -4,6 +4,8 @@ options _comment_hygiene = true
 module dasllama_common shared public
 
 require daslib/fio
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require daslib/perf_lint  // PERF026-028: the hot-path contracts below
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -372,7 +374,7 @@ def allow_cpu_prefill(on : bool = true) {
 
 def private cpu_prefill_allowed : bool {
     if (g_cpu_prefill_allowed < 0) {
-        g_cpu_prefill_allowed = get_env_variable("DASLLAMA_CPU_PREFILL") == "1" ? 1 : 0
+        g_cpu_prefill_allowed = env_flag("DASLLAMA_CPU_PREFILL", false) ? 1 : 0
     }
     return g_cpu_prefill_allowed == 1
 }
@@ -2068,8 +2070,7 @@ let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mi
 // the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
-    let e = get_env_variable("DASLLAMA_GPU_MIN_CTX")
-    let v = int64(to_int(e))   // non-numeric -> 0 -> treated as unset (keep the default floor)
+    let v = env_int64("DASLLAMA_GPU_MIN_CTX", 0l)   // unset or non-numeric keeps the default floor
     return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
 }
 
@@ -2105,7 +2106,7 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
     }
     // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
     // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = get_env_variable("DASLLAMA_PIN_PREFILL")
+    let pin = env_str("DASLLAMA_PIN_PREFILL", "")
     if ((!empty(pin) && pin != "vulkan") || !empty(active_prefill_override())) {
         return false
     }
@@ -2622,7 +2623,7 @@ def moe_gpu_upload_resident(var t : Model) {
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
     let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
-    if (cls_servable && get_env_variable("DASLLAMA_GPU_CLS") != "0"
+    if (cls_servable && env_flag("DASLLAMA_GPU_CLS", true)
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
         set_moe_gpu_cls_off(t.wcls_off)
     }
@@ -8131,7 +8132,7 @@ def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne
 
 def private expert_reuse_armed() : bool {
     if (g_reuse_on < 0) {
-        g_reuse_on = get_env_variable("DASLLAMA_EXPERT_REUSE") == "1" ? 1 : 0
+        g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
     }
     return g_reuse_on == 1
 }
@@ -11270,7 +11271,7 @@ var private g_gpu_combine_probed = false
 def private gpu_combine_on : bool {
     if (!g_gpu_combine_probed) {
         g_gpu_combine_probed = true
-        g_gpu_combine = get_env_variable("DASLLAMA_GPU_COMBINE") != "0"
+        g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
     }
     return g_gpu_combine
 }
