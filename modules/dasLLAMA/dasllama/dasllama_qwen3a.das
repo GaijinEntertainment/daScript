@@ -52,7 +52,7 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
+        var inscope m <- parse_gguf_meta(bytes)
         // qwen3a mmprojs spell the key clip.audio.projector_type (not clip.projector_type)
         let proj = (gguf_has(m, "clip.audio.projector_type") ? gguf_str(m, bytes, "clip.audio.projector_type")
             : gguf_str(m, bytes, "clip.projector_type"))

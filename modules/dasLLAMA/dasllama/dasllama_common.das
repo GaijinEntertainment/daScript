@@ -3053,7 +3053,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
+        var inscope m <- parse_gguf_meta(bytes)
         load_gguf_parsed(t, m, bytes, mode, ts_load)
     }
     fclose(f)

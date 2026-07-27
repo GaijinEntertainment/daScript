@@ -1004,7 +1004,7 @@ def private load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
+        var inscope m <- parse_gguf_meta(bytes)
         let proj = gguf_str(m, bytes, "clip.projector_type")
         if (proj == "qwen2a" || proj == "qwen2.5o") {   // omni's audio side is qwen2a verbatim
             t.proj_kind = AudioProjKind.qwen2a

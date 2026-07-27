@@ -142,7 +142,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     fmap(ef) $(var bytes : array<uint8>#) {
         emagic = rd_u32(bytes, 0l)
         if (emagic == 0x46554747u) {   // "GGUF" — sniff the audio projector type
-            let mm <- parse_gguf_meta(bytes)
+            var inscope mm <- parse_gguf_meta(bytes)
             if (gguf_has(mm, "clip.audio.projector_type")) {
                 eproj = gguf_str(mm, bytes, "clip.audio.projector_type")
             } elif (gguf_has(mm, "clip.projector_type")) {

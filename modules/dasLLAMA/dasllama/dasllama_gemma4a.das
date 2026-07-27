@@ -197,7 +197,7 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
+        var inscope m <- parse_gguf_meta(bytes)
         let proj = (gguf_has(m, "clip.audio.projector_type")
             ? gguf_str(m, bytes, "clip.audio.projector_type")
             : gguf_str(m, bytes, "clip.projector_type"))

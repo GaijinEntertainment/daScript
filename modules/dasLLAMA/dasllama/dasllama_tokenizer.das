@@ -61,9 +61,9 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
-        let toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
-        let scores <- gguf_f32_array(m, bytes, "tokenizer.ggml.scores")
+        var inscope m <- parse_gguf_meta(bytes)
+        var inscope toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
+        var inscope scores <- gguf_f32_array(m, bytes, "tokenizer.ggml.scores")
         let n = length(toks)
         tk.vocab |> reserve(n)
         tk.scores |> reserve(n)
@@ -189,7 +189,7 @@ def load_tokenizer_auto(path : string) : Tokenizer {
     }
     var model_kind = ""
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
+        var inscope m <- parse_gguf_meta(bytes)
         if (gguf_has(m, "tokenizer.ggml.model")) {
             model_kind = gguf_str(m, bytes, "tokenizer.ggml.model")
         }
