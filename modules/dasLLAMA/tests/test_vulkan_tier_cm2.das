@@ -122,11 +122,11 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
     gout |> resize(int(nrows * N))
     let nb = int(N / 32l)
     let nbh = int(NFE / 32l)
-    var gate : array<float>
-    var up : array<float>
-    var h : array<float>
-    var hq : array<int>
-    var hs : array<float>
+    var inscope gate : array<float>
+    var inscope up : array<float>
+    var inscope h : array<float>
+    var inscope hq : array<int>
+    var inscope hs : array<float>
     gate |> resize(int(NFE))
     up |> resize(int(NFE))
     h |> resize(int(NFE))
@@ -216,17 +216,17 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
                 feint("no Vulkan device or no NV_cooperative_matrix2; cm2 twin untestable here\n")
                 return
             }
-            var wq1 : array<int8>
-            var ws1 : array<float>
-            var wq3 : array<int8>
-            var ws3 : array<float>
-            var wq2 : array<int8>
-            var ws2 : array<float>
+            var inscope wq1 : array<int8>
+            var inscope ws1 : array<float>
+            var inscope wq3 : array<int8>
+            var inscope ws3 : array<float>
+            var inscope wq2 : array<int8>
+            var inscope ws2 : array<float>
             fill_stack(wq1, ws1, NE * NFE, N, 0l, true)
             fill_stack(wq3, ws3, NE * NFE, N, 5l, true)
             fill_stack(wq2, ws2, NE * N, NFE, 9l, true)
-            var wqb : array<uint8>
-            var no_ws : array<uint8>   // q8n stacks upload with an EMPTY scale plane
+            var inscope wqb : array<uint8>
+            var inscope no_ws : array<uint8>   // q8n stacks upload with an EMPTY scale plane
             pack_q8n(wq1, ws1, NE * NFE, N, wqb)
             let up_ok = moe_gpu_upload_stack(wqb, no_ws, WOFF1, N, NE * NFE, 6)
             if (!up_ok) {
@@ -242,16 +242,16 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
 
             // decode arm: 2 rows, 1 per region — the q8n native-block GEMV + the Q8_0 requant
             // mid-chain; int-exact like the q8 suite's decode arm
-            var xq : array<int8>
-            var xs : array<float>
+            var inscope xq : array<int8>
+            var inscope xs : array<float>
             fill_acts(xq, xs, 2l)
-            var offs1 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF1, ege1)
-            var offs3 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF3, ege1)
-            var offs2 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF2, ege2)
-            var gout : array<float>
+            var inscope offs1 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF1, ege1)
+            var inscope offs3 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF3, ege1)
+            var inscope offs2 <- make_offs([1l, 2l], [0l, 1l], [1l, 1l], WOFF2, ege2)
+            var inscope gout : array<float>
             gout |> resize(int(2l * N))
             matmul_moe_gpu_ffn(gout, offs1, offs3, offs2, 2l, xq, xs, N, NFE, 2l, 6, 6, 6, false)
-            var refv : array<float>
+            var inscope refv : array<float>
             ref_ffn(offs1, offs3, offs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 2l, true,
                 WOFF1, WOFF3, WOFF2, refv)
             var c = compare_gout(gout, refv)
@@ -262,9 +262,9 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
             // batch arm: 40 rows, 2 regions, deliberately unpadded — underfilled 128-wide token
             // tiles + the 96 = 64+32 weight-tail tile on the down twin (clamp/discard coverage)
             fill_acts(xq, xs, 40l)
-            var boffs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF1, ege1)
-            var boffs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF3, ege1)
-            var boffs2 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF2, ege2)
+            var inscope boffs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF1, ege1)
+            var inscope boffs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF3, ege1)
+            var inscope boffs2 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFF2, ege2)
             gout |> resize(int(40l * N))
             matmul_moe_gpu_ffn(gout, boffs1, boffs3, boffs2, 2l, xq, xs, N, NFE, 40l, 6, 6, 6, false)
             ref_ffn(boffs1, boffs3, boffs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 40l, false,
@@ -276,9 +276,9 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
 
             // multi-tile arm: a 130-row region spans two token tiles (128 + 2-row tail)
             fill_acts(xq, xs, 200l)
-            var moffs1 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF1, ege1)
-            var moffs3 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF3, ege1)
-            var moffs2 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF2, ege2)
+            var inscope moffs1 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF1, ege1)
+            var inscope moffs3 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF3, ege1)
+            var inscope moffs2 <- make_offs([0l, 1l], [0l, 130l], [130l, 70l], WOFF2, ege2)
             gout |> resize(int(200l * N))
             matmul_moe_gpu_ffn(gout, moffs1, moffs3, moffs2, 2l, xq, xs, N, NFE, 200l, 6, 6, 6, false)
             ref_ffn(moffs1, moffs3, moffs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 200l, false,
@@ -290,8 +290,8 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
 
             // combined arm: the routed weighted-sum reduce composed onto the twin chain, judged
             // against the same combine of the GPU's OWN per-row gout (isolates the combine op)
-            var cw : array<float>
-            var cinv : array<uint>
+            var inscope cw : array<float>
+            var inscope cinv : array<uint>
             cw |> resize(40)
             cinv |> resize(40)
             for (g in range(40)) {
@@ -301,10 +301,10 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
             fill_acts(xq, xs, 40l)
             gout |> resize(int(40l * N))
             matmul_moe_gpu_ffn(gout, boffs1, boffs3, boffs2, 2l, xq, xs, N, NFE, 40l, 6, 6, 6, false)
-            var comb : array<float>
+            var inscope comb : array<float>
             comb |> resize(int(10l * N))
             matmul_moe_gpu_ffn_combined(comb, boffs1, boffs3, boffs2, 2l, xq, xs, cw, cinv, N, NFE, 40l, 10l, 6, 6, 6, false)
-            var combref : array<float>
+            var inscope combref : array<float>
             combref |> resize(int(10l * N))
             for (p in range(10)) {
                 for (i in range(int(N))) {
@@ -322,13 +322,13 @@ def test_vulkan_moe_ffn_cm2(t : T?) {
 
             // mixed arm: fmt-0 gate/up (the mm/sdot4 rail) + q8n down — the actf16 mid-step
             // keyed on the DOWN stack composes with a non-cm2 front half (the gemma triple shape)
-            var wsb : array<uint8>
+            var inscope wsb : array<uint8>
             pack_upload(wq1, ws1, wqb, wsb)
             t |> success(moe_gpu_upload_stack(wqb, wsb, WOFFQ1, N, NE * NFE, 0), "mixed-arm q8 gate uploaded")
             pack_upload(wq3, ws3, wqb, wsb)
             t |> success(moe_gpu_upload_stack(wqb, wsb, WOFFQ3, N, NE * NFE, 0), "mixed-arm q8 up uploaded")
-            var xoffs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFFQ1, ege1)
-            var xoffs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFFQ3, ege1)
+            var inscope xoffs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFFQ1, ege1)
+            var inscope xoffs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], WOFFQ3, ege1)
             fill_acts(xq, xs, 40l)
             gout |> resize(int(40l * N))
             matmul_moe_gpu_ffn(gout, xoffs1, xoffs3, boffs2, 2l, xq, xs, N, NFE, 40l, 0, 0, 6, false)
@@ -362,17 +362,17 @@ def test_vulkan_moe_ffn_cm2_streamed(t : T?) {
                 feint("no Vulkan device or no NV_cooperative_matrix2; cm2 twin untestable here\n")
                 return
             }
-            var wq1 : array<int8>
-            var ws1 : array<float>
-            var wq3 : array<int8>
-            var ws3 : array<float>
-            var wq2 : array<int8>
-            var ws2 : array<float>
+            var inscope wq1 : array<int8>
+            var inscope ws1 : array<float>
+            var inscope wq3 : array<int8>
+            var inscope ws3 : array<float>
+            var inscope wq2 : array<int8>
+            var inscope ws2 : array<float>
             fill_stack(wq1, ws1, NE * NFE, N, 21l, true)
             fill_stack(wq3, ws3, NE * NFE, N, 26l, true)
             fill_stack(wq2, ws2, NE * N, NFE, 30l, true)
-            var wqb : array<uint8>
-            var no_ws : array<uint8>
+            var inscope wqb : array<uint8>
+            var inscope no_ws : array<uint8>
             pack_q8n(wq1, ws1, NE * NFE, N, wqb)
             let up_ok = moe_gpu_upload_stack(wqb, no_ws, SWOFF, N, NE * NFE, 6, [stream = true])
             if (!up_ok) {
@@ -385,16 +385,16 @@ def test_vulkan_moe_ffn_cm2_streamed(t : T?) {
             t |> success(moe_gpu_upload_stack(wqb, no_ws, SWOFF + 2000000l, NFE, NE * N, 6, [stream = true]), "streamed q8n down mirrored")
             let ege1 = NFE * N
             let ege2 = N * NFE
-            var xq : array<int8>
-            var xs : array<float>
+            var inscope xq : array<int8>
+            var inscope xs : array<float>
             fill_acts(xq, xs, 40l)
-            var offs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF, ege1)
-            var offs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF + 1000000l, ege1)
-            var offs2 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF + 2000000l, ege2)
-            var gout : array<float>
+            var inscope offs1 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF, ege1)
+            var inscope offs3 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF + 1000000l, ege1)
+            var inscope offs2 <- make_offs([0l, 2l], [0l, 24l], [24l, 16l], SWOFF + 2000000l, ege2)
+            var inscope gout : array<float>
             gout |> resize(int(40l * N))
             matmul_moe_gpu_ffn(gout, offs1, offs3, offs2, 2l, xq, xs, N, NFE, 40l, 6, 6, 6, false)
-            var refv : array<float>
+            var inscope refv : array<float>
             ref_ffn(offs1, offs3, offs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 40l, false,
                 SWOFF, SWOFF + 1000000l, SWOFF + 2000000l, refv)
             let c = compare_gout(gout, refv)
@@ -419,11 +419,11 @@ def test_vulkan_arena_cm2(t : T?) {
                 feint("no Vulkan device or no NV_cooperative_matrix2; cm2 arena untestable here\n")
                 return
             }
-            var wq : array<int8>
-            var ws : array<float>
+            var inscope wq : array<int8>
+            var inscope ws : array<float>
             fill_stack(wq, ws, NFE, N, 13l, false)
-            var wqb : array<uint8>
-            var no_ws : array<uint8>
+            var inscope wqb : array<uint8>
+            var inscope no_ws : array<uint8>
             pack_q8n(wq, ws, NFE, N, wqb)
             if (!vk_arena_reserve(6, NFE * (N / 32l))) {
                 feint("fmt-6 arena reserve refused (no device); skipping\n")
@@ -431,10 +431,10 @@ def test_vulkan_arena_cm2(t : T?) {
             }
             let blk = vk_arena_place(wqb, no_ws, N, NFE, 6)
             t |> success(blk >= 0l, "q8n arena placement accepted an empty scale plane")
-            var xq : array<int8>
-            var xs : array<float>
+            var inscope xq : array<int8>
+            var inscope xs : array<float>
             fill_acts(xq, xs, 1l)
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(int(NFE))
             vk_arena_gemv(y, blk, N, NFE, 6, xq, xs)
             let nb = int(N / 32l)
