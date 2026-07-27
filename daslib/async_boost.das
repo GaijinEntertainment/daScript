@@ -9,7 +9,6 @@ module async_boost shared private
 //! Provides ``[async]`` function annotation and ``await`` call macro that
 //! rewrite annotated functions into generator-based coroutines.
 
-require strings
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

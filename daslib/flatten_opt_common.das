@@ -612,7 +612,7 @@ def public subst_consts(var e : ExpressionPtr; constmap : table<string; Expressi
     var tmpl : Template
     for (nm in keys(constmap)) {
         // ?[] yields a const view; const-strip the raw pointer (apply_template clones per use anyway).
-        var ex = unsafe(reinterpret<Expression? -const>(constmap?[nm] ?? null))
+        var ex = unsafe(reinterpret<Expression?>(constmap?[nm] ?? null))
         tmpl |> replaceVariable(nm, ex)
     }
     var res = apply_template(tmpl, e.at, e, false)
@@ -718,7 +718,7 @@ def public store_base(e : Expression const?) : ExpressionPtr {
     if (e is ExprSwizzle) return store_base((e as ExprSwizzle).value)
     if (e is ExprPtr2Ref) return store_base((e as ExprPtr2Ref).subexpr)
     if (e is ExprRef2Value) return store_base((e as ExprRef2Value).subexpr)
-    return e is ExprVar ? unsafe(reinterpret<Expression? -const>(e)) : null
+    return e is ExprVar ? unsafe(reinterpret<Expression?>(e)) : null
 }
 
 // Names reassigned somewhere in the block (live/loop masks `__flat_*`, any reassigned user `var`).

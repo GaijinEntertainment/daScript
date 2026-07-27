@@ -594,6 +594,50 @@ Only user-written, non-generated code is reported. Generic templates and their
 instantiated functions are skipped; a direct call from ordinary user code is
 still checked.
 
+LINT017 — 64-bit cast of a call that has a ``long_`` counterpart
+=================================================================
+
+``int64(length(x))`` widens a result that is already 32-bit, so the
+2\ :sup:`31` limit is reached inside ``length`` before the cast ever runs — as
+a silent wrap for the unguarded pairs, or as a panic for array, table and
+string length, which carry an always-on guard. Either way the cast looks like
+it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
+64-bit the whole way through.
+
+.. code-block:: das
+
+    // Bad — wraps before the cast ever runs
+    let n = int64(length(arr))
+
+    // Good
+    let n = long_length(arr)
+
+Applies to ``int64(...)`` and ``uint64(...)`` over ``length``, ``capacity``,
+``count``, ``find_index``, ``fread`` and ``fwrite``.
+
+The pair table is hardcoded on purpose. An "does this function exist" check is
+not meaningful for user functions — a macro may add or remove them during
+compilation — so the only well-defined domain is the builtin and ``daslib``
+set, which is enumerable. Each pair is additionally gated on the receiver
+type, which keeps a same-named user overload silent, along with the
+fixed-array ``length`` generic in ``daslib/builtin.das`` that genuinely has no
+``long_`` twin.
+
+LINT018 — narrowed ``memcpy`` / ``memcmp`` size
+================================================
+
+``memcpy`` and ``memcmp`` carry ``uint``, ``int64`` and ``uint64`` size
+overloads, so an ``int(...)`` cast on the size argument is pure loss: above
+2\ :sup:`31` it silently covers the wrong number of bytes.
+
+.. code-block:: das
+
+    // Bad — truncates for nbytes > 2GB
+    unsafe(memcpy(dst, src, int(nbytes)))    // nbytes : int64
+
+    // Good
+    unsafe(memcpy(dst, src, nbytes))
+
 .. _perf_lint:
 
 -----------------
@@ -2081,6 +2125,34 @@ Pointer targets only: a pointer→integer pun such as
 silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
+
+STYLE036 — inert type contract on a cast target
+================================================
+
+``-const``, ``-&``, ``-[]``, ``-#``, ``==const`` and ``==&`` are *substitution
+contracts*. They do work only while a generic binds, and type inference clears
+them once it consumes them. A cast target that is already concrete has nothing
+to consume the contract, so it does nothing at all — ``void?`` is ``void?``
+regardless of ``-const``.
+
+.. code-block:: das
+
+    // Bad — the -const strips nothing
+    let p = unsafe(addr<void? -const>(x))
+
+    // Good
+    let p = unsafe(addr<void?>(x))
+
+Because inference clears a contract it actually consumed, a flag still set at
+lint time is itself the proof that the contract was inert — the rule is exact
+rather than heuristic.
+
+The one exclusion is an ``auto`` or still-unresolved alias target, where
+substitution has not happened yet: ``reinterpret<ARGT -const>`` inside a
+generic really does strip const from whatever ``ARGT`` binds. A *concrete*
+typedef is not such a case — with ``typedef CI = int const``,
+``reinterpret<CI? -const>`` keeps the const, so the contract is inert there
+too and the rule correctly fires.
 
 -----
 Tests

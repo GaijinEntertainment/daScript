@@ -522,6 +522,9 @@ def resolve_path(path : string) : string {
     // std::filesystem doesn't classify them as absolute (no trailing separator),
     // so they'd otherwise be joined under das_root and produce an invalid path.
     if (is_absolute(path) || find(path, ":") == 1) return path
+    // Deliberately NOT normalize()d: lexically_normal rewrites every separator to the
+    // platform preferred one, so on Windows it would turn the forward slashes of
+    // get_das_root() into backslashes and break callers that compare against it.
     return path_join(get_das_root(), path)
 }
 

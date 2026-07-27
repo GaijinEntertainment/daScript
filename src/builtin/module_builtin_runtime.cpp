@@ -854,6 +854,34 @@ namespace das
         context->throw_error_at(at, "terminate");
     }
 
+    // string length lives in the base module next to empty(), not in strings: both are
+    // reachable with no require. The int-returning forms carry the same always-on guard
+    // as array/table length -- strings past INT_MAX are rare but reachable via fmap, and
+    // returning a wrapped negative is worse than stopping when long_length() exists.
+    // Context is unused now that the guard replaced stringLengthSafe; it stays in the
+    // signature so embedders calling this directly keep compiling.
+    int builtin_string_length ( const char * str, Context * ) {
+        const size_t len = str ? strlen(str) : 0;
+        DAS_VERIFYF(len <= size_t(INT32_MAX), "string length %llu exceeds INT_MAX; use long_length() instead", (unsigned long long)len);
+        return int(len);
+    }
+
+    int64_t builtin_string_long_length ( const char * str ) {
+        const size_t len = str ? strlen(str) : 0;
+        DAS_VERIFYF(len <= size_t(INT64_MAX), "string length %llu exceeds INT64_MAX", (unsigned long long)len);
+        return int64_t(len);
+    }
+
+    int32_t builtin_ext_string_length ( const string & str ) {
+        DAS_VERIFYF(str.length() <= size_t(INT32_MAX), "string length %llu exceeds INT_MAX; use long_length() instead", (unsigned long long)str.length());
+        return int32_t(str.length());
+    }
+
+    int64_t builtin_ext_string_long_length ( const string & str ) {
+        DAS_VERIFYF(str.length() <= size_t(INT64_MAX), "string length %llu exceeds INT64_MAX", (unsigned long long)str.length());
+        return int64_t(str.length());
+    }
+
     int builtin_table_size ( const Table & arr ) {
         DAS_VERIFYF(arr.size <= uint64_t(INT32_MAX), "table size %llu exceeds INT_MAX; use long_length() instead", (unsigned long long)arr.size);
         return int(arr.size);
@@ -2429,6 +2457,27 @@ namespace das
         addExtern<int (*)(void *, void *, int), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
+        // unsigned and 64-bit size overloads. Without these a size that is already
+        // uint/int64/uint64 can only reach memcpy through int(...), which truncates
+        // above 2GB -- silently copying the wrong number of bytes.
+        addExtern<void (*)(void *, void *, uint32_t), das_memcpy>(*this, lib, "memcpy",
+            SideEffects::modifyArgumentAndExternal, "das_memcpy")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<void (*)(void *, void *, int64_t), das_memcpy>(*this, lib, "memcpy",
+            SideEffects::modifyArgumentAndExternal, "das_memcpy")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<void (*)(void *, void *, uint64_t), das_memcpy>(*this, lib, "memcpy",
+            SideEffects::modifyArgumentAndExternal, "das_memcpy")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<int (*)(void *, void *, uint32_t), das_memcmp>(*this, lib, "memcmp",
+            SideEffects::none, "das_memcmp")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<int (*)(void *, void *, int64_t), das_memcmp>(*this, lib, "memcmp",
+            SideEffects::none, "das_memcmp")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<int (*)(void *, void *, uint64_t), das_memcmp>(*this, lib, "memcmp",
+            SideEffects::none, "das_memcmp")
+                ->args({"left","right","size"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(das_memset8)>(*this, lib, "memset8",
             SideEffects::modifyArgumentAndExternal, "das_memset8")
                 ->args({"left","value","count"})->unsafeOperation = true;
@@ -2511,11 +2560,20 @@ namespace das
         // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
-        // string emptiness
+        // string emptiness and length. length lived in the strings module, which made
+        // `length(str)` need a require that `empty(str)` did not -- these belong together.
         addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
             SideEffects::none, "builtin_empty")->arg("str");
         addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
             SideEffects::none, "builtin_empty_das_string")->arg("str");
+        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
+            SideEffects::none, "builtin_string_length")->args({"str","context"});
+        addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
+            SideEffects::none, "builtin_ext_string_length")->arg("str");
+        addExtern<DAS_BIND_FUN(builtin_string_long_length)>(*this, lib, "long_length",
+            SideEffects::none, "builtin_string_long_length")->arg("str");
+        addExtern<DAS_BIND_FUN(builtin_ext_string_long_length)>(*this, lib, "long_length",
+            SideEffects::none, "builtin_ext_string_long_length")->arg("str");
         // das-string extra
         STR_DSTR_REG(  eq,==);
         STR_DSTR_REG( neq,!=);

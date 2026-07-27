@@ -10,7 +10,7 @@ require daslib/strings_boost     // extras: split, contains, count, join, levens
 require daslib/strings_convert   // safe parsing: try_to_int / try_to_float (Result-returning)
 ```
 
-`strings` is the always-on built-in — `find`, `replace`, `slice`, `length`, `to_int`, `build_string`, `format`, `peek_data`/`modify_data`, the `is_*` char predicates, etc. `strings_boost` is the daslang-side companion (multi-result `split`, `contains`, `count`, generic `join`, `pad_left`/`pad_right`, `levenshtein_distance`, `replace_multiple`, `glob_match`, `is_null_or_whitespace`). `strings_convert` is the validating-parse layer.
+`strings` is the always-on built-in — `find`, `replace`, `slice`, `to_int`, `build_string`, `format`, `peek_data`/`modify_data`, the `is_*` char predicates, etc. **`length` and `empty` need no `require` at all** — both live in the base module, so `length(s)` works in a bare file. Their 64-bit forms `long_length(s)` are there too; the `int`-returning `length` panics rather than wrapping past 2^31. `strings_boost` is the daslang-side companion (multi-result `split`, `contains`, `count`, generic `join`, `pad_left`/`pad_right`, `levenshtein_distance`, `replace_multiple`, `glob_match`, `is_null_or_whitespace`). `strings_convert` is the validating-parse layer.
 
 ## Don't iterate bytes when a built-in does it
 

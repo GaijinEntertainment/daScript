@@ -248,7 +248,7 @@ def array_view(
             var res : array<TT -const>#
             if (length > 0) {
                 let data = addr<TT -const?>(bytes[byte_offset])
-                if (intptr(reinterpret<void? -const>(data)) % uint64(element_align) != 0_ul) {
+                if (intptr(reinterpret<void?>(data)) % uint64(element_align) != 0_ul) {
                     panic("array_view: unaligned typed view")
                 }
                 _builtin_make_temp_array(res, data, length)
@@ -262,7 +262,7 @@ def array_view(
             var res : array<TT -const>#
             if (length > 0_l) {
                 let data = addr<TT -const?>(bytes[byte_offset])
-                if (intptr(reinterpret<void? -const>(data)) % uint64(element_align) != 0_ul) {
+                if (intptr(reinterpret<void?>(data)) % uint64(element_align) != 0_ul) {
                     panic("array_view: unaligned typed view")
                 }
                 _builtin_make_temp_array_i64(res, data, length)
