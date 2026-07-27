@@ -47,6 +47,9 @@ struct Args {
     @clarg_doc = "Disable the fused decode chains (set_fused_decode(false)) — the chain-vs-per-op A/B lever"
     no_fused : bool
 
+    @clarg_doc = "Save a jobque lane trace of the measurement window to this path (perfetto JSON; adds ring overhead — don't trust the pace of a traced run)"
+    trace : string
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -112,12 +115,21 @@ def main() {
             forward_prefill(t, s, prompt, depth, 0l)
         }
         forward(t, s, synth_id(0l, 999l), depth)   // warmup token — untimed, outside the window
+        if (!empty(cfg.trace)) {
+            jobque_trace_start(1 << 21)   // decode makes ~30k chunk events/token — size for a ~32-token window
+            set_trace_tags(true)
+        }
         forward_profile_reset()
         let t0 = ref_time_ticks()
         for (i in range64(ngen)) {
             forward(t, s, synth_id(i, 1l), depth + 1l + i)
         }
         let us = get_time_usec(t0)
+        if (!empty(cfg.trace)) {
+            set_trace_tags(false)
+            jobque_trace_stop()
+            print(jobque_trace_save(cfg.trace) ? "jobque trace saved: {cfg.trace}\n" : "jobque trace: nothing recorded\n")
+        }
         forward_profile_report()
         let pace = double(ngen) * 1.0e6lf / double(us)
         print("WINDOW depth={depth + 1l} n={ngen} wall_us={us} us_per_token={int64(us) / ngen} pace={pace:.2f} tok/s\n")
