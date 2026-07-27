@@ -974,6 +974,7 @@ let TUNE_EVENT_PREFIX = "@tune "
 
 struct private TuneProgress {
     active : bool
+    drawn : bool
     scope : string
     kernel : string
     phase : string
@@ -1095,13 +1096,15 @@ def private render_progress() {
         }
     }
     print("\r{line}{padding}\r")
+    g_prog.drawn = true
 }
 
 def private finish_progress() {
-    if (g_prog.active) {
+    if (g_prog.drawn) {
         print("\n")
-        g_prog.active = false
     }
+    g_prog.active = false
+    g_prog.drawn = false
 }
 
 // Fold one event into the display state, drawing it when `render`. State is folded either way
@@ -1157,6 +1160,16 @@ def tune_progress_active() : bool {
 //! Drop the progress state, for a front end starting a fresh scope.
 def tune_progress_reset() {
     g_prog = TuneProgress()
+}
+
+//! Print one of a tuner's own detail lines — the per-variant measurements the display replaces.
+//! Shown under `verbose`, or whenever no display is live, so a tuner that emits no progress
+//! events prints exactly as it always did. Use this instead of `print` for measurement chatter.
+def tune_detail(text : string) {
+    let v = tune_verbosity()
+    if (v == "silent" || (v == "normal" && g_prog.active)) return
+    finish_progress()
+    print(text)
 }
 
 //! Close a live display, so whatever prints next starts on its own line. A tuner that emitted

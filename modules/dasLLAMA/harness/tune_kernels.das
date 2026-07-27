@@ -135,7 +135,7 @@ def private kernel_begin(name : string) : int64 {
 
 def private kernel_done(name : string; t0 : int64) {
     // report() already emitted the end event with its verdict; this is just the timing marker
-    print("TUNE_KERNEL_TIME {name} {get_time_usec(t0) / 1000} ms\n")
+    tune_detail("TUNE_KERNEL_TIME {name} {get_time_usec(t0) / 1000} ms\n")
 }
 
 // One progress step per measured round: which pass we are in, and how many grid rows are still
@@ -182,15 +182,15 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
             winner = i
         }
     }
-    print("--- {kernel} ---\n")
+    tune_detail("--- {kernel} ---\n")
     for (i in range(length(names))) {
         if (!ok[i]) {
-            print("  {names[i]}: REJECTED\n")
+            tune_detail("  {names[i]}: REJECTED\n")
             continue
         }
         let delta = base > 0.0lf ? (best[i] - base) / base * 100.0lf : 0.0lf
         let mark = i == winner ? "  <== winner" : ""
-        print("  {names[i]}: {best[i]} us  ({delta}% vs {baseline}){mark}\n")
+        tune_detail("  {names[i]}: {best[i]} us  ({delta}% vs {baseline}){mark}\n")
     }
     if (winner < 0) {
         print("  {kernel}: no passing variant\n")
@@ -203,13 +203,13 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     let margin = base > 0.0lf ? (base - best[winner]) / base * 100.0lf : 0.0lf
     if (wname != baseline && base > 0.0lf && margin < 0.5lf) {
         wname = baseline
-        print("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor, {margin}%)\n")
+        tune_detail("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor, {margin}%)\n")
         tune_progress_kernel_end(kernel, wname, "holds")
     } elif (wname == baseline) {
-        print("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
+        tune_detail("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
         tune_progress_kernel_end(kernel, wname, "holds")
     } else {
-        print("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
+        tune_detail("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
         tune_progress_kernel_end(kernel, wname, "beats")
     }
     return wname
@@ -344,7 +344,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report(kernel, names, best, ok)
 }
 
@@ -412,7 +412,7 @@ def bench_axpy() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("axpy", names, best, ok)
 }
 
@@ -540,7 +540,7 @@ def bench_axpy_f16() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("axpy_f16", names, best, ok)
 }
 
@@ -712,7 +712,7 @@ def bench_scale() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("scale_inplace", names, best, ok)
 }
 
@@ -790,7 +790,7 @@ def bench_softmax() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("softmax", names, best, ok)
 }
 
@@ -862,7 +862,7 @@ def bench_rmsnorm() : string {
         }
         sink += o[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("rmsnorm", names, best, ok, "plain")
 }
 
@@ -1227,7 +1227,7 @@ def bench_axpy_q8kv() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("axpy_q8kv", names, best, ok)
 }
 
@@ -1288,7 +1288,7 @@ def bench_cvt_q8kv_to_f32() : string {
         }
         sink += d[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("cvt_q8kv_to_f32", names, best, ok)
 }
 
@@ -1349,7 +1349,7 @@ def bench_quantize_q8kv_row() : string {
         }
         sink += int(d[0])
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("quantize_q8kv_row", names, best, ok, "plain")
 }
 
@@ -1502,7 +1502,7 @@ def bench_quantize() : string {
         }
         sink += sdst[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("quantize_q8_0_into_ptr", names, best, ok, "plain")
 }
 
@@ -1588,7 +1588,7 @@ def bench_quantize_bs() : string {
         }
         sink += sdst[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("quantize_q8_0_bs_into_ptr", names, best, ok, "plain")
 }
 
@@ -1671,7 +1671,7 @@ def bench_rope_tab() : string {
         }
         sink += v[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("rope_scaled_neox_tab", names, best, ok)
 }
 
@@ -1753,7 +1753,7 @@ def bench_gemm_tile() : string {
         }
         sink += c[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("gemm_f32_uk_4x16", names, best, ok, "u2")
 }
 
@@ -1762,7 +1762,7 @@ def bench_gemm_tile() : string {
 
 def bench_laneq4x4() : string {
     if (get_architecture_name() != "arm64" || !jit_enabled()) {
-        print("--- dot_q8q8_laneq4x4 ---\n  skipped (needs arm64 + -jit: lane-indexed SDOT + the repack backend)\n")
+        tune_detail("--- dot_q8q8_laneq4x4 ---\n  skipped (needs arm64 + -jit: lane-indexed SDOT + the repack backend)\n")
         return ""
     }
     let vs <- dot_q8q8_laneq4x4_template_variants()
@@ -1863,7 +1863,7 @@ def bench_laneq4x4() : string {
         }
         sink += y[0]
     }
-    print("  checksum {sink}\n")
+    tune_detail("  checksum {sink}\n")
     return report("dot_q8q8_laneq4x4", names, best, ok, "u2")
 }
 
@@ -1882,7 +1882,7 @@ def main {
     }
     create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
     let affinity_desc = affinity_inherited ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}" : "hard CPU0 (tuner default)"
-    print("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
+    tune_detail("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
     tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT)
 
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
@@ -2019,7 +2019,7 @@ def main {
             changed++
         }
     }
-    print(changed == 0
+    tune_detail(changed == 0
         ? "\nevery kernel keeps its shipped fallback — the tuner found nothing new on this box.\n"
         : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
 
@@ -2067,7 +2067,11 @@ def main {
     // this tuner owns it — and everything else (other scopes' keys) survives
     let ppath = box_profile_path()
     if (tune_sidecar_merge(winners, runtime)) {
-        print("wrote {ppath}: {fread(ppath)}\n")
+        print("wrote {ppath}\n")
+        // the sidecar body is what the display exists to replace — verbose only
+        if (tune_verbosity() == "verbose") {
+            print("{fread(ppath)}\n")
+        }
     } else {
         print("FAILED to write {ppath} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
     }
