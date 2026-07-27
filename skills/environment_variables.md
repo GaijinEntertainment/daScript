@@ -36,6 +36,12 @@ Both exist to reproduce another box's codegen locally, or to check that a featur
 actually the one being measured. Forcing a feature the CPU lacks produces an illegal instruction at
 run time, not a diagnostic.
 
+They also override `cpu_supports`, which is what `requires=` on a `[tune_perm]` and the
+`suffix:requires` entries of a `[tuned]` fallback chain are matched against — so forcing a feature
+is how you check that a per-ISA default resolves the way you expect without owning that silicon.
+Names are the LLVM target-feature spellings on both architectures (`avx2`, `amx-int8`; `dotprod`,
+`i8mm`, `fullfp16`).
+
 ## Kernel tuning
 
 `DAS_TUNE_MODE`, `DAS_TUNE_MANIFEST` and `DAS_TUNE_POLICY` drive the `[tune]` framework. They are

@@ -258,19 +258,29 @@ def private config_perm_for(fname : string) : string {
 // Perm precedence: explicit `perm=` pin > app sidecar's "kernels" entry > `fallback=`
 // (kernel's own hand hints) > DEFAULT_PERM (bit-identical fallback when no sidecar exists).
 // (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
+def private report_perm(fname, perm, source : string) : string {
+    if (tune_verbosity() == "verbose") {
+        print("dasllama_tune: {fname} <- {perm} ({source})\n")
+    }
+    return perm
+}
+
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
     let cfg = config_perm_for("{func.name}")
     if (!empty(cfg)) {
-        if (tune_verbosity() == "verbose") {
-            print("dasllama_tune: {func.name} <- {cfg} ({box_profile_path()})\n")
-        }
-        return cfg
+        return report_perm("{func.name}", cfg, box_profile_path())
     }
     let dv = find_arg(args, "fallback")
-    if (dv is tString) return dv as tString
-    return DEFAULT_PERM
+    if (dv is tString) {
+        // ';'-chain of `suffix` or `suffix:requires` — one annotation, a per-ISA default
+        let picked = tune_pick_fallback(dv as tString)
+        if (!empty(picked)) {
+            return report_perm("{func.name}", picked, "fallback")
+        }
+    }
+    return report_perm("{func.name}", DEFAULT_PERM, "default")
 }
 
 // Template lives in the compiling module for production `[tuned]`; the profiler harness

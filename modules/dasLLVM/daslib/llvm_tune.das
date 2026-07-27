@@ -508,9 +508,12 @@ def private fallback_feature_ok(name : string) : bool {
     return false
 }
 
-def private perm_requires_ok(p : TunePerm) : bool {
-    if (empty(p.requires)) return true
-    for (conj in split(p.requires, ",")) {
+//! True when a `requires=` feature expression passes on this box — a `,`-separated AND of
+//! `|`-separated alternatives, matched against host CPU features plus the
+//! `DAS_JIT_*_FORCE_FEATURES` overrides. An empty expression always passes.
+def tune_requires_ok(expr : string) : bool {
+    if (empty(expr)) return true
+    for (conj in split(expr, ",")) {
         continue if (empty(conj))
         var anyOk = false
         for (alt in split(conj, "|")) {
@@ -519,6 +522,25 @@ def private perm_requires_ok(p : TunePerm) : bool {
         if (!anyOk) return false
     }
     return true
+}
+
+//! Pick from a `;`-chain of `suffix` or `suffix:requires` entries — the first whose requires
+//! passes on this box, so one annotation can ship a different default per ISA. "" when none
+//! qualify. A chain with no `:` is a plain ordered list, and a single name is just that name.
+def tune_pick_fallback(chain : string) : string {
+    for (entry in split(chain, ";")) {
+        continue if (empty(entry))
+        let colon = find(entry, ":")
+        if (colon < 0) return entry
+        if (tune_requires_ok(slice(entry, colon + 1))) {
+            return slice(entry, 0, colon)
+        }
+    }
+    return ""
+}
+
+def private perm_requires_ok(p : TunePerm) : bool {
+    return tune_requires_ok(p.requires)
 }
 
 def private suffix_piece(name : string; v : RttiValue) : string {
