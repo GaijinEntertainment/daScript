@@ -56,7 +56,7 @@ count, per Boris):
 | `scope.begin` | scope name, sidecar path | llvm_tune (level 1) |
 | `plan` | outer total for this half | each tuner half |
 | `kernel.begin` | kernel name, inner total (variant count) | each tuner half |
-| `kernel.step` | inner index | the bench loop |
+| `kernel.step` | inner index, pass name, live-candidate count | the bench loop |
 | `kernel.end` | kernel name, winner suffix, verdict (`holds` / `beats` / `rejected`) | each tuner half |
 | `scope.end` | tuned count, elapsed | llvm_tune |
 | `restart` | — | llvm_tune (see §5) |
@@ -65,15 +65,27 @@ count, per Boris):
 Renders as roughly:
 
 ```
-[#####-------------]  9/25   dot_q8q8   47/128        1m12s
+[#####-------------]  9/25   dot_q8q8   finalists 47/80   4 live   1m12s
 ```
 
-Elapsed comes free from `ref_time_ticks`. No ETA — the segments are too uneven (the 25 `[tuned]`
-kernels are seconds each; the q8q8 grid and the confirm prefill dominate wall clock). The inner
-counter is what keeps the long segments honest, which is why time-weighting is not needed.
+**No duration estimate, ever.** We genuinely do not know it — the segments are wildly uneven (the
+25 `[tuned]` kernels are seconds each; the q8q8 grid and the confirm prefill dominate wall clock)
+and a wrong ETA is worse than none. Everything displayed is *observed*, never predicted. Elapsed
+is fine on those terms and comes free from `ref_time_ticks`. This is also why time-weighting the
+bar is out and the two-level counter is in.
 
-The confirm pass gets its own `kernel.begin`/`end` pair so it is not an invisible 40-second stall
-at `24/25`.
+The three honest axes, beyond the outer `n/m`:
+
+- **inner `n/m`** — rounds done against this kernel's round budget.
+- **pass name** — `tune_kernels` really does run distinct passes (`tune_candidate_active`,
+  tune_kernels.das:127): full-grid `screening` through `SCREEN_ROUNDS`, a fast-only `narrowing`
+  phase (top 8 / within 10%) through `FAST_MID_ROUNDS`, then `finalists` (top 4 / within 5%) to
+  `ROUNDS`. Naming the pass explains why the inner counter's cost per round drops partway through.
+- **live-candidate count** — the grid narrows as passes advance; `4 live` out of a 28-row grid is
+  the single most informative "something extra" available, and `screening_keep` already computes
+  it per round.
+
+The confirm pass gets its own `kernel.begin`/`end` pair so it is not an invisible stall at `24/25`.
 
 ## 3. Renderer vs forwarder — one rule
 
@@ -235,7 +247,7 @@ and `wav2txt.das` are `auto`). The skeleton is already correct end to end:
 | step | mechanism today | gap |
 |---|---|---|
 | start | watchdog spawns `daslang -jit main.das` | — |
-| "tuning" | `tune_restart_needed` → `run_scope_tuner` prints `llvm_tune: tuning scope` → watchdog stage `tuning` (rank 3) | **no up-front "this takes minutes, we will restart" promise** |
+| "tuning" | `tune_restart_needed` → `run_scope_tuner` prints `llvm_tune: tuning scope` → watchdog stage `tuning` (rank 3) | **no up-front "this will take a while, we will restart" promise** |
 | progress | — | **nothing — `run_scope_tuner` buffers the whole tune (§1)** |
 | "done" | `llvm_tune: scope '<x>' tuned -> <path>` | present, but buried in the buffered wall |
 | "we will restart" | `llvm_tune: restart to apply the winners` → stage `tune_restart` (rank 4) + `tune_restart_seen.set()` | present |
@@ -279,5 +291,5 @@ so the page can render real progress. Cheap: `set_state` is already called on ev
 - Prefix spelling for event lines.
 - Whether the final winner summary is the current `===== summary =====` block or a tightened one.
 - `ROUNDS` 6 → 3 or 6 → 2 under fast (§8).
-- Wording of the up-front promise, and whether it names an expected duration (the tuner knows its
-  budget: 20/80 vs fast 4/8/20).
+- Wording of the up-front promise. It states *that* we will restart, never *when* — no duration,
+  estimated or otherwise (§2).
