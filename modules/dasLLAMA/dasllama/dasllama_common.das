@@ -5077,8 +5077,8 @@ def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<flo
     let half = head_size / 2l
     let scale = c.rope_mscale   // scales cos/sin — ggml applies mscale to NORM and NEOX alike (mistral3 YaRN)
     let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(npos * half)
-    sin_tab |> resize(npos * half)
+    cos_tab |> resize(npos * half)   // nolint:PERF026 — session scratch; same size every decode step, so this allocates once
+    sin_tab |> resize(npos * half)   // nolint:PERF026 — see above
     unsafe {
         var cp = addr(cos_tab[0])
         var sp = addr(sin_tab[0])
@@ -5299,6 +5299,7 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
 
 // Double the pool's group capacity. Every blob resizes IN PLACE — a hoisted cache pointer would
 // dangle, which is why kv_ensure runs at the top of the forward entries, before any hoist.
+[cold_path]   // doubling growth: amortized O(1) per page, and never on a flat session
 def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
@@ -5351,13 +5352,20 @@ def release_kv_pages_(var s : Session) {
 //! Grow this session's block table to cover positions [0, upto) — the ONLY place a paged session
 //! allocates cache. Runs at the top of forward/forward_prefill/eval_batch, BEFORE any cache-pointer
 //! hoist: group allocation may resize the pool's blobs. Flat sessions: no-op.
+[cold_path]   // only on a page crossing — once every kv_pool.page_rows positions
+def private kv_grow_block_table(var s : Session; np : int64) {
+    while (int64(length(s.block_table)) < np) {
+        s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    }
+}
+
 def kv_ensure(var s : Session; upto : int64) {
     if (s.kv_pool == null) {
         return
     }
     let np = (upto + s.kv_pool.page_rows - 1l) / s.kv_pool.page_rows
-    while (int64(length(s.block_table)) < np) {
-        s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    if (int64(length(s.block_table)) < np) {
+        kv_grow_block_table(s, np)
     }
 }
 
@@ -6746,7 +6754,8 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         var flmp = nsl > 1 ? addr(s.fl_m[0]) : null
         var fllp = nsl > 1 ? addr(s.fl_l[0]) : null
         var flop = nsl > 1 ? addr(s.fl_o[0]) : null
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        // the lambda's capture frame is heap per call — the dispatch API's cost, not this kernel's
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026
             if (stage == 0) {
                 // qkv rows in 32-row groups (row-local); a group never straddles a q/k/v region boundary
                 unsafe {
@@ -7128,7 +7137,7 @@ def private ffn_chain_decode(t : Model; var s : Session; l : int64) {
         let kqp2 = kq_plane_q(t, f2, w2o)
         let ksp2 = kq_plane_s(t, f2, w2o)
         let rows2 = kq_rows_for(f2)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 let grain = stage == 0 ? grain0 : 32l
                 let r0 = int64(jb) * grain
@@ -9091,7 +9100,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     let mmrows = mm_q8q8_rows_fn()
     let ngrp = int(vocab / 32l)
     let n0 = chain_stage_chunks(ngrp, int(vocab), dim * vocab)
-    s.chain_stages |> resize(1)
+    s.chain_stages |> resize(1)   // nolint:PERF026 — session scratch, fixed size after the first classifier call
     s.chain_stages[0] = int3(0, ngrp, n0)
     count_parallel_dispatch(min(n0, ngrp))
     unsafe {
@@ -9114,7 +9123,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
         let kqpc = kq_plane_q(t, cls_fmt, t.wcls_off)
         let kspc = kq_plane_s(t, cls_fmt, t.wcls_off)
         let rowsc = kq_rows_for(cls_fmt)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 let r0 = int64(jb) * 32l
                 let r1 = int64(je) * 32l
@@ -9131,6 +9140,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
+[no_alloc]
 def forward(t : Model; var s : Session; token, pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -9657,11 +9667,13 @@ var g_forward_prof_acc : table<string; int64>
 var g_forward_prof_disp : table<string; int64>    // parallel_for dispatches per section
 var g_forward_prof_chunks : table<string; int64>   // chunks (jobs) pushed per section
 var g_forward_prof_inline : table<string; int64>   // inline (non-dispatched) runs per section
+var private g_forward_prof_on = false   // armed by forward_profile_reset; see prof_add
 var g_prof_mark_disp = 0l
 var g_prof_mark_chunks = 0l
 var g_prof_mark_inline = 0l
 
 def forward_profile_reset() {
+    g_forward_prof_on = true
     g_forward_prof_acc |> clear()
     g_forward_prof_disp |> clear()
     g_forward_prof_chunks |> clear()
@@ -9672,8 +9684,10 @@ def forward_profile_reset() {
 }
 
 // Sections are sequential and each span ends in exactly one prof_add, so the dispatch-counter
-// deltas since the previous prof_add belong to `name` — jobs-per-section with no call-site changes.
-def private prof_add(name : string; t0 : int64) {
+// deltas since the previous belong to `name`. Armed by forward_profile_reset — it used to run
+// unconditionally: six string-keyed table ops per section, per layer, per token, always.
+[cold_path]   // only reached once profiling is armed; the accumulate IS the cost of measuring
+def private prof_add_armed(name : string; t0 : int64) {
     let cur = g_forward_prof_acc?[name] ?? 0l
     g_forward_prof_acc[name] = cur + int64(get_time_usec(t0))
     let dc = get_disp_count()
@@ -9685,6 +9699,11 @@ def private prof_add(name : string; t0 : int64) {
     g_prof_mark_disp = dc
     g_prof_mark_chunks = ch
     g_prof_mark_inline = il
+}
+
+def private prof_add(name : string; t0 : int64) {
+    return if (!g_forward_prof_on)
+    prof_add_armed(name, t0)
 }
 
 //! The accumulated time (us) for one section since the last reset (0 if the section never ran).

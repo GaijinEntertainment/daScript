@@ -192,14 +192,48 @@ def private is_io_builtin(n : string) : bool {
 class HotBodyScan : AstVisitor {
     sinks : array<HotSink>
     edges : array<HotEdge>
+    // Depth inside a panic(...) argument list. A panic is fatal in daslang — not an exception — so
+    // its message is on the abort path, and the interpolation building it is not hot-path traffic.
+    panic_depth : int = 0
+
+    // Depth inside a macro-generated subtree. A rewritten stub force_at-stamps the CALLER's line
+    // onto its splice, so its machinery would be blamed on every call site. Macros mark only the
+    // ROOT of their output generated (ast_match.das does), hence the depth rather than a flag test.
+    gen_depth : int = 0
+
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        if (expr.genFlags.generated) {
+            gen_depth++
+        }
+    }
+
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
+        if (expr.genFlags.generated) {
+            gen_depth--
+        }
+        return expr
+    }
 
     def add_sink(bit : HotBits; what : string; var site : ExpressionPtr) {
+        return if (panic_depth > 0 || gen_depth > 0)
         sinks |> push(HotSink(bit = bit, what = what, site = site))
+    }
+
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (expr.func != null && expr.func.name == "panic") {
+            panic_depth--
+        }
+        return expr
     }
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
         if (expr.func == null) return
         let n = string(expr.func.name)
+        if (n == "panic") {
+            panic_depth++
+            return
+        }
+        return if (panic_depth > 0)
         if (is_env_builtin(n)) {
             add_sink(HotBits.env, "{n}()", expr)
         } elif (is_io_builtin(n)) {
@@ -1985,8 +2019,17 @@ class PerfLintVisitor : AstVisitor {
 
     def hot_report(frames : array<HotFrame>; fi : int; sink : HotSink; want : HotBits; root_file : string) {
         return if (uint(sink.bit & want) == 0u)
-        // Prefer the anchor: a shared sink node has one location, collapsing every caller into one.
-        var at = frames[fi].anchor != null ? frames[fi].anchor.at : sink.site.at
+        // sink's own location, unless another file or a SHARED node — then the caller-side anchor
+        var at = sink.site.at
+        let shared_node = frames[fi].fn.flags.generated || frames[fi].fn.fromGeneric != null
+        if ((hot_file_of(at) != root_file || shared_node) && frames[fi].anchor != null) {
+            at = frames[fi].anchor.at
+        }
+        // ...but then say where the sink actually is, or a callee in another file is unfindable
+        var sink_pos = ""
+        if (sink.site.at.line != at.line || hot_file_of(sink.site.at) != hot_file_of(at)) {
+            sink_pos = " [at {hot_file_of(sink.site.at)}:{int(sink.site.at.line)}]"
+        }
         // Generic instances mangle their name; the origin reads the way the author wrote the call.
         var parts : array<string>
         var pi = fi
@@ -2008,11 +2051,11 @@ class PerfLintVisitor : AstVisitor {
         delete parts
         let esc = "[cold_path] on the callee, // nolint on the line, or DAS_LINT_DISABLE for a whole run"
         if (sink.bit.alloc) {
-            perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}; hoist it out of the hot path. To allow it: {esc}", at)
+            perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc}", at)
         } elif (sink.bit.env) {
-            perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}; getenv allocates a string in the context heap on every call — read it once at init and cache the value. To allow it: {esc}", at)
+            perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}{sink_pos}; getenv allocates a string in the context heap on every call — read it once at init and cache the value. To allow it: {esc}", at)
         } else {
-            perf_warning("PERF028: {sink.what} performs I/O on a hot path, via {chain}. To allow it: {esc}", at)
+            perf_warning("PERF028: {sink.what} performs I/O on a hot path, via {chain}{sink_pos}. To allow it: {esc}", at)
         }
     }
 
