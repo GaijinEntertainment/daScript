@@ -64,6 +64,9 @@ STATE: dict[str, object] = {
     "child_exit_code": None,
     "restart_delay": 0.0,
     "stage": None,
+    # Progress of an in-flight tune, folded from llvm_tune's @tune events. Counters only —
+    # nothing here is an estimate, because the tuner cannot know how long it has left.
+    "tune": {},
 }
 
 
@@ -565,6 +568,48 @@ def advance_stage(stage: dict[str, object], message: str, now: float) -> dict[st
     return fields
 
 
+# llvm_tune emits structured progress as `@tune <kind> k=v ...` lines. A supervised child never
+# owns a terminal, so it forwards these instead of drawing a bar — that is exactly what makes
+# them ours to consume. Values never contain spaces (llvm_tune's contract), so a plain split is
+# enough. Consuming these is why the log no longer needs to infer structure from prose.
+TUNE_EVENT_PREFIX = "@tune "
+
+
+def parse_tune_event(message: str) -> tuple[str, dict[str, str]] | None:
+    """Return (kind, fields) for a `@tune ...` line, or None. Never raises on malformed input."""
+    if not message.startswith(TUNE_EVENT_PREFIX):
+        return None
+    parts = message[len(TUNE_EVENT_PREFIX):].split()
+    if not parts:
+        return None
+    fields = {}
+    for token in parts[1:]:
+        key, sep, value = token.partition("=")
+        if sep:
+            fields[key] = value
+    return parts[0], fields
+
+
+def apply_tune_event(tune: dict[str, object], kind: str, fields: dict[str, str]) -> None:
+    """Fold one progress event into the published tune state. Counters only; no prediction."""
+    def as_int(key: str) -> int:
+        try:
+            return int(fields.get(key, ""))
+        except ValueError:
+            return 0
+    if kind == "plan":
+        tune.clear()
+        tune.update(scope=fields.get("scope", ""), done=0, total=as_int("total"))
+    elif kind == "begin":
+        tune.update(kernel=fields.get("name", ""), round=0, rounds=as_int("total"),
+                    phase="", live=0)
+    elif kind == "step":
+        tune.update(round=as_int("i"), phase=fields.get("phase", ""), live=as_int("live"))
+    elif kind == "end":
+        tune["done"] = int(tune.get("done", 0)) + 1
+        tune.update(rounds=0, live=0)
+
+
 def stream_child(
     proc: subprocess.Popen[str],
     logger: logging.Logger,
@@ -573,8 +618,19 @@ def stream_child(
     stage: dict[str, object],
 ) -> None:
     assert proc.stdout is not None
+    tune: dict[str, object] = {}
     for line in proc.stdout:
         message = line.rstrip("\r\n")
+        event = parse_tune_event(message)
+        if event is not None:
+            kind, fields = event
+            apply_tune_event(tune, kind, fields)
+            # A tune is hundreds of steps; publish every one for the control page but log only
+            # the kernel boundaries, or the log becomes the flood these events exist to replace.
+            set_state(tune=dict(tune))
+            if kind in ("plan", "end"):
+                emit(logger, "tune", pid=proc.pid, kind=kind, **fields)
+            continue
         if "llvm_tune: restart to apply the winners" in message:
             tune_restart_seen.set()
         match = re.search(
