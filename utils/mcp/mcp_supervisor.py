@@ -177,9 +177,11 @@ class DaslangChild:
 
     @staticmethod
     def _with_noise(reason: str, noise: list[str]) -> str:
+        # cap the WHOLE message, not just the noise tail — the reason can itself be an arbitrarily
+        # long OSError string, and this ends up inside a JSON-RPC error the client has to render
         if not noise:
-            return reason
-        return f"{reason}; daslang child said: " + " | ".join(noise)[:2000]
+            return reason[:2000]
+        return (f"{reason}; daslang child said: " + " | ".join(noise))[:2000]
 
     # ---- forwarding -----------------------------------------------------
     def request(self, msg: dict) -> str:

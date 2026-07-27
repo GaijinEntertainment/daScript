@@ -27,6 +27,8 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
 | `DASLLAMA_CALLER_PRIO` | number | unset | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
 | `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
+| `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
+| `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 | `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
@@ -44,8 +46,6 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
-| `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
-| `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 
 ## Metal backend
 
@@ -140,8 +140,6 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `PROBE_PATH` | path | _wcliff.bin | Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test. |
-| `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |
@@ -152,6 +150,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASMETAL_LAB_PASSES` | number | 4 | Passes per round in the Metal MoE lab. |
 | `DASMETAL_LAB_ATTN_NSGS` | number | 16 | Simdgroups per threadgroup in the Metal attention lab. |
 | `DASMETAL_LAB_DUMP_MSL` | flag | off | Dump generated MSL from the Metal labs instead of running it. |
+| `PROBE_PATH` | path | _wcliff.bin | Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test. |
+| `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 
 ## Profiling and baselines
 
