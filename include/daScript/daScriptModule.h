@@ -46,7 +46,7 @@ DAS_CC_API void register_fusion ();
 // modules are declared above. A separately compiled custom module must first be
 // declared with DECLARE_MODULE at file scope.
 #define NEED_MODULE(ClassName) \
-    *das::ModuleKarma += unsigned(intptr_t(::register_##ClassName()))
+    *das::ModuleKarma += unsigned(intptr_t(::register_##ClassName()));
 
 #define NEED_FUSION \
     ::register_fusion()
