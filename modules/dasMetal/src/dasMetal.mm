@@ -151,6 +151,14 @@ namespace das {
 #else
             opts.fastMathEnabled = fastmath ? YES : NO;
 #endif
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+            // pin the newest MSL the OS offers: the DEFAULT tracks the SDK the binary was
+            // LINKED against, so a module built under an older CLT silently loses metal_tensor
+            // (mpp/dextents undeclared) on the same OS — probe-verified on the m4 box
+            if (@available(macOS 26.0, *)) {
+                opts.languageVersion = MTLLanguageVersion4_0;
+            }
+#endif
             NSString * nsSrc = [NSString stringWithUTF8String:src];
             if ( nsSrc == nil ) {   // invalid UTF-8 — a nil source would raise an ObjC exception below
                 error = ctx->allocateString("metal_new_library_from_source: MSL source is not valid UTF-8", at);
