@@ -1348,6 +1348,72 @@ call inside the braces (e.g. ``"{length(string(x))}"``) — only direct
 interpolation elements are flagged — nor for an explicit hex request
 ``string(x, true)``.
 
+PERF026/027/028 — hot-path contracts
+=====================================
+
+Unlike every other performance rule, these three check nothing until a function
+declares a contract. They exist for code where an allocation, an environment
+lookup or a log line is a bug rather than a smell — a decode step, an audio
+callback, a frame loop.
+
+.. code-block:: das
+
+    [hot_path]                          // all three contracts
+    def step(var s : Session; pos : int64) { ... }
+
+    [no_alloc, no_env, no_io]           // or name them individually
+    def step2(var s : Session) { ... }
+
+    [cold_path]                         // prunes the walk: a one-time init leg
+    def load_knobs() { ... }
+
+From each annotated root the scan follows **direct** calls transitively, so a
+sink several frames deep is still reported, with the call chain in the message
+and the warning anchored on the line you wrote rather than the daslib internal
+that actually allocates.
+
+Declaring a contract is free: the five markers are registered by the compiler
+as metadata-only annotations, so a file under contract requires nothing. The
+checker lives in ``daslib/perf_lint``, which such a file does **not** require —
+verification runs wherever lint runs.
+
+**What counts as heap traffic.** Every array/table heap operation bottoms out
+in a ``__builtin_array_*`` / ``__builtin_table_*`` extern, so detection matches
+that prefix rather than a list of surface names — ``push`` / ``reserve`` /
+``resize`` / ``erase`` / ``insert`` / ``delete`` are all covered, and a newly
+added builtin is caught by default. On top of that: ``new``, ``delete``, string
+interpolation, lambda capture frames, table indexing (``t[k]`` inserts on
+read), and any builtin returning a freshly allocated string.
+
+**Declaring a reused buffer.** A buffer sized to the current step's geometry and
+reused is not an accident, and saying so at the buffer beats a suppression at
+every call site:
+
+.. code-block:: das
+
+    struct Session {
+        @scratch attq : array<float>    // reused per step; sizing it is intentional
+        logits : array<float>           // unmarked: sizing this on a hot path warns
+    }
+
+    // a helper that sizes a caller's buffer marks the PARAMETER, since the
+    // destination arrives by reference and the call site cannot see the field
+    def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
+
+**What the scan deliberately ignores.** Arguments to ``panic(...)`` — a panic is
+fatal in daslang, not an exception, so its interpolated message is on the abort
+path. Macro-generated subtrees, since a rewritten stub stamps the caller's line
+onto its splice and would otherwise blame every call site for the machinery it
+expands into. And indirect calls through a function pointer or lambda, which
+cannot be resolved statically — annotate the implementations they reach.
+
+Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
+leg genuinely runs once; ``@scratch`` on a reused destination; ``// nolint``
+with a reason (honored at either end of a chain, so a suppression written where
+the code lives works even when the report anchors elsewhere); and
+``DAS_LINT_DISABLE=PERF028`` for a whole run, which needs no source edit and is
+the point when adding a log line to chase a bug.
+
 .. _style_lint:
 
 -----------

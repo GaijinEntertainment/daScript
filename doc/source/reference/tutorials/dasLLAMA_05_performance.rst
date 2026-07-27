@@ -45,10 +45,10 @@ On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 lanes on one physical core's SMT pair, which roughly halves batched prefill
 while barely moving decode.
 
-Both are daslang knobs rather than dasLLAMA ones — :ref:`environment_variables`
-lists every one daslang reads. dasLLAMA has its own set, roughly 130 of them
-covering backend selection, GPU rails and the probe harnesses: see
-:ref:`dasllama_env`.
+Both are daslang knobs rather than dasLLAMA ones — :ref:`the daslang environment
+variables <environment_variables>` page lists every one it reads. dasLLAMA has
+its own set, roughly 130 of them covering backend selection, GPU rails and the
+probe harnesses: see :ref:`the dasLLAMA knob reference <dasllama_env>`.
 
 Prefill vs generation
 =====================

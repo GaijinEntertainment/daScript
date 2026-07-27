@@ -180,7 +180,8 @@ Testing
 conformance test: it starts the server on its own thread, then drives
 ``/v1/models``, ``/v1/embeddings``, and ``/v1/chat/completions`` over the real
 dashv HTTP client. It skips cleanly when the model GGUF is absent; set
-``DASLLAMA_MODELS_DIR`` (one of the knobs listed in :ref:`dasllama_env`) to a directory containing
+``DASLLAMA_MODELS_DIR`` (one of the knobs in :ref:`the dasLLAMA knob reference
+<dasllama_env>`) to a directory containing
 ``tinyllama-1.1b-chat-v1.0.Q8_0.gguf``, then::
 
    bin/daslang -jit dastest/dastest.das -- --test utils/dasllama-server/test_openai_server.das
