@@ -1016,17 +1016,26 @@ def private tuner_cmd(scope : TuneScope) : string {
     return "{envs}\"{get_das_exe()}\" -jit \"{scope.tunerPath}\" -dasroot \"{get_das_root()}\""
 }
 
-// spawn the scope's tuner to completion, relaying its output — RUNTIME only (the auto and
-// restart guards); never from macro context, where a daslang child cannot run mid-compile
+// spawn the scope's tuner, relaying its output LIVE — RUNTIME only (the auto and restart
+// guards); never from macro context. Streaming is load-bearing: a tune is minutes of work, and
+// buffering it to a file left us and any supervisor with no signal until the child exited.
 def private run_scope_tuner(scope : TuneScope) : bool {
-    let tmp = path_join(get_das_root(), "_tune_{scope.scopeName}_out.txt")
-    let cmd = "{tuner_cmd(scope)} > \"{tmp}\" 2>&1"
+    let cmd = "{tuner_cmd(scope)} 2>&1"
     print("llvm_tune: tuning scope '{scope.scopeName}' -> {scope.manifestPath}\nllvm_tune: {cmd}\n")
-    unsafe(popen(cmd) $(_f) {})
-    let outp = fread(tmp)
-    remove(tmp)
-    print("{outp}\n")
-    return true
+    var rc : int
+    unsafe {
+        rc = popen(cmd) $(f) {
+            if (f != null) {
+                while (!feof(f)) {
+                    print(fgets(f))
+                }
+            }
+        }
+    }
+    if (rc != 0) {
+        print("llvm_tune: tuner for scope '{scope.scopeName}' exited with {rc}\n")
+    }
+    return rc == 0
 }
 
 // runtime accumulators for the auto/--tune guard: how many scopes just got tuned, and the
