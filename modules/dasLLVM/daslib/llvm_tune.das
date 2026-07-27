@@ -1038,7 +1038,8 @@ def private tuner_cmd(scope : TuneScope) : string {
 // ===== progress events =====
 
 //! Prefix of a tune progress event. Events are lines on stdout because the tuner runs as a
-//! chain of child processes — a pipe is the only channel that spans them.
+//! chain of child processes — a pipe is the only channel that spans them. Fields are `k=v`
+//! split on spaces, so a VALUE MUST NOT CONTAIN A SPACE — it silently truncates at the first.
 let TUNE_EVENT_PREFIX = "@tune "
 
 struct private TuneProgress {

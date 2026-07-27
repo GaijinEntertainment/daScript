@@ -1583,10 +1583,10 @@ def tune_mode_run : bool {
         kok = kok && qok
     }
     let confirm_t0 = ref_time_ticks()
-    tune_progress_kernel_begin("confirm (end-to-end prefill)", 0)
+    tune_progress_kernel_begin("confirm_e2e_prefill", 0)
     let ok = confirm_and_write(vs[merged]._0) && kok
     print("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
-    tune_progress_kernel_end("confirm (end-to-end prefill)", "", ok ? "holds" : "rejected")
+    tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
     print("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
     delete y
     delete yg

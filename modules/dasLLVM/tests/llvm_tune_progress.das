@@ -98,6 +98,18 @@ def test_malformed_events_do_not_break_the_display(t : T?) {
     t |> success(tune_progress_line(100) |> find("0/5") >= 0)
 }
 
+// Fields are k=v split on spaces, so a value containing one truncates at the first space rather
+// than corrupting the display. gen_tune_probe shipped exactly this bug for its confirm step.
+[test]
+def test_a_spaced_value_truncates_but_does_not_corrupt(t : T?) {
+    feed_plan(2)
+    tune_progress_feed("@tune begin name=confirm (end-to-end prefill) total=0")
+    let line = tune_progress_line(100)
+    t |> success(line |> find("confirm") >= 0, "the value survives up to the space")
+    t |> success(line |> find("end-to-end") < 0, "the remainder is dropped, not rendered")
+    t |> success(line |> find("0/2") >= 0, "the counters are untouched")
+}
+
 [test]
 def test_verbosity_parses_and_defaults(t : T?) {
     tune_set_verbosity("silent")
