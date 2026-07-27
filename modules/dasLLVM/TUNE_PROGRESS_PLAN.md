@@ -223,8 +223,61 @@ model-prefill arms only run when the winner diverges from the fallback *and*
 The parser goes in as clargs from the start rather than hand-rolled-then-migrated, so this is part
 of §7 rather than a separate change.
 
+## 9. The supervised scenario — this is the goal
+
+Start `dasllama-server` under the watchdog. If it is untuned it should say *tuning, this will take
+a while, we will restart when it is done*, show progress, finish, restart, then run normally.
+
+That narrative is the `restart` policy rail, and `utils/dasllama-server/main.das:882` is
+`[tune_policy(missing = "restart")]` — the only one of the four entry points that is (`ask.das`
+and `wav2txt.das` are `auto`). The skeleton is already correct end to end:
+
+| step | mechanism today | gap |
+|---|---|---|
+| start | watchdog spawns `daslang -jit main.das` | — |
+| "tuning" | `tune_restart_needed` → `run_scope_tuner` prints `llvm_tune: tuning scope` → watchdog stage `tuning` (rank 3) | **no up-front "this takes minutes, we will restart" promise** |
+| progress | — | **nothing — `run_scope_tuner` buffers the whole tune (§1)** |
+| "done" | `llvm_tune: scope '<x>' tuned -> <path>` | present, but buried in the buffered wall |
+| "we will restart" | `llvm_tune: restart to apply the winners` → stage `tune_restart` (rank 4) + `tune_restart_seen.set()` | present |
+| restart | main returns 3 → `TUNE_RESTART_EXIT` → relaunch, no backoff | present |
+| normal | stages `model_load` → `asr_init` → `ready` | present |
+
+So this is wiring, not new architecture. Two gaps only: the up-front promise, and the silence.
+
+**§1 is the direct cause of the thing the stage machinery was written to paper over.** watchdog.py
+comments at :514-516 that "startup is several minutes of work with no single progress signal ...
+the log is only `health ok:false` repeated for the whole window, which says the server is down but
+never what it is doing." That window *is* the buffered relay. Fix §1 and the window has content.
+
+`advance_stage` is rank-monotonic with `tune_restart` as the one legitimate rewind — it resets the
+rank so the sequence replays after the relaunch (watchdog.py:519-522, :563). That is exactly right
+for this narrative; no change needed.
+
+### Consequence: the watchdog is the renderer here
+
+`stream_child` re-emits **every** child line as its own JSON record to both the rotating log and
+watchdog's console (`emit(logger, "child", ..., message=message)`, watchdog.py:590). So:
+
+- A `\r`-drawn bar from the daslang side is garbage here — every redraw becomes a JSON record.
+  The §3 rule already prevents it (the server's stdout is a pipe, so it forwards and never draws),
+  but it means **the drawing code exists twice**: once in llvm_tune, once in watchdog.py. That is
+  the honest cost of "single source of draw" — single *per process tree*, with the event protocol
+  as the contract that lets either end be the drawer.
+- Today the tuner's hundreds of per-variant lines all land in that log wrapped in JSON envelopes.
+  A supervised run should default to a quiet verbosity so the log carries ~25 informative event
+  records instead of hundreds of noise lines.
+
+### Third surface: `STATE` / the control page
+
+`STATE` (watchdog.py:60-67) is published for the optional `watchdog_control.py` HTTP control
+plugin, and carries a coarse `stage` string. For a *server*, nobody watches the terminal — the
+control page is the primary display. The tune counters should land in `STATE` alongside `stage`
+so the page can render real progress. Cheap: `set_state` is already called on every stage move.
+
 ## Open
 
 - Prefix spelling for event lines.
 - Whether the final winner summary is the current `===== summary =====` block or a tightened one.
 - `ROUNDS` 6 → 3 or 6 → 2 under fast (§8).
+- Wording of the up-front promise, and whether it names an expected duration (the tuner knows its
+  budget: 20/80 vs fast 4/8/20).
