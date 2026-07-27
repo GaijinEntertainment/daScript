@@ -4434,7 +4434,11 @@ class MetalDnBa {
 var private g_pf_dev : MetalDevice?
 var private g_pf_queue : MetalCommandQueue?
 var private g_pf_failed = false
-var private g_pf_regions : table<uint64; MetalBuffer?>    // base address -> resident weight/scale/norm region
+var private @scratch g_pf_regions : table<uint64; MetalBuffer?>    // base address -> resident region; upload-once, steady-state [] is a hit
+// per-prefill transients, reused across calls (prefill orchestration is serial)
+var private @scratch g_pf_bks : array<MetalBuffer?>
+var private @scratch g_pf_bvs : array<MetalBuffer?>
+var private @scratch g_pf_cbs : array<MetalCommandBuffer?>
 var private g_pf_pool : MetalBufferPool
 var private g_pf_upool : MetalBufferPool     // UNTRACKED pool: uniforms + rope tables (GPU-read-only)
 // what the prefill kernels implement beyond the base llama dense block — grows wave by wave
@@ -5702,6 +5706,7 @@ def private pf_enc_swiglu_oai(enc : MetalComputeEncoder?; bg, bu, btot, bcnt, bb
 // own address-keyed region cache when a model (re)load may have recycled the addresses
 var private g_pf_cache_epoch = -1l
 
+[cold_path]   // live-reload only
 def private pf_weight_caches_flush_on_reload {
     if (weights_epoch() == g_pf_cache_epoch) {
         return
@@ -5734,7 +5739,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     return metal_prefill_init()
 }
 
-[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
+[hot_path]
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
     pf_weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
@@ -5867,8 +5872,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let dual_rope = has_dual_rope(c)
     var bcos_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab_sw) : null
     var bsin_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab_sw) : null
-    var bks : array<MetalBuffer?>
-    var bvs : array<MetalBuffer?>
+    var bks & = unsafe(g_pf_bks)
+    var bvs & = unsafe(g_pf_bvs)
+    bks |> clear()
+    bvs |> clear()
     bks |> reserve(int(c.n_layers + c.n_layer_nextn))
     bvs |> reserve(int(c.n_layers + c.n_layer_nextn))
     var no_panel : MetalBuffer?   // recurrent layers' null K/V slot
@@ -6123,7 +6130,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // CONCURRENT encoder (auto-schedule + hz barriers at real hazards). DASLLAMA_METAL_SCHED=0
     // keeps capture order; DASLLAMA_METAL_PF_CAPTURE=0 = the direct serial-encode rollback.
     let cap = g_pf_env_capture
-    var cbs : array<MetalCommandBuffer?>
+    var cbs & = unsafe(g_pf_cbs)
+    cbs |> clear()
     cbs |> reserve(int(ncb))
     var cb : MetalCommandBuffer?
     var enc : MetalComputeEncoder?
@@ -6696,10 +6704,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         let runsp = addr < KVRun const? >(s.kv_runs[0])
         for (cbi, i in cbs, count()) {
             metal_wait_until_completed(cbi)
-            let e = metal_command_buffer_error(cbi)
-            if (!empty(e)) {
+            if (metal_command_buffer_failed(cbi)) {
                 ran = false
-                err = e
+                err = cb_error_text(cbi)
             }
             let t0 = metal_command_buffer_gpu_start_time(cbi)
             let t1 = metal_command_buffer_gpu_end_time(cbi)
@@ -6746,9 +6753,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
     }
     cbs |> clear()
-    unsafe {
-        delete cbs
-    }
     gpu_ms = (gpu_t1 - gpu_t0) * 1000.0lf   // whole-GPU window: first chunk start -> last chunk end
     let encwait_us = get_time_usec(ts_enc)
     let ok = ran
@@ -6874,10 +6878,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     }
     bks |> clear()      // non-owning handles — the pool owns them now
     bvs |> clear()
-    unsafe {
-        delete bks
-        delete bvs
-    }
     pool_release(g_pf_upool, u_dim, 4ul)
     pool_release(g_pf_upool, u_qd, 4ul)
     pool_release(g_pf_upool, u_kvd, 4ul)

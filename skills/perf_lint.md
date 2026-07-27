@@ -144,7 +144,7 @@ transitively, so a sink several frames deep is still reported.
 
 **Declaring a contract is free.** The five annotations are registered by the compiler itself as
 metadata-only markers (the same shape as `[clone]`), so a file under contract requires *nothing* — no module compiles, no build time is paid. `@scratch` is a
-field/parameter annotation, which is free-form anyway. The verification lives here, in
+field/parameter/global annotation, which is free-form anyway. The verification lives here, in
 `daslib/perf_lint`, which code under contract does **not** require: the checker is heavy (it pulls
 `ast_boost`, `lint_config`, `toml`, `json`), and lint already runs where lint belongs —
 `utils/lint/main.das`, the MCP `lint` subtool, CI — none of which ever needed the target to require
@@ -187,8 +187,10 @@ struct Session {
 def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
 ```
 
-A sizing call whose destination reaches a `@scratch` field is not descended into. Field
-annotations are free-form (`@name`, no registration), so `@scratch` costs nothing to parse.
+A sizing call whose destination reaches a `@scratch` declaration is not descended into — a
+struct field, a by-ref helper parameter, or a **module global** (`var @scratch g : array<T>`;
+the annotation goes AFTER `var` — before it is a syntax error). Field/variable annotations are
+free-form (`@name`, no registration), so `@scratch` costs nothing to parse.
 
 **Future — `@scratch` as an optimization hint, not just a lint marker.** Today the declaration only
 tells the linter "this buffer is reused". The same statement is exactly the precondition a
@@ -211,10 +213,15 @@ rather than for the lint, so it can carry the optimization meaning later without
 
 1. `[cold_path]` on the callee — the honest fix when the leg genuinely runs once (lazy init,
    PSO compile, opt-in bookkeeping, a reference-check path behind a debug flag).
-2. `@scratch` on the destination when it is a reused buffer.
-3. `// nolint:PERF026` on the line, **with a reason**. Honored at *either* end of a chain: the
-   report anchors on the caller when the sink is in another file, so a suppression written where
-   the code actually lives still works.
+2. `@scratch` on the destination when it is a reused buffer — a struct field, a by-ref helper
+   parameter, or a module global. It covers the sizing set (`resize`/`reserve`/`push*`/`emplace`/
+   `insert`/`erase`/`pop`/`clear`), **table indexing** (`t[k]` on a `@scratch` table is the
+   pool / residency-cache shape — insert on first touch, steady-state hit), and it follows local
+   reference bindings (`var lst & = pool.free_bufs[b]` carries the mark).
+3. `// nolint:PERF026` on the line, **with a reason**. Honored **anywhere along the chain** —
+   the anchor line, the sink line, or any intermediate call site. The sink often bottoms out in
+   `daslib/builtin.das` (whose lines are nobody's to annotate), so the honest suppression line is
+   usually the call site in the module that owns the decision, and that works.
 4. `DAS_LINT_DISABLE=PERF028` for a whole run — no source edit, which is the point when you are
    adding a log line to chase a bug. With all three codes disabled the closure walk is skipped
    entirely, so this buys compile time and not just quiet.

@@ -503,6 +503,16 @@ namespace das {
         [(__bridge id<MTLCommandBuffer>)(void *) cb waitUntilCompleted];
     }
 
+    // the hot-path probe: status check only, no string — metal_command_buffer_error allocates
+    // its message, so per-step success checks use this and fetch the text on the failure leg
+    bool metal_command_buffer_failed ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at ) {
+        if ( !cb ) ctx->throw_error_at(at, "metal_command_buffer_failed: null command buffer");
+        @autoreleasepool {
+            id<MTLCommandBuffer> c = (__bridge id<MTLCommandBuffer>)(void *) cb;
+            return c.status == MTLCommandBufferStatusError;
+        }
+    }
+
     char * metal_command_buffer_error ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at ) {
         if ( !cb ) ctx->throw_error_at(at, "metal_command_buffer_error: null command buffer");
         @autoreleasepool {
@@ -701,6 +711,9 @@ namespace das {
                     ->args({"command_buffer", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_command_buffer_error)>(*this, lib, "metal_command_buffer_error",
                 SideEffects::modifyExternal, "metal_command_buffer_error")
+                    ->args({"command_buffer", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_command_buffer_failed)>(*this, lib, "metal_command_buffer_failed",
+                SideEffects::modifyExternal, "metal_command_buffer_failed")
                     ->args({"command_buffer", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_command_buffer_gpu_start_time)>(*this, lib, "metal_command_buffer_gpu_start_time",
                 SideEffects::modifyExternal, "metal_command_buffer_gpu_start_time")

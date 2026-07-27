@@ -189,12 +189,12 @@ def private is_alloc_builtin(n : string) : bool {
 def private is_container_sizing(n : string) : bool {
     return (n == "resize" || n == "resize_no_init" || n == "reserve" || n == "clear"
             || n == "push" || n == "push_clone" || n == "emplace" || n == "push_from"
-            || n == "push_clone_from" || n == "insert" || n == "erase")
+            || n == "push_clone_from" || n == "insert" || n == "erase" || n == "pop")
 }
 
-// True when `expr` reaches a struct field marked @scratch — walking through indexing and deref,
-// so `p.kblobs[b]` counts by virtue of kblobs. Sizing such a buffer to the step's geometry is the
-// engine's own allocation strategy, declared once at the field, not an accident at each call site.
+// True when `expr` reaches a declaration marked @scratch — a struct field or a module global
+// (`var @scratch g : array<T>`, the clear()-recycled capture-rail shape) — walking through
+// indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
 def private is_scratch_dest(var expr : Expression?) : bool {
     return false if (expr == null)
     if (expr is ExprField) {
@@ -206,6 +206,19 @@ def private is_scratch_dest(var expr : Expression?) : bool {
             }
         }
         return is_scratch_dest(f.value)
+    }
+    if (expr is ExprVar) {
+        var v = (expr as ExprVar).variable
+        if (v != null) {
+            for (a in v.annotation) {
+                if (a.name == "scratch") return true
+            }
+            // a ref binding (`var lst & = pool.free_bufs[b]`) carries its destination's scratch-ness
+            if (v._type != null && v._type.flags.ref && v.init != null) {
+                return is_scratch_dest(v.init)
+            }
+        }
+        return false
     }
     if (expr is ExprRef2Value) return is_scratch_dest((expr as ExprRef2Value.subexpr))
     if (expr is ExprAt) return is_scratch_dest((expr as ExprAt.subexpr))
@@ -320,10 +333,11 @@ class HotBodyScan : AstVisitor {
     }
 
     // table[key] inserts a default entry when the key is missing, so it allocates on READ too;
-    // the ?[] form (ExprSafeAt) has its own visitor hook and never inserts.
+    // the ?[] form (ExprSafeAt) has its own visitor hook and never inserts. A @scratch table
+    // (the pool / residency-cache shape) is declared reuse — indexing it is the owner's strategy.
     def override preVisitExprAt(var expr : ExprAt?) : void {
         if (expr.subexpr == null || expr.subexpr._type == null) return
-        if (expr.subexpr._type.baseType == Type.tTable) {
+        if (expr.subexpr._type.baseType == Type.tTable && !is_scratch_dest(expr.subexpr)) {
             add_sink(HotBits.alloc, "table index (inserts a default entry when the key is missing)", expr)
         }
     }
@@ -2083,9 +2097,16 @@ class PerfLintVisitor : AstVisitor {
     def hot_report(frames : array<HotFrame>; fi : int; sink : HotSink; want : HotBits; root_file : string) {
         // cast each side: AOT emits bitfield & bitfield as a raw C++ &, ambiguous when one is const
         return if ((uint(sink.bit) & uint(want)) == 0u)
-        // honor a nolint at EITHER end: a report can be anchored in a different file than the sink
+        // honor a nolint ANYWHERE along the chain — the sink may bottom in daslib, so the honest line is often an intermediate call site
         let code = sink.bit.alloc ? "PERF026" : (sink.bit.env ? "PERF027" : "PERF028")
         return if (is_lint_suppressed(sink.site.at, code))
+        var si = fi
+        while (si >= 0) {
+            if (frames[si].site != null && is_lint_suppressed(frames[si].site.at, code)) {
+                return
+            }
+            si = frames[si].parent
+        }
         // sink's own location, unless another file or a SHARED node — then the caller-side anchor
         var at = sink.site.at
         let shared_node = frames[fi].fn.flags.generated || frames[fi].fn.fromGeneric != null
