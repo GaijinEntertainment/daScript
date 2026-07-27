@@ -98,6 +98,12 @@ def test_short4_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = short4(-19, 26, -33, 40)
+        t |> success(a >> 2 == short4(-5, 6, -9, 10), "arithmetic shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = short4(1, 2, 3, 4)
         let w = int4(a)

@@ -247,7 +247,7 @@ def LLVMBuildStore2Aligned(builder : LLVMOpaqueBuilder?; var types : PrimitiveTy
 }
 
 def LLVMGetEnumAttributeKindForName(attr_name : string) {
-    return LLVMGetEnumAttributeKindForName(attr_name, uint64(length(attr_name)))
+    return LLVMGetEnumAttributeKindForName(attr_name, uint64(long_length(attr_name)))
 }
 
 def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueAttributeRef? {
@@ -443,11 +443,11 @@ def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : L
 }
 
 def LLVMLookupIntrinsicID(name : string) {
-    return LLVMLookupIntrinsicID(name, uint64(length(name)))
+    return LLVMLookupIntrinsicID(name, uint64(long_length(name)))
 }
 
 def LLVMGetIntrinsicDeclaration(mod : LLVMOpaqueModule?; id : uint; var argTypes : array<LLVMOpaqueType?>) {
-    return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), uint64(length(argTypes)))
+    return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), uint64(long_length(argTypes)))
 }
 
 def describe(typ : LLVMOpaqueType?) {
@@ -468,7 +468,7 @@ def describe(typ : LLVMOpaqueValue?) {
 
 def describe(blk : LLVMOpaqueBasicBlock?) {
     return "null" if (blk == null)
-    let st := LLVMGetBasicBlockName(blk)
+    let st = clone_string(LLVMGetBasicBlockName(blk))
     return st
 }
 
@@ -497,6 +497,10 @@ def is_lattice_op2_native(expr : ExprOp2?) {
         // int-lattice equality is icmp+reduce (unconditional); fp16 compares promote
         // through float, so they ride the hardware-convert gate
         return is_f16_small_type(lbt) ? g_lattice_fp16_ops_native : true
+    }
+    if (expr.op == ">>") {
+        // int-lattice per-lane shift right — native ashr/lshr on every ISA (fp16 has no shifts)
+        return !is_f16_small_type(lbt)
     }
     if (is_f16_small_type(lbt) || is_f16_small_type(expr.right._type.baseType)) {
         // the closed fp16 arithmetic + scalar ordered compares

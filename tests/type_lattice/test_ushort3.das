@@ -97,6 +97,12 @@ def test_ushort3_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ushort3(200u, 203u, 206u)
+        t |> success(a >> 2 == ushort3(50u, 50u, 51u), "logical shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = ushort3(1u, 2u, 3u)
         let w = uint3(a)

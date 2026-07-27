@@ -97,6 +97,12 @@ def test_byte3_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = byte3(-19, 26, -33)
+        t |> success(a >> 2 == byte3(-5, 6, -9), "arithmetic shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = byte3(1, 2, 3)
         let w = int3(a)

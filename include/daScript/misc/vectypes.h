@@ -477,6 +477,18 @@ namespace das
         for ( int i = 0; i != 16; ++i ) r.s[i] = lut.s[idx.s[i] & 15];
         return r;
     }
+    // per-lane shift right on the integer lattice vectors: signed lanes shift arithmetically,
+    // unsigned logically; the count masks to the LANE width (the scalar &31 rule at lane size).
+    // The name carries the template args so AOT emits verbatim.
+    template <typename VT, typename ET>
+    __forceinline VT das_sv_shr ( VT v, int32_t count ) {
+        constexpr int bits = int(sizeof(ET) * 8);
+        const int s = count & (bits - 1);
+        constexpr int n = int(sizeof(VT) / sizeof(ET));
+        ET * d = (ET *) &v;
+        for ( int i = 0; i != n; ++i ) d[i] = ET(d[i] >> s);
+        return v;
+    }
 
     template <typename TO, typename TOE, typename FROM, typename FE>
     __forceinline TO das_sv_cvt_sat ( FROM v ) {

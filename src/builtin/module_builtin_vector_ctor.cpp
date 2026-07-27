@@ -544,6 +544,29 @@ ADD_SVEC_SPLAT(VTYPE,ETYPE,uint32_t) ADD_SVEC_CTOR_##N(VTYPE,ETYPE,uint32_t)
         addExtern<DAS_BIND_FUN(das_idot_ss)>(*this, lib, "idot", SideEffects::none, "das_idot_ss")->args({"a","b"});
         addExtern<DAS_BIND_FUN(das_idot_us)>(*this, lib, "idot", SideEffects::none, "das_idot_us")->args({"a","b"});
         addExtern<DAS_BIND_FUN(das_shuffle_b16)>(*this, lib, "shuffle", SideEffects::none, "das_shuffle_b16")->args({"lut","idx"});
+        // per-lane >> on the integer lattice vectors (count masked to lane width; signed =
+        // arithmetic, unsigned = logical) — the JIT overrides with native ashr/lshr
+#define ADD_SVEC_SHR(VTYPE,ETYPE) \
+    addExtern<DAS_BIND_FUN((das_sv_shr<VTYPE,ETYPE>))>(*this, lib, ">>", SideEffects::none, "das_sv_shr<" #VTYPE "," #ETYPE ">")->args({"v","count"});
+        ADD_SVEC_SHR(byte2, int8_t);
+        ADD_SVEC_SHR(byte3, int8_t);
+        ADD_SVEC_SHR(byte4, int8_t);
+        ADD_SVEC_SHR(byte8, int8_t);
+        ADD_SVEC_SHR(byte16, int8_t);
+        ADD_SVEC_SHR(ubyte2, uint8_t);
+        ADD_SVEC_SHR(ubyte3, uint8_t);
+        ADD_SVEC_SHR(ubyte4, uint8_t);
+        ADD_SVEC_SHR(ubyte8, uint8_t);
+        ADD_SVEC_SHR(ubyte16, uint8_t);
+        ADD_SVEC_SHR(short2, int16_t);
+        ADD_SVEC_SHR(short3, int16_t);
+        ADD_SVEC_SHR(short4, int16_t);
+        ADD_SVEC_SHR(short8, int16_t);
+        ADD_SVEC_SHR(ushort2, uint16_t);
+        ADD_SVEC_SHR(ushort3, uint16_t);
+        ADD_SVEC_SHR(ushort4, uint16_t);
+        ADD_SVEC_SHR(ushort8, uint16_t);
+#undef ADD_SVEC_SHR
 #undef ADD_SVEC_CVT
 #undef ADD_SVEC_CVT_SAT
     }

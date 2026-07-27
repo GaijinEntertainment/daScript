@@ -95,6 +95,12 @@ def test_byte2_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = byte2(-19, 26)
+        t |> success(a >> 2 == byte2(-5, 6), "arithmetic shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = byte2(1, 2)
         let w = int2(a)

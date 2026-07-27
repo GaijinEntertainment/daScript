@@ -309,9 +309,9 @@ class public LlvmJitVisitor : AstVisitor {
             // real .das paths, so the CU's own file name is just a label.
             let cu_name = "das-jit"
             let producer = "daslang jit"
-            let cu_file = LLVMDIBuilderCreateFile(g_di_builder, cu_name, uint64(length(cu_name)), "", 0ul)
+            let cu_file = LLVMDIBuilderCreateFile(g_di_builder, cu_name, uint64(long_length(cu_name)), "", 0ul)
             LLVMDIBuilderCreateCompileUnit(g_di_builder, LLVMDWARFSourceLanguage.C, cu_file,
-                producer, uint64(length(producer)), 0, "", 0ul, 0u, "", 0ul,
+                producer, uint64(long_length(producer)), 0, "", 0ul, 0u, "", 0ul,
                 LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0u, 0, 0, "", 0ul, "", 0ul)
         }
     }
@@ -338,7 +338,7 @@ class public LlvmJitVisitor : AstVisitor {
             var ty = LLVMDIBuilderCreateSubroutineType(
                 g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
             di_function = LLVMDIBuilderCreateFunction(g_di_builder, unit,
-                implName, uint64(length(implName)), "", 0ul, unit, fun.at.line,
+                implName, uint64(long_length(implName)), "", 0ul, unit, fun.at.line,
                 ty, 1, 1, fun.at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
             LLVMSetSubprogram(ffunc, di_function)
         }
@@ -370,7 +370,7 @@ class public LlvmJitVisitor : AstVisitor {
         if (meta == null) {
             // filename already carries its path; a non-empty directory would make CodeView
             // consumers print the dir twice (dir/dir/file) when they join the two fields
-            meta = LLVMDIBuilderCreateFile(g_di_builder, filename, uint64(length(filename)), "", 0ul)
+            meta = LLVMDIBuilderCreateFile(g_di_builder, filename, uint64(long_length(filename)), "", 0ul)
         }
         return meta
     }
@@ -700,7 +700,7 @@ class public LlvmJitVisitor : AstVisitor {
             let publName = fnmna.publ()
             var wty = LLVMDIBuilderCreateSubroutineType(g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
             let wsp = LLVMDIBuilderCreateFunction(g_di_builder, unit,
-                publName, uint64(length(publName)), "", 0ul, unit, at.line,
+                publName, uint64(long_length(publName)), "", 0ul, unit, at.line,
                 wty, 0, 1, at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
             LLVMSetSubprogram(wfunc, wsp)
             LLVMSetCurrentDebugLocation2(g_builder,
@@ -2930,10 +2930,20 @@ class public LlvmJitVisitor : AstVisitor {
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if (expr.op == "<<" || expr.op == ">>" || expr.op == ">>>" || expr.op == "<<<" || expr.op == "<<=" || expr.op == ">>=" || expr.op == ">>>=" || expr.op == "<<<=") {
-            // Create a mask value: (sizeof(element_type) * 8) - 1
-            verify(isNumeric(opType))
-            right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64((opType.sizeOf * 8) - 1), 0), "")
-            right = build_broadcast_vector(g_builder, shiftType, right)
+            if (shiftType.isVectorType && is_lattice_small_type(shiftType.baseType)) {
+                // int-lattice: the count masks to the LANE width (7/15), truncated to the
+                // lane type before the splat — an i32 can't insert into <N x i8> lanes
+                let laneT = base_type_to_llvm_type(shiftType.vectorBaseType)
+                let laneBits = (shiftType.vectorBaseType == Type.tInt16 || shiftType.vectorBaseType == Type.tUInt16) ? 16 : 8
+                right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64(laneBits - 1), 0), "")
+                right = LLVMBuildTrunc(g_builder, right, laneT, "")
+                right = build_broadcast_vector(g_builder, shiftType, right)
+            } else {
+                // Create a mask value: (sizeof(element_type) * 8) - 1
+                verify(isNumeric(opType))
+                right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64((opType.sizeOf * 8) - 1), 0), "")
+                right = build_broadcast_vector(g_builder, shiftType, right)
+            }
         }
         if (is_f16_small_type(opType.baseType)) {
             // nolint:STYLE014
@@ -3157,9 +3167,9 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported <<= type {describe(shiftType)}")
             }
         } elif (expr.op == ">>") {
-            if (shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType == Type.tInt)) {
+            if (shiftType.isSignedInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tInt8 || shiftType.vectorBaseType == Type.tInt16))) {
                 setE(expr, LLVMBuildAShr(g_builder, left, right, ""))
-            } elif (shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType == Type.tUInt)) {
+            } elif (shiftType.isUnsignedInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tUInt || shiftType.vectorBaseType == Type.tUInt8 || shiftType.vectorBaseType == Type.tUInt16))) {
                 setE(expr, LLVMBuildLShr(g_builder, left, right, ""))
             } else {
                 failed_E(expr, "unsupported >> type {describe(shiftType)}")
@@ -7123,7 +7133,7 @@ class public LlvmJitVisitor : AstVisitor {
     // Build `!{!"name"}` — a 1-operand MDNode wrapping a metadata string.
     def make_loop_md_flag(name : string) : LLVMOpaqueMetadata? {
         var arr : LLVMOpaqueMetadata? [1]
-        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(long_length(name)))
         return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 1ul)
     }
 
@@ -7131,7 +7141,7 @@ class public LlvmJitVisitor : AstVisitor {
     // like `llvm.loop.unroll.count, i32 N`.
     def make_loop_md_pair_i32(name : string; n : int) : LLVMOpaqueMetadata? {
         var arr : LLVMOpaqueMetadata? [2]
-        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(long_length(name)))
         arr[1] = LLVMValueAsMetadata(LLVMConstInt(types.t_int32, uint64(n), 0))
         return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 2ul)
     }
@@ -7139,7 +7149,7 @@ class public LlvmJitVisitor : AstVisitor {
     // Build `!{!"name", i1 b}` — for `llvm.loop.vectorize.enable`-style toggles.
     def make_loop_md_pair_i1(name : string; b : bool) : LLVMOpaqueMetadata? {
         var arr : LLVMOpaqueMetadata? [2]
-        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(long_length(name)))
         arr[1] = LLVMValueAsMetadata(LLVMConstInt(types.t_int1, b ? 1ul : 0ul, 0))
         return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 2ul)
     }
@@ -7198,7 +7208,7 @@ class public LlvmJitVisitor : AstVisitor {
                 append_loop_hint_operand(operands, a)
             }
         }
-        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(length(operands)))
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(long_length(operands)))
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)
         let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
         let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)

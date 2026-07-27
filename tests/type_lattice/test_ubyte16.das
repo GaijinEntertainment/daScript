@@ -100,4 +100,10 @@ def test_ubyte16_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ubyte16(200u, 203u, 206u, 209u, 212u, 215u, 218u, 221u, 224u, 227u, 230u, 233u, 236u, 239u, 242u, 245u)
+        t |> success(a >> 2 == ubyte16(50u, 50u, 51u, 52u, 53u, 53u, 54u, 55u, 56u, 56u, 57u, 58u, 59u, 59u, 60u, 61u), "logical shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
 }

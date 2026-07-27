@@ -95,6 +95,12 @@ def test_ubyte2_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ubyte2(200u, 203u)
+        t |> success(a >> 2 == ubyte2(50u, 50u), "logical shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = ubyte2(1u, 2u)
         let w = uint2(a)

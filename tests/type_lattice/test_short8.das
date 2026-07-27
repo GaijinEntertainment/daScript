@@ -92,6 +92,12 @@ def test_short8_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = short8(-19, 26, -33, 40, -47, 54, -61, 68)
+        t |> success(a >> 2 == short8(-5, 6, -9, 10, -12, 13, -16, 17), "arithmetic shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         t |> success(short8(byte8(1, 2, 3, 4, 5, 6, 7, 8)) == short8(1, 2, 3, 4, 5, 6, 7, 8), "widen from 8-bit")
     }

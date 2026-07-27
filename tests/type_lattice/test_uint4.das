@@ -115,4 +115,10 @@ def test_uint4_conformance(t : T?) {
         c *= 2u
         t |> success(c == a + a, "mul assign scalar")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = uint4(200u, 203u, 206u, 209u)
+        t |> success(a >> 2 == uint4(50u, 50u, 51u, 52u), "logical shift")
+        t |> success(a >> 34 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
 }

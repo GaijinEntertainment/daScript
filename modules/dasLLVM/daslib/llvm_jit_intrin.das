@@ -1320,14 +1320,24 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     return s
 }
 
-// dynamic table select: idx masked to 16 entries, then 16 dynamically-indexed lane reads —
-// generic IR every backend accepts; tbl1/pshufb single-op forms = the later per-ISA wave
+// dynamic table select: idx masked to 16 entries. aarch64 emits one @llvm.aarch64.neon.tbl1
+// (baseline NEON — same gate as the tbl16 intrinsics); elsewhere 16 dynamically-indexed lane
+// reads, generic IR every backend accepts (pshufb single-op = the x64 wave)
 [unused_argument(expr)]
 def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
-    var m15elems <- [for (_i in range(16)); LLVMConstInt(ctx.types.t_int8, 15ul, 0)]
-    var m15 = LLVMConstVector(array_data_ptr(m15elems), 16u)
-    var idx = LLVMBuildAnd(ctx.builder, arguments[1], m15, "shuffle_idx")
+    var idx = LLVMBuildAnd(ctx.builder, arguments[1], splat_v16i8(ctx, 15), "shuffle_idx")
+    if (g_target_is_aarch64) {
+        let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.tbl1")
+        var declTypes <- [v16i8]
+        var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null
+        if (decl != null) {
+            var fnArgTypes <- [v16i8, v16i8]
+            var fnTy = LLVMFunctionType(v16i8, fnArgTypes)
+            var callArgs <- [arguments[0], idx]
+            return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "shuffle")
+        }
+    }
     var vres = LLVMGetUndef(v16i8)
     for (i in range(16)) {
         var lane = LLVMBuildExtractElement(ctx.builder, idx, ctx.types.ConstI32(uint64(i)), "")

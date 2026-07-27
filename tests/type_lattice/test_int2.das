@@ -113,4 +113,10 @@ def test_int2_conformance(t : T?) {
         c *= 2
         t |> success(c == a + a, "mul assign scalar")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = int2(-19, 26)
+        t |> success(a >> 2 == int2(-5, 6), "arithmetic shift")
+        t |> success(a >> 34 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
 }

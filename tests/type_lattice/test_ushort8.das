@@ -92,6 +92,12 @@ def test_ushort8_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ushort8(200u, 203u, 206u, 209u, 212u, 215u, 218u, 221u)
+        t |> success(a >> 2 == ushort8(50u, 50u, 51u, 52u, 53u, 53u, 54u, 55u), "logical shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         t |> success(ushort8(ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u)) == ushort8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u), "widen from 8-bit")
     }

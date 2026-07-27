@@ -100,4 +100,10 @@ def test_byte16_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = byte16(-19, 26, -33, 40, -47, 54, -61, 68, -75, 82, -89, 96, -103, 110, -117, 124)
+        t |> success(a >> 2 == byte16(-5, 6, -9, 10, -12, 13, -16, 17, -19, 20, -23, 24, -26, 27, -30, 31), "arithmetic shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
 }

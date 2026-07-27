@@ -85,20 +85,23 @@ def private q8q8_group3_kernel_neon_idot4x4(var y0p : float?; var y1p : float?; 
 def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uint8 const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
     let nb = n / 32l
     var f = 0.0
-    for [tune = 1] (bi in range64(nb)) {   // fallback u2 = ggml's ib += 2 shape
-        let wp = unsafe(wn + bi * 16l)
-        let xp = unsafe(xq + bi * 32l)
-        var acc = int4(0, 0, 0, 0)
-        acc = sdot4_w(acc, tbl16_lo(lut, wp), xp)
-        acc = sdot4_w(acc, tbl16_hi(lut, wp), unsafe(xp + 16l))
-        f += float(acc.x + acc.y + acc.z + acc.w) * e8m0_half(uint(unsafe(we[bi]))) * unsafe(xs[bi])
+    unsafe {
+        let lutv = reinterpret<byte16 const?>(lut)[0]
+        let wv = reinterpret<ubyte16 const?>(wn)
+        let xv = reinterpret<byte16 const?>(xq)
+        for [tune = 1] (bi in range64(nb)) {   // fallback u2 = ggml's ib += 2 shape
+            let nib = wv[bi]
+            var acc = idot4(shuffle(lutv, nib), xv[bi * 2l])
+            acc = idot4(acc, shuffle(lutv, nib >> 4), xv[bi * 2l + 1l])
+            f += float(acc.x + acc.y + acc.z + acc.w) * e8m0_half(uint(we[bi])) * xs[bi]
+        }
     }
     return f
 }
 
-//! ARM TBL+SDOT MXFP4·Q8 dot (NEON body of ggml_vec_dot_mxfp4_q8_0): one v16i8 nibble load feeds
-//! two TBL lookups (low/high nibbles), each SDOT'd in-register against the Q8 activation, flushed
-//! through e8m0_half(we) × xs. Not `private`: called from lifted parallel_for worker lambdas.
+//! MXFP4·Q8 dot in plain das (ggml_vec_dot_mxfp4_q8_0's shape): one nibble load, two shuffle LUT
+//! lookups (low via the &15 mask, high via the per-byte >> 4), each idot4'd against the Q8
+//! activation (one TBL + one SDOT each on arm64 JIT). Not `private`: called from lifted workers.
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
 def dot_mx4q8(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 

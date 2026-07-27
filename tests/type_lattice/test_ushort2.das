@@ -95,6 +95,12 @@ def test_ushort2_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ushort2(200u, 203u)
+        t |> success(a >> 2 == ushort2(50u, 50u), "logical shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+    }
     t |> run("converts") @(t : T?) {
         let a = ushort2(1u, 2u)
         let w = uint2(a)
