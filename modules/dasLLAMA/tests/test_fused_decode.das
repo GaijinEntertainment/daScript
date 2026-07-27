@@ -356,6 +356,41 @@ def test_fused_decode_kquant(t : T?) {
     }
 }
 
+// The fused MoE expert chain (mx4 experts: gate+up rows + bias + act + requant -> down rows +
+// bias + weighted reduce as ONE rendezvous) vs the 3-dispatch groupn sequence. gpt-oss-20b is
+// the mx4 fixture (12GB — the large-tier PARITY_FULL gate, same rule as the fam cells).
+[test]
+def test_fused_decode_moe_chain(t : T?) {
+    t |> run("fused MoE expert chain bit-exact on gpt-oss (needs the gguf + DASLLAMA_PARITY_FULL)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (empty(get_env_variable("DASLLAMA_PARITY_FULL"))) {
+            t |> skip("large-tier fixture (set DASLLAMA_PARITY_FULL=1)")
+            return
+        }
+        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        let prev_thresh = get_target_chunk_work()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            set_target_chunk_work(1l)
+            var tr <- load_gguf(path, QuantMode.q8)
+            if (!kernel_backend_has_mx4_rows()) {
+                t |> success(true, "skipped: active backend has no mx4 rows core")
+            } else {
+                fused_vs_std_bit_exact(t, tr)
+            }
+            delete tr
+        }
+        set_target_chunk_work(prev_thresh)
+    }
+}
+
 [test]
 def test_fused_decode_attn_chain(t : T?) {
     t |> run("fused attention chain bit-exact on SmolLM2-135M (needs the gguf)") @(t : T?) {

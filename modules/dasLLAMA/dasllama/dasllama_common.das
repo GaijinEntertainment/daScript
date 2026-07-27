@@ -1940,7 +1940,7 @@ def private dense_plane_ok(t : Model; f : KqFmt) : bool => (f == KqFmt.q8 || moe
 
 // layer l carries a parallel-dense shared expert whose whole w1/w3/w2 triple the tier can serve
 def private dense_shexp_uploadable(t : Model; l : int64) : bool {
-    if (!t.config.moe_dense_shexp || !gpu_want_dense_shexp() || int64(length(t.w1_offs)) <= l
+    if (!t.config.moe_dense_shexp || !gpu_want_dense_shexp() || long_length(t.w1_offs) <= l
             || t.w1_offs[l] < 0l || t.w2_offs[l] < 0l || t.w3_offs[l] < 0l) {
         return false
     }
@@ -2962,14 +2962,14 @@ def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
 
 def private metal_blob_layout_ok(t : Model) : bool {
     let c = t.config
-    if (int64(length(t.wq_offs)) < c.n_layers) {
+    if (long_length(t.wq_offs) < c.n_layers) {
         return false
     }
     // a pure-MoE file (qwen3moe) carries no dense FFN arrays — its expert stacks bind instead
-    let has_ffn = int64(length(t.w1_offs)) >= c.n_layers
-    let has_exps = (c.moe && int64(length(t.we1_offs)) >= c.n_layers &&
-        int64(length(t.we2_offs)) >= c.n_layers && int64(length(t.we3_offs)) >= c.n_layers)
-    let has_dn = c.recr_mask != 0ul && int64(length(t.dnqkv_offs)) >= c.n_layers
+    let has_ffn = long_length(t.w1_offs) >= c.n_layers
+    let has_exps = (c.moe && long_length(t.we1_offs) >= c.n_layers &&
+        long_length(t.we2_offs) >= c.n_layers && long_length(t.we3_offs) >= c.n_layers)
+    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= c.n_layers
     if (!has_ffn && !has_exps) {
         return false
     }
@@ -3525,7 +3525,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         var hidden = 0l
         if (gguf_is_array(m, "{arch}.feed_forward_length")) {
             t.ffn_w <- gguf_int_array(m, bytes, "{arch}.feed_forward_length")
-            if (int64(length(t.ffn_w)) != layers) {
+            if (long_length(t.ffn_w) != layers) {
                 panic("dasLLAMA: feed_forward_length array has {length(t.ffn_w)} entries, expected {layers}")
             }
             for (w in t.ffn_w) { hidden = max(hidden, w) }
@@ -3589,7 +3589,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             if (gguf_is_array(m, "{arch}.attention.recurrent_layers")) {
                 let rl <- gguf_int_array(m, bytes, "{arch}.attention.recurrent_layers")
-                if (int64(length(rl)) != layers) {
+                if (long_length(rl) != layers) {
                     panic("dasLLAMA: recurrent_layers array has {length(rl)} entries, expected {layers}")
                 }
                 for (l in range64(layers)) {
@@ -4331,7 +4331,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
 //! Requires the fp32 representation (wblob) — i.e. a model loaded with QuantMode.fp32. Keeps wblob
 //! so the same model can be re-quantized to another precision for an A/B comparison.
 def quantize_weights(var t : Model) {
-    let n = int64(length(t.wblob))
+    let n = long_length(t.wblob)
     var qt <- quantize_q8_0(t.wblob, n)
     t.qblob <- qt.q
     t.qscales <- qt.scales
@@ -4349,7 +4349,7 @@ def quantize_weights(var t : Model) {
 //! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
 //! Same fp32-required / wblob-kept contract as quantize_weights.
 def quantize_weights_q4(var t : Model) {
-    let n = int64(length(t.wblob))
+    let n = long_length(t.wblob)
     var qt <- quantize_q4_0(t.wblob, n)
     t.q4blob <- qt.q
     t.q4scales <- qt.scales
@@ -4833,7 +4833,7 @@ def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = 
 //! outlive the session and stay in place; release the pages (release_kv_pages_) when done.
 def make_run_state_paged(c : Config; var pool : KVPool) : Session {
     let kv_layers = c.n_layers + c.n_layer_nextn   // + the MTP/NextN draft block's slab
-    if (int64(length(pool.blob_of)) != kv_layers) {
+    if (long_length(pool.blob_of) != kv_layers) {
         panic("make_run_state_paged: pool was built for a different model ({length(pool.blob_of)} layers vs {kv_layers})")
     }
     for (l in range64(kv_layers)) {
@@ -4858,7 +4858,7 @@ def create_session_(model : Model; var pool : KVPool) : Session {
 //! THE eval primitive: run `tokens` at the session's current position and advance it. Prefill =
 //! eval(prompt); each step = eval([token]) — same call, different batch size. Logits → `s.logits`.
 def eval_(t : Model; var s : Session; tokens : array<int64>) {
-    let npos = int64(length(tokens))
+    let npos = long_length(tokens)
     if (npos <= 0l) return
     forward_batch(t, s, tokens, npos, s.n_past)
     s.n_past += npos
@@ -5355,7 +5355,7 @@ def kv_ensure(var s : Session; upto : int64) {
         return
     }
     let np = (upto + s.kv_pool.page_rows - 1l) / s.kv_pool.page_rows
-    while (int64(length(s.block_table)) < np) {
+    while (long_length(s.block_table) < np) {
         s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
     }
 }
@@ -7748,10 +7748,10 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
 
 // Zero the recurrent state for a fresh conversation (position 0).
 def private dn_reset(var s : Session) {
-    for (i in range64(int64(length(s.dn_conv_state)))) {
+    for (i in range64(long_length(s.dn_conv_state))) {
         s.dn_conv_state[i] = 0.0
     }
-    for (i in range64(int64(length(s.dn_state)))) {
+    for (i in range64(long_length(s.dn_state))) {
         s.dn_state[i] = 0.0
     }
     moe_gpu_dn_invalidate()   // CPU zeros are now authoritative — drop any device-resident copies
@@ -7759,7 +7759,7 @@ def private dn_reset(var s : Session) {
 
 // Sync one layer's device-resident deltanet state down before a CPU read (no-op when clean).
 def private dn_flush_layer(var s : Session; l : int64) {
-    if (l < int64(length(s.dn_state_prefix)) && s.dn_state_prefix[l] >= 0l) {
+    if (l < long_length(s.dn_state_prefix) && s.dn_state_prefix[l] >= 0l) {
         unsafe {
             moe_gpu_dn_flush(l, addr(s.dn_state[s.dn_state_prefix[l]]),
                 addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
@@ -7768,7 +7768,7 @@ def private dn_flush_layer(var s : Session; l : int64) {
 }
 
 def private dn_flush_all(var s : Session) {
-    for (l in range64(int64(length(s.dn_state_prefix)))) {
+    for (l in range64(long_length(s.dn_state_prefix))) {
         dn_flush_layer(s, l)
     }
 }
@@ -8094,7 +8094,7 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     }
     var ids <- [for (i in range(length(h.cnt))); int64(i)]
     ids |> sort() $(a, b) => h.cnt[a] > h.cnt[b]
-    var want = min(g_heat_want, int64(length(ids)))
+    var want = min(g_heat_want, long_length(ids))
     while (want > 0l && h.cnt[ids[want - 1l]] <= 0.0) {   // never pin never-picked experts
         want--
     }
@@ -8224,7 +8224,7 @@ def expert_reuse_report(verbose : bool = true) {
         var acc = 0l
         var fi = 0
         for (ci in range(4)) {
-            while (int64(fi) < min(REUSE_CAPS[ci], int64(length(f)))) {
+            while (int64(fi) < min(REUSE_CAPS[ci], long_length(f))) {
                 acc += f[fi]
                 fi++
             }
@@ -8277,6 +8277,122 @@ def expert_reuse_top(li : int; n : int) : array<int64> {
     return <- res
 }
 
+// Can the routed mx4 experts run as the fused 2-stage chain? Q8 pre-quant, mx4 expert planes,
+// team mode + a backend mx4 rows core, 32-divisible spans — the fused_ffn_ok contract at MoE shape.
+def private fused_moe_ok(t : Model) : bool {
+    let c = t.config
+    return (g_fused_decode && t.quant == QuantMode.q8 && t.experts_mx4
+        && c.n_ff_exp % 32l == 0l && c.dim % 32l == 0l
+        && get_jobque_team_mode() && kernel_backend_has_mx4_rows()
+        && lanes_for_work(2l * c.n_expert_used * c.dim * c.n_ff_exp, g_gemv_lane_cap) > 1)
+}
+
+// Fused MoE expert chain: ONE team rendezvous runs [gate+up rows + bias + act + requant] ->
+// [down rows + bias + weighted reduce] over all k routed experts. Bit-identical to the groupn
+// sequence — same rows cores, same dot->bias->act element order, stage 1 reduces in slot order.
+def private moe_experts_chain(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let nfe = c.n_ff_exp
+    let ege = dim * nfe
+    let biased = c.moe_exps_bias
+    let ts_chain = ref_time_ticks()
+    let mxrows = mx4_rows_fn()
+    let is_gelu = c.ffn_act == FfnAct.gelu
+    let is_oai = c.ffn_act == FfnAct.swiglu_oai
+    let vec = g_act_vec
+    let w1o = t.we1_offs[l]
+    let w3o = t.we3_offs[l]
+    let w2o = t.we2_offs[l]
+    let web1o = t.web1_off
+    let web3o = t.web3_off
+    let web2o = t.web2_off
+    let ng0 = nfe / 32l
+    let ngrp0 = int(k * ng0)
+    let ngrp1 = int(dim / 32l)
+    let n0 = chain_stage_chunks(ngrp0, int(k * nfe), 2l * k * dim * nfe)
+    let n1 = chain_stage_chunks(ngrp1, int(dim), k * nfe * dim)
+    s.chain_stages |> resize(2)
+    s.chain_stages[0] = int3(0, ngrp0, n0)
+    s.chain_stages[1] = int3(0, ngrp1, n1)
+    count_parallel_dispatch(min(n0, ngrp0) + min(n1, ngrp1))
+    unsafe {
+        var accp = addr(s.moe_acc[0])
+        var gup = addr(s.moe_gu[0])
+        var gu2p = addr(s.moe_gu2[0])
+        var dnp = addr(s.moe_dn[0])
+        var dqp = addr(s.moe_dq[0])
+        var dsp = addr(s.moe_ds[0])
+        let xqp = addr<int8 const?>(s.moe_xq[0])
+        let xsp = addr<float const?>(s.moe_xs[0])
+        let wnb = addr<uint8 const?>(t.mxq[0])
+        let web = addr<uint8 const?>(t.mxs[0])
+        let fbp = biased ? addr<float const?>(t.fblob[0]) : null
+        let idxp = addr<int64 const?>(s.moe_idx[0])
+        let wvp = addr<float const?>(s.moe_w[0])
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+            unsafe {
+                if (stage == 0) {
+                    // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
+                    var g = int64(jb)
+                    while (g < int64(je)) {
+                        let j = g / ng0
+                        let gEnd = min(int64(je) - j * ng0, ng0)
+                        let r0 = (g % ng0) * 32l
+                        let r1 = gEnd * 32l
+                        let base = idxp[j] * ege
+                        let w1 = w1o + base
+                        let w3 = w3o + base
+                        invoke(mxrows, gup + j * nfe, wnb + w1 / 2l, web + w1 / 32l, xqp, xsp, dim, r0, r1)
+                        invoke(mxrows, gu2p + j * nfe, wnb + w3 / 2l, web + w3 / 32l, xqp, xsp, dim, r0, r1)
+                        if (biased) {
+                            let e = l * ne + idxp[j]
+                            add_inplace(gup + j * nfe + r0, fbp + web1o + e * nfe + r0, r1 - r0)
+                            add_inplace(gu2p + j * nfe + r0, fbp + web3o + e * nfe + r0, r1 - r0)
+                        }
+                        if (vec) {
+                            if (is_gelu) {
+                                geglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } elif (is_oai) {
+                                swiglu_oai4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } else {
+                                swiglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            }
+                        } else {
+                            if (is_gelu) {
+                                geglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } elif (is_oai) {
+                                swiglu_oai(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } else {
+                                swiglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            }
+                        }
+                        quantize_q8_0_into_ptr(gup + j * nfe + r0, r1 - r0, dqp, dsp, j * nfe + r0, (j * nfe + r0) / 32l)
+                        g = j * ng0 + gEnd
+                    }
+                } else {
+                    // every expert's down rows for this dim span, then the weighted sum in slot order
+                    let r0 = int64(jb) * 32l
+                    let r1 = int64(je) * 32l
+                    for (j in range64(k)) {
+                        let w2 = w2o + idxp[j] * ege
+                        invoke(mxrows, dnp + j * dim, wnb + w2 / 2l, web + w2 / 32l, dqp + j * nfe, dsp + j * nfe / 32l, nfe, r0, r1)
+                        if (biased) {
+                            add_inplace(dnp + j * dim + r0, fbp + web2o + (l * ne + idxp[j]) * dim + r0, r1 - r0)
+                        }
+                    }
+                    for (j in range64(k)) {
+                        axpy(accp + r0, dnp + j * dim + r0, wvp[j], r1 - r0)
+                    }
+                }
+            }
+        }
+    }
+    prof_add("moe_chain", ts_chain)
+}
+
 // Routed experts, given the pre-normed input in s.xb and the top-k selection in s.moe_idx/s.moe_w:
 // s.moe_acc = Σ_j w_j · FFN_e_j(xb). Shared by qwen2moe/gpt-oss (via moe_ffn_core) and gemma4
 // (which folds its per-expert down scale into s.moe_w first).
@@ -8323,6 +8439,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
         // heat cache: non-resident layers partition the top-k against the tier's slot pools — hits ride the GPU FFN chain async, misses run the CPU groupn path concurrently
         let heat_moe = !gpu_moe && !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && heat_armed()
         var nhits = 0l
+        var moe_chained = false   // the fused chain reduces inline — the nhits==0 axpy tail must skip
         if (heat_moe) {
             heat_note_and_advise(t, l, s.moe_idx, k, ne)
             s.heat_hit |> resize(int(k))
@@ -8361,8 +8478,8 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
                 let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
                 for (j in range64(k)) {
-                    memcpy(reinterpret<void?>(gq + j * dim), sxq, int(dim))
-                    memcpy(reinterpret<void?>(gs + j * nb), sxs, int(nb * 4l))
+                    memcpy(reinterpret<void?>(gq + j * dim), sxq, dim)
+                    memcpy(reinterpret<void?>(gs + j * nb), sxs, nb * 4l)
                 }
             }
             matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
@@ -8394,8 +8511,8 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
                 let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
                 for (i in range64(nhits)) {
-                    memcpy(reinterpret<void?>(gq + i * dim), sxq, int(dim))
-                    memcpy(reinterpret<void?>(gs + i * nb), sxs, int(nb * 4l))
+                    memcpy(reinterpret<void?>(gq + i * dim), sxq, dim)
+                    memcpy(reinterpret<void?>(gs + i * nb), sxs, nb * 4l)
                 }
             }
             let ts_sub = ref_time_ticks()
@@ -8479,6 +8596,11 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 }
             }
             prof_add("moe_reduce", ts_hred)
+        } elif (t.experts_mx4 && !kq_sb(f1) && f1 != KqFmt.q51 && !kq_sb(f3) && f3 != KqFmt.q51
+                && !kq_sb(f2) && f2 != KqFmt.q51 && fused_moe_ok(t)) {
+            // fused mx4 expert chain: 3 groupn fork/joins collapse to ONE team rendezvous
+            moe_experts_chain(t, s, l)
+            moe_chained = true
         } else {
             for (j in range64(k)) {
                 let e = l * ne + s.moe_idx[j]
@@ -8555,7 +8677,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
             }
             prof_add("mm_moe_dn", ts_down)
         }
-        if (nhits == 0l) {   // the split arm above reduced its own hit/miss row banks
+        if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline
             let ts_red = ref_time_ticks()
             for (j in range64(k)) {   // slot order preserved — the sum is bit-identical
                 axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
@@ -9303,8 +9425,8 @@ def mtp_verify_prep(t : Model; var s : Session; tok, d, pos : int64) {
 //! only the recurrent state rolls back, then one plain forward re-advances it.
 def mtp_state_snapshot(var s : Session) {
     dn_flush_all(s)   // the snapshot must capture device-resident decode-step state
-    let nc = int64(length(s.dn_conv_state))
-    let ns = int64(length(s.dn_state))
+    let nc = long_length(s.dn_conv_state)
+    let ns = long_length(s.dn_state)
     s.mtp_snap_conv |> resize(nc)   // no-op after the first call
     s.mtp_snap_state |> resize(ns)
     copy_floats(s.dn_conv_state, 0l, s.mtp_snap_conv, 0l, nc)
@@ -9313,8 +9435,8 @@ def mtp_state_snapshot(var s : Session) {
 }
 
 def mtp_state_restore(var s : Session) {
-    copy_floats(s.mtp_snap_conv, 0l, s.dn_conv_state, 0l, int64(length(s.mtp_snap_conv)))
-    copy_floats(s.mtp_snap_state, 0l, s.dn_state, 0l, int64(length(s.mtp_snap_state)))
+    copy_floats(s.mtp_snap_conv, 0l, s.dn_conv_state, 0l, long_length(s.mtp_snap_conv))
+    copy_floats(s.mtp_snap_state, 0l, s.dn_state, 0l, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
     moe_gpu_dn_invalidate()   // restored CPU state is authoritative — device copies are stale
 }
@@ -9457,14 +9579,14 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
     if (t.quant == QuantMode.q4_0) {   // no batched prefill rail: the 2-row verify (and the warm) need it
         panic("dasLLAMA: MTP self-spec decode needs the batched prefill path — load q8 or fp32, not q4_0")
     }
-    let np = int64(length(prompt))
+    let np = long_length(prompt)
     var ids : array<int64>
     if (total <= 0l || np <= 0l) {
         return <- ids
     }
     ids |> reserve(total)
     for (i in range64(1l, np)) {   // generate()'s echo convention (incl. budget + BOS delimiter)
-        if (int64(length(ids)) >= total || prompt[i] == 1l) {
+        if (long_length(ids) >= total || prompt[i] == 1l) {
             return <- ids
         }
         ids |> push(prompt[i])
@@ -9478,15 +9600,15 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
     var tok = parallel_argmax(s.logits, c.vocab_size)
     let d0 = s.mtp_drafted
     let a0 = s.mtp_accepted
-    while (int64(length(ids)) < total) {
+    while (long_length(ids) < total) {
         break if (tok == 1l)   // BOS delimits sequences (generate()'s contract)
         ids |> push(tok)
-        break if (int64(length(ids)) >= total)
+        break if (long_length(ids) >= total)
         var acc = 0l
         if (mtp_spec_eval(t, s, tok, acc)) {
             break if (acc == 1l)   // BOS: generate() stops before emitting it — mirror that
             ids |> push(acc)
-            break if (int64(length(ids)) >= total)
+            break if (long_length(ids) >= total)
         }
         tok = parallel_argmax(s.logits, c.vocab_size)
     }
@@ -10233,7 +10355,7 @@ def private prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, st
     let nrun = kv_runs(s, kstart_min, start_pos + npos, s.kv_runs)
     // block-codec K: quantize every query row once so scores run the SAME int8 dot as decode; flash skips this (f32 tiles)
     if ((kdt == KVDtype.q8_0 || kdt == KVDtype.tq4) && g_attn_prefill_mode != AttnPrefillMode.flash) {
-        if (int64(length(s.attq)) < npos * qd) {
+        if (long_length(s.attq) < npos * qd) {
             s.attq |> resize(int(npos * qd))
             s.atts |> resize(int(npos * qd / 32l))
         }
@@ -12092,7 +12214,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     if (t.quant == QuantMode.q4_0) {
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
-    if (int64(length(embd)) < npos * t.config.dim) {
+    if (long_length(embd) < npos * t.config.dim) {
         panic("forward_prefill_embd: embd has {length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
@@ -12115,7 +12237,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
 //! text-span half of a multimodal prefill buffer.
 def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at : int64) {
     let dim = t.config.dim
-    let n = int64(length(tokens))
+    let n = long_length(tokens)
     for (p in range64(n)) {
         embed_row(t, tokens[p], unsafe(addr(dst[(at + p) * dim])))
     }
@@ -12183,7 +12305,7 @@ def embed_(m : Model; text : string) : array<float> {
     var s <- create_session_(m)
     let tokens = encode_(m, text)
     var out : array<float>
-    embed_forward(m, s, tokens, int64(length(tokens)), out)
+    embed_forward(m, s, tokens, long_length(tokens), out)
     delete s
     return <- out
 }
@@ -12192,7 +12314,7 @@ def embed_(m : Model; text : string) : array<float> {
 // contents are stage output (fully overwritten); `delete` on grow skips the realloc's old-block
 // copy + zero-fill (~5ms saved on a first 512-row prefill).
 def private scratch_resize(var a : array<auto(numT)>; need : int64) {
-    if (int64(length(a)) < need) {
+    if (long_length(a) < need) {
         delete a
     }
     a |> resize_no_init(need)
@@ -12533,11 +12655,11 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
 //! sizes, uniform KV dtype); B == 1, q4_0, non-std attention, or classic rope fall back to forward().
 def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:LINT014 — rows mutate THROUGH the pointers; a const array constifies the pointees
     let c = t.config
-    let nrows = int64(length(sessions))
+    let nrows = long_length(sessions)
     if (nrows <= 0l) {
         return
     }
-    if (int64(length(tokens)) != nrows) {
+    if (long_length(tokens) != nrows) {
         panic("eval_batch: {length(sessions)} sessions but {length(tokens)} tokens — one token per session")
     }
     for (i in range64(nrows)) {
@@ -12703,7 +12825,7 @@ def private argmax(s : Session; vocab : int64) : int64 {
 //! otherwise it's argmax. Returns emitted IDs (prompt echo minus BOS, then continuation; stops on BOS).
 def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : int) : array<int64> {
     var ids : array<int64>
-    let n_prompt = int64(length(prompt_tokens))
+    let n_prompt = long_length(prompt_tokens)
     let nsteps = int64(steps)
     if (nsteps <= 0l || n_prompt <= 0l) {
         return <- ids
@@ -12714,7 +12836,7 @@ def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : i
     // echo prompt[1..n_prompt-1] (the forced "next" tokens while consuming the prompt), honoring
     // the step budget and the BOS delimiter
     for (q in range64(n_prompt - 1l)) {
-        if (int64(length(ids)) >= nsteps) {
+        if (long_length(ids) >= nsteps) {
             return <- ids
         }
         let tok = prompt_tokens[q + 1l]
@@ -12725,19 +12847,19 @@ def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : i
     }
     // greedy continuation: sample from the last prompt position's logits, then decode one token
     // per step at the next absolute position
-    if (int64(length(ids)) >= nsteps) {
+    if (long_length(ids) >= nsteps) {
         return <- ids
     }
     var token = argmax(s, t.config.vocab_size)
     var apos = n_prompt
     var one : array<int64>
     one |> resize(1)
-    while (int64(length(ids)) < nsteps) {
+    while (long_length(ids) < nsteps) {
         if (token == 1l) {  // BOS delimits sequences
             break
         }
         ids |> push(token)
-        if (int64(length(ids)) >= nsteps) {
+        if (long_length(ids) >= nsteps) {
             break
         }
         one[0] = token
@@ -12808,7 +12930,7 @@ def private apply_penalties_(var s : Session; params : SamplingParams) {
 //! Sample the next token from `s.logits` per `params`: penalties, then temp + top-k, softmax,
 //! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
 def sample_(var s : Session; params : SamplingParams) : int64 {
-    let vocab = int64(length(s.logits))
+    let vocab = long_length(s.logits)
     apply_penalties_(s, params)
     if (params.temp <= 0.0) {
         return argmax(s, vocab)
@@ -12901,7 +13023,7 @@ def generate_(t : Model; var s : Session; prompt : array<int64>; params : Sampli
     let t_pre = ref_time_ticks()
     eval_(t, s, prompt)
     s.stat_prefill_us = int64(get_time_usec(t_pre))
-    s.stat_n_prefill = int64(length(prompt))
+    s.stat_n_prefill = long_length(prompt)
     var one : array<int64>
     one |> resize(1)
     var nout = 0l

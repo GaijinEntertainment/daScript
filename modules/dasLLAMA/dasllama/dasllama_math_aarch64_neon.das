@@ -436,6 +436,18 @@ def q8q8_rows_kernel_neon_idot4x4_s16(var yp : float?; wp : int8 const?; sp : ui
     }
 }
 
+def mx4q8_rows_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
+    let nb = n / 32l
+    var lut : int8[16]
+    mxfp4_fill_lut(lut)
+    unsafe {
+        let lutp = addr(lut[0])
+        for (i in range64(rb, re)) {
+            yp[i] = dot_mx4q8(lutp, wn + i * (n / 2l), we + i * nb, xqp, xsp, n)
+        }
+    }
+}
+
 [init]
 def dasllama_math_aarch64_neon_register() {
     // Only register the SDOT backends under JIT on arm64. Off-JIT (interpreter or AOT) sdot4/sdot4_laneq
@@ -448,7 +460,7 @@ def dasllama_math_aarch64_neon_register() {
             batch = @@q8q8_batch_kernel_neon_idot4x4, group3 = @@q8q8_group3_kernel_neon_idot4x4,
             repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel_neon,
             groupn = @@q8q8_groupn_kernel_neon_idot4x4, groupn_mx4 = @@mx4q8_groupn_kernel_neon,
-            mm_rows = @@q8q8_rows_kernel_neon_idot4x4,
+            mm_rows = @@q8q8_rows_kernel_neon_idot4x4, mx4_rows = @@mx4q8_rows_kernel_neon,
             mm_s16 = @@q8q8_kernel_neon_idot4x4_s16, batch_s16 = @@q8q8_batch_kernel_neon_idot4x4_s16,
             group3_s16 = @@q8q8_group3_kernel_neon_idot4x4_s16, groupn_s16 = @@q8q8_groupn_kernel_neon_idot4x4_s16,
             mm_rows_s16 = @@q8q8_rows_kernel_neon_idot4x4_s16,

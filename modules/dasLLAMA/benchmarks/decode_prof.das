@@ -43,6 +43,10 @@ struct Args {
     @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier, the lcpp_bench --accel mirror — profiles the 'accel' flavor's decode"
     accel : bool
 
+    @clarg_name = "no-fused"
+    @clarg_doc = "Disable the fused decode chains (set_fused_decode(false)) — the chain-vs-per-op A/B lever"
+    no_fused : bool
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -84,6 +88,9 @@ def main() {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
+    if (cfg.no_fused) {
+        set_fused_decode(false)
+    }
     if (cfg.accel) {
         static_if (typeinfo builtin_module_exists(das_accelerate)) {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
