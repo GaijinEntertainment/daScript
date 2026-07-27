@@ -594,3 +594,33 @@ Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - mcp_supervisor.py cannot answer ping while a tool call blocks
   (single-threaded stdin loop); mcp_main.das query values not
   URL-encoded (watcher-generated ids/tokens are URL-safe).
+
+## Block: dogfood round 2 (2026-07-27, rig-start intake)
+
+Found while bringing the rig up on freshly built binaries (master with the
+whole arc merged), BEFORE Boris's play session — filed, not fixed.
+
+- 52: the terminal pane keeps rendering a DEAD session's restored content
+  while its own header says "No session selected". Repro: restart the
+  watcher under an attached client — the client reconnects, the session is
+  gone (attached=false, session_id=""), but g_terminal still holds the
+  checkpoint-restored screen, so the pane shows a ghost until the client
+  restarts. Structured proof: herder_terminal_state reported attached=false
+  with 36 non-empty rows, footer "Terminal restored at byte 89489". Fix
+  shape: clear the terminal model on detach / on a reconnect that does not
+  re-establish the session (reset_terminal exists; the detach path never
+  calls it).
+- 53: note 47 had a SECOND cause, still open. A checkpoint restored into a
+  terminal of a DIFFERENT width strands each wrapped line's first character
+  in its own column: observed 'C' at column 119 with "hecking for updates"
+  at column 0 on every row, in a 176-column terminal restored from a
+  ~120-column checkpoint. That is exactly Boris's original note-47 sighting
+  ("stray letters in a one-character column"); the panel-eliding fix covered
+  only the Sessions-panel half. Fix shape: the checkpoint ANSI carries its
+  own geometry — resize to it before feeding, or reflow after.
+- 54: closing a herd session ORPHANS its PTY into the raw session list when
+  that PTY ended in a non-exited terminal state. herd_owns_pty skips closed
+  records (rich_sessions_ui.das:566) so the PTY reads as "unowned", and the
+  raw list hides only the "exited" state, not "failed" — leaving a bare
+  warning-glyph row with no context. Seen after closing two probe sessions
+  whose hosts had been killed (state=failed, reason=host_lost).
