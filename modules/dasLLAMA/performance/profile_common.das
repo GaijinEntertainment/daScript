@@ -321,7 +321,9 @@ def run_capture(cmd : string; first_line : bool) : string {
 // The running daslang's version, via the box's binary (DASLANG_BIN, default bin/daslang from the
 // repo-root cwd these tools run in). Takes the last token of the first --version line ("0.6.3").
 def das_version() : string {
-    let bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
+    // cmd resolves `bin\daslang`, not `bin/daslang` (forward slash reads as an option there)
+    let dflt = is_windows() ? "bin\\daslang" : "bin/daslang"
+    let bin = empty(get_env_variable("DASLANG_BIN")) ? dflt : get_env_variable("DASLANG_BIN")
     let line = run_capture("{bin} --version", true)
     let toks <- split(line, " ")
     return empty(toks) ? "unknown" : toks[length(toks) - 1]
@@ -436,7 +438,8 @@ def private platform_ram_gb() : int {
     }
     let gib = 1024.0 * 1024.0 * 1024.0
     if (is_windows()) {
-        // wmic emits "TotalPhysicalMemory=68632934400"
+        // wmic emits "TotalPhysicalMemory=68632934400"; Windows 11 24H2 removed wmic, so
+        // fall through to the CIM probe when it yields nothing
         let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value", false)
         for (ln in split(raw, "\n")) {
             let i = find(ln, "=")
@@ -444,7 +447,8 @@ def private platform_ram_gb() : int {
                 return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
             }
         }
-        return 0
+        let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"", true)
+        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
     }
     if (is_macos()) {
         return int(to_float(run_capture("sysctl -n hw.memsize", true)) / gib + 0.5)
@@ -486,7 +490,22 @@ def private platform_gpu() : string {
                 return strip(slice(ln, i + length("Name=")))
             }
         }
-        return ""
+        // wmic is gone on Windows 11 24H2+ — same probe via CIM; prefer a physical adapter
+        // (remote-desktop stacks enumerate their virtual display first)
+        let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController).Name\"", false)
+        var first = ""
+        for (ln in split(ps, "\n")) {
+            let name = strip(ln)
+            if (!empty(name)) {
+                if (find(name, "Virtual") < 0) {
+                    return name
+                }
+                if (empty(first)) {
+                    first = name
+                }
+            }
+        }
+        return first
     }
     if (is_macos()) {
         let raw = run_capture("system_profiler SPDisplaysDataType", false)
@@ -1068,9 +1087,13 @@ struct LlamaBenchRow {
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
 //! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
 def run_llama_bench(cmd : string; var rows : array<LlamaBenchRow>) : bool {
+    // _popen hands the string to `cmd /c` verbatim; a command that starts with a quote and
+    // contains more quotes loses its first and last quote to cmd's strip rule, breaking the
+    // binary path — one extra outer pair is the documented workaround (safe either way)
+    let shell = is_windows() ? "\"{cmd}\"" : cmd
     var out = ""
     unsafe {
-        popen(cmd) $(f) {
+        popen(shell) $(f) {
             if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
                 out = fread_to_eof(f)
             }
