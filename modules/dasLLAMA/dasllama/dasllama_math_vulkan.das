@@ -3696,6 +3696,19 @@ def private mm_small_tile : int64 {
     return g_mm_small
 }
 
+// the small-d cutoff. A narrow role (k/v: d = kv_dim) makes ceil(d/128) * ceil(cnt/128) tiles —
+// at d 1024 / cnt 512 that is 32 workgroups for 36 SMs, one starved wave. DASLLAMA_MM_SMALLD
+// raises the cutoff so those roles take the 32-tile's much wider grid instead.
+var private g_mm_smalld = -1l
+
+def private mm_small_d : int64 {
+    if (g_mm_smalld < 0l) {
+        let e = get_env_variable("DASLLAMA_MM_SMALLD")
+        g_mm_smalld = empty(e) ? 64l : int64(to_int(e))
+    }
+    return g_mm_smalld
+}
+
 // per-dispatch tile router (the lcpp l/m ladder, ours resolved by measurement): in mm mode a
 // small-cnt or small-d dispatch drops to the small tier — the L tile starves the grid and pads
 // its B panel there. Pure in (d, cnt, mode), so pipe pick and meta fill can never disagree.
@@ -3703,7 +3716,7 @@ def private q8_batch_tile_for(d, cnt : int64) : int64 {
     if (g_gpu.coopmat_mode < 3) {
         return q8_batch_tile()
     }
-    return d <= 64l || cnt < MM_SMALL_CNT ? mm_small_tile() : 128l
+    return d <= mm_small_d() || cnt < MM_SMALL_CNT ? mm_small_tile() : 128l
 }
 
 // aligned-L eligibility: every tile interior (d and cnt both 128-multiples) — the guard-free
