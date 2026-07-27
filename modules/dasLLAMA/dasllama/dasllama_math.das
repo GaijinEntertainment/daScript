@@ -1220,6 +1220,9 @@ typedef MatmulQ8Q8GroupNFn = function<(var yp : float?; wp : int8 const?; sp : f
 // inside its own stage lambdas. rb/re must be multiples of 32; bit-identical to the mm slot.
 typedef MatmulQ8Q8RowsFn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 typedef MatmulMx4GroupNFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n : int64; d : int64) : void>
+// Row-range MXFP4·Q8 GEMV core — the mx4 twin of MatmulQ8Q8RowsFn (wn/we are the REGION's
+// nibble/exponent plane bases; same rb/re-multiples-of-32, no-internal-dispatch contract).
+typedef MatmulMx4RowsFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 // f16-weight-scale twins (the wscale_f16 rail): identical contracts to the Fn above them, except
 // the per-32-block WEIGHT scale plane is raw binary16 halfwords (Model.qscales16) instead of f32 —
 // llama.cpp byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
@@ -1291,6 +1294,9 @@ struct KernelBackend {
     // Optional row-range GEMV core (see MatmulQ8Q8RowsFn) — backends without one keep the panic
     // stub, and the fused multi-stage decode falls back to the per-op dispatch path.
     mm_rows : MatmulQ8Q8RowsFn = @@q8q8_unset_rows
+    // Optional mx4 row-range GEMV core (see MatmulMx4RowsFn) — the fused MoE expert chain gates
+    // on it the same way the dense chains gate on mm_rows.
+    mx4_rows : MatmulMx4RowsFn = @@mx4q8_unset_rows
     // Optional f16-scale twins (the wscale_f16 rail). All-or-nothing per backend: the loader's
     // plane convert gates on kernel_backend_has_wscale16(), keyed off mm_s16 alone.
     mm_s16 : MatmulQ8Q8FnS16 = @@q8q8_unset_kernel_s16
@@ -1354,6 +1360,8 @@ var g_mm_q51q8_groupn = @@q51q8_groupn_kernel
 var g_mm_q51q8_batch_groupn = @@q51q8_batch_groupn_kernel
 var g_mm_q8q8_rows = @@q8q8_unset_rows
 var g_active_has_rows = false       // does the active backend carry a row-range GEMV core?
+var g_mm_mx4q8_rows = @@mx4q8_unset_rows
+var g_active_has_mx4_rows = false   // ... and the mx4 row-range core (the fused MoE chain's gate)?
 var g_mm_q8q8_s16 = @@q8q8_unset_kernel_s16
 var g_mm_q8q8_batch_s16 = @@q8q8_unset_batch_s16
 var g_mm_q8q8_group3_s16 = @@q8q8_unset_group3_s16
@@ -2622,6 +2630,11 @@ def private q8q8_unset_rows(var yp : float?; wp : int8 const?; sp : float const?
 }
 [unused_argument(yp, wn, we, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private mx4q8_unset_groupn(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) { no_backend() }
+[unused_argument(yp, wn, we, xqp, xsp, n, rb, re)]
+def private mx4q8_unset_rows(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
+    // reachable with a registered backend: the slot is optional — gate on kernel_backend_has_mx4_rows()
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no mx4 row-range GEMV core (mx4_rows)")
+}
 // The f16-scale stubs are reachable with a registered backend (the twins are optional) — a
 // wscale_f16 model must never activate a backend without them; the loader gates the convert.
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
@@ -2681,6 +2694,8 @@ def private activate(be : KernelBackend) {
     g_mm_q51q8_batch_groupn = be.q51_batch_groupn
     g_mm_q8q8_rows = be.mm_rows
     g_active_has_rows = !(be.mm_rows == @@q8q8_unset_rows)
+    g_mm_mx4q8_rows = be.mx4_rows
+    g_active_has_mx4_rows = !(be.mx4_rows == @@mx4q8_unset_rows)
     g_mm_q8q8_s16 = be.mm_s16
     g_mm_q8q8_batch_s16 = be.batch_s16
     g_mm_q8q8_group3_s16 = be.group3_s16
@@ -2841,6 +2856,18 @@ def kernel_backend_has_rows() : bool {
 //! MAIN context and capture that in worker lambdas — same rule as every kernel-pointer read.
 def mm_q8q8_rows_fn() : MatmulQ8Q8RowsFn {
     return g_mm_q8q8_rows
+}
+
+//! Does the active backend carry the mx4 row-range GEMV core (mx4_rows)? The fused MoE expert
+//! chain gates on this and falls back to the per-op groupn dispatch path when false.
+def kernel_backend_has_mx4_rows() : bool {
+    return g_active_has_mx4_rows
+}
+
+//! The active backend's mx4 row-range GEMV core (see MatmulMx4RowsFn) — the MoE chain's twin of
+//! mm_q8q8_rows_fn. Same read-into-a-local-then-capture rule.
+def mx4_rows_fn() : MatmulMx4RowsFn {
+    return g_mm_mx4q8_rows
 }
 
 //! Does the active backend carry the f16-scale kernel twins (the wscale_f16 rail)? The loader's

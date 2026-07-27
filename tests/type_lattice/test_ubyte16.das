@@ -100,4 +100,37 @@ def test_ubyte16_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ubyte16(200u, 203u, 206u, 209u, 212u, 215u, 218u, 221u, 224u, 227u, 230u, 233u, 236u, 239u, 242u, 245u)
+        t |> success(a >> 2 == ubyte16(50u, 50u, 51u, 52u, 53u, 53u, 54u, 55u, 56u, 56u, 57u, 58u, 59u, 59u, 60u, 61u), "logical shift")
+        t |> success(a >> 10 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = ubyte16(200u, 203u, 206u, 209u, 212u, 215u, 218u, 221u, 224u, 227u, 230u, 233u, 236u, 239u, 242u, 245u)
+        t |> success(a << 2 == ubyte16(32u, 44u, 56u, 68u, 80u, 92u, 104u, 116u, 128u, 140u, 152u, 164u, 176u, 188u, 200u, 212u), "lanes wrap")
+        t |> success(a << 10 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = ubyte16(200u, 203u, 206u, 209u, 212u, 215u, 218u, 221u, 224u, 227u, 230u, 233u, 236u, 239u, 242u, 245u)
+        let b = ubyte16(45u, 50u, 55u, 60u, 65u, 70u, 75u, 80u, 85u, 90u, 95u, 100u, 105u, 110u, 115u, 120u)
+        t |> success((a & b) == ubyte16(8u, 2u, 6u, 16u, 64u, 70u, 74u, 80u, 64u, 66u, 70u, 96u, 104u, 110u, 114u, 112u), "and")
+        t |> success((a | b) == ubyte16(237u, 251u, 255u, 253u, 213u, 215u, 219u, 221u, 245u, 251u, 255u, 237u, 237u, 239u, 243u, 253u), "or")
+        t |> success((a ^ b) == ubyte16(229u, 249u, 249u, 237u, 149u, 145u, 145u, 141u, 181u, 185u, 185u, 141u, 133u, 129u, 129u, 141u), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
+    }
 }

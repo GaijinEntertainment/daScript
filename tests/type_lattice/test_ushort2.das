@@ -95,6 +95,39 @@ def test_ushort2_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = ushort2(200u, 203u)
+        t |> success(a >> 2 == ushort2(50u, 50u), "logical shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = ushort2(200u, 203u)
+        t |> success(a << 2 == ushort2(800u, 812u), "lanes wrap")
+        t |> success(a << 18 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = ushort2(200u, 203u)
+        let b = ushort2(45u, 50u)
+        t |> success((a & b) == ushort2(8u, 2u), "and")
+        t |> success((a | b) == ushort2(237u, 251u), "or")
+        t |> success((a ^ b) == ushort2(229u, 249u), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
+    }
     t |> run("converts") @(t : T?) {
         let a = ushort2(1u, 2u)
         let w = uint2(a)

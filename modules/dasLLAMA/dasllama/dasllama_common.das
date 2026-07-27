@@ -8308,6 +8308,122 @@ def expert_reuse_top(li : int; n : int) : array<int64> {
     return <- res
 }
 
+// Can the routed mx4 experts run as the fused 2-stage chain? Q8 pre-quant, mx4 expert planes,
+// team mode + a backend mx4 rows core, 32-divisible spans — the fused_ffn_ok contract at MoE shape.
+def private fused_moe_ok(t : Model) : bool {
+    let c = t.config
+    return (g_fused_decode && t.quant == QuantMode.q8 && t.experts_mx4
+        && c.n_ff_exp % 32l == 0l && c.dim % 32l == 0l
+        && get_jobque_team_mode() && kernel_backend_has_mx4_rows()
+        && lanes_for_work(2l * c.n_expert_used * c.dim * c.n_ff_exp, g_gemv_lane_cap) > 1)
+}
+
+// Fused MoE expert chain: ONE team rendezvous runs [gate+up rows + bias + act + requant] ->
+// [down rows + bias + weighted reduce] over all k routed experts. Bit-identical to the groupn
+// sequence — same rows cores, same dot->bias->act element order, stage 1 reduces in slot order.
+def private moe_experts_chain(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let nfe = c.n_ff_exp
+    let ege = dim * nfe
+    let biased = c.moe_exps_bias
+    let ts_chain = ref_time_ticks()
+    let mxrows = mx4_rows_fn()
+    let is_gelu = c.ffn_act == FfnAct.gelu
+    let is_oai = c.ffn_act == FfnAct.swiglu_oai
+    let vec = g_act_vec
+    let w1o = t.we1_offs[l]
+    let w3o = t.we3_offs[l]
+    let w2o = t.we2_offs[l]
+    let web1o = t.web1_off
+    let web3o = t.web3_off
+    let web2o = t.web2_off
+    let ng0 = nfe / 32l
+    let ngrp0 = int(k * ng0)
+    let ngrp1 = int(dim / 32l)
+    let n0 = chain_stage_chunks(ngrp0, int(k * nfe), 2l * k * dim * nfe)
+    let n1 = chain_stage_chunks(ngrp1, int(dim), k * nfe * dim)
+    s.chain_stages |> resize(2)
+    s.chain_stages[0] = int3(0, ngrp0, n0)
+    s.chain_stages[1] = int3(0, ngrp1, n1)
+    count_parallel_dispatch(min(n0, ngrp0) + min(n1, ngrp1))
+    unsafe {
+        var accp = addr(s.moe_acc[0])
+        var gup = addr(s.moe_gu[0])
+        var gu2p = addr(s.moe_gu2[0])
+        var dnp = addr(s.moe_dn[0])
+        var dqp = addr(s.moe_dq[0])
+        var dsp = addr(s.moe_ds[0])
+        let xqp = addr<int8 const?>(s.moe_xq[0])
+        let xsp = addr<float const?>(s.moe_xs[0])
+        let wnb = addr<uint8 const?>(t.mxq[0])
+        let web = addr<uint8 const?>(t.mxs[0])
+        let fbp = biased ? addr<float const?>(t.fblob[0]) : null
+        let idxp = addr<int64 const?>(s.moe_idx[0])
+        let wvp = addr<float const?>(s.moe_w[0])
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+            unsafe {
+                if (stage == 0) {
+                    // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
+                    var g = int64(jb)
+                    while (g < int64(je)) {
+                        let j = g / ng0
+                        let gEnd = min(int64(je) - j * ng0, ng0)
+                        let r0 = (g % ng0) * 32l
+                        let r1 = gEnd * 32l
+                        let base = idxp[j] * ege
+                        let w1 = w1o + base
+                        let w3 = w3o + base
+                        invoke(mxrows, gup + j * nfe, wnb + w1 / 2l, web + w1 / 32l, xqp, xsp, dim, r0, r1)
+                        invoke(mxrows, gu2p + j * nfe, wnb + w3 / 2l, web + w3 / 32l, xqp, xsp, dim, r0, r1)
+                        if (biased) {
+                            let e = l * ne + idxp[j]
+                            add_inplace(gup + j * nfe + r0, fbp + web1o + e * nfe + r0, r1 - r0)
+                            add_inplace(gu2p + j * nfe + r0, fbp + web3o + e * nfe + r0, r1 - r0)
+                        }
+                        if (vec) {
+                            if (is_gelu) {
+                                geglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } elif (is_oai) {
+                                swiglu_oai4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } else {
+                                swiglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            }
+                        } else {
+                            if (is_gelu) {
+                                geglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } elif (is_oai) {
+                                swiglu_oai(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            } else {
+                                swiglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
+                            }
+                        }
+                        quantize_q8_0_into_ptr(gup + j * nfe + r0, r1 - r0, dqp, dsp, j * nfe + r0, (j * nfe + r0) / 32l)
+                        g = j * ng0 + gEnd
+                    }
+                } else {
+                    // every expert's down rows for this dim span, then the weighted sum in slot order
+                    let r0 = int64(jb) * 32l
+                    let r1 = int64(je) * 32l
+                    for (j in range64(k)) {
+                        let w2 = w2o + idxp[j] * ege
+                        invoke(mxrows, dnp + j * dim, wnb + w2 / 2l, web + w2 / 32l, dqp + j * nfe, dsp + j * nfe / 32l, nfe, r0, r1)
+                        if (biased) {
+                            add_inplace(dnp + j * dim + r0, fbp + web2o + (l * ne + idxp[j]) * dim + r0, r1 - r0)
+                        }
+                    }
+                    for (j in range64(k)) {
+                        axpy(accp + r0, dnp + j * dim + r0, wvp[j], r1 - r0)
+                    }
+                }
+            }
+        }
+    }
+    prof_add("moe_chain", ts_chain)
+}
+
 // Routed experts, given the pre-normed input in s.xb and the top-k selection in s.moe_idx/s.moe_w:
 // s.moe_acc = Σ_j w_j · FFN_e_j(xb). Shared by qwen2moe/gpt-oss (via moe_ffn_core) and gemma4
 // (which folds its per-expert down scale into s.moe_w first).
@@ -8354,6 +8470,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
         // heat cache: non-resident layers partition the top-k against the tier's slot pools — hits ride the GPU FFN chain async, misses run the CPU groupn path concurrently
         let heat_moe = !gpu_moe && !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && heat_armed()
         var nhits = 0l
+        var moe_chained = false   // the fused chain reduces inline — the nhits==0 axpy tail must skip
         if (heat_moe) {
             heat_note_and_advise(t, l, s.moe_idx, k, ne)
             s.heat_hit |> resize(int(k))
@@ -8510,6 +8627,11 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
                 }
             }
             prof_add("moe_reduce", ts_hred)
+        } elif (t.experts_mx4 && !kq_sb(f1) && f1 != KqFmt.q51 && !kq_sb(f3) && f3 != KqFmt.q51
+                && !kq_sb(f2) && f2 != KqFmt.q51 && fused_moe_ok(t)) {
+            // fused mx4 expert chain: 3 groupn fork/joins collapse to ONE team rendezvous
+            moe_experts_chain(t, s, l)
+            moe_chained = true
         } else {
             for (j in range64(k)) {
                 let e = l * ne + s.moe_idx[j]
@@ -8586,7 +8708,7 @@ def private moe_experts_apply(t : Model; var s : Session; l : int64) {
             }
             prof_add("mm_moe_dn", ts_down)
         }
-        if (nhits == 0l) {   // the split arm above reduced its own hit/miss row banks
+        if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline
             let ts_red = ref_time_ticks()
             for (j in range64(k)) {   // slot order preserved — the sum is bit-identical
                 axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
