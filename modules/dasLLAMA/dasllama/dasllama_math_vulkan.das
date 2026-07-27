@@ -63,6 +63,7 @@ var @ssbo @binding = 0 vk_wq4 : array<uint4>   // vec4 view of the same weight w
 var @ssbo @binding = 1 vk_ws : array<float16>
 var @ssbo @binding = 2 vk_meta : array<uint>
 var @ssbo @binding = 3 vk_xq : array<uint>
+var @ssbo @binding = 3 vk_xq4 : array<uint4>   // vec4 view of the activation words (16B loads)
 var @ssbo @binding = 4 vk_xs : array<float>
 var @ssbo @binding = 5 vk_y : array<float>
 
@@ -2918,6 +2919,63 @@ var @ssbo @binding = 1 vk_wsu : array<uint>
 def private k5_dep(hb : uint) : uint => (
     ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u))
 
+// ===== the K-quant decode GEMV family: ONE LANE PER 32-BLOCK, uint4 loads =====
+// uint4 index `wsb*stride4 + blk` IS block blk's 4 quant words: 4x bytes in flight/warp (512B vs
+// 128B, q8_moe_groupn's lever) + one scale decode/block, not four. DRIFT-CLASS (1 float term/block).
+
+let private KQ_LOW = 0x0F0F0F0Fu   // nibble mask
+let private KQ_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
+
+// a block's activation sum (the min/offset terms fold against it)
+def private kq_blk_sum(xl, xh : uint4) : int {
+    let bs = sdot4(xl.x, KQ_ONES) + sdot4(xl.y, KQ_ONES) + sdot4(xl.z, KQ_ONES) + sdot4(xl.w, KQ_ONES)
+    return bs + sdot4(xh.x, KQ_ONES) + sdot4(xh.y, KQ_ONES) + sdot4(xh.z, KQ_ONES) + sdot4(xh.w, KQ_ONES)
+}
+
+// a 4-bit block's dot: weight word j's LOW nibbles hit x word j, its HIGH nibbles x word j+4
+def private kq_blk_dot(wv, xl, xh : uint4) : int {
+    var idot = sdot4(wv.x & KQ_LOW, xl.x) + sdot4(wv.y & KQ_LOW, xl.y)
+    idot += sdot4(wv.z & KQ_LOW, xl.z) + sdot4(wv.w & KQ_LOW, xl.w)
+    idot += sdot4((wv.x >> 4u) & KQ_LOW, xh.x) + sdot4((wv.y >> 4u) & KQ_LOW, xh.y)
+    return idot + sdot4((wv.z >> 4u) & KQ_LOW, xh.z) + sdot4((wv.w >> 4u) & KQ_LOW, xh.w)
+}
+
+// Q6_K's dot, halves kept apart: the lo/hi nibble halves ARE the block's two 16-weight sub-scale
+// groups, so each needs its own dot and activation sum. qh contributes 2 bits per weight.
+// Returns (ilo, ihi, blo, bhi) — an int4, since a shader function cannot return a tuple.
+def private k6_blk_dot(wv, xl, xh, qhl, qhh : uint4; shift : uint) : int4 {
+    let m2 = 0x03030303u
+    let l0 = (wv.x & KQ_LOW) | (((qhl.x >> shift) & m2) << 4u)
+    let l1 = (wv.y & KQ_LOW) | (((qhl.y >> shift) & m2) << 4u)
+    let l2 = (wv.z & KQ_LOW) | (((qhl.z >> shift) & m2) << 4u)
+    let l3 = (wv.w & KQ_LOW) | (((qhl.w >> shift) & m2) << 4u)
+    let h0 = ((wv.x >> 4u) & KQ_LOW) | (((qhh.x >> shift) & m2) << 4u)
+    let h1 = ((wv.y >> 4u) & KQ_LOW) | (((qhh.y >> shift) & m2) << 4u)
+    let h2 = ((wv.z >> 4u) & KQ_LOW) | (((qhh.z >> shift) & m2) << 4u)
+    let h3 = ((wv.w >> 4u) & KQ_LOW) | (((qhh.w >> shift) & m2) << 4u)
+    return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
+                sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
+                sdot4(xl.x, KQ_ONES) + sdot4(xl.y, KQ_ONES) + sdot4(xl.z, KQ_ONES) + sdot4(xl.w, KQ_ONES),
+                sdot4(xh.x, KQ_ONES) + sdot4(xh.y, KQ_ONES) + sdot4(xh.z, KQ_ONES) + sdot4(xh.w, KQ_ONES))
+}
+
+// Q5_K's dot: the same fold with the 5th bit deposited from the block's qh word, byte j serving
+// weight word j (low nibble -> lo half, high nibble -> hi half)
+def private k5_blk_dot(wv, xl, xh : uint4; qh : uint) : int {
+    let h0 = qh & 0xFFu
+    let h1 = (qh >> 8u) & 0xFFu
+    let h2 = (qh >> 16u) & 0xFFu
+    let h3 = (qh >> 24u) & 0xFFu
+    var idot = sdot4((wv.x & KQ_LOW) | k5_dep(h0 & 0xFu), xl.x)
+    idot += sdot4((wv.y & KQ_LOW) | k5_dep(h1 & 0xFu), xl.y)
+    idot += sdot4((wv.z & KQ_LOW) | k5_dep(h2 & 0xFu), xl.z)
+    idot += sdot4((wv.w & KQ_LOW) | k5_dep(h3 & 0xFu), xl.w)
+    idot += sdot4(((wv.x >> 4u) & KQ_LOW) | k5_dep(h0 >> 4u), xh.x)
+    idot += sdot4(((wv.y >> 4u) & KQ_LOW) | k5_dep(h1 >> 4u), xh.y)
+    idot += sdot4(((wv.z >> 4u) & KQ_LOW) | k5_dep(h2 >> 4u), xh.z)
+    return idot + sdot4(((wv.w >> 4u) & KQ_LOW) | k5_dep(h3 >> 4u), xh.w)
+}
+
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block xs*(d*sc*idot - dmin*mn*bsum)
 [compute_shader(local_size_x=64, local_size_x_id=0, name="kq_moe_gemv_k4_spv")]
 def kq_moe_gemv_k4 {
@@ -2932,30 +2990,26 @@ def kq_moe_gemv_k4 {
         let wsb0 = vk_meta[4u + r * 2u] + row * nsb
         let xsb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        let j = lane % 4u
-        let brel = lane / 4u
-        let bstride = gl_SubgroupSize / 4u
         let nb = nsb * 8u
         var acc = 0.0
         var b0 = 0u
         while (b0 < nb) {
-            let bb = b0 + brel
+            let bb = b0 + lane
             if (bb < nb) {
                 let sb = bb / 8u
                 let blk = bb % 8u
                 let wsb = wsb0 + sb
-                let w = vk_wq[wsb * 32u + blk * 4u + j]
-                let xw = (xsb0 + sb) * 64u + blk * 8u + j
-                let xlo = vk_xq[xw]
-                let xhi = vk_xq[xw + 4u]
-                let idot = sdot4(w & 0x0F0F0F0F, xlo) + sdot4((w >> 4u) & 0x0F0F0F0F, xhi)
-                let bs = sdot4(xlo, 0x01010101) + sdot4(xhi, 0x01010101)
+                let xb4 = (xsb0 + sb) * 16u + blk * 2u
+                let xl = vk_xq4[xb4]
+                let xh = vk_xq4[xb4 + 1u]
+                let idot = kq_blk_dot(vk_wq4[wsb * 8u + blk], xl, xh)
+                let bs = kq_blk_sum(xl, xh)
                 let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
                 let sc = int((vk_wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
                 let mn = int((vk_wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
                 acc += vk_xs[xsb0 + sb] * (dm.x * float(sc * idot) - dm.y * float(mn * bs))
             }
-            b0 += bstride
+            b0 += gl_SubgroupSize
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
@@ -2979,29 +3033,24 @@ def kq_moe_gemv_q40 {
         let wsb0 = vk_meta[4u + r * 2u] + row * nsb
         let xsb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        let j = lane % 4u
-        let brel = lane / 4u
-        let bstride = gl_SubgroupSize / 4u
         let nb = nsb * 8u
         var acc = 0.0
         var b0 = 0u
         while (b0 < nb) {
-            let bb = b0 + brel
+            let bb = b0 + lane
             if (bb < nb) {
                 let sb = bb / 8u
                 let blk = bb % 8u
                 let wsb = wsb0 + sb
-                let w = vk_wq[wsb * 32u + blk * 4u + j]
-                let xw = (xsb0 + sb) * 64u + blk * 8u + j
-                let xlo = vk_xq[xw]
-                let xhi = vk_xq[xw + 4u]
-                let idot = sdot4(w & 0x0F0F0F0F, xlo) + sdot4((w >> 4u) & 0x0F0F0F0F, xhi)
-                let bs = sdot4(xlo, 0x01010101) + sdot4(xhi, 0x01010101)
+                let xb4 = (xsb0 + sb) * 16u + blk * 2u
+                let xl = vk_xq4[xb4]
+                let xh = vk_xq4[xb4 + 1u]
+                let idot = kq_blk_dot(vk_wq4[wsb * 8u + blk], xl, xh)
                 let dp = unpackHalf2x16(vk_wsu[wsb * 5u + blk / 2u])   // 8 f16 d packed in words 0..3
                 let dv = blk % 2u == 0u ? dp.x : dp.y
-                acc += vk_xs[xsb0 + sb] * dv * float(idot - 8 * bs)
+                acc += vk_xs[xsb0 + sb] * dv * float(idot - 8 * kq_blk_sum(xl, xh))
             }
-            b0 += bstride
+            b0 += gl_SubgroupSize
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
@@ -3024,32 +3073,26 @@ def kq_moe_gemv_k5 {
         let wsb0 = vk_meta[4u + r * 2u] + row * nsb
         let xsb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        let j = lane % 4u
-        let brel = lane / 4u
-        let bstride = gl_SubgroupSize / 4u
         let nb = nsb * 8u
         var acc = 0.0
         var b0 = 0u
         while (b0 < nb) {
-            let bb = b0 + brel
+            let bb = b0 + lane
             if (bb < nb) {
                 let sb = bb / 8u
                 let blk = bb % 8u
                 let wsb = wsb0 + sb
-                let w = vk_wq[wsb * 40u + blk * 4u + j]
-                let hb = (vk_wq[wsb * 40u + 32u + blk] >> (j * 8u)) & 0xFF
-                let xw = (xsb0 + sb) * 64u + blk * 8u + j
-                let xlo = vk_xq[xw]
-                let xhi = vk_xq[xw + 4u]
-                let idot = (sdot4((w & 0x0F0F0F0F) | k5_dep(hb & 0xF), xlo)
-                    + sdot4(((w >> 4u) & 0x0F0F0F0F) | k5_dep(hb >> 4u), xhi))
-                let bs = sdot4(xlo, 0x01010101) + sdot4(xhi, 0x01010101)
+                let xb4 = (xsb0 + sb) * 16u + blk * 2u
+                let xl = vk_xq4[xb4]
+                let xh = vk_xq4[xb4 + 1u]
+                let idot = k5_blk_dot(vk_wq4[wsb * 10u + blk], xl, xh, vk_wq[wsb * 40u + 32u + blk])
+                let bs = kq_blk_sum(xl, xh)
                 let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
                 let sc = int((vk_wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
                 let mn = int((vk_wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
                 acc += vk_xs[xsb0 + sb] * (dm.x * float(sc * idot) - dm.y * float(mn * bs))
             }
-            b0 += bstride
+            b0 += gl_SubgroupSize
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
@@ -3074,37 +3117,26 @@ def kq_moe_gemv_k6 {
         let wsb0 = vk_meta[4u + r * 2u] + row * nsb
         let xsb0 = vk_meta[5u + r * 2u]
         let lane = gl_SubgroupInvocationID
-        let j = lane % 4u
-        let brel = lane / 4u
-        let bstride = gl_SubgroupSize / 4u
         let nb = nsb * 8u
         var acc = 0.0
         var b0 = 0u
         while (b0 < nb) {
-            let bb = b0 + brel
+            let bb = b0 + lane
             if (bb < nb) {
                 let sb = bb / 8u
                 let blk = bb % 8u
                 let wsb = wsb0 + sb
-                let w = vk_wq[wsb * 48u + blk * 4u + j]
-                let qhw = wsb * 48u + 32u + (blk / 4u) * 8u + j
-                let shift = (blk % 4u) * 2u
-                let lo6 = (w & 0x0F0F0F0F) | (((vk_wq[qhw] >> shift) & 0x03030303) << 4u)
-                let hi6 = ((w >> 4u) & 0x0F0F0F0F) | (((vk_wq[qhw + 4u] >> shift) & 0x03030303) << 4u)
-                let xw = (xsb0 + sb) * 64u + blk * 8u + j
-                let xlo = vk_xq[xw]
-                let xhi = vk_xq[xw + 4u]
-                let ilo = sdot4(lo6, xlo)
-                let ihi = sdot4(hi6, xhi)
-                let blo = sdot4(xlo, 0x01010101)
-                let bhi = sdot4(xhi, 0x01010101)
+                let qh4 = wsb * 12u + 8u + (blk / 4u) * 2u
+                let xb4 = (xsb0 + sb) * 16u + blk * 2u
+                let dot = k6_blk_dot(vk_wq4[wsb * 12u + blk], vk_xq4[xb4], vk_xq4[xb4 + 1u],
+                    vk_wq4[qh4], vk_wq4[qh4 + 1u], (blk % 4u) * 2u)
                 let s4 = int4(unpack8(int(vk_wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
                 let slo = (blk % 2u) == 0u ? s4.x : s4.z
                 let shi = (blk % 2u) == 0u ? s4.y : s4.w
                 let dd = unpackHalf2x16(vk_wsu[wsb * 5u + 4u]).x
-                acc += vk_xs[xsb0 + sb] * dd * float(slo * (ilo - 32 * blo) + shi * (ihi - 32 * bhi))
+                acc += vk_xs[xsb0 + sb] * dd * float(slo * (dot.x - 32 * dot.z) + shi * (dot.y - 32 * dot.w))
             }
-            b0 += bstride
+            b0 += gl_SubgroupSize
         }
         let total = subgroupAdd(acc)
         if (subgroupElect()) {
