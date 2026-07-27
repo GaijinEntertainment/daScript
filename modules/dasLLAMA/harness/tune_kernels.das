@@ -1993,6 +1993,7 @@ def main {
 
     // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the
     // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).
+    tune_progress_finish()
     print("\n===== summary (winner per kernel) =====\n")
     let knames = fixed_array("dot", "axpy", "dot_f16", "axpy_f16", "cvt_f32_to_f16", "cvt_f16_to_f32",
         "add_inplace", "mul_inplace", "scale_inplace", "copy_floats",

@@ -56,14 +56,9 @@ def tune_mode() : string {
     return empty(m) ? "normal" : m
 }
 
-//! True when this compile must stay stamp-free. Two triggers: `policies.tune_frozen` — the
-//! dedicated "cross-box artifact" mark (set by the `-aot` C++ generator and by dastest's AST
-//! serializer; per-box stamps must never leak into an artifact another box consumes) — and an
-//! AOT-consuming run (`policies.aot`) WITHOUT the JIT (a stamp changes the semantic hash, so a
-//! stamped function would fail the AOT link; under `-jit` the JIT supersedes AOT bodies and
-//! tuned stamps are wanted). When the gate fires every tune annotation is fully inert: no
-//! manifest/scope reads, no stamps (`fallback=` included), no policy, no injected checks —
-//! only the reference-row `<name>_variants()` registries are emitted so harness code compiles.
+    //! True when this compile must stay stamp-free: `policies.tune_frozen` (the cross-box
+    //! artifact mark) or an AOT-consuming run without the JIT (a stamp changes the semantic
+    //! hash). Every tune annotation goes inert; only reference-row registries are emitted.
 def tune_aot_gate() : bool {
     return (compiling_program().policies.tune_frozen
         || (compiling_program().policies.aot && !compiling_program().policies.jit_enabled))
@@ -76,21 +71,18 @@ def tune_stamp_free_gate() : bool {
     return tune_aot_gate() || is_building_documentation()
 }
 
-//! True when this compile produces a standalone exe (`llvm-jit -exe`). Stamping still runs:
-//! an exe built on a box WITH a manifest ships those winners (a local-use artifact by
-//! definition), and without one it ships the generic per-ISA `fallback=` stamps. Only the
-//! policy rail (`[tune_policy]`, `--tune`) is dead — a frozen artifact must not demand or
-//! run tuning.
+    //! True when this compile produces a standalone exe (`llvm-jit -exe`). Stamping still runs:
+    //! with a sidecar the exe ships those winners, without one the generic `fallback=` stamps.
+    //! Only the policy rail (`[tune_policy]`, `--tune`) is dead.
 def tune_exe_gate() : bool {
     return compiling_program().policies.jit_exe_mode
 }
 
 // ===== the per-app sidecar =====
 
-//! The app this process runs: the first `.das` argument on the command line before `--`.
-//! Macro time and runtime read the same argv, so compile-time stamps and the runtime write
-//! API agree on the file. "" in a standalone exe or an embedded host — the binary itself is
-//! the app then (see `tune_manifest_path`).
+    //! The app this process runs: the first `.das` argument on the command line before `--`.
+    //! Macro time and runtime read the same argv, so stamps and the write API agree on the file.
+    //! "" in a standalone exe or embedded host — the binary itself is the app then.
 def tune_app_script() : string {
     // aliases a process-global Array header (locked) — do not delete
     var argv <- get_command_line_arguments()
@@ -116,10 +108,8 @@ def private sidecar_for(app : string) : string {
     return "{stem}.tune.json"
 }
 
-// the binary THIS process runs as — argv[0] verbatim (a standalone exe is its own binary;
-// a `daslang app.das` run anchors on the daslang binary). NOT get_das_exe(): that derives
-// "<argv[0] dir>/daslang.exe" — the interpreter-to-SPAWN, which does not exist inside a
-// released bundle and silently mis-anchored the exe's sidecar + staleness checks.
+    // argv[0] verbatim, NOT get_das_exe(): that derives the interpreter-to-SPAWN, which does
+    // not exist inside a released bundle and mis-anchored the exe sidecar + staleness checks.
 def private running_binary() : string {
     // aliases a process-global Array header (locked) — do not delete
     let argv <- get_command_line_arguments()
@@ -135,10 +125,9 @@ def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
 }
 
-//! The tune sidecar location: `DAS_TUNE_MANIFEST` env override, else a harness override
-//! (`set_tune_manifest_runtime_path`), else `<app>.tune.json` beside the app — the root
-//! script this process runs, or the binary itself (standalone exe, embedded host) when
-//! there is none. Never "" — every app has a sidecar location.
+    //! The tune sidecar location: `DAS_TUNE_MANIFEST` env, else a harness override, else
+    //! `<app>.tune.json` beside the app (the root script, or the binary when there is none).
+    //! Never "" — every app has a sidecar location.
 def tune_manifest_path() : string {
     let env = get_env_variable("DAS_TUNE_MANIFEST")
     if (!empty(env)) return env
@@ -147,10 +136,9 @@ def tune_manifest_path() : string {
     return sidecar_for(empty(app) ? running_binary() : app)
 }
 
-//! True when the sidecar predates the binary that runs (or builds) the app — a rebuilt
-//! binary invalidates every measured winner, so a stale sidecar reads as ABSENT everywhere
-//! (compile-time stamps, the policy rail, the auto guard) and gets regenerated. This kills
-//! the copy-a-stale-file trap: measurements never outlive the binary that made them.
+    //! True when the sidecar predates the binary that runs (or builds) the app. A stale sidecar
+    //! reads as ABSENT everywhere and is regenerated, so measurements never outlive the binary
+    //! that made them — which is what kills the copy-a-stale-file trap.
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
     return false if (!stat(path, sfs))   // absent is "missing", not "stale"
@@ -242,12 +230,9 @@ def private doc_kernels_set(var doc : JsonValue?; fname : string; suffix : strin
     kern[fname] = JV(suffix)
 }
 
-//! Upsert `fname -> suffix` into the sidecar's `"kernels"` section and save it — the
-//! set-a-value API the tune harness calls after picking a winner. Every other section
-//! (`"runtime"`, keys of other scopes' tuners) is preserved — upsert semantics are what let
-//! several libraries' tuners share the one per-app file. A STALE sidecar (older than the
-//! running binary) is reset to a fresh document first. Refreshes `"provenance"` on every
-//! write. Returns false when the file can't be written.
+    //! Upsert `fname -> suffix` into the sidecar's `"kernels"` section and save — what a harness
+    //! calls after picking a winner. Other sections and other scopes' keys survive, which is what
+    //! lets several libraries share one file. A stale sidecar resets first; false = write failed.
 def tune_manifest_set(fname : string; suffix : string) : bool {
     let path = tune_manifest_path()
     if (empty(path)) {
@@ -260,11 +245,9 @@ def tune_manifest_set(fname : string; suffix : string) : bool {
     return ok
 }
 
-//! The bulk form for library tuners that record many kernels plus their runtime knobs in
-//! one write: upsert every `kernels` entry, and (when `runtime` is non-null) REPLACE the
-//! sidecar's `"runtime"` section with it — the tuner owns that section outright, and the
-//! document ADOPTS the passed tree (freed with it — don't reuse it after). Same
-//! preservation and stale-reset semantics as `tune_manifest_set`.
+    //! The bulk form: upsert every `kernels` entry, and when `runtime` is non-null REPLACE the
+    //! sidecar's `"runtime"` section with it (the document ADOPTS that tree — do not reuse it).
+    //! Same preservation and stale-reset semantics as `tune_manifest_set`.
 def tune_sidecar_merge(kernels : table<string; string>; var runtime : JsonValue?) : bool {
     let path = tune_manifest_path()
     if (empty(path)) {
@@ -308,10 +291,9 @@ def tune_status() : array<TuneStatus> {
     return clone_to_move(g_tune_status)
 }
 
-//! Log the tune status table at `LOG_INFO` — the shared "am I tuned?" surface for any app.
-//! `appName` prefixes the lines. No-op when the table is empty (no `[tune_policy]`, or a
-//! standalone build). Prints `<n>/<total> kernels tuned for this box`, one line per function,
-//! and a `--tune` hint when any kernel is on a fallback/reference tier.
+    //! Log the tune status table at `LOG_INFO` — the shared "am I tuned?" surface, prefixed by
+    //! `appName`. Prints `<n>/<total> kernels tuned for this box`, one line per function, and a
+    //! `--tune` hint when any kernel sits on a fallback/reference tier. No-op when empty.
 def log_tune_status(appName : string) {
     var st <- tune_status()
     if (empty(st)) {
@@ -348,10 +330,8 @@ struct private TuneScope {
 // read path itself is scope-independent (every module reads the app sidecar).
 var private g_scopes : table<string; TuneScope>
 
-// the kernels `mod` demands sidecar entries for, read OFF THE AST: every [tune] function
-// plus every non-perm-pinned [tuned] function (the loop-hint kernels; a perm= pin is a
-// profiler variant stub, not a tunable). AST-derived on purpose — shared macro-module
-// globals are per-requiring-context copies, so a bank would read empty across modules.
+    // every [tune] function plus every non-perm-pinned [tuned] one, read OFF THE AST: a macro
+    // global would be a per-requiring-context copy and read empty across modules.
 def private module_kernel_fnames(mod : Module?; var fnames : array<string>) {
     for_each_function(mod, "") $(fn) {
         var demand = false
@@ -403,11 +383,9 @@ struct TuneScopeStatus {
     fallbacks : string  //!< ';'-joined fname=suffix stamps selected by this compile/host
 }
 
-//! Every declared scope in `prog` with its per-key completeness against the app sidecar,
-//! read OFF THE AST (the `[tune_scope]` structure annotations + each module's `[tune]`
-//! functions) — NOT off this module's macro globals: a shared module's globals are
-//! per-requiring-context copies, so a caller in another macro module (llvm_exe writing the
-//! release-deps JSON) would read an empty bank. Deduped by scope name.
+    //! Every declared scope in `prog` with its per-key completeness against the app sidecar,
+    //! read OFF THE AST, not this module's macro globals — those are per-requiring-context
+    //! copies, so a caller in another macro module reads an empty bank. Deduped by name.
 def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
     // pass 1: the declared scopes (name, tuner, covers) off the [tune_scope] annotations
     var found : array<TuneScope>
@@ -490,11 +468,9 @@ def tune_sidecar_missing_entries(path : string; fnames : string) : string {
     return r
 }
 
-//! Every kernel in the ';'-joined `fnames` list has a `"kernels"` entry in the sidecar at
-//! `path` (companions ride their main entry; an explicit "reference" entry counts). A
-//! missing, stale, or unparsable sidecar has no entries. An empty list is trivially
-//! complete. This is the "is this scope tuned" predicate — with one shared per-app sidecar,
-//! file existence proves nothing (another library's tuner may have written it first).
+    //! Every kernel in the ';'-joined `fnames` has a `"kernels"` entry in the sidecar at `path`
+    //! (companions ride their main entry; "reference" counts). Missing/stale/unparsable means no
+    //! entries. This is the "is this scope tuned" predicate — file existence proves nothing.
 def tune_sidecar_entries_complete(path : string; fnames : string) : bool {
     var found = false
     var manifest <- read_manifest(path, found)
@@ -518,16 +494,9 @@ struct private TunePerm {
     args : array<tuple<argname : string; argvalue : RttiValue>>
 }
 
-// fallback tier truth: host cpuid OR'd with the DAS_JIT_X64_FORCE_FEATURES emission-only
-// override — same names and semantics as llvm_jit_common's x64_target_feature (keep in
-// lockstep; that module lives outside this macro context). requires= is an ELIGIBILITY
-// hint for fallback selection only — the generator's own decline predicate remains the
-// emission truth (a stamped-but-declining row still lands on the reference body).
-// arm64 feature names (e.g. "i8mm") ride DAS_JIT_ARM64_FORCE_FEATURES: cpu_supports is
-// x64-cpuid-only (fail-closed on arm), and this is macro context — no LLVM host-features
-// query here — so on aarch64 the env IS the eligibility truth (the same env the emission
-// rail and the DLL cache key read; a native-i8mm box without it still runs smmla via the
-// manifest, which bypasses requires=).
+    // Host cpuid OR'd with the DAS_JIT_*_FORCE_FEATURES override — keep in lockstep with
+    // llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for fallback
+    // selection only; the generator's own decline predicate stays the emission truth.
 def private fallback_feature_ok(name : string) : bool {
     if (cpu_supports(name)) return true
     for (part in split(get_env_variable("DAS_JIT_X64_FORCE_FEATURES"), ",")) {
@@ -560,10 +529,8 @@ def private suffix_piece(name : string; v : RttiValue) : string {
     return name
 }
 
-// Annotation applies run in declaration order, and a function's annotations only attach to
-// the Function AFTER every apply has run — so [tune] cannot read its [tune_perm] siblings off
-// func.annotations. Instead each [tune_perm] apply banks its row here (all tune annotations
-// share llvm_tune's macro context), and the trailing [tune] apply consumes them.
+    // A function's annotations attach only AFTER every apply has run, so [tune] cannot read its
+    // [tune_perm] siblings off func.annotations — each perm banks its row here instead.
 var private g_perm_rows : table<string; array<TunePerm>>
 
 def private perm_key(func : FunctionPtr) : string => "{compiling_module().name}::{func.name}"
@@ -579,8 +546,7 @@ def private build_perm_row(args : AnnotationArgumentList) : TunePerm {
             continue
         }
         if (aa.name == "requires") {
-            // eligibility hint, consumed here — must not leak into the stamp args or the
-            // auto-derived suffix
+    // consumed here — must not leak into the stamp args or the auto-derived suffix
             if (v is tString) { row.requires = v as tString }
             continue
         }
@@ -624,11 +590,7 @@ def private take_companions(func : FunctionPtr; var errors : das_string) : array
             } elif (c.fn.result.baseType == Type.autoinfer) {
                 errors := "[tune] on {func.name}: companion {c.fnname} needs an explicit return type"
             } else {
-                // even when this compile leaves the companion unstamped (no fallback, no env
-                // manifest), a root-module [tune_manifest] may re-stamp it later — a pure
-                // zero-arg companion const-folded at ITS module's compile would leave stale
-                // reference values at call sites while the main function moves to the
-                // manifest perm. Force the side effect up front, not just at stamp time.
+    // up front, or a const-folded zero-arg companion keeps stale reference values at call sites
                 c.fn.sideEffectFlags.userScenario = true
             }
         }
@@ -669,12 +631,9 @@ def private take_perms(func : FunctionPtr; var errors : das_string) : array<Tune
 
 // ===== stamping =====
 
-// [llvm_code(name=<generator>, <perm args>)] onto `fn`. The appended declaration's own apply
-// does not run for macro-added annotations, so force the side effects here too — without
-// userScenario the front-end const-folds constant-arg calls before they reach the JIT.
-// tune_suffix/tune_from ride along as extra args (generators ignore unknown args by
-// contract): they are the stamped-truth record `collect_status` reads back off the AST —
-// `from` is the manifest the winner came from, "" for a fallback= stamp.
+    // The appended declaration's own apply does not run for macro-added annotations, so force
+    // the side effects here — without userScenario the front end const-folds constant-arg calls
+    // before they reach the JIT. tune_suffix/tune_from ride along as the stamped-truth record.
 def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePerm; from : string) {
     var aargs : array<tuple<argname : string; argvalue : RttiValue>>
     aargs |> reserve(length(perm.args) + 3)
@@ -689,12 +648,9 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     delete aargs
 }
 
-// tune/test modes: one `<base>__<suffix>` clone per perm, each carrying its [llvm_code] stamp,
-// plus the `<base>_variants()` registry — and the same treatment for every companion (its
-// clones carry the companion's generator key with the same perm args/suffixes). The base
-// functions keep their reference bodies — they are the oracle rows. (Clones are
-// annotation-free: the parsed declarations attach to the base only after every apply has run,
-// which is after the clones are made.)
+    // tune/test modes: one `<base>__<suffix>` clone per perm plus the `<base>_variants()`
+    // registry, companions included. The base functions keep their reference bodies as the
+    // oracle rows; clones are annotation-free (applies all ran before the clones were made).
 def private stamp_grid(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; comps : array<TuneCompanion>; var errors : das_string) : bool {
     var mod = compiling_module()
     for (p in perms) {
@@ -763,10 +719,9 @@ def private emit_registry(var mod : Module?; base : FunctionPtr; perms : array<T
 
 // ===== the annotations =====
 
-//! `[tune_perm(<generator args>)]` — one grid row for the `tune(...)` annotation that must
-//! follow it in the same bracket. The args are passed to the generator verbatim (they become
-//! `[llvm_code]` annotation args, and fold into the JIT DLL cache key); `suffix="..."`
-//! overrides the auto-derived variant name.
+    //! `[tune_perm(<generator args>)]` — one grid row for the `tune(...)` that must follow it in
+    //! the same bracket. Args pass to the generator verbatim and fold into the JIT DLL cache
+    //! key; `suffix="..."` overrides the auto-derived variant name.
 [function_macro(name = "tune_perm")]
 class private TunePermAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
@@ -776,18 +731,14 @@ class private TunePermAnnotation : AstFunctionAnnotation {
     }
 }
 
-//! `[tune_companion(fn = "sibling", gen = "generator_key")]` — stamps `sibling` with the SAME
-//! perm as the tuned function, from the same manifest entry: the two-function stamp (e.g. a
-//! GEMM kernel and its repack-layout query can never desync — including on JIT-time declines,
-//! when both generators fall back to their reference bodies together). List companion rows
-//! AFTER the [tune_perm] grid and BEFORE tune(...); the sibling is a plain function (no [tune]
-//! of its own) declared earlier in the same module, with an explicit return type.
+    //! `[tune_companion(fn = "sibling", gen = "generator_key")]` — stamps `sibling` with the SAME
+    //! perm from the same sidecar entry, so a kernel and (say) its repack-layout query can never
+    //! desync. List these after the [tune_perm] grid and before tune(...). See `skills/tune.md`.
 [function_macro(name = "tune_companion")]
 class private TuneCompanionAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        // the perm bank doubles as the order guard: rows placed after tune(...) (bank already
-        // consumed) or before any [tune_perm] would be silently ignored otherwise
+    // the bank doubles as the order guard: rows after tune(...) or before any perm are ignored
         if (!(g_perm_rows |> key_exists(perm_key(func)))) {
             errors := "[tune_companion] on {func.name}: list it AFTER the [tune_perm] rows and BEFORE tune(...) in the same bracket"
             return false
@@ -806,11 +757,9 @@ class private TuneCompanionAnnotation : AstFunctionAnnotation {
     }
 }
 
-//! `[tune(gen="key", fallback="suffix")]` — LAST in a bracket of `[tune_perm]` rows (applies
-//! run in declaration order; `tune` consumes the rows banked before it). Normal runs stamp
-//! exactly one winner (manifest > fallback > reference); tune/test runs stamp the whole grid
-//! as `<name>__<suffix>` stubs plus a `<name>_variants()` registry. See the module docstring
-//! for the mode contract.
+    //! `[tune(gen="key", fallback="suffix")]` — LAST in a bracket of `[tune_perm]` rows, which it
+    //! consumes. Normal runs stamp one winner (sidecar > fallback > reference); tune/test runs
+    //! stamp the whole grid plus a `<name>_variants()` registry. Mode contract: module docstring.
 [function_macro(name = "tune")]
 class private TuneAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
@@ -832,17 +781,13 @@ class private TuneAnnotation : AstFunctionAnnotation {
             return false
         }
         if (func.result.baseType == Type.autoinfer) {
-            // function_to_type runs pre-infer: an implicit result type reaches the
-            // variants registry as `auto` and its rows fail to unify
+    // function_to_type runs pre-infer: an implicit result reaches the registry as `auto`
             errors := "[tune] on {func.name}: an explicit return type is required (add ': void' or the real type)"
             delete perms
             delete comps
             return false
         }
-        // AOT is tune-free by contract — reference bodies only, registries emitted so harness
-        // code compiles. Overrides grid modes too: a stale DAS_TUNE_MODE env must not leak
-        // variant stubs into generated C++. (-exe is NOT gated here: an exe ships the box's
-        // manifest winners — local-use build — or the generic fallback= stamps without one.)
+    // overrides grid modes too: a stale DAS_TUNE_MODE must not leak stubs into generated C++
         if (tune_stamp_free_gate()) {
             let noPerms : array<TunePerm>
             var gok = emit_registry(compiling_module(), func, noPerms, errors)
@@ -868,12 +813,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
             delete comps
             return false
         }
-        // normal: sidecar entry > fallback= > reference. The sidecar is the per-app file
-        // (env override folded in — see tune_manifest_path); a fresh sidecar with no entry
-        // for this function falls back to the declared fallback= (a sidecar written before
-        // a kernel family landed must not silently drop that family to the reference tier);
-        // an explicit "reference" entry forces the original body; a STALE sidecar (older
-        // than the binary) reads as absent.
+    // no entry falls back rather than dropping to reference, so a sidecar written before a kernel family landed cannot untune it
         let fname = "{func.name}"
         var manifestFound = false
         let mpath = tune_manifest_path()
@@ -885,10 +825,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
         let fromManifest = !empty(suffix)
         var ok = true
         if (empty(suffix)) {
-            // fallback= is a ';'-chain tried in declaration order: the first perm whose
-            // requires= hint passes on this box (per-ISA defaults — a manifest-less box
-            // still lands on its ISA's known-good row instead of the reference tier).
-            // Every listed suffix must exist in the grid; none eligible => reference.
+    // ';'-chain in declaration order, first passing requires= wins; none eligible => reference
             let fv = find_arg(args, "fallback")
             if (fv is tString) {
                 for (cand in split(fv as tString, ";")) {
@@ -929,9 +866,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 errors := "[tune] on {func.name}: perm '{suffix}' is not in the [tune_perm] grid"
             }
         }
-        // reference-row-only registries (base + companions), so harness code referencing
-        // <name>_variants() compiles (and lints) in every mode — the perm stubs themselves
-        // exist only in tune/test runs
+    // reference-row-only registries, so harness code referencing <name>_variants() still compiles
         if (ok) {
             let noPerms : array<TunePerm>
             ok = emit_registry(compiling_module(), func, noPerms, errors)
@@ -953,13 +888,9 @@ def private resolve_decl_path(declFile : string; p : string) : string {
     return is_absolute(p) ? p : path_join(dir_name(declFile), p)
 }
 
-//! `[tune_scope(name = "mylib", tuner = "harness.das")]` on a (dummy) struct in the library
-//! module that owns the `[tune]` functions, declared ABOVE them: names the library's tuner
-//! unit. `tuner=` (optional) is the harness that regenerates this library's winners in the
-//! app sidecar, resolved against the declaring file; `[tune_policy]` and `--tune` run it
-//! (with `DAS_TUNE_MANIFEST` pointed at the sidecar — the harness upserts its own keys and
-//! leaves other scopes' keys alone). The winners themselves live in the ONE per-app sidecar
-//! (see the module docstring) — there is no per-scope file.
+    //! `[tune_scope(name = "mylib", tuner = "harness.das")]` on a dummy struct in the library that
+    //! owns the `[tune]` functions, declared ABOVE them: names the tuner that regenerates this
+    //! library's winners in the ONE per-app sidecar. `tuner=` resolves against the declaring file.
 [structure_macro(name = "tune_scope")]
 class private TuneScopeAnnotation : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
@@ -1027,8 +958,7 @@ def private apply_cli_tune_flags() : bool {
 // so the command never starts with a quote (cmd.exe strips a leading quote)
 def private tuner_cmd(scope : TuneScope) : string {
     let win = get_platform_name() == "windows"
-    // quote the env values: <das_root> (hence the manifest path) can contain spaces — on POSIX
-    // an unquoted VAR=/a b/x.json splits the assignment; Windows `set "VAR=..."` is the safe form.
+    // <das_root> can contain spaces: POSIX splits an unquoted VAR=/a b/x.json, Windows needs set "VAR=..."
     let envs = (win ?
         "set \"DAS_TUNE_MODE=tune\"&& set \"DAS_TUNE_MANIFEST={scope.manifestPath}\"&& " :
         "DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=\"{scope.manifestPath}\" ")
@@ -1082,8 +1012,11 @@ def private is_progress_renderer() : bool {
     return is_stdout_terminal()
 }
 
+// Emitting goes through the same relay as receiving, so the rule is uniform: a tuner run
+// straight from a terminal draws its own display instead of spewing raw event lines, and one
+// spawned by a parent forwards them for the parent to draw.
 def private emit_event(kind : string; fields : string) {
-    print("{TUNE_EVENT_PREFIX}{kind} {fields}\n")
+    relay_line("{TUNE_EVENT_PREFIX}{kind} {fields}\n")
 }
 
 //! Announce how many kernels this tuner is about to work through. Call once per tuner half.
@@ -1226,6 +1159,12 @@ def tune_progress_reset() {
     g_prog = TuneProgress()
 }
 
+//! Close a live display, so whatever prints next starts on its own line. A tuner that emitted
+//! progress calls this before it returns; the relay does it automatically when a child exits.
+def tune_progress_finish() {
+    finish_progress()
+}
+
 // Forwarding events is unconditional; verbosity gates only what a human sees. Raw chatter is
 // muted only while a display is actually LIVE — a tuner that emits no events must keep printing
 // exactly as it always did, or adopting the protocol becomes a prerequisite for being visible.
@@ -1288,14 +1227,9 @@ def private run_scope_tuner(scope : TuneScope) : bool {
 var private g_tuned_scopes = 0
 var private g_reexec_code = 0
 
-//! Runtime half of `[tune_policy(missing = "auto")]` / `--tune` — injected at the top of the
-//! app's `main`, one call per scope, followed by `tune_auto_reexec()`. Runs the scope's tuner
-//! when any of the scope's kernels (`fnames`, ';'-joined — the compile-time list baked into
-//! the guard) lacks a sidecar entry, or the sidecar is stale (unconditionally under
-//! `--tune`); tuning happens at RUNTIME because the winners are compile-time stamps — this
-//! process compiled without them, and the re-exec that follows picks them up in a fresh
-//! compile. A stray empty / half-written / corrupt sidecar reads as untuned — otherwise the
-//! guard would no-op while the compile fell back to fallback stamps, never self-healing.
+    //! Runtime half of `[tune_policy(missing = "auto")]` / `--tune`, injected at the top of the
+    //! app's `main` and followed by `tune_auto_reexec()`. Tuning happens at RUNTIME because the
+    //! winners are compile-time stamps. An empty or corrupt sidecar reads as untuned, so it self-heals.
 def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string) {
     if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
         return
@@ -1309,11 +1243,9 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     }
 }
 
-//! Relaunch the current process so a fresh compile stamps the just-written manifests (the
-//! winners are compile-time stamps — they cannot be adopted mid-run). Relays the child's
-//! output; `--tune` is stripped from the relaunch, so the child converges (its manifests are
-//! present) instead of looping. Returns true when the child ran and main must return
-//! immediately — `tune_reexec_code()` is its exit code.
+    //! Relaunch the process so a fresh compile stamps the just-written manifests — they cannot be
+    //! adopted mid-run. `--tune` is stripped from the relaunch so the child converges. True means
+    //! the child ran and main must return `tune_reexec_code()` immediately.
 def tune_auto_reexec() : bool {
     if (g_tuned_scopes == 0) {
         return false
@@ -1348,11 +1280,9 @@ def tune_reexec_code() : int {
     return g_reexec_code
 }
 
-//! Runtime half of `[tune_policy(missing = "restart")]` — injected as a guard at the top of
-//! the app's `main`. When any of the scope's kernels (`fnames`, ';'-joined) lacks a sidecar
-//! entry: runs the tuner NOW, prints the restart banner, and returns true so main returns
-//! immediately (the winners are compile-time stamps — this process compiled without them).
-//! False = scope complete, carry on.
+    //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of the
+    //! app's `main`. Runs the tuner, prints the restart banner, and returns true so main returns
+    //! immediately (the winners are compile-time stamps). False = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         return false
@@ -1409,12 +1339,9 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
     return <- rows
 }
 
-// AOT builds run no policy at all; grid-mode children manage their own manifest (and the
-// spawned tuner compiles in tune mode — the recursion guard); a DAS_TUNE_MANIFEST env
-// override means the user drives manually. -exe is NOT in this gate: a standalone build
-// runs no policy either (a frozen artifact must not demand or run tuning), but it still
-// emits the status [init] so the artifact can self-report its baked stamps — the two call
-// sites below split on tune_exe_gate() explicitly.
+    // AOT runs no policy; grid-mode children manage their own manifest (also the recursion guard);
+    // a DAS_TUNE_MANIFEST override means manual. -exe is NOT here — it runs no policy either, but
+    // still emits the status [init], so the two call sites split on tune_exe_gate() explicitly.
 def private tune_policy_gated() : bool {
     return (tune_stamp_free_gate() || tune_mode() != "normal"
         || !empty(get_env_variable("DAS_TUNE_MANIFEST")))
@@ -1440,7 +1367,7 @@ def private emit_status_init(var errors : string&) {
         fn |> append_annotation("$", "init")
         fn.flags.generated = true
         if (!(compiling_module() |> add_function(fn))) {
-            errors := "[tune_policy]: duplicate declaration (one per program)"
+            errors = "[tune_policy]: duplicate declaration (one per program)"
         }
     }
     delete rows
@@ -1457,15 +1384,14 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             policy = penv
         }
         if (policy != "fallback" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
-            errors := "[tune_policy] on {func.name}: missing=\"{policy}\" — use fallback | warn | error | auto | restart"
+            errors = "[tune_policy] on {func.name}: missing=\"{policy}\" — use fallback | warn | error | auto | restart"
             return false
         }
         let force = apply_cli_tune_flags()
         if (force && empty(g_scopes)) {
             print("llvm_tune: --tune requested but no [tune_scope] is declared by any required library\n")
         }
-        // snapshot: values() locks the table for the loop's duration, and the body reads
-        // g_scopes indirectly (the [] op is insert-capable — it trips the lock even on hits)
+    // snapshot: values() locks the table for the loop, and the body reads g_scopes indirectly
         var scopes <- [for (scope in values(g_scopes)); scope]
         var seen : table<string>
         var autoScopes : array<TuneScope>
@@ -1475,29 +1401,24 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             // per-scope KEY completeness, not file existence — the sidecar is shared
             continue if (!force && tune_sidecar_entries_complete(scope.manifestPath, scope_fnames_joined(scope)))
             if (force || policy == "auto") {
-                // NO tuner run and NO restamp at compile time: the tuner is a daslang child
-                // (can't run mid-compile), and restamping a REQUIRED module's compiled
-                // function is a cross-module mutation the re-infer pass can't survive.
-                // Instead a runtime guard tunes and RE-EXECS — the fresh compile stamps the
-                // winners at [tune] time, which is cross-module-safe.
+    // a runtime guard tunes and RE-EXECS: restamping a required module's compiled function is a cross-module mutation re-infer cannot survive
                 if (empty(scope.tunerPath)) {
-                    errors := "[tune_policy]: scope '{scope.scopeName}' declares no tuner= — cannot {force ? "--tune" : "auto-tune"}; produce {scope.manifestPath} manually"
+                    errors = "[tune_policy]: scope '{scope.scopeName}' declares no tuner= — cannot {force ? "--tune" : "auto-tune"}; produce {scope.manifestPath} manually"
                 } else {
                     autoScopes |> push(scope)
                 }
             } elif (policy == "error") {
-                errors := "[tune_policy]: scope '{scope.scopeName}' is untuned on this box — run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
+                errors = "[tune_policy]: scope '{scope.scopeName}' is untuned on this box — run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
             } elif (policy == "warn") {
                 print("llvm_tune: WARNING scope '{scope.scopeName}' is untuned on this box (fallback stamps in effect)\nllvm_tune: run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)\n")
             } elif (policy == "restart") {
-                // prepend a graceful guard to the annotated function (main) — a hard exit()
-                // from an [init] would skip environment shutdown (g_envTotal FATAL at exit)
+    // graceful guard, not exit(): a hard exit from an [init] skips environment shutdown
                 if (!(func.body is ExprBlock)) {
-                    errors := "[tune_policy]: restart — {func.name} has no body block"
+                    errors = "[tune_policy]: restart — {func.name} has no body block"
                 } elif (func.result.baseType != Type.tVoid && func.result.baseType != Type.tInt
                         && func.result.baseType != Type.autoinfer) {
                     // autoinfer = undeclared result, void by convention for main
-                    errors := "[tune_policy]: restart — {func.name} must return void or int"
+                    errors = "[tune_policy]: restart — {func.name} must return void or int"
                 } else {
                     let fnames = scope_fnames_joined(scope)
                     var guard : ExpressionPtr
@@ -1522,15 +1443,14 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
         }
         delete seen
         delete scopes
-        // the auto/--tune guard: prepend one tune_auto_prepare per scope, then the re-exec —
-        // execution order is prepare(s) first, re-exec last, ahead of the original body
+    // order is prepare(s) first, re-exec last, both ahead of the original body
         if (empty(errors) && !empty(autoScopes)) {
             if (!(func.body is ExprBlock)) {
-                errors := "[tune_policy]: {func.name} has no body block"
+                errors = "[tune_policy]: {func.name} has no body block"
             } elif (func.result.baseType != Type.tVoid && func.result.baseType != Type.tInt
                     && func.result.baseType != Type.autoinfer) {
                 // autoinfer = undeclared result, void by convention for main
-                errors := "[tune_policy]: auto/--tune — {func.name} must return void or int"
+                errors = "[tune_policy]: auto/--tune — {func.name} must return void or int"
             } else {
                 var guards : array<ExpressionPtr>
                 guards |> reserve(length(autoScopes) + 1)
@@ -1570,24 +1490,9 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
     return empty(errors)
 }
 
-//! `[tune_policy(missing = "...")]` on the app's `main` (must be `main` for auto/restart —
-//! they prepend a guard to its body): what to do about scopes whose sidecar entries are
-//! missing (or stale) at compile time —
-//!   fallback: stamp `fallback=` silently
-//!   warn:    loud compile-time banner with the exact tuner command
-//!   error:   fail the compile with the same message — the dev mode
-//!   auto:    THE DEFAULT (declared or not — see TuneDefaultPolicy below): tune at startup
-//!            (injected guard runs each incomplete scope's tuner), then RE-EXEC the process —
-//!            the fresh compile stamps the winners; one launch, then it serves. (Tuning
-//!            cannot happen mid-compile: the tuner is a daslang child, and adopting its
-//!            winners means new compile-time stamps anyway.)
-//!   restart: like auto but no re-exec — tune at startup, then exit asking for a manual
-//!            restart (one incomplete scope per start)
-//! `--tune` after `--` on the app's command line forces the auto path even when the sidecar
-//! is complete (re-tune; the flag is stripped from the re-exec). `DAS_TUNE_POLICY` env
-//! overrides the declared value (CI kill switch: `DAS_TUNE_POLICY=fallback`). Grid modes
-//! (`DAS_TUNE_MODE=tune`/`test` — also the recursion guard for the spawned tuner), a
-//! `DAS_TUNE_MANIFEST` env override, and standalone builds (`-exe`, AOT) skip policy entirely.
+    //! `[tune_policy(missing = "...")]` on the app's `main`: what to do about scopes whose sidecar
+    //! entries are missing or stale — `fallback` | `warn` | `error` | `auto` (THE DEFAULT, declared
+    //! or not) | `restart`. Full semantics and the escapes: `skills/tune.md`.
 [function_macro(name = "tune_policy")]
 class private TunePolicyAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
@@ -1626,21 +1531,13 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
     }
 }
 
-//! The "untuned does not start" default: when the PROGRAM ROOT (the anonymous main module)
-//! has a `main`, any `[tune_scope]` is in play, and no `[tune_policy]` was declared, behave
-//! as `[tune_policy(missing = "auto")]` — an incomplete/stale sidecar tunes at startup and
-//! re-execs. Escapes: `DAS_TUNE_POLICY=fallback` (the CI kill switch), the standing gates
-//! (AOT / -exe / grid modes / `DAS_TUNE_MANIFEST`), and structurally any root without a
-//! `main` (dastest-driven test files never tune — dastest runs `[test]` functions, not
-//! `main`). Fires as an infer pass on the root module; the appended inert marker
-//! annotation makes it once-only and a declared `[tune_policy]` wins.
+    //! The "untuned does not start" default: a program root with a `main`, some `[tune_scope]` in
+    //! play and no declared `[tune_policy]` behaves as `missing = "auto"`. Escapes and the
+    //! once-only marker: `skills/tune.md`. A root without `main` never tunes (dastest files).
 [infer_macro]
 class private TuneDefaultPolicy : AstPassMacro {
     def override apply(prog : ProgramPtr; _mod : Module?) : bool {
-        // libraries compile under their module name; the app root module is anonymous.
-        // NOTE the pass only fires for roots that SEE llvm_tune — a library owning tune
-        // scopes must re-export it (`require llvm/daslib/llvm_tune public`), or its apps
-        // silently get no default policy (dasllama_math_gen / dasllama_common do).
+    // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
         return false if (is_in_completion() || !empty("{compiling_module().name}")
             || empty(g_scopes) || tune_policy_gated())
         var main_fn = compiling_module() |> find_unique_function("main", false)
@@ -1660,8 +1557,7 @@ class private TuneDefaultPolicy : AstPassMacro {
             ok = apply_tune_policy(main_fn, "auto", errs)
         }
         if (!ok || !empty(errs)) {
-            // macro_error reported mid-infer-pass is silently dropped by the retry loop —
-            // print + panic instead, so the error flavor actually stops the compile
+    // macro_error mid-infer-pass is dropped by the retry loop — print + panic actually stops it
             print("llvm_tune: {errs}\n")
             panic("llvm_tune default policy: {errs}")
         }
