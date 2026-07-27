@@ -344,11 +344,56 @@ namespace das {
             string          tempName;               // tier C: read this temp instead
         };
 
+        // free variable names of an expression - used to decide which block-literal
+        // arguments can actually capture a substituted caller expression
+        // every declaration name in the caller: function arguments, lets, for iterators,
+        // block-literal arguments. infer resolves LOCALS BEFORE BLOCK ARGUMENTS, so a spliced
+        // can_shadow block argument (kept name, see LocalNameCollect) loses to any same-named
+        // caller declaration - reads inside the block silently bind the caller's variable
+        class DeclNameCollect : public Visitor {
+        public:
+            das_hash_set<string> * names = nullptr;
+        protected:
+            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+            void add ( const VariablePtr & var ) {
+                names->insert(var->name);
+                if ( !var->aka.empty() ) names->insert(var->aka);
+            }
+            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+                Visitor::preVisitLet(let, var, last);
+                add(var);
+            }
+            virtual void preVisit ( ExprFor * expr ) override {
+                Visitor::preVisit(expr);
+                for ( auto & var : expr->iteratorVariables ) add(var);
+            }
+            virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+                Visitor::preVisitBlockArgument(block, var, lastArg);
+                add(var);
+            }
+        };
+
+        class FreeNameCollect : public Visitor {
+        public:
+            das_hash_set<string> * names = nullptr;
+        protected:
+            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+            virtual void preVisit ( ExprVar * expr ) override {
+                Visitor::preVisit(expr);
+                names->insert(expr->name);
+            }
+        };
+
         // the callee's local declarations, so reads can be renamed by name
         // (infer re-resolves every ExprVar by name; consistent renaming is all it takes)
         class LocalNameCollect : public Visitor {
         public:
             das_hash_map<string, string> * rename = nullptr;
+            // can_shadow block-argument names are semantic (a host ECS resolves the component
+            // by the argument name), so they are never renamed; the splice DECLINES instead
+            // when a substituted caller expression could be captured by one (see call sites).
+            // collected here so the caller can run that check.
+            das_hash_set<string> * canShadowArgs = nullptr;
             string prefix;
         protected:
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
@@ -368,6 +413,15 @@ namespace das {
             // scope chain, and an unrenamed argument could shadow a caller local (an error)
             virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
                 Visitor::preVisitBlockArgument(block, var, lastArg);
+                // a plain argument must rename: after the splice it can shadow a caller-side
+                // name, which is 30701. a can_shadow argument keeps its (semantic) name.
+                if ( var->can_shadow ) {
+                    if ( canShadowArgs ) {
+                        canShadowArgs->insert(var->name);
+                        if ( !var->aka.empty() ) canShadowArgs->insert(var->aka);
+                    }
+                    return;
+                }
                 renameVar(var->name, var->aka);
             }
         };
@@ -385,6 +439,30 @@ namespace das {
             LineInfo tempAt;    // call site location for manufactured temp reads
             bool clearUserUnsafe = false;   // splicing a function callee (not a devirt literal)
         protected:
+            // scope gate for the name-based rename. the map holds every declaration in the body,
+            // including nested block-literal arguments, but a rename may only apply to references
+            // under that declaration's lexical scope: a reference bound OUTSIDE the body (caller
+            // code around a devirted literal) can spell the same name - a can_shadow block argument
+            // makes that legal - and renaming it points it at a variable that does not exist there.
+            // per-name declaration stack; true = renamed (the rename applies within its scope),
+            // false = KEPT - a can_shadow block argument keeps its (semantic) name and must
+            // SHIELD it: references under the argument's scope bind the argument, so an outer
+            // renamed declaration of the same name may not capture them. innermost entry wins.
+            das_hash_map<string, vector<bool>> activeDecl;
+            vector<vector<string>> declFrames { {} };
+            void activateDecl ( const string & name, bool renamed ) {
+                activeDecl[name].push_back(renamed);
+                declFrames.back().push_back(name);
+            }
+            void pushDeclFrame () { declFrames.emplace_back(); }
+            void popDeclFrame () {
+                for ( auto & n : declFrames.back() ) activeDecl[n].pop_back();
+                declFrames.pop_back();
+            }
+            bool renameActive ( const string & name ) const {
+                auto it = activeDecl.find(name);
+                return it!=activeDecl.end() && !it->second.empty() && it->second.back();
+            }
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             virtual void preVisitExpression ( Expression * expr ) override {
                 Visitor::preVisitExpression(expr);
@@ -406,7 +484,7 @@ namespace das {
                     }
                 }
                 auto rit = rename->find(expr->name);
-                if ( rit != rename->end() ) {
+                if ( rit != rename->end() && renameActive(expr->name) ) {
                     expr->name = rit->second;
                     expr->variable = nullptr;   // infer re-resolves by name
                 }
@@ -431,10 +509,10 @@ namespace das {
             virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
                 Visitor::preVisitLet(let, var, last);
                 auto rit = rename->find(var->name);
-                if ( rit != rename->end() ) var->name = rit->second;
+                if ( rit != rename->end() ) { activateDecl(var->name, true); var->name = rit->second; }
                 if ( !var->aka.empty() ) {
                     auto ait = rename->find(var->aka);
-                    if ( ait != rename->end() ) var->aka = ait->second;
+                    if ( ait != rename->end() ) { activateDecl(var->aka, true); var->aka = ait->second; }
                 }
                 // a compiled (cross-module) callee has been through allocateStack, which
                 // aliases the returned local's storage to the function's CMRES slot. the
@@ -445,22 +523,45 @@ namespace das {
             }
             virtual void preVisit ( ExprFor * expr ) override {
                 Visitor::preVisit(expr);
+                pushDeclFrame();
                 for ( size_t i=0, is=expr->iterators.size(); i!=is; ++i ) {
                     auto rit = rename->find(expr->iterators[i]);
-                    if ( rit != rename->end() ) expr->iterators[i] = rit->second;
+                    if ( rit != rename->end() ) { activateDecl(expr->iterators[i], true); expr->iterators[i] = rit->second; }
                 }
                 for ( auto & var : expr->iteratorVariables ) {
                     auto rit = rename->find(var->name);
                     if ( rit != rename->end() ) var->name = rit->second;
                 }
             }
+            virtual ExpressionPtr visit ( ExprFor * expr ) override {
+                popDeclFrame();
+                return Visitor::visit(expr);
+            }
+            virtual void preVisit ( ExprBlock * block ) override {
+                Visitor::preVisit(block);
+                pushDeclFrame();
+            }
+            virtual ExpressionPtr visit ( ExprBlock * block ) override {
+                popDeclFrame();
+                return Visitor::visit(block);
+            }
             virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
                 Visitor::preVisitBlockArgument(block, var, lastArg);
+                // a can_shadow argument keeps its (semantic) name even when a same-named
+                // renamable declaration put that name in the map - the map is name-keyed
+                // and cannot tell them apart, the flag on the variable can
+                if ( var->can_shadow ) {
+                    activateDecl(var->name, false);
+                    if ( !var->aka.empty() ) activateDecl(var->aka, false);
+                    return;
+                }
                 auto rit = rename->find(var->name);
-                if ( rit != rename->end() ) var->name = rit->second;
+                if ( rit != rename->end() ) { activateDecl(var->name, true); var->name = rit->second; }
+                else { activateDecl(var->name, false); }
                 if ( !var->aka.empty() ) {
                     auto ait = rename->find(var->aka);
-                    if ( ait != rename->end() ) var->aka = ait->second;
+                    if ( ait != rename->end() ) { activateDecl(var->aka, true); var->aka = ait->second; }
+                    else { activateDecl(var->aka, false); }
                 }
             }
         };
@@ -1919,6 +2020,16 @@ namespace das {
                 }
             }
             int inlineId = nextInlineId(fn);
+            das_hash_set<string> callerDeclNames;
+            {
+                DeclNameCollect dnc;
+                dnc.names = &callerDeclNames;
+                fn->body->visit(dnc);
+                for ( auto & arg : fn->arguments ) {
+                    callerDeclNames.insert(arg->name);
+                    if ( !arg->aka.empty() ) callerDeclNames.insert(arg->aka);
+                }
+            }
             // per-round frame-growth budget (see AUTO_INLINE_CALLER_GROWTH_BYTES);
             // conservatively charged at the gate, so later-declined sites still count
             int64_t grownBytes = 0;
@@ -2342,7 +2453,42 @@ namespace das {
                 bool needStatements = !temps.empty() || !exprBody;
                 if ( !needStatements ) {
                     // ----- pure graft: no statements, no anchors, legal in any position -----
-                    das_hash_map<string, string> rename;    // expression bodies declare no locals
+                    // an expression body declares no LOCALS, but a block literal inside it declares
+                    // ARGUMENTS, and after the graft those sit in the caller's scope chain. infer
+                    // re-resolves every ExprVar by name, so an unrenamed one captures a substituted
+                    // argument expression that happens to spell the same name: 30701 for an ordinary
+                    // block, and for a can_shadow block (host query blocks, linq_boost) SILENTLY the
+                    // wrong variable, since can_shadow is what switches 30701 off. same collector the
+                    // statement path below uses
+                    das_hash_set<string> argHazard;
+                    {
+                        // every actual argument, not just tier substitutes: a block-literal
+                        // argument moves into the body wholesale, and its free names can be
+                        // captured the same way
+                        FreeNameCollect fnc;
+                        fnc.names = &argHazard;
+                        for ( size_t ai=0, ais=sa.count(); ai!=ais; ++ai ) sa.arg(ai)->visit(fnc);
+                    }
+                    das_hash_map<string, string> rename;
+                    das_hash_set<string> canShadowArgs;
+                    LocalNameCollect pnames;
+                    pnames.rename = &rename;
+                    pnames.canShadowArgs = &canShadowArgs;
+                    pnames.prefix = "__inl" + to_string(inlineId) + "_l_";
+                    body->visit(pnames);
+                    // a substituted caller expression under a can_shadow block argument of the
+                    // same name re-resolves to the block's variable - silently, that is what
+                    // can_shadow means - and the argument cannot be renamed (its name is the
+                    // component). no rename is correct here; do not inline this site.
+                    bool captureRisk = false;
+                    for ( auto & csn : canShadowArgs ) {
+                        if ( argHazard.count(csn) || callerDeclNames.count(csn) ) { captureRisk = true; break; }
+                    }
+                    if ( captureRisk ) {
+                        siteFail(site, "can't inline " + subjName
+                            + ": a substituted expression would be captured by a can_shadow block argument", callLike->at);
+                        continue;
+                    }
                     InlineBodyRewriter rewriter;
                     rewriter.paramSub = &paramSub;
                     rewriter.rename = &rename;
@@ -2560,11 +2706,13 @@ namespace das {
                     continue;
                 }
                 // ----- eager position: hoist the impure prefix, splice temps and body -----
+                // ALL declinable checks run BEFORE the prefix hoist mutates the statement: a
+                // `continue` after ReplaceNode has rewritten the statement discards the pending
+                // temp declarations but keeps the __inl<N>_pre* references, and the orphaned
+                // ExprVar later fails infer (30838) or segfaults the access-flags pass
                 vector<Expression *> prefix;
                 collectImpurePrefix(site.stmt, callLike, prefix);
-                vector<ExpressionPtr> splice;
                 bool prefixFailed = false;
-                int preIdx = 0;
                 for ( auto pe : prefix ) {
                     if ( pe->type && pe->type->isVoid() ) {
                         // a void expression can only BE the statement, and then it has no prefix
@@ -2579,6 +2727,50 @@ namespace das {
                         prefixFailed = true;
                         break;
                     }
+                }
+                if ( prefixFailed ) continue;
+                // the statement path stores into an UNINITIALIZED result temp, and that temp is a
+                // local: a type whose C++ constructor must run cannot be declared that way (30316).
+                // the [inline] and block shape checks only cover a refType result, so a by-value
+                // result with a nontrivial ctor reaches here
+                if ( subjResult && !subjResult->ref && subjResult->hasNonTrivialCtor() ) {
+                    siteFail(site, "can't inline " + subjName + ": result type "
+                        + subjResult->describe() + " requires nontrivial construction", callLike->at);
+                    continue;
+                }
+                das_hash_set<string> argHazard;
+                {
+                    // every actual argument, not just tier substitutes: a block-literal
+                    // argument moves into the body wholesale, and its free names can be
+                    // captured the same way. collected before the prefix hoist rewrites the
+                    // arguments - conservative: a name the hoist would have moved to statement
+                    // level still counts as hazardous
+                    FreeNameCollect fnc;
+                    fnc.names = &argHazard;
+                    for ( size_t ai=0, ais=sa.count(); ai!=ais; ++ai ) sa.arg(ai)->visit(fnc);
+                }
+                das_hash_map<string, string> rename;
+                das_hash_set<string> canShadowArgs;
+                LocalNameCollect names;
+                names.rename = &rename;
+                names.canShadowArgs = &canShadowArgs;
+                // renamed locals live in the _l_ sub-namespace so a callee local named
+                // `res` (or `arg_x`, `pre0`, `low`) can never collide with the
+                // manufactured _res/_arg_*/_pre*/_low temps of the same site
+                names.prefix = "__inl" + to_string(inlineId) + "_l_";
+                body->visit(names);
+                bool captureRisk = false;
+                for ( auto & csn : canShadowArgs ) {
+                    if ( argHazard.count(csn) || callerDeclNames.count(csn) ) { captureRisk = true; break; }
+                }
+                if ( captureRisk ) {
+                    siteFail(site, "can't inline " + subjName
+                        + ": a substituted expression would be captured by a can_shadow block argument", callLike->at);
+                    continue;
+                }
+                vector<ExpressionPtr> splice;
+                int preIdx = 0;
+                for ( auto pe : prefix ) {
                     string tname = "__inl" + to_string(inlineId) + "_pre" + to_string(preIdx++);
                     // non-const temps throughout: the hoisted expression was a non-const
                     // rvalue (or keeps its lvalue constness via the reference binding), and
@@ -2607,25 +2799,8 @@ namespace das {
                     }
                 }
                 if ( prefixFailed ) continue;
-                // the statement path stores into an UNINITIALIZED result temp, and that temp is a
-                // local: a type whose C++ constructor must run cannot be declared that way (30316).
-                // the [inline] and block shape checks only cover a refType result, so a by-value
-                // result with a nontrivial ctor reaches here
-                if ( subjResult && !subjResult->ref && subjResult->hasNonTrivialCtor() ) {
-                    siteFail(site, "can't inline " + subjName + ": result type "
-                        + subjResult->describe() + " requires nontrivial construction", callLike->at);
-                    continue;
-                }
                 for ( auto & t : temps ) splice.push_back(t);
                 // body
-                das_hash_map<string, string> rename;
-                LocalNameCollect names;
-                names.rename = &rename;
-                // renamed locals live in the _l_ sub-namespace so a callee local named
-                // `res` (or `arg_x`, `pre0`, `low`) can never collide with the
-                // manufactured _res/_arg_*/_pre*/_low temps of the same site
-                names.prefix = "__inl" + to_string(inlineId) + "_l_";
-                body->visit(names);
                 InlineBodyRewriter rewriter;
                 rewriter.paramSub = &paramSub;
                 rewriter.rename = &rename;
