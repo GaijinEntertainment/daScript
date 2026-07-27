@@ -158,7 +158,7 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
 //! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike mtmd whisper,
 //! no float round-trip); n_len = min((n_padded−400)/160+1, n_in/160+1), mel-major.
 def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
-    let n_in = int64(length(samples))
+    let n_in = long_length(samples)
     let head = AUDIO_N_FFT / 2l                        // 200 reflection each side
     let n_padded = n_in + 2l * head
     var padded : array<float>
@@ -372,7 +372,7 @@ def qwen3a_encode_all(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConv
         let win <- qwen3a_mel_window(mel, off)
         qwen3a_encode(t, s, cs, win)
         let n = (win.n_len / QWEN3A_CHUNK) * QWEN3A_TOK_PER_CHUNK
-        rows |> reserve(int(int64(length(rows)) + n * t.proj_dim))
+        rows |> reserve(int(long_length(rows) + n * t.proj_dim))
         for (i in range64(n * t.proj_dim)) {
             rows |> push(s.out[i])
         }

@@ -205,7 +205,7 @@ def func_call_length(var st : TokenStream; result : Result) : Result {
         }
         if (TypeInfo(basicType = Type.tString)) {
             let pstr = unsafe(reinterpret<string?>(getPD(st, result)))
-            return <- Result(int64(length(*pstr)))
+            return <- Result(long_length(*pstr))
         }
         if (TypeInfo(basicType = Type.tArray)) {
             let parr = unsafe(reinterpret<DapiArray?>(getPD(st, result)))

@@ -414,6 +414,36 @@ def test_repository_async_lifecycle_contract(t : T?) {
 }
 
 [test]
+def test_repository_worktree_identity(t : T?) {
+    t |> run("main-checkout identity folds case on Windows only") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_repo_identity_")
+        if (!(temp is value)) {
+            t |> failure("could not create temporary test directory")
+            return
+        }
+        let root = temp as value
+        t |> success(repository_same_worktree_identity(root, root),
+            "a path is its own identity")
+        // Case-only difference: equal under Windows' case-insensitive
+        // filesystem, distinct everywhere else (the #3574 review fix - an
+        // unconditional fold refused legitimate deletions as \"main\").
+        let probe_upper = path_join(root, "CaseProbe")
+        let probe_lower = path_join(root, "caseprobe")
+        let case_folded = get_platform_name() == "windows"
+        t |> equal(repository_same_worktree_identity(probe_upper, probe_lower), case_folded)
+        t |> equal(repository_same_worktree_identity(probe_lower, probe_upper), case_folded)
+        // Slash direction never separates identities (normalized_path).
+        t |> success(repository_same_worktree_identity(
+                replace(root, "\\", "/"), root),
+            "separator spelling does not split the identity")
+        t |> success(!repository_same_worktree_identity(
+                path_join(root, "elsewhere"), root),
+            "distinct paths stay distinct")
+        rmdir_rec(root)
+    }
+}
+
+[test]
 def test_repository_text_read_contract(t : T?) {
     t |> run("empty files remain distinct from read failures") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_repository_text_")

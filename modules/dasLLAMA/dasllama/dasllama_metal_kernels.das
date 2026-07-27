@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_metal_kernels shared public
 
 require math
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -5795,6 +5796,7 @@ def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : Metal
 }
 
 
+[cold_path]   // one-time PSO/device bring-up, guarded by its own inited flag
 def metal_decode_init : bool {
     if (g_pso_add != null) {
         return true
@@ -5980,9 +5982,14 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
 // DASLLAMA_METAL_KQ_B8=0 = the A/B rail). bys = y ROW-stride; bnr = live columns (stores gate).
 var private g_kq_b8_mode = -1
 
+[cold_path]   // one-time env resolution; kq_b8_on is a global test after the first call
+def private load_kq_b8_mode() {
+    g_kq_b8_mode = env_int("DASLLAMA_METAL_KQ_B8", 1) != 0 ? 1 : 0
+}
+
 def private kq_b8_on : bool {
     if (g_kq_b8_mode < 0) {
-        g_kq_b8_mode = env_int("DASLLAMA_METAL_KQ_B8", 1) != 0 ? 1 : 0
+        load_kq_b8_mode()
     }
     return g_kq_b8_mode == 1
 }

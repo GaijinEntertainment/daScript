@@ -628,7 +628,7 @@ def byte_token_val(piece : string) : int {
 //! <|eot_id|>, header markers) render as empty — callers detect them by id, not text.
 def bpe_decode(tk : BpeTokenizer; id : int64) : string {
     // out of range, or a control token (BOS/EOS/<|eot_id|>/headers, GGUF type 3) — render nothing
-    if (id < 0l || id >= int64(length(tk.vocab)) || tk.token_type[id] == 3l) {
+    if (id < 0l || id >= long_length(tk.vocab) || tk.token_type[id] == 3l) {
         return ""
     }
     if (tk.spm_space) {

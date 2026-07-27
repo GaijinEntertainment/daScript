@@ -61,6 +61,88 @@ def template dot_q8q8_f16s_template(wq : int8 const ?; ws : uint16 const ?; xq :
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), tuned(fallback = "vec16")]
 def dot_q8q8_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
+//! The 4-accumulator idot4 GEMV dot (4 blocks/iter, 2 idot4/block, per-block hsum into 4 rotating
+//! float accs): plain-das byte16 loads + the idot4 builtin — one SDOT per call on arm64 JIT,
+//! ~1.35x the autovectorized dot_q8q8, bit-identical to the hand-NEON sdot4x4 leg it retired.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = 0.0
+    var f1 = 0.0
+    var f2 = 0.0
+    var f3 = 0.0
+    var bi = 0l
+    unsafe {
+        let wv = reinterpret<byte16 const?>(wq)
+        let xv = reinterpret<byte16 const?>(xq)
+        while (bi + 4l <= nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            var a1 = idot4(wv[v + 2l], xv[v + 2l])
+            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
+            var a2 = idot4(wv[v + 4l], xv[v + 4l])
+            a2 = idot4(a2, wv[v + 5l], xv[v + 5l])
+            var a3 = idot4(wv[v + 6l], xv[v + 6l])
+            a3 = idot4(a3, wv[v + 7l], xv[v + 7l])
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi + 0l] * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * ws[bi + 1l] * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * ws[bi + 2l] * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * ws[bi + 3l] * xs[bi + 3l]
+            bi += 4l
+        }
+        while (bi < nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi] * xs[bi]
+            bi++
+        }
+    }
+    return f0 + f1 + f2 + f3
+}
+
+//! The wscale_f16 twin of dot_q8q8_idot4x4: the per-block WEIGHT scale is a raw binary16
+//! halfword widened in-loop — same fold order, bit-identical over the widened plane.
+//! Not `private`: called from lifted parallel_for worker lambdas.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = 0.0
+    var f1 = 0.0
+    var f2 = 0.0
+    var f3 = 0.0
+    var bi = 0l
+    unsafe {
+        let wv = reinterpret<byte16 const?>(wq)
+        let xv = reinterpret<byte16 const?>(xq)
+        while (bi + 4l <= nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            var a1 = idot4(wv[v + 2l], xv[v + 2l])
+            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
+            var a2 = idot4(wv[v + 4l], xv[v + 4l])
+            a2 = idot4(a2, wv[v + 5l], xv[v + 5l])
+            var a3 = idot4(wv[v + 6l], xv[v + 6l])
+            a3 = idot4(a3, wv[v + 7l], xv[v + 7l])
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * f16_to_f32(uint(ws[bi + 0l])) * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * f16_to_f32(uint(ws[bi + 1l])) * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * f16_to_f32(uint(ws[bi + 2l])) * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * f16_to_f32(uint(ws[bi + 3l])) * xs[bi + 3l]
+            bi += 4l
+        }
+        while (bi < nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * f16_to_f32(uint(ws[bi])) * xs[bi]
+            bi++
+        }
+    }
+    return f0 + f1 + f2 + f3
+}
+
 // ----- parallel_for dispatch profiler (off by default) -----
 // Records each worker's start time (rel. to pf-start) into g_pf_ws[rb]; a large first/last-worker gap
 // = workers trickling in (job pool waking from sleep) — the suspected prefill stall.

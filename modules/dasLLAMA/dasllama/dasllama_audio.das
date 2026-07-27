@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_audio shared public
 
 require math
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require strings
 require daslib/fio
 require daslib/apply
@@ -448,7 +449,7 @@ def build_whisper_mel_plan(n_fft : int64) : WhisperMelPlan {
 // exact-length grow for reused mel scratch: reserve once (exact), resize every call —
 // length stays exact so `for (v in arr)` loops and array-bound reads stay valid on reuse
 def private mel_sized(var a : array<float>; n : int64) {
-    if (int64(capacity(a)) < n) {
+    if (long_capacity(a) < n) {
         a |> reserve(int(n))
     }
     a |> resize(int(n))
@@ -467,7 +468,7 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
 
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : array<float>; n_mel : int64;
                     var padded : array<float>; var m : WhisperMel) {
-    let n_in = int64(length(samples))
+    let n_in = long_length(samples)
     let head = AUDIO_N_FFT / 2l                            // 200
     let n_padded = n_in + AUDIO_SAMPLE_RATE * 30l + 2l * head
     mel_sized(padded, n_padded)
@@ -888,7 +889,7 @@ def private tw_repack(var t : AudioTower; woff, n, d : int64) {
 //! conv1 stays fp32 (its 3·n_mel contraction isn't a 32-multiple on 80-mel models); non-GEMM slots
 //! are quantized-but-unread — fblob stays the fp32 truth for them.
 def tower_quantize(var t : AudioTower) {
-    let total = int64(length(t.fblob)) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
+    let total = long_length(t.fblob) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
     t.qblob |> resize(int(total))
     t.qscales |> resize(int(total / 32l))
     quantize_q8_0_into(t.fblob, total, t.qblob, t.qscales, 0l, 0l)
@@ -978,7 +979,7 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    if (get_env_variable("DASLLAMA_IMAGE") != "0") {
+    if (env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
@@ -1196,7 +1197,7 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     let nu = int(t.n_head) * nqb
     // que-less-creation guard: the state may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
-    if (int64(length(s.att)) < attNeed) {
+    if (long_length(s.att) < attNeed) {
         s.att |> resize(int(attNeed))
     }
     unsafe {

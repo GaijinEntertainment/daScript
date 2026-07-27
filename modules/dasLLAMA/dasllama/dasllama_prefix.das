@@ -71,7 +71,7 @@ def private chain_page_hash(prev : uint64; tokens : array<int64>; lo, hi : int64
 }
 
 def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : int64) : bool {
-    for (i in range64(int64(length(entry.tokens)))) {
+    for (i in range64(long_length(entry.tokens))) {
         if (entry.tokens[i] != tokens[lo + i]) {
             return false
         }
@@ -87,7 +87,7 @@ def create_prefix_cache_(max_groups : int64 = 0l) : PrefixCache {
 }
 
 //! Pages the cache currently holds (== held pool groups).
-def prefix_held_groups_(cache : PrefixCache) : int64 => int64(length(cache.entries))
+def prefix_held_groups_(cache : PrefixCache) : int64 => long_length(cache.entries)
 
 //! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``, copying matched
 //! groups into the block table and setting ``n_past`` accordingly; returns the matched count, capped
@@ -104,7 +104,7 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     if (s.n_past != 0l || !empty(s.block_table)) {
         panic("prefix_attach: the session already holds context (n_past {s.n_past}, {length(s.block_table)} pages) — attach only to a fresh session")
     }
-    let np = int64(length(prompt))
+    let np = long_length(prompt)
     let pr = pool.page_rows
     let pages_max = np > 0l ? (np - 1l) / pr : 0l
     var h = 0ul
@@ -179,7 +179,7 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; s : Session; toke
         panic("prefix_insert: the session is not paged out of this pool")
     }
     let pr = pool.page_rows
-    let covered = min(int64(length(tokens)), s.n_past)
+    let covered = min(long_length(tokens), s.n_past)
     let pages = covered / pr
     var h = 0ul
     var chain_id = 0l
@@ -206,7 +206,7 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; s : Session; toke
         cache.chains[chain_id].n_tokens += pr   // NEW pages only — a partially-cached donation must not over-report
     }
     if (cache.max_groups > 0l) {
-        while (int64(length(cache.entries)) > cache.max_groups) {
+        while (long_length(cache.entries) > cache.max_groups) {
             prefix_evict_lru(cache, pool)
         }
     }

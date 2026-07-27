@@ -594,6 +594,50 @@ Only user-written, non-generated code is reported. Generic templates and their
 instantiated functions are skipped; a direct call from ordinary user code is
 still checked.
 
+LINT017 — 64-bit cast of a call that has a ``long_`` counterpart
+=================================================================
+
+``int64(length(x))`` widens a result that is already 32-bit, so the
+2\ :sup:`31` limit is reached inside ``length`` before the cast ever runs — as
+a silent wrap for the unguarded pairs, or as a panic for array, table and
+string length, which carry an always-on guard. Either way the cast looks like
+it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
+64-bit the whole way through.
+
+.. code-block:: das
+
+    // Bad — wraps before the cast ever runs
+    let n = int64(length(arr))
+
+    // Good
+    let n = long_length(arr)
+
+Applies to ``int64(...)`` and ``uint64(...)`` over ``length``, ``capacity``,
+``count``, ``find_index``, ``fread`` and ``fwrite``.
+
+The pair table is hardcoded on purpose. An "does this function exist" check is
+not meaningful for user functions — a macro may add or remove them during
+compilation — so the only well-defined domain is the builtin and ``daslib``
+set, which is enumerable. Each pair is additionally gated on the receiver
+type, which keeps a same-named user overload silent, along with the
+fixed-array ``length`` generic in ``daslib/builtin.das`` that genuinely has no
+``long_`` twin.
+
+LINT018 — narrowed ``memcpy`` / ``memcmp`` size
+================================================
+
+``memcpy`` and ``memcmp`` carry ``uint``, ``int64`` and ``uint64`` size
+overloads, so an ``int(...)`` cast on the size argument is pure loss: above
+2\ :sup:`31` it silently covers the wrong number of bytes.
+
+.. code-block:: das
+
+    // Bad — truncates for nbytes > 2GB
+    unsafe(memcpy(dst, src, int(nbytes)))    // nbytes : int64
+
+    // Good
+    unsafe(memcpy(dst, src, nbytes))
+
 .. _perf_lint:
 
 -----------------
@@ -1303,6 +1347,72 @@ It also does NOT fire when ``string(...)`` is nested as an argument to another
 call inside the braces (e.g. ``"{length(string(x))}"``) — only direct
 interpolation elements are flagged — nor for an explicit hex request
 ``string(x, true)``.
+
+PERF026/027/028 — hot-path contracts
+=====================================
+
+Unlike every other performance rule, these three check nothing until a function
+declares a contract. They exist for code where an allocation, an environment
+lookup or a log line is a bug rather than a smell — a decode step, an audio
+callback, a frame loop.
+
+.. code-block:: das
+
+    [hot_path]                          // all three contracts
+    def step(var s : Session; pos : int64) { ... }
+
+    [no_alloc, no_env, no_io]           // or name them individually
+    def step2(var s : Session) { ... }
+
+    [cold_path]                         // prunes the walk: a one-time init leg
+    def load_knobs() { ... }
+
+From each annotated root the scan follows **direct** calls transitively, so a
+sink several frames deep is still reported, with the call chain in the message
+and the warning anchored on the line you wrote rather than the daslib internal
+that actually allocates.
+
+Declaring a contract is free: the five markers are registered by the compiler
+as metadata-only annotations, so a file under contract requires nothing. The
+checker lives in ``daslib/perf_lint``, which such a file does **not** require —
+verification runs wherever lint runs.
+
+**What counts as heap traffic.** Every array/table heap operation bottoms out
+in a ``__builtin_array_*`` / ``__builtin_table_*`` extern, so detection matches
+that prefix rather than a list of surface names — ``push`` / ``reserve`` /
+``resize`` / ``erase`` / ``insert`` / ``delete`` are all covered, and a newly
+added builtin is caught by default. On top of that: ``new``, ``delete``, string
+interpolation, lambda capture frames, table indexing (``t[k]`` inserts on
+read), and any builtin returning a freshly allocated string.
+
+**Declaring a reused buffer.** A buffer sized to the current step's geometry and
+reused is not an accident, and saying so at the buffer beats a suppression at
+every call site:
+
+.. code-block:: das
+
+    struct Session {
+        @scratch attq : array<float>    // reused per step; sizing it is intentional
+        logits : array<float>           // unmarked: sizing this on a hot path warns
+    }
+
+    // a helper that sizes a caller's buffer marks the PARAMETER, since the
+    // destination arrives by reference and the call site cannot see the field
+    def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
+
+**What the scan deliberately ignores.** Arguments to ``panic(...)`` — a panic is
+fatal in daslang, not an exception, so its interpolated message is on the abort
+path. Macro-generated subtrees, since a rewritten stub stamps the caller's line
+onto its splice and would otherwise blame every call site for the machinery it
+expands into. And indirect calls through a function pointer or lambda, which
+cannot be resolved statically — annotate the implementations they reach.
+
+Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
+leg genuinely runs once; ``@scratch`` on a reused destination; ``// nolint``
+with a reason (honored at either end of a chain, so a suppression written where
+the code lives works even when the report anchors elsewhere); and
+``DAS_LINT_DISABLE=PERF028`` for a whole run, which needs no source edit and is
+the point when adding a log line to chase a bug.
 
 .. _style_lint:
 
@@ -2081,6 +2191,34 @@ Pointer targets only: a pointer→integer pun such as
 silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
+
+STYLE036 — inert type contract on a cast target
+================================================
+
+``-const``, ``-&``, ``-[]``, ``-#``, ``==const`` and ``==&`` are *substitution
+contracts*. They do work only while a generic binds, and type inference clears
+them once it consumes them. A cast target that is already concrete has nothing
+to consume the contract, so it does nothing at all — ``void?`` is ``void?``
+regardless of ``-const``.
+
+.. code-block:: das
+
+    // Bad — the -const strips nothing
+    let p = unsafe(addr<void? -const>(x))
+
+    // Good
+    let p = unsafe(addr<void?>(x))
+
+Because inference clears a contract it actually consumed, a flag still set at
+lint time is itself the proof that the contract was inert — the rule is exact
+rather than heuristic.
+
+The one exclusion is an ``auto`` or still-unresolved alias target, where
+substitution has not happened yet: ``reinterpret<ARGT -const>`` inside a
+generic really does strip const from whatever ``ARGT`` binds. A *concrete*
+typedef is not such a case — with ``typedef CI = int const``,
+``reinterpret<CI? -const>`` keeps the const, so the contract is inert there
+too and the rule correctly fires.
 
 -----
 Tests

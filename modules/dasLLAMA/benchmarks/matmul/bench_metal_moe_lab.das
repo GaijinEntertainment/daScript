@@ -3,6 +3,7 @@ options persistent_heap
 options stack = 65536
 
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE GEMV MSL (zero copy drift)
 require llvm/daslib/f16_cvt
@@ -516,19 +517,15 @@ def private ref_q51_row(wq : array<uint8>; ws : array<uint8>; xf : array<float>;
 
 // ===== host plumbing =====
 
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
 def private want(filter_env, name : string) : bool {
     return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
 }
 
 // generic (untyped param) — non-Apple builds never compile the Metal-typed body
 def private upload_bytes(dev; arr : array<uint8>) {
-    var buf = metal_new_buffer_untracked(dev, uint64(length(arr)))
+    var buf = metal_new_buffer_untracked(dev, uint64(long_length(arr)))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), length(arr))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), long_length(arr))
     }
     return buf
 }
@@ -1562,6 +1559,7 @@ let GM_UG1 = 14     // gather = 1
 let GM_UNTOK = 15
 let GM_VT = 16      // prod doubled-e2m1 LUT
 let GM_LVT = 17     // lcpp halved LUT
+let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
 
 def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_pipeline(enc, pso)
@@ -1578,7 +1576,9 @@ def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_buffer(enc, gb[GM_UEBLK], 0ul, 9)
     metal_set_buffer(enc, gb[GM_UNK], 0ul, 10)
     metal_set_buffer(enc, gb[GM_UG1], 0ul, 11)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wb slot — never read at hasb=0, any float buffer satisfies binding validation
     metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
+    metal_set_buffer(enc, gb[GM_U0], 0ul, 14)
     metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
 }
 
@@ -1750,6 +1750,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     gb |> push(upload_u32v(dev, uint(GNTOK)))                                  // GM_UNTOK
     gb |> push(upload_floats(dev, vtab))                                       // GM_VT
     gb |> push(upload_floats(dev, lvt))                                        // GM_LVT
+    gb |> push(upload_u32v(dev, 0u))                                           // GM_U0
 
     check_gmm4(queue, gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, "gmm4_prod", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
     check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
@@ -1845,8 +1846,8 @@ def private main_apple(dummy) {
     if (dump_gmx4_msl()) {
         return
     }
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
-    let passes = int64(env_or("DASMETAL_LAB_PASSES", 4))
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let passes = int64(env_int("DASMETAL_LAB_PASSES", 4))
     var dev = metal_create_system_default_device()
     if (dev == null) {
         print("no Metal device\n")

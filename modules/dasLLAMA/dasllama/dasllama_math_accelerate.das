@@ -4,13 +4,12 @@ options _comment_hygiene = true
 module dasllama_math_accelerate shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require dasllama/dasllama_par
 require das_accelerate
 require llvm/daslib/f16_cvt
 require math
-require daslib/fio
 require daslib/math_bits
-require daslib/strings_convert
 
 // The "+AMX" tier: Accelerate BLAS (AMX on M1-M3, SME on M4+) serving the FLOAT-plane batch
 // matmuls only. The AMX arc P0 ceilings put the quant crossover out of reach on M1 (dequant tax
@@ -137,7 +136,7 @@ def private accel_bnns_strips(var yp : float?; hwp : uint16 const?; hxp : uint16
 def private accel_bf16_f16_lane(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     let hwp = f16_plane_ptr(wp, d * n)
     let xcnt = ntok * n
-    if (int64(length(g_hx_scratch)) < xcnt) {
+    if (long_length(g_hx_scratch) < xcnt) {
         g_hx_scratch |> resize(int(xcnt))
     }
     unsafe {
@@ -196,7 +195,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     }
     // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
     let total = d * n
-    if (int64(length(g_wf32_scratch)) < total) {
+    if (long_length(g_wf32_scratch) < total) {
         g_wf32_scratch |> resize(int(total))
     }
     unsafe {
@@ -224,28 +223,28 @@ def dasllama_accelerate_disable() {
     clear_float_batch_override()
 }
 
-def private env_int64(name : string; def_v : int64; min_v : int64) : int64 {
-    let raw : string = get_env_variable(name)
-    if (empty(raw)) {
+// env_int64 with a floor. A SET but bad value is worth a word either way — unparseable and
+// out-of-range both land below the floor via the sentinel default, so one branch covers both.
+def private env_int64_min(name : string; def_v : int64; min_v : int64) : int64 {
+    let raw = env_str(name, "")
+    return def_v if (empty(raw))
+    let v = env_int64(name, min_v - 1l)
+    if (v < min_v) {
+        to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
         return def_v
     }
-    let parsed = try_to_int64(raw)
-    if (parsed._is_ok && parsed._value >= min_v) {
-        return parsed._value
-    }
-    to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
-    return def_v
+    return v
 }
 
 [init]
 def private dasllama_math_accelerate_init() {
-    if (get_env_variable("DASLLAMA_ACCEL") != "1") {
+    if (!env_flag("DASLLAMA_ACCEL", false)) {
         return
     }
-    g_accel_min_mmac = env_int64("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
-    dasllama_accelerate_set_f16_strips(env_int64("DASLLAMA_ACCEL_F16_STRIPS", 0l, 0l))
-    if (get_env_variable("DASLLAMA_ACCEL_F16") == "1" && !dasllama_accelerate_set_f16(true)) {
+    g_accel_min_mmac = env_int64_min("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
+    dasllama_accelerate_set_f16_strips(env_int64_min("DASLLAMA_ACCEL_F16_STRIPS", 0l, 0l))
+    if (env_flag("DASLLAMA_ACCEL_F16", false) && !dasllama_accelerate_set_f16(true)) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ACCEL_F16=1 but the BNNS probe failed — f16 lane stays off\n")
     }
-    dasllama_accelerate_enable(env_int64("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
+    dasllama_accelerate_enable(env_int64_min("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
 }

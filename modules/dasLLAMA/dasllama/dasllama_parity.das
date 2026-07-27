@@ -3,6 +3,7 @@ options gen2
 module dasllama_parity shared public
 
 require daslib/fio
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/strings_boost
 require daslib/strings_convert
 require strings
@@ -20,7 +21,7 @@ def parity_ref_path(model_path, key : string) : string {
 }
 
 def parity_refresh : bool {
-    return get_env_variable("DASLLAMA_TRUTH_REFRESH") == "1"
+    return env_flag("DASLLAMA_TRUTH_REFRESH", false)
 }
 
 def save_ref_ids(path : string; ids : array<int64>) {

@@ -1,0 +1,1 @@
+Declares that the function, and everything it calls, must not touch the heap — no array or table growth, no ``new`` or ``delete``, no string interpolation, no lambda capture frame. Reported as PERF026. Mark a reused buffer ``@scratch`` at its field (or at a by-reference helper's parameter) to declare that sizing it is intentional.

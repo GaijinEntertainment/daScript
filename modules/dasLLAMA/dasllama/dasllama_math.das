@@ -4,8 +4,8 @@ options _comment_hygiene = true
 module dasllama_math shared public
 
 require math
-require strings  // to_int: DASLLAMA_CALLER_PRIO env override in setup_dasllama_jobque_
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
+require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
@@ -567,11 +567,7 @@ def setup_dasllama_jobque_() {
     // The dispatch caller is load-bearing in team mode — only it publishes chains, so a
     // descheduled caller idles every lane (4B Q4 32L trace: 13 all-lane holes/token, 1.7% worst).
     // Que creation ran this thread at High; claim the top notch. DASLLAMA_CALLER_PRIO=<-2..2> is the A/B rail.
-    var prio = 2
-    if (has_env_variable("DASLLAMA_CALLER_PRIO")) {
-        prio = to_int(get_env_variable("DASLLAMA_CALLER_PRIO"))
-    }
-    set_current_thread_priority(clamp(prio, -2, 2))
+    set_current_thread_priority(clamp(env_int("DASLLAMA_CALLER_PRIO", 2), -2, 2))
 }
 
 // dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the
@@ -1224,6 +1220,9 @@ typedef MatmulQ8Q8GroupNFn = function<(var yp : float?; wp : int8 const?; sp : f
 // inside its own stage lambdas. rb/re must be multiples of 32; bit-identical to the mm slot.
 typedef MatmulQ8Q8RowsFn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 typedef MatmulMx4GroupNFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n : int64; d : int64) : void>
+// Row-range MXFP4·Q8 GEMV core — the mx4 twin of MatmulQ8Q8RowsFn (wn/we are the REGION's
+// nibble/exponent plane bases; same rb/re-multiples-of-32, no-internal-dispatch contract).
+typedef MatmulMx4RowsFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 // f16-weight-scale twins (the wscale_f16 rail): identical contracts to the Fn above them, except
 // the per-32-block WEIGHT scale plane is raw binary16 halfwords (Model.qscales16) instead of f32 —
 // llama.cpp byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
@@ -1295,6 +1294,9 @@ struct KernelBackend {
     // Optional row-range GEMV core (see MatmulQ8Q8RowsFn) — backends without one keep the panic
     // stub, and the fused multi-stage decode falls back to the per-op dispatch path.
     mm_rows : MatmulQ8Q8RowsFn = @@q8q8_unset_rows
+    // Optional mx4 row-range GEMV core (see MatmulMx4RowsFn) — the fused MoE expert chain gates
+    // on it the same way the dense chains gate on mm_rows.
+    mx4_rows : MatmulMx4RowsFn = @@mx4q8_unset_rows
     // Optional f16-scale twins (the wscale_f16 rail). All-or-nothing per backend: the loader's
     // plane convert gates on kernel_backend_has_wscale16(), keyed off mm_s16 alone.
     mm_s16 : MatmulQ8Q8FnS16 = @@q8q8_unset_kernel_s16
@@ -1358,6 +1360,8 @@ var g_mm_q51q8_groupn = @@q51q8_groupn_kernel
 var g_mm_q51q8_batch_groupn = @@q51q8_batch_groupn_kernel
 var g_mm_q8q8_rows = @@q8q8_unset_rows
 var g_active_has_rows = false       // does the active backend carry a row-range GEMV core?
+var g_mm_mx4q8_rows = @@mx4q8_unset_rows
+var g_active_has_mx4_rows = false   // ... and the mx4 row-range core (the fused MoE chain's gate)?
 var g_mm_q8q8_s16 = @@q8q8_unset_kernel_s16
 var g_mm_q8q8_batch_s16 = @@q8q8_unset_batch_s16
 var g_mm_q8q8_group3_s16 = @@q8q8_unset_group3_s16
@@ -2040,8 +2044,6 @@ def public set_gpu_tier_want(want : GpuTierWant) {
     g_gpu_want = want
 }
 
-def private env_int64(name : string) : int64 => int64(to_int(get_env_variable(name)))
-
 // Noisy mode: the engine says what it did instead of leaving it to be inferred from timings.
 // Lives here (not dasllama_common) so the GPU drivers can report too.
 var private g_noisy = -1
@@ -2052,7 +2054,7 @@ def public set_dasllama_noisy(on : bool) {
 }
 def public dasllama_noisy() : bool {
     if (g_noisy < 0) {
-        g_noisy = get_env_variable("DASLLAMA_NOISY") == "1" ? 1 : 0
+        g_noisy = env_flag("DASLLAMA_NOISY", false) ? 1 : 0
     }
     return g_noisy == 1
 }
@@ -2061,61 +2063,61 @@ def public dasllama_noisy() : bool {
 //! deltanet/attention/dense/shared-expert/classifier rails. qkv and heat stay off (measured
 //! negative and a wash). Any DASLLAMA_GPU_* knob still overrides individually.
 def public gpu_want_auto : bool
-    => has_env_variable("DASLLAMA_GPU") ? get_env_variable("DASLLAMA_GPU") == "1" : g_gpu_want.auto_tier
+    => env_flag("DASLLAMA_GPU", g_gpu_want.auto_tier)
 
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.
 
 // -1 = auto: the upload walk resolves it against n_layers and lets its budget stops place the split
 def public gpu_want_moe_layers : int64
-    => (has_env_variable("DASLLAMA_GPU_MOE_LAYERS") ? env_int64("DASLLAMA_GPU_MOE_LAYERS")
-        : (g_gpu_want.moe_layers != 0l ? g_gpu_want.moe_layers : (gpu_want_auto() ? -1l : 0l)))
+    => env_int64("DASLLAMA_GPU_MOE_LAYERS",
+                 g_gpu_want.moe_layers != 0l ? g_gpu_want.moe_layers : (gpu_want_auto() ? -1l : 0l))
 
 def public gpu_want_moe_stream : int64
-    => (has_env_variable("DASLLAMA_GPU_MOE_STREAM") ? env_int64("DASLLAMA_GPU_MOE_STREAM")
-        : (g_gpu_want.moe_stream != 0l ? g_gpu_want.moe_stream : (gpu_want_auto() ? -1l : 0l)))
+    => env_int64("DASLLAMA_GPU_MOE_STREAM",
+                 g_gpu_want.moe_stream != 0l ? g_gpu_want.moe_stream : (gpu_want_auto() ? -1l : 0l))
 
 def public gpu_want_vram_mb : int64
-    => has_env_variable("DASLLAMA_GPU_VRAM_MB") ? env_int64("DASLLAMA_GPU_VRAM_MB") : g_gpu_want.vram_mb
+    => env_int64("DASLLAMA_GPU_VRAM_MB", g_gpu_want.vram_mb)
 
 def public gpu_want_dn : bool
-    => has_env_variable("DASLLAMA_GPU_DN") ? get_env_variable("DASLLAMA_GPU_DN") == "1" : (g_gpu_want.dn || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DN", g_gpu_want.dn || gpu_want_auto())
 
 def public gpu_want_attn : bool
-    => has_env_variable("DASLLAMA_GPU_ATTN") ? get_env_variable("DASLLAMA_GPU_ATTN") == "1" : (g_gpu_want.attn || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_ATTN", g_gpu_want.attn || gpu_want_auto())
 
 def public gpu_want_dense : bool
-    => has_env_variable("DASLLAMA_GPU_DENSE") ? get_env_variable("DASLLAMA_GPU_DENSE") == "1" : (g_gpu_want.dense || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DENSE", g_gpu_want.dense || gpu_want_auto())
 
 //! Dense-rail sub-arm for gemma-4's parallel dense shared expert (moe_dense_shexp) w1/w3/w2 triple.
 //! Opt-IN: MEASURED a wash-to-loss (3 dispatches each paying acts-up + y-down around a CPU gate)
 //! and the uploads displace 1-2 expert layers. Kept as the upload half of a future FUSED chain.
 def public gpu_want_dense_shexp : bool
-    => get_env_variable("DASLLAMA_GPU_DENSE_SHEXP") == "1"
+    => env_flag("DASLLAMA_GPU_DENSE_SHEXP", false)
 
 //! The dense rail's attention half (per-layer q/o pairs). Opt-OUT (``DASLLAMA_GPU_DENSE_ATTN=0``)
 //! — measured a LOSS on gemma-4 where the shexp triple is a large win, so the two halves need
 //! independent control rather than one DENSE gate.
 def public gpu_want_dense_attn : bool
-    => get_env_variable("DASLLAMA_GPU_DENSE_ATTN") != "0"
+    => env_flag("DASLLAMA_GPU_DENSE_ATTN", true)
 
 def public gpu_want_dnd : bool
-    => has_env_variable("DASLLAMA_GPU_DND") ? get_env_variable("DASLLAMA_GPU_DND") == "1" : (g_gpu_want.dnd || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_DND", g_gpu_want.dnd || gpu_want_auto())
 
 def public gpu_want_heat : int64
-    => has_env_variable("DASLLAMA_GPU_HEAT") ? env_int64("DASLLAMA_GPU_HEAT") : g_gpu_want.heat
+    => env_int64("DASLLAMA_GPU_HEAT", g_gpu_want.heat)
 
 def public gpu_want_shexp : bool
-    => has_env_variable("DASLLAMA_GPU_SHEXP") ? get_env_variable("DASLLAMA_GPU_SHEXP") == "1" : (g_gpu_want.shexp || gpu_want_auto())
+    => env_flag("DASLLAMA_GPU_SHEXP", g_gpu_want.shexp || gpu_want_auto())
 
 def public gpu_want_qkv : bool
-    => has_env_variable("DASLLAMA_GPU_QKV") ? get_env_variable("DASLLAMA_GPU_QKV") == "1" : g_gpu_want.qkv
+    => env_flag("DASLLAMA_GPU_QKV", g_gpu_want.qkv)
 
 //! Arm-intent for the classifier plane. The UPLOAD is opt-OUT (DASLLAMA_GPU_CLS=0 declines it), so
 //! this is only the stronger "=1 arms the tier by itself" signal — letting the classifier offload be
 //! measured without also offloading expert layers. Unset keeps today's behavior exactly.
 def public gpu_want_cls : bool
-    => get_env_variable("DASLLAMA_GPU_CLS") == "1"
+    => env_flag("DASLLAMA_GPU_CLS", false)
 
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).
@@ -2234,9 +2236,9 @@ def public gpu_tier_status : GpuTierStatus {
         reason = g_moe_gpu_unsupported,
         resident_layers = resident,
         streamed_layers = streamed,
-        dn_layers = int64(length(g_moe_gpu_dn_layers)),
-        attn_layers = int64(length(g_moe_gpu_attn_layers)),
-        dense_planes = int64(length(g_moe_gpu_dense_offs)),
+        dn_layers = long_length(g_moe_gpu_dn_layers),
+        attn_layers = long_length(g_moe_gpu_attn_layers),
+        dense_planes = long_length(g_moe_gpu_dense_offs),
         cls_resident = g_moe_gpu_cls_off >= 0l,
         vram_bytes = invoke(g_moe_gpu_vram_report))
 }
@@ -2668,6 +2670,11 @@ def private q8q8_unset_rows(var yp : float?; wp : int8 const?; sp : float const?
 }
 [unused_argument(yp, wn, we, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private mx4q8_unset_groupn(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) { no_backend() }
+[unused_argument(yp, wn, we, xqp, xsp, n, rb, re)]
+def private mx4q8_unset_rows(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
+    // reachable with a registered backend: the slot is optional — gate on kernel_backend_has_mx4_rows()
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no mx4 row-range GEMV core (mx4_rows)")
+}
 // The f16-scale stubs are reachable with a registered backend (the twins are optional) — a
 // wscale_f16 model must never activate a backend without them; the loader gates the convert.
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
@@ -2727,6 +2734,8 @@ def private activate(be : KernelBackend) {
     g_mm_q51q8_batch_groupn = be.q51_batch_groupn
     g_mm_q8q8_rows = be.mm_rows
     g_active_has_rows = !(be.mm_rows == @@q8q8_unset_rows)
+    g_mm_mx4q8_rows = be.mx4_rows
+    g_active_has_mx4_rows = !(be.mx4_rows == @@mx4q8_unset_rows)
     g_mm_q8q8_s16 = be.mm_s16
     g_mm_q8q8_batch_s16 = be.batch_s16
     g_mm_q8q8_group3_s16 = be.group3_s16
@@ -2887,6 +2896,18 @@ def kernel_backend_has_rows() : bool {
 //! MAIN context and capture that in worker lambdas — same rule as every kernel-pointer read.
 def mm_q8q8_rows_fn() : MatmulQ8Q8RowsFn {
     return g_mm_q8q8_rows
+}
+
+//! Does the active backend carry the mx4 row-range GEMV core (mx4_rows)? The fused MoE expert
+//! chain gates on this and falls back to the per-op groupn dispatch path when false.
+def kernel_backend_has_mx4_rows() : bool {
+    return g_active_has_mx4_rows
+}
+
+//! The active backend's mx4 row-range GEMV core (see MatmulMx4RowsFn) — the MoE chain's twin of
+//! mm_q8q8_rows_fn. Same read-into-a-local-then-capture rule.
+def mx4_rows_fn() : MatmulMx4RowsFn {
+    return g_mm_mx4q8_rows
 }
 
 //! Does the active backend carry the f16-scale kernel twins (the wscale_f16 rail)? The loader's

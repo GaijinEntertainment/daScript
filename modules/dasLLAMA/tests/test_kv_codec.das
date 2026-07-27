@@ -57,8 +57,8 @@ def private check_layout(t : T?; c : Config; tag : string) {
         t |> equal(s.kv_bprefix_k[l], s.kv_bprefix_k[layer_kv_source(c, l)])   // shared-KV aliasing
     }
     let want = c.seq_len * own_row_elems(c) * 4l
-    t |> success(int64(length(s.key_cache)) == want, "{tag}: key cache sized exactly (bytes)")
-    t |> success(int64(length(s.value_cache)) == want, "{tag}: value cache sized exactly (bytes)")
+    t |> success(long_length(s.key_cache) == want, "{tag}: key cache sized exactly (bytes)")
+    t |> success(long_length(s.value_cache) == want, "{tag}: value cache sized exactly (bytes)")
     delete s
 }
 
@@ -104,15 +104,15 @@ def test_kv_layout_f16(t : T?) {
             t |> equal(s16.kv_bprefix_v[l], s16.kv_bprefix_k[l])
         }
         let want16 = c.seq_len * own_row_elems(c) * 2l
-        t |> success(int64(length(s16.key_cache)) == want16, "f16 key cache is half the f32 bytes")
-        t |> success(int64(length(s16.value_cache)) == want16, "f16 value cache is half the f32 bytes")
+        t |> success(long_length(s16.key_cache) == want16, "f16 key cache is half the f32 bytes")
+        t |> success(long_length(s16.value_cache) == want16, "f16 value cache is half the f32 bytes")
         delete s16
         var smix <- make_run_state(c, KVDtype.f16, KVDtype.f32)   // K/V dtypes are independent
         for (l in range64(c.n_layers)) {
             t |> equal(smix.kv_bprefix_k[l], ref[l] * 2l)
             t |> equal(smix.kv_bprefix_v[l], ref[l] * 4l)
         }
-        t |> success(int64(length(smix.key_cache)) * 2l == int64(length(smix.value_cache)),
+        t |> success(long_length(smix.key_cache) * 2l == long_length(smix.value_cache),
             "mixed session: K blob is half the V blob")
         delete smix
     }
@@ -129,8 +129,8 @@ def test_kv_layout_q8(t : T?) {
             t |> equal(sq.kv_bprefix_v[l], sq.kv_bprefix_k[l])
         }
         let wantq = c.seq_len * own_row_elems(c) / 32l * 34l
-        t |> success(int64(length(sq.key_cache)) == wantq, "q8_0 key cache sized exactly (34/32 of the element count)")
-        t |> success(int64(length(sq.value_cache)) == wantq, "q8_0 value cache sized exactly")
+        t |> success(long_length(sq.key_cache) == wantq, "q8_0 key cache sized exactly (34/32 of the element count)")
+        t |> success(long_length(sq.value_cache) == wantq, "q8_0 value cache sized exactly")
         delete sq
         var smix <- make_run_state(c, KVDtype.q8_0, KVDtype.f16)   // K/V dtypes stay independent
         for (l in range64(c.n_layers)) {
@@ -399,7 +399,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
             for (i in range(16)) {
                 prompt |> push(int64(i % 50 + 2))
             }
-            let n = int64(length(prompt))
+            let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
             forward_batch(tr, sp, prompt, n, 0l)
             var sd <- make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -555,7 +555,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
             for (i in range(16)) {
                 prompt |> push(int64(i % 50 + 2))
             }
-            let n = int64(length(prompt))
+            let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
             forward_batch(tr, sp, prompt, n, 0l)
             var sd <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)

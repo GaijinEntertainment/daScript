@@ -1,0 +1,1 @@
+Declares that the function, and everything it calls, must not perform console or file I/O. Reported as PERF028. This is the contract to relax with ``DAS_LINT_DISABLE=PERF028`` while adding a log line to chase a bug, rather than editing the annotation.

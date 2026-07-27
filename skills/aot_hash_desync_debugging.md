@@ -17,6 +17,17 @@ Background on the hash machinery is in [`skills/aot_testing.md`](aot_testing.md)
    rm -rf tests/<area>/_aot_generated/ daslib/_aot_generated/
    cmake --build build --config Release --target test_aot -- /nodeReuse:false
    ```
+   **This is local-only, and `preflight --full` does not wipe for you** — its `tests-aot`
+   gate reuses whatever stubs are on disk, so a `daslib` edit made after your last build
+   produces a 50101 that CI (fresh checkout, nothing cached) will never reproduce. Adding
+   a method to a widely-required class is enough: the class's semantic hash is an input to
+   every stub that requires it, so e.g. a new `LintVisitor` method desyncs `tests/lint`.
+   Tell this apart from a real desync by reading the hash list in the diagnostic — if it
+   names functions you just added, it is staleness, not codegen. Wipe every
+   `_aot_generated` (they are all gitignored) before trusting the gate:
+   ```
+   find tests daslib modules examples utils tutorials -type d -name _aot_generated -print0 | xargs -0 rm -rf
+   ```
 
 3. **The function's module was never AOT'd at all.** A missing stub and a mismatched stub produce the same 50101. New test dir not registered in `tests/aot/CMakeLists.txt`, or the module is in the daslib AOT *exclusion* regex there (modules whose builtins lack AOT header decls get excluded — if you gave such a module runtime-callable functions, add the missing decls to `include/daScript/simulate/aot_builtin_ast.h` and un-exclude it; precedent: `style_lint` and its five `for_each_*_macro` decls).
 

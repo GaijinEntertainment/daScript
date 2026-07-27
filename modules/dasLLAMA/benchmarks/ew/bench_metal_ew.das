@@ -2,11 +2,11 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production batch add+rms MSL (zero copy drift)
 require dasllama/dasllama_metal_prefill  // the production swiglu MSL (zero copy drift)
-require daslib/fio
 require math
 require strings
 
@@ -19,14 +19,10 @@ require strings
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_ew.das
 
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), int(bytes))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), bytes)
     }
     return buf
 }
@@ -83,7 +79,7 @@ def private best_of(queue; psos; bufss; groupss; threadss; tgmems; rounds : int;
 }
 
 def private run_ew_lab(b) {
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let dim = 3072l
     let hidden = 8192l
     let nb = 2l

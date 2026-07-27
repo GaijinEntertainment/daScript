@@ -26,7 +26,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 def private argmax_of(v : array<float>) : int64 {
     var best = -1e30
     var bi = 0l
-    for (i in range64(int64(length(v)))) {
+    for (i in range64(long_length(v))) {
         if (v[i] > best) {
             best = v[i]
             bi = i

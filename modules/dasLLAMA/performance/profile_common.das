@@ -10,6 +10,7 @@ options indenting = 4
 module profile_common shared public
 
 require daslib/fio public
+require dasllama/dasllama_env  // env_int/env_str: the shared typed readers + the knob registry
 require strings public
 require math
 require daslib/strings_boost public
@@ -428,10 +429,6 @@ def private platform_arch() : string {
     return run_capture("uname -m", true)
 }
 
-def private win_env_int(name : string) : int {
-    return to_int(get_env_variable(name))
-}
-
 def private platform_ram_gb() : int {
     let ov = get_env_variable("DASLLAMA_RAM_GB")
     if (!empty(ov)) {
@@ -507,7 +504,7 @@ def private platform_gpu() : string {
 
 def private platform_cores() : tuple<perf : int; total : int> {
     if (is_windows()) {
-        return (perf = 0, total = win_env_int("NUMBER_OF_PROCESSORS"))
+        return (perf = 0, total = env_int("NUMBER_OF_PROCESSORS", 0))
     }
     if (is_macos()) {
         return (

@@ -56,7 +56,7 @@ def feq(a, b : array<uint8>) : bool {
 // not bit-exact) and has its own oracle test.
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
-    let n = int64(length(prompt))
+    let n = long_length(prompt)
     with_job_que() {
         setup_dasllama_jobque_()
         set_prefill_attn_mode(mode)
@@ -78,7 +78,7 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
 // prefill the tail at start_pos=split. Must match running all positions per-token.
 def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64; mode : AttnPrefillMode) {
     let c = tr.config
-    let n = int64(length(prompt))
+    let n = long_length(prompt)
     with_job_que() {
         setup_dasllama_jobque_()
         set_prefill_attn_mode(mode)

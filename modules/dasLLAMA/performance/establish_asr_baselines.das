@@ -17,6 +17,7 @@ options indenting = 4
 //   bin/daslang modules/dasLLAMA/performance/establish_asr_baselines.das -- --libri
 
 require profile_common
+require dasllama/dasllama_env  // env_str: the shared typed readers + the knob registry
 require daslib/clargs
 require strings
 require daslib/strings_boost
@@ -45,13 +46,8 @@ struct Args {
 
 // ===== Reference-tool binaries / interpreters (all env-overridable) =====
 
-def env_or(name, dflt : string) : string {
-    let v = get_env_variable(name)
-    return empty(v) ? dflt : v
-}
-
 def whisper_cpp_bin(cli : string) : string {
-    let root = env_or("WHISPER_CPP", "/Users/borisbatkin/Work/whisper.cpp")
+    let root = env_str("WHISPER_CPP", "/Users/borisbatkin/Work/whisper.cpp")
     // Locate the built binary across cmake layouts: MSVC multi-config (build\bin\Release\x.exe),
     // Ninja/single-config (build/bin/x.exe), Mac/Make (build/bin/x). stat picks the one that exists.
     for (c in [normalize("{root}/build/bin/Release/{cli}.exe"),
@@ -65,11 +61,11 @@ def whisper_cpp_bin(cli : string) : string {
 }
 
 def onnx_py() : string {
-    return normalize(env_or("ONNX_PY", "/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python"))
+    return normalize(env_str("ONNX_PY", "/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python"))
 }
 
 def nemo_py() : string {
-    return normalize(env_or("NEMO_PY", "/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python"))
+    return normalize(env_str("NEMO_PY", "/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python"))
 }
 
 // The clean CPU-only build (llama.cpp-clean, ebd048f, Accelerate ON, Metal OFF, no dasprof) patched
@@ -77,7 +73,7 @@ def nemo_py() : string {
 // numbers rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route
 // through BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 def mtmd_bin() : string {
-    return normalize(env_or("MTMD_BIN", "/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli"))
+    return normalize(env_str("MTMD_BIN", "/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli"))
 }
 
 // The python bench scripts live beside the corpus (asr/); this tool runs from the repo-root cwd.

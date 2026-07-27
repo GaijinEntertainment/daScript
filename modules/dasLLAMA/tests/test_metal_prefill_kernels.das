@@ -1899,7 +1899,7 @@ def private axpy_sig_gate(t : T?; dev, queue; npos, dim : int) {
 // ===== local GPU plumbing (generic bodies instantiate only inside the static_if above) =====
 
 def private buf_upload(dev; arr : array<auto(TT)>) : auto {
-    var buf = metal_new_buffer(dev, uint64(length(arr)) * uint64(typeinfo sizeof(arr[0])))
+    var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))
     var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
     for (k in range(length(arr))) {
         unsafe(p[k]) = arr[k]

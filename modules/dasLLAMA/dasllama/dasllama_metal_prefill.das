@@ -5,8 +5,8 @@ module dasllama_metal_prefill shared public
 
 require math
 require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
-require strings
 require daslib/fio
+require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/msl_shader
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -1330,7 +1330,8 @@ class MetalMoeGemvQ51 {
 }
 
 // Gathered MXFP4 mul_mm — the gathered-GEMM shape with the mx4 A stage: each thread's 16-elem
-// half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Bias rides MetalMoeBiasRows.
+// half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Per-expert bias (hasb) seeds
+// the accumulator tiles (stride-0 loads of wb[e]) — ggml_add_id order, bias precedes the reduce.
 class MetalMoeMulMmMx4 {
     @ssbo @binding = 0 @role = "weight" mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
     @ssbo @binding = 1 @role = "weight" mxe : array<uint8>
@@ -1344,7 +1345,9 @@ class MetalMoeMulMmMx4 {
     @uniform @binding = 9 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
     @uniform @binding = 10 nk : uint
     @uniform @binding = 11 gather : uint
+    @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ndim] per-expert bias rows (hasb models)
     @ssbo @binding = 13 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
+    @uniform @binding = 14 hasb : uint
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
     @workgroup vt : float[32]
@@ -1366,6 +1369,14 @@ class MetalMoeMulMmMx4 {
         let sg = gl_SubgroupID
         let nBase = gl_WorkGroupID.y * 64u
         var mc : simdgroup_float8x8[8]
+        if (hasb != 0u) {
+            // bias as the accumulator seed: every row of tile i gets wb[e][col] (stride-0 load);
+            // padded ghost rows are harmlessly biased — never read
+            let wb0 = e * ndim + nBase + (sg % 2u) * 32u
+            for [unroll_full] (i in range(8)) {
+                simdgroup_load(mc[i], wb, wb0 + uint(i % 4) * 8u, 0u)
+            }
+        }
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         var va : float16[16]
@@ -1435,30 +1446,6 @@ class MetalMoeMulMmMx4 {
     }
 }
 
-// gpt-oss expert bias over the padded bucket rows (grid (cols, rows, experts)): rows past the
-// expert's live count exit — ggml_add_id order (bias precedes the routing-weight reduce).
-class MetalMoeBiasRows {
-    @ssbo @binding = 0 @role = "readwrite" y : array<float>     // [padded rows x d] bucket-ordered panel
-    @ssbo @binding = 1 @role = "weight" wb : array<float>    // [ne x d] this layer's per-expert bias rows
-    @ssbo @binding = 2 @role = "read" cnt : array<uint>
-    @ssbo @binding = 3 @role = "read" basep : array<uint>
-    @uniform @binding = 4 d : uint
-
-    [metal_kernel(name="metal_moe_bias_rows_msl")]
-    def metal_moe_bias_rows {
-        let col = gl_GlobalInvocationID.x
-        if (col >= d) {
-            return
-        }
-        let e = gl_WorkGroupID.z
-        let r = gl_WorkGroupID.y
-        if (r >= cnt[e]) {
-            return
-        }
-        y[(basep[e] + r) * d + col] += wb[e * d + col]
-    }
-}
-
 // Weighted top-k reduce per stream (grid.y): y[st*dim + i] = sum_j w[st][j] * dn[(st*k+j)*dim + i]
 // — the CPU slot-order axpy chain as one deterministic in-kernel loop. Overwrites y (the dense
 // w2 site's write shape).
@@ -1491,7 +1478,7 @@ class MetalMoeCombine {
 
 // gpt-oss clamped swiglu (stage 4): x = min(g, 7), y = clamp(u, -7, 7),
 // g = (x / (1 + exp(-1.702 x))) * (y + 1) — the clamps and the +1 are trained weights' contract.
-// float4 lanes, per-element math identical to the scalar form it replaced (bit-exact).
+// SHARED with the decode rail (dasllama_metal_llama's enc_ew2 binds slots 0-2) — keep the layout.
 class MetalSwigluOai {
     @ssbo @binding = 0 @role = "readwrite" g : array<float4>
     @ssbo @binding = 1 @role = "read" u : array<float4>
@@ -1501,6 +1488,34 @@ class MetalSwigluOai {
     def metal_swiglu_oai {
         let gid = gl_GlobalInvocationID.x
         if (gid * 4u >= total) {
+            return
+        }
+        let x = min(g[gid], float4(7.0))
+        let y = min(max(u[gid], float4(-7.0)), float4(7.0))   // nolint:STYLE019 — the MSL emitter doesn't lower clamp
+        g[gid] = (x / (float4(1.0) + exp(-1.702 * x))) * (y + float4(1.0))
+    }
+}
+
+// the prefill twin over the padded bucket panel: same math, plus ghost rows past the last
+// bucket's padded end (mpad worst-case vs the GPU-side true count) exit on a uniform-broadcast
+// liveness bound — they are never read by the down mm.
+class MetalSwigluOaiPf {
+    @ssbo @binding = 0 @role = "readwrite" g : array<float4>
+    @ssbo @binding = 1 @role = "read" u : array<float4>
+    @uniform @binding = 2 total : uint      // scalar element count (mpad worst-case bound)
+    @ssbo @binding = 3 @role = "read" cnt : array<uint>
+    @ssbo @binding = 4 @role = "read" basep : array<uint>
+    @uniform @binding = 5 ne : uint
+    @uniform @binding = 6 nfe : uint        // columns per bucket row (n_ff_exp)
+
+    [metal_kernel(name="metal_swiglu_oai_pf_msl")]
+    def metal_swiglu_oai_pf {
+        let gid = gl_GlobalInvocationID.x
+        if (gid * 4u >= total) {
+            return
+        }
+        let live = (basep[ne - 1u] + (cnt[ne - 1u] + 31u) / 32u * 32u) * nfe
+        if (gid * 4u >= live) {
             return
         }
         let x = min(g[gid], float4(7.0))
@@ -1621,33 +1636,15 @@ class MetalMoeCount {
     }
 }
 
-class MetalMoePrefix {
-    @ssbo @binding = 0 @role = "read" cnt : array<uint>
-    @ssbo @binding = 1 @role = "write" basep : array<uint>  // [ne] exclusive prefix over the PADDED counts
-    @uniform @binding = 2 ne : uint
-
-    [metal_kernel(name="metal_moe_prefix_msl")]
-    def metal_moe_prefix {
-        if (gl_LocalInvocationID.x != 0u) {
-            return
-        }
-        var b = 0u
-        var e = 0u
-        while (e < ne) {
-            basep[e] = b
-            b += (cnt[e] + 31u) / 32u * 32u
-            e++
-        }
-    }
-}
-
 class MetalMoeBucket {
     @ssbo @binding = 0 @role = "read" seli : array<uint>
-    @ssbo @binding = 1 @role = "read" basep : array<uint>
+    @ssbo @binding = 1 @role = "write" basep : array<uint>  // [ne] exclusive prefix over the PADDED counts
     @ssbo @binding = 2 @role = "write" bkt : array<uint>    // [padded rows] bucket -> entry (row*k + slot)
     @ssbo @binding = 3 @role = "write" inv : array<uint>    // [npos*k] entry -> padded bucket row
     @uniform @binding = 4 total : uint
     @uniform @binding = 5 nk : uint
+    @ssbo @binding = 6 @role = "read" cnt : array<uint>
+    @uniform @binding = 7 ne : uint
 
     [metal_kernel(name="metal_moe_bucket_msl")]
     def metal_moe_bucket {
@@ -1655,6 +1652,24 @@ class MetalMoeBucket {
         // serial entry order exactly (a 1-lane scan here was ~0.7ms/layer of load latency)
         let e = gl_WorkGroupID.x
         let lane = gl_SubgroupInvocationID
+        // in-tg fold of the old 1-tg prefix dispatch: masked padded sum below this expert
+        // (identical value in every tg; tg e publishes basep[e] for the mm/act consumers)
+        var pacc = 0u
+        var pt = lane
+        while (pt < ne) {
+            if (pt < e) {
+                pacc += (cnt[pt] + 31u) / 32u * 32u
+            }
+            pt += 32u
+        }
+        var pm = 16u
+        while (pm >= 1u) {
+            pacc += simd_shuffle_xor(pacc, pm)
+            pm /= 2u
+        }
+        if (lane == 0u) {
+            basep[e] = pacc
+        }
         let chunk = (total + 31u) / 32u
         let t0 = lane * chunk
         let t1 = min(t0 + chunk, total)
@@ -1675,7 +1690,7 @@ class MetalMoeBucket {
             }
             off *= 2u
         }
-        var b = basep[e] + n - mine
+        var b = pacc + n - mine
         t = t0
         while (t < t1) {
             if (seli[(t / nk) * 2u * nk + t % nk] == e) {
@@ -4476,7 +4491,6 @@ var private g_pf_pso_moe_router : MetalComputePipeline?   // MoE prefill (Wave C
 var private g_pf_pso_moe_router_b : MetalComputePipeline?   // position-blocked prefill router
 var private g_pf_pso_moe_select : MetalComputePipeline?
 var private g_pf_pso_moe_count : MetalComputePipeline?
-var private g_pf_pso_moe_prefix : MetalComputePipeline?
 var private g_pf_pso_moe_bucket : MetalComputePipeline?
 var private g_pf_pso_moe_reduce : MetalComputePipeline?
 var private g_pf_pso_moe_mm_q8 : MetalComputePipeline?
@@ -4488,13 +4502,12 @@ var private g_pf_pso_moe_wscale : MetalComputePipeline?
 var private g_pf_pso_swiglu_oai : MetalComputePipeline?
 var private g_pf_pso_moe_mm_mx4 : MetalComputePipeline?
 var private g_pf_pso_moe_mm_q51 : MetalComputePipeline?
-var private g_pf_pso_moe_bias_rows : MetalComputePipeline?
 var private g_pf_mx4_vtab : MetalBuffer?
 var private g_mm_legacy = false             // set_metal_prefill_mulmm_legacy — tests' exact-parity rail
 var private g_pf_logits_cpu = false            // set_metal_prefill_logits_cpu — the logits A/B rail
 // timing-attribution knockout (DASLLAMA_METAL_PREFILL_SKIP=attn|gemm|ew|nongemm|moe|moe_mm|
 // moe_act|moe_bias|moe_reduce|moe_only_router|moe_only_route|moe_no_mm_act): skips encoding that
-// stage family; consumers of skipped stages always skip too (no garbage OOB). Output GARBAGE, debug only.
+// stage family (moe_bias = hasb=0, the mm bias fold off). Output GARBAGE, debug only.
 var private g_pf_skip = ""
 
 // composite skip predicates for the MoE stages (moe_only_* isolate the route chain per-kernel)
@@ -4718,10 +4731,10 @@ def public metal_prefill_shutdown {
         g_pf_pso_ple_finish = null
     }
     for (pso in [g_pso_kq_mm4, g_pso_kq_mm5, g_pso_kq_mm6, g_pf_pso_kq4, g_pf_pso_kq5, g_pf_pso_kq6,
-                 g_pf_pso_moe_router, g_pf_pso_moe_router_b, g_pf_pso_moe_select, g_pf_pso_moe_count, g_pf_pso_moe_prefix,
+                 g_pf_pso_moe_router, g_pf_pso_moe_router_b, g_pf_pso_moe_select, g_pf_pso_moe_count,
                  g_pf_pso_moe_bucket, g_pf_pso_moe_reduce, g_pf_pso_moe_mm_q8, g_pf_pso_moe_mm_k4,
                  g_pf_pso_moe_mm_k5, g_pf_pso_moe_mm_k6, g_pf_pso_g4rnorm, g_pf_pso_moe_wscale, g_pf_pso_swiglu_oai,
-                 g_pf_pso_moe_mm_mx4, g_pf_pso_moe_mm_q51, g_pf_pso_moe_bias_rows]) {
+                 g_pf_pso_moe_mm_mx4, g_pf_pso_moe_mm_q51]) {
         if (pso != null) {
             metal_release(pso)
         }
@@ -4736,7 +4749,6 @@ def public metal_prefill_shutdown {
     g_pf_pso_moe_router_b = null
     g_pf_pso_moe_select = null
     g_pf_pso_moe_count = null
-    g_pf_pso_moe_prefix = null
     g_pf_pso_moe_bucket = null
     g_pf_pso_moe_reduce = null
     g_pf_pso_moe_mm_q8 = null
@@ -4748,7 +4760,6 @@ def public metal_prefill_shutdown {
     g_pf_pso_swiglu_oai = null
     g_pf_pso_moe_mm_mx4 = null
     g_pf_pso_moe_mm_q51 = null
-    g_pf_pso_moe_bias_rows = null
     if (g_pf_mx4_vtab != null) {
         metal_release(g_pf_mx4_vtab)
         g_pf_mx4_vtab = null
@@ -4772,10 +4783,7 @@ def public metal_prefill_shutdown {
     g_pf_failed = false
 }
 
-def private pf_env_int(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
+[cold_path]   // PSO compilation happens once per pipeline
 def private pf_compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
     var pso = pipeline_from_source(g_pf_dev, source, entry, fastmath, err)
@@ -4786,6 +4794,7 @@ def private pf_compile_pso(source, entry : string; fastmath : bool; var ok : boo
     return pso
 }
 
+[cold_path]   // one-time device/PSO bring-up, guarded by its own inited flag
 def private metal_prefill_init : bool {
     if (g_pf_pso_add != null) {
         return true
@@ -4844,7 +4853,6 @@ def private metal_prefill_init : bool {
     g_pf_pso_moe_router_b = pf_compile_pso(metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, ok)
     g_pf_pso_moe_select = pf_compile_pso(metal_moe_select_msl, metal_moe_select_msl_entry, metal_moe_select_msl_fastmath, ok)
     g_pf_pso_moe_count = pf_compile_pso(metal_moe_count_msl, metal_moe_count_msl_entry, metal_moe_count_msl_fastmath, ok)
-    g_pf_pso_moe_prefix = pf_compile_pso(metal_moe_prefix_msl, metal_moe_prefix_msl_entry, metal_moe_prefix_msl_fastmath, ok)
     g_pf_pso_moe_bucket = pf_compile_pso(metal_moe_bucket_msl, metal_moe_bucket_msl_entry, metal_moe_bucket_msl_fastmath, ok)
     g_pf_pso_moe_reduce = pf_compile_pso(metal_moe_reduce_msl, metal_moe_reduce_msl_entry, metal_moe_reduce_msl_fastmath, ok)
     g_pf_pso_moe_mm_q8 = pf_compile_pso(metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, ok)
@@ -4853,10 +4861,9 @@ def private metal_prefill_init : bool {
     g_pf_pso_moe_mm_k6 = pf_compile_pso(metal_moe_mulmm_k6_msl, metal_moe_mulmm_k6_msl_entry, metal_moe_mulmm_k6_msl_fastmath, ok)
     g_pf_pso_g4rnorm = pf_compile_pso(metal_g4_router_norm_msl, metal_g4_router_norm_msl_entry, metal_g4_router_norm_msl_fastmath, ok)
     g_pf_pso_moe_wscale = pf_compile_pso(metal_moe_wscale_msl, metal_moe_wscale_msl_entry, metal_moe_wscale_msl_fastmath, ok)
-    g_pf_pso_swiglu_oai = pf_compile_pso(metal_swiglu_oai_msl, metal_swiglu_oai_msl_entry, metal_swiglu_oai_msl_fastmath, ok)
+    g_pf_pso_swiglu_oai = pf_compile_pso(metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, ok)
     g_pf_pso_moe_mm_mx4 = pf_compile_pso(metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, ok)
     g_pf_pso_moe_mm_q51 = pf_compile_pso(metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, ok)
-    g_pf_pso_moe_bias_rows = pf_compile_pso(metal_moe_bias_rows_msl, metal_moe_bias_rows_msl_entry, metal_moe_bias_rows_msl_fastmath, ok)
     g_pf_pso_dn_conv = pf_compile_pso(metal_dn_conv_msl, metal_dn_conv_msl_entry, metal_dn_conv_msl_fastmath, ok)
     g_pf_pso_dn_hist = pf_compile_pso(metal_dn_conv_hist_msl, metal_dn_conv_hist_msl_entry, metal_dn_conv_hist_msl_fastmath, ok)
     g_pf_pso_dn_l2 = pf_compile_pso(metal_dn_l2norm_msl, metal_dn_l2norm_msl_entry, metal_dn_l2norm_msl_fastmath, ok)
@@ -4892,7 +4899,7 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_pf_dev, bytes)
     unsafe {
-        memcpy(metal_buffer_contents(buf), src, int(bytes))
+        memcpy(metal_buffer_contents(buf), src, bytes)
     }
     g_pf_regions[key] = buf
     return buf
@@ -4948,14 +4955,14 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
     // kquant rides the mul_mm path only — mm pinned off or a shape the %64 gate rejects has no kq-capable GEMM and declines
     if (t.kquant_native) {
         // kq_load_gpu_supported rejects fmts without a GPU kernel (q4_0 QAT tier) before they dispatch a wrong-layout branch
-        if (g_mm_legacy || get_env_variable("DASLLAMA_METAL_MULMM") == "0" ||
+        if (g_mm_legacy || !g_pf_env_mulmm ||
                 !pf_mm_shape64(t) || !kq_load_gpu_supported(t)) {
             return MetalPrefillDecline.kquant_native
         }
     }
     // wscale_f16 rides the mul_mm path only — a model the mm shape gate rejects has no s16-capable GEMM and declines
     if (t.wscale_f16) {
-        if (g_mm_legacy || get_env_variable("DASLLAMA_METAL_MULMM") == "0" || !pf_mm_shape64(t)) {
+        if (g_mm_legacy || !g_pf_env_mulmm || !pf_mm_shape64(t)) {
             return MetalPrefillDecline.wscale_f16
         }
     }
@@ -4988,14 +4995,14 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
         }
     }
     // AFTER the capability gates (the support matrix asserts those reasons): drivers are BLOB-ONLY — planar q8 has no upload path, and a blob model rides the mul_mm rail exclusively
-    if (!t.metal_blob || g_mm_legacy || get_env_variable("DASLLAMA_METAL_MULMM") == "0" ||
+    if (!t.metal_blob || g_mm_legacy || !g_pf_env_mulmm ||
             !pf_mm_shape64(t)) {
         return MetalPrefillDecline.planar
     }
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (int64(length(s.rope_cos)) < npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) ||
-            (has_dual_rope(c) && int64(length(s.rope_cos_swa)) < npos * (swa_hs / 2l))) {
+    if (long_length(s.rope_cos) < npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) ||
+            (has_dual_rope(c) && long_length(s.rope_cos_swa) < npos * (swa_hs / 2l))) {
         return MetalPrefillDecline.rope_rows
     }
     return MetalPrefillDecline.none
@@ -5164,14 +5171,6 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
     hz_write(bcnt)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(c.n_expert), 1u, 1u), uint3(32u, 1u, 1u))
-    kn_pipeline(enc, g_pf_pso_moe_prefix)
-    kn_buffer(enc, bcnt, 0ul, 0)
-    kn_buffer(enc, bbase, 0ul, 1)
-    kn_buffer(enc, bne, 0ul, 2)
-    hz_read(bcnt)
-    hz_write(bbase)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(1u, 1u, 1u), uint3(32u, 1u, 1u))
     kn_pipeline(enc, g_pf_pso_moe_bucket)
     kn_buffer(enc, bsel, 0ul, 0)
     kn_buffer(enc, bbase, 0ul, 1)
@@ -5179,8 +5178,11 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
     kn_buffer(enc, binv, 0ul, 3)
     kn_buffer(enc, btot, 0ul, 4)
     kn_buffer(enc, bnk, 0ul, 5)
+    kn_buffer(enc, bcnt, 0ul, 6)
+    kn_buffer(enc, bne, 0ul, 7)
     hz_read(bsel)
-    hz_read(bbase)
+    hz_read(bcnt)
+    hz_write(bbase)
     hz_write(bbkt)
     hz_write(binv)
     hz_gate(enc)
@@ -5280,7 +5282,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 // gemma4 router-input norm rows (weightless rms * 1/sqrt(dim) * rscale, one tg per position)
 // the MXFP4 gathered expert mul_mm (gpt-oss)
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
-                              bx, by, bkdim, bndim, bcnt, bbase, bbkt, beblk, bnk, bgather : MetalBuffer?) {
+                              bx, by, bkdim, bndim, bcnt, bbase, bbkt, beblk, bnk, bgather, bwb, bhasb : MetalBuffer?) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
     let mp = mx4_of(g_pf_dev, t, stack_off)
@@ -5298,7 +5300,9 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     kn_buffer(enc, beblk, 0ul, 9)
     kn_buffer(enc, bnk, 0ul, 10)
     kn_buffer(enc, bgather, 0ul, 11)
+    kn_buffer(enc, bwb, 0ul, 12)
     kn_buffer(enc, g_pf_mx4_vtab, 0ul, 13)
+    kn_buffer(enc, bhasb, 0ul, 14)
     hz_read(bx)
     hz_read(bcnt)
     hz_read(bbase)
@@ -5306,21 +5310,6 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     hz_write(by)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
-}
-
-// the per-expert bias over the padded bucket rows (ggml_add_id order — before the reduce)
-def private pf_enc_moe_bias_rows(enc : MetalComputeEncoder?; by, bwb, bcnt, bbase, bd : MetalBuffer?; d, npos, ne : int64) {
-    kn_pipeline(enc, g_pf_pso_moe_bias_rows)
-    kn_buffer(enc, by, 0ul, 0)
-    kn_buffer(enc, bwb, 0ul, 1)
-    kn_buffer(enc, bcnt, 0ul, 2)
-    kn_buffer(enc, bbase, 0ul, 3)
-    kn_buffer(enc, bd, 0ul, 4)
-    hz_read(bcnt)
-    hz_read(bbase)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((d + 255l) / 256l), uint(npos), uint(ne)), uint3(256u, 1u, 1u))
 }
 
 def private pf_enc_g4_router_norm(enc : MetalComputeEncoder?; bx, brs, by, bdim, beps, binvd : MetalBuffer?; npos : int64) {
@@ -5690,15 +5679,21 @@ def private pf_enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; 
     kn_dispatch(enc, uint3(uint((total + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
-// the float4-lane twin (swiglu_oai): grid over total/4 threads — total % 4 == 0 by the callers'
-// 32-row-padded panel contract
-def private pf_enc_ew2_v4(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba, bb, btot : MetalBuffer?; total : int64) {
-    kn_pipeline(enc, pso)
-    kn_buffer(enc, ba, 0ul, 0)
-    kn_buffer(enc, bb, 0ul, 1)
+// the float4-lane swiglu_oai: grid over total/4 threads — total % 4 == 0 by the callers'
+// 32-row-padded panel contract; cnt/basep feed the ghost-tail liveness bound
+def private pf_enc_swiglu_oai(enc : MetalComputeEncoder?; bg, bu, btot, bcnt, bbase, bne, bnfe : MetalBuffer?; total : int64) {
+    kn_pipeline(enc, g_pf_pso_swiglu_oai)
+    kn_buffer(enc, bg, 0ul, 0)
+    kn_buffer(enc, bu, 0ul, 1)
     kn_buffer(enc, btot, 0ul, 2)
-    hz_read(bb)
-    hz_write(ba)
+    kn_buffer(enc, bcnt, 0ul, 3)
+    kn_buffer(enc, bbase, 0ul, 4)
+    kn_buffer(enc, bne, 0ul, 5)
+    kn_buffer(enc, bnfe, 0ul, 6)
+    hz_read(bu)
+    hz_read(bcnt)
+    hz_read(bbase)
+    hz_write(bg)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint((total / 4l + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
@@ -5739,6 +5734,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     return metal_prefill_init()
 }
 
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
     pf_weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
@@ -5925,7 +5921,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 for (l in range64(c.n_layers)) {
                     for (p in range64(npos)) {
                         memcpy(reinterpret<void?>(dst + (l * npos + p) * ple_n),
-                            reinterpret<void const?>(src + p * ple_all + l * ple_n), int(ple_n * 4l))
+                            reinterpret<void const?>(src + p * ple_all + l * ple_n), ple_n * 4l)
                     }
                 }
             }
@@ -5934,12 +5930,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // upload the embedded rows + this prefill's rope table(s) (built for the chunk's GLOBAL
     // positions — build_rope_table takes start_pos; dual-rope: the sliding class's pair too)
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), int(npos * dim * 4l))
-        memcpy(metal_buffer_contents(bcos), addr < void? >(s.rope_cos[0]), int(npos * half * 4l))
-        memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), int(npos * half * 4l))
+        memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), npos * dim * 4l)
+        memcpy(metal_buffer_contents(bcos), addr < void? >(s.rope_cos[0]), npos * half * 4l)
+        memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), npos * half * 4l)
         if (dual_rope) {
-            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), int(npos * half_sw * 4l))
-            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), int(npos * half_sw * 4l))
+            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), npos * half_sw * 4l)
+            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), npos * half_sw * 4l)
         }
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
@@ -6060,7 +6056,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // knockout mode keeps gpu logits: constant across skip configs (deltas stay clean), and a
     // blob-only metal-flavor load HAS no CPU classifier to fall back to. NextN models serve
     // too — the readback stashes mtp_h from bxf (forward_prefill's handoff contract)
-    let gpu_logits = (!g_pf_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" &&
+    let gpu_logits = (!g_pf_logits_cpu && g_pf_env_logits &&
         !tied_f32 &&
         t.wcls_off >= 0l)
     var bxf = gpu_logits ? pool_acquire(g_pf_pool, g_pf_dev, uint64(dim * 4l)) : null
@@ -6068,7 +6064,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_vocab = gpu_logits ? pf_uniform_u32(uint(c.vocab_size)) : null
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? pf_uniform_f32(c.final_logit_softcap) : null
     // suppressed token ids pin to -1e30 AFTER the cap (gemma4) — the CPU classifier's order
-    let nsupp = int64(length(t.suppress))
+    let nsupp = long_length(t.suppress)
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
@@ -6104,14 +6100,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         // holds the window's embed panel here; the garbage last row reuses row 0
         unsafe {
             var dst = reinterpret<uint8?>(metal_buffer_contents(bwm_emb))
-            memcpy(reinterpret<void?>(dst), addr < void? >(s.x_b[dim]), int((npos - 1l) * dim * 4l))
-            memcpy(reinterpret<void?>(dst + (npos - 1l) * dim * 4l), addr < void? >(s.x_b[0]), int(dim * 4l))
+            memcpy(reinterpret<void?>(dst), addr < void? >(s.x_b[dim]), (npos - 1l) * dim * 4l)
+            memcpy(reinterpret<void?>(dst + (npos - 1l) * dim * 4l), addr < void? >(s.x_b[0]), dim * 4l)
         }
     }
     // ggml-geometry QK/AV (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid;
     // BOTH classes) and mp % 64 (the QK key grid — true by construction). DASLLAMA_METAL_ATTN=0
     // pins the trio.
-    let mmattn = (head_size % 64l) == 0l && (hs_sw % 64l) == 0l && get_env_variable("DASLLAMA_METAL_ATTN") != "0"
+    let mmattn = (head_size % 64l) == 0l && (hs_sw % 64l) == 0l && g_pf_env_attn
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
     var err : string
@@ -6120,13 +6116,13 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // command-buffer split (DASLLAMA_METAL_NCB chunks): each chunk commits as soon as encoded, so
     // the scheduler analyzes chunk k while chunk k-1 executes. DASLLAMA_METAL_UNRETAINED=1 skips
     // per-dispatch retain/release too. Default ~4 layers/chunk (3B: slack 57ms -> 9ms, +10% pp512).
-    let ncb = clamp(int64(pf_env_int("DASLLAMA_METAL_NCB", int((n_enc_layers + 3l) / 4l))), 1l, n_enc_layers)
-    let unret = get_env_variable("DASLLAMA_METAL_UNRETAINED") == "1"
+    let ncb = clamp(int64(g_pf_env_ncb > 0 ? g_pf_env_ncb : int((n_enc_layers + 3l) / 4l)), 1l, n_enc_layers)
+    let unret = g_pf_env_unretained
     let layers_per_cb = (n_enc_layers + ncb - 1l) / ncb
     // the capture rail: kn_* record each chunk as a step graph, graph_flush_sched replays on a
     // CONCURRENT encoder (auto-schedule + hz barriers at real hazards). DASLLAMA_METAL_SCHED=0
     // keeps capture order; DASLLAMA_METAL_PF_CAPTURE=0 = the direct serial-encode rollback.
-    let cap = get_env_variable("DASLLAMA_METAL_PF_CAPTURE") != "0"
+    let cap = g_pf_env_capture
     var cbs : array<MetalCommandBuffer?>
     cbs |> reserve(int(ncb))
     var cb : MetalCommandBuffer?
@@ -6500,16 +6496,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     if (!pf_skip_moe_mm()) {
                         if (t.experts_mx4) {
+                            // per-expert bias folds into the mm accumulator seed (hasb); the
+                            // moe_bias chase arm knocks the fold out for attribution
+                            var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
                             var bwb1 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var bwb3 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1)
+                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1, bwb1, bhasb)
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1)
-                            if (g_pf_skip != "moe_bias") {
-                                pf_enc_moe_bias_rows(enc, bmg, bwb1, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
-                                pf_enc_moe_bias_rows(enc, bmg2, bwb3, bmcnt, bmbase, u_moe_nfe, c.n_ff_exp, npos, c.n_expert)
-                            }
+                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1, bwb3, bhasb)
                         } else {
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g1)
@@ -6527,7 +6522,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if (moe && g_pf_skip != "ew" && g_pf_skip != "nongemm" && g_pf_skip != "moe" && !pf_skip_moe_act()) {
                     if (c.ffn_act == FfnAct.swiglu_oai) {
-                        pf_enc_ew2_v4(enc, g_pf_pso_swiglu_oai, bmg, bmg2, u_moe_ptot, mpad * c.n_ff_exp)
+                        pf_enc_swiglu_oai(enc, bmg, bmg2, u_moe_ptot, bmcnt, bmbase, u_moe_ne, u_moe_nfe, mpad * c.n_ff_exp)
                     } else {
                         pf_enc_ew2(enc, g4moe ? g_pf_pso_geglu : g_pf_pso_swiglu, bmg, bmg2, u_moe_ptot, mpad * c.n_ff_exp)
                     }
@@ -6539,12 +6534,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let fe2 = pf_fmt_at(t.we2_fmt, l)
                     if (!pf_skip_moe_mm()) {
                         if (t.experts_mx4) {
+                            var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
                             var bwb2 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
-                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0)
-                            if (g_pf_skip != "moe_bias") {
-                                pf_enc_moe_bias_rows(enc, bmdn, bwb2, bmcnt, bmbase, u_dim, dim, npos, c.n_expert)
-                            }
+                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0, bwb2, bhasb)
                         } else {
                             pf_enc_moe_mm(enc, t, fe2, t.we2_offs[l], dim, npos, bmg, bmdn,
                                 u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0)
@@ -6731,8 +6724,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let kvd_l = layer_kv_dim(c, l)
                     let hs_l = layer_head_size(c, l)
                     let koff_l = start_pos * kvd_l * 4l
-                    memcpy(addr < void? >(s.k_b[0]), reinterpret<void?>(kpan + koff_l), int(npos * kvd_l * 4l))
-                    memcpy(addr < void? >(s.v_b[0]), reinterpret<void?>(vpan + koff_l), int(npos * kvd_l * 4l))
+                    memcpy(addr < void? >(s.k_b[0]), reinterpret<void?>(kpan + koff_l), npos * kvd_l * 4l)
+                    memcpy(addr < void? >(s.v_b[0]), reinterpret<void?>(vpan + koff_l), npos * kvd_l * 4l)
                     // tq4 sessions store in the ROTATED basis: the GPU ran attention unrotated,
                     // so rotate the readback rows per head before the codec store (the CPU
                     // prefill's exact discipline — dasllama_common's tq4 store path)
@@ -6765,12 +6758,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
         let ts_rb = ref_time_ticks()
         unsafe {
-            memcpy(addr < void? >(s.x_b[0]), metal_buffer_contents(warm ? bwm_res : bx), int(npos * dim * 4l))
+            memcpy(addr < void? >(s.x_b[0]), metal_buffer_contents(warm ? bwm_res : bx), npos * dim * 4l)
             if (gpu_logits) {
-                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(blog), int(c.vocab_size * 4l))
+                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(blog), c.vocab_size * 4l)
                 if (c.n_layer_nextn > 0l) {
                     // forward_prefill's mtp_h contract — bxf holds the last row's post-final-norm hidden
-                    memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(bxf), int(dim * 4l))
+                    memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(bxf), dim * 4l)
                 }
             }
         }
@@ -6783,7 +6776,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         readback_us += int64(get_time_usec(ts_rb))
         g_prefills++
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")
+        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalPrefillDecline.gpu_error)
     }
     // return the pooled buffers (uniforms too); the weight regions stay resident
@@ -6971,10 +6964,19 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         g_pf_stage_gpu_ms += gpu_ms
         g_pf_stage_rb_us += readback_us
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
     }
     return ok
 }
+
+// Knobs resolved once at [init]. They were read per prefill call, and get_env_variable allocates
+// its result in the context heap on every call — see PERF027.
+var private g_pf_env_mulmm = true
+var private g_pf_env_logits = true
+var private g_pf_env_attn = true
+var private g_pf_env_unretained = false
+var private g_pf_env_capture = true
+var private g_pf_env_ncb = 0   // 0 = unset, fall back to the layer-derived default
 
 [init]
 def dasllama_metal_prefill_register() {
@@ -6982,6 +6984,12 @@ def dasllama_metal_prefill_register() {
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
     register_prefill_override("metal", @@metal_prefill_forward)
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
+    g_pf_env_mulmm = env_flag("DASLLAMA_METAL_MULMM", true)
+    g_pf_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
+    g_pf_env_attn = env_flag("DASLLAMA_METAL_ATTN", true)
+    g_pf_env_unretained = env_flag("DASLLAMA_METAL_UNRETAINED", false)
+    g_pf_env_capture = env_flag("DASLLAMA_METAL_PF_CAPTURE", true)
+    g_pf_env_ncb = env_int("DASLLAMA_METAL_NCB", 0)
     if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
         g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
         to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")

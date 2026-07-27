@@ -384,14 +384,14 @@ def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     let chunks <- log_mel_chunks(samples, c.tower.n_mel)
     let rows = audio_tokens_per_chunk(c.tower)
     let dim = c.tower.proj_dim
-    c.audio_rows |> reserve(int((c.n_audio_rows + int64(length(chunks)) * rows) * dim))
+    c.audio_rows |> reserve(int((c.n_audio_rows + long_length(chunks) * rows) * dim))
     for (chunk in chunks) {
         audio_encode(c.tower, c.enc, chunk)
         for (i in range64(rows * dim)) {
             c.audio_rows |> push(c.enc.out[i])
         }
     }
-    c.n_audio_rows += int64(length(chunks)) * rows
+    c.n_audio_rows += long_length(chunks) * rows
 }
 
 // The empty think block that turns a hybrid thinking model into an instruct model (Qwen3's
@@ -558,8 +558,8 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         render_prompt_audio(m, c, head, tail)
         render_think_suppress(m, c, tail)
         let dim = m.config.dim
-        let n_head = int64(length(head))
-        let n_tail = int64(length(tail))
+        let n_head = long_length(head)
+        let n_tail = long_length(tail)
         let npos = n_head + c.n_audio_rows + n_tail
         var embd : array<float>
         embd |> resize(int(npos * dim))

@@ -97,6 +97,39 @@ def test_short3_conformance(t : T?) {
         let s = "{a}"
         t |> success(!empty(s), "interpolates")
     }
+    t |> run("shift right") @(t : T?) {
+        let a = short3(-19, 26, -33)
+        t |> success(a >> 2 == short3(-5, 6, -9), "arithmetic shift")
+        t |> success(a >> 18 == a >> 2, "count masks to lane width")
+        t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = short3(-19, 26, -33)
+        t |> success(a << 2 == short3(-76, 104, -132), "lanes wrap")
+        t |> success(a << 18 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = short3(-19, 26, -33)
+        let b = short3(45, 50, 55)
+        t |> success((a & b) == short3(45, 18, 23), "and")
+        t |> success((a | b) == short3(-19, 58, -1), "or")
+        t |> success((a ^ b) == short3(-64, 40, -24), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
+    }
     t |> run("converts") @(t : T?) {
         let a = short3(1, 2, 3)
         let w = int3(a)
