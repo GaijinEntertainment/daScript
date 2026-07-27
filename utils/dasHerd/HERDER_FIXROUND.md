@@ -639,12 +639,27 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   SIBLING, still open: rich_git_ui.das:864 lane_spacing sizes the commit
   graph from the base zoom inside window_zoom_scope("git-activity") —
   same miss, drawn geometry rather than text.
+- 55b: (Boris, same session) the first fix was still wrong in MODEL: it made
+  Ctrl+wheel scale the whole inspector WINDOW, chrome included. "nop. only
+  rich text should. text in status bars, titles, etc - that is controlled by
+  one UI scale setting in settings. terminal scale in the other. size of text
+  in view mode - in separate one. diff - in separate one." REBUILT
+  (2026-07-27) to exactly four scales: ONE ui_zoom for all chrome everywhere
+  (Settings only), plus a per-CONTENT scale for terminal / view / diff, each
+  moved by Ctrl+wheel over that content and by its own Settings slider. The
+  old per-window chrome zoom (window_zoom_scope, notes 12/24) is deleted -
+  it scaled the frame around the content instead of the content. Proven:
+  view 100%->200% doubled content glyph runs (median 10px -> 21px) while the
+  chrome path line stayed 15px in both; terminal 100%->200% halved the grid
+  (108x66 -> 56x33) with ui untouched; setting any one scale to 170% left
+  the other three unmoved.
 - 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
   command could set or read it and no state dump exposed it, so neither a
   test nor an agent could verify note 55 either way (parity rule:
   editable-but-not-commandable is a bug). FIXED (2026-07-27): new
-  herder_window_zoom rail reads any window's zoom and optionally sets it,
-  reporting the base zoom alongside.
+  herder_content_zoom rail reads any content scale and optionally sets it,
+  reporting all four numbers together; the terminal and inspector state
+  rails now report the content scale they describe plus the UI scale.
 - 54: closing a herd session ORPHANS its PTY into the raw session list when
   that PTY ended in a non-exited terminal state. herd_owns_pty skips closed
   records (rich_sessions_ui.das:566) so the PTY reads as "unowned", and the

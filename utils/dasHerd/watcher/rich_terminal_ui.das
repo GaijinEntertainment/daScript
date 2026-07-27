@@ -49,12 +49,18 @@ def draw_session_label() {
     text(SESSION_LABEL, (text = g_client.selected_id))
 }
 
+// The terminal owns its text size (Boris, 2026-07-27): these buttons and
+// Ctrl+wheel over the screen move the TERMINAL scale, never the UI scale.
+def terminal_zoom_by(delta : int) {
+    set_content_zoom(CONTENT_TERMINAL, content_zoom_percent(CONTENT_TERMINAL) + delta)
+}
+
 def draw_terminal_footer() {
-    if (small_button(TERMINAL_ZOOM_OUT_BUTTON, (text = "-5%"))) zoom_by(-5)
+    if (small_button(TERMINAL_ZOOM_OUT_BUTTON, (text = "-5%"))) terminal_zoom_by(-5)
     same_line()
-    if (small_button(TERMINAL_ZOOM_IN_BUTTON, (text = "+5%"))) zoom_by(5)
+    if (small_button(TERMINAL_ZOOM_IN_BUTTON, (text = "+5%"))) terminal_zoom_by(5)
     same_line()
-    text("Zoom {g_zoom_percent}%")
+    text("Zoom {content_zoom_percent(CONTENT_TERMINAL)}%")
     same_line()
     // Input mode first: scroll is always local, but typing needs the
     // controller lease — say so instead of silently eating keys (note 38).
@@ -91,11 +97,7 @@ def paste_terminal_clipboard() {
 }
 
 def draw_terminal_window() {
-    let io & = unsafe(GetIO())
-    if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
-        if (io.MouseWheel > 0.0f) zoom_by(5)
-        elif (io.MouseWheel < 0.0f) zoom_by(-5)
-    }
+    content_zoom_wheel(CONTENT_TERMINAL)
     draw_session_label()
     separator()
     let terminal_style = ImGuiTerminalStyle(
@@ -104,7 +106,7 @@ def draw_terminal_window() {
         view_height = max(GetTextLineHeight(),
             GetContentRegionAvail().y - GetFrameHeightWithSpacing()
                 - GetStyle().ItemSpacing.y))
-    with_font(g_terminal_font) {
+    with_font(g_terminal_font, UI_BASE_FONT_SIZE * content_zoom_scale(CONTENT_TERMINAL)) {
         if (g_focus_terminal_pending) {
             // The window raise lands a frame after open; focusing while the
             // window is still unfocused is a no-op that used to eat the

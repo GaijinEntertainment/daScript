@@ -491,7 +491,12 @@ struct HerdUiSettings {
     show_exited : bool = false
     show_tasks : bool = false
     layout_preset : int = 0
-    window_zoom : table<string; int>
+    // Per-CONTENT text scale, keyed "terminal" | "view" | "diff" (Boris,
+    // 2026-07-27). Chrome — titles, status bars, labels, panel rows — is
+    // ui_zoom_percent alone, everywhere; each content kind owns its own text
+    // size and answers Ctrl+wheel over itself. Replaces the old per-window
+    // chrome zoom, which scaled the frame around the content instead.
+    content_zoom : table<string; int>
     // Project tab: sort mode (0 folders-first, 1 name, 2 largest, 3 newest)
     // and the optional size/modified columns.
     project_sort : int = 0
@@ -882,36 +887,39 @@ def draw_git_path_text(path : string; p0, p1 : float2;
     }
 }
 
-def window_zoom_percent(name : string) : int {
-    return clamp(g_ui_settings.window_zoom?[name] ?? 100, 50, 300)
+// The content kinds that own their own text size. Chrome is not on this
+// list on purpose: one UI scale in Settings drives every title, status bar,
+// label and panel row, everywhere.
+let CONTENT_TERMINAL = "terminal"
+let CONTENT_VIEW = "view"
+let CONTENT_DIFF = "diff"
+
+def content_zoom_percent(kind : string) : int {
+    return clamp(g_ui_settings.content_zoom?[kind] ?? 100, 50, 300)
 }
 
-def set_window_zoom(name : string; percent : int) {
+def content_zoom_scale(kind : string) : float {
+    return float(content_zoom_percent(kind)) * 0.01f
+}
+
+def set_content_zoom(kind : string; percent : int) {
     let clamped = clamp(percent, 50, 300)
-    if (window_zoom_percent(name) == clamped) return
-    g_ui_settings.window_zoom[name] = clamped
+    if (content_zoom_percent(kind) == clamped) return
+    g_ui_settings.content_zoom[kind] = clamped
     settings_save()
 }
 
-// Per-window zoom (notes 12/24): wraps a dock window's content in a resized
-// font (children inherit the push) and claims Ctrl+wheel for THIS window
-// only. The base UI zoom lives in Settings; the two compose.
-def window_zoom_scope(name : string; blk : block) {
+// Ctrl+wheel scales the CONTENT under the cursor and nothing else. Call it
+// inside the content's own child window, so the hover test is that content's
+// rectangle rather than the whole dock window (chrome must never move — the
+// single UI scale in Settings owns it).
+def content_zoom_wheel(kind : string) {
     var io & = unsafe(GetIO())
-    if (io.KeyCtrl && io.MouseWheel != 0.0f
-            && IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)) {
-        set_window_zoom(name, window_zoom_percent(name)
-            + (io.MouseWheel > 0.0f ? 10 : -10))
-        io.MouseWheel = 0.0f
-    }
-    let percent = window_zoom_percent(name)
-    if (percent == 100) {
-        invoke(blk)
-    } else {
-        with_font(null, UI_BASE_FONT_SIZE * float(percent) * 0.01f) {
-            invoke(blk)
-        }
-    }
+    if (!io.KeyCtrl || io.MouseWheel == 0.0f
+            || !IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)) return
+    set_content_zoom(kind, content_zoom_percent(kind)
+        + (io.MouseWheel > 0.0f ? 10 : -10))
+    io.MouseWheel = 0.0f
 }
 
 def set_ui_zoom(percent : int) {

@@ -145,25 +145,30 @@ def herder_reset_layout(_input : JsonValue?) : JsonValue? {
     return JV((ok = true))
 }
 
-struct HerderWindowZoomArgs {
-    window : string
+struct HerderContentZoomArgs {
+    kind : string
     percent : int
 }
 
-[live_command(description = "Read or set a window's own zoom, the target of Ctrl+wheel. Args: window = inspector | sessions | git-activity | git-changelist | repositories; optional percent (50-300) to set it.")]
-def herder_window_zoom(input : JsonValue?) : JsonValue? {
-    //! Parity rail (note 56): per-window zoom was mouse-only - adjustable but
-    //! neither commandable nor readable, so no test or agent could verify it.
-    let args = from_JV(input, type<HerderWindowZoomArgs>)
-    if (empty(args.window)) {
-        return JV((ok = false, error = "window is required"))
+[live_command(description = "Read or set a content text scale, the target of Ctrl+wheel over that content. Args: kind = terminal | view | diff; optional percent (50-300) to set it. Chrome is not here: one ui_zoom setting drives every title, status bar and label.")]
+def herder_content_zoom(input : JsonValue?) : JsonValue? {
+    //! Parity rail (note 56): the content scales were mouse-only - adjustable
+    //! but neither commandable nor readable, so nothing could verify them.
+    let args = from_JV(input, type<HerderContentZoomArgs>)
+    if (args.kind != CONTENT_TERMINAL && args.kind != CONTENT_VIEW
+            && args.kind != CONTENT_DIFF) {
+        return JV((ok = false,
+            error = "kind must be terminal, view, or diff"))
     }
     if (args.percent != 0) {
-        set_window_zoom(args.window, args.percent)
+        set_content_zoom(args.kind, args.percent)
     }
-    return JV((ok = true, window = args.window,
-        percent = window_zoom_percent(args.window),
-        base_percent = g_zoom_percent))
+    return JV((ok = true, kind = args.kind,
+        percent = content_zoom_percent(args.kind),
+        ui_zoom_percent = g_zoom_percent,
+        terminal = content_zoom_percent(CONTENT_TERMINAL),
+        view = content_zoom_percent(CONTENT_VIEW),
+        diff = content_zoom_percent(CONTENT_DIFF)))
 }
 
 struct HerderCommandArgs {
@@ -525,7 +530,8 @@ def herder_terminal_state(input : JsonValue?) : JsonValue? {
         scroll_offset = g_terminal_view.scroll_offset,
         scrollback_rows = g_terminal_view.scrollback_rows,
         content_revision = g_terminal_view.content_revision,
-        zoom_percent = g_zoom_percent,
+        zoom_percent = content_zoom_percent(CONTENT_TERMINAL),
+        ui_zoom_percent = g_zoom_percent,
         screen_text = g_terminal_view.screen_text))
 }
 
@@ -851,7 +857,9 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
         installed_diff_context = g_inspector.installed_diff_context,
         replacement_busy = (g_inspector.loading
             || g_inspector.prepare.request != InspectorRequestState.idle),
-        zoom_percent = g_zoom_percent,
+        zoom_percent = content_zoom_percent(
+            g_inspector.mode == GitInspectorMode.view ? CONTENT_VIEW : CONTENT_DIFF),
+        ui_zoom_percent = g_zoom_percent,
         diff_context = g_inspector.diff_context,
         diff_context_choice = g_inspector.diff_context_choice,
         mode = g_inspector.mode == GitInspectorMode.diff ? "diff" : "view",
@@ -1158,6 +1166,26 @@ def private draw_shortcuts_tab() {
     }
 }
 
+// Settings mirrors of the content scales. Declared explicitly because the
+// slider state is passed into a shared helper rather than named at the call
+// site, so the widget macro cannot emit these globals itself.
+var SETTINGS_TERMINAL_ZOOM : SliderStateInt
+
+var SETTINGS_VIEW_ZOOM : SliderStateInt
+
+var SETTINGS_DIFF_ZOOM : SliderStateInt
+
+var SETTINGS_ZOOM_HINT : NarrativeState
+
+def draw_content_zoom_slider(var state : SliderStateInt; kind, caption : string) {
+    state.bounds = (50, 300)
+    state.value = content_zoom_percent(kind)
+    SetNextItemWidth(240.0f)
+    if (slider_int(state, (text = caption))) {
+        set_content_zoom(kind, state.value)
+    }
+}
+
 def draw_settings_window() {
     tab_bar(SETTINGS_TABS, (text = "Settings sections", flags = ImGuiTabBarFlags.None)) {
         tab_item(SETTINGS_GENERAL_TAB, (text = "General", closable = false,
@@ -1168,6 +1196,16 @@ def draw_settings_window() {
             if (slider_int(SETTINGS_UI_ZOOM, (text = "UI zoom %"))) {
                 set_ui_zoom(SETTINGS_UI_ZOOM.value)
             }
+            text_disabled(SETTINGS_ZOOM_HINT,
+                (text = "UI zoom sizes every title, status bar and label. " +
+                    "Each content below has its own size, also set by " +
+                    "Ctrl+wheel over it."))
+            draw_content_zoom_slider(SETTINGS_TERMINAL_ZOOM, CONTENT_TERMINAL,
+                "Terminal text %")
+            draw_content_zoom_slider(SETTINGS_VIEW_ZOOM, CONTENT_VIEW,
+                "View text %")
+            draw_content_zoom_slider(SETTINGS_DIFF_ZOOM, CONTENT_DIFF,
+                "Diff text %")
             SETTINGS_SHOW_EXITED.value = g_show_exited
             if (checkbox(SETTINGS_SHOW_EXITED, (text = "Show exited sessions"))) {
                 g_show_exited = SETTINGS_SHOW_EXITED.value

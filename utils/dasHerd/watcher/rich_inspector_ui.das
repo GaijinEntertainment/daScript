@@ -79,18 +79,14 @@ def git_status_color(status : GitWindowStatus const) : float4 {
 }
 
 // Content renderers size text from an explicit zoom against a FIXED base
-// (fonts.size_px), not from the pushed font — so they must read the same
-// per-window zoom the chrome does, or Ctrl+wheel moves the chrome and leaves
-// the content behind (note 55). The base UI zoom arrives separately through
-// FontScaleMain; passing it here applied it to the content twice.
-def private inspector_zoom : float {
-    return float(window_zoom_percent("inspector")) * 0.01f
-}
-
-def source_view_style(diff_background : bool = false) : TextSourceViewStyle {
+// (fonts.size_px), not from the pushed font, so each names the content scale
+// it belongs to: View text and Diff text are separately sized, and the UI
+// scale reaches both once through FontScaleMain (note 55).
+def source_view_style(kind : string;
+                      diff_background : bool = false) : TextSourceViewStyle {
     return TextSourceViewStyle(
         fonts = g_fonts,
-        zoom = inspector_zoom(),
+        zoom = content_zoom_scale(kind),
         wrap = false,
         line_mark_background_alpha = diff_background ? 0.11f : 0.0f,
         line_mark_width = 2.0f,
@@ -251,6 +247,7 @@ def draw_side_by_side_diff() {
     child(DIFF_LEFT_PANE, (text = "before", size = float2(left_width, available.y),
             child_flags = ImGuiChildFlags.Borders,
             window_flags = ImGuiWindowFlags.NoScrollbar)) {
+        content_zoom_wheel(CONTENT_DIFF)
         let window_pos = GetWindowPos()
         let window_size = GetWindowSize()
         g_inspector.diff_left_rect = float4(window_pos.x, window_pos.y,
@@ -263,7 +260,7 @@ def draw_side_by_side_diff() {
         }
         text_disabled("BEFORE")
         separator()
-        var style = source_view_style(true)
+        var style = source_view_style(CONTENT_DIFF, true)
         let _ = text_source_view("git diff before", g_inspector.old_document,
             g_inspector.old_view, style)
     }
@@ -283,6 +280,7 @@ def draw_side_by_side_diff() {
     child(DIFF_RIGHT_PANE, (text = "after", size = float2(right_width, available.y),
             child_flags = ImGuiChildFlags.Borders,
             window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+        content_zoom_wheel(CONTENT_DIFF)
         let window_pos = GetWindowPos()
         let window_size = GetWindowSize()
         let scrollbar_width = GetStyle().ScrollbarSize
@@ -299,7 +297,7 @@ def draw_side_by_side_diff() {
         }
         text_disabled("AFTER")
         separator()
-        var style = source_view_style(true)
+        var style = source_view_style(CONTENT_DIFF, true)
         let result <- text_source_view("git diff after", g_inspector.new_document,
             g_inspector.new_view, style)
         draw_active_focus_overlay(g_inspector.new_view,
@@ -415,25 +413,26 @@ def draw_file_view() {
     child(FILE_VIEW_PANE, (text = "file view", size = float2(0.0f, 0.0f),
             child_flags = ImGuiChildFlags.None,
             window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+        content_zoom_wheel(CONTENT_VIEW)
         if (g_inspector.resolved_language == "markdown"
                 && !g_inspector.focus_document_valid) {
             var style = MarkdownViewStyle(
                 fonts = g_fonts,
                 typography = MarkdownTypography(
                     inline_code_scale = 0.84f, code_block_scale = 0.90f),
-                zoom = inspector_zoom(),
+                zoom = content_zoom_scale(CONTENT_VIEW),
                 write_system_clipboard = !harness_is_headless())
             let _ <- markdown_view_with_change_gutter("git markdown view",
                 g_inspector.markdown_document, g_inspector.markdown_view,
                 style, g_inspector.revision, g_inspector.changed_source_ranges,
                 g_inspector.markdown_gutter_segments,
-                max(1.0f, 2.0f * inspector_zoom()))
+                max(1.0f, 2.0f * content_zoom_scale(CONTENT_VIEW)))
         } else {
             if (g_focus_view_scroll_pending) {
                 SetScrollY(max(0.0f, g_focus_view_scroll_y))
                 g_focus_view_scroll_pending = false
             }
-            var style = source_view_style(false)
+            var style = source_view_style(CONTENT_VIEW)
             let result <- text_source_view("git file view",
                 g_inspector.view_document, g_inspector.view, style)
             draw_active_focus_overlay(g_inspector.view,
@@ -828,8 +827,6 @@ def inspector_ui_init() {
 def draw_file_inspector_dock() {
     dock_window(FILE_INSPECTOR_WIN.PUBLIC, (text = "File Inspector", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        window_zoom_scope("inspector") {
-            draw_file_inspector_window()
-        }
+        draw_file_inspector_window()
     }
 }
