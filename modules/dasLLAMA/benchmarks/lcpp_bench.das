@@ -303,7 +303,8 @@ def main() {
     }
     // -m accepts a comma-separated list: one process benches every model in turn, so a sweep
     // pays the compile/startup cost once; a single -m path behaves exactly as before
-    var model_list <- split(cfg.model, ",")
+    // trim: `-m "a.gguf, b.gguf"` is the natural spelling, and an untrimmed path fails to open
+    var model_list <- [for (m in split(cfg.model, ",")); strip(m)]
     var mdRows : array<array<string>>
     var jsonModels : array<BenchModel>
     with_job_que() {
@@ -320,7 +321,7 @@ def main() {
         // STREAM=35 that gather was the dominant per-run cost)
         var t <- load_model_cached(mpath, cfg.quant)
         // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
-        var toks : array<array<int64>>
+        var inscope toks : array<array<int64>>
         if (real_row) {
             var tk <- load_tokenizer_auto(mpath)
             var texts <- load_corpus(empty(cfg.prompts)

@@ -637,7 +637,7 @@ def private guard_interp_gguf_load(path : string) {
     if (!stat(path, st) || int64(st.size) <= 4_294_967_296l) {
         return
     }
-    if (get_env_variable("DASLLAMA_ALLOW_INTERP_LOAD") == "1") {
+    if (env_flag("DASLLAMA_ALLOW_INTERP_LOAD", false)) {
         to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB — expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
         return
     }
