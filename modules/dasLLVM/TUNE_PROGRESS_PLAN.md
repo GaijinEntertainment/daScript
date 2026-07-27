@@ -1,7 +1,12 @@
 # Tune UX rework — progress events and a single renderer
 
 Design notes for replacing the tuner's current terminal output (a per-variant firehose that
-mostly restates the sidecar JSON) with a progress display. Status: **design, not yet built.**
+mostly restates the sidecar JSON) with a progress display.
+
+**Status.** §1 (live relay), §2/§3 (event protocol + renderer), §4 (`daslib/tty` + binding) and
+the §9 up-front promise are **built and tested**. Still open: §7 (clargs flags), §8
+(`gen_tune_probe` honouring `--tune-fast`), wiring the emitters into the three real dasLLAMA
+tuners, the §5 watchdog migration, and the doc updates.
 
 Framework reference: `skills/llvm_tune.md` (internals), `skills/tune.md` (user-facing).
 
