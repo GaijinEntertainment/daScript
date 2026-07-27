@@ -105,7 +105,7 @@ def main() {
         var t <- load_model_cached(cfg.model, cfg.quant)
         t.config.seq_len = min(t.config.seq_len, depth + ngen + 8l)   // cap the KV allocation
         let c = t.config
-        print("config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | depth {depth} window {ngen}\n")
+        print("config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | fused {get_fused_decode()} | depth {depth} window {ngen}\n")
         var s <- make_run_state(c)
         if (depth > 0l) {
             let prompt <- [for (i in range64(depth)); synth_id(i, 999l)]
