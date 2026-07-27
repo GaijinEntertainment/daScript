@@ -161,6 +161,21 @@ def test_no_ad_hoc_env_helpers(t : T?) {
 }
 
 [test]
+def test_environment_md_is_current(t : T?) {
+    t |> run("the checked-in ENVIRONMENT.md matches what the registry renders") @(t : T?) {
+        let path = "{get_das_root()}/modules/dasLLAMA/ENVIRONMENT.md"
+        let onDisk = fread(path)
+        t |> success(!empty(onDisk), "cannot read {path}")
+        // \r\n on a Windows checkout: the file has no .gitattributes eol rule, and the comparison
+        // is about content, not line endings
+        let want = replace(env_markdown(), "\r\n", "\n")
+        let got = replace(onDisk, "\r\n", "\n")
+        t |> success(want == got,
+            "ENVIRONMENT.md is stale — regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`")
+    }
+}
+
+[test]
 def test_registry_has_no_duplicates(t : T?) {
     t |> run("registry lists each name once") @(t : T?) {
         var reg <- env_registry()

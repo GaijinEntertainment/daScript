@@ -1,0 +1,201 @@
+# dasLLAMA environment variables
+
+GENERATED from `env_registry()` in `dasllama/dasllama_env.das` — do not edit by hand.
+Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read anywhere
+in the tree without a registry entry fails `tests/test_env_registry.das`.
+
+Types: **flag** is unset-means-default, `0`/`false`/`off`/`no`/empty is false and
+anything else true; **number** falls back to the default when unset or unparseable;
+**text** and **path** are taken verbatim. Every read goes through `env_flag` /
+`env_int` / `env_int64` / `env_str`, so the rules are the same everywhere.
+
+A knob is read ONCE, at init or behind a one-time gate — reading the environment on a
+per-token path is what PERF027 exists to catch (see `skills/perf_lint.md`).
+
+## Engine
+
+Read by the inference engine itself, so these affect any program that loads a model.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_IMAGE` | flag | on | Use the prepared-image cache beside a .gguf for millisecond reloads; 0 forces a full parse. |
+| `DASLLAMA_CPU_PREFILL` | flag | off | Allow the CPU prefill path even when a GPU prefill override is registered. |
+| `DASLLAMA_PIN_PREFILL` | text | unset | Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload. |
+| `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |
+| `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |
+| `DASLLAMA_EXPERT_REUSE` | flag | off | Arm the MoE expert-reuse counter (probes and servers; benches use set_expert_reuse instead). |
+| `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
+| `DASLLAMA_CALLER_PRIO` | number | unset | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
+| `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
+| `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
+| `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
+| `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
+| `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks. |
+| `DASLLAMA_GPU_MIN_CTX` | number | built-in floor | Lower the context floor for arming the resident decode driver, for a short-context session on a small card. |
+| `DASLLAMA_GPU_DN` | flag | follows DASLLAMA_GPU | DeltaNet rail on the GPU. |
+| `DASLLAMA_GPU_DND` | flag | follows DASLLAMA_GPU | DeltaNet decode rail on the GPU. |
+| `DASLLAMA_GPU_ATTN` | flag | follows DASLLAMA_GPU | Attention rail on the GPU. |
+| `DASLLAMA_GPU_DENSE` | flag | follows DASLLAMA_GPU | Dense-weight rail on the GPU. |
+| `DASLLAMA_GPU_DENSE_ATTN` | flag | on | The dense rail's attention half (per-layer q/o pairs); opt-OUT, measured a loss on gemma-4. |
+| `DASLLAMA_GPU_DENSE_SHEXP` | flag | off | The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss. |
+| `DASLLAMA_GPU_SHEXP` | flag | follows DASLLAMA_GPU | Shared-expert rail on the GPU. |
+| `DASLLAMA_GPU_QKV` | flag | off | Fused QKV rail on the GPU; stays off under DASLLAMA_GPU (measured a wash). |
+| `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU — the best ms-per-GB region; 0 is the CPU A/B lever. |
+| `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
+| `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
+| `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+
+## Metal backend
+
+Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_METAL_LOGITS` | flag | on | Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on. |
+| `DASLLAMA_METAL_ATTN` | flag | on | ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
+| `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |
+| `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
+| `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |
+| `DASLLAMA_METAL_NCB` | number | ~4 layers/chunk | Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1. |
+| `DASLLAMA_METAL_UNRETAINED` | flag | off | Skip per-dispatch retain/release on the prefill command buffers. |
+| `DASLLAMA_METAL_PF_CAPTURE` | flag | on | Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback. |
+| `DASLLAMA_METAL_SCHED` | number | 1 | Graph scheduling mode for replay; 0 keeps capture order. |
+| `DASLLAMA_METAL_DECODE_CONCURRENT` | flag | on | Concurrent encoder for the single-stream decode step, with barriers only at detected hazards. |
+| `DASLLAMA_METAL_FUSE` | flag | on | The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B. |
+| `DASLLAMA_METAL_SPEC` | number | -1 (adaptive) | MTP speculative decode chain: 0 off, 1 forced, -1 adaptive. |
+| `DASLLAMA_METAL_GEMV_TG` | number | 4 | Rows per GEMV threadgroup, clamped 1..32. |
+| `DASLLAMA_METAL_KQ_B8` | flag | on | Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail. |
+| `DASLLAMA_METAL_KV_MIRROR_MB` | number | 4096 | Ceiling in MiB for the device-side KV mirror, clamped 64..4096. |
+| `DASLLAMA_METAL_HAZARD_PARANOID` | flag | off | Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect). |
+| `DASLLAMA_METAL_HAZARD_STRICT` | flag | off | Treat every detected hazard as strict, widening barriers (correctness bisect). |
+| `DASLLAMA_METAL_PIPE_DEBUG` | flag | off | Per-step pipeline trace: GPU envelope and true inter-step handoff idle, first steps plus outliers. |
+| `DASLLAMA_METAL_DECODE_SKIP` | text | unset | Comma-separated dispatch names to skip in decode — a bring-up bisect that breaks correctness. |
+| `DASLLAMA_METAL_PREFILL_SKIP` | text | unset | Prefill twin of DASLLAMA_METAL_DECODE_SKIP. |
+| `DASLLAMA_MTP_DEBUG` | text | unset | MTP bring-up bisect: cold logs the failing gate, reject forces the reject path. |
+| `DASLLAMA_METAL_BATCH_GEMM_MIN` | number | 5 | Batch size at which batched decode switches from GEMV to GEMM; floor 2. |
+| `DASLLAMA_METAL_BATCH_SK` | flag | on | Split-K in the batched decode GEMM. |
+| `DASLLAMA_METAL_BATCH_NCB` | number | 4 | Command buffers per batched decode step, clamped 1..16. |
+| `DASLLAMA_METAL_BATCH_CONCURRENT` | flag | on | Concurrent encoder for batched decode. |
+| `DASLLAMA_METAL_BATCH_FUSE` | flag | on | Epilogue fusion in batched decode. |
+| `DASLLAMA_METAL_BATCH_MV` | flag | on | Fixed-B GEMV forms for small batched decode. |
+| `DASLLAMA_METAL_BATCH_MV8` | flag | on | The column-tiling MV8 probe for batched decode. |
+| `DASLLAMA_METAL_BATCH_PIPE` | flag | off | Pipelined batched decode submission. |
+| `DASLLAMA_METAL_BATCH_MM` | flag | off | The mul_mm rail for batched decode; measured negative at M-pad-32, kept as the A/B rail. |
+
+## Vulkan backend
+
+Vulkan GPU backend. Present only where the dasVulkan package is installed.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_COOPMAT` | number | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
+| `DASLLAMA_MM_SMALL` | number | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
+| `DASLLAMA_VK_FA` | flag | on | Vulkan flash-attention kernel; 0 falls back to the chunked path. |
+| `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
+| `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
+| `DASLLAMA_VK_HAZARD_TRACE` | flag | off | Log every detected hazard and the barrier it produced. |
+
+## Accelerate / AMX backend
+
+Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_ACCEL` | flag | off | Arm the Apple Accelerate / AMX float-batch override. |
+| `DASLLAMA_ACCEL_F16` | flag | off | Use the BNNS f16 lane inside the Accelerate backend. |
+| `DASLLAMA_ACCEL_F16_STRIPS` | number | 0 | Strip count for the f16 lane; 0 lets the backend choose. |
+| `DASLLAMA_ACCEL_MIN_MMAC` | number | backend default | Minimum MMAC count below which Accelerate declines and the daslang kernel runs. |
+| `DASLLAMA_ACCEL_MIN_NTOK` | number | 32 | Minimum token count for the Accelerate float-batch override, floor 1. |
+
+## Harness — tuner and probes
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. |
+| `DASLLAMA_CONFIRM_MODEL` | path | unset | Model used by the tuner's confirm gate. Must be a FULL path, not a bare filename. |
+| `DASLLAMA_BATCH_CHUNKS` | number | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
+| `DASLLAMA_BATCH_GRID_2D` | flag | off | Use the 2D batch grid in the parity probe. |
+| `DASLLAMA_FOCUS_BACKEND` | text | unset | Restrict the 1-core GEMM probe to one backend. |
+| `DASLLAMA_FOCUS_SHAPE` | text | unset | Restrict the 1-core GEMM probe to one shape. |
+| `DASLLAMA_FOCUS_NTOK` | number | unset | Restrict the 1-core GEMM probe to one token count. |
+| `DASLLAMA_FOCUS_FORKED` | flag | off | Run the 1-core GEMM probe through the fork pool rather than inline. |
+| `GEN_TUNE_COMPILE_ONLY` | flag | off | Compile the generated tune probe without running it. |
+| `SMMLA_PROBE_COMPILE_ONLY` | flag | off | Compile the smmla probe without running it. |
+| `METAL` | flag | off | Run the Accelerate contention probe against the Metal backend. |
+| `DAS_DETAIL` | flag | off | Per-job dump in the dispatch probe. |
+| `DAS_SPIN_NS` | number | unset | Synthetic per-job spin in nanoseconds for the dispatch probe. |
+| `DAS_BATCH_DISPATCH` | flag | off | Exercise batched dispatch in the dispatch probe. |
+| `DAS_TWO_WAVE` | flag | off | Exercise the two-wave dispatch shape in the dispatch probe. |
+| `DAS_FORK_SKIP_HEAP_RESET` | flag | off | Skip restartHeaps on pooled fork-context reuse (A/B for the fork-pool heap cost). |
+| `DAS_WORKER_SPIN_US` | number | unset | Worker spin-before-park window in microseconds, applied via set_jobque_spin_us. |
+| `DAS_JOBQUE_JOIN_SPIN` | number | unset | Join-side spin window for the 1-core GEMM probe. |
+
+## Benchmarks
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
+| `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
+| `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |
+| `DASLLAMA_BENCH_VERBOSE` | flag | off | Per-run detail from the llama.cpp comparison bench. |
+| `DASLLAMA_MIN_CHUNK_ROWS` | number | unset | Override the minimum rows per dispatch chunk in the GEMM bench. |
+| `DASLLAMA_FUSED_DECODE` | flag | off | Exercise the fused decode arm in the emission bench. |
+| `DASMETAL_LAB_ROUNDS` | number | 3 | Timing rounds per cell in the Metal kernel labs. |
+| `DASMETAL_LAB_PASSES` | number | 4 | Passes per round in the Metal MoE lab. |
+| `DASMETAL_LAB_ATTN_NSGS` | number | 16 | Simdgroups per threadgroup in the Metal attention lab. |
+| `DASMETAL_LAB_DUMP_MSL` | flag | off | Dump generated MSL from the Metal labs instead of running it. |
+
+## Profiling and baselines
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_GPU_NAME` | text | probed | Override the GPU name recorded in a box profile. |
+| `DASLANG_BIN` | path | bin/daslang | daslang binary the profiling harness shells out to. |
+| `DASLLAMA_BOX` | text | probed | Override the box identifier recorded in a profile. |
+| `DASLLAMA_CPU` | text | probed | Override the CPU name recorded in a profile. |
+| `DASLLAMA_OS` | text | probed | Override the OS name recorded in a profile. |
+| `DASLLAMA_RAM_GB` | number | probed | Override the RAM size in GiB recorded in a profile. |
+| `DASLLAMA_THREADS` | number | probed | Override the thread count recorded in a profile. |
+| `LLAMA_BENCH` | path | unset | Path to the llama-bench binary used to establish reference baselines. |
+| `LLAMA_BENCH_CLEAN` | path | unset | Path to a clean-build llama-bench for the reference column. |
+| `LLAMA_BENCH_STOCK` | path | unset | Path to a stock-build llama-bench for the reference column. |
+| `WHISPER_CPP` | path | unset | whisper.cpp checkout used for ASR reference baselines. |
+| `WHISPER_CPP_MODELS` | path | unset | Directory of whisper.cpp models for ASR reference baselines. |
+| `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |
+| `NEMO_PY` | path | unset | Python interpreter of the NeMo oracle venv, for canary/parakeet baselines. |
+| `ONNX_PY` | path | unset | Python interpreter of the ONNX oracle venv, for parakeet baselines. |
+| `OS` | text | set by Windows | Read to detect Windows (Windows_NT); set by the OS, not by dasLLAMA. |
+| `PROCESSOR_ARCHITECTURE` | text | set by Windows | Read for the CPU architecture on Windows; set by the OS, not by dasLLAMA. |
+| `NUMBER_OF_PROCESSORS` | number | set by Windows | Read for the core count on Windows; set by the OS, not by dasLLAMA. |
+
+## Tests
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_PARITY_FULL` | flag | off | Run the FULL parity matrix. Without it the big-model rows silently skip. |
+| `DASLLAMA_TEST_ARMS` | text | unset | Comma-separated filter restricting which parity arms run. |
+| `DASLLAMA_TEST_FAMILY` | text | unset | Comma-separated filter restricting which model families run. |
+| `DASLLAMA_LLAMA2C_DIR` | path | unset | Directory of llama2.c reference checkpoints for the forward/decode parity tests. |
+| `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |
+| `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
+| `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
+
+## Examples and tutorials
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_MODEL` | path | unset | Model path for the dasLLAMA tutorials when none is passed on the command line. |
+
+## daslang core knobs dasLLAMA honours
+
+Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues. Overrides set_jobque_threads_cap; see skills/llvm_tune.md. |
+| `DAS_JOBQUE_AFFINITY` | number | 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes. |
+| `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
+| `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
+| `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode; see skills/llvm_tune.md. |
+| `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override; see skills/llvm_tune.md. |
+| `DAS_TUNE_COMPILE_FALLBACKS` | text | unset | Semicolon-separated kernel fallbacks for the generated tune probe. |

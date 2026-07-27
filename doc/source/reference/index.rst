@@ -29,6 +29,8 @@ THE SOFTWARE.
    utils.rst
    tutorials.rst
    tune.rst
+   environment_variables.rst
+   dasllama_env.rst
    flatten.rst
    linq_fold_patterns.rst
    linq_das.rst

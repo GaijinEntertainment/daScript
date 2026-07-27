@@ -44,6 +44,7 @@ linq_fold_patterns.md
 llvm_tune.md
 mcp_tools.md
 memory_leak_detection.md
+environment_variables.md
 perf_lint.md
 profiler.md
 project_overview.md

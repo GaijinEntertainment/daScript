@@ -47,8 +47,10 @@ EXE_CMD = re.compile(
 # junction workflow in external_module_debugging.md uses illustrative C:/DummyRoot paths
 # 17 times on purpose, and flagging those would force 17 noise markers onto correct
 # content. A bare `\\`-UNC branch is also out -- it matched `\\d` / `\\s` in regex prose.
+# AppData needs a leading separator: bare `APPDATA` is the ENV VAR NAME, which
+# environment_variables.md documents alongside XDG_CONFIG_HOME. Only a real path is a leak.
 MACHINE_PATH = re.compile(
-    r"(?:[A-Za-z]:[\\/](?:Users|Work|DASPKG)\b|/home/[A-Za-z0-9_.]+|AppData)", re.I)
+    r"(?:[A-Za-z]:[\\/](?:Users|Work|DASPKG)\b|/home/[A-Za-z0-9_.]+|[\\/]AppData\b)", re.I)
 
 SKILL_REF = re.compile(r"skills/([a-z_0-9]+\.md)")
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")

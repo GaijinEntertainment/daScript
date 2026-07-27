@@ -92,6 +92,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/tune.md` | The long-form `[tune]` reference that `llvm_tune.md` points at — the full permutation/scope/policy surface |
 | `skills/profiler.md` | Runtime profiling and `--das-profiler-leaks` — the full guide `memory_leak_detection.md` points at |
 | `skills/linq_fold_patterns.md` | Which chain shapes `_fold(...)` recognizes — the full pattern reference `linq.md` points at |
+| `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow. dasLLAMA's own ~130 knobs are generated into `modules/dasLLAMA/ENVIRONMENT.md` |
 | `skills/perf_lint.md` | Adding or interpreting `PERF*` rules in `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
 | `skills/style_lint.md` | Adding or interpreting `STYLE*` rules in `daslib/style_lint.das` |
 

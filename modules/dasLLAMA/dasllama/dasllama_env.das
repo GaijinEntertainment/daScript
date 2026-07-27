@@ -400,6 +400,76 @@ def public env_registry() : array<EnvKnob> {
     return <- out
 }
 
+def private kind_name(k : EnvKind) : string {
+    if (k == EnvKind.flag) return "flag"
+    if (k == EnvKind.number) return "number"
+    if (k == EnvKind.path) return "path"
+    return "text"
+}
+
+def private area_title(a : EnvArea) : string {
+    if (a == EnvArea.engine) return "Engine"
+    if (a == EnvArea.metal) return "Metal backend"
+    if (a == EnvArea.vulkan) return "Vulkan backend"
+    if (a == EnvArea.accelerate) return "Accelerate / AMX backend"
+    if (a == EnvArea.harness) return "Harness — tuner and probes"
+    if (a == EnvArea.benchmark) return "Benchmarks"
+    if (a == EnvArea.profiling) return "Profiling and baselines"
+    if (a == EnvArea.test) return "Tests"
+    if (a == EnvArea.example) return "Examples and tutorials"
+    return "daslang core knobs dasLLAMA honours"
+}
+
+def private area_note(a : EnvArea) : string {
+    if (a == EnvArea.engine) return "Read by the inference engine itself, so these affect any program that loads a model."
+    if (a == EnvArea.metal) return "Apple GPU backend. Absent on non-Apple builds, where setting them does nothing."
+    if (a == EnvArea.vulkan) return "Vulkan GPU backend. Present only where the dasVulkan package is installed."
+    if (a == EnvArea.accelerate) return "Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group."
+    if (a == EnvArea.core) return "Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`."
+    return ""
+}
+
+//! Renders the whole registry as the `ENVIRONMENT.md` body, grouped by area. `modules/dasLLAMA/
+//! ENVIRONMENT.md` is this output verbatim — `harness/gen_env_doc.das` writes it and
+//! `tests/test_env_registry.das` fails when the checked-in file drifts from it.
+def public env_markdown() : string {
+    var reg <- env_registry()
+    let areas <- [EnvArea.engine, EnvArea.metal, EnvArea.vulkan, EnvArea.accelerate,
+                  EnvArea.harness, EnvArea.benchmark, EnvArea.profiling, EnvArea.test,
+                  EnvArea.example, EnvArea.core]
+    var out = build_string() $(var w) {
+        w |> write("# dasLLAMA environment variables\n\n")
+        w |> write("GENERATED from `env_registry()` in `dasllama/dasllama_env.das` — do not edit by hand.\n")
+        w |> write("Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read anywhere\n")
+        w |> write("in the tree without a registry entry fails `tests/test_env_registry.das`.\n\n")
+        w |> write("Types: **flag** is unset-means-default, `0`/`false`/`off`/`no`/empty is false and\n")
+        w |> write("anything else true; **number** falls back to the default when unset or unparseable;\n")
+        w |> write("**text** and **path** are taken verbatim. Every read goes through `env_flag` /\n")
+        w |> write("`env_int` / `env_int64` / `env_str`, so the rules are the same everywhere.\n\n")
+        w |> write("A knob is read ONCE, at init or behind a one-time gate — reading the environment on a\n")
+        w |> write("per-token path is what PERF027 exists to catch (see `skills/perf_lint.md`).\n")
+        for (a in areas) {
+            var any = false
+            for (e in reg) {
+                if (e.area != a) continue
+                if (!any) {
+                    w |> write("\n## {area_title(a)}\n\n")
+                    let note = area_note(a)
+                    if (!empty(note)) {
+                        w |> write("{note}\n\n")
+                    }
+                    w |> write("| Variable | Type | Default | Effect |\n|---|---|---|---|\n")
+                    any = true
+                }
+                let dflt = empty(e.dflt) ? "unset" : e.dflt
+                w |> write("| `{e.name}` | {kind_name(e.kind)} | {dflt} | {e.doc} |\n")
+            }
+        }
+    }
+    delete reg
+    return out
+}
+
 //! True when `name` is a registered knob.
 def public env_is_registered(name : string) : bool {
     var reg <- env_registry()
