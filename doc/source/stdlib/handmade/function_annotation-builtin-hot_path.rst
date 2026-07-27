@@ -1,0 +1,1 @@
+Declares that the function, and everything it calls, must not allocate on the heap, read the environment, or perform I/O. Equivalent to ``[no_alloc, no_env, no_io]``. Checked by the PERF026-028 rules in ``daslib/perf_lint``, which the annotated code does not need to require — the marker itself is metadata only and costs nothing.

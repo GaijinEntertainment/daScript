@@ -2081,7 +2081,8 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def hot_report(frames : array<HotFrame>; fi : int; sink : HotSink; want : HotBits; root_file : string) {
-        return if (uint(sink.bit & want) == 0u)
+        // cast each side: AOT emits bitfield & bitfield as a raw C++ &, ambiguous when one is const
+        return if ((uint(sink.bit) & uint(want)) == 0u)
         // honor a nolint at EITHER end: a report can be anchored in a different file than the sink
         let code = sink.bit.alloc ? "PERF026" : (sink.bit.env ? "PERF027" : "PERF028")
         return if (is_lint_suppressed(sink.site.at, code))
