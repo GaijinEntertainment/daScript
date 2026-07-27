@@ -171,7 +171,7 @@ Sites:
 | `llvm_tune.das:991` `cli_forces_tune` | `--tune` | macro-time; shares the app's argv |
 | `dasllama_tuner.das:39` `tune_fast_requested` | `--tune-fast` | |
 | `tune_kernels.das:137` `tune_fast_requested` | `--tune-fast` | verbatim duplicate of the above |
-| `gen_tune_probe.das` | — | has **no** parser (see Open) |
+| `gen_tune_probe.das` | `--tune-fast` | has **no** parser today — add one (§8) |
 
 **Accessor: `get_user_args()`.** Mode-aware — `argv[1..]` under a standalone `-exe`, the post-`--`
 slice otherwise (clargs.das:70). `cli_forces_tune` currently hand-walks for `--` then `--tune`,
@@ -199,11 +199,32 @@ Two smaller points:
 - Help flag is `-?`, not `-h`: the daslang host intercepts `-h`/`--help` before forwarding script
   args.
 
+## 8. `gen_tune_probe` must honour `--tune-fast`
+
+`dasllama_tuner.das:51` passes `-- --tune-fast` to **both** halves and banners `mode = FAST`, but
+`gen_tune_probe.das` has no parser for it — the flag is silently dropped, and the banner's 20/80
+and 4/8/20 budgets are `tune_kernels`' numbers only. That half is a flat best-of-`ROUNDS = 6`
+(gen_tune_probe.das:49, a bare constant with no justifying comment) across three family loops
+(gen_tune_probe.das:929, :1470, and the q51 loop).
+
+**What fast should mean here.** There is no screening phase to narrow — the only dial is the flat
+round count. `tune_kernels` fast cuts its total budget 80 → 20 (4×) and its full-grid screening
+20 → 4 (5×). The proportionate move is **`ROUNDS` 6 → 3 under fast** (6 → 2 if we want to match
+the 3× more closely). Don't port the screening machinery: it pays when the grid is large and the
+round count is high, which is why `tune_kernels` has it and a best-of-6 loop does not.
+
+**Do not touch the confirm pass under fast.** `CONFIRM_ROUNDS = 2` is already minimal, and the
+confirm is a *correctness* gate, not a measurement budget — cutting it ships an unconfirmed crown,
+which is the exact failure it exists to prevent ("the SPR amx lesson", gen_tune_probe.das:1310).
+Note its cost is mostly the unconditional `discover_fallback_stamp()` compile-only child; the
+model-prefill arms only run when the winner diverges from the fallback *and*
+`DASLLAMA_CONFIRM_MODEL` is set, so on most boxes they never run at all.
+
+The parser goes in as clargs from the start rather than hand-rolled-then-migrated, so this is part
+of §7 rather than a separate change.
+
 ## Open
 
 - Prefix spelling for event lines.
 - Whether the final winner summary is the current `===== summary =====` block or a tightened one.
-- `gen_tune_probe.das` never parses `--tune-fast`, but `dasllama_tuner.das:51` passes it to both
-  halves and prints `mode = FAST` as though it applied to both. That half is a fixed `ROUNDS = 6`
-  (gen_tune_probe.das:49); the 20/80 and 4/8/20 budgets in the tuner banner are `tune_kernels`'
-  numbers only. Intentional, or should the generator half honour it too?
+- `ROUNDS` 6 → 3 or 6 → 2 under fast (§8).
