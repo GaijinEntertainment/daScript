@@ -45,7 +45,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
         return <- out
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let n = int64(length(bytes))
+        let n = long_length(bytes)
         var o = 12l
         while (o + 8l <= n) {
             let id = rd_u32(bytes, o)

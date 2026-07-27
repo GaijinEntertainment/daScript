@@ -22,11 +22,16 @@ module lint_config shared private
 //! Anything that is not a boolean entry under ``[rules]`` is ignored.
 //! If the file is missing, unreadable, or fails to parse the call is a
 //! no-op — built-in defaults stand.
+//!
+//! Two environment variables feed the same cascade: ``DAS_LINT_CONFIG_PATH``
+//! redirects which file is read, and ``DAS_LINT_DISABLE`` (comma-separated
+//! codes) turns rules off for one run, overriding everything above.
 
 require daslib/fio
 require daslib/json
 require daslib/toml
 require daslib/ast_boost
+require daslib/strings_boost
 
 //! Path override env var. When ``DAS_LINT_CONFIG_PATH`` is set, the macro
 //! cascade reads that path instead of ``{get_das_root()}/.lint_config`` —
@@ -41,11 +46,25 @@ def private resolved_config_path() : string {
     return "{get_das_root()}/.lint_config"
 }
 
-//! Loads the repo-level lint config (``{get_das_root()}/.lint_config`` by
-//! default; ``$DAS_LINT_CONFIG_PATH`` if set) into ``disabled_codes``.
-//! No-op when the file is missing or unreadable.
+//! Ad-hoc rule opt-out for one run: ``DAS_LINT_DISABLE=PERF026,LINT017`` (bare codes, comma
+//! separated, surrounding whitespace ignored, unknown codes harmless). Needs no source edit —
+//! the "let me add a log line while I debug this" hatch. Applied last, so it overrides the config.
+def public load_env_disabled(var disabled_codes : table<string>) : void {
+    return if (!has_env_variable("DAS_LINT_DISABLE"))
+    for (part in split(get_env_variable("DAS_LINT_DISABLE"), ",")) {
+        let code = strip(part)
+        if (!empty(code) && !key_exists(disabled_codes, code)) {
+            disabled_codes |> insert(code)
+        }
+    }
+}
+
+//! Loads the repo-level lint config (``{get_das_root()}/.lint_config`` by default;
+//! ``$DAS_LINT_CONFIG_PATH`` if set) into ``disabled_codes``, then layers ``$DAS_LINT_DISABLE``
+//! on top. No-op when the file is missing or unreadable.
 def public load_lint_config(var disabled_codes : table<string>) : void {
     load_lint_config_from_path(resolved_config_path(), disabled_codes)
+    load_env_disabled(disabled_codes)
 }
 
 //! Parser entry point. Reads ``path`` (TOML) and folds the ``[rules]``
@@ -130,6 +149,8 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     for (code in keys(_cache_on)) {
         if (key_exists(disabled, code)) disabled |> erase(code)
     }
+    // last, so a one-run DAS_LINT_DISABLE beats a `CODE = true` in the repo config
+    load_env_disabled(disabled)
     return <- disabled
 }
 

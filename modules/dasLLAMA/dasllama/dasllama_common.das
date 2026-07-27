@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_common shared public
 
 require daslib/fio
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -370,9 +371,14 @@ def allow_cpu_prefill(on : bool = true) {
     g_cpu_prefill_allowed = on ? 1 : 0
 }
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_cpu_prefill_allowed() {
+    g_cpu_prefill_allowed = env_flag("DASLLAMA_CPU_PREFILL", false) ? 1 : 0
+}
+
 def private cpu_prefill_allowed : bool {
     if (g_cpu_prefill_allowed < 0) {
-        g_cpu_prefill_allowed = get_env_variable("DASLLAMA_CPU_PREFILL") == "1" ? 1 : 0
+        load_cpu_prefill_allowed()
     }
     return g_cpu_prefill_allowed == 1
 }
@@ -2068,8 +2074,7 @@ let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mi
 // the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
-    let e = get_env_variable("DASLLAMA_GPU_MIN_CTX")
-    let v = int64(to_int(e))   // non-numeric -> 0 -> treated as unset (keep the default floor)
+    let v = env_int64("DASLLAMA_GPU_MIN_CTX", 0l)   // unset or non-numeric keeps the default floor
     return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
 }
 
@@ -2105,7 +2110,7 @@ def resident_upload(var t : Model; seq_cap : int64) : bool {
     }
     // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
     // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = get_env_variable("DASLLAMA_PIN_PREFILL")
+    let pin = env_str("DASLLAMA_PIN_PREFILL", "")
     if ((!empty(pin) && pin != "vulkan") || !empty(active_prefill_override())) {
         return false
     }
@@ -2622,7 +2627,7 @@ def moe_gpu_upload_resident(var t : Model) {
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
     let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
-    if (cls_servable && get_env_variable("DASLLAMA_GPU_CLS") != "0"
+    if (cls_servable && env_flag("DASLLAMA_GPU_CLS", true)
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
         set_moe_gpu_cls_off(t.wcls_off)
     }
@@ -3526,7 +3531,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (gguf_is_array(m, "{arch}.feed_forward_length")) {
             t.ffn_w <- gguf_int_array(m, bytes, "{arch}.feed_forward_length")
             if (long_length(t.ffn_w) != layers) {
-                panic("dasLLAMA: feed_forward_length array has {length(t.ffn_w)} entries, expected {layers}")
+                panic("dasLLAMA: feed_forward_length array has {long_length(t.ffn_w)} entries, expected {layers}")
             }
             for (w in t.ffn_w) { hidden = max(hidden, w) }
         } elif (gguf_has(m, "{arch}.feed_forward_length")) {
@@ -3590,7 +3595,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_is_array(m, "{arch}.attention.recurrent_layers")) {
                 let rl <- gguf_int_array(m, bytes, "{arch}.attention.recurrent_layers")
                 if (long_length(rl) != layers) {
-                    panic("dasLLAMA: recurrent_layers array has {length(rl)} entries, expected {layers}")
+                    panic("dasLLAMA: recurrent_layers array has {long_length(rl)} entries, expected {layers}")
                 }
                 for (l in range64(layers)) {
                     if (rl[l] != 0l) {
@@ -4449,7 +4454,7 @@ struct Session {
     v : array<float>          // value, this position (kv_dim)
     att : array<float>        // attention scores, one seq_len row PER HEAD (head h at h*seq_len) —
                               // the per-token forward() path threads over heads past the decode threshold
-    att_b : array<float>      // batched prefill attention scores, one (start_pos+npos)-wide row PER HEAD
+    @scratch att_b : array<float>      // batched prefill attention scores, one (start_pos+npos)-wide row PER HEAD
                               // so the head loop threads with no shared scratch (sized in forward_prefill)
     logits : array<float>     // output logits (vocab_size)
     xq : array<int8>          // activation quantized to Q8 (sized max(dim, hidden_dim)) for the Q8·Q8 kernel
@@ -4457,8 +4462,8 @@ struct Session {
     // q8_0-K decode query, quantized ONCE per token after RoPE (empty unless kv_dtype_k == q8_0;
     // batched decode resizes to nrows × qd). Dedicated planes: xq/xs hold the LIVE input quants
     // while the fused chain's stage-0 q epilogues fill these
-    attq : array<int8>        // quantized query rows (qd)
-    atts : array<float>       // ... and their per-32-block scales (qd / 32)
+    @scratch attq : array<int8>        // quantized query rows (qd)
+    @scratch atts : array<float>       // ... and their per-32-block scales (qd / 32)
     // fused decode-chain scratch (team_parallel_stages): the FFN chain's stage-0 workers requant
     // their activated-hidden rows while OTHER chunks still read the input quants in xq/xs, so the
     // requant needs its own buffers; chain_stages is the reused stage-def array (no per-layer alloc)
@@ -4472,13 +4477,13 @@ struct Session {
     kxq : array<int8>         // Q8_K-form activation quants (kq v2 — every kq weight reads these; sized maxn)
     kxs : array<float>        // Q8_K per-256 activation scales (maxn / 256)
     kxbs : array<int>         // Q8_K per-16 activation sums (maxn / 16)
-    chain_stages : array<int3>  // stage defs, int3(range_begin, range_end, num_chunks)
+    @scratch chain_stages : array<int3>  // stage defs, int3(range_begin, range_end, num_chunks)
     // flash-decode attention partials (fused chain, ctx > FLASH_DECODE_SLICE): per (head, slice)
     // running max / exp-sum / unnormalized AV accumulator, combined per head in the chain's
     // combine stage. Sized lazily on first deep-ctx use (n_heads x nsl [x head_size])
-    fl_m : array<float>
-    fl_l : array<float>
-    fl_o : array<float>
+    @scratch fl_m : array<float>
+    @scratch fl_l : array<float>
+    @scratch fl_o : array<float>
     // KV cache — codec-encoded byte blobs (dtype fixed per session at create). Layout is ragged
     // per layer: layer l's slab starts at byte kv_bprefix_*[l] * seq_len. Shared-KV layers alias
     // their source layer's slab (same prefix value).
@@ -4510,18 +4515,18 @@ struct Session {
     hb2_b : array<float>      // FFN gate (npos x hidden_dim)
     xqb : array<int8>         // batched activation Q8 quants (npos x max(dim, hidden_dim))
     xsb : array<float>        // batched activation Q8 scales (npos x max(dim, hidden_dim) / 32)
-    xbsb : array<int>         // batched per-16 activation sums (npos x maxn / 16) — the kq batch tile's offset term
-    kxqb : array<int8>        // batched Q8_K-form quants (kq v2 MoE gather source; lazily sized npos x dim)
-    kxsb : array<float>       // batched Q8_K per-256 scales (npos x dim / 256)
-    kxbsb : array<int>        // batched Q8_K per-16 sums (npos x dim / 16)
+    @scratch xbsb : array<int>         // batched per-16 activation sums (npos x maxn / 16) — the kq batch tile's offset term
+    @scratch kxqb : array<int8>        // batched Q8_K-form quants (kq v2 MoE gather source; lazily sized npos x dim)
+    @scratch kxsb : array<float>       // batched Q8_K per-256 scales (npos x dim / 256)
+    @scratch kxbsb : array<int>        // batched Q8_K per-16 sums (npos x dim / 16)
     // flash-attention per-head packing scratch (empty unless AttnPrefillMode.flash; sized in
     // forward_prefill to n_heads × tile, so each head's tile work is contention-free when threaded)
-    fa_q : array<float>       // packed Q tile [n_heads × QT × head_size]
-    fa_k : array<float>       // packed Kᵀ tile [n_heads × head_size × KV]
-    fa_v : array<float>       // packed V tile  [n_heads × KV × head_size]
-    fa_kq : array<float>      // score / prob tile [n_heads × QT × KV]
-    fa_vkq : array<float>     // output accumulator [n_heads × QT × head_size]
-    fa_tmp : array<float>     // per-head one-row dequant staging for the Kᵀ pack [n_heads × head_size]
+    @scratch fa_q : array<float>       // packed Q tile [n_heads × QT × head_size]
+    @scratch fa_k : array<float>       // packed Kᵀ tile [n_heads × head_size × KV]
+    @scratch fa_v : array<float>       // packed V tile  [n_heads × KV × head_size]
+    @scratch fa_kq : array<float>      // score / prob tile [n_heads × QT × KV]
+    @scratch fa_vkq : array<float>     // output accumulator [n_heads × QT × head_size]
+    @scratch fa_tmp : array<float>     // per-head one-row dequant staging for the Kᵀ pack [n_heads × head_size]
     // RoPE cos/sin table (empty until forward_prefill builds it, sized npos x head_size/2). angle
     // = pos*freq is identical across heads AND layers, precomputed once. Kept LOCAL (run-state, not
     // a module global) so jobque fork-context cloning stays cheap.
@@ -4546,11 +4551,11 @@ struct Session {
     moe_dq : array<int8>        // the k activated-hidden rows requantized (k x n_ff_exp)
     moe_ds : array<float>       // ... and their scales (k x n_ff_exp / 32)
     // heat-cache split-FFN scratch (decode: hits ride the GPU chain async, misses stay CPU)
-    moe_hdn : array<float>      // GPU hit-expert down outputs, compacted (nhits x dim)
-    heat_hit : array<int8>      // per routed position: 1 = served by the heat cache
-    heat_o1 : array<int64>      // compacted pool-coordinate offsets for the hit dispatch
-    heat_o3 : array<int64>
-    heat_o2 : array<int64>
+    @scratch moe_hdn : array<float>      // GPU hit-expert down outputs, compacted (nhits x dim)
+    @scratch heat_hit : array<int8>      // per routed position: 1 = served by the heat cache
+    @scratch heat_o1 : array<int64>      // compacted pool-coordinate offsets for the hit dispatch
+    @scratch heat_o3 : array<int64>
+    @scratch heat_o2 : array<int64>
     // the layer's rmsnormed activation quantized ONCE and reused across every expert's gate/up
     // matmul — dedicated buffers because the down-projections quantize s.hb into the shared xq/xs
     moe_xq : array<int8>        // xb's Q8 quants (dim)
@@ -4560,32 +4565,32 @@ struct Session {
     moe_dbs : array<int>        // per-16 sums of moe_dq (k x n_ff_exp / 16)
     // grouped MoE prefill scratch — sized per prefill by ffn_moe_prefill_grouped; empty for dense
     // arches, decode, and the per-position reference path
-    moe_rlog : array<float>     // batched router logits (npos x n_expert)
-    moe_idx_b : array<int64>    // per-position selected expert ids (npos x k)
-    moe_w_b : array<float>      // per-position selected weights (npos x k)
-    moe_gl_b : array<float>     // per-position shared-expert sigmoid gates (npos; shexp arches only)
-    moe_cnt : array<int64>      // per-expert bucket cursor, run END after the CSR fill (n_expert)
-    moe_bkt : array<int64>      // (position*k + slot) entries grouped by expert (npos x k)
-    moe_inv : array<uint>       // grid -> bucket row map (bkt's inverse; GPU combine arm only)
-    moe_gxq : array<int8>       // one bucket's gathered activation quants (npos x dim)
-    moe_gxs : array<float>      // one bucket's gathered activation scales (npos x dim/32)
-    moe_gxbs : array<int>       // ... and their per-16 sums (npos x dim/16; kq-expert layers only)
-    moe_hbs : array<int>        // bucket hidden requant per-16 sums (npos x nfx/16; kq-expert layers only)
-    moe_ord : array<int2>       // fused-prefill LPT region order (x = expert, y = bucket cnt; capacity ne)
+    @scratch moe_rlog : array<float>     // batched router logits (npos x n_expert)
+    @scratch moe_idx_b : array<int64>    // per-position selected expert ids (npos x k)
+    @scratch moe_w_b : array<float>      // per-position selected weights (npos x k)
+    @scratch moe_gl_b : array<float>     // per-position shared-expert sigmoid gates (npos; shexp arches only)
+    @scratch moe_cnt : array<int64>      // per-expert bucket cursor, run END after the CSR fill (n_expert)
+    @scratch moe_bkt : array<int64>      // (position*k + slot) entries grouped by expert (npos x k)
+    @scratch moe_inv : array<uint>       // grid -> bucket row map (bkt's inverse; GPU combine arm only)
+    @scratch moe_gxq : array<int8>       // one bucket's gathered activation quants (npos x dim)
+    @scratch moe_gxs : array<float>      // one bucket's gathered activation scales (npos x dim/32)
+    @scratch moe_gxbs : array<int>       // ... and their per-16 sums (npos x dim/16; kq-expert layers only)
+    @scratch moe_hbs : array<int>        // bucket hidden requant per-16 sums (npos x nfx/16; kq-expert layers only)
+    @scratch moe_ord : array<int2>       // fused-prefill LPT region order (x = expert, y = bucket cnt; capacity ne)
     // fused-prefill region triples (woff, row0, cnt) + per-expert bias offsets, one set per
     // projection — cleared and refilled per layer, capacity persists (no per-layer alloc)
-    moe_offs1 : array<int64>    // gate regions (3 per touched expert)
-    moe_offs3 : array<int64>    // up regions
-    moe_offs2 : array<int64>    // down regions
-    moe_boffs1 : array<int64>   // gate bias offsets (moe_exps_bias arches)
-    moe_boffs3 : array<int64>   // up bias offsets
-    moe_boffs2 : array<int64>   // down bias offsets
-    moe_ghb : array<float>      // bucket gate outputs (npos x max(n_ff_exp, n_ff_shexp))
-    moe_ghb2 : array<float>     // bucket up outputs (same shape)
-    moe_hq : array<int8>        // bucket hidden requant quants (npos x max(n_ff_exp, n_ff_shexp))
-    moe_hs : array<float>       // bucket hidden requant scales (same / 32)
-    moe_gout : array<float>     // bucket (then shared-expert) down-projection output (npos x dim)
-    moe_eout : array<float>     // routed expert outputs parked by (position, slot) (npos x k x dim)
+    @scratch moe_offs1 : array<int64>    // gate regions (3 per touched expert)
+    @scratch moe_offs3 : array<int64>    // up regions
+    @scratch moe_offs2 : array<int64>    // down regions
+    @scratch moe_boffs1 : array<int64>   // gate bias offsets (moe_exps_bias arches)
+    @scratch moe_boffs3 : array<int64>   // up bias offsets
+    @scratch moe_boffs2 : array<int64>   // down bias offsets
+    @scratch moe_ghb : array<float>      // bucket gate outputs (npos x max(n_ff_exp, n_ff_shexp))
+    @scratch moe_ghb2 : array<float>     // bucket up outputs (same shape)
+    @scratch moe_hq : array<int8>        // bucket hidden requant quants (npos x max(n_ff_exp, n_ff_shexp))
+    @scratch moe_hs : array<float>       // bucket hidden requant scales (same / 32)
+    @scratch moe_gout : array<float>     // bucket (then shared-expert) down-projection output (npos x dim)
+    @scratch moe_eout : array<float>     // routed expert outputs parked by (position, slot) (npos x k x dim)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
@@ -4593,10 +4598,10 @@ struct Session {
     // gemma-4 E-series per-layer embeddings (PLE) scratch — empty unless config.n_embd_per_layer > 0.
     // ple_inp holds one (position, layer) side vector per row, POSITION-major: (p, l, i) at
     // p*(n_layers*ple) + l*ple + i. Sized to 1 position in make_run_state, npos in forward_prefill.
-    ple_inp : array<float>      // the built per-(position, layer) side input (npos x n_layers x ple)
-    ple_proj : array<float>     // model-proj scratch for the pre-step (npos x n_layers x ple)
-    ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
-    ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
+    @scratch ple_inp : array<float>      // the built per-(position, layer) side input (npos x n_layers x ple)
+    @scratch ple_proj : array<float>     // model-proj scratch for the pre-step (npos x n_layers x ple)
+    @scratch ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
+    @scratch ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
     ple_gpu_pending : bool      // forward_prefill skipped the CPU pre-step — the engaged driver builds it
     // qwen35 deltanet recurrent state (persists across tokens; zeroed at position 0) + scratch.
     // Empty unless config.recr_mask != 0. State is forward-only — dn_pos guards against rewind.
@@ -4616,18 +4621,18 @@ struct Session {
     dn_qg : array<float>           // decode: 2 x qd
     dn_qgate : array<float>        // decode: qd
     // prefill twins (sized per prefill by forward_prefill_alloc)
-    dn_qkv_b : array<float>
-    dn_z_b : array<float>
-    dn_beta_b : array<float>
-    dn_g_b : array<float>
-    dn_o_b : array<float>
-    dn_qg_b : array<float>
-    dn_qgate_b : array<float>
+    @scratch dn_qkv_b : array<float>
+    @scratch dn_z_b : array<float>
+    @scratch dn_beta_b : array<float>
+    @scratch dn_g_b : array<float>
+    @scratch dn_o_b : array<float>
+    @scratch dn_qg_b : array<float>
+    @scratch dn_qgate_b : array<float>
     // chunked deltanet prefill scratch (DnPrefillMode.chunked only)
-    dn_conv_b : array<float>       // batched conv + SiLU output (npos x conv_dim)
-    dn_wtap : array<float>         // conv weights transposed tap-major for the batched form (d_conv x conv_dim)
-    dn_cws : array<float>          // per-v-head chunk workspace slabs (dt_rank x dn_cws_head_size)
-    dn_tail : array<float>         // GPU deltanet chain: last taps qkv rows back (conv-history store)
+    @scratch dn_conv_b : array<float>       // batched conv + SiLU output (npos x conv_dim)
+    @scratch dn_wtap : array<float>         // conv weights transposed tap-major for the batched form (d_conv x conv_dim)
+    @scratch dn_cws : array<float>          // per-v-head chunk workspace slabs (dt_rank x dn_cws_head_size)
+    @scratch dn_tail : array<float>         // GPU deltanet chain: last taps qkv rows back (conv-history store)
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
     // post-output-norm hidden of the LAST evaluated position (llama.cpp's t_h_nextn handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
@@ -4834,7 +4839,7 @@ def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = 
 def make_run_state_paged(c : Config; var pool : KVPool) : Session {
     let kv_layers = c.n_layers + c.n_layer_nextn   // + the MTP/NextN draft block's slab
     if (long_length(pool.blob_of) != kv_layers) {
-        panic("make_run_state_paged: pool was built for a different model ({length(pool.blob_of)} layers vs {kv_layers})")
+        panic("make_run_state_paged: pool was built for a different model ({long_length(pool.blob_of)} layers vs {kv_layers})")
     }
     for (l in range64(kv_layers)) {
         if (pool.krow_bytes[pool.blob_of[l]] != kv_row_bytes(pool.kdt, layer_kv_dim(c, l))) {
@@ -5076,8 +5081,8 @@ def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<flo
     let half = head_size / 2l
     let scale = c.rope_mscale   // scales cos/sin — ggml applies mscale to NORM and NEOX alike (mistral3 YaRN)
     let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(npos * half)
-    sin_tab |> resize(npos * half)
+    cos_tab |> resize(npos * half)   // nolint:PERF026 — session scratch; same size every decode step, so this allocates once
+    sin_tab |> resize(npos * half)   // nolint:PERF026 — see above
     unsafe {
         var cp = addr(cos_tab[0])
         var sp = addr(sin_tab[0])
@@ -5298,6 +5303,7 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
 
 // Double the pool's group capacity. Every blob resizes IN PLACE — a hoisted cache pointer would
 // dangle, which is why kv_ensure runs at the top of the forward entries, before any hoist.
+[cold_path]   // doubling growth: amortized O(1) per page, and never on a flat session
 def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
@@ -5350,13 +5356,20 @@ def release_kv_pages_(var s : Session) {
 //! Grow this session's block table to cover positions [0, upto) — the ONLY place a paged session
 //! allocates cache. Runs at the top of forward/forward_prefill/eval_batch, BEFORE any cache-pointer
 //! hoist: group allocation may resize the pool's blobs. Flat sessions: no-op.
+[cold_path]   // only on a page crossing — once every kv_pool.page_rows positions
+def private kv_grow_block_table(var s : Session; np : int64) {
+    while (long_length(s.block_table) < np) {
+        s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    }
+}
+
 def kv_ensure(var s : Session; upto : int64) {
     if (s.kv_pool == null) {
         return
     }
     let np = (upto + s.kv_pool.page_rows - 1l) / s.kv_pool.page_rows
-    while (long_length(s.block_table) < np) {
-        s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    if (long_length(s.block_table) < np) {
+        kv_grow_block_table(s, np)
     }
 }
 
@@ -5728,6 +5741,7 @@ def private kv_slice_av_d(var flop : float?; attp : float const?; vcl : uint8 co
 // The flash-decode witness body (see the call in attention_chain_decode): exact single-pass
 // recompute of every head's attention output vs the sliced result in xb. Codec-generic like the
 // workers; test-only and serial, so the extraction costs nothing.
+[cold_path]   // reference-check path, armed by g_flash_decode_check
 def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : float const?;
                                  kcp, vcp : auto const?; xbv : float const?;
                                  runs : KVRun const?;
@@ -5817,6 +5831,7 @@ def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : floa
 }
 
 // The witness' codec dispatch — the K×V matrix spelled once, like the worker wrappers.
+[cold_path]   // reference-check path, armed by g_flash_decode_check
 def private flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?;
                                  kcl, vcl : uint8 const?; kdt, vdt : KVDtype; xbv : float const?;
                                  runs : KVRun const?;
@@ -6745,7 +6760,8 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         var flmp = nsl > 1 ? addr(s.fl_m[0]) : null
         var fllp = nsl > 1 ? addr(s.fl_l[0]) : null
         var flop = nsl > 1 ? addr(s.fl_o[0]) : null
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        // the lambda's capture frame is heap per call — the dispatch API's cost, not this kernel's
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026
             if (stage == 0) {
                 // qkv rows in 32-row groups (row-local); a group never straddles a q/k/v region boundary
                 unsafe {
@@ -7127,7 +7143,7 @@ def private ffn_chain_decode(t : Model; var s : Session; l : int64) {
         let kqp2 = kq_plane_q(t, f2, w2o)
         let ksp2 = kq_plane_s(t, f2, w2o)
         let rows2 = kq_rows_for(f2)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 let grain = stage == 0 ? grain0 : 32l
                 let r0 = int64(jb) * grain
@@ -7201,6 +7217,7 @@ def private ffn_chain_decode(t : Model; var s : Session; l : int64) {
     }
 }
 
+[no_alloc, no_env, no_io]
 def private attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) {
     if (fused_attn_ok(t, l)) {
         attention_chain_decode(t, s, l, pos)
@@ -7775,6 +7792,7 @@ def private dn_flush_all(var s : Session) {
 
 // The qwen35 decode attention block: forward-only state guard, then deltanet or gated attention
 // per the layer mask.
+[no_alloc, no_env, no_io]
 def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
     if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
         if (pos == 0l) {
@@ -7857,6 +7875,7 @@ def private dense_ffn_inplace(t : Model; var s : Session; l : int64) {
     }
 }
 
+[no_alloc, no_env, no_io]
 def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
     if (fused_ffn_ok(t, l)) {
         ffn_chain_decode(t, s, l)
@@ -8014,10 +8033,10 @@ def private moe_shexp_gate(t : Model; l : int64; xp : float const?) : float {
 let private REUSE_CAPS = fixed_array(8l, 16l, 32l, 64l)   // simulated per-layer LRU capacities
 
 struct private ReuseLayer {
-    freq : array<int64>    // per-expert pick count (static-pinning oracle input)
-    prev : array<int64>    // previous token's picks
+    @scratch freq : array<int64>    // per-expert pick count (static-pinning oracle input)
+    @scratch prev : array<int64>    // previous token's picks
     prevn : int64
-    lru : array<int64>     // the simulated LRU lists, flattened at cap-sum offsets
+    @scratch lru : array<int64>     // the simulated LRU lists, flattened at cap-sum offsets
     lrun : int64[4]
     hits : int64[4]
     consec : int64         // picks already picked at the previous token
@@ -8036,7 +8055,7 @@ let private HEAT_DECAY = 256l    // halve the counters every this many tokens (p
 let private HEAT_REPIN = 64l     // advise interval (per layer, layer-staggered)
 
 struct private HeatLayer {
-    cnt : array<float>     // decaying pick counters (n_expert)
+    @scratch cnt : array<float>     // decaying pick counters (n_expert)
     tokens : int64
     hits : int64           // routed picks the slot cache served
     picks : int64          // ... out of this many
@@ -8075,9 +8094,14 @@ def heat_report_reset() {
     }
 }
 
+[cold_path]   // one-time env resolution; heat_armed is a global test after the first call
+def private load_heat_want() {
+    g_heat_want = max(gpu_want_heat(), 0l)
+}
+
 def private heat_armed() : bool {
     if (g_heat_want < 0l) {
-        g_heat_want = max(gpu_want_heat(), 0l)
+        load_heat_want()
     }
     return g_heat_want > 0l && moe_gpu_heat_on()
 }
@@ -8106,6 +8130,7 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     delete ids
 }
 
+[cold_path]   // opt-in bookkeeping behind the heat_moe gate
 def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne : int64) {
     let li = int(l)
     if (length(g_heat) <= li) {
@@ -8129,9 +8154,14 @@ def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne
     }
 }
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_expert_reuse() {
+    g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
+}
+
 def private expert_reuse_armed() : bool {
     if (g_reuse_on < 0) {
-        g_reuse_on = get_env_variable("DASLLAMA_EXPERT_REUSE") == "1" ? 1 : 0
+        load_expert_reuse()
     }
     return g_reuse_on == 1
 }
@@ -8141,6 +8171,7 @@ def set_expert_reuse(on : bool) {
     g_reuse_on = on ? 1 : 0
 }
 
+[cold_path]   // opt-in bookkeeping behind expert_reuse_armed
 def private expert_reuse_note(l : int64; idx : array<int64>; k, ne : int64) {
     let li = int(l)
     if (length(g_reuse) <= li) {
@@ -8332,7 +8363,7 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) {
         let fbp = biased ? addr<float const?>(t.fblob[0]) : null
         let idxp = addr<int64 const?>(s.moe_idx[0])
         let wvp = addr<float const?>(s.moe_w[0])
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 if (stage == 0) {
                     // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
@@ -8962,6 +8993,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
 }
 
 // gemma4 FFN decode: dense (12B/31B) or the parallel dense-shared + routed MoE (26B-A4B) by expert count.
+[no_alloc, no_env, no_io]
 def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
     let c = t.config
     if (c.n_expert <= 0l) {
@@ -8992,6 +9024,7 @@ def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
 
 // gemma4 FFN prefill: dense delegates; MoE takes the grouped expert-bucketed path (Q8, default) or the
 // per-position reference loop (fp32 loads and the bit-identical A/B switch).
+[no_alloc, no_env, no_io]
 def private ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     if (c.n_expert <= 0l) {
@@ -9025,6 +9058,7 @@ def private ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int
 
 // MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's
 // optional post-norm / layer-output-scale steps so future MoE arches compose with them.
+[no_alloc, no_env, no_io]
 def private ffn_moe_decode(t : Model; var s : Session; l : int64) {
     let c = t.config
     if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
@@ -9212,7 +9246,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     let mmrows = mm_q8q8_rows_fn()
     let ngrp = int(vocab / 32l)
     let n0 = chain_stage_chunks(ngrp, int(vocab), dim * vocab)
-    s.chain_stages |> resize(1)
+    s.chain_stages |> resize(1)   // nolint:PERF026 — session scratch, fixed size after the first classifier call
     s.chain_stages[0] = int3(0, ngrp, n0)
     count_parallel_dispatch(min(n0, ngrp))
     unsafe {
@@ -9235,7 +9269,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
         let kqpc = kq_plane_q(t, cls_fmt, t.wcls_off)
         let kspc = kq_plane_s(t, cls_fmt, t.wcls_off)
         let rowsc = kq_rows_for(cls_fmt)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 let r0 = int64(jb) * 32l
                 let r1 = int64(je) * 32l
@@ -9252,6 +9286,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
+[no_alloc, no_env, no_io]
 def forward(t : Model; var s : Session; token, pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -9360,6 +9395,7 @@ def set_mtp_batch_cls(on : bool) {
 //! Current state of the [[set_mtp_batch_cls]] gate.
 def get_mtp_batch_cls() : bool => g_mtp_batch_cls
 
+[no_alloc, no_env, no_io]
 def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bool = true) {
     let c = t.config
     let dim = c.dim
@@ -9778,11 +9814,13 @@ var g_forward_prof_acc : table<string; int64>
 var g_forward_prof_disp : table<string; int64>    // parallel_for dispatches per section
 var g_forward_prof_chunks : table<string; int64>   // chunks (jobs) pushed per section
 var g_forward_prof_inline : table<string; int64>   // inline (non-dispatched) runs per section
+var private g_forward_prof_on = false   // armed by forward_profile_reset; see prof_add
 var g_prof_mark_disp = 0l
 var g_prof_mark_chunks = 0l
 var g_prof_mark_inline = 0l
 
 def forward_profile_reset() {
+    g_forward_prof_on = true
     g_forward_prof_acc |> clear()
     g_forward_prof_disp |> clear()
     g_forward_prof_chunks |> clear()
@@ -9793,8 +9831,10 @@ def forward_profile_reset() {
 }
 
 // Sections are sequential and each span ends in exactly one prof_add, so the dispatch-counter
-// deltas since the previous prof_add belong to `name` — jobs-per-section with no call-site changes.
-def private prof_add(name : string; t0 : int64) {
+// deltas since the previous belong to `name`. Armed by forward_profile_reset — it used to run
+// unconditionally: six string-keyed table ops per section, per layer, per token, always.
+[cold_path]   // only reached once profiling is armed; the accumulate IS the cost of measuring
+def private prof_add_armed(name : string; t0 : int64) {
     let cur = g_forward_prof_acc?[name] ?? 0l
     g_forward_prof_acc[name] = cur + int64(get_time_usec(t0))
     let dc = get_disp_count()
@@ -9806,6 +9846,11 @@ def private prof_add(name : string; t0 : int64) {
     g_prof_mark_disp = dc
     g_prof_mark_chunks = ch
     g_prof_mark_inline = il
+}
+
+def private prof_add(name : string; t0 : int64) {
+    return if (!g_forward_prof_on)
+    prof_add_armed(name, t0)
 }
 
 //! The accumulated time (us) for one section since the last reset (0 if the section never ran).
@@ -10606,6 +10651,7 @@ def private attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_p
 }
 
 // attn-norm → batched QKV(+bias) → RoPE → KV-store → prefill attention → out-proj(+post-norm) → residual.
+[no_alloc, no_env, no_io]
 def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
         attention_gpu_prefill(t, s, l, npos, false)   // buckets at_norm / at_gpu / kv_store / at_resid
@@ -11177,6 +11223,7 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
 }
 
 // The qwen35 prefill attention block: forward-only state guard, then deltanet or gated attention.
+[no_alloc, no_env, no_io]
 def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
         if (start_pos == 0l) {
@@ -11194,6 +11241,7 @@ def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos
 }
 
 // ffn-norm → batched gated FFN → down-proj(+post-norm) → residual.
+[no_alloc, no_env, no_io]
 def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     let dim = c.dim
@@ -11282,7 +11330,7 @@ def private moe_gather_rows(var s : Session; b0, cnt, dim, k : int64; with_bs : 
 // Expand one native-MXFP4 expert region [d x n] into EXACT Q8 blocks: q[j] = doubled-e2m1 LUT
 // value, scale = e8m0_half(e) — no requantization error. Interleaved-mr backends write the
 // repacked form directly (byte-for-byte map); non-interleaved backends expand row-major then repack.
-def private expand_mx4_region_q8(t : Model; woff, n, d : int64; var wq : array<int8>; var ws : array<float>) {
+def private expand_mx4_region_q8(t : Model; woff, n, d : int64; @scratch var wq : array<int8>; @scratch var ws : array<float>) {
     let total = n * d
     wq |> resize(total)
     ws |> resize(total / 32l)
@@ -11389,10 +11437,15 @@ def private expand_mx4_region_q8(t : Model; woff, n, d : int64; var wq : array<i
 var private g_gpu_combine = true
 var private g_gpu_combine_probed = false
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_gpu_combine() {
+    g_gpu_combine_probed = true
+    g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
+}
+
 def private gpu_combine_on : bool {
     if (!g_gpu_combine_probed) {
-        g_gpu_combine_probed = true
-        g_gpu_combine = get_env_variable("DASLLAMA_GPU_COMBINE") != "0"
+        load_gpu_combine()
     }
     return g_gpu_combine
 }
@@ -12108,6 +12161,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
 // MoE FFN, prefill: norm, then either the grouped expert-bucketed path (Q8, default) or the
 // per-position reference path through the decode scratch (fp32 models — q4_0 never prefills — and
 // the bit-identical A/B switch).
+[no_alloc, no_env, no_io]
 def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
@@ -12141,6 +12195,7 @@ def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64)
     }
 }
 
+[no_alloc, no_env, no_io]
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     if (npos <= 0l) {
@@ -12186,10 +12241,10 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     if (g_mtp_spec && c.n_layer_nextn > 0l && start_pos > 0l && s.mtp_h_pos1 == start_pos) {
         if (t.metal_blob) {
             if (!empty(g_decode_override_name) && key_exists(g_mtp_seam_overrides, g_decode_override_name)) {
-                if (!invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)) {
+                if (!invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)) {   // nolint:PERF026 — key_exists guards the line above, so the index cannot insert
                     // quality-only miss: the stale seam row dents draft acceptance until the next
                     // draft rewrites it (the verify keeps outputs exact) — loud so a dip is traceable
-                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} — draft acceptance may dip this window\n")
+                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} — draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 — fires only on a seam decline; loud by design so a quality dip is traceable
                 }
             }
         } else {
@@ -12215,7 +12270,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
     if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
@@ -12313,7 +12368,7 @@ def embed_(m : Model; text : string) : array<float> {
 // batched-prefill scratch sizing, shared by token and embedding entries. grow-only no-init:
 // contents are stage output (fully overwritten); `delete` on grow skips the realloc's old-block
 // copy + zero-fill (~5ms saved on a first 512-row prefill).
-def private scratch_resize(var a : array<auto(numT)>; need : int64) {
+def private scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     if (long_length(a) < need) {
         delete a
     }
@@ -12414,7 +12469,7 @@ def private forward_prefill_body(t : Model; var s : Session; npos, start_pos : i
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) — select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {
-            trace_marker("layer", int(l))   // unit boundary for the timeline viewer (no-op untraced)
+            trace_marker("layer", int(l))   // nolint:PERF026 — gated on g_trace_tags; the name->id table lookup is the trace's own cost
             trace_tag(TRACE_TAG_ATTN_STD)   // per-lane trace: color the prefill attention section
             t.blocks.attn_prefill(t, s, l, npos, start_pos)
             trace_tag(TRACE_TAG_FFN_STD)
@@ -12454,6 +12509,7 @@ def private forward_prefill_body(t : Model; var s : Session; npos, start_pos : i
 
 //! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
+[no_alloc, no_env, no_io]
 def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)
@@ -12660,7 +12716,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         return
     }
     if (long_length(tokens) != nrows) {
-        panic("eval_batch: {length(sessions)} sessions but {length(tokens)} tokens — one token per session")
+        panic("eval_batch: {long_length(sessions)} sessions but {long_length(tokens)} tokens — one token per session")
     }
     for (i in range64(nrows)) {
         if (sessions[i] == null) {

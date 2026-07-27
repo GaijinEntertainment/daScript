@@ -44,7 +44,7 @@ def fill_scales(var a : array<float>; cnt, phase : int64) {
 }
 
 def blit_i8(src : array<int8>; var dst : array<int8>; at : int64) {
-    let cnt = int64(length(src))
+    let cnt = long_length(src)
     unsafe {
         let sp = addr<int8 const?>(src[0])
         var dp = addr(dst[at])
@@ -55,7 +55,7 @@ def blit_i8(src : array<int8>; var dst : array<int8>; at : int64) {
 }
 
 def blit_f32(src : array<float>; var dst : array<float>; at : int64) {
-    let cnt = int64(length(src))
+    let cnt = long_length(src)
     unsafe {
         let sp = addr<float const?>(src[0])
         var dp = addr(dst[at])

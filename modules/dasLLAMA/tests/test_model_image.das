@@ -443,8 +443,8 @@ def test_metal_flavor_image(tst : T?) {
             // teacher-forced parity vs a fresh planar CPU control (engine entry, no image
             // cache) — probe-measured noise ~0.75, breakage class 15+; 4.0 = ~4x SNR
             var tp <- load_model_(path, QuantMode.q8)
-            let np = int64(length(prompt))
-            var teach <- [for (i in range64(np, int64(length(g_cpu)))); g_cpu[i]]
+            let np = long_length(prompt)
+            var teach <- [for (i in range64(np, long_length(g_cpu))); g_cpu[i]]
             let maxd = forced_logits_maxd(tp, tm, prompt, teach)
             t |> success(maxd < 4.0, "teacher-forced GPU logits within 4.0 of the CPU control (maxd {maxd})")
             delete teach
@@ -571,7 +571,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
         return <- out
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let n = int64(length(bytes))
+        let n = long_length(bytes)
         var o = 12l
         while (o + 8l <= n) {
             let id = rd_u32(bytes, o)

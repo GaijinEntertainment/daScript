@@ -55,7 +55,7 @@ def private synth_gguf(gtype : int; n_elem : int64; data : array<uint8>) : array
     push_u64(b, uint64(n_elem))
     push_u32(b, uint(gtype))
     push_u64(b, 0ul)   // offset in data blob
-    while ((int64(length(b)) % 32l) != 0l) {
+    while ((long_length(b) % 32l) != 0l) {
         b |> push(uint8(0))
     }
     b |> push_from(data)

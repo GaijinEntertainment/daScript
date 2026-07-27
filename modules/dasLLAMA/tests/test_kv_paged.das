@@ -33,7 +33,7 @@ def test_kv_pool_layout(t : T?) {
     t |> run("blob_of aliases shared-KV layers; row bytes track the dtype; blobs start empty") @(t : T?) {
         let c = mk_shared_config()
         var pool <- create_kv_pool_(c, 4l, KVDtype.f16, KVDtype.f32)
-        t |> equal(int64(length(pool.blob_of)), c.n_layers)
+        t |> equal(long_length(pool.blob_of), c.n_layers)
         t |> equal(pool.nblobs, 4l)   // layers 0..3 own, 4/5 alias
         t |> equal(pool.blob_of[4], pool.blob_of[2])
         t |> equal(pool.blob_of[5], pool.blob_of[3])
@@ -57,7 +57,7 @@ def test_kv_pool_alloc_release(t : T?) {
         t |> equal(0, g0)   // first grow pushes high->low, so the lowest id pops first
         t |> equal(1, g1)
         t |> equal(pool.capacity_groups, 4l)
-        t |> equal(int64(length(pool.kblobs[0])), 4l * 4l * pool.krow_bytes[0])
+        t |> equal(long_length(pool.kblobs[0]), 4l * 4l * pool.krow_bytes[0])
         t |> equal(1, pool.refcnt[g0])
         kv_pool_release_group(pool, g0)
         t |> equal(0, pool.refcnt[g0])
@@ -100,7 +100,7 @@ def test_kv_ensure_growth(t : T?) {
             live += pool.refcnt[g]
         }
         t |> equal(0, live)
-        t |> equal(int64(length(pool.free_groups)), pool.capacity_groups)   // accounting back to baseline
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups)   // accounting back to baseline
         release_kv_pages_(s)                  // no-op on an empty table
         delete s
         delete pool
@@ -168,21 +168,21 @@ def test_kv_paged_memory_proportional(t : T?) {
     t |> run("paged cache bytes track actual context, not seq_len") @(t : T?) {
         let c = mk_config(4l, 4l, 2l, 64l, 1024l)
         var flat <- make_run_state(c)
-        let flat_bytes = int64(length(flat.key_cache)) + int64(length(flat.value_cache))
+        let flat_bytes = long_length(flat.key_cache) + long_length(flat.value_cache)
         delete flat
         var pool <- create_kv_pool_(c, 64l, KVDtype.f32, KVDtype.f32)
         var s <- make_run_state_paged(c, pool)
         kv_ensure(s, 10l)   // 10 positions -> 1 page -> first grow (4 groups)
         var paged_bytes = 0l
         for (b in range64(pool.nblobs)) {
-            paged_bytes += int64(length(pool.kblobs[b])) + int64(length(pool.vblobs[b]))
+            paged_bytes += long_length(pool.kblobs[b]) + long_length(pool.vblobs[b])
         }
         t |> success(paged_bytes * 2l < flat_bytes,
             "10-position paged pool ({paged_bytes}B) is far under the flat slabs ({flat_bytes}B)")
         kv_ensure(s, 600l)   // 10 pages -> grows toward the context, still bounded
         var grown = 0l
         for (b in range64(pool.nblobs)) {
-            grown += int64(length(pool.kblobs[b])) + int64(length(pool.vblobs[b]))
+            grown += long_length(pool.kblobs[b]) + long_length(pool.vblobs[b])
         }
         t |> success(grown > paged_bytes, "deeper context grows the pool")
         release_kv_pages_(s)
@@ -430,7 +430,7 @@ def test_kv_paged_prefill(t : T?) {
             for (i in range(21)) {   // straddles pages at P=8 (2 full + 1 partial)
                 prompt |> push(int64(i % 50 + 2))
             }
-            let n = int64(length(prompt))
+            let n = long_length(prompt)
             var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
             var sp <- make_run_state_paged(c, pool)
             forward_batch(tr, sp, prompt, n, 0l)

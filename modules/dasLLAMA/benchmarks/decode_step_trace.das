@@ -132,7 +132,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
 // per-bucket means over the trace; wall = finish-to-finish (the first step of the run has no
 // predecessor and is skipped), gap = this cb's GPUStart minus the previous cb's GPUEnd
 def private report_buckets(tr; bucket : int64) {   // untyped param = generic — non-Apple builds never compile the Metal-typed body
-    let nt = int64(length(tr))
+    let nt = long_length(tr)
     if (nt < 2l) {
         print("trace too short for buckets\n")
         return

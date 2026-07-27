@@ -115,7 +115,7 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
     var got : array<int64>
     with_job_que() {
         setup_dasllama_jobque()
-        let np = int64(length(MTP_PROMPT))
+        let np = long_length(MTP_PROMPT)
         // plain-decode reference (echo convention: ids[np-1] is the first generated token)
         var s1 = make_run_state(tr.config)
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))

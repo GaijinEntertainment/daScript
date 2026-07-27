@@ -234,18 +234,18 @@ def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
 def private split_generate(trp, trd : Model; prompt : array<int64>; steps : int) : array<int64> {
     var ids : array<int64>
     ids |> reserve(steps)
-    let n = int64(length(prompt))
+    let n = long_length(prompt)
     for (q in range64(n - 1l)) {
-        return <- ids if (int64(length(ids)) >= int64(steps) || prompt[q + 1l] == 1l)
+        return <- ids if (long_length(ids) >= int64(steps) || prompt[q + 1l] == 1l)
         ids |> push(prompt[q + 1l])
     }
     var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
     eval_(trp, s, prompt)
     var token = greedy_top(s.logits, trp.config.vocab_size)
-    while (int64(length(ids)) < int64(steps)) {
+    while (long_length(ids) < int64(steps)) {
         break if (token == 1l)   // BOS delimits sequences (generate's stop)
         ids |> push(token)
-        break if (int64(length(ids)) >= int64(steps))
+        break if (long_length(ids) >= int64(steps))
         var one <- [token]
         eval_(trd, s, one)
         delete one
@@ -548,7 +548,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
         let c = tr.config
         let vocab = c.vocab_size
         let full <- encode(tr, "The old lighthouse keeper watched the storm roll in from the", true, false)
-        let n = int64(length(full))
+        let n = long_length(full)
         var head : array<int64>
         var tail : array<int64>
         head |> reserve(int(n - 2l))
@@ -1142,8 +1142,8 @@ def private gemma2_window_row(t : T?; path : string) {
         var trg <- blob_twin(t, path, 512l)
         trg.config.sliding_window = 160l   // the twin must ride the same shrunk window
         let prompt <- encode(tr, counting_prompt(1, 120), true, false)
-        t |> success(int64(length(prompt)) > 224l,
-            "gemma2-2b/window: prompt depth {length(prompt)} crosses chunk 224")
+        t |> success(long_length(prompt) > 224l,
+            "gemma2-2b/window: prompt depth {long_length(prompt)} crosses chunk 224")
         var cpu_ids : array<int64>
         var gpu_ids : array<int64>
         var served_de = 0l

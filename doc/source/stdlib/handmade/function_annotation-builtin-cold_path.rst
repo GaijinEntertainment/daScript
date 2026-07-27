@@ -1,0 +1,1 @@
+Declares that the function is not on a hot path, pruning the PERF026-028 walk at that call. Use it for a leg that genuinely runs once or rarely — a lazy initializer, a shader or pipeline compile, opt-in bookkeeping behind its own gate, or a reference-check path behind a debug flag — reached from a function under contract.

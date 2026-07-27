@@ -3,6 +3,7 @@ options persistent_heap
 options stack = 65536
 
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE GEMV MSL (zero copy drift)
 require llvm/daslib/f16_cvt
@@ -516,19 +517,15 @@ def private ref_q51_row(wq : array<uint8>; ws : array<uint8>; xf : array<float>;
 
 // ===== host plumbing =====
 
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
-}
-
 def private want(filter_env, name : string) : bool {
     return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
 }
 
 // generic (untyped param) — non-Apple builds never compile the Metal-typed body
 def private upload_bytes(dev; arr : array<uint8>) {
-    var buf = metal_new_buffer_untracked(dev, uint64(length(arr)))
+    var buf = metal_new_buffer_untracked(dev, uint64(long_length(arr)))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), length(arr))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), long_length(arr))
     }
     return buf
 }
@@ -1849,8 +1846,8 @@ def private main_apple(dummy) {
     if (dump_gmx4_msl()) {
         return
     }
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
-    let passes = int64(env_or("DASMETAL_LAB_PASSES", 4))
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let passes = int64(env_int("DASMETAL_LAB_PASSES", 4))
     var dev = metal_create_system_default_device()
     if (dev == null) {
         print("no Metal device\n")

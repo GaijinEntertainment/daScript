@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_whisper shared public
 
 require math
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
 require daslib/apply
@@ -211,7 +212,7 @@ def private wm_repack(var w : WhisperModel; woff, n, d : int64) {
 //! logits GEMV weight; row lookups still read fp32 dblob) + per-layer self/cross q/k/v/o + fc1/fc2.
 //! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.
 def whisper_dec_quantize(var w : WhisperModel) {
-    let total = int64(length(w.dblob)) & ~31l
+    let total = long_length(w.dblob) & ~31l
     w.dqblob |> resize(int(total))
     w.dqscales |> resize(int(total / 32l))
     quantize_q8_0_into(w.dblob, total, w.dqblob, w.dqscales, 0l, 0l)
@@ -336,7 +337,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    if (get_env_variable("DASLLAMA_IMAGE") != "0") {
+    if (env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
@@ -880,7 +881,7 @@ def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64
 //! generation share this path). Leaves next-token logits (for the LAST row, tied token
 //! embedding) in ``ds.logits`` and advances ``ds.n_past``.
 def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array<int> | #) {
-    let n = int64(length(tokens))
+    let n = long_length(tokens)
     let d = w.n_text_state
     let hh = w.n_text_head
     let hs = d / hh
@@ -1082,7 +1083,7 @@ def private exp_sum4(p : float const?; n : int64; m : float) : float {
 // probability mass over timestamps beats every text token, force a timestamp. logprob
 // comparison == raw-logit comparison (log_softmax is a monotone shift).
 def private whisper_force_ts_rule(w : WhisperModel; var logits : array<float>) {
-    let n_ts = int64(length(logits)) - int64(w.tok_beg)
+    let n_ts = long_length(logits) - int64(w.tok_beg)
     unsafe {
         let p = addr<float const?>(logits[0])
         let ts_max = hmax(p + int64(w.tok_beg), n_ts)   // bit-identical to the scalar max fold
@@ -1101,7 +1102,7 @@ def private whisper_force_ts_rule(w : WhisperModel; var logits : array<float>) {
 // log-sum-exp over the current logits — the logprob normalizer whisper.cpp captures between
 // the main filter suite and the force-timestamp rule (plog = logit − this)
 def private logits_lse(logits : array<float>) : float {
-    let n = int64(length(logits))
+    let n = long_length(logits)
     unsafe {
         let p = addr<float const?>(logits[0])
         let m = hmax(p, n)
@@ -1116,8 +1117,8 @@ def private sample_greedy(w : WhisperModel; logits : array<float>; lse : float) 
     var r = SampledTok(id = 0, tid = w.tok_beg)
     unsafe {
         let p = addr<float const?>(logits[0])
-        let bestv = hmax(p, int64(length(logits)))
-        for (i in range64(int64(length(logits)))) {
+        let bestv = hmax(p, long_length(logits))
+        for (i in range64(long_length(logits))) {
             if (p[i] == bestv) {
                 r.id = int(i)
                 break
@@ -1141,7 +1142,7 @@ def private sample_greedy(w : WhisperModel; logits : array<float>; lse : float) 
 // softmax probability of one token id over RAW (pre-filter) logits — the no-speech gate
 // reads p[nosp] off the prompt decode before any filtering
 def private token_prob(logits : array<float>; id : int) : float {
-    let n = int64(length(logits))
+    let n = long_length(logits)
     unsafe {
         let p = addr<float const?>(logits[0])
         let m = hmax(p, n)
@@ -1433,7 +1434,7 @@ def drain(w : WhisperModel; var s : WhisperSession; blk : block<(seg : Transcrib
     //! stays pending. Returns the segment count — 0 until at least 30 s is buffered.
     var count = 0
     // no complete window yet -> nothing will transcribe; hold auto-detect for real audio too
-    if (int64(length(s.pending)) < AUDIO_CHUNK_FRAMES * AUDIO_HOP) {
+    if (long_length(s.pending) < AUDIO_CHUNK_FRAMES * AUDIO_HOP) {
         return 0
     }
     log_mel_whisper(s.pending, w.mel, w.filters, w.enc.n_mel, s.ds.mel_padded, s.ds.mel)
@@ -1444,7 +1445,7 @@ def drain(w : WhisperModel; var s : WhisperSession; blk : block<(seg : Transcrib
         blk |> invoke(seg)
     }
     if (consumed > 0l) {
-        let keep = int64(length(s.pending)) - consumed * AUDIO_HOP
+        let keep = long_length(s.pending) - consumed * AUDIO_HOP
         var rest : array<float>
         rest |> resize(int(max(keep, 0l)))
         for (i in range(int(max(keep, 0l)))) {

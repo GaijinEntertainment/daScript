@@ -238,7 +238,7 @@ def test_metal_prefill_parity(t : T?) {
                     trc.config.seq_len = 2048l
                 }
                 var trcg <- blob_twin(t, path, 2048l)
-                let nfull = int64(length(prompt))
+                let nfull = long_length(prompt)
                 let cut = int(nfull * 3l / 5l)
                 var ch1 <- [for (i in range(cut)); prompt[i]]
                 var ch2 <- [for (i in range(cut, int(nfull))); prompt[i]]

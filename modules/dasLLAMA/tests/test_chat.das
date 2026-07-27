@@ -562,7 +562,7 @@ def test_chat_render_seam(t : T?) {
             render_assistant(m, b, "Four.", toks)
             t |> equal(length(b.session.key_cache), 0, "renderer chat allocates no KV")
             t |> equal(b.session.n_past, 0l, "renderer chat never evals")
-            t |> equal(a.session.n_past, int64(length(toks)), "rendered token count == evaled positions")
+            t |> equal(a.session.n_past, long_length(toks), "rendered token count == evaled positions")
             t |> equal(length(b.history), length(a.history), "transcripts advance in lockstep")
             t |> equal(b.pending, "", "render_assistant consumed the pending text")
             t |> success(same(b.stop_ids, a.stop_ids), "renderer resolves the same stop ids")

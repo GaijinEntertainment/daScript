@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_image shared public
 
 require daslib/fio
+require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/apply
 require strings
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
@@ -393,7 +394,7 @@ def save_image(var t; path : string; tag : string = "") : bool {
         var scalar_blob <- meta->extractData()
         meta_blob |> push_from(scalar_blob)
         let meta_off = cur
-        let meta_bytes = uint64(length(meta_blob))
+        let meta_bytes = uint64(long_length(meta_blob))
         f |> fwrite(meta_blob)
         cur += meta_bytes
         // pad the file itself to a page multiple (the whole-file bytesNoCopy wrap needs it)
@@ -530,7 +531,7 @@ def load_image(path : string; var t; tag : string = "") : bool {
     var meta_blob : array<uint8>
     meta_blob |> resize(int(meta_bytes))
     unsafe {
-        memcpy(addr(meta_blob[0]), reinterpret<void?>(bp + int64(meta_off)), int(meta_bytes))
+        memcpy(addr(meta_blob[0]), reinterpret<void?>(bp + int64(meta_off)), meta_bytes)
     }
     var meta <- new MemSerializer(meta_blob)
     var rarch = Archive(reading = true, stream = meta)
@@ -655,7 +656,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
     // metal mode at load time picks the image FLAVOR: blob-only metal when the drivers can
     // serve the config, planar CPU otherwise (flavors are per-config and self-sufficient)
     let want_metal = mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
-    if (mode == QuantMode.q8 && get_env_variable("DASLLAMA_IMAGE") != "0") {
+    if (mode == QuantMode.q8 && env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let ts_img = ref_time_ticks()
         var t = Model()

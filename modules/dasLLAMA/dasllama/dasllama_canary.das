@@ -115,7 +115,7 @@ struct CanaryState {
 }
 
 def private cn_ensure(var a : array<float>; n : int64) {
-    if (int64(length(a)) < n) {
+    if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
     }
@@ -283,7 +283,7 @@ def load_canary_encoder(path : string) : CanaryEncoder {
 //! log(sum + 2⁻²⁴), then per-feature mean/std norm over valid frames (Bessel n−1, std + 1e-5);
 //! frames past ``valid`` are zeroed (NeMo's seq-len mask). FRAME-major ``[n_len × n_mel]``.
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
-    let n_in = int64(length(samples))
+    let n_in = long_length(samples)
     cn_ensure(st.pre, n_in)
     for (i in range(int(n_in))) {
         st.pre[i] = samples[i]
@@ -312,7 +312,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     st.n_len = (n_padded - n_fft) / CN_HOP + 1l
     let n_len = st.n_len
     cn_ensure(st.mel, n_len * n_mel)
-    let wsz = int64(length(m.window))
+    let wsz = long_length(m.window)
     let wpad = (n_fft - wsz) / 2l
 
     // windowed frames -> DFT via twiddle gemm -> power

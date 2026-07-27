@@ -60,7 +60,7 @@ def private argmax(a : array<float>) : int {
 // prompt) predict the same next token. start_pos>0 exercises the continuation path.
 def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; confident : bool) {
     let c = tr.config
-    let n = int64(length(prompt))
+    let n = long_length(prompt)
     let REL_TOL = 0.05
     with_job_que() {
         setup_dasllama_jobque_()

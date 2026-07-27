@@ -1,0 +1,1 @@
+Declares that the function, and everything it calls, must not read the environment. Reported as PERF027. ``get_env_variable`` calls ``getenv`` and allocates its result in the context heap on every call, so resolve a knob once at ``[init]`` or behind a ``[cold_path]`` loader and cache the value.

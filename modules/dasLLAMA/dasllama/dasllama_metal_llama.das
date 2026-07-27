@@ -5,6 +5,7 @@ module dasllama_metal_llama shared public
 
 require math
 require daslib/fio
+require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed readers + the knob registry
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
@@ -137,8 +138,8 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
     // forward() built this position's rope row(s) before the hook (dual-rope both classes; partial rope rot/2 wide)
     let rot = t.config.rope_dim > 0l ? t.config.rope_dim : t.config.head_size
     let swa_hs = t.config.head_size_swa > 0l ? t.config.head_size_swa : t.config.head_size
-    if (int64(length(s.rope_cos)) < rot / 2l ||
-            (has_dual_rope(t.config) && int64(length(s.rope_cos_swa)) < swa_hs / 2l)) {
+    if (long_length(s.rope_cos) < rot / 2l ||
+            (has_dual_rope(t.config) && long_length(s.rope_cos_swa) < swa_hs / 2l)) {
         return MetalDecodeDecline.rope_rows
     }
     return MetalDecodeDecline.none
@@ -539,7 +540,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
     // tied-fp32 stays CPU; blob models FORCE GPU logits (no CPU planes); MTP serves — finish_step stashes mtp_h from bxf
-    r.gpu_logits = ((t.metal_blob || (!g_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_skip))) &&
+    r.gpu_logits = ((t.metal_blob || (!g_logits_cpu && g_env_logits && empty(g_skip))) &&
         !tied_f32 &&
         t.wcls_off >= 0l)
     if (r.gpu_logits) {
@@ -547,7 +548,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
             r.u_flcap = uniform_f32(c.final_logit_softcap)
         }
         if (!empty(t.suppress)) {   // gemma4: pin the suppressed ids to -1e30 after the cap
-            r.bytes_supp = uint64(int64(length(t.suppress)) * 4l)
+            r.bytes_supp = uint64(long_length(t.suppress) * 4l)
             r.bsupp = pool_acquire_untracked(g_upool, g_dev, r.bytes_supp)
             unsafe {
                 var sp = reinterpret<uint?>(metal_buffer_contents(r.bsupp))
@@ -594,15 +595,15 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
 // the token-dependent input bytes — the ONLY step state not known at encode time
 def private poke_step(s : Session; r : StepRes) {
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
         if (r.bcos_swa != null) {
-            memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(s.rope_cos_swa[0]), int(r.bytes_tab_sw))
-            memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(s.rope_sin_swa[0]), int(r.bytes_tab_sw))
+            memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(s.rope_cos_swa[0]), r.bytes_tab_sw)
+            memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(s.rope_sin_swa[0]), r.bytes_tab_sw)
         }
         if (r.ple) {   // forward()'s ple_pre_decode filled s.ple_inp before the hook
-            memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), int(r.bytes_ple))
+            memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), r.bytes_ple)
         }
     }
 }
@@ -1106,22 +1107,22 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
             var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
             var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
             memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(kmp + lb + dpos * rowb), int(rowb))
+                reinterpret<void?>(kmp + lb + dpos * rowb), rowb)
             memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(vmp + lb + dpos * rowb), int(rowb))
+                reinterpret<void?>(vmp + lb + dpos * rowb), rowb)
             if (!seam) {
                 if (r.bnc == null) {
-                    memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), int(r.bytes_log))
+                    memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
                 }
                 // the head's own h_nextn — recursive drafting handoff (forward_mtp's contract)
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), int(r.bytes_x))
+                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
             }
         }
         if (!seam) {
             s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal MTP draft: dispatch failed ({err})\n")
+        to_log(LOG_ERROR, "dasLLAMA metal MTP draft: dispatch failed ({err})\n")   // nolint:PERF028,PERF026 — error path on a failed draft dispatch
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1149,10 +1150,10 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
     }
     mtp_draft_prep(t, s, token, dpos)
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bxb2), addr < void? >(s.mtp_h[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.x[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bxb2), addr < void? >(s.mtp_h[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
     }
     encode_draft_step(t, r, !seam)
     let ok = finish_draft_step(t, s, r, seam)
@@ -1409,7 +1410,7 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 32l)
     var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
     unsafe {
-        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), int(bytes_rt))
+        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
     }
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
@@ -1472,17 +1473,17 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
                 for (i in range64(2l)) {
                     let prow = kv_phys_row(s, pos + i)
                     memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(kmp + lb + (pos + i) * rowb), int(rowb))
+                        reinterpret<void?>(kmp + lb + (pos + i) * rowb), rowb)
                     memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(vmp + lb + (pos + i) * rowb), int(rowb))
+                        reinterpret<void?>(vmp + lb + (pos + i) * rowb), rowb)
                 }
             }
             var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
-            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), int(c.vocab_size * 4l))
-            memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), int(c.vocab_size * 4l))
+            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), c.vocab_size * 4l)
+            memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), c.vocab_size * 4l)
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({err})\n")
+        to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({err})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1491,6 +1492,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
 //! mtp_spec_eval's GPU twin: draft + B=2 same-slab verify, wholly on the metal decode path.
 //! Cold/decline paths fall back to one plain (GPU) forward — output-invariant either way.
 //! Reject is ~free: row0 IS the truth decode, the dn shadow region flips in — no re-forward.
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
     let pos = s.n_past
@@ -1508,21 +1510,21 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
             cold = kmr.watermark < pos || kmr.cap_rows < pos + 2l
         }
     }
-    if (cold && get_env_variable("DASLLAMA_MTP_DEBUG") == "cold") {   // bring-up bisect: log the failing gate
+    if (cold && g_env_mtp_debug == "cold") {   // bring-up bisect: log the failing gate
         let vok_g = metal_mtp_verify_ok(t, s)
         let dnp = c.recr_mask != 0ul && key_exists(g_dn_mirrors, s.uid) ? g_dn_mirrors[s.uid].pos : -1l
         let wm = key_exists(g_mirrors, s.uid) ? g_mirrors[s.uid].watermark : -1l
-        to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")
+        to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
     }
     if (!cold) {
         // the warm's row-pos h input is the PRE-draft trunk hidden — the draft overwrites mtp_h
         s.mtp_xb_save |> resize(int(c.dim))
         unsafe {
-            memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), int(c.dim * 4l))
+            memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
         }
         cold = !metal_mtp_draft_forward(t, s, tok, pos)
-        if (cold && get_env_variable("DASLLAMA_MTP_DEBUG") == "cold") {
-            to_log(LOG_INFO, "mtp cold: draft declined at pos={pos}\n")
+        if (cold && g_env_mtp_debug == "cold") {
+            to_log(LOG_INFO, "mtp cold: draft declined at pos={pos}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
         }
     }
     if (cold) {
@@ -1531,7 +1533,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         return false
     }
     var d = parallel_argmax(s.logits, c.vocab_size)
-    if (get_env_variable("DASLLAMA_MTP_DEBUG") == "reject") {   // bring-up bisect: force the reject path
+    if (g_env_mtp_debug == "reject") {   // bring-up bisect: force the reject path
         d = 0l
     }
     s.mtp_drafted++
@@ -1560,13 +1562,13 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         r.dn_conv_alt = dm.conv_alt
     }
     unsafe {
-        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.mtp_cat[0]), int(r.bytes_x))
-        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), int(r.bytes_tab))
-        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), int(r.bytes_tab))
+        memcpy(metal_buffer_contents(r.bx), addr < void? >(s.mtp_cat[0]), r.bytes_x)
+        memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
+        memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
         // warm inputs: embed pair + the saved pre-draft h — bcat is untouched by the trunk pass
         var bc = reinterpret<uint8?>(metal_buffer_contents(r.bcat))
-        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), int(2l * c.dim * 4l))
-        memcpy(reinterpret<void?>(bc + 2l * c.dim * 4l), addr < void? >(s.mtp_xb_save[0]), int(c.dim * 4l))
+        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), 2l * c.dim * 4l)
+        memcpy(reinterpret<void?>(bc + 2l * c.dim * 4l), addr < void? >(s.mtp_xb_save[0]), c.dim * 4l)
     }
     encode_verify_step(t, r, pos)
     let vok = finish_verify_step(t, s, r, pos)
@@ -1574,7 +1576,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
     if (vok && truth == d) {
         unsafe {
             var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + c.dim * 4l), int(c.dim * 4l))
+            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + c.dim * 4l), c.dim * 4l)
         }
         release_step(r)
         s.mtp_h_pos1 = pos + 2l
@@ -1593,8 +1595,8 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         // the watermark and the next step rewrites it
         unsafe {
             var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx), int(c.dim * 4l))
-            memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits[0]), int(c.vocab_size * 4l))
+            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx), c.dim * 4l)
+            memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits[0]), c.vocab_size * 4l)
         }
         release_step(r)
         s.mtp_h_pos1 = pos + 1l
@@ -1623,7 +1625,7 @@ var private g_dconc = -1
 
 def private decode_concurrent : bool {
     if (g_dconc < 0) {
-        g_dconc = env_int("DASLLAMA_METAL_DECODE_CONCURRENT", 1)
+        load_decode_concurrent()
     }
     return g_dconc != 0
 }
@@ -1641,7 +1643,7 @@ var private g_dfuse = -1
 
 def private decode_fuse_pre : bool {
     if (g_dfuse < 0) {
-        g_dfuse = env_int("DASLLAMA_METAL_FUSE", 1)
+        load_decode_fuse()
     }
     return g_dfuse != 0
 }
@@ -1725,7 +1727,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         let pos = r.pos
         let cap = r.cap
         unsafe {
-            memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), int(r.bytes_x))
+            memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), r.bytes_x)
             var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
             var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
             let prow = kv_phys_row(s, pos)
@@ -1734,16 +1736,16 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
                 memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(kmp + lb + pos * rowb), int(rowb))
+                    reinterpret<void?>(kmp + lb + pos * rowb), rowb)
                 memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(vmp + lb + pos * rowb), int(rowb))
+                    reinterpret<void?>(vmp + lb + pos * rowb), rowb)
             }
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
-                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), int(r.bytes_log))
+                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
             }
             if (r.gpu_logits && c.n_layer_nextn > 0l) {
                 // forward()'s mtp_h stash contract — bxf holds the post-final-norm hidden this row
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), int(r.bytes_x))
+                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
             }
         }
         if (r.gpu_logits && c.n_layer_nextn > 0l) {
@@ -1758,7 +1760,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         }
         g_us_readback += int64(get_time_usec(ts_rb))
         g_decodes++
-        if (int64(length(g_step_trace)) < g_step_trace_cap) {
+        if (long_length(g_step_trace) < g_step_trace_cap) {
             g_step_trace |> push(MetalDecodeStepTrace(pos = r.pos, mode = r.trace_mode,
                 commit_us = r.t_commit, finish_us = int64(get_time_usec(g_step_trace_t0)),
                 wait_us = wait_us,
@@ -1768,7 +1770,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 ge = metal_command_buffer_gpu_end_time(r.cb)))
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({err}) — falling back to the CPU layer loop\n")
+        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({err}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1945,7 +1947,7 @@ def private discard_pre {
         metal_wait_until_completed(r.cb)
         let err = metal_command_buffer_error(r.cb)
         if (!empty(err)) {
-            to_log(LOG_ERROR, "dasLLAMA metal decode: discarded pre-step failed ({err})\n")
+            to_log(LOG_ERROR, "dasLLAMA metal decode: discarded pre-step failed ({err})\n")   // nolint:PERF028,PERF026 — error path on a discarded pre-step
         }
     }
     release_step(r)
@@ -1975,14 +1977,14 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
         r.btok = pool_acquire(g_pool, g_dev, 64ul)
         build_decode_rope_row(t, npos, g_rope_cos_next, g_rope_sin_next)
         unsafe {
-            memcpy(metal_buffer_contents(r.bcos), addr < void? >(g_rope_cos_next[0]), int(r.bytes_tab))
-            memcpy(metal_buffer_contents(r.bsin), addr < void? >(g_rope_sin_next[0]), int(r.bytes_tab))
+            memcpy(metal_buffer_contents(r.bcos), addr < void? >(g_rope_cos_next[0]), r.bytes_tab)
+            memcpy(metal_buffer_contents(r.bsin), addr < void? >(g_rope_sin_next[0]), r.bytes_tab)
         }
         if (r.bcos_swa != null) {
             build_decode_rope_row_swa(t, npos, g_rope_cos_next_swa, g_rope_sin_next_swa)
             unsafe {
-                memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(g_rope_cos_next_swa[0]), int(r.bytes_tab_sw))
-                memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(g_rope_sin_next_swa[0]), int(r.bytes_tab_sw))
+                memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(g_rope_cos_next_swa[0]), r.bytes_tab_sw)
+                memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(g_rope_sin_next_swa[0]), r.bytes_tab_sw)
             }
         }
         encode_step(t, r, true, prev_blog)
@@ -2028,6 +2030,7 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
 //! The DecodeOverrideFn: runs one token step's whole llama layer stack GPU-resident against the
 //! session's KV mirror. true = done (KV row stored CPU-side too, s.x = final residual, s.logits
 //! when the GPU classifier gates pass); false = declined, the caller runs the CPU layer loop.
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool {
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
@@ -2208,8 +2211,8 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     }
     // dual-rope rows are built per class, each at ITS class's width (gemma4 swa rows = hs_swa/2)
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (int64(length(ws.scr.rope_cos)) < nrows * (c.head_size / 2l) ||
-            (has_dual_rope(c) && int64(length(ws.scr.rope_cos_swa)) < nrows * (swa_hs / 2l))) {
+    if (long_length(ws.scr.rope_cos) < nrows * (c.head_size / 2l) ||
+            (has_dual_rope(c) && long_length(ws.scr.rope_cos_swa) < nrows * (swa_hs / 2l))) {
         return MetalDecodeDecline.rope_rows
     }
     return MetalDecodeDecline.none
@@ -2218,6 +2221,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
+[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
         discard_pre()
@@ -2357,14 +2361,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         return false
     }
     if (g_bgemm_min < 0l) {
-        g_bgemm_min = int64(max(env_int("DASLLAMA_METAL_BATCH_GEMM_MIN", 5), 2))
-        g_bsk = env_int("DASLLAMA_METAL_BATCH_SK", 1) != 0
-        g_bncb = int64(clamp(env_int("DASLLAMA_METAL_BATCH_NCB", 4), 1, 16))
-        g_bconcurrent = env_int("DASLLAMA_METAL_BATCH_CONCURRENT", 1) != 0
-        g_bfuse = env_int("DASLLAMA_METAL_BATCH_FUSE", 1) != 0
-        g_bmv = env_int("DASLLAMA_METAL_BATCH_MV", 1) != 0
-        g_bmv8 = env_int("DASLLAMA_METAL_BATCH_MV8", 1) != 0
-        g_b_pipe = env_int("DASLLAMA_METAL_BATCH_PIPE", 0) != 0
+        load_batch_knobs()
     }
     // the fixed-B GEMV forms cover 4 rows — past that the GEMM is mandatory (the knob can only
     // pull the crossover DOWN) unless the MV8 probe column-tiles (its tiling is probe-tuned to
@@ -2374,7 +2371,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // the mul_mm rail (opt-in, DASLLAMA_METAL_BATCH_MM=1): MEASURED NEGATIVE at M-pad-32 (3B d512
     // -n 32: B=8 145.2 vs GemmB 153.3) — mm's 32x64 tile grids only d/64 threadgroups vs GemmB's
     // 32x32 = 2x occupancy. Kept as the A/B rail for bigger-M futures (B > 16 pads to 64).
-    let use_mm = (use_gemm && get_env_variable("DASLLAMA_METAL_BATCH_MM") == "1" &&
+    let use_mm = (use_gemm && g_env_batch_mm &&
         (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l &&
         (qd_sw % 64l) == 0l && (kvd_sw % 64l) == 0l)
     let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
@@ -2401,14 +2398,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // models stand down to the chunked pair. DASLLAMA_METAL_ATTN_D=0 = the A/B rail to the old path.
     let use_attn_d = (head_size == 128l && !hetero && c.attn_logit_softcap <= 0.0 && c.sliding_window == 0l &&
         !c.attn_sinks &&   // partD's online softmax has no sink seed — sink models take the chunked pair
-        get_env_variable("DASLLAMA_METAL_ATTN_D") != "0")
+        g_env_attn_d)
     let d_nsgs = min((maxcnt + 31l) / 32l, 16l)
     // logits-on-GPU (default ON): the batched final rms + classifier ride the same cb and the
     // CPU tail's classifier (one full weight-plane stream per step — ~6ms of the small-B wall)
     // is skipped via batch_decode_override_logits_done. Gates mirror the single-stream driver's.
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
-    let gpu_logits = ((t.metal_blob || (!g_logits_cpu && get_env_variable("DASLLAMA_METAL_LOGITS") != "0" && empty(g_skip))) &&
+    let gpu_logits = ((t.metal_blob || (!g_logits_cpu && g_env_logits && empty(g_skip))) &&
         !tied_f32 && c.n_layer_nextn == 0l &&
         t.wcls_off >= 0l &&
         (cls_fmt != KqFmt.q8 || !use_gemm || (c.vocab_size % (use_mm ? 64l : 32l)) == 0l))
@@ -2506,7 +2503,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
     var u_fltot = u_flcap != null ? uniform_u32(uint(nrows * c.vocab_size)) : null
     // suppressed token ids pin to -1e30 after the cap (gemma4) — per live row, the CPU order
-    let nsupp = int64(length(t.suppress))
+    let nsupp = long_length(t.suppress)
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
@@ -2562,14 +2559,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_b_ulays[l] = uniform_u32(uint(blockc ? kv_row_bytes(kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l]))
     }
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), int(nrows * dim * 4l))
-        memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), int(bytes_tab))
-        memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), int(bytes_tab))
+        memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
+        memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), bytes_tab)
+        memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), bytes_tab)
         if (dual_rope) {
-            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), int(bytes_tab_sw))
-            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), int(bytes_tab_sw))
+            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), bytes_tab_sw)
+            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), bytes_tab_sw)
         }
-        memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), int(bytes_rt))
+        memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), bytes_rt)
     }
     g_us_bsetup += int64(get_time_usec(ts_all))
     let ts_enc = ref_time_ticks()
@@ -3273,6 +3270,35 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
 
 
 
+// Knobs resolved once at [init]. They were read per decode step, and get_env_variable allocates
+// its result in the context heap on every call — see PERF027.
+var private g_env_logits = true
+var private g_env_batch_mm = false
+var private g_env_attn_d = true
+var private g_env_mtp_debug = ""
+
+[cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
+def private load_batch_knobs() {
+    g_bgemm_min = int64(max(env_int("DASLLAMA_METAL_BATCH_GEMM_MIN", 5), 2))
+    g_bsk = env_int("DASLLAMA_METAL_BATCH_SK", 1) != 0
+    g_bncb = int64(clamp(env_int("DASLLAMA_METAL_BATCH_NCB", 4), 1, 16))
+    g_bconcurrent = env_int("DASLLAMA_METAL_BATCH_CONCURRENT", 1) != 0
+    g_bfuse = env_int("DASLLAMA_METAL_BATCH_FUSE", 1) != 0
+    g_bmv = env_int("DASLLAMA_METAL_BATCH_MV", 1) != 0
+    g_bmv8 = env_int("DASLLAMA_METAL_BATCH_MV8", 1) != 0
+    g_b_pipe = env_int("DASLLAMA_METAL_BATCH_PIPE", 0) != 0
+}
+
+[cold_path]   // one-time env resolution; decode_concurrent is a global test after the first call
+def private load_decode_concurrent() {
+    g_dconc = env_int("DASLLAMA_METAL_DECODE_CONCURRENT", 1)
+}
+
+[cold_path]   // one-time env resolution; decode_fuse_pre is a global test after the first call
+def private load_decode_fuse() {
+    g_dfuse = env_int("DASLLAMA_METAL_FUSE", 1)
+}
+
 [init]
 def dasllama_metal_llama_register() {
     // registered but dormant: only select_decode_override("metal") (env rail DASLLAMA_PIN_DECODE
@@ -3283,6 +3309,10 @@ def dasllama_metal_llama_register() {
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
     register_metal_servable(@@metal_model_servable_impl)   // load_model's image-flavor gate
+    g_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
+    g_env_batch_mm = env_flag("DASLLAMA_METAL_BATCH_MM", false)
+    g_env_attn_d = env_flag("DASLLAMA_METAL_ATTN_D", true)
+    g_env_mtp_debug = env_str("DASLLAMA_MTP_DEBUG", "")
     if (has_env_variable("DASLLAMA_METAL_DECODE_SKIP")) {
         g_skip = get_env_variable("DASLLAMA_METAL_DECODE_SKIP")
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} — timing-attribution mode, output is GARBAGE\n")

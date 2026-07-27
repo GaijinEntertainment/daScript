@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
+require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production 32x32 GEMM MSL (the batch-crossover row)
@@ -4010,7 +4011,7 @@ def private cpu_ref_k6(kq : array<uint8>; ksc : array<uint8>; kd : array<uint8>;
 def private upload_array(dev; arr; bytes : int64) {
     var buf = metal_new_buffer(dev, uint64(bytes))
     unsafe {
-        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), int(bytes))
+        memcpy(metal_buffer_contents(buf), addr < void? >(arr[0]), bytes)
     }
     return buf
 }
@@ -4025,7 +4026,7 @@ def private upload_u32(dev; v : uint) {
 def private download_floats(buf; var dst : array<float>; count : int64) {
     dst |> resize(count)
     unsafe {
-        memcpy(addr < void? >(dst[0]), metal_buffer_contents(buf), int(count * 4l))
+        memcpy(addr < void? >(dst[0]), metal_buffer_contents(buf), count * 4l)
     }
 }
 
@@ -4089,10 +4090,6 @@ def private time_reps_sk(queue; pso_g; bufs_g; groups_g : uint3; tgmem : uint64;
         return -1.0lf
     }
     return gpu_ms / double(reps)
-}
-
-def private env_or(name : string; dflt : int) : int {
-    return has_env_variable(name) ? to_int(get_env_variable(name)) : dflt
 }
 
 def private want(filter_env, name : string) : bool {
@@ -4185,7 +4182,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
 }
 
 def private run_lab(b : B?; variants) {
-    let rounds = env_or("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let refd = 128l
     let bmax = 16l
     var dev = metal_create_system_default_device()

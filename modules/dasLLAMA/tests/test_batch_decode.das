@@ -419,7 +419,7 @@ def test_batch_decode_shrink(t : T?) {
             var maxd = 0.0
             for (st in range64(nsteps)) {
                 eval_batch_(tr, ws, sess, cur)
-                for (k in range64(int64(length(sess)))) {
+                for (k in range64(long_length(sess))) {
                     let ri = live[k]
                     let sp = sess[k]
                     for (v in range64(vocab)) {

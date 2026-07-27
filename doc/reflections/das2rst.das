@@ -1299,7 +1299,7 @@ def document_module_lint(_root : string) {
 def document_module_lint_config(_root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
-        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|seed_default_disabled|build_lint_macro_disabled)$%%),
+        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)
