@@ -192,10 +192,10 @@ Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depend
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues. Overrides set_jobque_threads_cap; see skills/llvm_tune.md. |
+| `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md. |
 | `DAS_JOBQUE_AFFINITY` | number | 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
-| `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode; see skills/llvm_tune.md. |
-| `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override; see skills/llvm_tune.md. |
+| `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |
+| `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_TUNE_COMPILE_FALLBACKS` | text | unset | Semicolon-separated kernel fallbacks for the generated tune probe. |

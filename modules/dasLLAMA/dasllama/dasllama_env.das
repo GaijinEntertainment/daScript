@@ -365,7 +365,7 @@ def private reg_example(var o : array<EnvKnob>) {
 
 def private reg_core(var o : array<EnvKnob>) {
     k(o, "DAS_JOBQUE_THREADS", EnvKind.number, EnvArea.core, "conservative default",
-      "Total compute lanes for job queues. Overrides set_jobque_threads_cap; see skills/llvm_tune.md.")
+      "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md.")
     k(o, "DAS_JOBQUE_AFFINITY", EnvKind.number, EnvArea.core, "0",
       "Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes.")
     k(o, "DAS_JOBQUE_TEAM_RANK_GATE", EnvKind.number, EnvArea.core, "profile-driven",
@@ -373,9 +373,9 @@ def private reg_core(var o : array<EnvKnob>) {
     k(o, "DAS_TUNE_MANIFEST", EnvKind.path, EnvArea.core, "<app>.tune.json",
       "Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only.")
     k(o, "DAS_TUNE_MODE", EnvKind.text, EnvArea.core, "",
-      "Kernel-tuning mode; see skills/llvm_tune.md.")
+      "Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md.")
     k(o, "DAS_TUNE_POLICY", EnvKind.text, EnvArea.core, "",
-      "Kernel-tuning policy override; see skills/llvm_tune.md.")
+      "Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md.")
     k(o, "DAS_TUNE_COMPILE_FALLBACKS", EnvKind.text, EnvArea.core, "",
       "Semicolon-separated kernel fallbacks for the generated tune probe.")
 }
