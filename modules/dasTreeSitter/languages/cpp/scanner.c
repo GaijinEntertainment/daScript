@@ -94,7 +94,7 @@ static bool scan_raw_string_content(Scanner *scanner, TSLexer *lexer) {
     }
 }
 
-void *tree_sitter_cpp_external_scanner_create() {
+void *tree_sitter_cpp_external_scanner_create(void) {
     Scanner *scanner = (Scanner *)ts_calloc(1, sizeof(Scanner));
     memset(scanner, 0, sizeof(Scanner));
     return scanner;
