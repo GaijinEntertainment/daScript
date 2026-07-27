@@ -4,6 +4,7 @@ require daslib/module_path
 require daslib/command_line
 require daslib/fio
 require daslib/jobque_boost   // get_total_hw_cores: the measurement-regime lane count
+require tuner_cli               // --tune-fast, shared with the other half
 require math
 
 // The dasllama scope tuner — the wrapper the policy rail (auto default / --tune / daspkg
@@ -14,8 +15,8 @@ require math
 // A child failure is reported but does not abort the other half — the completeness check
 // upstream names whatever ends up missing.
 
-// The default is the roughly one-minute 20-round full-grid / 80-round finalist budget.
-// Append `-- --tune-fast` for progressive 4/8 screening and a 20-round cap;
+// `-- --tune-fast` narrows both halves, but they are shaped differently: tune_kernels screens
+// progressively (20/80 -> 4/8/20), gen_tune_probe is a flat best-of-N and only drops 6 -> 3.
 // `daspkg release --tune-fast` forwards the same flag here.
 // Both halves take real measurements (the confirm gate is a full prefill), so they must run
 // under the box measurement regime — 16 cores with affinity on the big-SMT x64 boxes, not the
@@ -34,15 +35,6 @@ def private regime_env_prefix() : string {
         pfx = "{pfx}set DAS_JOBQUE_AFFINITY=2&& "   // hard mask — mode 1's hint re-rolls SMT placement per que
     }
     return pfx
-}
-
-def private tune_fast_requested() : bool {
-    for (arg in get_command_line_arguments()) {
-        if (arg == "--tune-fast" || arg == "-tune-fast") {
-            return true
-        }
-    }
-    return false
 }
 
 def private run_half(name : string; fast : bool) : bool {
@@ -76,9 +68,12 @@ def private run_half(name : string; fast : bool) : bool {
 [export]
 def main : int {
     let t0 = ref_time_ticks()
-    let fast = tune_fast_requested()
+    let fast = tuner_fast_requested()
     print("dasllama_tuner: sidecar = {get_env_variable("DAS_TUNE_MANIFEST")}\n")
-    print("dasllama_tuner: mode = {fast ? "FAST (progressive 4/8 screening / 20 max)" : "default (20 screening / 80 max)"}\n")
+    let modeDesc = (fast
+        ? "FAST (kernels 4/8/20 progressive, generators best-of-3)"
+        : "default (kernels 20 screening / 80 max, generators best-of-6)")
+    print("dasllama_tuner: mode = {modeDesc}\n")
     let ok1 = run_half("gen_tune_probe.das", fast)
     let ok2 = run_half("tune_kernels.das", fast)
     print("dasllama_tuner: total {get_time_usec(t0) / 1000} ms\n")

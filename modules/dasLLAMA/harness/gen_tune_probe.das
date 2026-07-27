@@ -43,10 +43,16 @@ require daslib/random
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
+require tuner_cli              // --tune-fast, shared with tune_kernels
 require math
 require strings
 
-let ROUNDS = 6
+// This half is a flat best-of-N with no screening phase to narrow, so the round count is the
+// only budget dial --tune-fast has. The confirm pass is deliberately NOT cut: it is a
+// correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
+let ROUNDS_FULL = 6
+let ROUNDS_FAST = 3
+var ROUNDS = ROUNDS_FULL
 
 struct Fixture {
     n, d, ntok, nb : int64
@@ -940,7 +946,8 @@ def kq_tune_family(fmt : int64) : string {
         hbest[i] = 1.0e30lf
     }
     let HOT_REPS = 16
-    for (_r in range(ROUNDS)) {   // interleaved best-of within the family
+    for (r in range(ROUNDS)) {   // interleaved best-of within the family
+        tune_progress_kernel_step(r + 1, "best-of", length(tvs))
         for (vi in range(nv)) {
             let mi = kq_mr_index(kmrs, vmr[vi])
             let t0 = ref_time_ticks()
@@ -1356,6 +1363,9 @@ def private confirm_and_write(winner : string) : bool {
 
 def tune_mode_run : bool {
     let tune_total_t0 = ref_time_ticks()
+    // q8q8 + four kq formats + q51 + the end-to-end confirm
+    tune_progress_plan("dasllama_generators", 7)
+    tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
     // batch shape: fat STREAMING ffn like the kq fixture — the old 2048x512x64 kv-projection was
     // L2-hot; divergent crowns still pass the e2e confirm gate before shipping
     var fx <- build_fixture(2048l, 8192l, 256l)
@@ -1481,7 +1491,8 @@ def tune_mode_run : bool {
     // the hot shape runs HOT_REPS back-to-back per timing sample: 1MB of weights stays
     // cache-resident, so the sample measures compute, not the first-touch stream
     let HOT_REPS = 16
-    for (_r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
+    for (r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
+        tune_progress_kernel_step(r + 1, "best-of", length(vs))
         for (vi in range(nv)) {
             let t0 = ref_time_ticks()
             run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
@@ -1535,11 +1546,14 @@ def tune_mode_run : bool {
     // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
     print("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
+    tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
     var kok = true
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
         let kq_t0 = ref_time_ticks()
+        tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
         let w = kq_tune_family(fmt)
         print("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
+        tune_progress_kernel_end("k{fmt}q8_tile_gen", w, empty(w) ? "rejected" : "beats")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
         if (empty(w)) {
             // gate failure (the broken perm is named above): record the always-correct
@@ -1554,8 +1568,10 @@ def tune_mode_run : bool {
         }
     }
     let q51_t0 = ref_time_ticks()
+    tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
     let qw = q51_tune_family()
     print("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
+    tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
     if (empty(qw)) {
         // same gate-failure fallback as the kq loop: complete the scope on the reference body
         let qok = tune_manifest_set("q51q8_gemv_gen", "reference")
@@ -1567,8 +1583,10 @@ def tune_mode_run : bool {
         kok = kok && qok
     }
     let confirm_t0 = ref_time_ticks()
+    tune_progress_kernel_begin("confirm (end-to-end prefill)", 0)
     let ok = confirm_and_write(vs[merged]._0) && kok
     print("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
+    tune_progress_kernel_end("confirm (end-to-end prefill)", "", ok ? "holds" : "rejected")
     print("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
     delete y
     delete yg
@@ -1602,6 +1620,9 @@ def main {
     if (!jit_enabled()) {
         print("run with -jit — the generator only fires under the LLVM JIT\n")
         return
+    }
+    if (tuner_fast_requested()) {
+        ROUNDS = ROUNDS_FAST
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips

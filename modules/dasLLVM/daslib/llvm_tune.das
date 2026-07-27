@@ -13,6 +13,7 @@ require daslib/strings_boost
 require daslib/command_line
 require daslib/json_boost
 require daslib/tty
+require daslib/clargs
 require strings
 require math
 require llvm/daslib/llvm_code public
@@ -988,22 +989,38 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
     }
 }
 
-// `--tune` after `--` on the app's command line — visible at macro time (the compiler argv
-// carries the script args)
-def private cli_forces_tune() : bool {
-    var r = false
-    var afterDD = false
-    // NO delete: the builtin aliases a process-global Array header (locked), not a copy
-    var argv <- get_command_line_arguments()
-    for (a in argv) {
-        if (afterDD && a == "--tune") {
-            r = true
-        }
-        if (a == "--") {
-            afterDD = true
-        }
+// The tune flags, parsed off the APP's command line — we share an argv we do not own, so this
+// is the two-arg parse_args form (clargs skips unknown flag-shaped tokens). Keep every field a
+// bool and never read positionals: an app's own `--model foo.gguf` leaves `foo.gguf` in there.
+[CommandLineArgs]
+struct private TuneCliArgs {
+    @clarg_doc = "Re-tune this box's kernels before the app runs"
+    tune : bool
+
+    @clarg_name = "tune-quiet"
+    @clarg_doc = "Tune with no output at all"
+    tune_quiet : bool
+
+    @clarg_name = "tune-verbose"
+    @clarg_doc = "Tune with the full per-variant output instead of a progress display"
+    tune_verbose : bool
+}
+
+// Adopts --tune-quiet/--tune-verbose and answers whether --tune was passed. Runs at MACRO
+// time, so the verbosity has to travel by env: the runtime guard is a different context and
+// would not see this context's global. get_user_args also gets the standalone-exe slice right.
+def private apply_cli_tune_flags() : bool {
+    var r <- parse_args(type<TuneCliArgs>, get_user_args())
+    if (r |> is_err) {
+        return false
     }
-    return r
+    let cfg <- r |> move_unwrap
+    if (cfg.tune_quiet) {
+        tune_set_verbosity("silent")
+    } elif (cfg.tune_verbose) {
+        tune_set_verbosity("verbose")
+    }
+    return cfg.tune
 }
 
 // the exact command a user (or the auto path) runs to tune one scope; the env prefix leads
@@ -1442,7 +1459,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             errors := "[tune_policy] on {func.name}: missing=\"{policy}\" — use fallback | warn | error | auto | restart"
             return false
         }
-        let force = cli_forces_tune()
+        let force = apply_cli_tune_flags()
         if (force && empty(g_scopes)) {
             print("llvm_tune: --tune requested but no [tune_scope] is declared by any required library\n")
         }

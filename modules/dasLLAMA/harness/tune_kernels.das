@@ -21,6 +21,7 @@ require dasllama/dasllama_quant  // quantize templates + the Q4/Q8 reference qua
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
+require tuner_cli               // --tune-fast, shared with the other half
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
 require math                     // mad (referenced by the cloned template bodies)
@@ -96,6 +97,9 @@ let FAST_MID_ROUNDS = 8
 let FAST_MID_FINALISTS = 8
 let FAST_MID_MARGIN = 1.10lf
 let REPS = 2000
+// The outer progress denominator: one per kernel_begin() call in main. A mismatch only skews
+// the bar, never the tuning, but keep it in step when adding a kernel.
+let TUNED_KERNEL_COUNT = 25
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -124,6 +128,32 @@ def screening_keep(best : array<double>; ok : array<bool>; i : int;
     return faster < min_finalists || best[i] <= leader * margin
 }
 
+def private kernel_begin(name : string) : int64 {
+    tune_progress_kernel_begin(name, ROUNDS)
+    return ref_time_ticks()
+}
+
+def private kernel_done(name : string; t0 : int64) {
+    // report() already emitted the end event with its verdict; this is just the timing marker
+    print("TUNE_KERNEL_TIME {name} {get_time_usec(t0) / 1000} ms\n")
+}
+
+// One progress step per measured round: which pass we are in, and how many grid rows are still
+// in contention. Both are already computed by the screening rule — this only reports them.
+def private emit_round(round : int; best : array<double>; ok : array<bool>) {
+    if (round < 0) return
+    var live = 0
+    for (i in range(length(best))) {
+        if (ok[i] && tune_candidate_active(round, best, ok, i)) {
+            live++
+        }
+    }
+    let phase = (round < SCREEN_ROUNDS
+        ? "screening"
+        : ((FAST_MODE && round < FAST_MID_ROUNDS) ? "narrowing" : "finalists"))
+    tune_progress_kernel_step(round + 1, phase, live)
+}
+
 def private tune_candidate_active(round : int; best : array<double>; ok : array<bool>; i : int) : bool {
     if (round < SCREEN_ROUNDS) {
         return true
@@ -132,15 +162,6 @@ def private tune_candidate_active(round : int; best : array<double>; ok : array<
         return screening_keep(best, ok, i, FAST_MID_FINALISTS, FAST_MID_MARGIN)
     }
     return screening_keep(best, ok, i, MIN_FINALISTS, FINALIST_MARGIN)
-}
-
-def private tune_fast_requested() : bool {
-    for (arg in get_command_line_arguments()) {
-        if (arg == "--tune-fast" || arg == "-tune-fast") {
-            return true
-        }
-    }
-    return false
 }
 
 // Print each passing variant's best time as a % delta vs the kernel's SHIPPED baseline (its
@@ -173,6 +194,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     }
     if (winner < 0) {
         print("  {kernel}: no passing variant\n")
+        tune_progress_kernel_end(kernel, "", "rejected")
         return ""
     }
     var wname = names[winner]
@@ -182,10 +204,13 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     if (wname != baseline && base > 0.0lf && margin < 0.5lf) {
         wname = baseline
         print("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor, {margin}%)\n")
+        tune_progress_kernel_end(kernel, wname, "holds")
     } elif (wname == baseline) {
         print("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
+        tune_progress_kernel_end(kernel, wname, "holds")
     } else {
         print("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
+        tune_progress_kernel_end(kernel, wname, "beats")
     }
     return wname
 }
@@ -238,6 +263,7 @@ def bench_dot() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -299,6 +325,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -366,6 +393,7 @@ def bench_axpy() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -427,6 +455,7 @@ def bench_dot_f16() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -492,6 +521,7 @@ def bench_axpy_f16() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -549,6 +579,7 @@ def bench_cvt_f32_to_f16() : string {
 
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -601,6 +632,7 @@ def bench_cvt_f16_to_f32() : string {
 
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -661,6 +693,7 @@ def bench_scale() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -738,6 +771,7 @@ def bench_softmax() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -810,6 +844,7 @@ def bench_rmsnorm() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -874,6 +909,7 @@ def bench_dot_q4() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -940,6 +976,7 @@ def bench_dot_q8q8() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1035,6 +1072,7 @@ def bench_dot_q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1102,6 +1140,7 @@ def bench_dot_q8q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1169,6 +1208,7 @@ def bench_axpy_q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1230,6 +1270,7 @@ def bench_cvt_q8kv_to_f32() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1290,6 +1331,7 @@ def bench_quantize_q8kv_row() : string {
     var sink = 0
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1370,6 +1412,7 @@ def bench_dot_mx4q8() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1441,6 +1484,7 @@ def bench_quantize() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1526,6 +1570,7 @@ def bench_quantize_bs() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1607,6 +1652,7 @@ def bench_rope_tab() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1686,6 +1732,7 @@ def bench_gemm_tile() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1798,6 +1845,7 @@ def bench_laneq4x4() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        emit_round(round, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1823,7 +1871,7 @@ def bench_laneq4x4() : string {
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
 def main {
-    FAST_MODE = tune_fast_requested()
+    FAST_MODE = tuner_fast_requested()
     if (FAST_MODE) {
         SCREEN_ROUNDS = 4
         ROUNDS = 20
@@ -1835,6 +1883,7 @@ def main {
     create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
     let affinity_desc = affinity_inherited ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}" : "hard CPU0 (tuner default)"
     print("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
+    tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT)
 
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
     var add_d0 : array<float>
@@ -1866,81 +1915,81 @@ def main {
     let mul_vs <- mul_inplace_template_variants()
     let cpy_vs <- copy_floats_template_variants()
 
-    var kernel_t0 = ref_time_ticks()
+    var kernel_t0 = kernel_begin("dot")
     let dotw = bench_dot()
-    print("TUNE_KERNEL_TIME dot {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot", kernel_t0)
+    kernel_t0 = kernel_begin("axpy")
     let axpyw = bench_axpy()
-    print("TUNE_KERNEL_TIME axpy {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("axpy", kernel_t0)
+    kernel_t0 = kernel_begin("dot_f16")
     let dotf16w = bench_dot_f16()
-    print("TUNE_KERNEL_TIME dot_f16 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_f16", kernel_t0)
+    kernel_t0 = kernel_begin("axpy_f16")
     let axpyf16w = bench_axpy_f16()
-    print("TUNE_KERNEL_TIME axpy_f16 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("axpy_f16", kernel_t0)
+    kernel_t0 = kernel_begin("cvt_f32_to_f16")
     let cvt16w = bench_cvt_f32_to_f16()
-    print("TUNE_KERNEL_TIME cvt_f32_to_f16 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("cvt_f32_to_f16", kernel_t0)
+    kernel_t0 = kernel_begin("cvt_f16_to_f32")
     let cvt32w = bench_cvt_f16_to_f32()
-    print("TUNE_KERNEL_TIME cvt_f16_to_f32 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("cvt_f16_to_f32", kernel_t0)
+    kernel_t0 = kernel_begin("add_inplace")
     let addw = bench_binary("add_inplace", add_vs, add_d0, add_s, @@(a, b : float) : double => double(a) + double(b))
-    print("TUNE_KERNEL_TIME add_inplace {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("add_inplace", kernel_t0)
+    kernel_t0 = kernel_begin("mul_inplace")
     let mulw = bench_binary("mul_inplace", mul_vs, mul_d0, mul_s, @@(a, b : float) : double => double(a) * double(b))
-    print("TUNE_KERNEL_TIME mul_inplace {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("mul_inplace", kernel_t0)
+    kernel_t0 = kernel_begin("scale_inplace")
     let scalew = bench_scale()
-    print("TUNE_KERNEL_TIME scale_inplace {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("scale_inplace", kernel_t0)
+    kernel_t0 = kernel_begin("copy_floats")
     let copyw = bench_binary("copy_floats", cpy_vs, cpy_d0, cpy_s, @@(_a, b : float) : double => double(b))
-    print("TUNE_KERNEL_TIME copy_floats {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("copy_floats", kernel_t0)
+    kernel_t0 = kernel_begin("softmax")
     let softmaxw = bench_softmax()
-    print("TUNE_KERNEL_TIME softmax {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("softmax", kernel_t0)
+    kernel_t0 = kernel_begin("rmsnorm")
     let rmsw = bench_rmsnorm()
-    print("TUNE_KERNEL_TIME rmsnorm {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("rmsnorm", kernel_t0)
+    kernel_t0 = kernel_begin("dot_q4")
     let dq4w = bench_dot_q4()
-    print("TUNE_KERNEL_TIME dot_q4 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_q4", kernel_t0)
+    kernel_t0 = kernel_begin("dot_q8q8")
     let dq8w = bench_dot_q8q8()
-    print("TUNE_KERNEL_TIME dot_q8q8 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_q8q8", kernel_t0)
+    kernel_t0 = kernel_begin("dot_q8kv")
     let dq8kvw = bench_dot_q8kv()
-    print("TUNE_KERNEL_TIME dot_q8kv {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_q8kv", kernel_t0)
+    kernel_t0 = kernel_begin("dot_q8q8kv")
     let dq8q8kvw = bench_dot_q8q8kv()
-    print("TUNE_KERNEL_TIME dot_q8q8kv {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_q8q8kv", kernel_t0)
+    kernel_t0 = kernel_begin("axpy_q8kv")
     let axq8kvw = bench_axpy_q8kv()
-    print("TUNE_KERNEL_TIME axpy_q8kv {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("axpy_q8kv", kernel_t0)
+    kernel_t0 = kernel_begin("cvt_q8kv_to_f32")
     let cvtq8kvw = bench_cvt_q8kv_to_f32()
-    print("TUNE_KERNEL_TIME cvt_q8kv_to_f32 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("cvt_q8kv_to_f32", kernel_t0)
+    kernel_t0 = kernel_begin("quantize_q8kv_row")
     let quantq8kvw = bench_quantize_q8kv_row()
-    print("TUNE_KERNEL_TIME quantize_q8kv_row {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("quantize_q8kv_row", kernel_t0)
+    kernel_t0 = kernel_begin("dot_mx4q8")
     let dmx4w = bench_dot_mx4q8()
-    print("TUNE_KERNEL_TIME dot_mx4q8 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("dot_mx4q8", kernel_t0)
+    kernel_t0 = kernel_begin("quantize_q8_0_into_ptr")
     let quantw = bench_quantize()
-    print("TUNE_KERNEL_TIME quantize_q8_0_into_ptr {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("quantize_q8_0_into_ptr", kernel_t0)
+    kernel_t0 = kernel_begin("quantize_q8_0_bs_into_ptr")
     let quantbsw = bench_quantize_bs()
-    print("TUNE_KERNEL_TIME quantize_q8_0_bs_into_ptr {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("quantize_q8_0_bs_into_ptr", kernel_t0)
+    kernel_t0 = kernel_begin("rope_scaled_neox_tab")
     let ropew = bench_rope_tab()
-    print("TUNE_KERNEL_TIME rope_scaled_neox_tab {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("rope_scaled_neox_tab", kernel_t0)
+    kernel_t0 = kernel_begin("gemm_f32_uk_4x16")
     let gemmw = bench_gemm_tile()
-    print("TUNE_KERNEL_TIME gemm_f32_uk_4x16 {get_time_usec(kernel_t0) / 1000} ms\n")
-    kernel_t0 = ref_time_ticks()
+    kernel_done("gemm_f32_uk_4x16", kernel_t0)
+    kernel_t0 = kernel_begin("dot_q8q8_laneq4x4")
     let laneqw = bench_laneq4x4()   // last: it pins the repack backend (sticks until process exit)
-    print("TUNE_KERNEL_TIME dot_q8q8_laneq4x4 {get_time_usec(kernel_t0) / 1000} ms\n")
+    kernel_done("dot_q8q8_laneq4x4", kernel_t0)
 
     // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the
     // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).

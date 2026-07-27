@@ -43,6 +43,15 @@ documented where the framework is — see `skills/tune.md`. The one worth repeat
 `DAS_TUNE_MANIFEST` points at the sidecar to read and write, which is how you tune when the
 application directory is read-only.
 
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_TUNE_VERBOSITY` | text | What a tune shows: `silent`, `normal` (default), `verbose`. Anything unrecognized reads as `normal`, so a typo never silences a tune. |
+
+`--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
+process chain — the measuring code is two `popen`s below the process the user typed the flag at.
+It gates only what a human sees: progress *events* are forwarded to a capturing parent regardless,
+so `silent` under a supervisor still yields a full event stream in the log.
+
 ## Lint
 
 | Variable | Type | Effect |
