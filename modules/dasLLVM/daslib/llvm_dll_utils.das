@@ -178,10 +178,6 @@ class public UidNodes {
         return get_base(blk, "block_{get_mangled_name(blk)}")
     }
 
-    def public get_block_ann(mk_blk : ExprMakeBlock?) : DllName {
-        return get_base(mk_blk, "makeblock_ann")
-    }
-
     def reset(var func : Function?) {
         thisFunc = func
     }

@@ -48,6 +48,7 @@ namespace das {
     void * das_get_jit_prologue ();
     void * das_get_jit_epilogue ();
     void * das_get_jit_make_block ();
+    void * das_get_jit_ad_by_sid ();
     void * das_get_jit_debug ();
     void * das_get_jit_iterator_iterate();
     void * das_get_jit_iterator_delete();
