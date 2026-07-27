@@ -1815,7 +1815,9 @@ class PerfLintVisitor : AstVisitor {
             if (is_array_func(expr, "push") || is_array_func(expr, "push_clone") || is_array_func(expr, "emplace")) {
                 var path = ""
                 let rv = find_expr_path(expr.arguments[0], path)
-                if (rv != null && is_defined_outside_loop(rv) && !reserved_paths |> has_value(make_path_key(rv, path))) {
+                // generated destination = lowering artifact (comprehension accumulator); no reserve to add
+                if (rv != null && !rv.flags.generated && is_defined_outside_loop(rv)
+                    && !reserved_paths |> has_value(make_path_key(rv, path))) {
                     let fname = string(expr.func.fromGeneric.name)
                     perf_warning("PERF006: {fname} in loop without prior reserve() may cause repeated reallocations; consider reserve() before the loop", expr.at)
                 }
