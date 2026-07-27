@@ -137,11 +137,12 @@ the watchdog to events in the same PR, drop the legacy strings a release later.
 
 ## 6. Verbosity
 
-Three levels, carried by env because it has to reach four process levels and
-`DAS_TUNE_MODE`/`DAS_TUNE_MANIFEST` already inherit that way with no forwarding code:
+Three levels. **`daslib/clargs` is the front door; env is the transport** — the flag is declared
+once in a clargs spec, and level 1 exports `DAS_TUNE_VERBOSITY=silent|normal|verbose` so it
+reaches all four process levels the same way `DAS_TUNE_MODE`/`DAS_TUNE_MANIFEST` already do, with
+no forwarding code. These are not competing mechanisms: nothing below level 1 parses the flag.
 
-`DAS_TUNE_VERBOSITY=silent|normal|verbose`, set from `--tune-quiet` / `--tune-verbose` on the app
-alongside the existing `--tune` / `--tune-fast`.
+New flags `--tune-quiet` / `--tune-verbose`, alongside the existing `--tune` / `--tune-fast`.
 
 - **silent** — nothing. (Forwarding is unconditional, so a supervised silent run still feeds the
   watchdog; the renderer is simply drawing nothing. Verbosity gates the renderer only.)
@@ -152,9 +153,57 @@ alongside the existing `--tune` / `--tune-fast`.
 `TUNE_KERNEL_TIME` / `TUNE_GEN_TIME` are grep-only markers — nothing parses them, so they demote
 to `verbose` safely. `CONFIRM_PP:` is parsed and must stay exactly as is.
 
+## 7. clargs migration
+
+Every flag in this rail goes through `daslib/clargs` — including migrating the hand-rolled
+parsers already there, per the standing rule in `skills/clargs_usage.md` ("when you edit any
+in-tree tool that still parses `get_command_line_arguments()` directly, migrate it in the same
+PR"). This work edits all of them.
+
+The producer side is *already* clargs — `daspkg` declares `--tune-fast` as a real field
+(`utils/daspkg/commands.das:68-70`) and emits it at commands.das:1434. Only the consumers
+hand-roll. That asymmetry is the whole argument.
+
+Sites:
+
+| site | flag | note |
+|---|---|---|
+| `llvm_tune.das:991` `cli_forces_tune` | `--tune` | macro-time; shares the app's argv |
+| `dasllama_tuner.das:39` `tune_fast_requested` | `--tune-fast` | |
+| `tune_kernels.das:137` `tune_fast_requested` | `--tune-fast` | verbatim duplicate of the above |
+| `gen_tune_probe.das` | — | has **no** parser (see Open) |
+
+**Accessor: `get_user_args()`.** Mode-aware — `argv[1..]` under a standalone `-exe`, the post-`--`
+slice otherwise (clargs.das:70). `cli_forces_tune` currently hand-walks for `--` then `--tune`,
+which is only ever right for the interpreted case; the accessor makes the exe case correct for
+free. (The policy rail is dead under `-exe` today, so this is not a live bug.)
+
+**Sharing argv with the app.** llvm_tune parses an argv it does not own, so it needs the two-arg
+`parse_args(type<TuneCliArgs>, argv)` form — same as `ReleaseDepsArgs` in
+`modules/dasLLVM/daslib/llvm_exe.das:791`, which `skills/clargs_usage.md` names as *the* precedent
+for this exact case, and which lives in this module already.
+
+One hazard to record: clargs skips unknown flag-shaped tokens **without consuming their value**
+(clargs.das:320-326). So an app invoked as `... -- --model foo.gguf --tune` leaves `foo.gguf` in
+the positional list. Harmless here — the tune spec is bool fields only and never reads
+positionals — but **the tune spec must never grow a positional or a value-taking flag whose value
+could be confused with an app token.**
+
+Two smaller points:
+
+- The single-dash `-tune-fast` form the hand-rolled parsers also accept is never produced by
+  anything (daspkg, dasllama_tuner, and the docs all emit `--tune-fast`). clargs drops it; safe.
+- `--tune` stays stripped from the re-exec ([llvm_tune.das:1072](daslib/llvm_tune.das)) so the
+  child converges. `--tune-quiet` / `--tune-verbose` must *survive* it — a quiet run must stay
+  quiet across the relaunch.
+- Help flag is `-?`, not `-h`: the daslang host intercepts `-h`/`--help` before forwarding script
+  args.
+
 ## Open
 
 - Prefix spelling for event lines.
 - Whether the final winner summary is the current `===== summary =====` block or a tightened one.
-- Whether `--tune-quiet`/`--tune-verbose` go through `daslib/clargs` (the tuner currently hand-rolls
-  `get_command_line_arguments()`; `skills/clargs_usage.md` has the migration discipline).
+- `gen_tune_probe.das` never parses `--tune-fast`, but `dasllama_tuner.das:51` passes it to both
+  halves and prints `mode = FAST` as though it applied to both. That half is a fixed `ROUNDS = 6`
+  (gen_tune_probe.das:49); the 20/80 and 4/8/20 budgets in the tuner banner are `tune_kernels`'
+  numbers only. Intentional, or should the generator half honour it too?
