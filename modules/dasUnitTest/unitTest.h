@@ -203,6 +203,9 @@ struct TestObjectNotLocal {
     int fooData;
 };
 
+// hands a TestObjectNotLocal to a block: das has no other way to obtain a value of a non-local type
+DAS_MOD_API void testNotLocalObject(const das::TBlock<void, TestObjectNotLocal> & blk, das::Context * context, das::LineInfoArg * lineinfo);
+
 struct TestObjectNotNullPtr {
     int fooData;
 };

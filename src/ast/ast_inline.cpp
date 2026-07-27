@@ -2125,7 +2125,28 @@ namespace das {
                     bool leafVar = leafA->rtti_isVar();
                     // a non-copyable CONST source cannot move into its temp (30940) - the
                     // original call only ever BOUND it; the temp clone-initializes instead
+                    // a by-value temp is a local, and infer rejects a local of a type that cannot be
+                    // one: a non-local annotation needs unsafe (31020), and a type that neither
+                    // copies nor moves can only be built by its constructor (30199). Refusing the
+                    // site keeps the call as a call - manufacturing the temp anyway would report
+                    // those errors against a generated name the author cannot act on.
+                    auto tempTypeIsLocal = [&]( Expression * init, bool ref ) {
+                        if ( ref || !init->type ) return true;
+                        // infer exempts block types from the isLocal test - a block local is legal,
+                        // it just has to be initialized with a make-block - so leave those alone
+                        if ( init->type->isGoodBlockType() ) return true;
+                        if ( !init->type->isLocal() ) return false;
+                        return init->type->canCopy() || init->type->canMove()
+                            || !init->type->hasNonTrivialCtor();
+                    };
                     auto makeArgTemp = [&]( Expression * init, bool cnst, bool ref, bool viaMove ) {
+                        if ( !tempTypeIsLocal(init, ref) ) {
+                            siteFail(site, "can't inline " + subjName + ": argument '" + P->name
+                                + "' needs a temporary, and " + init->type->describe()
+                                + " can't be a local variable", callLike->at);
+                            argFlavorFail = true;
+                            return;
+                        }
                         string tname = "__inl" + to_string(inlineId) + "_arg_" + P->name;
                         bool viaClone = viaMove && init->type && init->type->constant;
                         temps.push_back(makeTemp(callLike->at, tname, init, cnst, ref, viaMove && !viaClone, viaClone));
@@ -2494,6 +2515,13 @@ namespace das {
                         siteFail(site, "can't inline " + subjName + " here: missing type on the lazy operator", callLike->at);
                         continue;
                     }
+                    // the arms store into an uninitialized declaration of the operator's type, which
+                    // a type whose C++ constructor must run cannot take (30316)
+                    if ( !lazy->type->ref && lazy->type->hasNonTrivialCtor() ) {
+                        siteFail(site, "can't inline " + subjName + " here: lazy operator of type "
+                            + lazy->type->describe() + " requires nontrivial construction", callLike->at);
+                        continue;
+                    }
                     vector<ExpressionPtr> replacement;
                     replacement.push_back(makeUninitDecl(site.stmt->at, rootVar->name, lazy->type));
                     auto readT = [&]() { return new ExprVar(site.stmt->at, rootVar->name); };
@@ -2579,6 +2607,15 @@ namespace das {
                     }
                 }
                 if ( prefixFailed ) continue;
+                // the statement path stores into an UNINITIALIZED result temp, and that temp is a
+                // local: a type whose C++ constructor must run cannot be declared that way (30316).
+                // the [inline] and block shape checks only cover a refType result, so a by-value
+                // result with a nontrivial ctor reaches here
+                if ( subjResult && !subjResult->ref && subjResult->hasNonTrivialCtor() ) {
+                    siteFail(site, "can't inline " + subjName + ": result type "
+                        + subjResult->describe() + " requires nontrivial construction", callLike->at);
+                    continue;
+                }
                 for ( auto & t : temps ) splice.push_back(t);
                 // body
                 das_hash_map<string, string> rename;

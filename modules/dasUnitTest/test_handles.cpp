@@ -385,6 +385,16 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
 }
 
 
+// hands out a TestObjectNotLocal, whose annotation reports isLocal()==false. das code has no other
+// way to obtain one, and a value of a non-local type is what the inliner's argument temp must refuse.
+void testNotLocalObject(const TBlock<void,TestObjectNotLocal> & blk, Context * context, LineInfoArg * at) {
+    TestObjectNotLocal obj;
+    obj.fooData = 13;
+    vec4f args[1];
+    args[0] = cast<TestObjectNotLocal *>::from(&obj);
+    context->invoke(blk, args, nullptr, at);
+}
+
 float2 test_abi_mad2 ( float2 a, float2 b, float2 c ) {
     return v_add(v_mul(a,b),c);
 }
@@ -594,6 +604,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
+    addExtern<DAS_BIND_FUN(testNotLocalObject)>(*this, lib, "testNotLocalObject",
+        SideEffects::modifyExternal, "testNotLocalObject");
     addExtern<DAS_BIND_FUN(testCMRES),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "testCMRES",
         SideEffects::modifyExternal, "testCMRES");
 
