@@ -653,6 +653,24 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   chrome path line stayed 15px in both; terminal 100%->200% halved the grid
   (108x66 -> 56x33) with ui untouched; setting any one scale to 170% left
   the other three unmoved.
+- 57: (Boris, live) Git Activity: the selection bar blocks the Tree view.
+  The perspective banner + the Branches/Focus row sit above the graph and
+  eat the vertical space Tree needs — and Tree is the one perspective whose
+  whole value is seeing the shape at once.
+- 58: (Boris, live) THE DELETE-SAFETY GAP — second roadblock in the
+  delete-unused-worktrees-and-sessions scenario (the first was note 41).
+  On the codex/fix-ci-30233791631 worktree: "there are no UI indications of
+  sessions. how do i know if its safe to delete - i.e. if there are changes
+  which have not been merged into master? It shows 3 commits on a purple
+  line - it shows other lines - but i have no idea."
+  Ground truth measured 2026-07-27: 0 commits outside origin/master,
+  upstream borisbat/codex/fix-ci-30233791631 exists, working tree clean,
+  0 stashes, 0 herd sessions referencing it => SAFE TO DELETE.
+  THE TRAP that makes this a real design problem, not a missing label:
+  against LOCAL master that same branch shows 45 unmerged commits, because
+  local master is 108 behind origin/master. A merged-check against the
+  wrong baseline reports the exact OPPOSITE of the truth. Design proposal
+  in the block below.
 - 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
   command could set or read it and no state dump exposed it, so neither a
   test nor an agent could verify note 55 either way (parity rule:

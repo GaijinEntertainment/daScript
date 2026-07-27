@@ -120,3 +120,56 @@ finish; nothing else depends on it.
    visible; the observer pays down review capacity. Plan assumes external
    first (it is smaller and Phase 3's reviewer summons benefit from it).
 3. **When ssh becomes real** — pull Phase 5 forward or leave it parked.
+
+## Design: worktree/session deletion safety (note 58, 2026-07-27)
+
+Boris hit a wall twice trying to retire an unused worktree: the app knows
+nothing he needs and shows nothing he can act on. The answer is not a
+label — it is a computed VERDICT carrying its reasons.
+
+### The question a user actually asks
+
+"If I delete this, do I lose anything?" It decomposes into five facts,
+every one of them cheap:
+
+| Fact | Source | Meaning when bad |
+|---|---|---|
+| in use | herd registry + running PTYs (already known) | someone is working there NOW |
+| dirty | status porcelain (already counted per worktree) | uncommitted edits die |
+| untracked | same (already counted) | files git never saw die |
+| stashed | stash list filtered to that worktree | stashed work dies |
+| unmerged | rev-list count BASE..head | commits exist nowhere else |
+
+### The trap: which BASE
+
+WorktreeState's ahead/behind are measured against the branch's own
+UPSTREAM — that answers "is it pushed", NOT "is it merged". Both matter,
+and together they give a three-tier verdict:
+
+- unmerged AND unpushed: deleting DESTROYS work. Red.
+- unmerged but pushed: the remote still has it; the worktree is
+  disposable, the branch is not. Amber, with the recovery command.
+- merged into the integration ref: nothing to lose. Green.
+
+The base must be the AUTHORITATIVE ref (origin/master), never local
+master. Measured live: codex/fix-ci-30233791631 reads 45 unmerged against
+local master and 0 against origin/master, because local master sat 108
+behind. The convenient base inverts the answer.
+
+### Proposal
+
+1. Extend WorktreeState with unmerged_commits, merge_base_ref,
+   has_upstream, stash_count, claimed_by (session name or ""), and a
+   derived delete_safety = safe | recoverable | destructive | in_use.
+2. Put the verdict where the decision happens: a badge on every worktree
+   row and session card, colored by tier, tooltip listing the reasons.
+   Absence of a session marker must READ as "no session" — an empty space
+   is indistinguishable from an unimplemented feature, which is exactly
+   the confusion Boris hit.
+3. Make delete a CHECKLIST, not a confirm: the five facts with pass/fail,
+   the tier verdict, and the literal recovery command for the amber case.
+   Blocked cases keep note 41's resolver-session offer.
+4. Tree/History: mark commits already contained in the base, so "3
+   commits on a purple line" reads as "3 commits, all in origin/master".
+5. Recompute on the git observer's cadence, and ALWAYS name the base in
+   the UI ("vs origin/master") so no number is ever ambiguous.
