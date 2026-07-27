@@ -1166,6 +1166,14 @@ def test_grep_usage(t : T?) {
         t |> success(find(text, "common.das") >= 0, "root-anchored glob should match")
         t |> success(find(text, "Found 0 match") < 0, "glob must not silently zero the result")
     }
+    t |> run("explicit '.' directory behaves like the default root") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", ".", "", "utils/mcp/tools/*.das"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "common.das") >= 0, "'.' root must not append a trailing /.")
+        t |> success(find(text, "Found 0 match") < 0, "glob must not silently zero the result")
+    }
 }
 
 [test]
