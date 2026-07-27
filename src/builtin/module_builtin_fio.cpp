@@ -236,6 +236,8 @@ namespace das {
     const FILE * builtin_stdin() GENERATE_IO_STUB_RET
     const FILE * builtin_stdout() GENERATE_IO_STUB_RET
     const FILE * builtin_stderr() GENERATE_IO_STUB_RET
+    bool builtin_is_terminal ( int32_t ) GENERATE_IO_STUB_RET
+    int32_t builtin_terminal_width () GENERATE_IO_STUB_RET
     bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
     const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
@@ -269,12 +271,15 @@ namespace das {
 #include <chrono>
 #if _WIN32
 #include <fcntl.h>
+#include <io.h>             // _isatty
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <unistd.h>         // isatty, STDOUT_FILENO
+#include <sys/ioctl.h>      // TIOCGWINSZ
 #endif
 
 #include <filesystem>
@@ -359,6 +364,40 @@ namespace das {
 
     const FILE * builtin_stderr() {
         return stderr;
+    }
+
+    // fd is 0/1/2 (stdin/stdout/stderr). Whether the stream is a real terminal is the only
+    // reliable way to know a `\r`-redrawn progress display is safe — TERM is still set when
+    // stdout is a pipe or a log file.
+    bool builtin_is_terminal ( int32_t fd ) {
+        if ( fd<0 || fd>2 ) return false;
+#if defined(_WIN32)
+        return _isatty(fd) != 0;
+#else
+        return isatty(fd) != 0;
+#endif
+    }
+
+    // Terminal columns, or 0 when unknown (not a terminal, or the query failed). COLUMNS wins
+    // when the OS query has nothing, which is what a user overriding it expects.
+    int32_t builtin_terminal_width () {
+#if defined(_WIN32)
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        if ( GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi) ) {
+            int32_t w = int32_t(csbi.srWindow.Right) - int32_t(csbi.srWindow.Left) + 1;
+            if ( w>0 ) return w;
+        }
+#else
+        struct winsize ws;
+        if ( ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)==0 && ws.ws_col>0 ) {
+            return int32_t(ws.ws_col);
+        }
+#endif
+        if ( const char * cols = getenv("COLUMNS") ) {
+            int32_t w = atoi(cols);
+            if ( w>0 ) return w;
+        }
+        return 0;
     }
 
     bool builtin_feof(const FILE* _f) {
@@ -2321,6 +2360,11 @@ namespace das {
                 SideEffects::modifyExternal, "builtin_stdout");
             addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr",
                 SideEffects::modifyExternal, "builtin_stderr");
+            addExtern<DAS_BIND_FUN(builtin_is_terminal)>(*this, lib, "is_terminal",
+                SideEffects::accessExternal, "builtin_is_terminal")
+                    ->arg("fd");
+            addExtern<DAS_BIND_FUN(builtin_terminal_width)>(*this, lib, "terminal_width",
+                SideEffects::accessExternal, "builtin_terminal_width");
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep",
                 SideEffects::modifyExternal, "builtin_sleep")
                     ->arg("msec");
