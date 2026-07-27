@@ -372,9 +372,14 @@ def allow_cpu_prefill(on : bool = true) {
     g_cpu_prefill_allowed = on ? 1 : 0
 }
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_cpu_prefill_allowed() {
+    g_cpu_prefill_allowed = env_flag("DASLLAMA_CPU_PREFILL", false) ? 1 : 0
+}
+
 def private cpu_prefill_allowed : bool {
     if (g_cpu_prefill_allowed < 0) {
-        g_cpu_prefill_allowed = env_flag("DASLLAMA_CPU_PREFILL", false) ? 1 : 0
+        load_cpu_prefill_allowed()
     }
     return g_cpu_prefill_allowed == 1
 }
@@ -7211,6 +7216,7 @@ def private ffn_chain_decode(t : Model; var s : Session; l : int64) {
     }
 }
 
+[no_env, no_io]
 def private attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) {
     if (fused_attn_ok(t, l)) {
         attention_chain_decode(t, s, l, pos)
@@ -7785,6 +7791,7 @@ def private dn_flush_all(var s : Session) {
 
 // The qwen35 decode attention block: forward-only state guard, then deltanet or gated attention
 // per the layer mask.
+[no_env, no_io]
 def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
     if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
         if (pos == 0l) {
@@ -7867,6 +7874,7 @@ def private dense_ffn_inplace(t : Model; var s : Session; l : int64) {
     }
 }
 
+[no_env, no_io]
 def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
     if (fused_ffn_ok(t, l)) {
         ffn_chain_decode(t, s, l)
@@ -8085,9 +8093,14 @@ def heat_report_reset() {
     }
 }
 
+[cold_path]   // one-time env resolution; heat_armed is a global test after the first call
+def private load_heat_want() {
+    g_heat_want = max(gpu_want_heat(), 0l)
+}
+
 def private heat_armed() : bool {
     if (g_heat_want < 0l) {
-        g_heat_want = max(gpu_want_heat(), 0l)
+        load_heat_want()
     }
     return g_heat_want > 0l && moe_gpu_heat_on()
 }
@@ -8139,9 +8152,14 @@ def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne
     }
 }
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_expert_reuse() {
+    g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
+}
+
 def private expert_reuse_armed() : bool {
     if (g_reuse_on < 0) {
-        g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
+        load_expert_reuse()
     }
     return g_reuse_on == 1
 }
@@ -8850,6 +8868,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
 }
 
 // gemma4 FFN decode: dense (12B/31B) or the parallel dense-shared + routed MoE (26B-A4B) by expert count.
+[no_env, no_io]
 def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
     let c = t.config
     if (c.n_expert <= 0l) {
@@ -8880,6 +8899,7 @@ def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
 
 // gemma4 FFN prefill: dense delegates; MoE takes the grouped expert-bucketed path (Q8, default) or the
 // per-position reference loop (fp32 loads and the bit-identical A/B switch).
+[no_env, no_io]
 def private ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     if (c.n_expert <= 0l) {
@@ -8913,6 +8933,7 @@ def private ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int
 
 // MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's
 // optional post-norm / layer-output-scale steps so future MoE arches compose with them.
+[no_env, no_io]
 def private ffn_moe_decode(t : Model; var s : Session; l : int64) {
     let c = t.config
     if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
@@ -9140,7 +9161,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
-[no_alloc]
+[no_env, no_io]
 def forward(t : Model; var s : Session; token, pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -9249,6 +9270,7 @@ def set_mtp_batch_cls(on : bool) {
 //! Current state of the [[set_mtp_batch_cls]] gate.
 def get_mtp_batch_cls() : bool => g_mtp_batch_cls
 
+[no_env, no_io]
 def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bool = true) {
     let c = t.config
     let dim = c.dim
@@ -10504,6 +10526,7 @@ def private attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_p
 }
 
 // attn-norm → batched QKV(+bias) → RoPE → KV-store → prefill attention → out-proj(+post-norm) → residual.
+[no_env, no_io]
 def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
         attention_gpu_prefill(t, s, l, npos, false)   // buckets at_norm / at_gpu / kv_store / at_resid
@@ -11075,6 +11098,7 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
 }
 
 // The qwen35 prefill attention block: forward-only state guard, then deltanet or gated attention.
+[no_env, no_io]
 def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
         if (start_pos == 0l) {
@@ -11092,6 +11116,7 @@ def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos
 }
 
 // ffn-norm → batched gated FFN → down-proj(+post-norm) → residual.
+[no_env, no_io]
 def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     let dim = c.dim
@@ -11287,10 +11312,15 @@ def private expand_mx4_region_q8(t : Model; woff, n, d : int64; var wq : array<i
 var private g_gpu_combine = true
 var private g_gpu_combine_probed = false
 
+[cold_path]   // one-time env resolution; the accessor is a global test after the first call
+def private load_gpu_combine() {
+    g_gpu_combine_probed = true
+    g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
+}
+
 def private gpu_combine_on : bool {
     if (!g_gpu_combine_probed) {
-        g_gpu_combine_probed = true
-        g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
+        load_gpu_combine()
     }
     return g_gpu_combine
 }
@@ -12006,6 +12036,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
 // MoE FFN, prefill: norm, then either the grouped expert-bucketed path (Q8, default) or the
 // per-position reference path through the decode scratch (fp32 models — q4_0 never prefills — and
 // the bit-identical A/B switch).
+[no_env, no_io]
 def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
@@ -12039,6 +12070,7 @@ def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64)
     }
 }
 
+[no_env, no_io]
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     if (npos <= 0l) {
@@ -12087,7 +12119,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
                 if (!invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)) {
                     // quality-only miss: the stale seam row dents draft acceptance until the next
                     // draft rewrites it (the verify keeps outputs exact) — loud so a dip is traceable
-                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} — draft acceptance may dip this window\n")
+                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} — draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 — fires only on a seam decline; loud by design so a quality dip is traceable
                 }
             }
         } else {
@@ -12352,6 +12384,7 @@ def private forward_prefill_body(t : Model; var s : Session; npos, start_pos : i
 
 //! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
+[no_env, no_io]
 def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)

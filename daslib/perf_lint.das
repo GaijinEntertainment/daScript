@@ -353,8 +353,11 @@ class PerfLintVisitor : AstVisitor {
         pass
     }
 
+    // The file is part of the key: the PERF026-028 chains report sinks in OTHER files, so a
+    // line|column key alone silently drops a finding that happens to share a position elsewhere.
     def location_key(at : LineInfo) : uint64 {
-        return uint64(at.line) | (uint64(at.column) << uint64(20))
+        let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
+        return pos ^ (intptr(at.fileInfo) * 1099511628211ul)
     }
 
     // Filters: disabled (denylist) and enabled (whitelist; empty == all).
@@ -2019,6 +2022,9 @@ class PerfLintVisitor : AstVisitor {
 
     def hot_report(frames : array<HotFrame>; fi : int; sink : HotSink; want : HotBits; root_file : string) {
         return if (uint(sink.bit & want) == 0u)
+        // honor a nolint at EITHER end: a report can be anchored in a different file than the sink
+        let code = sink.bit.alloc ? "PERF026" : (sink.bit.env ? "PERF027" : "PERF028")
+        return if (is_lint_suppressed(sink.site.at, code))
         // sink's own location, unless another file or a SHARED node — then the caller-side anchor
         var at = sink.site.at
         let shared_node = frames[fi].fn.flags.generated || frames[fi].fn.fromGeneric != null

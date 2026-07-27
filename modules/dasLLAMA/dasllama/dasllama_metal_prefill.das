@@ -4,8 +4,8 @@ options _comment_hygiene = true
 module dasllama_metal_prefill shared public
 
 require math
+require daslib/perf_lint  // PERF026-028: the hot-path contracts below
 require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
-require strings
 require daslib/fio
 require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/msl_shader
@@ -4773,6 +4773,7 @@ def public metal_prefill_shutdown {
     g_pf_failed = false
 }
 
+[cold_path]   // PSO compilation happens once per pipeline
 def private pf_compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
     var pso = pipeline_from_source(g_pf_dev, source, entry, fastmath, err)
@@ -4783,6 +4784,7 @@ def private pf_compile_pso(source, entry : string; fastmath : bool; var ok : boo
     return pso
 }
 
+[cold_path]   // one-time device/PSO bring-up, guarded by its own inited flag
 def private metal_prefill_init : bool {
     if (g_pf_pso_add != null) {
         return true
@@ -5736,6 +5738,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     return metal_prefill_init()
 }
 
+[no_env, no_io]
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
     pf_weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
@@ -6117,7 +6120,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // command-buffer split (DASLLAMA_METAL_NCB chunks): each chunk commits as soon as encoded, so
     // the scheduler analyzes chunk k while chunk k-1 executes. DASLLAMA_METAL_UNRETAINED=1 skips
     // per-dispatch retain/release too. Default ~4 layers/chunk (3B: slack 57ms -> 9ms, +10% pp512).
-    let ncb = clamp(int64(env_int("DASLLAMA_METAL_NCB", int((n_enc_layers + 3l) / 4l))), 1l, n_enc_layers)
+    let ncb = clamp(int64(g_pf_env_ncb > 0 ? g_pf_env_ncb : int((n_enc_layers + 3l) / 4l)), 1l, n_enc_layers)
     let unret = g_pf_env_unretained
     let layers_per_cb = (n_enc_layers + ncb - 1l) / ncb
     // the capture rail: kn_* record each chunk as a step graph, graph_flush_sched replays on a
@@ -6780,7 +6783,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         readback_us += int64(get_time_usec(ts_rb))
         g_prefills++
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")
+        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalPrefillDecline.gpu_error)
     }
     // return the pooled buffers (uniforms too); the weight regions stay resident
@@ -6968,7 +6971,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         g_pf_stage_gpu_ms += gpu_ms
         g_pf_stage_rb_us += readback_us
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"}\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
     }
     return ok
 }
@@ -6980,6 +6983,7 @@ var private g_pf_env_logits = true
 var private g_pf_env_attn = true
 var private g_pf_env_unretained = false
 var private g_pf_env_capture = true
+var private g_pf_env_ncb = 0   // 0 = unset, fall back to the layer-derived default
 
 [init]
 def dasllama_metal_prefill_register() {
@@ -6992,6 +6996,7 @@ def dasllama_metal_prefill_register() {
     g_pf_env_attn = env_flag("DASLLAMA_METAL_ATTN", true)
     g_pf_env_unretained = env_flag("DASLLAMA_METAL_UNRETAINED", false)
     g_pf_env_capture = env_flag("DASLLAMA_METAL_PF_CAPTURE", true)
+    g_pf_env_ncb = env_int("DASLLAMA_METAL_NCB", 0)
     if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
         g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
         to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")

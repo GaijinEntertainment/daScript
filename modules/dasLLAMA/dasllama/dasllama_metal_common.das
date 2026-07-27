@@ -5,8 +5,8 @@ options _metal_manual_dispatch = true   // PERMANENT opt-out: this module IS the
 module dasllama_metal_common shared public
 
 require math
+require daslib/perf_lint  // [cold_path] on the one-time bring-up legs
 require strings
-require daslib/fio
 require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -906,7 +906,7 @@ def private mirror_slice_shape(t : Model; s : Session; pos : int64) : tuple<cap 
 }
 
 def private mirror_ceiling_bytes : uint64 {
-    let ceil_mb = uint64(clamp(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : env_int("DASLLAMA_METAL_KV_MIRROR_MB", 4096), 64, 4096))
+    let ceil_mb = uint64(clamp(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64, 4096))
     return ceil_mb * 1024ul * 1024ul
 }
 
@@ -927,7 +927,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     g_arena_free |> clear()
     g_arena_free |> push((off = 0ul, size = g_arena_bytes))
     g_arena_epoch++
-    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")
+    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")   // nolint:PERF028,PERF026 — arena growth is rare and the upload it announces dwarfs the log
 }
 
 // the arena bytes session s will occupy after mirror_prepare(t, s, pos): its existing slice
@@ -1043,7 +1043,7 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
         g_mirrors[s.uid] = mr
         // the evict target honors the RAW knob (a tiny cap is legitimate idle-eviction policy —
         // the LRU churn tests rely on it); only the arena GROWTH ceiling carries the 64MB floor
-        let cap_mb = uint64(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : env_int("DASLLAMA_METAL_KV_MIRROR_MB", 4096))
+        let cap_mb = uint64(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env)
         mirror_evict_to_cap(cap_mb * 1024ul * 1024ul, s.uid)
     }
     g_tick++
@@ -1344,6 +1344,7 @@ let HZ_WHOLE = 0xFFFFFFFFFFFFFFFFul   // whole-buffer p1 — for binds whose spa
 var g_hz_on = false                 // gating armed for the encoder being built
 var g_hz_paranoid = false           // DASLLAMA_METAL_HAZARD_PARANOID: barrier every dispatch
 var private g_pipe_debug = false    // DASLLAMA_METAL_PIPE_DEBUG, resolved once — the read sits in the per-step path
+var private g_mirror_cap_env = 4096   // DASLLAMA_METAL_KV_MIRROR_MB, resolved at init; the default stands until then
 var g_hz_strict = false             // DASLLAMA_METAL_HAZARD_STRICT: undeclared dispatch panics
 var g_hz_dirty = false              // an undeclared dispatch ran — the next gate must barrier
 var g_hz_stage : array<MemRange>    // the next dispatch's declared ranges
@@ -1549,9 +1550,14 @@ struct KSched {
 var g_gr_scheds : table<uint64; KSched>
 var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
 
+[cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
+def private load_sched_mode() {
+    g_gr_sched_mode = env_int("DASLLAMA_METAL_SCHED", 1)
+}
+
 def private sched_enabled : bool {
     if (g_gr_sched_mode < 0) {
-        g_gr_sched_mode = env_int("DASLLAMA_METAL_SCHED", 1)
+        load_sched_mode()
     }
     return g_gr_sched_mode != 0
 }
@@ -1576,7 +1582,7 @@ def private gr_schedule(var sched : KSched) : bool {
     sched.nodes = n
     for (j in range(n)) {
         if (g_gr_nodes[j].nrange == 0) {
-            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")   // nolint:PERF028,PERF026 — inside gr_schedule, which runs once per shape class
             return false
         }
     }
@@ -1638,9 +1644,9 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
     if (!key_exists(g_gr_scheds, h)) {
         var s : KSched
         if (!gr_schedule(s)) {
-            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")
+            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028 — once per shape class, inside the schedule-compile miss
         }
-        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")
+        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026 — once per shape class, inside the schedule-compile miss
         g_gr_scheds[h] <- s
     }
     graph_flush(enc, g_gr_scheds[h].order)
@@ -1678,7 +1684,7 @@ def hz_coverage_check(ndisp, ngated : int64) {
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")
+        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 
@@ -1754,7 +1760,7 @@ def finish_pending_step {
         let gap_ms = (gs0 - g_lp_prev_gpu_end) * 1000.0lf
         let env_ms = (ge_last - gs0) * 1000.0lf
         if (g_batch_steps < 8l || gap_ms > 1.0lf) {
-            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")
+            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")   // nolint:PERF028,PERF026 — behind the g_pipe_debug gate above
         }
     }
     g_lp_prev_gpu_end = ge_last
@@ -1797,7 +1803,7 @@ def finish_pending_step {
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")
+        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026 — error path; the re-upload it triggers dwarfs the log
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
         for (i in range64(g_lp_nrows)) {
@@ -1837,6 +1843,7 @@ def public metal_decode_flush {
 
 //! Bring up the shared device + queue (the PSO half lives in dasllama_metal_kernels'
 //! metal_decode_init, which calls this first).
+[cold_path]   // one-time device/queue bring-up, guarded by its own inited flag
 def metal_common_init : bool {
     if (g_dev != null) {
         return true
@@ -1853,6 +1860,7 @@ def metal_common_init : bool {
     g_queue = metal_new_command_queue(g_dev)
     g_attn_single_max = clamp(int64(env_int("DASLLAMA_METAL_ATTN_SINGLE", 64)), ATTN_CHUNK_ROWS, 128l)
     g_pipe_debug = env_flag("DASLLAMA_METAL_PIPE_DEBUG", false)
+    g_mirror_cap_env = env_int("DASLLAMA_METAL_KV_MIRROR_MB", 4096)
     g_hz_paranoid = env_int("DASLLAMA_METAL_HAZARD_PARANOID", 0) != 0
     g_hz_strict = env_int("DASLLAMA_METAL_HAZARD_STRICT", 0) != 0
     return true
