@@ -453,7 +453,7 @@ def private vk_bake_append(a : array<uint8>) : int64 {
     let off = (long_length(g_vk_bake_blob) + 4095l) / 4096l * 4096l
     let abytes = long_length(a)
     let need = off + abytes
-    // growth capped at 2GB steps past 4GB — doubling's overshoot paged a 128GB box on GLM's bake
+    // growth capped at 2GB steps past 4GB — doubling a multi-GB blob wastes up to half its size
     if (long_capacity(g_vk_bake_blob) < need) {
         let cap = long_capacity(g_vk_bake_blob)
         let grown = cap < 4_294_967_296l ? cap * 2l : cap + 2_147_483_648l

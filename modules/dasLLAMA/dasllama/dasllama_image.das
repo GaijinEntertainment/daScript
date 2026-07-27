@@ -621,6 +621,24 @@ def load_image(path : string; var t; tag : string = "") : bool {
     return true
 }
 
+// interp-load guard: the gguf path's O(model) das loops run ~10x slower interpreted (tinyllama
+// load 53s vs 5.5s jitted; repack itself is native tune kernels, 0ms either way) — a 69GB
+// hybrid extrapolates to an hour. Prepared images (the slice path) stay interp-friendly.
+def private guard_interp_gguf_load(path : string) {
+    if (jit_enabled() || is_standalone_exe()) {
+        return
+    }
+    var st : FStat
+    if (!stat(path, st) || int64(st.size) <= 4_294_967_296l) {
+        return
+    }
+    if (get_env_variable("DASLLAMA_ALLOW_INTERP_LOAD") == "1") {
+        to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB — expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
+        return
+    }
+    panic("dasLLAMA: loading a {int64(st.size) >> 30l} GB gguf without -jit runs the load transforms interpreted (an hour on big models) — run with -jit, load a prepared .dlim, or set DASLLAMA_ALLOW_INTERP_LOAD=1")
+}
+
 //! Model entry point — see load_image (`tag` = the flavor, like save_model_image).
 def load_model_image(path : string; var t : Model; tag : string = "") : bool {
     if (!load_image(path, t, tag)) {
@@ -717,6 +735,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             // and regenerate the blob flavor (the planar file stays for CPU-mode loads)
             delete t
         }
+        guard_interp_gguf_load(path)
         var m <- load_model_(path, mode)
         let ts_save = ref_time_ticks()
         if (want_metal && metal_model_servable(m) && convert_model_to_metal_blob(m)) {
@@ -742,6 +761,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         }
         return <- m
     }
+    guard_interp_gguf_load(path)
     var m <- load_model_(path, mode)
     // no image cache: the metal drivers are blob-only, so metal mode still takes the in-RAM form
     if (want_metal && metal_model_servable(m)) {
