@@ -6,10 +6,9 @@ options gen2
 // total. The .dlim writer is the caller that hits this: 75 GB at 275 MB/s where a 2.5 GB image
 // writes at ~1 GB/s.
 //   bin/daslang modules/dasLLAMA/benchmarks/write_cliff_probe.das
-//   PROBE_GB=50 PROBE_PATH=D:/_wcliff.bin bin/daslang .../write_cliff_probe.das
+//   PROBE_GB=50 PROBE_PATH=/mnt/nvme/_wcliff.bin bin/daslang .../write_cliff_probe.das
 
 require daslib/fio
-require strings
 require math
 require dasllama/dasllama_env
 
@@ -19,7 +18,8 @@ let WINDOW_CHUNKS = 32l   // one report line per 512 MB
 [export]
 def main() {
     let gb = max(env_int64("PROBE_GB", 50l), 1l)
-    let path = env_str("PROBE_PATH", "D:/_wcliff.bin")
+    // cwd-relative so the default works on every host; point it at the drive under test
+    let path = env_str("PROBE_PATH", "_wcliff.bin")
     let chunk_bytes = CHUNK_MB * 1024l * 1024l
     let chunks = max(gb * 1024l / CHUNK_MB, 1l)
     var buf : array<uint8>

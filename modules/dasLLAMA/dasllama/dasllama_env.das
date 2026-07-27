@@ -223,8 +223,8 @@ def private reg_vulkan(var o : array<EnvKnob>) {
       "Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor.")
     k(o, "DASLLAMA_ALLOW_INTERP_LOAD", EnvKind.flag, EnvArea.engine, "off",
       "Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB.")
-    k(o, "PROBE_PATH", EnvKind.path, EnvArea.benchmark, "D:/_wcliff.bin",
-      "Scratch file the write-cliff probe writes; put it on the drive under test.")
+    k(o, "PROBE_PATH", EnvKind.path, EnvArea.benchmark, "_wcliff.bin",
+      "Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test.")
     k(o, "PROBE_GB", EnvKind.number, EnvArea.benchmark, "50",
       "Gigabytes the write-cliff probe writes before reporting.")
     k(o, "DASLLAMA_MM_SMALLD", EnvKind.number, EnvArea.vulkan, "64",

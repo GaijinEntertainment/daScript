@@ -140,7 +140,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `PROBE_PATH` | path | D:/_wcliff.bin | Scratch file the write-cliff probe writes; put it on the drive under test. |
+| `PROBE_PATH` | path | _wcliff.bin | Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test. |
 | `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
