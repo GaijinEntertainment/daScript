@@ -4,7 +4,6 @@ options _comment_hygiene = true
 module dasllama_math shared public
 
 require math
-require strings  // to_int: DASLLAMA_CALLER_PRIO env override in setup_dasllama_jobque_
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols

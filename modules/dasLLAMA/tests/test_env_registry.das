@@ -116,6 +116,8 @@ let BANNED_HELPERS = [
     "def env_or(",
     "def private pf_env_int(",
     "def private win_env_int(",
+    "def env_int64(",
+    "def private env_int64(",
     "def env_int(",
     "def private env_int(",
     "def env_str(",
