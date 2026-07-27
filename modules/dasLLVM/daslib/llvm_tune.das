@@ -12,7 +12,9 @@ require daslib/fio
 require daslib/strings_boost
 require daslib/command_line
 require daslib/json_boost
+require daslib/tty
 require strings
+require math
 require llvm/daslib/llvm_code public
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
@@ -1016,23 +1018,248 @@ def private tuner_cmd(scope : TuneScope) : string {
     return "{envs}\"{get_das_exe()}\" -jit \"{scope.tunerPath}\" -dasroot \"{get_das_root()}\""
 }
 
+// ===== progress events =====
+
+//! Prefix of a tune progress event. Events are lines on stdout because the tuner runs as a
+//! chain of child processes — a pipe is the only channel that spans them.
+let TUNE_EVENT_PREFIX = "@tune "
+
+struct private TuneProgress {
+    active : bool
+    scope : string
+    kernel : string
+    phase : string
+    outerDone : int
+    outerTotal : int
+    innerDone : int
+    innerTotal : int
+    live : int
+    startTicks : int64
+}
+
+var private g_prog : TuneProgress
+var private g_verbosity = ""
+
+//! Display verbosity from `DAS_TUNE_VERBOSITY`: `silent` (nothing), `normal` (the default —
+//! a progress display and the closing summary) or `verbose` (every line the tuner prints, no
+//! display). Anything unrecognized reads as `normal`, so a typo never silences the tune.
+def tune_verbosity() : string {
+    if (empty(g_verbosity)) {
+        let v = get_env_variable("DAS_TUNE_VERBOSITY")
+        g_verbosity = v == "silent" ? "silent" : (v == "verbose" ? "verbose" : "normal")
+    }
+    return g_verbosity
+}
+
+//! Override the verbosity a `--tune-quiet` / `--tune-verbose` flag selected, before any tuner
+//! runs. Exported so the flag rail does not have to go through the environment twice.
+def tune_set_verbosity(v : string) {
+    g_verbosity = v == "silent" ? "silent" : (v == "verbose" ? "verbose" : "normal")
+    set_env_variable("DAS_TUNE_VERBOSITY", g_verbosity)   // the tuner children inherit it
+}
+
+// A process draws the display only when its own stdout is a terminal. Otherwise it forwards
+// events untouched, so whoever is capturing us (a supervisor, a parent tuner) can draw instead.
+def private is_progress_renderer() : bool {
+    return is_stdout_terminal()
+}
+
+def private emit_event(kind : string; fields : string) {
+    print("{TUNE_EVENT_PREFIX}{kind} {fields}\n")
+}
+
+//! Announce how many kernels this tuner is about to work through. Call once per tuner half.
+def tune_progress_plan(scope : string; total : int) {
+    emit_event("plan", "scope={scope} total={total}")
+}
+
+//! Enter a kernel: `total` is its own round budget, the inner counter's denominator.
+def tune_progress_kernel_begin(name : string; total : int) {
+    emit_event("begin", "name={name} total={total}")
+}
+
+//! One round of the current kernel. `phase` names the pass (`screening` / `narrowing` /
+//! `finalists`) and `live` is how many grid rows are still in contention.
+def tune_progress_kernel_step(i : int; phase : string; live : int) {
+    emit_event("step", "i={i} phase={phase} live={live}")
+}
+
+//! Leave a kernel. `verdict` is `holds`, `beats` or `rejected`.
+def tune_progress_kernel_end(name, winner, verdict : string) {
+    emit_event("end", "name={name} winner={winner} verdict={verdict}")
+}
+
+def private event_field(parts : array<string>; key, dflt : string) : string {
+    for (p in parts) {
+        let eq = find(p, "=")
+        if (eq > 0 && slice(p, 0, eq) == key) {
+            return slice(p, eq + 1)
+        }
+    }
+    return dflt
+}
+
+def private elapsed_text(sinceTicks : int64) : string {
+    let secs = get_time_usec(sinceTicks) / 1000000
+    let m = secs / 60
+    let s = secs % 60
+    if (m <= 0) return "{s}s"
+    let pad = s < 10 ? "0" : ""
+    return "{m}m{pad}{s}s"
+}
+
+//! The display as a plain string: bar, outer counter, kernel, pass + inner counter, live rows,
+//! observed elapsed — every part of it measured, none of it predicted. Exposed so another front
+//! end (a GUI, a supervisor's status page) can render the state without redoing the layout.
+def tune_progress_line(cols : int) : string {
+    let head = "{g_prog.outerDone}/{g_prog.outerTotal}"
+    var tail = "  {g_prog.kernel}"
+    if (g_prog.innerTotal > 0) {
+        tail += "  {g_prog.phase} {g_prog.innerDone}/{g_prog.innerTotal}"
+    }
+    if (g_prog.live > 0) {
+        tail += "  {g_prog.live} live"
+    }
+    tail += "  {elapsed_text(g_prog.startTicks)}"
+    // the bar takes whatever is left after the text, clamped to something still readable
+    let barw = clamp(cols - length(head) - length(tail) - 6, 8, 28)
+    let filled = g_prog.outerTotal > 0 ? barw * g_prog.outerDone / g_prog.outerTotal : 0
+    let bar = build_string() $(w) {
+        w |> write("[")
+        for (i in range(barw)) {
+            w |> write(i < filled ? "#" : "-")
+        }
+        w |> write("] ")
+    }
+    return "{bar}{head}{tail}"
+}
+
+def private render_progress() {
+    let cols = terminal_columns()
+    let line = tune_progress_line(cols)
+    // pad to the full width so a shorter line cannot leave the previous one's tail behind
+    let padding = build_string() $(w) {
+        for (_i in range(max(0, cols - length(line) - 1))) {
+            w |> write(" ")
+        }
+    }
+    print("\r{line}{padding}\r")
+}
+
+def private finish_progress() {
+    if (g_prog.active) {
+        print("\n")
+        g_prog.active = false
+    }
+}
+
+// Fold one event into the display state, drawing it when `render`. State is folded either way
+// so a forwarding process still knows a display is live and can mute the raw chatter under it.
+def private consume_event(line : string; render : bool) {
+    var parts <- split(strip(slice(line, length(TUNE_EVENT_PREFIX))), " ")
+    if (empty(parts)) {
+        delete parts
+        return
+    }
+    let kind = parts[0]
+    if (kind == "plan") {
+        g_prog.scope = event_field(parts, "scope", "")
+        g_prog.outerTotal = to_int(event_field(parts, "total", "0"))
+        g_prog.outerDone = 0
+        g_prog.startTicks = ref_time_ticks()
+        g_prog.active = true
+    } elif (kind == "begin") {
+        g_prog.kernel = event_field(parts, "name", "")
+        g_prog.innerTotal = to_int(event_field(parts, "total", "0"))
+        g_prog.innerDone = 0
+        g_prog.phase = ""
+        g_prog.live = 0
+    } elif (kind == "step") {
+        g_prog.innerDone = to_int(event_field(parts, "i", "0"))
+        g_prog.phase = event_field(parts, "phase", "")
+        g_prog.live = to_int(event_field(parts, "live", "0"))
+    } elif (kind == "end") {
+        g_prog.outerDone++
+        g_prog.innerTotal = 0
+        g_prog.live = 0
+    }
+    delete parts
+    if (render && g_prog.active) {
+        render_progress()
+    }
+}
+
+//! Fold one relayed line into the progress state, drawing nothing. True when the line WAS a
+//! progress event — i.e. not tuner chatter. This plus `tune_progress_line` is the whole seam a
+//! different front end (a GUI, a supervisor's status page) needs.
+def tune_progress_feed(line : string) : bool {
+    if (!starts_with(line, TUNE_EVENT_PREFIX)) return false
+    consume_event(line, false)
+    return true
+}
+
+//! True while a progress display is live — a `plan` event has arrived and no scope has ended.
+def tune_progress_active() : bool {
+    return g_prog.active
+}
+
+//! Drop the progress state, for a front end starting a fresh scope.
+def tune_progress_reset() {
+    g_prog = TuneProgress()
+}
+
+// Forwarding events is unconditional; verbosity gates only what a human sees. Raw chatter is
+// muted only while a display is actually LIVE — a tuner that emits no events must keep printing
+// exactly as it always did, or adopting the protocol becomes a prerequisite for being visible.
+def private relay_line(line : string) {
+    let v = tune_verbosity()
+    let renderer = is_progress_renderer()
+    if (starts_with(line, TUNE_EVENT_PREFIX)) {
+        consume_event(line, renderer && v == "normal")
+        if (!renderer) {
+            print(line)
+        }
+        return
+    }
+    if (v == "silent" || (v == "normal" && g_prog.active)) return
+    finish_progress()
+    print(line)
+}
+
+// The up-front promise. A tune is minutes of work that ends in a relaunch, so say both BEFORE
+// the wait — a user (or a supervisor) staring at a silent process cannot infer either.
+def private announce_tuning(scopeName : string; force, selfRestarts : bool) {
+    if (tune_verbosity() == "silent") return
+    let why = force ? "re-tuning (--tune)" : "is untuned on this box"
+    let tail = (selfRestarts
+        ? "the process restarts itself when it is done"
+        : "the process exits when it is done, and must be restarted to pick up the winners")
+    print("llvm_tune: scope '{scopeName}' {why} — tuning now. This takes a while; {tail}.\n")
+}
+
 // spawn the scope's tuner, relaying its output LIVE — RUNTIME only (the auto and restart
 // guards); never from macro context. Streaming is load-bearing: a tune is minutes of work, and
 // buffering it to a file left us and any supervisor with no signal until the child exited.
 def private run_scope_tuner(scope : TuneScope) : bool {
     let cmd = "{tuner_cmd(scope)} 2>&1"
-    print("llvm_tune: tuning scope '{scope.scopeName}' -> {scope.manifestPath}\nllvm_tune: {cmd}\n")
+    if (tune_verbosity() != "silent") {
+        print("llvm_tune: tuning scope '{scope.scopeName}' -> {scope.manifestPath}\n")
+    }
+    if (tune_verbosity() == "verbose") {
+        print("llvm_tune: {cmd}\n")
+    }
     var rc : int
     unsafe {
         rc = popen(cmd) $(f) {
             if (f != null) {
                 while (!feof(f)) {
-                    print(fgets(f))
+                    relay_line(fgets(f))
                 }
             }
         }
     }
-    if (rc != 0) {
+    finish_progress()
+    if (rc != 0 && tune_verbosity() != "silent") {
         print("llvm_tune: tuner for scope '{scope.scopeName}' exited with {rc}\n")
     }
     return rc == 0
@@ -1055,7 +1282,7 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
         return
     }
-    print("llvm_tune: scope '{scopeName}' {force ? "re-tuning (--tune)" : "is untuned on this box — tuning now"}\n")
+    announce_tuning(scopeName, force, true)
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         g_tuned_scopes++
@@ -1112,11 +1339,12 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         return false
     }
-    print("llvm_tune: scope '{scopeName}' is untuned on this box\n")
     if (empty(tunerPath)) {
+        print("llvm_tune: scope '{scopeName}' is untuned on this box\n")
         print("llvm_tune: no tuner declared — produce {manifestPath} with the library's tuner, then restart\n")
         return true
     }
+    announce_tuning(scopeName, false, false)
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         print("llvm_tune: scope '{scopeName}' tuned -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
