@@ -223,11 +223,14 @@ def dasllama_accelerate_disable() {
     clear_float_batch_override()
 }
 
-// env_int64 with a floor: out-of-range is worth a word, unlike a plain unset knob
+// env_int64 with a floor. A SET but bad value is worth a word either way — unparseable and
+// out-of-range both land below the floor via the sentinel default, so one branch covers both.
 def private env_int64_min(name : string; def_v : int64; min_v : int64) : int64 {
-    let v = env_int64(name, def_v)
+    let raw = env_str(name, "")
+    return def_v if (empty(raw))
+    let v = env_int64(name, min_v - 1l)
     if (v < min_v) {
-        to_log(LOG_WARNING, "dasLLAMA: {name} must be an integer >= {min_v} — keeping {def_v}\n")
+        to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
         return def_v
     }
     return v
