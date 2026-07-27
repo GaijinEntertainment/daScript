@@ -186,6 +186,16 @@ Two entry doors, one operation:
 | commits exist only on this machine (unmerged AND unpushed) | WARN only; a push helper comes later |
 | otherwise | GREEN |
 
+ARTIFACTS — settled, and it is a standing rule, not a preference for this
+feature (Boris, 2026-07-27): "if u ever hear 'delete' from me - slap me.
+boris never delets. boris may forget to save, but stories stay." So
+retiring a session ARCHIVES it: the record survives in an archived state,
+hidden from the default list but retrievable, and its artifacts move
+beside the other archived host files. Nothing about retiring a workspace
+destroys history. See note 60 — today's herd_delete violates this by
+erasing the record and orphaning the files it leaves on disk. The wording
+follows too: a control that archives must not be labelled "Delete".
+
 SCOPE (Boris, 2026-07-27): no "move to main" button — if someone wants the
 work they check the branch out. Two adjacent scenarios are explicitly
 SEPARATE and LATER, not part of this one:

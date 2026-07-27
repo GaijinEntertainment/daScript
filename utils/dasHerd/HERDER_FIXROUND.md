@@ -671,6 +671,18 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   local master is 108 behind origin/master. A merged-check against the
   wrong baseline reports the exact OPPOSITE of the truth. Design proposal
   in the block below.
+- 60: herd_delete ERASES a session record — against the standing rule
+  Boris set the same day: "if u ever hear 'delete' from me - slap me.
+  boris never delets. boris may forget to save, but stories stay."
+  Today (herd_sessions.das:492) it does `g_herd |> erase(index)` and
+  saves, so the session vanishes from the registry while its artifacts —
+  events.jsonl, mailbox.jsonl, bundles.jsonl, the ptyhost journal and
+  host log — stay on disk ORPHANED: still written, no longer reachable
+  through the app. That is the worst of both. Fix: retiring a session
+  ARCHIVES it — the record keeps existing in an archived state (hidden
+  from the default list, still retrievable), artifacts move beside the
+  other archived host files rather than being stranded. The UI wording
+  follows the same rule: a control that archives must not say "Delete".
 - 59: IGNORED FILES ARE SILENTLY DESTROYED by worktree removal — found
   while Boris challenged the note-58 "recoverable" tier ("worktree yes,
   branch no is how?"). Proven in an isolated probe repo (2026-07-27):
