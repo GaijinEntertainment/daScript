@@ -120,12 +120,21 @@ class DaslangChild:
         self._kill_proc()   # clean up any prior child before respawning
         if self._stderr_fh is None:
             self._stderr_fh = open(self.stderr_log, "ab", buffering=0)
+        env = None
+        picked = _pick_binary(self.cwd)          # re-resolved per spawn: a rebuild mid-session
+        launcher = list(self.launcher)           # can change which layout is newest
+        if picked is not None:
+            # Windows goes through the vcvars .cmd, which reads this; POSIX execs the binary
+            # directly, so the pick has to replace argv[0] or it silently would not apply
+            env = dict(os.environ, DASLANG_MCP_BIN=picked)
+            if not IS_WINDOWS:
+                launcher[0] = picked
         self.proc = subprocess.Popen(
-            self.launcher,
+            launcher,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr_fh,
-            cwd=self.cwd, text=True, encoding="utf-8", errors="replace", bufsize=1,
+            cwd=self.cwd, text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
         )
-        _log(f"spawned daslang child pid={self.proc.pid}")
+        _log(f"spawned daslang child pid={self.proc.pid} bin={picked if IS_WINDOWS else launcher[0]}")
         if self.init_request is not None:
             self._write_line(json.dumps(self.init_request, separators=(",", ":")))
             self._read_line()  # consume & discard the replayed initialize result
@@ -144,16 +153,40 @@ class DaslangChild:
             raise ChildDead(str(e))
 
     def _read_line(self) -> str:
+        """Return the child's next JSON-RPC line. Anything else on its stdout is
+        DIAGNOSTIC NOISE, not a response — a daslang compile failure (stale
+        binary, build-id mismatch, missing shared_module) prints there, and
+        returning it as a frame silently corrupts the pipe and makes the client
+        drop the whole server. Noise is logged and skipped; if the child then
+        dies, it rides the ChildDead message so the client sees the real error."""
+        noise: list[str] = []
         while True:
             try:
                 line = self.proc.stdout.readline()
             except (OSError, ValueError) as e:
-                raise ChildDead(str(e))
+                raise ChildDead(self._with_noise(str(e), noise))
             if line == "":
-                raise ChildDead("eof")
+                raise ChildDead(self._with_noise("eof", noise))
             line = line.strip()
-            if line:
-                return line
+            if not line:
+                continue
+            if line.startswith("{"):
+                try:
+                    json.loads(line)
+                    return line
+                except Exception:
+                    pass
+            _log(f"child noise: {line[:400]}")
+            if len(noise) < 40:
+                noise.append(line)
+
+    @staticmethod
+    def _with_noise(reason: str, noise: list[str]) -> str:
+        # cap the WHOLE message, not just the noise tail — the reason can itself be an arbitrarily
+        # long OSError string, and this ends up inside a JSON-RPC error the client has to render
+        if not noise:
+            return reason[:2000]
+        return (f"{reason}; daslang child said: " + " | ".join(noise))[:2000]
 
     # ---- forwarding -----------------------------------------------------
     def request(self, msg: dict) -> str:
@@ -224,18 +257,44 @@ def handle(child: DaslangChild, msg: dict) -> str | None:
                        "error": {"code": -32601, "message": f"method not found: {method}"}})
 
 
+BIN_CANDIDATES = ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang")
+
+
+def _pick_binary(repo_root: str) -> str | None:
+    """The NEWEST existing daslang binary among the single/multi-config output
+    locations. Newest-wins, not first-wins: a box that has built both layouts
+    (e.g. a stale Ninja `bin/daslang.exe` beside a fresh MSVC
+    `bin/Release/daslang.exe`) otherwise runs the stale one, whose DAS_BUILD_ID
+    no longer matches the tree's dynamic modules — every `require` of a native
+    module fails and the server never answers a single tool call.
+    DASLANG_MCP_BIN in the environment pins an explicit binary (bisect hatch); a
+    pin that does not exist is announced and ignored rather than handed on, since
+    it would otherwise surface as a bare FileNotFoundError at spawn — or, worse,
+    get written into .mcp.json — instead of naming the bad path."""
+    pinned = os.environ.get("DASLANG_MCP_BIN")
+    if pinned:
+        if os.path.exists(pinned):
+            return pinned
+        _log(f"DASLANG_MCP_BIN points at a missing path, ignoring it: {pinned}")
+        print(f"WARNING: DASLANG_MCP_BIN={pinned} does not exist — falling back to auto-pick",
+              file=sys.stderr, flush=True)
+    exe = ".exe" if IS_WINDOWS else ""
+    found = [c for c in (os.path.join(repo_root, rel + exe) for rel in BIN_CANDIDATES)
+             if os.path.exists(c)]
+    if not found:
+        return None
+    return max(found, key=os.path.getmtime)
+
+
 def _default_launcher() -> list[str]:
     if IS_WINDOWS:
+        # The .cmd sets up vcvars (cpp_compile_check needs cl.exe on PATH) and
+        # then runs whichever binary DASLANG_MCP_BIN names — chosen here so the
+        # newest-wins rule is one implementation, not two.
         return ["cmd", "/c", os.path.join(SCRIPT_DIR, "daslang-mcp-msvc.cmd")]
-    # POSIX: run the built binary directly, trying the usual single/multi-config
-    # output locations (bin/ and build/, cf. setup.das locate_binary) — first
-    # existing wins.
     main_das = os.path.join(SCRIPT_DIR, "main.das")
-    for rel in ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang"):
-        cand = os.path.join(REPO_ROOT, rel)
-        if os.path.exists(cand):
-            return [cand, main_das]
-    return [os.path.join(REPO_ROOT, "bin", "daslang"), main_das]  # best-guess fallback
+    picked = _pick_binary(REPO_ROOT)
+    return [picked or os.path.join(REPO_ROOT, "bin", "daslang"), main_das]
 
 
 def _python_launcher() -> str:
@@ -263,10 +322,9 @@ def _daslang_binary(repo_root: str) -> str:
     """The tree's own built daslang binary (cross-tree guard: a worktree's
     .mcp.json must point at that worktree's binary)."""
     exe = ".exe" if IS_WINDOWS else ""
-    for rel in ("bin/Release/daslang", "bin/daslang", "build/daslang", "build/bin/daslang"):
-        cand = os.path.join(repo_root, rel + exe)
-        if os.path.exists(cand):
-            return cand.replace(os.sep, "/")
+    picked = _pick_binary(repo_root)
+    if picked is not None:
+        return picked.replace(os.sep, "/")
     return os.path.join(repo_root, "bin", "daslang" + exe).replace(os.sep, "/")
 
 

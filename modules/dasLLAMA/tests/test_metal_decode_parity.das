@@ -5,6 +5,7 @@ options stack = 131072   // several by-value Sessions per arm in one frame (test
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
+require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — stats/mirror/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Metal-prefill→GPU-decode hybrid arm
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate

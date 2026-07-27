@@ -2153,6 +2153,31 @@ def public set_moe_gpu_budget_hooks(budget : function<() : int64>; plane : funct
 //! Device-local bytes the armed tier may spend on resident weights (0 = no tier).
 def public moe_gpu_weight_budget() : int64 => invoke(g_moe_gpu_budget_report)
 
+def private moe_gpu_no_q8n : bool => false
+var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
+
+//! The tier asks the loader to gather q8 EXPERT stacks as gguf-native q8n blocks (fmt 6, the
+//! cm2 decode-in-load layout, no scale plane). Registered beside the budget hooks; the probe
+//! may create the device — it must answer before the first gather.
+def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
+    g_moe_gpu_expert_q8n = f
+}
+
+def private moe_gpu_no_bake_tag : string => ""
+
+var private g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
+
+//! The GPU tier's config-identity tag for the vulkan-flavor image ("" = tier absent/unarmed —
+//! no flavor). Everything that shapes the load-time GPU walk must fold in: a config switch
+//! must miss the flavor's identity and rebake.
+def public set_moe_gpu_bake_tag(f : function<() : string>) {
+    g_moe_gpu_bake_tag = f
+}
+
+def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
+
+def public moe_gpu_expert_q8n() : bool => invoke(g_moe_gpu_expert_q8n)
+
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.
 def public moe_gpu_plane_bytes(n, rows : int64; fmt : int) : int64 => invoke(g_moe_gpu_plane_bytes_fn, n, rows, fmt)
 
@@ -2164,6 +2189,17 @@ def public moe_gpu_tier_installed : bool {
 def public set_moe_gpu_total_layers(n : int64) {
     g_moe_gpu_total_layers = n
 }
+
+var private g_moe_gpu_stream_need = 0l
+
+//! Loader contract: worst-case streamed-slot bytes of THIS model (2x gate/up + down device
+//! planes of the largest expert layer, via moe_gpu_plane_bytes). The tier carves its stream
+//! reserve from this instead of a fixed guess; 0 = unknown (tier falls back to its constant).
+def public set_moe_gpu_stream_need(bytes : int64) {
+    g_moe_gpu_stream_need = bytes
+}
+
+def public moe_gpu_stream_need() : int64 => g_moe_gpu_stream_need
 
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
@@ -2214,8 +2250,12 @@ def public moe_gpu_upload_stack(wq : array<uint8> | #; ws : array<uint8> | #; wo
     if (!g_moe_gpu_installed) {
         return false
     }
+    var wsp : uint8 const?   // q8n stacks carry no scale plane — an empty ws hands the tier null
+    if (!empty(ws)) {
+        wsp = unsafe(addr<uint8 const?>(ws[0]))
+    }
     unsafe {
-        return invoke(g_moe_gpu_upload, addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), woff, n, rows, fmt, stream)
+        return invoke(g_moe_gpu_upload, addr<uint8 const?>(wq[0]), wsp, woff, n, rows, fmt, stream)
     }
 }
 

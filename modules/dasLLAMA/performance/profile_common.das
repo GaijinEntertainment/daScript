@@ -895,6 +895,74 @@ struct BenchRun {
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor
+    @optional env : string      // the arming environment `cmd` was run under — see [[bench_env_line]].
+                                // Load-bearing: most GPU/tier levers arm via env, so a `cmd` alone
+                                // does NOT reproduce a row and two configs can look identical
+}
+
+// Every env var the dasLLAMA engine + the tune rail consult. Capturing the WHOLE set (not a curated
+// "interesting" subset) is deliberate: an unrecorded var is exactly how two different configs come
+// to look like the same row.
+let private BENCH_ENV_VARS = fixed_array(
+    "DAS_JOBQUE_AFFINITY", "DAS_JOBQUE_TEAM_RANK_GATE", "DAS_JOBQUE_THREADS",
+    "DAS_TUNE_MANIFEST", "DAS_TUNE_MODE",
+    "DASLLAMA_ACCEL", "DASLLAMA_ACCEL_F16", "DASLLAMA_ACCEL_F16_STRIPS", "DASLLAMA_ACCEL_MIN_MMAC",
+    "DASLLAMA_ACCEL_MIN_NTOK", "DASLLAMA_ALLOW_INTERP_LOAD", "DASLLAMA_BATCH_GRID_2D",
+    "DASLLAMA_BENCH_VERBOSE", "DASLLAMA_BOX", "DASLLAMA_CALLER_PRIO", "DASLLAMA_CONV_PROF",
+    "DASLLAMA_COOPMAT", "DASLLAMA_CPU", "DASLLAMA_CPU_PREFILL", "DASLLAMA_EXPERT_REUSE",
+    "DASLLAMA_FUSED_DECODE", "DASLLAMA_GPU", "DASLLAMA_GPU_ATTN", "DASLLAMA_GPU_CLS",
+    "DASLLAMA_GPU_COMBINE", "DASLLAMA_GPU_DENSE", "DASLLAMA_GPU_DENSE_ATTN",
+    "DASLLAMA_GPU_DENSE_SHEXP", "DASLLAMA_GPU_DN", "DASLLAMA_GPU_DND", "DASLLAMA_GPU_HEAT",
+    "DASLLAMA_GPU_MIN_CTX", "DASLLAMA_GPU_MOE_LAYERS", "DASLLAMA_GPU_MOE_STREAM",
+    "DASLLAMA_GPU_NAME", "DASLLAMA_GPU_PROF", "DASLLAMA_GPU_QKV", "DASLLAMA_GPU_SHEXP",
+    "DASLLAMA_GPU_VRAM_MB", "DASLLAMA_IMAGE", "DASLLAMA_METAL_ATTN", "DASLLAMA_METAL_ATTN_D",
+    "DASLLAMA_METAL_ATTN_SINGLE", "DASLLAMA_METAL_BATCH_CONCURRENT", "DASLLAMA_METAL_BATCH_FUSE",
+    "DASLLAMA_METAL_BATCH_GEMM_MIN", "DASLLAMA_METAL_BATCH_MM", "DASLLAMA_METAL_BATCH_MV",
+    "DASLLAMA_METAL_BATCH_MV8", "DASLLAMA_METAL_BATCH_NCB", "DASLLAMA_METAL_BATCH_PIPE",
+    "DASLLAMA_METAL_BATCH_SK", "DASLLAMA_METAL_DECODE_CONCURRENT", "DASLLAMA_METAL_DECODE_SKIP",
+    "DASLLAMA_METAL_FUSE", "DASLLAMA_METAL_GEMV_TG", "DASLLAMA_METAL_HAZARD_PARANOID",
+    "DASLLAMA_METAL_HAZARD_STRICT", "DASLLAMA_METAL_KQ_B8", "DASLLAMA_METAL_KV_MIRROR_MB",
+    "DASLLAMA_METAL_LOGITS", "DASLLAMA_METAL_MULMM", "DASLLAMA_METAL_NCB",
+    "DASLLAMA_METAL_PF_CAPTURE", "DASLLAMA_METAL_PIPE_DEBUG", "DASLLAMA_METAL_PREFILL_SKIP",
+    "DASLLAMA_METAL_SCHED", "DASLLAMA_METAL_SPEC", "DASLLAMA_METAL_UNRETAINED",
+    "DASLLAMA_MM_SMALL", "DASLLAMA_MODELS_DIR", "DASLLAMA_MTP_DEBUG", "DASLLAMA_NOISY",
+    "DASLLAMA_OS", "DASLLAMA_PIN_BACKEND", "DASLLAMA_PIN_PREFILL", "DASLLAMA_RAM_GB",
+    "DASLLAMA_THREADS", "DASLLAMA_TRUTH_REFRESH", "DASLLAMA_VK_FA", "DASLLAMA_VK_HAZARD_PARANOID",
+    "DASLLAMA_VK_HAZARD_TRACE", "DASLLAMA_VK_MEMPRIO", "DASLLAMA_VK_REBAR", "DASLLAMA_VK_XFERQ")
+
+// quote on anything a shell reads as syntax, not just spaces — full cross-shell escaping is not
+// well-defined (cmd and POSIX disagree on the rules), so widen the trigger rather than pretend
+def private shell_quote(s : string) : string {
+    var bare = !empty(s)
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            bare = bare && (is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/'
+                || c == '\\' || c == ':' || c == '=' || c == '-' || c == '+' || c == ',')
+        }
+    }
+    return bare ? s : "\"{s}\""
+}
+
+//! The run's REAL invocation, from the process argv — binary, interpreter flags, script and args
+//! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
+//! and silently drops anything the arg parser did not model.
+def bench_cmd_line() : string {
+    var parts <- [for (a in get_command_line_arguments()); shell_quote(a)]
+    let line = join(parts, " ")
+    delete parts
+    return line
+}
+
+//! The set members of [[BENCH_ENV_VARS]] that are actually set, as a copy-pasteable `K=V ...`
+//! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
+def bench_env_line() : string {
+    var parts <- [for (name in BENCH_ENV_VARS);
+        "{name}={shell_quote(get_env_variable(name))}";
+        where has_env_variable(name)]
+    let line = join(parts, " ")
+    delete parts
+    return line
 }
 
 //! One GGUF's identity plus every run measured against it. `gguf` (the exact filename) is the

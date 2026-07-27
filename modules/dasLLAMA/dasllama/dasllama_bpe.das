@@ -36,9 +36,9 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let m <- parse_gguf_meta(bytes)
-        let toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
-        let merges <- gguf_str_array(m, bytes, "tokenizer.ggml.merges")
+        var inscope m <- parse_gguf_meta(bytes)
+        var inscope toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
+        var inscope merges <- gguf_str_array(m, bytes, "tokenizer.ggml.merges")
         let n = length(toks)
         tk.vocab |> reserve(n)
         for (i in range(n)) {

@@ -9,6 +9,7 @@ require daslib/clargs
 require daslib/fio   // has_env_variable / get_env_variable (the DASLLAMA_BATCH_GRID_2D A/B rail)
 require math
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_layout  // convert_model_to_metal_blob — the blob-flavor transform
 
 // dasLLAMA parity harness — the dasLLAMA side of the token-for-token oracle check.
 // Feed the prompt token IDs the reference (harness/oracle/simple_ids) produced, greedily generate N

@@ -11,6 +11,7 @@ require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serial
 require daslib/archive
 require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
 require dasllama/dasllama_common
+require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
@@ -25,8 +26,12 @@ require dasllama/dasllama_math   // active_kernel_backend — half the image ide
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-// bump on ANY layout/serialization change — a mismatched image regenerates from the gguf
-let IMAGE_VERSION = 5   // v5: Model grew the deltanet projection format tags (dn kq-native planes)
+// Bump on ANY change to the image's layout/serialization OR to WHAT THE LOADER PUTS IN IT — the
+// identity below is computed before the gguf is parsed, so it can carry box/knob state but nothing
+// config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
+// image that silently represents a different model; only this version catches it. Mismatch
+// regenerates from the gguf, never migrates.
+let IMAGE_VERSION = 6   // v6: glm4moe NextN heads now load (blk.n_layers + its qkv biases)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -621,6 +626,24 @@ def load_image(path : string; var t; tag : string = "") : bool {
     return true
 }
 
+// interp-load guard: the gguf path's O(model) das loops run ~10x slower interpreted (tinyllama
+// load 53s vs 5.5s jitted; repack itself is native tune kernels, 0ms either way) — a 69GB
+// hybrid extrapolates to an hour. Prepared images (the slice path) stay interp-friendly.
+def private guard_interp_gguf_load(path : string) {
+    if (jit_enabled() || is_standalone_exe()) {
+        return
+    }
+    var st : FStat
+    if (!stat(path, st) || int64(st.size) <= 4_294_967_296l) {
+        return
+    }
+    if (env_flag("DASLLAMA_ALLOW_INTERP_LOAD", false)) {
+        to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB — expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
+        return
+    }
+    panic("dasLLAMA: loading a {int64(st.size) >> 30l} GB gguf without -jit runs the load transforms interpreted (an hour on big models) — run with -jit, load a prepared .dlim, or set DASLLAMA_ALLOW_INTERP_LOAD=1")
+}
+
 //! Model entry point — see load_image (`tag` = the flavor, like save_model_image).
 def load_model_image(path : string; var t : Model; tag : string = "") : bool {
     if (!load_image(path, t, tag)) {
@@ -637,24 +660,39 @@ def load_model_image(path : string; var t : Model; tag : string = "") : bool {
 //! (``DASLLAMA_IMAGE=0`` disables); under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise. Call inside ``with_job_que()``.
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     if (path |> ends_with(".dlim")) {
-        // a prepared image named directly — first-class once the source gguf is gone. Try both
-        // identities, EXPECTED flavor first (metal under an active Metal mode, else planar) so
-        // the normal case loads without the wrong-tag decline warning; a dual mismatch panics
+        // a prepared image named directly — first-class once the source gguf is gone. EXPECTED
+        // flavor first (metal mode > armed vulkan tier > planar) so the normal case loads
+        // without the wrong-tag decline warning; a full mismatch panics
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Model()
         let metal_first = get_metal_mode() != MetalMode.off && has_decode_override("metal")
-        let loaded = (metal_first
-            ? load_model_image(path, t, METAL_IMAGE_TAG) || load_model_image(path, t)
-            : load_model_image(path, t) || load_model_image(path, t, METAL_IMAGE_TAG))
+        let vk_cfg = metal_first ? "" : moe_gpu_bake_tag()
+        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        var loaded = false
+        if (vk_tag != "") {
+            vulkan_bake_slice_begin()
+            loaded = load_model_image(path, t, vk_tag)
+            if (loaded) {
+                vulkan_bake_slice_end(t)
+            } else {
+                vulkan_bake_disarm()
+            }
+        }
         if (!loaded) {
-            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}) — regenerate it from the source gguf")
+            loaded = (metal_first
+                ? load_model_image(path, t, METAL_IMAGE_TAG) || load_model_image(path, t)
+                : load_model_image(path, t) || load_model_image(path, t, METAL_IMAGE_TAG))
+        }
+        if (!loaded) {
+            let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""
+            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) — regenerate it from the source gguf")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    // metal mode at load time picks the image FLAVOR: blob-only metal when the drivers can
-    // serve the config, planar CPU otherwise (flavors are per-config and self-sufficient)
+    // load-time flavor pick: blob-only metal when its drivers serve the config; the vulkan
+    // flavor (planar + baked GPU planes) when the vulkan tier arms; planar CPU otherwise
     let want_metal = mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
     if (mode == QuantMode.q8 && env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
@@ -667,8 +705,33 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
                 return <- t
             }
         }
+        // the vulkan flavor: the GPU walk slices the baked device-layout planes off the mapping
+        // instead of re-gathering; ANY vulkan config switch changes the tag and rebakes below
+        let vk_cfg = want_metal ? "" : moe_gpu_bake_tag()
+        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        if (vk_tag != "") {
+            let img_v = image_path_for(path, vk_tag)
+            vulkan_bake_slice_begin()
+            if (load_model_image(img_v, t, vk_tag)) {
+                vulkan_bake_slice_end(t)
+                to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms — {img_v}\n")
+                return <- t
+            }
+            vulkan_bake_disarm()
+            vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
+        }
         let img = image_path_for(path)
         if (load_model_image(img, t)) {
+            if (vk_tag != "" && vulkan_bake_take(t)) {
+                // the planar image served this run's uploads; bake the flavor for the next one
+                let ts_save = ref_time_ticks()
+                let img_v = image_path_for(path, vk_tag)
+                if (save_model_image(t, img_v, vk_tag)) {
+                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_save) / 1000} ms — {img_v}\n")
+                }
+                delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
+                delete t.vkplan
+            }
             if (!(want_metal && metal_model_servable(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
                 return <- t
@@ -677,6 +740,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             // and regenerate the blob flavor (the planar file stays for CPU-mode loads)
             delete t
         }
+        guard_interp_gguf_load(path)
         var m <- load_model_(path, mode)
         let ts_save = ref_time_ticks()
         if (want_metal && metal_model_servable(m) && convert_model_to_metal_blob(m)) {
@@ -684,11 +748,25 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             if (save_model_image(m, img_m, METAL_IMAGE_TAG)) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img_m}\n")
             }
-        } elif (save_model_image(m, img)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        } else {
+            // planar saves FIRST (vkblob still empty — the planar flavor must stay planar),
+            // then the take moves the collected planes in and the vulkan flavor saves
+            if (save_model_image(m, img)) {
+                to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+            }
+            if (vk_tag != "" && vulkan_bake_take(m)) {
+                let ts_vk = ref_time_ticks()
+                let img_v = image_path_for(path, vk_tag)
+                if (save_model_image(m, img_v, vk_tag)) {
+                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_vk) / 1000} ms — {img_v}\n")
+                }
+                delete m.vkblob
+                delete m.vkplan
+            }
         }
         return <- m
     }
+    guard_interp_gguf_load(path)
     var m <- load_model_(path, mode)
     // no image cache: the metal drivers are blob-only, so metal mode still takes the in-RAM form
     if (want_metal && metal_model_servable(m)) {

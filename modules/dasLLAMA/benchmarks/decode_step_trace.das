@@ -4,6 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — the CPU prefill/sam
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
+require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_llama   // nolint:STYLE030 — GPU driver half, Apple builds only
 require daslib/jobque_boost
 require daslib/clargs
