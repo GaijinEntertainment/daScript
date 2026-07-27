@@ -671,6 +671,26 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   local master is 108 behind origin/master. A merged-check against the
   wrong baseline reports the exact OPPOSITE of the truth. Design proposal
   in the block below.
+- 59: IGNORED FILES ARE SILENTLY DESTROYED by worktree removal — found
+  while Boris challenged the note-58 "recoverable" tier ("worktree yes,
+  branch no is how?"). Proven in an isolated probe repo (2026-07-27):
+  a worktree holding only an ignored file reports NOTHING in
+  `git status --porcelain`, so the dirty guard calls it clean; then
+  `git worktree remove` (exactly what repository_remove_worktree runs)
+  deletes the directory and the ignored file with it. Bites dasHerd
+  hardest of all: worktrees carry gitignored logs/dasHerd/** — ptyhost
+  journals, host logs, session records — plus build output and
+  .jitted_scripts. Fix shape: count ignored-but-present files
+  (`status --porcelain --ignored`) and surface them as their own
+  pre-delete fact ("N ignored files will be destroyed"), since no git
+  guard covers them.
+  SAME PROBE corrected note 58's tiers: `git worktree remove` never
+  touches the branch, so committed work is NEVER at risk from it (the
+  probe's unmerged commit survived intact on its branch). The
+  destructive / recoverable / safe ladder applies to BRANCH deletion,
+  which dasHerd does not offer today; for worktree removal the unmerged
+  count is an "is this workspace still carrying unfinished work" signal,
+  not a data-loss gate.
 - 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
   command could set or read it and no state dump exposed it, so neither a
   test nor an agent could verify note 55 either way (parity rule:

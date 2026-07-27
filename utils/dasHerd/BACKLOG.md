@@ -140,6 +140,26 @@ every one of them cheap:
 | stashed | stash list filtered to that worktree | stashed work dies |
 | unmerged | rev-list count BASE..head | commits exist nowhere else |
 
+### CORRECTION (2026-07-27, after Boris asked "worktree yes, branch no is how?")
+
+The tiers below were written for the wrong operation. Proven in an isolated
+probe: `git worktree remove` — the only thing dasHerd runs — never touches
+the branch, so committed work is never at risk from it. What the probe DID
+destroy: an ignored file, silently, while `status --porcelain` reported the
+tree clean (note 59). So for worktree removal:
+
+- committed work: never at risk (the branch keeps it)
+- uncommitted / untracked: already blocked by the dirty guard
+- IGNORED files: silently destroyed — the only real loss, and unguarded
+
+The unmerged count therefore is NOT a safety gate for removing a worktree;
+it answers "is this workspace still carrying unfinished work" — an
+abandonment signal, which is what "is this still needed?" really asks.
+The destructive/recoverable/safe ladder below is correct only for BRANCH
+deletion, which dasHerd does not offer yet. If we add it (retiring a
+branch+worktree pair together is the natural user intent), the ladder and
+its base-selection trap apply exactly as written.
+
 ### The trap: which BASE
 
 WorktreeState's ahead/behind are measured against the branch's own
