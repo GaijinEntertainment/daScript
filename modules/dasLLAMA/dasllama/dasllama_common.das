@@ -8363,7 +8363,7 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) {
         let fbp = biased ? addr<float const?>(t.fblob[0]) : null
         let idxp = addr<int64 const?>(s.moe_idx[0])
         let wvp = addr<float const?>(s.moe_w[0])
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 if (stage == 0) {
                     // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
