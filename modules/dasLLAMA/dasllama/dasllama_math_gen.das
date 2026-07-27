@@ -1350,7 +1350,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
             let wrow = wp + i * n
             let srow = sp + i * nb
             for (tk in range64(ntok)) {
-                myp[tk * d + i] = dot_q8q8_sdot4x4(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                myp[tk * d + i] = dot_q8q8_idot4x4(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
             }
         }
     }
@@ -1359,7 +1359,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
 
 // mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows core —
 // ONE core call per chunk. Strides come off the layout companion, so the same wrapper serves
-// both stamped layouts; the row tail (d % mr) stays row-major and rides sdot4x4.
+// both stamped layouts; the row tail (d % mr) stays row-major and rides idot4x4.
 def private q8q8_kernel_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -1370,7 +1370,7 @@ def private q8q8_kernel_gen(var yp : float?; wp : int8 const?; sp : float const?
     }
     unsafe {
         for (i in range64(ng * mr, d)) {
-            myp[i] = dot_q8q8_sdot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
+            myp[i] = dot_q8q8_idot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -1410,13 +1410,13 @@ def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?
     }
     unsafe {
         for (i in range64(ng0 * mr, d0)) {
-            w0[i] = dot_q8q8_sdot4x4(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
+            w0[i] = dot_q8q8_idot4x4(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
         }
         for (i in range64(ng1 * mr, d1)) {
-            w1[i] = dot_q8q8_sdot4x4(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
+            w1[i] = dot_q8q8_idot4x4(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
         }
         for (i in range64(ng2 * mr, d2)) {
-            w2[i] = dot_q8q8_sdot4x4(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
+            w2[i] = dot_q8q8_idot4x4(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -1449,11 +1449,11 @@ def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?
         }
     }
     unsafe {
-        for (r in range64(nregions)) {   // row tails (d % mr): row-major sdot4x4 per region
+        for (r in range64(nregions)) {   // row tails (d % mr): row-major idot4x4 per region
             let woff = offs[r * 2l]
             let xoff = offs[r * 2l + 1l]
             for (i in range64(ng * mr, d)) {
-                var v = dot_q8q8_sdot4x4(wp + woff + i * n, sp + woff / 32l + i * nb, xqp + xoff, xsp + xoff / 32l, n)
+                var v = dot_q8q8_idot4x4(wp + woff + i * n, sp + woff / 32l + i * nb, xqp + xoff, xsp + xoff / 32l, n)
                 if (bp != null) {
                     v += bp[boffs[r] + i]
                 }

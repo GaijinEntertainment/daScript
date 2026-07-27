@@ -35,7 +35,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x48ul   // kq tile: vector bsums + epilogue min-fold + fused-acc mr8 perm (0x47: assert message appends rather than replaces)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x49ul   // idot family: native aarch64 sdot arm on the host-features rail (0x48: kq tile vector bsums)
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -446,14 +446,14 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
         // /DEBUG can build PDB line tables (windows targets only).
         if (debug_info) {
             let div_key = "Debug Info Version"
-            LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, div_key, uint64(length(div_key)),
+            LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, div_key, uint64(long_length(div_key)),
                 LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 3ul, 0)))
             // host_jit_triple() is "" on MSVC hosts (it only disambiguates mingw arches) —
             // LLVM's default triple is the actual host answer.
             let triple = (target_triple |> empty()) ? LLVMGetDefaultTargetTriple() : target_triple
             if (triple |> find("windows") != -1) {
                 let cv_key = "CodeView"
-                LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, cv_key, uint64(length(cv_key)),
+                LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, cv_key, uint64(long_length(cv_key)),
                     LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 1ul, 0)))
             }
         }
