@@ -175,6 +175,10 @@ namespace das {
         struct ParamReadStats {
             das_hash_map<Variable *, int>   readCount;
             das_hash_set<Variable *>        readUnderLoop;
+            // read as the argument of a REF parameter: such a read needs real storage, so the splice
+            // must bind a temp rather than substitute a value. an implicit const-ref native parameter
+            // is the case that bites - it cannot bind a bare value ("can't pass non-ref to ref")
+            das_hash_set<Variable *>        readAsRefArg;
         };
 
         class ParamReadScan : public Visitor {
@@ -201,6 +205,22 @@ namespace das {
                     if ( loopDepth ) stats.readUnderLoop.insert(expr->variable);
                 }
             }
+            void notePos ( ExprCallFunc * call ) {
+                if ( !call->func ) return;
+                for ( size_t i=0, is=call->arguments.size(); i!=is && i!=call->func->arguments.size(); ++i ) {
+                    auto & fa = call->func->arguments[i];
+                    if ( !fa->type || !fa->type->isRef() ) continue;
+                    Expression * a = call->arguments[i];
+                    if ( a && a->rtti_isR2V() ) a = static_cast<ExprRef2Value *>(a)->subexpr;
+                    if ( a && a->rtti_isVar() ) {
+                        auto v = static_cast<ExprVar *>(a)->variable;
+                        if ( v && params.find(v)!=params.end() ) stats.readAsRefArg.insert(v);
+                    }
+                }
+            }
+            virtual void preVisit ( ExprCall * expr ) override { Visitor::preVisit(expr); notePos(expr); }
+            virtual void preVisit ( ExprOp1 * expr ) override { Visitor::preVisit(expr); notePos(expr); }
+            virtual void preVisit ( ExprOp2 * expr ) override { Visitor::preVisit(expr); notePos(expr); }
         };
 
         // ----- cross-module reference scan (splice gate) -----
@@ -2237,6 +2257,9 @@ namespace das {
                         // a mutable by-value param IS a local copy
                         makeArgTemp(A->clone(), false, false, A->type && !A->type->canCopy());
                     } else if ( leafConst ) {
+                        if ( stats.readAsRefArg.find(P)!=stats.readAsRefArg.end() ) {
+                            makeArgTemp(A->clone(), true, false, false);
+                        } else
                         // an enum constant re-resolves its enumeration by name - under a
                         // module-scope wrap that name lands in the wrong module; bind it out
                         if ( needScope && leafA->type && leafA->type->isEnumT() ) {
@@ -2284,7 +2307,9 @@ namespace das {
                         if ( rit != stats.readCount.end() ) reads = rit->second;
                         bool underLoop = stats.readUnderLoop.find(P)!=stats.readUnderLoop.end();
                         bool orderSafe = writeFree || argReadsOnlyPrivateLocals(A, sa);
-                        if ( reads<=1 && !underLoop && inlinePure(A) && orderSafe && !needScope ) {
+                        bool needsStorage = stats.readAsRefArg.find(P)!=stats.readAsRefArg.end()
+                            && !(A->type && A->type->ref);
+                        if ( reads<=1 && !underLoop && inlinePure(A) && orderSafe && !needScope && !needsStorage ) {
                             sub.substitute = A;
                         } else {
                             makeArgTemp(A->clone(), true, false, A->type && !A->type->canCopy());
