@@ -755,7 +755,13 @@ def public repository_remove_worktree(repository_id, worktree_path : string;
     }
     var runtime = g_repositories[repository_index]
     let checkout = runtime.snapshot.record.checkout_path
-    if (to_lower(normalized_path(worktree_path)) == to_lower(normalized_path(checkout))) {
+    // Case-insensitive only on Windows, matching find_worktree's platform
+    // gate - a case-sensitive filesystem holds case-differing paths apart.
+    let wanted_identity = (get_platform_name() == "windows"
+        ? to_lower(normalized_path(worktree_path)) : normalized_path(worktree_path))
+    let checkout_identity = (get_platform_name() == "windows"
+        ? to_lower(normalized_path(checkout)) : normalized_path(checkout))
+    if (wanted_identity == checkout_identity) {
         reason = "main"
         detail = "the main checkout cannot be deleted"
         return false
