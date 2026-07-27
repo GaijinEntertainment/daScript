@@ -677,13 +677,17 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   a worktree holding only an ignored file reports NOTHING in
   `git status --porcelain`, so the dirty guard calls it clean; then
   `git worktree remove` (exactly what repository_remove_worktree runs)
-  deletes the directory and the ignored file with it. Bites dasHerd
-  hardest of all: worktrees carry gitignored logs/dasHerd/** — ptyhost
-  journals, host logs, session records — plus build output and
-  .jitted_scripts. Fix shape: count ignored-but-present files
-  (`status --porcelain --ignored`) and surface them as their own
-  pre-delete fact ("N ignored files will be destroyed"), since no git
-  guard covers them.
+  deletes the directory and the ignored file with it.
+  DOWNGRADED the same day (Boris): "herder files belong to a session, and
+  we can't delete a session's worktree anyways. so no need to worry for
+  gitignore" — correct, and verified: the watcher's log root is
+  get_das_root()/logs/dasHerd/**, i.e. the tree the WATCHER runs in, never
+  the session worktrees, so no delete can reach the journals or session
+  records; and a live session's worktree is hard-blocked regardless. What
+  is actually left in a session worktree's ignored set is reproducible
+  build output (bin/, build/, .jitted_scripts). So: keep the fact, drop
+  the alarm — surface an ignored-file count in the delete checklist if it
+  is free, never gate on it.
   SAME PROBE corrected note 58's tiers: `git worktree remove` never
   touches the branch, so committed work is NEVER at risk from it (the
   probe's unmerged commit survived intact on its branch). The

@@ -121,6 +121,63 @@ finish; nothing else depends on it.
    first (it is smaller and Phase 3's reviewer summons benefit from it).
 3. **When ssh becomes real** — pull Phase 5 forward or leave it parked.
 
+## Retiring a workspace — the two scenarios (Boris, 2026-07-27)
+
+Boris named the shape: two entry doors into ONE operation, because a
+session and its worktree are a pair and a live session's worktree is
+hard-blocked anyway.
+
+### Scenario 1 — worktree first: "is it safe to delete?"
+
+The question is "is there work in here that will be lost". Two layers,
+and only one of them is loss:
+
+- WORKING TREE (uncommitted + untracked) — genuinely lost on delete.
+- BRANCH (commits not in the base) — NOT lost; the branch survives
+  `git worktree remove`. It means "unfinished", not "at risk".
+
+So the offer is a verdict with an escape hatch per tier:
+
+- clean -> **Delete** (green; nothing to lose).
+- dirty -> a MECHANICAL rescue that needs no judgment, then delete. The
+  cheapest complete one is committing the WIP to the branch: the branch
+  outlives the worktree, keeps its name, and stays visible in the branch
+  list. (`git stash -u` also survives — stashes are repo-level, not
+  per-worktree — but it is easy to forget a stash and hard to find it
+  later; prefer the named branch.)
+- dirty and interesting -> **"Start a session to sort it out"**, which
+  ALREADY EXISTS (note 41): the blocked-delete dialog briefs a resolver
+  session with the exact blocking state. What is missing is that it is
+  REACTIVE — you only meet it after a delete attempt is refused. It
+  should be offered from the verdict, before you try.
+- unknown -> **"Start a session to figure out what is here"** — the same
+  launcher with an investigate brief instead of a resolve brief.
+
+Open question for Boris: "move changes to main" — main = the master
+BRANCH (put the work on master) or the main CHECKOUT (move the files to
+D:/Work/daScript)? Deciding what belongs on master is judgment, so that
+one reads like the agent path rather than a button; committing to the
+branch is the button.
+
+### Scenario 2 — session first: "delete this session"
+
+Offer to delete its worktree in the same act. Mostly built already:
+herd_delete removes the record and then attempts each worktree under the
+same guards, reporting removed/kept. What is missing is that it ACTS
+instead of OFFERING — it should present the same verdict/checklist and
+let the user choose, and it should say what happens to the session's own
+artifacts (records, journal, host log): deleted with it, or archived.
+
+Consequence Boris drew, and it retires the note-59 alarm: herder files
+belong to the SESSION, live in the watcher's tree, and a live session's
+worktree cannot be deleted — so worktree deletion never endangers them.
+
+### The leftover
+
+Neither scenario deletes the BRANCH, so retired workspaces leave their
+branches behind. That is where the destructive / recoverable / safe
+ladder below actually applies, if we ever offer it.
+
 ## Design: worktree/session deletion safety (note 58, 2026-07-27)
 
 Boris hit a wall twice trying to retire an unused worktree: the app knows
