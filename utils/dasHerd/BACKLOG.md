@@ -186,6 +186,15 @@ Two entry doors, one operation:
 | commits exist only on this machine (unmerged AND unpushed) | WARN only; a push helper comes later |
 | otherwise | GREEN |
 
+SCOPE (Boris, 2026-07-27): no "move to main" button — if someone wants the
+work they check the branch out. Two adjacent scenarios are explicitly
+SEPARATE and LATER, not part of this one:
+
+- "show me uncommitted branches" (which branches carry work that exists
+  nowhere else);
+- "delete local branches no longer in use" — where the destructive /
+  recoverable / safe ladder further down finally applies.
+
 Two wording rules that keep it honest:
 
 - The unpushed WARNING is about REDUNDANCY, not risk. Deleting a worktree
