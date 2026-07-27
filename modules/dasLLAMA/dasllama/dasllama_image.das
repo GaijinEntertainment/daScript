@@ -25,8 +25,12 @@ require dasllama/dasllama_math   // active_kernel_backend — half the image ide
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-// bump on ANY layout/serialization change — a mismatched image regenerates from the gguf
-let IMAGE_VERSION = 5   // v5: Model grew the deltanet projection format tags (dn kq-native planes)
+// Bump on ANY change to the image's layout/serialization OR to WHAT THE LOADER PUTS IN IT — the
+// identity below is computed before the gguf is parsed, so it can carry box/knob state but nothing
+// config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
+// image that silently represents a different model; only this version catches it. Mismatch
+// regenerates from the gguf, never migrates.
+let IMAGE_VERSION = 6   // v6: glm4moe NextN heads now load (blk.n_layers + its qkv biases)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and

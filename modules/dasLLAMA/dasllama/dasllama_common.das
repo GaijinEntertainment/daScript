@@ -1462,45 +1462,126 @@ def load_checkpoint(path : string) : Model {
 // Read one big 2D weight tensor into the active representation: transcode straight from disk when
 // the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
 // and quantize into the shared blob. `fmt` != q8 routes into that native K-quant plane pair.
+// ===== conversion-time accounting =====
+// Every big tensor rides load_big and its branches ARE the conversion kinds, so bucketing here is
+// what answers "where does gguf -> image time actually go". Armed by DASLLAMA_CONV_PROF; the cost
+// when armed is one clock pair per tensor, and the whole thing compiles to a dead branch when off.
+
+struct private ConvBucket {
+    nsec : int64
+    elems : int64
+    calls : int64
+}
+
+struct private ConvRow {
+    name : string
+    nsec : int64
+    elems : int64
+    calls : int64
+}
+
+var private g_conv_prof = false
+var private g_conv : table<string; ConvBucket>
+
+//! Arm per-conversion-kind timing over the gguf -> image weight walk (env DASLLAMA_CONV_PROF=1
+//! arms it at load). Buckets reset on each arm; dump them with [[conv_profile_report]].
+def set_conv_profile(on : bool) {
+    g_conv_prof = on
+    g_conv |> clear()
+}
+
+//! Current state of the [[set_conv_profile]] gate.
+def get_conv_profile() : bool => g_conv_prof
+
+def private conv_note(kind : string; t0, n : int64) {
+    if (!g_conv_prof) {
+        return
+    }
+    let ns = get_time_nsec(t0)
+    var b = g_conv[kind]
+    b.nsec += ns
+    b.elems += n
+    b.calls++
+    g_conv[kind] = b
+}
+
+//! Dump the conversion-kind breakdown gathered since the last [[set_conv_profile]] arm, slowest
+//! first: wall ms, share of the accounted total, weights moved, and the arm's throughput.
+def conv_profile_report() {
+    if (!g_conv_prof || empty(g_conv)) {
+        return
+    }
+    var rows : array<ConvRow>
+    var total = 0l
+    for (k, v in keys(g_conv), values(g_conv)) {
+        rows |> emplace(ConvRow(name = clone_string(k), nsec = v.nsec, elems = v.elems, calls = v.calls))
+        total += v.nsec
+    }
+    rows |> sort() $(a, b) => a.nsec > b.nsec
+    to_log(LOG_INFO, "dasLLAMA conv: {length(rows)} kinds, {double(total) / 1.0e6lf:.0f} ms accounted\n")
+    for (r in rows) {
+        let ms = double(r.nsec) / 1.0e6lf
+        let pct = total > 0l ? 100.0lf * double(r.nsec) / double(total) : 0.0lf
+        let mws = r.nsec > 0l ? double(r.elems) * 1000.0lf / double(r.nsec) : 0.0lf
+        to_log(LOG_INFO, "dasLLAMA conv:   {r.name}: {ms:.0f} ms ({pct:.1f}%), "
+            + "{double(r.elems) / 1.0e6lf:.0f} Mw over {r.calls} tensors, {mws:.0f} Mw/s\n")
+    }
+    delete rows
+}
+
 def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
+    let t0 = g_conv_prof ? ref_time_ticks() : 0l
+    var kind = "f32 read (no quant)"
     if (fmt == KqFmt.k4) {
         gguf_transcode_q4k(m, bytes, name, t.k4q, t.k4s, woff, n, src_off)
+        kind = "k4 transcode (Q4_K)"
     } elif (fmt == KqFmt.k5) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q5_K) {
             gguf_transcode_q5k(m, bytes, name, t.k5q, t.k5s, woff, n, src_off)
+            kind = "k5 transcode (Q5_K)"
         } else {   // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
             scratch |> resize(n)
             gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_k5_plane(scratch, n, t.k5q, t.k5s, woff)
+            kind = "k5 RE-ENCODE (Q5_0 dequant+quant)"
         }
     } elif (fmt == KqFmt.k6) {
         gguf_transcode_q6k(m, bytes, name, t.k6q, t.k6s, woff, n, src_off)
+        kind = "k6 transcode (Q6_K)"
     } elif (fmt == KqFmt.q40) {
         gguf_transcode_q40(m, bytes, name, t.q40q, t.q40s, woff, n, src_off)
+        kind = "q40 transcode (Q4_0)"
     } elif (fmt == KqFmt.q51) {
         gguf_transcode_q51(m, bytes, name, t.q51q, t.q51s, woff, n, src_off)
+        kind = "q51 transcode (Q5_1)"
     } elif (t.quant == QuantMode.q8) {
         let gt = gguf_tensor_type(m, name)
         if (gt == GGML_TYPE_Q8_0) {
             gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
+            kind = "q8 transcode (Q8_0 verbatim)"
         } elif (gt == GGML_TYPE_Q5_0) {
             gguf_transcode_q5_0_to_q8(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
+            kind = "q8 transcode (Q5_0 exact)"
         } else {
             scratch |> resize(n)
             gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
+            kind = "q8 REQUANT (dequant+quant)"
         }
     } elif (t.quant == QuantMode.q4_0) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q4_0) {
             gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n, src_off)
+            kind = "q4_0 transcode (Q4_0 verbatim)"
         } else {
             scratch |> resize(n)
             gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
+            kind = "q4_0 REQUANT (dequant+quant)"
         }
     } else {
         gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n, src_off)
     }
+    conv_note(kind, t0, n)
 }
 
 // qwen3next-layout deltanet big weights: same planes as the qwen35 arm, but the file's v-indexed
@@ -3030,6 +3111,9 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     g_weights_epoch++
     var t = Model()
     t.quant = mode
+    if (has_env_variable("DASLLAMA_CONV_PROF")) {
+        set_conv_profile(true)
+    }
     let ts_load = ref_time_ticks()
     let shards <- gguf_shard_paths(path)
     if (length(shards) > 1) {
@@ -3199,12 +3283,18 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
                 panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported — use the full -MTP file")
             }
-            // glm4moe ships the draft head with its OWN embed_tokens/shared_head_head; the das MTP
-            // head drafts through the TRUNK's embedding/classifier instead, so drafting here would
-            // use the wrong weights — disable the head honestly rather than mis-draft.
-            if (gguf_find_tensor(m, "blk.{layers}.nextn.embed_tokens.weight") >= 0
-                    || gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight") >= 0) {
-                to_log(LOG_WARNING, "dasLLAMA: NextN block carries its own embed_tokens/shared_head_head — MTP draft head disabled\n")
+            // DeepSeek-V3-style MTP (glm4moe) SHARES the trunk's embedding and classifier with the
+            // draft head — that is what "shared_head" names. The HF checkpoint serializes the shared
+            // reference, so the GGUF materializes copies: on GLM-4.5-Air nextn.embed_tokens is
+            // byte-identical to token_embd and nextn.shared_head_head is output.weight at a coarser
+            // quant (q4k vs the trunk's q6k — cos 0.9973 across the whole vocab). The head drafts
+            // through the TRUNK's tables (same weights, better classifier) and the copies never
+            // load; a shape disagreement would mean it is NOT that sharing, so fail closed there.
+            let nemb = gguf_find_tensor(m, "blk.{layers}.nextn.embed_tokens.weight")
+            let nhead = gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight")
+            if ((nemb >= 0 && m.tensors[nemb].n_elem != vocab * dim)
+                    || (nhead >= 0 && m.tensors[nhead].n_elem != vocab * dim)) {
+                to_log(LOG_WARNING, "dasLLAMA: NextN embed_tokens/shared_head_head are not the trunk's shape — MTP draft head disabled\n")
                 t.config.n_layer_nextn = 0l
             }
         } elif (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") >= 0
@@ -3819,11 +3909,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             } else {
                 t.mtp_headnorm_off = -1l   // reads fall back to output_norm (rms_final_off)
             }
-            // optional per-head embedding/classifier: no known qwen35 file ships them — fail closed
-            if (gguf_find_tensor(m, "blk.{layers}.nextn.embed_tokens.weight") >= 0
-                    || gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight") >= 0) {
-                panic("dasLLAMA: NextN per-head embed_tokens/shared_head_head are not supported yet")
-            }
+            // nextn.embed_tokens / nextn.shared_head_head are the trunk's own tables under the
+            // head's prefix (shape-vetted at config parse) — deliberately never loaded
         }
         if (has_ple(t.config)) {  // the per-layer token-embedding table [vocab x (ple*layers)], gathered per token, never repacked
             load_big(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, vocab * t.config.n_embd_per_layer * layers, scratch, 0l, t.ple_emb_fmt)
@@ -3841,10 +3928,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {
-            t.bq |> resize(layers * qd)
-            t.bk |> resize(layers * kv)
-            t.bv |> resize(layers * kv)
-            for (l in range64(layers)) {
+            t.bq |> resize(layers_ld * qd)
+            t.bk |> resize(layers_ld * kv)
+            t.bv |> resize(layers_ld * kv)
+            for (l in range64(layers_ld)) {
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * qd, qd)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.bias", t.bk, l * kv, kv)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.bias", t.bv, l * kv, kv)
@@ -3852,13 +3939,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // gpt-oss attention output-projection bias (dim per layer)
         if (t.config.attn_out_bias) {
-            t.bo |> resize(layers * dim)
-            for (l in range64(layers)) {
+            t.bo |> resize(layers_ld * dim)
+            for (l in range64(layers_ld)) {
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_output.bias", t.bo, l * dim, dim)
             }
         }
         delete scratch
         to_log(LOG_INFO, "dasLLAMA: load stage weights: {get_time_usec(ts_stage) / 1000} ms\n")
+        conv_profile_report()   // the per-conversion-kind split of the stage just reported
         ts_stage = ref_time_ticks()
         // arm64: switch to the laneq backend and repack the just-loaded Q8 weights into its interleaved
         // layout. Returns false off-ARM (portable stays, weights stay row-major).
@@ -4196,6 +4284,9 @@ struct Session {
     // post-output-norm hidden of the LAST evaluated position (llama.cpp's t_h_nextn handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
     mtp_h : array<float>           // h_nextn (dim)
+    mtp_h0 : array<float>          // the verify batch's ROW-0 normed hidden (= h_pos). forward_prefill's
+                                   // tail only stashes the LAST row, which a reject discards — this is
+                                   // what re-seeds mtp_h so a rejected step needs no re-forward
     mtp_h_pos1 : int64
     mtp_cat : array<float>         // eh_proj input [enorm(embed(tok)) ; hnorm(h)] (2*dim)
     mtp_cat_b : array<float>       // prompt-warm eh_proj concat image ((npos-1) x 2*dim, scratch-sized per warm)
@@ -4324,6 +4415,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
         s.mtp_h |> resize(c.dim)
+        s.mtp_h0 |> resize(c.dim)
         s.mtp_cat |> resize(2l * c.dim)
         s.mtp_logits |> resize(c.vocab_size)
         s.mtp_vbatch |> resize(2)
@@ -8890,6 +8982,7 @@ def private mtp_verify_row0(t : Model; var s : Session) {
     let c = t.config
     let dim = c.dim
     rms_at(s.xb, t, t.rms_final_off, s.x_b, 0l, dim)
+    copy_floats(s.xb, 0l, s.mtp_h0, 0l, dim)   // = h_pos; a reject re-seeds the draft head from it
     mm_cls(s.mtp_logits, t, s.xb, s.xq, s.xs, s.xbs, dim, c.vocab_size)
     // mirror the plain classifier tail exactly — `truth` must match plain decode BY CONSTRUCTION
     if (c.final_logit_softcap > 0.0) {
@@ -8920,6 +9013,7 @@ def private mtp_verify_logits(t : Model; var s : Session; npos : int64) {
     s.mtp_norm_b |> scratch_resize(npos * dim)
     s.mtp_logits_b |> scratch_resize(npos * vocab)
     rms_batch(s.mtp_norm_b, s.x_b, t, t.rms_final_off, dim, npos)
+    copy_floats(s.mtp_norm_b, 0l, s.mtp_h0, 0l, dim)   // = h_pos; a reject re-seeds the draft head from it
     mm_b_f(s, s.mtp_logits_b, t, cls_fmt, t.wcls_off, s.mtp_norm_b, dim, vocab, npos)
     copy_floats(s.mtp_logits_b, 0l, s.mtp_logits, 0l, vocab)
     copy_floats(s.mtp_logits_b, (npos - 1l) * vocab, s.logits, 0l, vocab)
@@ -9003,8 +9097,21 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 2l
         return true
     }
-    // reject: the accepted row's KV from the verify batch is already correct; roll the recurrent
-    // state back and re-advance it through tok alone (s.logits = plain logits, like forward)
+    // Reject — but the verify ALREADY produced everything a plain step would: row 0's logits are
+    // the plain result for `tok` (softcap + suppress mirrored by construction) and row 0's KV is
+    // correct. Re-forwarding discards work we did. The ONLY thing the re-forward is genuinely
+    // needed for is rolling recurrent state that the verify advanced past the draft — an arch with
+    // none consumes the verify's own outputs and skips it. (The head's KV row pos holds the
+    // rejected draft; the next step drafts at that same row and rewrites it, as before.)
+    if (c.recr_mask == 0ul) {
+        copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
+        // forward_prefill's tail stashed the LAST row's h — the draft's, now discarded — so re-seed
+        // the draft head from row 0's normed hidden the verify's own classifier computed
+        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, c.dim)
+        s.mtp_h_pos1 = pos + 1l
+        s.n_past = pos + 1l
+        return false
+    }
     mtp_state_restore(s)
     forward(t, s, tok, pos)
     s.n_past = pos + 1l
@@ -9063,6 +9170,11 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
 // ----- forward section profiler (decode AND prefill feed the same buckets) -----
 // Measurement is UNCONDITIONAL and negligible vs the matmuls; reset() starts a window, report() dumps it.
 // Prefill pass-threading thresholds (M1 Max ~90us dispatch, runtime knobs, 0 = always thread).
+// Batch widths at or below this are speculative-verify shaped and follow the DECODE path's
+// dispatch policy rather than the prefill work threshold — see prefill_attention. Covers the spec
+// depths real engines run (llama.cpp field configs are n=1..3, vLLM's GLM recipe is 1).
+let private ATTN_NARROW_NPOS = 8l
+
 var g_attn_par_threshold = 100_000l
 // Thread the per-position activation requant (mm_b) once n × npos clears this.
 var g_requant_par_threshold = 256_000l
@@ -9789,7 +9901,12 @@ def private prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, st
                               is_sliding : bool; sliding_window : int64; attn_softcap : float;
                               sinksp : float const?) {   // this layer's per-head sink logits; null = no sinks
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-    let attn_par = npos * maxctx * n_heads >= g_attn_par_threshold
+    // A NARROW batch is a speculative verify, i.e. decode-shaped work: attention_std_decode threads
+    // over heads UNCONDITIONALLY at npos=1, so npos=2 — strictly more work per head — must not fall
+    // under the prefill work threshold and run single-threaded. Without this a 2-row MTP verify lost
+    // all 16 lanes on attention (profiled: attn 2% -> 38%, dispatches 1472 -> 109, inline 0 -> 799).
+    // Real prefills keep the work-based threshold; the width bound covers any plausible spec depth.
+    let attn_par = npos <= ATTN_NARROW_NPOS || npos * maxctx * n_heads >= g_attn_par_threshold
     let kdt = s.kv_dtype_k
     let vdt = s.kv_dtype_v
     // ONE run list over the layer's widest window; workers intersect their sub-windows with each run
