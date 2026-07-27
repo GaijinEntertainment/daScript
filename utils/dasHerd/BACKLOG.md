@@ -172,6 +172,31 @@ Consequence Boris drew, and it retires the note-59 alarm: herder files
 belong to the SESSION, live in the watcher's tree, and a live session's
 worktree cannot be deleted — so worktree deletion never endangers them.
 
+### SETTLED RULES (Boris, 2026-07-27)
+
+Two entry doors, one operation:
+1. kill/close the session, which then offers to delete its worktree;
+2. delete a worktree directly — the same operation, blocked while a
+   session holds it.
+
+| condition | outcome |
+|---|---|
+| a session holds the worktree | BLOCK — retire the session first (door 1) |
+| uncommitted OR untracked present | BLOCK, with rescue: commit WIP to the branch, launch a resolver session, or an explicit "delete anyway, N files lost" |
+| commits exist only on this machine (unmerged AND unpushed) | WARN only; a push helper comes later |
+| otherwise | GREEN |
+
+Two wording rules that keep it honest:
+
+- The unpushed WARNING is about REDUNDANCY, not risk. Deleting a worktree
+  cannot lose commits — the branch keeps them. Phrase it "N commits here
+  exist only on this machine; deleting this folder will not lose them,
+  nothing else has a copy." A warning that implies the delete destroys
+  them would be a lie, which is the class of bug this round keeps finding.
+- Untracked-as-blocker needs a way through. Untracked is usually junk, and
+  a block with no escape sends the user to clean by hand or spawn an agent
+  for nothing. List the files and let them proceed explicitly.
+
 ### The leftover
 
 Neither scenario deletes the BRANCH, so retired workspaces leave their
