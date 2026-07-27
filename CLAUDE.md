@@ -78,7 +78,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server for Claude Code / stdio clients) — locked architecture, coordinate conventions, CC wire facts, headless dev rig, protocol tests |
 | `utils/dasHerd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (any `DASHERD_SESSION_ID` env var set) — the session cooperation contract: inbox/outbox mailbox, declaring participating repositories, Review Bundles, the `dasherd.ps1` CLI |
 | `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — diagnosing/fixing ANY dasImgui UI or interaction bug. The discipline: reproduce + screenshot → make it observable in `imgui_snapshot` (fix the inspection if it isn't) → fix → prove via snapshot + test → 'after' screenshot. UI is hard; **never claim a UI fix works from logic or a screenshot — only from structured snapshot state.** |
-| `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` |
+| `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
 | `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |
 | `skills/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` (covers `strings`, `daslib/strings_boost`, `daslib/strings_convert`) |
 | `skills/regex.md` | Writing regular expressions in `.das` code |
@@ -300,6 +300,9 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 ### Common gotchas
 
 - Lambda params can shadow function params — use distinct names
+- **`where` and `shared` are reserved words too** — `where` is the comprehension filter keyword and
+  `shared` the module modifier; both are a syntax error as a variable name (`let where = ...`,
+  `let shared = ...`). Rename (`sink_pos`, `shared_node`); hit while writing PERF026-028
 - **`label`, `expect`, and `pass` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS` — `pass` is the no-op statement) — using any as a parameter/variable name is a syntax error; rename (`tag`, `want`, `cpass`)
 - **`range`/`urange`/`range64`/`urange64` are lexer TYPE tokens** (`DAS_TRANGE` etc., like `int`) — unusable as struct-field, parameter, or annotation-argument names (`@range = ...` is a syntax error); the grammar whitelists them back to a plain name only in call position, which is why `range(10)` works. Rename (`rng`, `span`); grammar-verified 2026-07-23
 - **Literal `{`/`}` in string literals must be escaped `\{`/`\}`** — unescaped `{...}` is interpolation. Bites when embedding shader/C source as inline strings. String literals may span multiple lines (raw newlines are legal); probe-verified 2026-07-11

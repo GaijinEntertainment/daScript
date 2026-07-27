@@ -35,7 +35,14 @@ module perf_lint shared private
 //!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
 //!   PERF023 — var X = clone_expression(E); ... $e(X) ... — qmacro splice already clones; drop the pre-clone
 //!   PERF024 — var X = clone_*(E); func(X) where func is [clone(...)]-annotated — callee clones; drop the pre-clone
-//!   PERF025 — string(...) inside string interpolation is redundant — interpolation already converts to string
+//!   PERF025 — string(...) inside string interpolation is redundant
+//!   PERF026 — heap traffic on a hot path ([hot_path] / [no_alloc])
+//!   PERF027 — environment lookup on a hot path ([hot_path] / [no_env])
+//!   PERF028 — console / file I/O on a hot path ([hot_path] / [no_io])
+//!
+//! PERF026-028 are annotation-gated: nothing is checked until a function declares a contract.
+//! [cold_path] prunes the walk; @scratch on a field (or on a by-ref helper parameter) declares a
+//! reused buffer whose sizing is intentional. See skills/perf_lint.md. — interpolation already converts to string
 
 require daslib/ast_boost
 require strings
@@ -207,7 +214,7 @@ def private is_scratch_dest(var expr : Expression?) : bool {
     return false
 }
 
-// A helper sizing a caller's reused buffer marks the PARAMETER: the destination arrives by ref.
+// a helper sizing a caller's reused buffer marks the PARAMETER (destination arrives by ref)
 def private takes_scratch_arg(fn : Function?) : bool {
     return false if (fn == null)
     for (arg in fn.arguments) {
@@ -413,6 +420,11 @@ class PerfLintVisitor : AstVisitor {
     // Caller-populated via collect overload; applied alongside // nolint suppression.
     disabled_codes : table<string>
     enabled_codes : table<string>
+
+    def is_suppressed_code(code : string) : bool {
+        return (key_exists(disabled_codes, code)
+                || (!empty(enabled_codes) && !key_exists(enabled_codes, code)))
+    }
 
     def is_suppressed(text : string; at : LineInfo) : bool {
         let code = extract_lint_code(text)
@@ -2155,6 +2167,12 @@ class PerfLintVisitor : AstVisitor {
 
     def hot_path_scan() {
         return if (empty(hot_roots))
+        // all three off: skip the walk rather than discard it, so the disable buys compile time
+        if (is_suppressed_code("PERF026") && is_suppressed_code("PERF027")
+            && is_suppressed_code("PERF028")) {
+            hot_roots |> clear()
+            return
+        }
         var hc : HotCache
         while (!empty(hot_roots)) {
             var root = hot_roots[length(hot_roots) - 1]

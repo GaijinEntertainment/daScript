@@ -132,6 +132,113 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF024 | `func(clone_*(X))` (Arm A) or `var X = clone_*(E); func(X)` with no other uses (Arm B) where `func` carries a `[clone(paramName)]` annotation at the matching arg position | Medium | drop the outer clone wrap — the callee clones internally. `[clone(p1, p2)]` is a C++-registered metadata-only annotation (zero runtime cost); each annotated function promises to clone the named params internally. Detection in `preVisitExprCallArgument`: compute the callee's annotated param indices, identity-match the current arg's position via `intptr`, peel `ExprRef2Value` wrapper (typer inserts it whenever a ref-typed var — e.g. `var X : Expression?` — is passed to a non-ref param), then either flag `clone_*(...)` directly (Arm A) or mark a bare ExprVar candidate as safe (Arm B). Arm B reuses PERF023's seed-+-classify shape with a per-function `Perf024Candidate` array and `perf024_skip_iptr` flag. Annotation is wrong when the function MUTATES its input in place (e.g. `apply_template` / all `apply_qmacro_*` / `apply_qblock_*` go through `TemplateVisitor` which substitutes in place) — pre-clones at mutating callsites are load-bearing, NOT redundant; verify by reading the body before annotating |
 | PERF025 | `"{string(x)}"` — a `string(value)` cast as a direct string-interpolation element, where `value` is stringify-equivalent: signed `int`/`int8`/`int16`/`int64`, `float`, `double`, `string`, `das_string` (`tHandle` + annotation `"das_string"`) | Low | drop the cast — interpolation already converts via the builder's `DebugDataWalker`, so the cast just allocates an intermediate string. Detection in `preVisitExprStringBuilderElement` (per-element hook): `perf025_unwrap_element` peels one `ExprRef2Value`, `perf025_string_call_value` matches a `string(...)` call (skipping explicit `string(x, true)` hex) and returns its value arg, `perf025_value_kind` classifies it. **Unsigned** ints (`uint`/`uint8`/`uint16`/`uint64`) still warn but append a `:d`-tag hint — they interpolate as **hex** by default (`"{42u}"` → `0x2a`), unlike `string()`'s decimal, so the bare drop changes output. **Skipped (kind 0):** `array<uint8>`/`uri`/`text_range` (value-shape change, not just format), `string()` nested as an arg to another call (`"{length(string(x))}"` — only direct elements are flagged), and any type with no `string()` overload. Reports at the `string` call's `.at`; for a `string(string)` arg PERF025 claims the location and the overlapping PERF020 is deduped. `string(x)` under a `_::fmt(":fmt", …)` format wrapper cannot occur — `fmt` has no string-valued overload, so `"{string(x):fmt}"` does not compile |
 
+| PERF026 | heap traffic on a hot path — reached from a function carrying `[hot_path]` / `[no_alloc]` | High | see **Hot-path contracts** below |
+| PERF027 | environment lookup on a hot path (`[hot_path]` / `[no_env]`) | High | `get_env_variable` calls `getenv` AND allocates the result in the context heap on every call; resolve at `[init]` or behind a `[cold_path]` loader and cache |
+| PERF028 | console / file I/O on a hot path (`[hot_path]` / `[no_io]`) | Medium | the debug line that never got removed; this is the rule to reach for `DAS_LINT_DISABLE=PERF028` on |
+
+## Hot-path contracts (PERF026-028)
+
+Unlike every other rule here, these three are **annotation-gated**: nothing is checked until a
+function declares a contract. From each annotated root the scan follows **direct** calls
+transitively, so a sink several frames deep is still reported.
+
+| Annotation | Bans |
+|---|---|
+| `[hot_path]` | all three |
+| `[no_alloc]` | heap traffic (PERF026) |
+| `[no_env]` | environment lookups (PERF027) |
+| `[no_io]` | console / file I/O (PERF028) |
+| `[cold_path]` | *prunes the walk* — a one-time init or opt-in leg reached from a hot function |
+
+Combine on one line: `[no_alloc, no_env, no_io]`. Two stacked annotation blocks do not parse.
+
+### What counts as heap traffic
+
+Detection is structural rather than a list of surface names. Every array/table heap operation
+bottoms out in a `__builtin_array_*` / `__builtin_table_*` extern, so the rule matches the prefix
+(minus the lock/probe forms) — `push` / `reserve` / `resize` / `erase` / `insert` / `delete` are all
+covered without naming one generic, and a **newly added builtin is caught by default**. On top of
+that: `ExprNew`, `ExprAscend` (`new Foo(f = v)` lowers to move-to-heap, *not* `ExprNew`),
+`ExprDelete`, string interpolation, lambda capture frames, table index (`t[k]` inserts on read),
+and any builtin extern returning a freshly allocated string.
+
+### `@scratch` — declaring a reused buffer
+
+A buffer that is sized to the current step's geometry and reused is not an accident. Say so once,
+at the buffer, rather than with a `nolint` per call site (which buries the next real finding and
+does not survive the code moving):
+
+```das
+struct Session {
+    @scratch attq : array<float>     // reused per step; sizing it is the owner's strategy
+    logits : array<float>            // unmarked: sizing this on a hot path is reported
+}
+
+// a helper that sizes a caller's buffer marks the PARAMETER — the call site cannot see
+// which field arrived, because the destination comes in by reference
+def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
+```
+
+A sizing call whose destination reaches a `@scratch` field is not descended into. Field
+annotations are free-form (`@name`, no registration), so `@scratch` costs nothing to parse.
+
+**Future — `@scratch` as an optimization hint, not just a lint marker.** Today the declaration only
+tells the linter "this buffer is reused". The same statement is exactly the precondition a
+*compiler* would need to do better than a general `resize`:
+
+- **Keep capacity across a shrink.** A general `resize` down-then-up must assume the array may be
+  handed off or freed; `@scratch` says it will not, so the down-size can retain the block and the
+  up-size becomes a no-op instead of a realloc.
+- **Skip the zero-fill.** `resize` init-fills new elements; a scratch buffer is fully rewritten by
+  the step that sizes it, so `@scratch` licenses `resize_no_init` implicitly. dasLLAMA already
+  hand-rolls exactly this in `scratch_resize` (delete-on-shrink, then `resize_no_init`) — the
+  annotation could make that the default rather than a hand-written idiom.
+- **Hoist the sizing.** With the reuse promise, a `resize(n)` whose `n` is loop-invariant can be
+  lifted out of the step loop entirely.
+
+None of that is implemented. The annotation is deliberately named for the property (`scratch`)
+rather than for the lint, so it can carry the optimization meaning later without a rename.
+
+### Escape hatches, in order of preference
+
+1. `[cold_path]` on the callee — the honest fix when the leg genuinely runs once (lazy init,
+   PSO compile, opt-in bookkeeping, a reference-check path behind a debug flag).
+2. `@scratch` on the destination when it is a reused buffer.
+3. `// nolint:PERF026` on the line, **with a reason**. Honored at *either* end of a chain: the
+   report anchors on the caller when the sink is in another file, so a suppression written where
+   the code actually lives still works.
+4. `DAS_LINT_DISABLE=PERF028` for a whole run — no source edit, which is the point when you are
+   adding a log line to chase a bug. With all three codes disabled the closure walk is skipped
+   entirely, so this buys compile time and not just quiet.
+
+### What the scan deliberately does not report
+
+- **Anything under a `panic(...)` argument.** A panic is fatal in daslang, not an exception, so its
+  interpolated message is on the abort path by construction.
+- **Macro-generated subtrees.** A rewritten stub (`maybe_parallel_for`) `force_at`-stamps the
+  caller's line onto its splice, so its job-dispatch machinery would otherwise be blamed on every
+  kernel that dispatches. Macros mark only the *root* of their output generated, so the flag has to
+  propagate down — the scan tracks a depth, not a per-node flag test.
+- **Indirect calls.** `ExprInvoke` through a function pointer or lambda cannot be resolved
+  statically; annotate the implementations it reaches instead. `ExprAddr` is deliberately not an
+  edge — taking a function's address is not calling it.
+
+### Cost
+
+Measured on dasLLAMA (`-compile-only examples/dasLLAMA/run.das`, 3 samples each), 18 annotated
+roots over a ~66k-line engine:
+
+| | wall | delta |
+|---|---|---|
+| before the module was required | 5.55s | — |
+| `-no-lint` | 5.79s | +0.24s — **always paid**: the module must compile for `[no_alloc]` to parse |
+| `DAS_LINT_DISABLE=PERF026,PERF027,PERF028` | 5.95s | +0.40s |
+| default | 6.13s | +0.58s (+10%), of which the closure walk is ~0.18s |
+
+The always-paid share is the annotation module's own compile (`perf_lint` pulls `ast_boost`,
+`lint_config`, `toml`, `json`). Splitting the five annotations into a leaf module would recover
+most of it, at the cost of a second module to require.
+
 ## Visitor gotchas
 
 - **`in_closure > 0` is NOT a useful guard in `preVisitExprOp2`** — `loop_depth` already doesn't increment inside closure bodies (`preVisitExprFor` / `While` gate on `in_closure == 0`), so PERF001's `loop_depth > 0` correctly excludes closure-internal loops without a separate skip. An `in_closure` early-return at the top of `preVisitExprOp2` hides syntactic patterns (PERF007/008/010/013/014/017) inside the natural `build_string() $(var w) { ... }` idiom and is a bug, not a feature.
