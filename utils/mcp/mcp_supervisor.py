@@ -122,14 +122,19 @@ class DaslangChild:
             self._stderr_fh = open(self.stderr_log, "ab", buffering=0)
         env = None
         picked = _pick_binary(self.cwd)          # re-resolved per spawn: a rebuild mid-session
-        if picked is not None:                   # can change which layout is newest
+        launcher = list(self.launcher)           # can change which layout is newest
+        if picked is not None:
+            # Windows goes through the vcvars .cmd, which reads this; POSIX execs the binary
+            # directly, so the pick has to replace argv[0] or it silently would not apply
             env = dict(os.environ, DASLANG_MCP_BIN=picked)
+            if not IS_WINDOWS:
+                launcher[0] = picked
         self.proc = subprocess.Popen(
-            self.launcher,
+            launcher,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr_fh,
             cwd=self.cwd, text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
         )
-        _log(f"spawned daslang child pid={self.proc.pid} bin={picked}")
+        _log(f"spawned daslang child pid={self.proc.pid} bin={picked if IS_WINDOWS else launcher[0]}")
         if self.init_request is not None:
             self._write_line(json.dumps(self.init_request, separators=(",", ":")))
             self._read_line()  # consume & discard the replayed initialize result
