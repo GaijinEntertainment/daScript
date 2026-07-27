@@ -366,7 +366,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
-void *tree_sitter_markdown_inline_external_scanner_create() {
+void *tree_sitter_markdown_inline_external_scanner_create(void) {
     Scanner *s = (Scanner *)malloc(sizeof(Scanner));
     deserialize(s, NULL, 0);
     return s;

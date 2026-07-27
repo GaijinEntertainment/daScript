@@ -1663,7 +1663,7 @@ namespace das {
     void set_env_variable ( const char * var, const char * value, Context *, LineInfoArg * ) {
         // process-wide; children spawned via popen/popen_argv inherit it
         if ( !var || !*var ) return;
-#ifdef _MSC_VER
+#ifdef _WIN32
         _putenv_s(var, value ? value : "");
 #else
         setenv(var, value ? value : "", 1);
