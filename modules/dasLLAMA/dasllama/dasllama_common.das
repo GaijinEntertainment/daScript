@@ -382,22 +382,164 @@ def private repack_q51_stacks(var t : Model) {
     invoke(g_layout_repack_q51, t)
 }
 
+// ===== the vulkan-flavor image bake (driven by dasllama_image) =====
+// Collect: a normal load's GPU walk appends every gather's output to the bake blob; slice: a
+// flavor load's walk skips the transforms and copies the mapped blob back, plan-checked.
+
+//! One baked gather of the vulkan flavor's plan — walk order, offsets into Model.vkblob.
+struct VkPlanEntry {
+    fmt : int
+    woff : int64
+    n : int64
+    rows : int64
+    wq_off : int64
+    wq_bytes : int64
+    ws_off : int64
+    ws_bytes : int64
+}
+
+enum private VkBakeMode {
+    off
+    collect
+    slice
+}
+
+var private g_vk_bake = VkBakeMode.off
+var private g_vk_bake_blob : array<uint8>
+var private g_vk_bake_plan : array<VkPlanEntry>
+var private g_vk_bake_cursor = 0l
+
+//! Arm collection for the next model load's GPU walk (the vulkan-flavor bake).
+def vulkan_bake_begin {
+    g_vk_bake = VkBakeMode.collect
+    g_vk_bake_blob |> clear()
+    g_vk_bake_plan |> clear()
+}
+
+//! Move the collected planes into the model and disarm; false = nothing collected (no GPU walk ran).
+def vulkan_bake_take(var t : Model) : bool {
+    g_vk_bake = VkBakeMode.off
+    if (empty(g_vk_bake_plan)) {
+        delete g_vk_bake_blob
+        return false
+    }
+    t.vkblob <- g_vk_bake_blob
+    t.vkplan <- g_vk_bake_plan
+    return true
+}
+
+//! Arm slicing for a mapped vulkan-flavor load: the walk reads t.vkblob instead of gathering.
+def vulkan_bake_slice_begin {
+    g_vk_bake = VkBakeMode.slice
+    g_vk_bake_cursor = 0l
+}
+
+//! Disarm after a successful flavor load; a partially-consumed plan means the walk diverged
+//! (the slicer already declined to live gathers — correct, just slower) and is worth a rebake.
+def vulkan_bake_slice_end(t : Model) {
+    if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != int64(length(t.vkplan))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers — the image is stale for this run's shape, consider rebaking\n")
+    }
+    g_vk_bake = VkBakeMode.off
+}
+
+//! Disarm without verification (a flavor-load attempt that never ran the walk).
+def vulkan_bake_disarm {
+    g_vk_bake = VkBakeMode.off
+}
+
+def private vk_bake_append(a : array<uint8>) : int64 {
+    // 4KB-aligned starts (import windows); long_ forms — the blob crosses the int32 array rail
+    let off = (long_length(g_vk_bake_blob) + 4095l) / 4096l * 4096l
+    let abytes = long_length(a)
+    let need = off + abytes
+    // growth capped at 2GB steps past 4GB — doubling's overshoot paged a 128GB box on GLM's bake
+    if (long_capacity(g_vk_bake_blob) < need) {
+        let cap = long_capacity(g_vk_bake_blob)
+        let grown = cap < 4_294_967_296l ? cap * 2l : cap + 2_147_483_648l
+        g_vk_bake_blob |> reserve(max(need, grown))
+    }
+    g_vk_bake_blob |> resize(need)
+    if (abytes > 0l) {
+        unsafe {
+            memcpy(addr<void?>(g_vk_bake_blob[off]), addr<void? -const>(a[0]), int(abytes))
+        }
+    }
+    return off
+}
+
+def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uint8>) {
+    if (g_vk_bake != VkBakeMode.collect) {
+        return
+    }
+    var e = VkPlanEntry(fmt = fmt, woff = woff, n = n, rows = rows,
+                        wq_bytes = int64(length(wq)), ws_bytes = int64(length(ws)))
+    e.wq_off = vk_bake_append(wq)
+    e.ws_off = vk_bake_append(ws)
+    g_vk_bake_plan |> push(e)
+}
+
+def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
+                          var wq : array<uint8>; var ws : array<uint8>) : bool {
+    if (g_vk_bake != VkBakeMode.slice) {
+        return false
+    }
+    // plan divergence DECLINES to live gathers mid-walk (seamless: matched entries were byte-identical)
+    if (g_vk_bake_cursor >= int64(length(t.vkplan))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} — regathering live from here\n")
+        g_vk_bake = VkBakeMode.off
+        return false
+    }
+    let e = t.vkplan[int(g_vk_bake_cursor)]
+    if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} woff {woff} {n}x{rows}) — regathering live from here\n")
+        g_vk_bake = VkBakeMode.off
+        return false
+    }
+    g_vk_bake_cursor++
+    wq |> resize(int(e.wq_bytes))
+    ws |> resize(int(e.ws_bytes))
+    unsafe {
+        // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
+        if (e.wq_bytes > 0l) {
+            memcpy(addr(wq[0]), addr<void? -const>(t.vkblob[e.wq_off]), int(e.wq_bytes))
+        }
+        if (e.ws_bytes > 0l) {
+            memcpy(addr(ws[0]), addr<void? -const>(t.vkblob[e.ws_off]), int(e.ws_bytes))
+        }
+    }
+    return true
+}
+
 def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
                                  var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
+    if (vk_bake_slice(t, 0, woff, n, rows, wq, ws)) {
+        return
+    }
     invoke(g_layout_gather, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    vk_bake_collect(0, woff, n, rows, wq, ws)
 }
 
 def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                     repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
+    if (vk_bake_slice(t, int(fmt), woff, n, rows, wq, ws)) {
+        return
+    }
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+    vk_bake_collect(int(fmt), woff, n, rows, wq, ws)
 }
 
 def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      mr, kgroup, wbias : int64; var wq : array<uint8>) {
     layout_hooks_check()
+    var no_ws : array<uint8>
+    if (vk_bake_slice(t, 6, woff, n, rows, wq, no_ws)) {
+        return
+    }
     invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
+    vk_bake_collect(6, woff, n, rows, wq, no_ws)
 }
 
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
@@ -771,6 +913,11 @@ struct Model {
     mtp_enorm_off : int64 = -1      // fblob: nextn.enorm (token-embedding RMS weight), dim
     mtp_hnorm_off : int64 = -1      // fblob: nextn.hnorm (trunk-hidden RMS weight), dim
     mtp_headnorm_off : int64 = -1   // fblob: nextn.shared_head_norm, dim (-1 = output_norm)
+    // vulkan-flavor bake (dasllama_image): the GPU walk's gathered device-layout planes + the
+    // walk-order plan. Empty on planar/metal flavors (empty planes never save); borrowed
+    // views on a flavor load — the generic finalizer walk covers both.
+    vkblob : array<uint8>
+    vkplan : array<VkPlanEntry>
     // prepared-model image backing (dasllama_image): when set, every locked array field above
     // is a borrowed VIEW into this mapping (zero-copy) and the finalizer below unmaps it.
     // Both fields are skipped by the image save/load field walk.

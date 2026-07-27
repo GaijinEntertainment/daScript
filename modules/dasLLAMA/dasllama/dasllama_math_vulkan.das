@@ -8586,12 +8586,27 @@ def vulkan_moe_gpu_arm : bool {
     return true
 }
 
+// the vulkan flavor's config identity. ENV-OR-AUTO knobs only — resolving them (vk_moe_init)
+// would carve the stream reserve BEFORE the loader reports the model's slot need (518ae164a);
+// "auto" resolves deterministically per box and the image is local, so the identity is stable.
+def private vk_bake_tag : string {
+    if (!vulkan_moe_gpu_arm()) {
+        return ""
+    }
+    let cm = get_env_variable("DASLLAMA_COOPMAT")
+    let vb = get_env_variable("DASLLAMA_GPU_VRAM_MB")
+    return ("m{cm == "" ? "auto" : cm} b{vb == "" ? "auto" : vb}"
+        + " l{gpu_want_moe_layers()} s{gpu_want_moe_stream()}"
+        + " r{gpu_want_dn() ? 1 : 0}{gpu_want_attn() ? 1 : 0}{gpu_want_dnd() ? 1 : 0}{gpu_want_shexp() ? 1 : 0}{gpu_want_qkv() ? 1 : 0}{gpu_want_cls() ? 1 : 0}")
+}
+
 [init]
 def dasllama_math_vulkan_register() {
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
         group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
         needs_repack = false, priority = -1, available = @@vulkan_backend_available))
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
+    set_moe_gpu_bake_tag(@@vk_bake_tag)
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)

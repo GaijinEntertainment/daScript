@@ -2161,6 +2161,19 @@ def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
     g_moe_gpu_expert_q8n = f
 }
 
+def private moe_gpu_no_bake_tag : string => ""
+
+var private g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
+
+//! The GPU tier's config-identity tag for the vulkan-flavor image ("" = tier absent/unarmed —
+//! no flavor). Everything that shapes the load-time GPU walk must fold in: a config switch
+//! must miss the flavor's identity and rebake.
+def public set_moe_gpu_bake_tag(f : function<() : string>) {
+    g_moe_gpu_bake_tag = f
+}
+
+def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
+
 def public moe_gpu_expert_q8n() : bool => invoke(g_moe_gpu_expert_q8n)
 
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.

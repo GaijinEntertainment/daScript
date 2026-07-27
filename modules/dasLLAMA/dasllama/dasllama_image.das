@@ -637,24 +637,39 @@ def load_model_image(path : string; var t : Model; tag : string = "") : bool {
 //! (``DASLLAMA_IMAGE=0`` disables); under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise. Call inside ``with_job_que()``.
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     if (path |> ends_with(".dlim")) {
-        // a prepared image named directly — first-class once the source gguf is gone. Try both
-        // identities, EXPECTED flavor first (metal under an active Metal mode, else planar) so
-        // the normal case loads without the wrong-tag decline warning; a dual mismatch panics
+        // a prepared image named directly — first-class once the source gguf is gone. EXPECTED
+        // flavor first (metal mode > armed vulkan tier > planar) so the normal case loads
+        // without the wrong-tag decline warning; a full mismatch panics
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Model()
         let metal_first = get_metal_mode() != MetalMode.off && has_decode_override("metal")
-        let loaded = (metal_first
-            ? load_model_image(path, t, METAL_IMAGE_TAG) || load_model_image(path, t)
-            : load_model_image(path, t) || load_model_image(path, t, METAL_IMAGE_TAG))
+        let vk_cfg = metal_first ? "" : moe_gpu_bake_tag()
+        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        var loaded = false
+        if (vk_tag != "") {
+            vulkan_bake_slice_begin()
+            loaded = load_model_image(path, t, vk_tag)
+            if (loaded) {
+                vulkan_bake_slice_end(t)
+            } else {
+                vulkan_bake_disarm()
+            }
+        }
         if (!loaded) {
-            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}) — regenerate it from the source gguf")
+            loaded = (metal_first
+                ? load_model_image(path, t, METAL_IMAGE_TAG) || load_model_image(path, t)
+                : load_model_image(path, t) || load_model_image(path, t, METAL_IMAGE_TAG))
+        }
+        if (!loaded) {
+            let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""
+            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) — regenerate it from the source gguf")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    // metal mode at load time picks the image FLAVOR: blob-only metal when the drivers can
-    // serve the config, planar CPU otherwise (flavors are per-config and self-sufficient)
+    // load-time flavor pick: blob-only metal when its drivers serve the config; the vulkan
+    // flavor (planar + baked GPU planes) when the vulkan tier arms; planar CPU otherwise
     let want_metal = mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
     if (mode == QuantMode.q8 && get_env_variable("DASLLAMA_IMAGE") != "0") {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
@@ -667,8 +682,33 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
                 return <- t
             }
         }
+        // the vulkan flavor: the GPU walk slices the baked device-layout planes off the mapping
+        // instead of re-gathering; ANY vulkan config switch changes the tag and rebakes below
+        let vk_cfg = want_metal ? "" : moe_gpu_bake_tag()
+        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        if (vk_tag != "") {
+            let img_v = image_path_for(path, vk_tag)
+            vulkan_bake_slice_begin()
+            if (load_model_image(img_v, t, vk_tag)) {
+                vulkan_bake_slice_end(t)
+                to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms — {img_v}\n")
+                return <- t
+            }
+            vulkan_bake_disarm()
+            vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
+        }
         let img = image_path_for(path)
         if (load_model_image(img, t)) {
+            if (vk_tag != "" && vulkan_bake_take(t)) {
+                // the planar image served this run's uploads; bake the flavor for the next one
+                let ts_save = ref_time_ticks()
+                let img_v = image_path_for(path, vk_tag)
+                if (save_model_image(t, img_v, vk_tag)) {
+                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_save) / 1000} ms — {img_v}\n")
+                }
+                delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
+                delete t.vkplan
+            }
             if (!(want_metal && metal_model_servable(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
                 return <- t
@@ -684,8 +724,21 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             if (save_model_image(m, img_m, METAL_IMAGE_TAG)) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img_m}\n")
             }
-        } elif (save_model_image(m, img)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        } else {
+            // planar saves FIRST (vkblob still empty — the planar flavor must stay planar),
+            // then the take moves the collected planes in and the vulkan flavor saves
+            if (save_model_image(m, img)) {
+                to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+            }
+            if (vk_tag != "" && vulkan_bake_take(m)) {
+                let ts_vk = ref_time_ticks()
+                let img_v = image_path_for(path, vk_tag)
+                if (save_model_image(m, img_v, vk_tag)) {
+                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_vk) / 1000} ms — {img_v}\n")
+                }
+                delete m.vkblob
+                delete m.vkplan
+            }
         }
         return <- m
     }
