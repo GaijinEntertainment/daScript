@@ -39,14 +39,15 @@ the element size) and pass by value like other PODs. The fp16 family has closed 
 ``a * b + c`` on ``half4`` yields ``half4``, computed by promoting each lane to ``float``,
 computing, and rounding back — correctly rounded per operation, bit-identical to native fp16
 hardware. Division follows IEEE (``1h / 0h`` is ``inf``; ``NaN != NaN``). ``float16`` literals
-use the ``h`` suffix: ``1.5h``. The integer families carry storage, converts, and a per-lane
-shift right — but no other arithmetic (``byte4 + byte4`` is a compile error): widen with the
-wider ctor (``int4(b4)`` sign-extends, ``short8(b8)``), narrow with the ctor (C truncation,
+use the ``h`` suffix: ``1.5h``. The integer families carry storage, converts, and the integer
+bit surface — but no arithmetic (``byte4 + byte4`` is a compile error): widen with the wider
+ctor (``int4(b4)`` sign-extends, ``short8(b8)``), narrow with the ctor (C truncation,
 ``short4(i4)``) or the saturating ``_sat`` forms (``short4_sat(i4)``, ``byte8_sat(s8)``,
-clamping to the target range). ``v >> n`` shifts every lane right by a scalar ``int`` count:
-signed lanes shift arithmetically, unsigned logically, and the count masks to the lane width
-(``b16 >> 9`` equals ``b16 >> 1``) — the nibble-unpack shape (``shuffle(lut, nib >> 4)``).
-The fp16 family converts to and from float per arity (``half4(f4)`` rounds each lane,
+clamping to the target range). The bit surface matches the 32-bit vector families:
+``<< >> & | ^`` and their compound assigns. Shifts take a scalar ``int`` count masked to the
+lane width (``b16 >> 9`` equals ``b16 >> 1``); signed lanes shift right arithmetically,
+unsigned logically; ``<<`` wraps each lane — ``shuffle(lut, nib >> 4)`` is the nibble-unpack
+shape. The fp16 family converts to and from float per arity (``half4(f4)`` rounds each lane,
 ``float4(h4)`` is exact) plus ``half8(lo, hi)`` / ``half8_lo`` / ``half8_hi`` packing against
 two ``float4``.
 

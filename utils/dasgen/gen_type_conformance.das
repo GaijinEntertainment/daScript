@@ -18,7 +18,7 @@ struct TypeSpec {
     kind : string           // ctor-argument literal spelling: "float" | "int" | "uint"
     ekind : string          // element literal spelling — differs for fp16 ("half": 1.h)
     has_arith : bool        // closed +,-,*,/ operators exist (div emitted for float kind only)
-    has_shr : bool          // per-lane >> by a scalar int exists (int vectors; count masks to lane width)
+    has_bitops : bool       // the int-vector bit surface exists: << >> & | ^ + compound assigns
     size_bytes : int
     align_bytes : int
 }
@@ -168,10 +168,23 @@ def emit_arith_section(var writer; spec : TypeSpec) {
     writer |> write("    \}\n")
 }
 
-// per-lane shift right — signed lanes shift arithmetically (negative lane values pin it),
-// unsigned logically; the count masks to the LANE width. Expected lanes computed here via
-// das int >>, which is arithmetic and value-preserving for every lane value used.
-def emit_shr_section(var writer; spec : TypeSpec) {
+// wrap a das-int lane value to `bits`-wide two's complement — the exact value a lane of that
+// width holds after a wrapping op (shl, bitwise on negatives)
+def wrap_lane(v : int; bits : int; signed_kind : bool) : int {
+    if (bits >= 32) {
+        return v
+    }
+    var w = v & ((1 << bits) - 1)
+    if (signed_kind && w >= (1 << (bits - 1))) {
+        w -= 1 << bits
+    }
+    return w
+}
+
+// the int-vector bit surface — >> (signed lanes arithmetic, unsigned logical), << (lanes wrap),
+// & | ^, and the compound assigns; shift counts mask to the LANE width. Expected lanes are
+// computed here in das int and wrapped to lane width.
+def emit_bitops_section(var writer; spec : TypeSpec) {
     let bits = spec.size_bytes * 8 / spec.arity
     let signed_kind = spec.kind == "int"
     writer |> write("    t |> run(\"shift right\") @(t : T?) \{\n")
@@ -184,6 +197,43 @@ def emit_shr_section(var writer; spec : TypeSpec) {
     }
     writer |> write("        t |> success(a >> {bits + 2} == a >> 2, \"count masks to lane width\")\n")
     writer |> write("        t |> success(a >> 0 == a, \"shift by zero\")\n")
+    writer |> write("        var c = a\n")
+    writer |> write("        c >>= 2\n")
+    writer |> write("        t |> success(c == a >> 2, \"shift right assign\")\n")
+    writer |> write("    \}\n")
+    writer |> write("    t |> run(\"shift left\") @(t : T?) \{\n")
+    if (signed_kind) {
+        writer |> write("        let a = {ctor_gen(spec) $(i) => i % 2 == 0 ? -(19 + i * 7) : 19 + i * 7}\n")
+        writer |> write("        t |> success(a << 2 == {ctor_gen(spec) $(i) => wrap_lane((i % 2 == 0 ? -(19 + i * 7) : 19 + i * 7) << 2, bits, true)}, \"lanes wrap\")\n")
+    } else {
+        writer |> write("        let a = {ctor_gen(spec) $(i) => 200 + i * 3}\n")
+        writer |> write("        t |> success(a << 2 == {ctor_gen(spec) $(i) => wrap_lane((200 + i * 3) << 2, bits, false)}, \"lanes wrap\")\n")
+    }
+    writer |> write("        t |> success(a << {bits + 2} == a << 2, \"count masks to lane width\")\n")
+    writer |> write("        var c = a\n")
+    writer |> write("        c <<= 2\n")
+    writer |> write("        t |> success(c == a << 2, \"shift left assign\")\n")
+    writer |> write("    \}\n")
+    writer |> write("    t |> run(\"bitwise\") @(t : T?) \{\n")
+    if (signed_kind) {
+        writer |> write("        let a = {ctor_gen(spec) $(i) => i % 2 == 0 ? -(19 + i * 7) : 19 + i * 7}\n")
+    } else {
+        writer |> write("        let a = {ctor_gen(spec) $(i) => 200 + i * 3}\n")
+    }
+    writer |> write("        let b = {ctor_gen(spec) $(i) => 45 + i * 5}\n")
+    let av <- [for (i in range(spec.arity)); spec.kind == "int" ? (i % 2 == 0 ? -(19 + i * 7) : 19 + i * 7) : 200 + i * 3]
+    writer |> write("        t |> success((a & b) == {ctor_gen(spec) $(i) => wrap_lane(av[i] & (45 + i * 5), bits, signed_kind)}, \"and\")\n")
+    writer |> write("        t |> success((a | b) == {ctor_gen(spec) $(i) => wrap_lane(av[i] | (45 + i * 5), bits, signed_kind)}, \"or\")\n")
+    writer |> write("        t |> success((a ^ b) == {ctor_gen(spec) $(i) => wrap_lane(av[i] ^ (45 + i * 5), bits, signed_kind)}, \"xor\")\n")
+    writer |> write("        var c = a\n")
+    writer |> write("        c &= b\n")
+    writer |> write("        t |> success(c == (a & b), \"and assign\")\n")
+    writer |> write("        c = a\n")
+    writer |> write("        c |= b\n")
+    writer |> write("        t |> success(c == (a | b), \"or assign\")\n")
+    writer |> write("        c = a\n")
+    writer |> write("        c ^= b\n")
+    writer |> write("        t |> success(c == (a ^ b), \"xor assign\")\n")
     writer |> write("    \}\n")
 }
 
@@ -362,8 +412,8 @@ def emit_test_file(spec : TypeSpec) {
             if (spec.has_arith) {
                 emit_arith_section(writer, spec)
             }
-            if (spec.has_shr) {
-                emit_shr_section(writer, spec)
+            if (spec.has_bitops) {
+                emit_bitops_section(writer, spec)
             }
             emit_convert_section(writer, spec)
             writer |> write("\}\n")
@@ -381,8 +431,8 @@ def main {
         TypeSpec(name = "float2", family = "float", arity = 2, kind = "float", ekind = "float", has_arith = true, size_bytes = 8, align_bytes = 4),
         TypeSpec(name = "float3", family = "float", arity = 3, kind = "float", ekind = "float", has_arith = true, size_bytes = 12, align_bytes = 4),
         TypeSpec(name = "float4", family = "float", arity = 4, kind = "float", ekind = "float", has_arith = true, size_bytes = 16, align_bytes = 4),
-        TypeSpec(name = "int2", family = "int", arity = 2, kind = "int", ekind = "int", has_arith = true, has_shr = true, size_bytes = 8, align_bytes = 4),
-        TypeSpec(name = "uint4", family = "uint", arity = 4, kind = "uint", ekind = "uint", has_arith = true, has_shr = true, size_bytes = 16, align_bytes = 4),
+        TypeSpec(name = "int2", family = "int", arity = 2, kind = "int", ekind = "int", has_arith = true, has_bitops = true, size_bytes = 8, align_bytes = 4),
+        TypeSpec(name = "uint4", family = "uint", arity = 4, kind = "uint", ekind = "uint", has_arith = true, has_bitops = true, size_bytes = 16, align_bytes = 4),
         TypeSpec(name = "int8", family = "int8", arity = 1, kind = "int", ekind = "int", has_arith = false, size_bytes = 1, align_bytes = 1),
         TypeSpec(name = "uint16", family = "uint16", arity = 1, kind = "uint", ekind = "uint", has_arith = false, size_bytes = 2, align_bytes = 2),
         // the 16/8-bit lattice — fp16 family has closed arithmetic; int families are storage
@@ -391,24 +441,24 @@ def main {
         TypeSpec(name = "half3", family = "half", arity = 3, kind = "float", ekind = "half", has_arith = true, size_bytes = 6, align_bytes = 2),
         TypeSpec(name = "half4", family = "half", arity = 4, kind = "float", ekind = "half", has_arith = true, size_bytes = 8, align_bytes = 2),
         TypeSpec(name = "half8", family = "half", arity = 8, kind = "float", ekind = "half", has_arith = true, size_bytes = 16, align_bytes = 2),
-        TypeSpec(name = "short2", family = "short", arity = 2, kind = "int", ekind = "short", has_arith = false, has_shr = true, size_bytes = 4, align_bytes = 2),
-        TypeSpec(name = "short3", family = "short", arity = 3, kind = "int", ekind = "short", has_arith = false, has_shr = true, size_bytes = 6, align_bytes = 2),
-        TypeSpec(name = "short4", family = "short", arity = 4, kind = "int", ekind = "short", has_arith = false, has_shr = true, size_bytes = 8, align_bytes = 2),
-        TypeSpec(name = "short8", family = "short", arity = 8, kind = "int", ekind = "short", has_arith = false, has_shr = true, size_bytes = 16, align_bytes = 2),
-        TypeSpec(name = "ushort2", family = "ushort", arity = 2, kind = "uint", ekind = "ushort", has_arith = false, has_shr = true, size_bytes = 4, align_bytes = 2),
-        TypeSpec(name = "ushort3", family = "ushort", arity = 3, kind = "uint", ekind = "ushort", has_arith = false, has_shr = true, size_bytes = 6, align_bytes = 2),
-        TypeSpec(name = "ushort4", family = "ushort", arity = 4, kind = "uint", ekind = "ushort", has_arith = false, has_shr = true, size_bytes = 8, align_bytes = 2),
-        TypeSpec(name = "ushort8", family = "ushort", arity = 8, kind = "uint", ekind = "ushort", has_arith = false, has_shr = true, size_bytes = 16, align_bytes = 2),
-        TypeSpec(name = "byte2", family = "byte", arity = 2, kind = "int", ekind = "byte", has_arith = false, has_shr = true, size_bytes = 2, align_bytes = 1),
-        TypeSpec(name = "byte3", family = "byte", arity = 3, kind = "int", ekind = "byte", has_arith = false, has_shr = true, size_bytes = 3, align_bytes = 1),
-        TypeSpec(name = "byte4", family = "byte", arity = 4, kind = "int", ekind = "byte", has_arith = false, has_shr = true, size_bytes = 4, align_bytes = 1),
-        TypeSpec(name = "byte8", family = "byte", arity = 8, kind = "int", ekind = "byte", has_arith = false, has_shr = true, size_bytes = 8, align_bytes = 1),
-        TypeSpec(name = "byte16", family = "byte", arity = 16, kind = "int", ekind = "byte", has_arith = false, has_shr = true, size_bytes = 16, align_bytes = 1),
-        TypeSpec(name = "ubyte2", family = "ubyte", arity = 2, kind = "uint", ekind = "ubyte", has_arith = false, has_shr = true, size_bytes = 2, align_bytes = 1),
-        TypeSpec(name = "ubyte3", family = "ubyte", arity = 3, kind = "uint", ekind = "ubyte", has_arith = false, has_shr = true, size_bytes = 3, align_bytes = 1),
-        TypeSpec(name = "ubyte4", family = "ubyte", arity = 4, kind = "uint", ekind = "ubyte", has_arith = false, has_shr = true, size_bytes = 4, align_bytes = 1),
-        TypeSpec(name = "ubyte8", family = "ubyte", arity = 8, kind = "uint", ekind = "ubyte", has_arith = false, has_shr = true, size_bytes = 8, align_bytes = 1),
-        TypeSpec(name = "ubyte16", family = "ubyte", arity = 16, kind = "uint", ekind = "ubyte", has_arith = false, has_shr = true, size_bytes = 16, align_bytes = 1)
+        TypeSpec(name = "short2", family = "short", arity = 2, kind = "int", ekind = "short", has_arith = false, has_bitops = true, size_bytes = 4, align_bytes = 2),
+        TypeSpec(name = "short3", family = "short", arity = 3, kind = "int", ekind = "short", has_arith = false, has_bitops = true, size_bytes = 6, align_bytes = 2),
+        TypeSpec(name = "short4", family = "short", arity = 4, kind = "int", ekind = "short", has_arith = false, has_bitops = true, size_bytes = 8, align_bytes = 2),
+        TypeSpec(name = "short8", family = "short", arity = 8, kind = "int", ekind = "short", has_arith = false, has_bitops = true, size_bytes = 16, align_bytes = 2),
+        TypeSpec(name = "ushort2", family = "ushort", arity = 2, kind = "uint", ekind = "ushort", has_arith = false, has_bitops = true, size_bytes = 4, align_bytes = 2),
+        TypeSpec(name = "ushort3", family = "ushort", arity = 3, kind = "uint", ekind = "ushort", has_arith = false, has_bitops = true, size_bytes = 6, align_bytes = 2),
+        TypeSpec(name = "ushort4", family = "ushort", arity = 4, kind = "uint", ekind = "ushort", has_arith = false, has_bitops = true, size_bytes = 8, align_bytes = 2),
+        TypeSpec(name = "ushort8", family = "ushort", arity = 8, kind = "uint", ekind = "ushort", has_arith = false, has_bitops = true, size_bytes = 16, align_bytes = 2),
+        TypeSpec(name = "byte2", family = "byte", arity = 2, kind = "int", ekind = "byte", has_arith = false, has_bitops = true, size_bytes = 2, align_bytes = 1),
+        TypeSpec(name = "byte3", family = "byte", arity = 3, kind = "int", ekind = "byte", has_arith = false, has_bitops = true, size_bytes = 3, align_bytes = 1),
+        TypeSpec(name = "byte4", family = "byte", arity = 4, kind = "int", ekind = "byte", has_arith = false, has_bitops = true, size_bytes = 4, align_bytes = 1),
+        TypeSpec(name = "byte8", family = "byte", arity = 8, kind = "int", ekind = "byte", has_arith = false, has_bitops = true, size_bytes = 8, align_bytes = 1),
+        TypeSpec(name = "byte16", family = "byte", arity = 16, kind = "int", ekind = "byte", has_arith = false, has_bitops = true, size_bytes = 16, align_bytes = 1),
+        TypeSpec(name = "ubyte2", family = "ubyte", arity = 2, kind = "uint", ekind = "ubyte", has_arith = false, has_bitops = true, size_bytes = 2, align_bytes = 1),
+        TypeSpec(name = "ubyte3", family = "ubyte", arity = 3, kind = "uint", ekind = "ubyte", has_arith = false, has_bitops = true, size_bytes = 3, align_bytes = 1),
+        TypeSpec(name = "ubyte4", family = "ubyte", arity = 4, kind = "uint", ekind = "ubyte", has_arith = false, has_bitops = true, size_bytes = 4, align_bytes = 1),
+        TypeSpec(name = "ubyte8", family = "ubyte", arity = 8, kind = "uint", ekind = "ubyte", has_arith = false, has_bitops = true, size_bytes = 8, align_bytes = 1),
+        TypeSpec(name = "ubyte16", family = "ubyte", arity = 16, kind = "uint", ekind = "ubyte", has_arith = false, has_bitops = true, size_bytes = 16, align_bytes = 1)
     ]
     for (spec in specs) {
         emit_test_file(spec)

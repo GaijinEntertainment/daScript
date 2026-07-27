@@ -498,8 +498,11 @@ def is_lattice_op2_native(expr : ExprOp2?) {
         // through float, so they ride the hardware-convert gate
         return is_f16_small_type(lbt) ? g_lattice_fp16_ops_native : true
     }
-    if (expr.op == ">>") {
-        // int-lattice per-lane shift right — native ashr/lshr on every ISA (fp16 has no shifts)
+    if (expr.op == ">>" || expr.op == "<<" || expr.op == ">>=" || expr.op == "<<=" ||
+            expr.op == "&" || expr.op == "|" || expr.op == "^" ||
+            expr.op == "&=" || expr.op == "|=" || expr.op == "^=") {
+        // the int-lattice bit surface — native vector shl/ashr/lshr/and/or/xor on every ISA
+        // (fp16 has no bit ops)
         return !is_f16_small_type(lbt)
     }
     if (is_f16_small_type(lbt) || is_f16_small_type(expr.right._type.baseType)) {

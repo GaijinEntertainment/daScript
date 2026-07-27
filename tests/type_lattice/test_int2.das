@@ -118,5 +118,32 @@ def test_int2_conformance(t : T?) {
         t |> success(a >> 2 == int2(-5, 6), "arithmetic shift")
         t |> success(a >> 34 == a >> 2, "count masks to lane width")
         t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = int2(-19, 26)
+        t |> success(a << 2 == int2(-76, 104), "lanes wrap")
+        t |> success(a << 34 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = int2(-19, 26)
+        let b = int2(45, 50)
+        t |> success((a & b) == int2(45, 18), "and")
+        t |> success((a | b) == int2(-19, 58), "or")
+        t |> success((a ^ b) == int2(-64, 40), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
     }
 }

@@ -2901,8 +2901,14 @@ class public LlvmJitVisitor : AstVisitor {
                opType.baseType == Type.tEnumeration64)
     }
 
+    // an integer-lattice vector (byteN/ubyteN/shortN/ushortN) — the small-vector bit surface
+    def isLatticeIntVec(opType : TypeDeclPtr) {
+        return opType.isVectorType && (opType.vectorBaseType == Type.tInt8 || opType.vectorBaseType == Type.tUInt8 ||
+            opType.vectorBaseType == Type.tInt16 || opType.vectorBaseType == Type.tUInt16)
+    }
+
     def isBinary(opType : TypeDeclPtr) {
-        return isNumeric(opType) || isEnumeration(opType)
+        return isNumeric(opType) || isEnumeration(opType) || isLatticeIntVec(opType)
     }
 
     def visitExprOp2_NonMonade(var expr : ExprOp2?) {
@@ -3155,13 +3161,13 @@ class public LlvmJitVisitor : AstVisitor {
             }
             setE(expr, opR)
         } elif (expr.op == "<<") {
-            if (shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tUInt))) {
+            if (shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tUInt)) || isLatticeIntVec(shiftType)) {
                 setE(expr, LLVMBuildShl(g_builder, left, right, ""))
             } else {
                 failed_E(expr, "unsupported << type {describe(shiftType)}")
             }
         } elif (expr.op == "<<=") {
-            if (shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tUInt))) {
+            if (shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tUInt)) || isLatticeIntVec(shiftType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildShl(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported <<= type {describe(shiftType)}")
@@ -3175,9 +3181,9 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported >> type {describe(shiftType)}")
             }
         } elif (expr.op == ">>=") {
-            if (shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType == Type.tInt)) {
+            if (shiftType.isSignedInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tInt || shiftType.vectorBaseType == Type.tInt8 || shiftType.vectorBaseType == Type.tInt16))) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAShr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
-            } elif (shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType == Type.tUInt)) {
+            } elif (shiftType.isUnsignedInteger || (shiftType.isVectorType && (shiftType.vectorBaseType == Type.tUInt || shiftType.vectorBaseType == Type.tUInt8 || shiftType.vectorBaseType == Type.tUInt16))) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildLShr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported >>= type {describe(shiftType)}")

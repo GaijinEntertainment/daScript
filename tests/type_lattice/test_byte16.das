@@ -105,5 +105,32 @@ def test_byte16_conformance(t : T?) {
         t |> success(a >> 2 == byte16(-5, 6, -9, 10, -12, 13, -16, 17, -19, 20, -23, 24, -26, 27, -30, 31), "arithmetic shift")
         t |> success(a >> 10 == a >> 2, "count masks to lane width")
         t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = byte16(-19, 26, -33, 40, -47, 54, -61, 68, -75, 82, -89, 96, -103, 110, -117, 124)
+        t |> success(a << 2 == byte16(-76, 104, 124, -96, 68, -40, 12, 16, -44, 72, -100, -128, 100, -72, 44, -16), "lanes wrap")
+        t |> success(a << 10 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = byte16(-19, 26, -33, 40, -47, 54, -61, 68, -75, 82, -89, 96, -103, 110, -117, 124)
+        let b = byte16(45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120)
+        t |> success((a & b) == byte16(45, 18, 23, 40, 65, 6, 67, 64, 21, 82, 7, 96, 9, 110, 3, 120), "and")
+        t |> success((a | b) == byte16(-19, 58, -1, 60, -47, 118, -53, 84, -11, 90, -1, 100, -7, 110, -5, 124), "or")
+        t |> success((a ^ b) == byte16(-64, 40, -24, 20, -112, 112, -120, 20, -32, 8, -8, 4, -16, 0, -8, 4), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
     }
 }

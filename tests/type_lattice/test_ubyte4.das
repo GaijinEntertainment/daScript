@@ -103,6 +103,33 @@ def test_ubyte4_conformance(t : T?) {
         t |> success(a >> 2 == ubyte4(50u, 50u, 51u, 52u), "logical shift")
         t |> success(a >> 10 == a >> 2, "count masks to lane width")
         t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = ubyte4(200u, 203u, 206u, 209u)
+        t |> success(a << 2 == ubyte4(32u, 44u, 56u, 68u), "lanes wrap")
+        t |> success(a << 10 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = ubyte4(200u, 203u, 206u, 209u)
+        let b = ubyte4(45u, 50u, 55u, 60u)
+        t |> success((a & b) == ubyte4(8u, 2u, 6u, 16u), "and")
+        t |> success((a | b) == ubyte4(237u, 251u, 255u, 253u), "or")
+        t |> success((a ^ b) == ubyte4(229u, 249u, 249u, 237u), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
     }
     t |> run("converts") @(t : T?) {
         let a = ubyte4(1u, 2u, 3u, 4u)

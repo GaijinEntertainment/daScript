@@ -100,6 +100,33 @@ def test_ubyte2_conformance(t : T?) {
         t |> success(a >> 2 == ubyte2(50u, 50u), "logical shift")
         t |> success(a >> 10 == a >> 2, "count masks to lane width")
         t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = ubyte2(200u, 203u)
+        t |> success(a << 2 == ubyte2(32u, 44u), "lanes wrap")
+        t |> success(a << 10 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = ubyte2(200u, 203u)
+        let b = ubyte2(45u, 50u)
+        t |> success((a & b) == ubyte2(8u, 2u), "and")
+        t |> success((a | b) == ubyte2(237u, 251u), "or")
+        t |> success((a ^ b) == ubyte2(229u, 249u), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
     }
     t |> run("converts") @(t : T?) {
         let a = ubyte2(1u, 2u)

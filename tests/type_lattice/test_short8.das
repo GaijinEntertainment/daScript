@@ -97,6 +97,33 @@ def test_short8_conformance(t : T?) {
         t |> success(a >> 2 == short8(-5, 6, -9, 10, -12, 13, -16, 17), "arithmetic shift")
         t |> success(a >> 18 == a >> 2, "count masks to lane width")
         t |> success(a >> 0 == a, "shift by zero")
+        var c = a
+        c >>= 2
+        t |> success(c == a >> 2, "shift right assign")
+    }
+    t |> run("shift left") @(t : T?) {
+        let a = short8(-19, 26, -33, 40, -47, 54, -61, 68)
+        t |> success(a << 2 == short8(-76, 104, -132, 160, -188, 216, -244, 272), "lanes wrap")
+        t |> success(a << 18 == a << 2, "count masks to lane width")
+        var c = a
+        c <<= 2
+        t |> success(c == a << 2, "shift left assign")
+    }
+    t |> run("bitwise") @(t : T?) {
+        let a = short8(-19, 26, -33, 40, -47, 54, -61, 68)
+        let b = short8(45, 50, 55, 60, 65, 70, 75, 80)
+        t |> success((a & b) == short8(45, 18, 23, 40, 65, 6, 67, 64), "and")
+        t |> success((a | b) == short8(-19, 58, -1, 60, -47, 118, -53, 84), "or")
+        t |> success((a ^ b) == short8(-64, 40, -24, 20, -112, 112, -120, 20), "xor")
+        var c = a
+        c &= b
+        t |> success(c == (a & b), "and assign")
+        c = a
+        c |= b
+        t |> success(c == (a | b), "or assign")
+        c = a
+        c ^= b
+        t |> success(c == (a ^ b), "xor assign")
     }
     t |> run("converts") @(t : T?) {
         t |> success(short8(byte8(1, 2, 3, 4, 5, 6, 7, 8)) == short8(1, 2, 3, 4, 5, 6, 7, 8), "widen from 8-bit")
