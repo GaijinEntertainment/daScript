@@ -78,10 +78,19 @@ def git_status_color(status : GitWindowStatus const) : float4 {
             : float4(0.69f, 0.73f, 0.80f, 1.0f)))
 }
 
+// Content renderers size text from an explicit zoom against a FIXED base
+// (fonts.size_px), not from the pushed font — so they must read the same
+// per-window zoom the chrome does, or Ctrl+wheel moves the chrome and leaves
+// the content behind (note 55). The base UI zoom arrives separately through
+// FontScaleMain; passing it here applied it to the content twice.
+def private inspector_zoom : float {
+    return float(window_zoom_percent("inspector")) * 0.01f
+}
+
 def source_view_style(diff_background : bool = false) : TextSourceViewStyle {
     return TextSourceViewStyle(
         fonts = g_fonts,
-        zoom = float(g_zoom_percent) / 100.0f,
+        zoom = inspector_zoom(),
         wrap = false,
         line_mark_background_alpha = diff_background ? 0.11f : 0.0f,
         line_mark_width = 2.0f,
@@ -412,13 +421,13 @@ def draw_file_view() {
                 fonts = g_fonts,
                 typography = MarkdownTypography(
                     inline_code_scale = 0.84f, code_block_scale = 0.90f),
-                zoom = float(g_zoom_percent) / 100.0f,
+                zoom = inspector_zoom(),
                 write_system_clipboard = !harness_is_headless())
             let _ <- markdown_view_with_change_gutter("git markdown view",
                 g_inspector.markdown_document, g_inspector.markdown_view,
                 style, g_inspector.revision, g_inspector.changed_source_ranges,
                 g_inspector.markdown_gutter_segments,
-                max(1.0f, 2.0f * float(g_zoom_percent) / 100.0f))
+                max(1.0f, 2.0f * inspector_zoom()))
         } else {
             if (g_focus_view_scroll_pending) {
                 SetScrollY(max(0.0f, g_focus_view_scroll_y))

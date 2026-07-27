@@ -145,6 +145,27 @@ def herder_reset_layout(_input : JsonValue?) : JsonValue? {
     return JV((ok = true))
 }
 
+struct HerderWindowZoomArgs {
+    window : string
+    percent : int
+}
+
+[live_command(description = "Read or set a window's own zoom, the target of Ctrl+wheel. Args: window = inspector | sessions | git-activity | git-changelist | repositories; optional percent (50-300) to set it.")]
+def herder_window_zoom(input : JsonValue?) : JsonValue? {
+    //! Parity rail (note 56): per-window zoom was mouse-only - adjustable but
+    //! neither commandable nor readable, so no test or agent could verify it.
+    let args = from_JV(input, type<HerderWindowZoomArgs>)
+    if (empty(args.window)) {
+        return JV((ok = false, error = "window is required"))
+    }
+    if (args.percent != 0) {
+        set_window_zoom(args.window, args.percent)
+    }
+    return JV((ok = true, window = args.window,
+        percent = window_zoom_percent(args.window),
+        base_percent = g_zoom_percent))
+}
+
 struct HerderCommandArgs {
     id : string
 }

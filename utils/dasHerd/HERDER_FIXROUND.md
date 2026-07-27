@@ -618,6 +618,33 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   ("stray letters in a one-character column"); the panel-eliding fix covered
   only the Sessions-panel half. Fix shape: the checkpoint ANSI carries its
   own geometry — resize to it before feeding, or reflow after.
+- 55: (Boris, live) File Inspector View mode on a .md file — Ctrl+wheel
+  "zooms the wrong thing: status bar, not rich text". Mechanism: the
+  per-window zoom (window_zoom_scope("inspector"), rich_state.das:899)
+  only pushes an ImGui font, which sizes the window's CHROME — labels,
+  search box, status line. The content renderers size themselves from an
+  explicit `zoom` argument that reads the GLOBAL base zoom instead:
+  markdown at rich_inspector_ui.das:415 and its gutter width at :421,
+  source/diff views via source_view_style at :84 — all
+  `float(g_zoom_percent) / 100.0f`. So Ctrl+wheel over the inspector
+  resizes everything EXCEPT the content the window exists to show.
+  Not markdown-specific: code in View mode and both Diff panes inherit
+  the same miss. FIXED (2026-07-27): the three sites now read
+  inspector_zoom() = window_zoom_percent("inspector"), because the base
+  zoom already reaches the content through FontScaleMain — passing it
+  explicitly applied it TWICE. Measured before: markdown glyphs 1.71x the
+  chrome glyphs at base 150%. Measured after: content tracks the window
+  zoom (90% -> 19 text lines in an 790px band; 180% -> 8 lines, inked
+  rows 202 -> 483) and matches chrome size at the same setting.
+  SIBLING, still open: rich_git_ui.das:864 lane_spacing sizes the commit
+  graph from the base zoom inside window_zoom_scope("git-activity") —
+  same miss, drawn geometry rather than text.
+- 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
+  command could set or read it and no state dump exposed it, so neither a
+  test nor an agent could verify note 55 either way (parity rule:
+  editable-but-not-commandable is a bug). FIXED (2026-07-27): new
+  herder_window_zoom rail reads any window's zoom and optionally sets it,
+  reporting the base zoom alongside.
 - 54: closing a herd session ORPHANS its PTY into the raw session list when
   that PTY ended in a non-exited terminal state. herd_owns_pty skips closed
   records (rich_sessions_ui.das:566) so the PTY reads as "unowned", and the
