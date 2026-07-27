@@ -14,9 +14,14 @@ require strings
 // the daslang binary: STALE reads as absent, so the stamps drop back to fallback.
 
 def private spawn_client(cmd : string; var lines : array<string>) : int {
-    // cmd.exe /c strips the first and last quote of a line that starts with a quote —
-    // wrap in a sacrificial outer pair on windows (same trap as the daspkg popen incident)
-    let full = get_platform_name() == "windows" ? "\"{cmd}\"" : cmd
+    // verbose: the `llvm_tune: <fn> <- <perm>` stamp lines this test reads are the stamped-truth
+    // proof, and they are verbose-only now (one per kernel is a wall in front of a real app)
+    let env = (get_platform_name() == "windows"
+        ? "set DAS_TUNE_VERBOSITY=verbose&& "
+        : "DAS_TUNE_VERBOSITY=verbose ")
+    // cmd.exe /c strips the first and last quote of a line that starts with a quote — but the env
+    // prefix now leads, so the line never starts with a quote and no sacrificial wrap is needed
+    let full = "{env}{cmd}"
     var rc : int
     unsafe {
         rc = popen_timeout(full, 300.0) $(f) {

@@ -263,7 +263,9 @@ def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : st
     if (av is tString) return av as tString
     let cfg = config_perm_for("{func.name}")
     if (!empty(cfg)) {
-        print("dasllama_tune: {func.name} <- {cfg} ({box_profile_path()})\n")
+        if (tune_verbosity() == "verbose") {
+            print("dasllama_tune: {func.name} <- {cfg} ({box_profile_path()})\n")
+        }
         return cfg
     }
     let dv = find_arg(args, "fallback")

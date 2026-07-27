@@ -857,7 +857,9 @@ class private TuneAnnotation : AstFunctionAnnotation {
                     for (c in comps) {
                         stamp_llvm_code(c.fn, c.genkey, p, fromManifest ? mpath : "")
                     }
-                    print("llvm_tune: {fname} <- {suffix} ({fromManifest ? mpath : "fallback"})\n")
+                    if (tune_verbosity() == "verbose") {
+                        print("llvm_tune: {fname} <- {suffix} ({fromManifest ? mpath : "fallback"})\n")
+                    }
                     ok = true
                     break
                 }
