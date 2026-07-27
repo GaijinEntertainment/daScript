@@ -97,9 +97,20 @@ let FAST_MID_ROUNDS = 8
 let FAST_MID_FINALISTS = 8
 let FAST_MID_MARGIN = 1.10lf
 let REPS = 2000
-// The outer progress denominator: one per kernel_begin() call in main. A mismatch only skews
-// the bar, never the tuning, but keep it in step when adding a kernel.
+// The outer progress denominator, needed before the first kernel runs so it cannot be derived
+// from the results. A mismatch only skews the bar, and main says so at the end.
 let TUNED_KERNEL_COUNT = 25
+
+struct private KernelResult {
+    kernel : string
+    winner : string
+    fallback : string
+}
+
+// One row per benched kernel, in call order. report() is the single place that holds a kernel's
+// name, its winner, and the shipped fallback it was judged against — the summary reads them back
+// from here rather than restating all three in parallel arrays that can drift apart.
+var private g_results : array<KernelResult>
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -195,6 +206,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     if (winner < 0) {
         print("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
+        g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
         return ""
     }
     var wname = names[winner]
@@ -212,6 +224,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_detail("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
         tune_progress_kernel_end(kernel, wname, "beats")
     }
+    g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
     return wname
 }
 
@@ -1995,33 +2008,21 @@ def main {
     // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).
     tune_progress_finish()
     print("\n===== summary (winner per kernel) =====\n")
-    let knames = fixed_array("dot", "axpy", "dot_f16", "axpy_f16", "cvt_f32_to_f16", "cvt_f16_to_f32",
-        "add_inplace", "mul_inplace", "scale_inplace", "copy_floats",
-        "softmax", "rmsnorm", "dot_q4", "dot_q8q8",
-        "dot_q8kv", "dot_q8q8kv", "axpy_q8kv", "cvt_q8kv_to_f32", "quantize_q8kv_row",
-        "dot_mx4q8", "quantize_q8_0_into_ptr", "quantize_q8_0_bs_into_ptr",
-        "rope_scaled_neox_tab", "gemm_f32_uk_4x16", "dot_q8q8_laneq4x4")
-    let kwin = fixed_array(dotw, axpyw, dotf16w, axpyf16w, cvt16w, cvt32w, addw, mulw, scalew, copyw,
-        softmaxw, rmsw, dq4w, dq8w,
-        dq8kvw, dq8q8kvw, axq8kvw, cvtq8kvw, quantq8kvw,
-        dmx4w, quantw, quantbsw, ropew, gemmw, laneqw)
-    let kfall = fixed_array(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE,
-        BASELINE, BASELINE, BASELINE, BASELINE,
-        BASELINE, "plain", "vec4_u4", "vec16",
-        BASELINE, "vec16", BASELINE, BASELINE, "plain",
-        "u2", "plain", "plain",
-        BASELINE, "u2", "u2")
     var changed = 0
-    for (k, w, f in knames, kwin, kfall) {
-        let note = (w == "" || w == f) ? "" : "  (shipped fallback {f})"
-        print("  {k}: {w}{note}\n")
-        if (w != "" && w != f) {
+    for (r in g_results) {
+        let note = (r.winner == "" || r.winner == r.fallback) ? "" : "  (shipped fallback {r.fallback})"
+        print("  {r.kernel}: {r.winner}{note}\n")
+        if (r.winner != "" && r.winner != r.fallback) {
             changed++
         }
     }
     tune_detail(changed == 0
         ? "\nevery kernel keeps its shipped fallback — the tuner found nothing new on this box.\n"
         : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
+    // the one count still written by hand; say so rather than let the bar quietly misreport
+    if (length(g_results) != TUNED_KERNEL_COUNT) {
+        print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran — the progress bar was scaled wrong; update the constant\n")
+    }
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
     // mirrors softmax's winner instead of paying its own sweep.
