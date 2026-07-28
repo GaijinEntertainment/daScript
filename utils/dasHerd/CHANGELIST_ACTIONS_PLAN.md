@@ -1,6 +1,16 @@
 # The Changelist becomes a working surface — plan of record
 
-Status: PLANNED 2026-07-27, not started. Written to be implementable from cold
+Status: **IMPLEMENTED 2026-07-28**, seven commits on codex/dogfood-round-2
+(4bbfd3d6e through 2c91d8ccc), every step live-verified through the rails on a
+throwaway repo with a local bare origin. One deliberate deviation: the PR
+view's single-flight file action was NOT ported onto the rail — instead both
+gates refuse while the other side runs (watcher_kind_running / 
+repository_operation_busy), which closes the index.lock race with far less
+churn. Retiring the single-flight path entirely remains an open follow-up.
+The Changes view lives in a Changelist-local tab bar beside the preserved
+"PR result" view — nothing was deleted to make room.
+
+Originally: PLANNED 2026-07-27. Written to be implementable from cold
 context: every file, function and git command it names was verified against the
 tree on the day it was written.
 
