@@ -47,14 +47,17 @@ def box_name() : string {
     return empty(env) ? "m1" : env
 }
 
-//! Profiling lane/thread count for this box. 16-cores-with-affinity is the standing methodology on
-//! the x64 boxes; the M1 rig keeps its 8 P-core lanes. Override with DASLLAMA_THREADS.
+//! Profiling lane/thread count: min(16, physical performance cores), same count both engines,
+//! pinned — one rule for every box (M1 Max 8, M4 Pro 10, M3 Air 4, big x86 16). Fixed by policy:
+//! no per-engine detection, no thread matrix (METHODOLOGY.md carries the why). Override with
+//! DASLLAMA_THREADS.
 def profile_threads() : int {
     let env = get_env_variable("DASLLAMA_THREADS")
     if (!empty(env)) {
         return max(to_int(env), 1)
     }
-    return box_name() == "m1" ? 8 : 16
+    let phys = physical_perf_cores()
+    return phys > 0 ? min(16, phys) : 16
 }
 
 //! True when profiling lanes pin to distinct physical cores (all Windows/x64 boxes — OS placement
@@ -432,6 +435,10 @@ struct HardwareInfo {
     @optional total_cores : int   // physical on macOS, logical on Windows/Linux (best-effort)
     @optional ram_gb : int
     @optional gpu : string
+    @optional model_id : string   // machine model (mac: hw.model e.g. "MacBookPro18,2")
+    @optional ram_config : string // module layout ("4×32 GB DDR4-3200") — bandwidth identity on PC
+    @optional power_plan : string // Windows active power scheme — throttling identity
+    @optional smt : string        // "on" | "off" when determinable; "" elsewhere
 }
 
 def private is_macos() : bool {
@@ -568,6 +575,91 @@ def private platform_cores() : tuple<perf : int; total : int> {
     return (perf = 0, total = to_int(run_capture("nproc", true)))
 }
 
+//! Physical core count — the thread-policy input ([[profile_threads]]): performance cores on
+//! Apple, `wmic cpu get NumberOfCores` on Windows (logical count would double-count SMT), lscpu
+//! math on Linux. 0 when the box can't answer (policy then falls back to its cap).
+def physical_perf_cores() : int {
+    if (is_windows()) {
+        let raw = run_capture("wmic cpu get NumberOfCores /value", false)
+        for (ln in split(raw, "\n")) {
+            let i = find(ln, "=")
+            if (i >= 0 && find(ln, "NumberOfCores") >= 0) {
+                return to_int(strip(slice(ln, i + 1)))
+            }
+        }
+        return 0
+    }
+    if (is_macos()) {
+        return to_int(run_capture("sysctl -n hw.perflevel0.physicalcpu", true))
+    }
+    // cores per socket × sockets; lscpu -p would need parsing, the two -e fields are stable
+    let cps = to_int(run_capture("lscpu | grep \"Core(s) per socket\" | grep -oE \"[0-9]+\"", true))
+    let sk = to_int(run_capture("lscpu | grep \"Socket(s)\" | grep -oE \"[0-9]+\"", true))
+    return cps * max(sk, 1)
+}
+
+// mac machine model ("MacBookPro18,2" / "Mac16,11") — the two-different-M1-Pros disambiguator
+def private platform_model_id() : string {
+    return is_macos() ? run_capture("sysctl -n hw.model", true) : ""
+}
+
+// RAM module layout — the bandwidth identity on PC ("4×32 GB DDR4-3200"). Apple unified memory
+// has no modules; the chip name already implies the bandwidth class there.
+def private platform_ram_config() : string {
+    if (!is_windows()) {
+        return ""
+    }
+    // wmic emits one block per module: "Capacity=34359738368\n...\nSpeed=3200"
+    let raw = run_capture("wmic memorychip get Capacity,Speed /value", false)
+    var count = 0
+    var cap_gb = 0
+    var speed = 0
+    for (ln in split(raw, "\n")) {
+        let i = find(ln, "=")
+        if (i < 0) {
+            continue
+        }
+        if (find(ln, "Capacity") >= 0) {
+            count++
+            cap_gb = int(to_float(strip(slice(ln, i + 1))) / (1024.0 * 1024.0 * 1024.0) + 0.5)
+        } elif (find(ln, "Speed") >= 0) {
+            speed = to_int(strip(slice(ln, i + 1)))
+        }
+    }
+    if (count == 0) {
+        return ""
+    }
+    return speed > 0 ? "{count}×{cap_gb} GB @ {speed} MT/s" : "{count}×{cap_gb} GB"
+}
+
+// Windows active power scheme name — a "Power saver" sweep is not a "High performance" sweep
+def private platform_power_plan() : string {
+    if (!is_windows()) {
+        return ""
+    }
+    let ln = run_capture("powercfg /getactivescheme", true)
+    let i = find(ln, "(")
+    let j = find(ln, ")")
+    return (i >= 0 && j > i) ? slice(ln, i + 1, j) : ""
+}
+
+// SMT state, where logical vs physical counts can answer it (Windows/Linux; Apple has no SMT)
+def private platform_smt() : string {
+    if (is_windows()) {
+        let phys = physical_perf_cores()
+        let logical = env_int("NUMBER_OF_PROCESSORS", 0)
+        if (phys > 0 && logical > 0) {
+            return logical > phys ? "on" : "off"
+        }
+        return ""
+    }
+    if (is_macos()) {
+        return ""
+    }
+    let tpc = to_int(run_capture("lscpu | grep \"Thread(s) per core\" | grep -oE \"[0-9]+\"", true))
+    return tpc > 1 ? "on" : (tpc == 1 ? "off" : "")
+}
+
 //! Probe this box's hardware identity (see `HardwareInfo`). One-shot — a handful of child
 //! processes; call once per run, not per row.
 def gather_hardware : HardwareInfo {
@@ -581,7 +673,86 @@ def gather_hardware : HardwareInfo {
         perf_cores = cores.perf,
         total_cores = cores.total,
         ram_gb = platform_ram_gb(),
-        gpu = platform_gpu())
+        gpu = platform_gpu(),
+        model_id = platform_model_id(),
+        ram_config = platform_ram_config(),
+        power_plan = platform_power_plan(),
+        smt = platform_smt())
+}
+
+// ===== Input-file identity (.sha sidecars) =====
+
+// process-lifetime cache: path -> "sha256\tsize\tmtime" (the sidecar payload)
+var private g_sha_cache : table<string; string>
+
+// hex sha256 of a file via the OS tool; "" on failure
+def private compute_sha256(path : string) : string {
+    var out = ""
+    if (is_windows()) {
+        // certutil: line 2 is the digest (spaced hex on older builds — strip non-hex)
+        let raw = run_capture("certutil -hashfile \"{path}\" SHA256", false)
+        var lines <- split(raw, "\n")
+        if (length(lines) >= 2) {
+            out = to_lower(replace(strip(lines[1]), " ", ""))
+        }
+        delete lines
+    } else {
+        let cmd = is_macos() ? "shasum -a 256 \"{path}\"" : "sha256sum \"{path}\""
+        let ln = run_capture(cmd, true)
+        var toks <- split(ln, " ")
+        if (!empty(toks)) {
+            out = to_lower(toks[0])
+        }
+        delete toks
+    }
+    return length(out) == 64 ? out : ""
+}
+
+//! Content identity of one input file, served from a `{path}.sha` sidecar so a 22 GB gguf is
+//! hashed once per box, not once per run. The sidecar is `sha256\tsize\tmtime`; a size or mtime
+//! mismatch (re-download, re-quantize) recomputes and rewrites it. `sha256` is "" only when the
+//! file is missing or the box has no hash tool — callers store the InputFile regardless, so the
+//! gap is visible in the record rather than silently absent.
+def file_identity(path : string; role : string) : InputFile {
+    var fi = InputFile(role = role, name = base_name(path))
+    let st = stat(path)
+    if (!st.is_valid) {
+        return fi
+    }
+    fi.bytes = int64(st.size)
+    let stamp = "{st.size}\t{format_time(st.mtime, "%Y-%m-%dT%H:%M:%S")}"
+    if (key_exists(g_sha_cache, path)) {
+        let hit = g_sha_cache?[path] ?? ""
+        if (ends_with(hit, stamp)) {
+            fi.sha256 = slice(hit, 0, find(hit, "\t"))
+            return fi
+        }
+    }
+    let side = "{path}.sha"
+    if (stat(side).is_valid) {
+        let txt = strip(fread(side))
+        var cols <- split(txt, "\t")
+        if (length(cols) == 3 && "{cols[1]}\t{cols[2]}" == stamp && length(cols[0]) == 64) {
+            fi.sha256 = cols[0]
+            g_sha_cache[path] = "{cols[0]}\t{stamp}"
+            delete cols
+            return fi
+        }
+        delete cols
+    }
+    let sha = compute_sha256(path)
+    if (empty(sha)) {
+        to_log(LOG_WARNING, "dasLLAMA bench: no sha256 for {path} — identity recorded without hash\n")
+        return fi
+    }
+    fi.sha256 = sha
+    g_sha_cache[path] = "{sha}\t{stamp}"
+    fopen(side, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, "{sha}\t{stamp}\n")
+        }
+    }
+    return fi
 }
 
 // ===== Baseline TSV I/O (reference tok/s the establisher writes, the generator reads) =====
@@ -750,10 +921,12 @@ def asr_catalog() : array<AsrModelSpec> {
     let wroot = whisper_models_dir()
     let lroot = models_dir()
     return <- [
+        // libri_short only on Parakeet v3 — the LibriSpeech aggregate is deliberately scoped to
+        // the fastest model (one-model dictation stats; anything wider is box-hours, not signal)
         AsrModelSpec(display = "Parakeet-TDT v2", das_model = "ggml-parakeet-tdt-0.6b-v2-f32.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "parakeet-cli", handle = ""), AsrRef(tool = "onnx", handle = "v2-int8")],
-            buckets <- corpus_buckets(), libri_short = "v2", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
         AsrModelSpec(display = "Parakeet-TDT v3", das_model = "ggml-parakeet-tdt-0.6b-v3-f32.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "parakeet-cli", handle = ""), AsrRef(tool = "onnx", handle = "int8")],
@@ -761,7 +934,7 @@ def asr_catalog() : array<AsrModelSpec> {
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-tiny-int8")],
-            buckets <- corpus_buckets(), libri_short = "tiny", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-turbo-int8")],
@@ -770,15 +943,261 @@ def asr_catalog() : array<AsrModelSpec> {
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b")],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto"),
+        // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
+        // provenance; every published input must be re-fetchable (B2/B3)
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf")],
-            buckets <- ["gemma4a_test2.wav"], libri_short = "", lang = "auto"),
+            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto"),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")],
             buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto")
     ]
+}
+
+// ===== ASR: reference tools (paths, parsers, runners, versions) =====
+
+//! "audio-chat" when the model's reference is llama.cpp's multimodal CLI, else "asr" — the
+//! `BenchRun.workload` classifier, derived from the catalog rather than a hand-kept model list.
+def asr_workload(spec : AsrModelSpec) : string {
+    for (rf in spec.refs) {
+        if (rf.tool == "mtmd") {
+            return "audio-chat"
+        }
+    }
+    return "asr"
+}
+
+//! The `BenchRun.engine` name for a reference tool — the tool IS the engine identity here
+//! (parakeet-cli lives in the whisper.cpp tree, but the row names what actually ran).
+def asr_engine_name(tool : string) : string {
+    return tool == "mtmd" ? "llama-mtmd-cli" : tool
+}
+
+def whisper_cpp_root() : string {
+    return env_str("WHISPER_CPP", "/Users/borisbatkin/Work/whisper.cpp")
+}
+
+def whisper_cpp_bin(cli : string) : string {
+    let root = whisper_cpp_root()
+    // Locate the built binary across cmake layouts: MSVC multi-config (build\bin\Release\x.exe),
+    // Ninja/single-config (build/bin/x.exe), Mac/Make (build/bin/x). stat picks the one that exists.
+    for (c in [normalize("{root}/build/bin/Release/{cli}.exe"),
+               normalize("{root}/build/bin/{cli}.exe"),
+               normalize("{root}/build/bin/{cli}")]) {
+        if (stat(c).is_valid) {
+            return c
+        }
+    }
+    return normalize("{root}/build/bin/{cli}")
+}
+
+def onnx_py() : string {
+    return normalize(env_str("ONNX_PY", "/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python"))
+}
+
+def nemo_py() : string {
+    return normalize(env_str("NEMO_PY", "/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python"))
+}
+
+// The clean CPU-only build (llama.cpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
+// patched with patches/mtmd-timing.patch. CPU-only is deliberate: the fast historical mtmd numbers
+// rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
+// BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
+def mtmd_bin() : string {
+    return normalize(env_str("MTMD_BIN", "/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli"))
+}
+
+// The python bench scripts live beside the corpus (asr/); these tools run from the repo-root cwd.
+def asr_dir() : string {
+    return "modules/dasLLAMA/benchmarks/asr"
+}
+
+// The numeric token immediately before an "ms" token on a whitespace line (whisper.cpp timing lines:
+// "whisper_print_timings:  total time =  1234.56 ms"). -1 if none.
+def private ms_before_ms_token(line : string) : double {
+    let toks <- [for (t in split(line, " ")); t; where !empty(t)]
+    for (i in range(length(toks))) {
+        if (toks[i] == "ms" && i > 0) {
+            return to_double(toks[i - 1])
+        }
+    }
+    return -1.0lf
+}
+
+//! whisper.cpp transcribe ms = total time - load time, from the *_print_timings lines. -1 on failure.
+def parse_cli_ms(out : string) : double {
+    var load = -1.0lf
+    var total = -1.0lf
+    for (line in split(out, "\n")) {
+        if (find(line, "_print_timings") < 0) {
+            continue
+        }
+        if (find(line, "load time") >= 0) {
+            load = ms_before_ms_token(line)
+        }
+        if (find(line, "total time") >= 0) {
+            total = ms_before_ms_token(line)
+        }
+    }
+    return (load >= 0.0lf && total >= 0.0lf) ? total - load : -1.0lf
+}
+
+//! Best (min) ms over the BENCH lines whose clip basename == `wav_base` (onnx_bench / canary_qwen_bench
+//! emit "BENCH\t<model>\t<base>\t<audio_s>\t<rep>\t<ms>\t<speed>"). Also reports the audio seconds. -1 if none.
+def parse_bench_best(out, wav_base : string; var audio_s : double&) : double {
+    var best = -1.0lf
+    audio_s = -1.0lf
+    for (line in split(out, "\n")) {
+        let c <- split(line, "\t")
+        if (length(c) < 6 || c[0] != "BENCH" || c[2] != wav_base) {
+            continue
+        }
+        audio_s = to_double(c[3])
+        let ms = to_double(c[5])
+        if (ms > 0.0lf && (best < 0.0lf || ms < best)) {
+            best = ms
+        }
+    }
+    return best
+}
+
+//! The patched llama-mtmd-cli emits "MTMD_TIMING encode_prefill_ms E decode_ms D total_ms T". Returns
+//! (total, encode) ms; (-1, -1) if the line is absent.
+def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
+    for (line in split(out, "\n")) {
+        if (find(line, "MTMD_TIMING") < 0) {
+            continue
+        }
+        let toks <- [for (t in split(line, " ")); t; where !empty(t)]
+        var enc = -1.0lf
+        var tot = -1.0lf
+        for (i in range(length(toks))) {
+            if (toks[i] == "encode_prefill_ms" && i + 1 < length(toks)) {
+                enc = to_double(toks[i + 1])
+            }
+            if (toks[i] == "total_ms" && i + 1 < length(toks)) {
+                tot = to_double(toks[i + 1])
+            }
+        }
+        return (total = tot, encode = enc)
+    }
+    return (total = -1.0lf, encode = -1.0lf)
+}
+
+//! whisper.cpp parakeet-cli / whisper-cli — one process per clip (load is ~ms; parse_cli_ms
+//! subtracts it regardless). Best over `reps`. Returns the winning command line too — the receipt.
+def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
+    let flags = cli == "whisper-cli" ? "-bs 1 -bo 1 -nf -ng" : "-ng"
+    var best = -1.0lf
+    cmd_out = "{whisper_cpp_bin(cli)} -m {model_path} -f {wav_path} -t {threads} {flags}"
+    for (_rep in range(reps)) {
+        let ms = parse_cli_ms(run_capture("{cmd_out} 2>&1", false))
+        if (ms > 0.0lf && (best < 0.0lf || ms < best)) {
+            best = ms
+        }
+    }
+    return best
+}
+
+//! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
+//! Best total over `reps`.
+def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
+    var best = -1.0lf
+    cmd_out = ("{mtmd_bin()} -m {model_path} --mmproj {mmproj_path} --audio {wav_path} " +
+        "-p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t {threads}")
+    for (_rep in range(reps)) {
+        let r = parse_mtmd_ms(run_capture("{cmd_out} 2>&1", false))
+        if (r.total > 0.0lf && (best < 0.0lf || r.total < best)) {
+            best = r.total
+        }
+    }
+    return best
+}
+
+//! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
+//! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
+def asr_pybench_cmd(tool, handle : string; clips : array<string>; threads, reps : int) : string {
+    let wav_args = build_string() $(w) {
+        for (c in clips) {
+            w |> write(" --wav {asr_corpus_dir()}{c}")
+        }
+    }
+    return (tool == "onnx"
+        ? "{onnx_py()} {asr_dir()}/onnx_bench.py --variant {handle} --threads {threads} --reps {reps}{wav_args}"
+        : "{nemo_py()} {asr_dir()}/canary_qwen_bench.py --threads {threads} --reps {reps}{wav_args}")
+}
+
+// ===== Reference-engine version capture (B4 — never hand-typed) =====
+
+// 9-hex short commit of the git checkout containing `path`; "" when not a checkout
+def private git_commit_at(path : string) : string {
+    let out = run_capture("git -C \"{path}\" rev-parse --short=9 HEAD 2>&1", true)
+    if (length(out) != 9) {
+        return ""
+    }
+    var hex = true
+    peek_data(out) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            hex = hex && (is_number(c) || (c >= 'a' && c <= 'f'))
+        }
+    }
+    return hex ? out : ""
+}
+
+def private git_dirty_at(path : string) : bool {
+    return !empty(strip(run_capture("git -C \"{path}\" status --porcelain 2>&1", false)))
+}
+
+//! Version line for the whisper.cpp checkout (whisper-cli AND parakeet-cli — one tree). A dirty
+//! tree taints the identity loudly: nobody can rebuild "+dirty".
+def whisper_cpp_versions() : string {
+    let root = whisper_cpp_root()
+    let commit = git_commit_at(root)
+    if (empty(commit)) {
+        return ""
+    }
+    if (git_dirty_at(root)) {
+        to_log(LOG_WARNING, "dasLLAMA bench: {root} has uncommitted changes — reference identity is DIRTY\n")
+        return "whisper.cpp @ {commit}+dirty"
+    }
+    return "whisper.cpp @ {commit}"
+}
+
+//! Version line for the patched mtmd build: base commit + the patch file's content hash. The
+//! checkout is EXPECTED dirty (the patch is applied); the patch sha is what makes that ok.
+def mtmd_versions() : string {
+    let commit = git_commit_at(dir_name(mtmd_bin()))
+    let patch = file_identity("{asr_dir()}/patches/mtmd-timing.patch", "patch")
+    let ptag = empty(patch.sha256) ? "mtmd-timing.patch(unhashed)" : "mtmd-timing.patch@{slice(patch.sha256, 0, 8)}"
+    return empty(commit) ? "llama.cpp + {ptag}" : "llama.cpp @ {commit} + {ptag}"
+}
+
+def onnx_versions() : string {
+    return run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__)\" 2>&1", true)
+}
+
+def nemo_versions() : string {
+    return run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__)\" 2>&1", true)
+}
+
+//! The version line for one reference tool — dispatch by catalog tool name.
+def asr_tool_versions(tool : string) : string {
+    if (tool == "parakeet-cli" || tool == "whisper-cli") {
+        return whisper_cpp_versions()
+    }
+    if (tool == "mtmd") {
+        return mtmd_versions()
+    }
+    if (tool == "onnx") {
+        return onnx_versions()
+    }
+    if (tool == "nemo") {
+        return nemo_versions()
+    }
+    return ""
 }
 
 // ===== ASR: baseline TSV I/O (reference tool times the establisher writes, the generator reads) =====
@@ -923,17 +1342,31 @@ def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
 // ===== Public bench records (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md) =====
 
 //! One measured test row, keyed in `BenchRun.tests` by the llama-bench test name
-//! ("pp512", "tg128", ...): mean tok/s over the timed reps ± sample stdev.
+//! ("pp512", "tg128", ...) for LLM runs, or by clip ("asr:jfk.wav") for ASR runs.
+//! LLM: mean tok/s over the timed reps ± sample stdev (higher is better).
+//! ASR: best-of-reps transcribe wall ms + the clip's audio seconds (lower ms is better).
 struct BenchTest {
-    tok_s : double
+    @optional tok_s : double
     @optional stddev : double
+    @optional ms : double
+    @optional audio_s : double
 }
 
-//! One engine × backend × flavor run on one box — a first-class record. das and llama.cpp runs
+//! One input file a run read, pinned by content hash. `sha256` comes from the `.sha` sidecar
+//! rail ([[file_identity]]) so two boxes claiming "the same" gguf/clip are provably the same
+//! bytes — or provably not.
+struct InputFile {
+    role : string            // "weights" | "mmproj" | "clip"
+    name : string            // basename as the catalog knows it
+    sha256 : string
+    bytes : int64
+}
+
+//! One engine × backend × flavor run on one box — a first-class record. das and reference runs
 //! are siblings in the same store; pairing and ratios are derived at render time, never stored.
 //! `cmd` is the reproduction receipt: the exact invocation that produced the numbers.
 struct BenchRun {
-    engine : string          // "das" | "llama.cpp"
+    engine : string          // "das" | "llama.cpp" | ASR references ("whisper.cpp", "onnx", "nemo", ...)
     backend : string         // "cpu" | "metal" | "vulkan"
     flavor : string          // das: "tuned" | "accel" (+AMX tier); llama.cpp build flavor: "stock" | "clean-cpu"
     box : string
@@ -942,9 +1375,11 @@ struct BenchRun {
     cmd : string
     hardware : HardwareInfo
     tests : table<string; BenchTest>
+    @optional workload : string // "" = text LLM; "asr" | "audio-chat" — selects the tests-key shape
     @optional source : string   // "official" | "community" — stamped by the store driver, not the tool
     @optional sha : string      // engine commit (das: git HEAD; llama.cpp: build_commit)
     @optional version : string  // das release version
+    @optional versions : string // reference-tool version line (venv package pins, patch sha) — see B4
     @optional tune : string     // das gen-kernel stamp provenance — required for reproducibility
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
@@ -952,6 +1387,9 @@ struct BenchRun {
     @optional env : string      // the arming environment `cmd` was run under — see [[bench_env_line]].
                                 // Load-bearing: most GPU/tier levers arm via env, so a `cmd` alone
                                 // does NOT reproduce a row and two configs can look identical
+    @optional files : array<InputFile> // every input the run read (weights, mmproj, clips)
+    @optional comment : string  // merged from records/annotations.json by gen_site_records —
+                                // never written by sweep tools, so re-sweeps cannot wipe it
 }
 
 // Every env var the dasLLAMA engine + the tune rail consult. Capturing the WHOLE set (not a curated
@@ -1032,6 +1470,64 @@ struct BenchModel {
     @optional note : string        // board caveat for this model (quant substitution, capability gap)
 }
 
+//! One hand-authored annotation (records/annotations.json): an honest note merged onto matching
+//! records at site-gen time. Lives OUTSIDE the sweep output on purpose — re-profiling regenerates
+//! the stores, and a comment explaining an anomaly must survive that. `gguf` alone annotates the
+//! model (its `note`); any selector present narrows it to matching runs (their `comment`).
+struct BenchAnnotation {
+    gguf : string
+    @optional box : string
+    @optional engine : string
+    @optional backend : string
+    @optional flavor : string
+    @optional workload : string
+    comment : string
+}
+
+def annotations_path() : string {
+    return "modules/dasLLAMA/performance/records/annotations.json"
+}
+
+def read_annotations(var out : array<BenchAnnotation>) : bool {
+    let path = annotations_path()
+    if (!stat(path).is_valid) {
+        return false
+    }
+    return sscan_json(fread(path), out)
+}
+
+def private anno_is_model_level(a : BenchAnnotation) : bool {
+    return empty(a.box) && empty(a.engine) && empty(a.backend) && empty(a.flavor) && empty(a.workload)
+}
+
+def private anno_matches_run(a : BenchAnnotation; r : BenchRun) : bool {
+    return ((empty(a.box) || a.box == r.box) && (empty(a.engine) || a.engine == r.engine)
+        && (empty(a.backend) || a.backend == r.backend) && (empty(a.flavor) || a.flavor == r.flavor)
+        && (empty(a.workload) || a.workload == r.workload))
+}
+
+//! Merge annotations onto the models they describe: model-level entries set `note`, run-level
+//! entries set `comment` on every matching run. In-order application — a later, more specific
+//! entry overwrites an earlier one where both match.
+def apply_annotations(var models : array<BenchModel>; annos : array<BenchAnnotation>) {
+    for (a in annos) {
+        for (m in models) {
+            if (m.gguf != a.gguf) {
+                continue
+            }
+            if (anno_is_model_level(a)) {
+                m.note = a.comment
+            } else {
+                for (r in m.runs) {
+                    if (anno_matches_run(a, r)) {
+                        r.comment = a.comment
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! True on a macOS box — the gate for Metal cells in the record driver.
 def is_apple_box : bool {
     return !is_windows() && run_capture("uname -s", true) == "Darwin"
@@ -1063,11 +1559,12 @@ def write_bench_records(path : string; models : array<BenchModel>) {
     }
 }
 
-//! Update-or-insert one run; the identity is (box, engine, backend, flavor) — a re-measure
-//! replaces its row in place (fresh date/sha), never appends a superseded copy.
+//! Update-or-insert one run; the identity is (box, engine, backend, flavor, workload) — a
+//! re-measure replaces its row in place (fresh date/sha), never appends a superseded copy.
 def upsert_bench_run(var runs : array<BenchRun>; var r : BenchRun) {
     for (c in runs) {
-        if (c.box == r.box && c.engine == r.engine && c.backend == r.backend && c.flavor == r.flavor) {
+        if (c.box == r.box && c.engine == r.engine && c.backend == r.backend
+                && c.flavor == r.flavor && c.workload == r.workload) {
             c <- r
             return
         }

@@ -537,12 +537,13 @@ def main() {
         date = date,
         cmd = bench_cmd_line(),
         env = bench_env_line(),
-        sha = run_capture("git rev-parse --short HEAD", true),
+        sha = run_capture("git rev-parse --short=9 HEAD", true),
         version = das_version(),
         tune = tune_summary(),
         exec_fmt = execFmt,
         hardware = hw,
         tests <- tests_of(results))
+    dr.files |> emplace(file_identity(mpath, "weights"))
     m.runs |> emplace(dr)
     if (!empty(refRows)) {
         var rr = BenchRun(
@@ -556,6 +557,7 @@ def main() {
             sha = refRows[0].build_commit,
             exec_fmt = lcpp_exec_fmt(backend),
             hardware = hw)
+        rr.files |> emplace(file_identity(mpath, "weights"))
         for (row in refRows) {
             let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
             rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))

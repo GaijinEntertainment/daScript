@@ -6,16 +6,19 @@ require daslib/clargs
 require daslib/fio
 require math
 
-// The official record driver (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md, step 3): loops the public
-// catalog x pair legs, runs lcpp_bench as a CHILD per cell (one model process at a time), and
-// upserts the --json-path records into the per-box store — written after EVERY cell, so a crash
-// never costs a measured cell. Each board ratio is one das cell + its matched ref run ADJACENT:
-//   metal : das metal            vs stock -ngl 99          ("as shipped")
-//   neon  : das cpu              vs clean-cpu -ngl 0       ("generic neon-64", kernel vs kernel)
-//   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + AMX" — -nopo keeps lcpp's Metal
-//           op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build, window-proven)
-//   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--legs neon,amx,metal]
+// The official record driver — ONE rig for every workload: loops the catalogs x pair legs, runs
+// the das side as a CHILD per cell (lcpp_bench for LLM, asr_bench_cell for audio; one model
+// process at a time), and upserts the --json-path records into the per-box store — written after
+// EVERY cell, so a crash never costs a measured cell. Each board ratio is one das cell + its
+// matched ref run ADJACENT:
+//   metal : das metal            vs stock -ngl 99          ("gpu")
+//   neon  : das cpu              vs clean-cpu -ngl 0       ("cpu", kernel vs kernel)
+//   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps lcpp's
+//           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
+//   asr   : das cpu (asr_bench_cell) vs each catalog reference tool, per clip
+//   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|all]
 // Ref binaries come from setup_lcpp_ref: --ref-clean/--ref-stock or LLAMA_BENCH_CLEAN/LLAMA_BENCH_STOCK.
+// ASR references resolve via WHISPER_CPP / MTMD_BIN / ONNX_PY / NEMO_PY (profile_common).
 
 [CommandLineArgs]
 struct Args {
@@ -55,6 +58,14 @@ struct Args {
     @clarg_short = "r"
     @clarg_doc = "Timed repetitions per row (default: 5)"
     reps : int = 5
+
+    @clarg_short = "w"
+    @clarg_doc = "Workloads to measure: llm | asr | all (default: all — absent models/tools skip with a warning)"
+    workload : string = "all"
+
+    @clarg_name = "asr-reps"
+    @clarg_doc = "Timed repetitions per ASR clip, best kept (default: 2 — clips are minutes, not seconds)"
+    asr_reps : int = 2
 
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
@@ -213,6 +224,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         source = "official",
         exec_fmt = lcpp_exec_fmt(backend),
         hardware = hw)
+    rr.files |> emplace(file_identity(path, "weights"))
     for (row in rows) {
         let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
         rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
@@ -223,6 +235,121 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     stamp_note(models, file, note)
     write_bench_records(store, models)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
+}
+
+// ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
+
+// das side: one asr_bench_cell child per catalog model, absorbed via the same cell protocol
+def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store : string;
+                         var models : array<BenchModel>; var failed : array<string>) {
+    let t0 = ref_time_ticks()
+    to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr\n")
+    let args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das", "--",
+                 "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+                 "--json-path", cellPath]
+    var out = ""
+    let rc = run_and_capture(args, out)
+    var cell : array<BenchModel>
+    if (rc != 0 || !read_bench_records(cellPath, cell)) {
+        let tail = slice(out, max(0, length(out) - 400))
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das asr rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
+        failed |> push("{spec.display} das asr")
+        return
+    }
+    absorb_cell(models, cell, store, "")
+    remove(cellPath)
+    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
+}
+
+// True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
+def private asr_ref_available(tool : string) : bool {
+    if (tool == "parakeet-cli" || tool == "whisper-cli") {
+        return stat(whisper_cpp_bin(tool)).is_valid
+    }
+    if (tool == "mtmd") {
+        return stat(mtmd_bin()).is_valid
+    }
+    if (tool == "onnx") {
+        return stat(onnx_py()).is_valid
+    }
+    if (tool == "nemo") {
+        return stat(nemo_py()).is_valid
+    }
+    return false
+}
+
+// reference side: one tool over the model's clips, one BenchRun with per-clip tests keys.
+// cli tools fork per clip; onnx/nemo run ONE process over all clips (python load amortized).
+def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; cfg : Args; threads : int;
+                         hw : HardwareInfo; box, date, store : string;
+                         var models : array<BenchModel>; var failed : array<string>) {
+    if (!asr_ref_available(ref.tool)) {
+        to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} — tool not on this box\n")
+        return
+    }
+    let t0 = ref_time_ticks()
+    to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
+    let model_path = "{spec.root}{spec.das_model}"
+    var rr = BenchRun(
+        engine = asr_engine_name(ref.tool),
+        backend = "cpu",
+        flavor = "stock",
+        workload = asr_workload(spec),
+        box = box,
+        threads = threads,
+        date = date,
+        source = "official",
+        versions = versions,
+        hardware = hw)
+    var measured = 0
+    if (ref.tool == "onnx" || ref.tool == "nemo") {
+        // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
+        // them); only the clips are local files here
+        let cmd = asr_pybench_cmd(ref.tool, ref.handle, spec.buckets, threads, cfg.asr_reps)
+        rr.cmd = cmd
+        let out = run_capture("{cmd} 2>&1", false)
+        for (wav in spec.buckets) {
+            var audio_s = -1.0lf
+            let ms = parse_bench_best(out, wav, audio_s)
+            if (ms > 0.0lf) {
+                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, audio_s = audio_s))
+                rr.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
+                measured++
+            }
+        }
+    } else {
+        rr.files |> emplace(file_identity(model_path, "weights"))
+        if (ref.tool == "mtmd") {
+            rr.files |> emplace(file_identity("{spec.root}{ref.handle}", "mmproj"))
+        }
+        for (wav in spec.buckets) {
+            let wav_path = "{asr_corpus_dir()}{wav}"
+            var cmd = ""
+            let ms = (ref.tool == "mtmd"
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd)
+                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
+            rr.cmd = cmd   // last clip's line; they differ only in -f
+            if (ms > 0.0lf) {
+                // audio seconds live on the das cell's matching test key; cli tools don't report it
+                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms))
+                rr.files |> emplace(file_identity(wav_path, "clip"))
+                measured++
+            } else {
+                to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref {ref.tool} {wav} — no timing parsed\n")
+            }
+        }
+    }
+    if (measured == 0) {
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} ref {ref.tool} — nothing measured ({elapsed_ms(t0)} ms)\n")
+        failed |> push("{spec.display} ref {ref.tool}")
+        return
+    }
+    var bm = BenchModel(gguf = spec.das_model, arch = spec.display,
+        size_bytes = int64(stat(model_path).size))
+    bm.runs |> emplace(rr)
+    upsert_bench_model(models, bm)
+    write_bench_records(store, models)
+    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)\n")
 }
 
 [export]
@@ -241,6 +368,12 @@ def main : int {
     let apple = is_apple_box()
     if (cfg.backend == "metal" && !apple) {   // fail fast instead of running metal cells that all decline on non-Apple boxes
         to_log(LOG_ERROR, "gen_bench_records: --backend metal requested on a non-Apple box — Metal is macOS-only\n")
+        return 1
+    }
+    let doLlm = cfg.workload == "llm" || cfg.workload == "all"
+    let doAsr = cfg.workload == "asr" || cfg.workload == "all"
+    if (!doLlm && !doAsr) {
+        to_log(LOG_ERROR, "gen_bench_records: unknown --workload `{cfg.workload}` (expected llm | asr | all)\n")
         return 1
     }
     // pair legs: --legs wins outright; otherwise --backend implies its legs (amx is Apple-only —
@@ -297,6 +430,9 @@ def main : int {
     var failed : array<string>
     var cat <- pub_catalog()
     for (ent in cat) {
+        if (!doLlm) {
+            continue
+        }
         let file = ent.file
         if (!empty(cfg.only) && find(file, cfg.only) < 0) {
             continue
@@ -329,6 +465,28 @@ def main : int {
             das_cell(file, path, "cpu", true, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
+        }
+    }
+    if (doAsr) {
+        // per-tool version lines are session facts — capture once, not per model
+        var toolVersions : table<string; string>
+        for (spec in asr_catalog()) {
+            if (!empty(cfg.only) && find(spec.display, cfg.only) < 0 && find(spec.das_model, cfg.only) < 0) {
+                continue
+            }
+            if (!stat("{spec.root}{spec.das_model}").is_valid) {
+                to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} — model not on this box\n")
+                continue
+            }
+            settle(cfg)
+            asr_das_cell(spec, cfg, threads, cellPath, store, models, failed)
+            for (rf in spec.refs) {
+                if (!key_exists(toolVersions, rf.tool)) {
+                    toolVersions |> insert(rf.tool, asr_ref_available(rf.tool) ? asr_tool_versions(rf.tool) : "")
+                }
+                settle(cfg)
+                asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
+            }
         }
     }
     if (!empty(failed)) {

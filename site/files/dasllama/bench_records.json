@@ -30,7 +30,8 @@
         },
         "sha":"5b4bc1b3f",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; resident vulkan graph (prefill + decode)",
-        "env":"DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=6000 DASLLAMA_COOPMAT=mm"
+        "env":"DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=6000 DASLLAMA_COOPMAT=mm",
+        "comment":"Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. Yardstick is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
       },
       {
         "engine":"llama.cpp",
