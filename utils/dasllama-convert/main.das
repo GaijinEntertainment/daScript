@@ -288,7 +288,7 @@ def main() : int {
             var mt = Model()
             var jobs : array<FillJob>
             var blk_ran = false
-            let sok = load_gguf_streaming(cfg.model, qm, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8> const#) {
+            let sok = load_gguf_streaming(cfg.model, qm, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8>) {
                 blk_ran = true
                 if (empty(jobs)) {
                     to_log(LOG_INFO, "dasllama-convert: streaming unavailable for this model — writing eagerly from RAM\n")

@@ -3567,13 +3567,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
 //! mapping STILL ALIVE — the caller streams the save inside. Fails open (unstreamable models
 //! materialize + save eagerly through the same blk); split shards return false pre-blk.
 def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs : array<FillJob>;
-                        blk : block<(m : GGUFMeta; bytes : array<uint8> const#) : bool>) : bool {
-    var shards <- gguf_shard_paths(path)
-    let nshards = length(shards)
-    delete shards
-    if (nshards > 1) {
-        return false
-    }
+                        blk : block<(m : GGUFMeta; bytes : array<uint8>) : bool>) : bool {
     if (!is_job_que_available()) {
         var okj = false
         with_job_que() {
@@ -3587,6 +3581,46 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         set_conv_profile(true)
     }
     let ts_load = ref_time_ticks()
+    let lmode0 = mode
+    var shards <- gguf_shard_paths(path)
+    if (length(shards) > 1) {
+        // split gguf: every shard mapping stays alive across the plan-load AND the blk-save
+        // (the transcode kernels resolve per-shard bases through the meta)
+        to_log(LOG_INFO, "dasLLAMA: split gguf — {length(shards)} shards (streaming)\n")
+        var sok = false
+        var bases : array<void?>
+        var sizes : array<int64>
+        gguf_map_shards(shards, 0, bases, sizes) {
+            if (env_flag("DASLLAMA_PREFETCH", true)) {
+                var pf_mb = 0l
+                for (bi in range(length(bases))) {
+                    if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
+                        pf_mb += sizes[bi] >> 20l
+                    }
+                }
+                if (pf_mb > 0l) {
+                    to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({pf_mb} MB across {length(bases)} shards)\n")
+                }
+            }
+            var m <- parse_gguf_meta_shards(bases, sizes)
+            fill_plan_begin()
+            unsafe {
+                load_gguf_parsed(t, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>), lmode0, ts_load)
+            }
+            fill_plan_take(jobs)
+            t.tok <- load_tokenizer_auto(path)
+            unsafe {
+                sok = invoke(blk, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>))
+            }
+            delete m
+        }
+        bases |> clear()   // borrowed mapping bases — clear so delete frees only the buffer
+        delete bases
+        delete sizes
+        delete shards
+        return sok
+    }
+    delete shards
     let f = fopen(path, "rb")
     if (f == null) {
         return false
@@ -3608,7 +3642,9 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         load_gguf_parsed(t, m, bytes, lmode, ts_load)
         fill_plan_take(jobs)
         t.tok <- load_tokenizer_auto(path)
-        ok = invoke(blk, m, bytes)
+        unsafe {
+            ok = invoke(blk, m, temp_array(reinterpret<uint8?>(addr(bytes[0])), long_length(bytes), type<uint8>))
+        }
     }
     fclose(f)
     return ok
