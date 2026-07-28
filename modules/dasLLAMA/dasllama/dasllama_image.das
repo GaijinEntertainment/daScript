@@ -72,14 +72,82 @@ def private pad_to_page(cur : uint64) : uint64 {
     return (cur + page - 1ul) / page * page
 }
 
-def private write_zeros(f : file; n : uint64) {
-    if (n == 0ul) {
+let private IMAGE_WRITE_BAND = 16l * 1024l * 1024l   // the direct writer's staging band
+let private SECTION_TABLE_SLACK = 65536ul            // preallocation headroom for the section blob
+
+// The image's byte sink: append-only and strictly ascending, which is what keeps NTFS from
+// charging valid-data-length zero-fill on the preallocated file (measured: 3.4 s per 8 GB gap).
+struct private ImgWriter {
+    h : void? = null
+    cur : uint64 = 0ul
+    ok : bool = true
+}
+
+def private w_open(path : string; total : uint64) : ImgWriter {
+    let h = unsafe(dwrite_open(path, total, uint64(IMAGE_WRITE_BAND)))
+    return ImgWriter(h = h, ok = h != null)
+}
+
+def private w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
+    if (!w.ok || nbytes == 0ul) {
+        return
+    }
+    if (!unsafe(dwrite_append(w.h, p, nbytes))) {
+        w.ok = false   // a dead save stays dead — don't keep pushing bytes at a full disk
+        return
+    }
+    w.cur += nbytes
+}
+
+def private w_zeros(var w : ImgWriter; n : uint64) {
+    if (n == 0ul || !w.ok) {
         return
     }
     var z : array<uint8>
     z |> resize(int(n))
-    f |> fwrite(z)
+    unsafe {
+        w_append(w, addr<void?>(z[0]), n)
+    }
     delete z
+}
+
+def private w_close(var w : ImgWriter) : bool {
+    if (w.h == null) {
+        return false
+    }
+    let flushed = unsafe(dwrite_close(w.h))
+    w.h = null
+    return flushed && w.ok
+}
+
+def private plane_end(cur : uint64; field : array<auto(TT)>) : uint64 {
+    if (empty(field)) {
+        return cur
+    }
+    return pad_to_page(cur) + uint64(long_length(field)) * uint64(typeinfo sizeof(field[0]))
+}
+
+// The image's final size, known before a byte goes out: planes contribute their sizes, the meta
+// blob is already serialized. The writer preallocates from this, so the file lands as one
+// contiguous run.
+def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
+    var cur = uint64(IMAGE_PAGE)
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            static_if (!typeinfo is_string(field[0])) {
+                cur = plane_end(cur, field)
+            }
+        } static_elif (typeinfo safe_has_field < image_map > (field)) {
+            apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
+                static_if (typeinfo is_array(ifield)) {
+                    static_if (!typeinfo is_string(ifield[0])) {
+                        cur = plane_end(cur, ifield)
+                    }
+                }
+            }
+        }
+    }
+    return pad_to_page(cur + meta_bytes)
 }
 
 def private store_u32(var b : array<uint8>; at : int; v : uint) {
@@ -321,31 +389,33 @@ def private image_post_load(var t : Model) {
 
 // ===== save =====
 
-// one plane: pad to a page, bulk-write, account. long_ forms: a plane past 2 GiB
-// (voxtral-mini qblob = 3.6 G elements) does not fit the int32 length/byte-count rail
-def private write_plane(f : file; var sections : array<ImgSection>; var cur : uint64&;
-                        var ok : bool&; name : string; var field : array<auto(TT)>) {
-    if (empty(field) || !ok) {   // a dead save stays dead — don't keep pushing bytes at a full disk
+// one plane: pad to a page, bulk-append, account. The writer advances w.cur by exactly what it
+// accepted, so the section table cannot drift from the file. long_ forms: a plane past 2 GiB
+// (voxtral-mini qblob = 3.6 G elements) does not fit the int32 rail.
+def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
+                        name : string; var field : array<auto(TT)>) {
+    if (empty(field) || !w.ok) {
         return
     }
     let nbytes = uint64(long_length(field)) * uint64(typeinfo sizeof(field[0]))
-    let at = pad_to_page(cur)
-    write_zeros(f, at - cur)
-    let wrote = f |> long_fwrite(field)
-    if (uint64(wrote) != nbytes) {
-        // a short write is an I/O failure (ENOSPC in practice), not an accounting bug
-        to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' short write {wrote} of {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
-        ok = false
+    let at = pad_to_page(w.cur)
+    w_zeros(w, at - w.cur)
+    let ts = ref_time_ticks()
+    unsafe {
+        w_append(w, addr<void?>(field[0]), nbytes)
+    }
+    // big planes get their own line: a uniform rate means the cost is systemic, a few slow ones
+    // mean stalls. Only >=256 MB, so small models stay quiet and this needs no env knob.
+    if (nbytes >= 256ul * 1024ul * 1024ul) {
+        let ms = int64(get_time_usec(ts)) / 1000l
+        let mb = int64(nbytes) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image:   plane {name} {mb} MB in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
+    }
+    if (!w.ok) {
+        to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' failed writing {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
         return
     }
     sections |> push(ImgSection(name = name, off = at, bytes = nbytes))
-    cur = at + nbytes
-    // fwrite and the section table must agree byte-for-byte, or the mapped planes land at
-    // the wrong offsets — fail the save loudly, not the load
-    if (uint64(ftell(f)) != cur) {
-        to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' wrote {ftell(f)} != accounted {int64(cur)} (nbytes {int64(nbytes)}) — image save aborted\n")
-        ok = false
-    }
 }
 
 //! Serialize a loaded weight-carrying struct as a prepared image: array planes page-aligned raw
@@ -355,27 +425,30 @@ def save_image(var t; path : string; tag : string = "") : bool {
     // per-writer tmp name: concurrent savers (parallel test workers on one cache miss) must
     // not clobber each other's half-written file; last atomic rename wins with same content
     let tmp_path = "{path}.{ref_time_ticks()}.tmp"
-    var ok = true
     var fend = 0ul
+    var meta_off = 0ul
+    var meta_bytes = 0ul
+    var nsections = 0
     var meta <- new MemSerializer()
     var warch = Archive(reading = false, stream = meta)
     var sections : array<ImgSection>
-    fopen(tmp_path, "wb") $(f) {
-        if (f == null) {
-            ok = false
-            return
-        }
-        // page 0: header placeholder — patched after the walk (fseek back)
-        write_zeros(f, uint64(IMAGE_PAGE))
-        var cur = uint64(IMAGE_PAGE)
-        let ts_meta = ref_time_ticks()
-        _::serialize_image_meta(warch, t)
-        to_log(LOG_INFO, "dasLLAMA image: meta serialize {get_time_usec(ts_meta) / 1000}ms\n")
+    // meta first: it needs nothing from the planes, and having it sized up front is what lets
+    // the writer preallocate the exact file (see image_total_bytes)
+    let ts_meta = ref_time_ticks()
+    _::serialize_image_meta(warch, t)
+    to_log(LOG_INFO, "dasLLAMA image: meta serialize {get_time_usec(ts_meta) / 1000}ms\n")
+    var scalar_blob <- meta->extractData()
+    unsafe {
+        delete meta
+    }
+    var w = w_open(tmp_path, image_total_bytes(t, uint64(long_length(scalar_blob)) + SECTION_TABLE_SLACK))
+    if (w.ok) {
+        w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — patched after close
         let ts_planes = ref_time_ticks()
         apply(t) $(name : string; var field) {
             static_if (typeinfo is_array(field)) {
                 static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
-                    write_plane(f, sections, cur, ok, name, field)
+                    write_plane(w, sections, name, field)
                 }
             } static_elif (typeinfo safe_has_field < image_map > (field)) {
                 // a nested weight-carrier on the image rail (marker: it declares image_map) —
@@ -384,54 +457,76 @@ def save_image(var t; path : string; tag : string = "") : bool {
                 apply(field) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
                         static_if (!typeinfo is_string(ifield[0])) {
-                            write_plane(f, sections, cur, ok, "{name}.{iname}", ifield)
+                            write_plane(w, sections, "{name}.{iname}", ifield)
                         }
                     }
                 }
             }
         }
-        to_log(LOG_INFO, "dasLLAMA image: planes write {get_time_usec(ts_planes) / 1000}ms\n")
+        let planes_ms = int64(get_time_usec(ts_planes)) / 1000l
+        let planes_mb = int64(w.cur) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image: planes write {planes_ms}ms ({planes_mb} MB at {planes_ms > 0l ? planes_mb * 1000l / planes_ms : 0l} MB/s)\n")
+        // the writer's own split — staging our bytes vs waiting on the device. Anything the two
+        // do not account for is time spent OUTSIDE the writer (the walk itself).
+        let copy_ms = int64(unsafe(dwrite_stat(w.h, 0))) / 1000000l
+        let write_ms = int64(unsafe(dwrite_stat(w.h, 1))) / 1000000l
+        let direct_mb = int64(unsafe(dwrite_stat(w.h, 2))) >> 20l
+        let bounce_mb = int64(unsafe(dwrite_stat(w.h, 3))) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image:   writer split: stage {copy_ms}ms ({bounce_mb} MB bounced), syscall {write_ms}ms ({direct_mb} MB direct), unaccounted {planes_ms - copy_ms - write_ms}ms\n")
         // meta = [sections][the walk's scalar stream], one blob at the tail
         var smeta <- new MemSerializer()
         var sarch = Archive(reading = false, stream = smeta)
         sarch |> serialize(sections)
         var meta_blob <- smeta->extractData()
-        var scalar_blob <- meta->extractData()
         meta_blob |> push_from(scalar_blob)
-        let meta_off = cur
-        let meta_bytes = uint64(long_length(meta_blob))
-        f |> fwrite(meta_blob)
-        cur += meta_bytes
+        nsections = length(sections)
+        meta_off = w.cur
+        meta_bytes = uint64(long_length(meta_blob))
+        if (meta_bytes > 0ul) {   // never empty in practice — the section table always rides here
+            unsafe {
+                w_append(w, addr<void?>(meta_blob[0]), meta_bytes)
+            }
+        }
         // pad the file itself to a page multiple (the whole-file bytesNoCopy wrap needs it)
-        fend = pad_to_page(cur)
-        write_zeros(f, fend - cur)
-        // patch the header
-        var hdr : array<uint8>
-        hdr |> resize(int(IMAGE_HEADER_BYTES))
-        store_u32(hdr, 0, IMAGE_MAGIC)
-        store_u32(hdr, 4, uint(IMAGE_VERSION))
-        store_u32(hdr, 8, uint(IMAGE_PAGE))
-        store_u32(hdr, 12, uint(length(sections)))
-        store_u64(hdr, 16, meta_off)
-        store_u64(hdr, 24, meta_bytes)
-        store_u64(hdr, 32, fend)
-        store_u64(hdr, 40, hash(image_identity(tag)))
-        fseek(f, 0l, seek_set)
-        f |> fwrite(hdr)
-        delete hdr
+        fend = pad_to_page(w.cur)
+        w_zeros(w, fend - w.cur)
         delete meta_blob
-        delete scalar_blob
         unsafe {
             delete smeta
         }
         delete sections
     }
-    unsafe {
-        delete meta
+    delete scalar_blob
+    var ok = w_close(w)
+    if (ok) {
+        // the header carries counts only the finished walk knows (section count, meta offset and
+        // size), and the direct writer is append-only — so patch page 0 through an ordinary
+        // handle now that the streaming one is closed
+        var hdr : array<uint8>
+        hdr |> resize(int(IMAGE_HEADER_BYTES))
+        store_u32(hdr, 0, IMAGE_MAGIC)
+        store_u32(hdr, 4, uint(IMAGE_VERSION))
+        store_u32(hdr, 8, uint(IMAGE_PAGE))
+        store_u32(hdr, 12, uint(nsections))
+        store_u64(hdr, 16, meta_off)
+        store_u64(hdr, 24, meta_bytes)
+        store_u64(hdr, 32, fend)
+        store_u64(hdr, 40, hash(image_identity(tag)))
+        ok = false
+        fopen(tmp_path, "r+b") $(hf) {
+            if (hf != null) {
+                fseek(hf, 0l, seek_set)
+                ok = int64(hf |> fwrite(hdr)) == IMAGE_HEADER_BYTES
+            }
+        }
+        if (!ok) {
+            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' header patch failed — image save aborted\n")
+        }
+        delete hdr
     }
     if (ok) {
-        // buffered-tail backstop: the small tail writes can sit in the stdio buffer and hit
-        // ENOSPC only at fclose, which reports nothing here — verify what landed on disk
+        // last backstop: the writer reports its own failures, but an ENOSPC that only surfaces
+        // at close would still leave a short file — verify what actually landed on disk
         var st : FStat
         if (!stat(tmp_path, st) || st.size != fend) {
             to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(fend)} — disk full? image save aborted\n")
@@ -439,7 +534,8 @@ def save_image(var t; path : string; tag : string = "") : bool {
         }
     }
     if (!ok) {
-        if (!remove(tmp_path)) {
+        // a failed OPEN never created the file, so only warn about a tmp that is actually there
+        if (stat(tmp_path).is_valid && !remove(tmp_path)) {
             to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed — clean it up by hand\n")
         }
         return false
