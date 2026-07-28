@@ -123,30 +123,30 @@ finish; nothing else depends on it.
 
 ## NEXT ARC — the Changelist becomes a working surface (Boris, 2026-07-27)
 
+PLANNED IN FULL: **CHANGELIST_ACTIONS_PLAN.md** — read that before starting;
+it carries the git command table, the discard semantics per group, the test
+plan, and the ordered checkpoints.
+
 Where the retire scenario LEADS. Boris, coming out of it: "im going from
 delete scenario - but it brings 'ok, unstaged files, uncommited files - what do
 i do'." The delete flow answers "is it safe"; it then hands the user a dirty
 worktree and no way to act on it. Today the Changelist has exactly one control:
 Refresh.
 
-What it needs, in his order:
+His list, in his order: stage/unstage/discard with multiselect and
+confirmations; commit; fetch/push/pull/sync.
 
-1. **stage / unstage / discard**, with MULTISELECT and confirmations. Stage and
-   unstage exist per-file already (`repository_build_file_action_argv`, the
-   `herder_git_file_action` rail) — what is missing is discard, selecting more
-   than one row, and a confirmation on the destructive one. Discard is the
-   first genuinely UNRECOVERABLE action in the app: it destroys the only copy.
-   It gets the same treatment retire got — say what is lost, name the count,
-   and offer the WIP-commit rescue as the non-destructive alternative.
-2. **commit**, from this view.
-3. **fetch / push / pull / sync**. All four are long-running network
-   operations, so they ride the WorktreeOperation rail built for retire:
-   progress, cancel, collapsed log, and the failure treatment (git's own words,
-   a reason, terminal, "start a session to fix this").
+Three things the plan settles that are easy to get wrong:
 
-Note the shape: every one of these is a git operation that can take seconds,
-and the rail + failure UX now exist. This arc is mostly wiring, not new
-machinery — the same lesson as Phase 4.
+- A prerequisite refactor comes FIRST: `advance_operation`'s per-kind phase
+  ladder becomes a step list with a per-step failure policy. Nine more kinds on
+  the current shape would rot it.
+- **Discard is the first genuinely unrecoverable action in the app** — retire
+  never loses a commit, archive comes back, worktree removal keeps the branch.
+  Discard destroys the only copy, so it names the count, offers the WIP-commit
+  rescue first, and arms in two steps. Stage/unstage get NO confirmation.
+- `git pull` is never bare — `--ff-only`, because a surprise merge commit is
+  the same class of silent lie this round kept removing.
 
 ## Retiring a workspace — BUILT 2026-07-27 (design below stands as the record)
 
