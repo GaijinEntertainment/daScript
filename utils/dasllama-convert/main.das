@@ -64,6 +64,9 @@ struct ConvertArgs {
     @clarg_doc = "Print this box's DlimConfiguration JSON (or write it to -o) and exit"
     dump_config : bool
 
+    @clarg_doc = "P3 trim (with -f vulkan): drop the big CPU weight families from the image — pure resident-driver dense models only; serve with DASLLAMA_TRIM=1"
+    trim : bool
+
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
 
@@ -228,6 +231,10 @@ def main() : int {
         }
         have_want = true
     }
+    if (cfg.trim && cfg.flavor != Flavor.vulkan) {
+        to_log(LOG_ERROR, "dasllama-convert: --trim is a vulkan-flavor property (add -f vulkan)\n")
+        return 2
+    }
     if (cfg.flavor == Flavor.vulkan) {
         // OFFLINE bake: the walk's accept/refuse arithmetic runs against the config's numbers,
         // the gathers collect, and no Vulkan call is made — no instance, no device, no VRAM
@@ -242,6 +249,7 @@ def main() : int {
             }
             vkc = probed.vulkan
         }
+        vkc.trim = cfg.trim
         if (!moe_gpu_dry_bake_arm(vkc)) {
             to_log(LOG_ERROR, "dasllama-convert: offline vulkan bake could not arm — see the log above\n")
             return 2
@@ -279,6 +287,10 @@ def main() : int {
         }
         if (rc == 0 && cfg.flavor == Flavor.vulkan && !vulkan_bake_take(m)) {
             to_log(LOG_ERROR, "dasllama-convert: the GPU walk collected nothing — the tier declined this model under the supplied config\n")
+            rc = 1
+        }
+        if (rc == 0 && cfg.trim && !trim_model_planes(m)) {
+            to_log(LOG_ERROR, "dasllama-convert: --trim declined — see the log above (only pure resident-driver dense models qualify)\n")
             rc = 1
         }
         if (rc == 0 && !save_model_image(m, out, tag, qs)) {

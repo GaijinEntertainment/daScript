@@ -549,6 +549,9 @@ def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : 
     if (vk_bake_slice(t, 0, woff, n, rows, wq, ws)) {
         return
     }
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+    }
     invoke(g_layout_gather, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
 }
 
@@ -557,6 +560,9 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
     layout_hooks_check()
     if (vk_bake_slice(t, int(fmt), woff, n, rows, wq, ws)) {
         return
+    }
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
     }
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
@@ -568,7 +574,93 @@ def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_row
     if (vk_bake_slice(t, 6, woff, n, rows, wq, no_ws)) {
         return
     }
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+    }
     invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
+}
+
+//! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
+//! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
+//! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
+def trim_model_planes(var t : Model) : bool {
+    if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
+        return false
+    }
+    for (e in t.vkplan) {
+        if (e.role != int(VkBakeRole.arena)) {
+            to_log(LOG_WARNING, "dasLLAMA trim: baked plan carries non-arena role {e.role} — only pure resident-driver dense models trim; declining\n")
+            return false
+        }
+    }
+    let dim = t.config.dim
+    let vocab = t.config.vocab_size
+    if (t.cls_q8) {
+        // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
+        let nb = vocab * dim / 32l
+        t.embq |> resize(int(nb * 34l))
+        unsafe {
+            for (b in range64(nb)) {
+                let off = t.emb_q8_off + b * 32l
+                var bp = addr(t.embq[b * 34l])
+                let sc = t.wscale_f16 ? uint(t.qscales16[off / 32l]) : f32_to_f16(t.qscales[off / 32l])
+                bp[0] = uint8(sc & 0xFFu)
+                bp[1] = uint8((sc >> 8u) & 0xFFu)
+                memcpy(addr<void?>(t.embq[b * 34l + 2l]), addr<void?>(t.qblob[off]), 32l)
+            }
+        }
+    } elif (cls_kq(t)) {
+        // the region's plane pair verbatim (repack layout preserved), rebased to superblock 0
+        let nsb = vocab * (dim / 256l)
+        let sb0 = t.wcls_off / 256l
+        unsafe {
+            if (t.emb_fmt == KqFmt.k4) {
+                t.embq |> resize(int(nsb * K4_QSB))
+                t.embs |> resize(int(nsb * K4_SSB))
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k4q[sb0 * K4_QSB]), nsb * K4_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k4s[sb0 * K4_SSB]), nsb * K4_SSB)
+            } elif (t.emb_fmt == KqFmt.k5) {
+                t.embq |> resize(int(nsb * K5_QSB))
+                t.embs |> resize(int(nsb * K5_SSB))
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k5q[sb0 * K5_QSB]), nsb * K5_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k5s[sb0 * K5_SSB]), nsb * K5_SSB)
+            } elif (t.emb_fmt == KqFmt.k6) {
+                t.embq |> resize(int(nsb * K6_QSB))
+                t.embs |> resize(int(nsb * K6_SSB))
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k6q[sb0 * K6_QSB]), nsb * K6_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k6s[sb0 * K6_SSB]), nsb * K6_SSB)
+            } elif (t.emb_fmt == KqFmt.q40) {
+                t.embq |> resize(int(nsb * Q40_QSB))
+                t.embs |> resize(int(nsb * Q40_SSB))
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
+            } else {
+                to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair — declining\n")
+                return false
+            }
+        }
+    }   // fp32 embeddings ride fblob, which the trim keeps
+    t.planes_trimmed = true
+    delete t.qblob
+    delete t.qscales
+    delete t.qscales16
+    delete t.wblob
+    delete t.bf16blob
+    delete t.k4q
+    delete t.k4s
+    delete t.k5q
+    delete t.k5s
+    delete t.k6q
+    delete t.k6s
+    delete t.q40q
+    delete t.q40s
+    delete t.q51q
+    delete t.q51s
+    delete t.mxq
+    delete t.mxs
+    delete t.q4blob
+    delete t.q4scales
+    return true
 }
 
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
@@ -797,6 +889,9 @@ struct Model {
     // scale strips, k6s the GPU split form. CPU inference on a blob-only model PANICS.
     mblob : array<uint8>
     metal_blob : bool = false
+    // P3-trimmed image: the big CPU weight families are EMPTY (GPU-resident consumers only);
+    // embed reads embq/embs, re-gathers must slice from vkblob, CPU fallbacks fail closed
+    planes_trimmed : bool = false
     q4blob : array<uint8>
     q4scales : array<float>
     // Native-MXFP4 expert stacks (valid when experts_mx4): the routed we1/we2/we3 stacks live here
@@ -952,6 +1047,11 @@ struct Model {
     // views on a flavor load — the generic finalizer walk covers both.
     vkblob : array<uint8>
     vkplan : array<VkPlanEntry>
+    // trimmed-flavor embedding planes (P3): the emb/cls tensor's rows kept CPU-readable after
+    // the big weight families drop. q8: mblob-style 34B interleaved blocks (embs empty);
+    // kq: the region's quant + scale planes copied verbatim (repack layout preserved, rebased to 0).
+    embq : array<uint8>
+    embs : array<uint8>
     // prepared-model image backing (dasllama_image): when set, every locked array field above
     // is a borrowed VIEW into this mapping (zero-copy) and the finalizer below unmaps it.
     // Both fields are skipped by the image save/load field walk.
@@ -8861,13 +8961,33 @@ def private dequant_q8_row(t : Model; off, n : int64; var dst : float?) {
     }
 }
 
+// trimmed-flavor q8 embedding read: embq holds the emb region as mblob-style 34B interleaved
+// blocks (f16 scale + 32 int8), region-rebased — same loop as dequant_q8_row's mblob arm
+def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
+    unsafe {
+        let bp = addr < uint8 const? >(t.embq[(off / 32l) * 34l])
+        for (b in range64(n / 32l)) {
+            let sc = f16_to_f32(uint(bp[b * 34l]) | (uint(bp[b * 34l + 1l]) << 8u))
+            let qp = reinterpret<int8 const?>(bp + b * 34l + 2l)
+            let base = b * 32l
+            for (k in range64(32l)) {
+                dst[base + k] = float(qp[k]) * sc
+            }
+        }
+    }
+}
+
 // Copy token `token`'s embedding row into dst — from fp32 fblob, or (cls_q8) dequanted from the
-// linear Q8 copy at emb_q8_off, or (cls_kq) from the K-quant plane at wcls_off. Rows are whole
-// superblocks (dim % 256 == 0, a ggml K-quant invariant).
+// linear Q8 copy at emb_q8_off (embq when trimmed), or (cls_kq) from the K-quant plane at
+// wcls_off (embq/embs when trimmed). Rows are whole superblocks (a ggml K-quant invariant).
 def private embed_row(t : Model; token : int64; var dst : float?) {
     let dim = t.config.dim
     if (t.cls_q8) {
-        dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
+        if (t.planes_trimmed) {
+            dequant_embq_row(t, token * dim, dim, dst)
+        } else {
+            dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
+        }
     } elif (cls_kq(t)) {
         let mr = (t.emb_fmt == KqFmt.k4 ? t.kq_repack_mr4
             : (t.emb_fmt == KqFmt.k5 ? t.kq_repack_mr5
@@ -8878,15 +8998,29 @@ def private embed_row(t : Model; token : int64; var dst : float?) {
                 let nsb = dim / 256l
                 let g = token / mr
                 let fmt = int64(kq_fi(t.emb_fmt))
-                let sb0t = t.wcls_off / 256l
-                if (t.emb_fmt == KqFmt.k4) {
-                    dequant_kq_row_grp(fmt, addr(t.k4q[(sb0t + g * mr * nsb) * K4_QSB]), addr(t.k4s[(sb0t + g * mr * nsb) * K4_SSB]), token % mr, mr, dim, dst)
+                // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
+                let sb0t = t.planes_trimmed ? 0l : t.wcls_off / 256l
+                let sbg = (sb0t + g * mr * nsb)
+                if (t.planes_trimmed) {
+                    if (t.emb_fmt == KqFmt.k4) {
+                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K4_QSB]), addr(t.embs[sbg * K4_SSB]), token % mr, mr, dim, dst)
+                    } elif (t.emb_fmt == KqFmt.k5) {
+                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K5_QSB]), addr(t.embs[sbg * K5_SSB]), token % mr, mr, dim, dst)
+                    } elif (t.emb_fmt == KqFmt.k6) {
+                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K6_QSB]), addr(t.embs[sbg * K6_SSB]), token % mr, mr, dim, dst)
+                    } elif (t.emb_fmt == KqFmt.q40) {
+                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * Q40_QSB]), addr(t.embs[sbg * Q40_SSB]), token % mr, mr, dim, dst)
+                    } else {
+                        panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
+                    }
+                } elif (t.emb_fmt == KqFmt.k4) {
+                    dequant_kq_row_grp(fmt, addr(t.k4q[sbg * K4_QSB]), addr(t.k4s[sbg * K4_SSB]), token % mr, mr, dim, dst)
                 } elif (t.emb_fmt == KqFmt.k5) {
-                    dequant_kq_row_grp(fmt, addr(t.k5q[(sb0t + g * mr * nsb) * K5_QSB]), addr(t.k5s[(sb0t + g * mr * nsb) * K5_SSB]), token % mr, mr, dim, dst)
+                    dequant_kq_row_grp(fmt, addr(t.k5q[sbg * K5_QSB]), addr(t.k5s[sbg * K5_SSB]), token % mr, mr, dim, dst)
                 } elif (t.emb_fmt == KqFmt.k6) {
-                    dequant_kq_row_grp(fmt, addr(t.k6q[(sb0t + g * mr * nsb) * K6_QSB]), addr(t.k6s[(sb0t + g * mr * nsb) * K6_SSB]), token % mr, mr, dim, dst)
+                    dequant_kq_row_grp(fmt, addr(t.k6q[sbg * K6_QSB]), addr(t.k6s[sbg * K6_SSB]), token % mr, mr, dim, dst)
                 } elif (t.emb_fmt == KqFmt.q40) {
-                    dequant_kq_row_grp(fmt, addr(t.q40q[(sb0t + g * mr * nsb) * Q40_QSB]), addr(t.q40s[(sb0t + g * mr * nsb) * Q40_SSB]), token % mr, mr, dim, dst)
+                    dequant_kq_row_grp(fmt, addr(t.q40q[sbg * Q40_QSB]), addr(t.q40s[sbg * Q40_SSB]), token % mr, mr, dim, dst)
                 } else {
                     panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                 }
@@ -8894,12 +9028,25 @@ def private embed_row(t : Model; token : int64; var dst : float?) {
         } else {
             unsafe {
                 var row = temp_array(dst, dim, type<float>)
-                let sb0 = (t.wcls_off + token * dim) / 256l
+                // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
+                let sb0 = t.planes_trimmed ? (token * dim) / 256l : (t.wcls_off + token * dim) / 256l
                 // metal-blob planes: k4/k5 strips are 16B, k6 is the split GPU form (d in the tail)
                 let ssb45 = t.metal_blob ? 16l : K4_SSB
                 let k6d0 = t.metal_blob ? (long_length(t.k6s) / K6_SSB) * 16l : 0l
                 for (s in range64(dim / 256l)) {
-                    if (t.emb_fmt == KqFmt.k4) {
+                    if (t.planes_trimmed) {
+                        if (t.emb_fmt == KqFmt.k4) {
+                            dequant_k4_plane_superblock(t.embq, (sb0 + s) * K4_QSB, t.embs, (sb0 + s) * K4_SSB, row, s * 256l)
+                        } elif (t.emb_fmt == KqFmt.k5) {
+                            dequant_k5_plane_superblock(t.embq, (sb0 + s) * K5_QSB, t.embs, (sb0 + s) * K5_SSB, row, s * 256l)
+                        } elif (t.emb_fmt == KqFmt.k6) {
+                            dequant_k6_plane_superblock(t.embq, (sb0 + s) * K6_QSB, t.embs, (sb0 + s) * K6_SSB, row, s * 256l)
+                        } elif (t.emb_fmt == KqFmt.q40) {
+                            dequant_q40_plane_superblock(t.embq, (sb0 + s) * Q40_QSB, t.embs, (sb0 + s) * Q40_SSB, row, s * 256l)
+                        } else {
+                            panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
+                        }
+                    } elif (t.emb_fmt == KqFmt.k4) {
                         dequant_k4_plane_superblock(t.k4q, (sb0 + s) * K4_QSB, t.k4s, (sb0 + s) * ssb45, row, s * 256l)
                     } elif (t.emb_fmt == KqFmt.k5) {
                         dequant_k5_plane_superblock(t.k5q, (sb0 + s) * K5_QSB, t.k5s, (sb0 + s) * ssb45, row, s * 256l)
@@ -8928,6 +9075,10 @@ def private embed_row(t : Model; token : int64; var dst : float?) {
 def private mm_cls(var y : array<float>; t : Model; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
+    if (t.planes_trimmed && !moe_gpu_cls_on_gpu(t.wcls_off)) {
+        // fail closed LOUDLY: the CPU classifier path reads the trimmed families
+        panic("dasLLAMA: planes_trimmed image — the classifier must serve on the GPU (rebake without trim, or arm the tier as the image's config says)")
+    }
     if (moe_gpu_cls_on_gpu(t.wcls_off)) {
         if (cls_fmt == KqFmt.q8) {
             quantize_q8_0_into(x, n, xq, xs, 0l, 0l)

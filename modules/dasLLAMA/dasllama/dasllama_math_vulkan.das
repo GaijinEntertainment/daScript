@@ -4423,6 +4423,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense = gpu_want_dense()
     v.dense_attn = gpu_want_dense_attn()
     v.dense_shexp = gpu_want_dense_shexp()
+    v.trim = env_flag("DASLLAMA_TRIM", false)
 }
 
 //! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic
@@ -4433,6 +4434,7 @@ def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
     // them would write an image whose identity lies about its own plan. Fail closed, name both.
     var w = v
     vk_dlim_wants_fill(w)
+    w.trim = v.trim   // trim shapes the SAVE, not the walk — the converter's flag decides it
     if (dlim_vulkan_tag(w) != dlim_vulkan_tag(v)) {
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: dry-bake config disagrees with this process' wants (set the DASLLAMA_GPU_* knobs to match)\n  config {dlim_vulkan_tag(v)}\n  wants  {dlim_vulkan_tag(w)}\n")
         return false

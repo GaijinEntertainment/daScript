@@ -311,6 +311,7 @@ def private serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.ple_post_off)
     arch |> serialize_raw(t.wscale_f16)
     arch |> serialize_raw(t.metal_blob)
+    arch |> serialize_raw(t.planes_trimmed)
     arch |> serialize_raw(t.experts_mx4)
     arch |> serialize_raw(t.ple_model_bf16)
     arch |> serialize_raw(t.kquant_native)
@@ -358,9 +359,9 @@ def private serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// the tripwire: serialize_image_meta(Model) covers 65 fields; blocks + image_map +
+// the tripwire: serialize_image_meta(Model) covers 66 fields; blocks + image_map +
 // image_bytes are deliberate skips. A new non-array Model field trips this until BOTH agree.
-let IMAGE_META_FIELDS = 65 + 3
+let IMAGE_META_FIELDS = 66 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to
