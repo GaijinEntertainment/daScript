@@ -29,6 +29,11 @@ require daslib/json
 require daslib/json_boost
 require daslib/fio
 
+// The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
+// perm it falls back to ON THIS BOX, so report() never restates one as a literal.
+[dasllama_fallbacks]
+struct private FallbackRegistry {}
+
 // One [dasllama_grid] per kernel: emits <src>__<suffix> for all 20 perms + <src>_variants().
 [dasllama_grid(src = "dot_template")]
 struct GridDot {}
@@ -111,6 +116,7 @@ struct private KernelResult {
 // name, its winner, and the shipped fallback it was judged against — the summary reads them back
 // from here rather than restating all three in parallel arrays that can drift apart.
 var private g_results : array<KernelResult>
+var private g_shipped : table<string; string>
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -179,7 +185,15 @@ def private tune_candidate_active(round : int; best : array<double>; ok : array<
 // [tuned] fallback perm — vec8_u2 for most, but e.g. dot_q8q8 ships vec16), mark the winner, and
 // return the winning suffix (or "" if nothing passed). A win of only a couple % is flagged but is
 // likely noise — vec16 was a real 2% loss, so the bar for "genuinely new" is a repeatable margin.
-def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>; baseline = BASELINE) : string {
+def private shipped_fallback(kernel : string) : string {
+    if (empty(g_shipped)) {
+        g_shipped <- dasllama_tuned_fallbacks()
+    }
+    return g_shipped?[kernel] ?? BASELINE
+}
+
+def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
+    let baseline = shipped_fallback(kernel)
     var bi = -1
     for (i, nm in count(), names) {
         if (nm == baseline) {
@@ -876,7 +890,7 @@ def bench_rmsnorm() : string {
         sink += o[0]
     }
     tune_detail("  checksum {sink}\n")
-    return report("rmsnorm", names, best, ok, "plain")
+    return report("rmsnorm", names, best, ok)
 }
 
 // ===== dot_q4 / dot_q8q8: quantized dots, repeatable (no mutation). References run in f64 on the
@@ -942,7 +956,7 @@ def bench_dot_q4() : string {
     if (sink == 12345.678f) {
         print("")   // keep sink live
     }
-    return report("dot_q4", names, best, ok, "vec4_u4")
+    return report("dot_q4", names, best, ok)
 }
 
 def bench_dot_q8q8() : string {
@@ -1009,7 +1023,7 @@ def bench_dot_q8q8() : string {
     if (sink == 12345.678f) {
         print("")   // keep sink live
     }
-    return report("dot_q8q8", names, best, ok, "vec16")
+    return report("dot_q8q8", names, best, ok)
 }
 
 // ===== q8_0 KV-codec kernels: dot_q8kv / dot_q8q8kv / axpy_q8kv / cvt_q8kv_to_f32 /
@@ -1173,7 +1187,7 @@ def bench_dot_q8q8kv() : string {
     if (sink == 12345.678f) {
         print("")   // keep sink live
     }
-    return report("dot_q8q8kv", names, best, ok, "vec16")
+    return report("dot_q8q8kv", names, best, ok)
 }
 
 def bench_axpy_q8kv() : string {
@@ -1363,7 +1377,7 @@ def bench_quantize_q8kv_row() : string {
         sink += int(d[0])
     }
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8kv_row", names, best, ok, "plain")
+    return report("quantize_q8kv_row", names, best, ok)
 }
 
 // ===== dot_mx4q8: native-MXFP4 weight planes (deterministic nibbles + E8M0 bytes) vs Q8 activation.
@@ -1445,7 +1459,7 @@ def bench_dot_mx4q8() : string {
     if (sink == 12345.678f) {
         print("")   // keep sink live
     }
-    return report("dot_mx4q8", names, best, ok, "u2")
+    return report("dot_mx4q8", names, best, ok)
 }
 
 // ===== quantize_q8_0_into_ptr: EXACT gate — every variant must produce byte-identical quants and
@@ -1516,7 +1530,7 @@ def bench_quantize() : string {
         sink += sdst[0]
     }
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8_0_into_ptr", names, best, ok, "plain")
+    return report("quantize_q8_0_into_ptr", names, best, ok)
 }
 
 // quantize + per-16 block sums (the K-quant activation pass): quants/scales must be byte-identical
@@ -1602,7 +1616,7 @@ def bench_quantize_bs() : string {
         sink += sdst[0]
     }
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8_0_bs_into_ptr", names, best, ok, "plain")
+    return report("quantize_q8_0_bs_into_ptr", names, best, ok)
 }
 
 // ===== rope_scaled_neox_tab: in-place rotation, norm-preserving — timing runs without reset.
@@ -1767,7 +1781,7 @@ def bench_gemm_tile() : string {
         sink += c[0]
     }
     tune_detail("  checksum {sink}\n")
-    return report("gemm_f32_uk_4x16", names, best, ok, "u2")
+    return report("gemm_f32_uk_4x16", names, best, ok)
 }
 
 // ===== dot_q8q8_laneq4x4: arm64+JIT only (the repack backend must be registered so the pin lands
@@ -1877,7 +1891,7 @@ def bench_laneq4x4() : string {
         sink += y[0]
     }
     tune_detail("  checksum {sink}\n")
-    return report("dot_q8q8_laneq4x4", names, best, ok, "u2")
+    return report("dot_q8q8_laneq4x4", names, best, ok)
 }
 
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto

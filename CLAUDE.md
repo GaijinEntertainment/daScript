@@ -304,7 +304,7 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 - **`where` and `shared` are reserved words too** — `where` is the comprehension filter keyword and
   `shared` the module modifier; both are a syntax error as a variable name (`let where = ...`,
   `let shared = ...`). Rename (`sink_pos`, `shared_node`); hit while writing PERF026-028
-- **`label`, `expect`, and `pass` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS` — `pass` is the no-op statement) — using any as a parameter/variable name is a syntax error; rename (`tag`, `want`, `cpass`)
+- **`label`, `expect`, `pass`, and `explicit` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS`/`DAS_EXPLICIT` — `pass` is the no-op statement, `explicit` the generic-parameter modifier you see in `array<T> explicit` signatures) — using any as a parameter/variable name is a syntax error; rename (`tag`, `want`, `cpass`, `declared`)
 - **`range`/`urange`/`range64`/`urange64` are lexer TYPE tokens** (`DAS_TRANGE` etc., like `int`) — unusable as struct-field, parameter, or annotation-argument names (`@range = ...` is a syntax error); the grammar whitelists them back to a plain name only in call position, which is why `range(10)` works. Rename (`rng`, `span`); grammar-verified 2026-07-23
 - **Literal `{`/`}` in string literals must be escaped `\{`/`\}`** — unescaped `{...}` is interpolation. Bites when embedding shader/C source as inline strings. String literals may span multiple lines (raw newlines are legal); probe-verified 2026-07-11
 - String builder requires `unsafe` or `options persistent_heap` if returned

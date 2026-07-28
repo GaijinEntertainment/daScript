@@ -199,6 +199,45 @@ def private emit_registry(var mod : Module?; tmpl : FunctionPtr; grid : array<Tu
     return true
 }
 
+// Emit `dasllama_tuned_fallbacks() : table<string; string>` from the bank — the harness reads a
+// kernel's shipped default from here instead of restating it as a literal that a per-ISA chain
+// would silently outdate.
+def private emit_fallback_registry(var mod : Module?; var errors : das_string) : bool {
+    var body : array<ExpressionPtr>
+    body |> reserve(length(g_fallbacks) + 2)
+    body |> push <| qmacro_expr() {
+        var result : table<string; string>
+    }
+    for (k, v in keys(g_fallbacks), values(g_fallbacks)) {
+        body |> push <| qmacro_expr() {
+            result[$v(k)] = $v(v)
+        }
+    }
+    body |> push <| qmacro_expr() {
+        return <- result
+    }
+    var fn = qmacro_function("dasllama_tuned_fallbacks") $() : table<string; string> {
+        $b(body)
+    }
+    fn.flags.generated = true
+    if (!(mod |> add_function(fn))) {
+        errors := "dasllama_fallbacks: failed to add dasllama_tuned_fallbacks"
+        return false
+    }
+    return true
+}
+
+//! `[dasllama_fallbacks]` on any (dummy) struct emits `dasllama_tuned_fallbacks()`, mapping every
+//! `[tuned]` kernel to the fallback perm it resolved to ON THIS BOX. Declare it AFTER the requires
+//! that pull in the kernels, so every `[tuned]` apply has run by the time this one does.
+[structure_macro(name="dasllama_fallbacks")]
+class private FallbacksMacro : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup;
+                       args : AnnotationArgumentList; var errors : das_string) : bool {
+        return emit_fallback_registry(compiling_module(), errors)
+    }
+}
+
 //! `[dasllama_grid(src="dot_template")]` on any (dummy) struct emits the full grid of
 //! `<src>__<suffix>` variant clones (cross-module) plus a `<src>_variants()` fn-ptr registry
 //! the profiler harness benches. Replaces hand-written per-perm `[tuned]` stubs + `variants()`.
@@ -255,9 +294,20 @@ def private config_perm_for(fname : string) : string {
     return tune_manifest_get(fname)
 }
 
-// Perm precedence: explicit `perm=` pin > app sidecar's "kernels" entry > `fallback=`
-// (kernel's own hand hints) > DEFAULT_PERM (bit-identical fallback when no sidecar exists).
-// (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
+// Every [tuned] kernel's shipped fallback AS RESOLVED HERE — a `;`-chain picks per ISA, so this
+// is box-specific and cannot be restated as a literal anywhere else. [dasllama_fallbacks] emits it.
+var private g_fallbacks : table<string; string>
+
+def private fallback_perm(args : AnnotationArgumentList) : string {
+    let dv = find_arg(args, "fallback")
+    if (dv is tString) {
+        // ';'-chain of `suffix` or `suffix:requires` — one annotation, a per-ISA default
+        let picked = tune_pick_fallback(dv as tString)
+        if (!empty(picked)) return picked
+    }
+    return DEFAULT_PERM
+}
+
 def private report_perm(fname, perm, source : string) : string {
     if (tune_verbosity() == "verbose") {
         print("dasllama_tune: {fname} <- {perm} ({source})\n")
@@ -265,22 +315,20 @@ def private report_perm(fname, perm, source : string) : string {
     return perm
 }
 
+// Precedence: `perm=` pin > sidecar "kernels" entry > the fallback chain > DEFAULT_PERM.
+// (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
+    let fname = "{func.name}"
+    let fb = fallback_perm(args)
+    g_fallbacks[fname] = fb
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
-    let cfg = config_perm_for("{func.name}")
+    let cfg = config_perm_for(fname)
     if (!empty(cfg)) {
-        return report_perm("{func.name}", cfg, box_profile_path())
+        return report_perm(fname, cfg, box_profile_path())
     }
-    let dv = find_arg(args, "fallback")
-    if (dv is tString) {
-        // ';'-chain of `suffix` or `suffix:requires` — one annotation, a per-ISA default
-        let picked = tune_pick_fallback(dv as tString)
-        if (!empty(picked)) {
-            return report_perm("{func.name}", picked, "fallback")
-        }
-    }
-    return report_perm("{func.name}", DEFAULT_PERM, "default")
+    let declared = find_arg(args, "fallback") is tString
+    return report_perm(fname, fb, declared ? "fallback" : "default")
 }
 
 // Template lives in the compiling module for production `[tuned]`; the profiler harness

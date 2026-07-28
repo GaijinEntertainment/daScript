@@ -60,6 +60,15 @@ loop-hint grid + the `"runtime"` knob snapshot), both upserting the one env-poin
 is what `screening_keep` already computes), while `gen_tune_probe` is a flat best-of-N and only
 drops 6 → 3. Its confirm pass is deliberately NOT cut — a correctness gate, not a budget.
 The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
+
+**The shipped fallback has ONE source.** `[tuned]` banks each kernel's resolved fallback and
+`[dasllama_fallbacks]` (a dummy struct in `tune_kernels.das`, declared after the requires that
+pull the kernels in) emits `dasllama_tuned_fallbacks() : table<string;string>` from that bank.
+`report()` looks the baseline up there rather than taking a literal — which matters because the
+baseline is not cosmetic: a sub-0.5% win reverts to it, and that decides what lands in the
+sidecar. A per-ISA chain resolves per box, so a literal could not have followed it. The bank
+survives the module hop because it is read by a macro in the SAME macro module (`dasllama_tune`);
+the cross-macro-module trap still applies to anything else.
 `tune_kernels` records explicit shipped-fallback entries for kernels it doesn't sweep yet
 (dot_bf16, add_scale_inplace, the tq4 codec four, dot_q8q8_f16s) — a missing demanded key
 would re-tune every start. Adding a `[tuned]` kernel ⇒ add its key to tune_kernels' winners
