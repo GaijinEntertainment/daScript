@@ -13,6 +13,8 @@ require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; ST
 require dasllama/dasllama_common
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
+require dasllama/dasllama_config   // DlimConfiguration + dlim_identity — the identity formatter
+require math
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
 // Model dumped once — planes POST-repack, page-aligned — then mapped back with zero O(model)
@@ -31,7 +33,7 @@ require dasllama/dasllama_math   // active_kernel_backend — half the image ide
 // config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
 // image that silently represents a different model; only this version catches it. Mismatch
 // regenerates from the gguf, never migrates.
-let IMAGE_VERSION = 6   // v6: glm4moe NextN heads now load (blk.n_layers + its qkv biases)
+let IMAGE_VERSION = 7   // v7: identity string + DlimConfiguration JSON ride the meta head (readable declines; the .dlim-arc format changes batch into this one bump)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -48,16 +50,11 @@ struct ImgSection {
     bytes : uint64
 }
 
-// the box + knob identity an image is valid for; folded into filename AND header. Must be computed
-// AFTER the same backend select the gguf loader runs at repack time (entry-time default differs).
-// `tag` distinguishes image kinds sharing one source path (e.g. "tower-f32" vs "tower-q8").
+// the box + knob identity an image is valid for; folded into filename AND header. A PURE
+// formatter of DlimConfiguration — the backend-select side effect lives in the config's cpu
+// source, so callers need no ordering ritual. `tag` distinguishes kinds sharing one source path.
 def image_identity(tag : string = "") : string {
-    select_matmul_backend_for_load()
-    return ("v{IMAGE_VERSION}|{active_kernel_backend()}|{get_wscale_f16() ? "s16" : "s32"}"
-        + "|q8 mr{active_q8_layout_mr()} b{active_q8_wbias()} g{active_q8_kgroup()}"
-        + "|kq {active_kq_layout_mr(4)}/{active_kq_layout_mr(5)}/{active_kq_layout_mr(6)}/{active_kq_layout_mr(40)}"
-        + "|q51 mr{active_q51_layout_mr()}"
-        + (tag != "" ? "|{tag}" : ""))
+    return dlim_identity(dlim_config_current(), IMAGE_VERSION, tag)
 }
 
 // the image path for (gguf, current identity) — knob combos coexist as separate files
@@ -361,7 +358,7 @@ def private serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// the tripwire: serialize_image_meta(Model) covers 64 fields; blocks + image_map +
+// the tripwire: serialize_image_meta(Model) covers 65 fields; blocks + image_map +
 // image_bytes are deliberate skips. A new non-array Model field trips this until BOTH agree.
 let IMAGE_META_FIELDS = 65 + 3
 
@@ -425,6 +422,9 @@ def save_image(var t; path : string; tag : string = "") : bool {
     // per-writer tmp name: concurrent savers (parallel test workers on one cache miss) must
     // not clobber each other's half-written file; last atomic rename wins with same content
     let tmp_path = "{path}.{ref_time_ticks()}.tmp"
+    // one config snapshot serves the meta embed AND the header hash — they must agree
+    let dcfg = dlim_config_current()
+    let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
     var fend = 0ul
     var meta_off = 0ul
     var meta_bytes = 0ul
@@ -473,9 +473,15 @@ def save_image(var t; path : string; tag : string = "") : bool {
         let direct_mb = int64(unsafe(dwrite_stat(w.h, 2))) >> 20l
         let bounce_mb = int64(unsafe(dwrite_stat(w.h, 3))) >> 20l
         to_log(LOG_INFO, "dasLLAMA image:   writer split: stage {copy_ms}ms ({bounce_mb} MB bounced), syscall {write_ms}ms ({direct_mb} MB direct), unaccounted {planes_ms - copy_ms - write_ms}ms\n")
-        // meta = [sections][the walk's scalar stream], one blob at the tail
+        // meta = [identity string][config JSON][sections][the walk's scalar stream], one blob at
+        // the tail — the two strings lead so a mismatched load can print WHAT the image was
+        // baked for without parsing anything else
         var smeta <- new MemSerializer()
         var sarch = Archive(reading = false, stream = smeta)
+        var m_ident = ident
+        var m_cfg = dlim_config_json(dcfg)
+        sarch |> serialize(m_ident)
+        sarch |> serialize(m_cfg)
         sarch |> serialize(sections)
         var meta_blob <- smeta->extractData()
         meta_blob |> push_from(scalar_blob)
@@ -511,7 +517,7 @@ def save_image(var t; path : string; tag : string = "") : bool {
         store_u64(hdr, 16, meta_off)
         store_u64(hdr, 24, meta_bytes)
         store_u64(hdr, 32, fend)
-        store_u64(hdr, 40, hash(image_identity(tag)))
+        store_u64(hdr, 40, hash(ident))
         ok = false
         fopen(tmp_path, "r+b") $(hf) {
             if (hf != null) {
@@ -608,11 +614,12 @@ def load_image(path : string; var t; tag : string = "") : bool {
         return false
     }
     var bp = unsafe(reinterpret<uint8 const?>(base))
-    if ((read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)) ||
-            (read_u32(bp, 8l) != uint(IMAGE_PAGE) || read_u64(bp, 40l) != hash(image_identity(tag)))) {
-        // every decline is loud (short of the file simply not existing) — a silently
-        // regenerating cache is undebuggable
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)} identity {read_u64(bp, 40l)} (want {hash(image_identity(tag))} = '{image_identity(tag)}')\n")
+    if (read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)
+            || read_u32(bp, 8l) != uint(IMAGE_PAGE)) {
+        // every decline is loud (short of a missing file) — a silently regenerating cache is
+        // undebuggable. A wrong version means the meta layout is unknowable, so this arm
+        // cannot read the baked identity string the identity-mismatch arm below prints.
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)}\n")
         unsafe(fmap_close(base, msize))
         return false
     }
@@ -628,6 +635,27 @@ def load_image(path : string; var t; tag : string = "") : bool {
         unsafe(fmap_close(base, msize))
         return false
     }
+    let want_ident = image_identity(tag)
+    if (read_u64(bp, 40l) != hash(want_ident)) {
+        // same version ⇒ the meta head is readable: say WHAT the image was baked for, not
+        // just that a 64-bit hash missed (bounds were validated above)
+        var head : array<uint8>
+        head |> resize(int(min(meta_bytes, 65536ul)))
+        unsafe {
+            memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
+        }
+        var hmeta <- new MemSerializer(head)
+        var harch = Archive(reading = true, stream = hmeta)
+        var baked_ident = ""
+        harch |> serialize(baked_ident)
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — baked for '{hmeta->OK() ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
+        delete head
+        unsafe {
+            delete hmeta
+        }
+        unsafe(fmap_close(base, msize))
+        return false
+    }
     // the meta blob is the ONE copied+parsed piece (small); planes stay lazy in the mapping
     var meta_blob : array<uint8>
     meta_blob |> resize(int(meta_bytes))
@@ -636,6 +664,10 @@ def load_image(path : string; var t; tag : string = "") : bool {
     }
     var meta <- new MemSerializer(meta_blob)
     var rarch = Archive(reading = true, stream = meta)
+    var baked_ident = ""
+    var baked_cfg = ""
+    rarch |> serialize(baked_ident)
+    rarch |> serialize(baked_cfg)
     var sections : array<ImgSection>
     rarch |> serialize(sections)
     // the header count must agree with the meta blob's own section list — a disagreement

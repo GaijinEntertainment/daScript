@@ -17,6 +17,7 @@ require daslib/strings_boost
 let SCAN_ROOTS = [
     "modules/dasLLAMA",
     "utils/dasllama-server",
+    "utils/dasllama-convert",
     "examples/dasLLAMA",
     "tutorials/dasLLAMA"
 ]

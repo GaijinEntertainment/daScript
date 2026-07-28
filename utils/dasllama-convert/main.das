@@ -10,6 +10,11 @@ options stack = 65536   // dasLLAMA program-root convention (options stack does 
 // this ahead of time and the first real load maps instead of converting. `--flavor` picks which
 // image a config with several flavors emits (planar CPU, metal blob, vulkan-baked).
 //
+// The config is EXPLICIT (DlimConfiguration): `--dump-config` prints/writes this box's config as
+// JSON; `--config x.json` bakes against a supplied one — applied knob-by-knob, then verified
+// fail-closed against the resulting identity, so a knob that did not take is an error, never a
+// silently different image.
+//
 // Conversion is I/O bound at both ends: the transcode is ~5% of wall time, the rest is reading the
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
 // without a profiler.
@@ -18,6 +23,7 @@ require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires ea
 require dasllama/dasllama_math          // apply_box_profile_runtime + select_matmul_backend_for_load
 require dasllama/dasllama_image         // the .dlim rail itself
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
+require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -50,6 +56,12 @@ struct ConvertArgs {
     @clarg_short = "f"
     @clarg_doc = "Which image flavor to emit (default: planar)"
     flavor : Flavor = Flavor.planar
+
+    @clarg_doc = "Path to a DlimConfiguration JSON (from --dump-config on the target box) to bake against"
+    config : string
+
+    @clarg_doc = "Print this box's DlimConfiguration JSON (or write it to -o) and exit"
+    dump_config : bool
 
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
@@ -94,6 +106,21 @@ def private sweep_stale_tmp(gguf : string) : int {
     return n
 }
 
+// q is a REFERENCE — a plain `var q : QuantMode` is a workhorse-type copy and the caller
+// would never see the write (LINT003 caught exactly that)
+def private quant_from_string(s : string; var q : QuantMode&) : bool {
+    if (s == "fp32") {
+        q = QuantMode.fp32
+    } elif (s == "q8") {
+        q = QuantMode.q8
+    } elif (s == "q4_0") {
+        q = QuantMode.q4_0
+    } else {
+        return false
+    }
+    return true
+}
+
 def private flavor_tag(f : Flavor) : string {
     if (f == Flavor.metal) {
         return METAL_IMAGE_TAG
@@ -121,6 +148,32 @@ def main() : int {
         print_help(get_command_info(type<ConvertArgs>), "dasllama-convert")
         return 0
     }
+    if (cfg.dump_config) {
+        // same ordering the load path uses: the sidecar's backend pin precedes the identity
+        apply_box_profile_runtime()
+        let dc = dlim_config_current("{cfg.quant}")
+        let js = dlim_config_json(dc)
+        var rc0 = 0
+        if (cfg.out != "") {
+            var wrote = false
+            fopen(cfg.out, "wb") $(f) {
+                if (f != null) {
+                    f |> fwrite(js)
+                    wrote = true
+                }
+            }
+            if (wrote) {
+                to_log(LOG_INFO, "dasllama-convert: config -> {cfg.out}\n")
+            } else {
+                to_log(LOG_ERROR, "dasllama-convert: cannot write '{cfg.out}'\n")
+                rc0 = 1
+            }
+        } else {
+            print("{js}\n")
+        }
+        to_log(LOG_INFO, "dasllama-convert: identity {dlim_identity(dc, IMAGE_VERSION)}\n")
+        return rc0
+    }
     if (cfg.model == "") {
         to_log(LOG_ERROR, "dasllama-convert: --model is required\n\n")
         print_help(get_command_info(type<ConvertArgs>), "dasllama-convert")
@@ -136,6 +189,42 @@ def main() : int {
     }
     // the backend pin must precede the identity: image_identity names the active kernel backend
     apply_box_profile_runtime()
+    var qm = cfg.quant
+    if (cfg.config != "") {
+        var text = ""
+        fopen(cfg.config, "rb") $(f) {
+            if (f != null) {
+                text = fread(f)
+            }
+        }
+        if (text == "") {
+            to_log(LOG_ERROR, "dasllama-convert: cannot read --config '{cfg.config}'\n")
+            return 2
+        }
+        var want = DlimConfiguration()
+        if (!dlim_config_from_json(text, want)) {
+            to_log(LOG_ERROR, "dasllama-convert: --config '{cfg.config}' is not a DlimConfiguration JSON\n")
+            return 2
+        }
+        if (!quant_from_string(want.quant, qm)) {
+            to_log(LOG_ERROR, "dasllama-convert: --config quant '{want.quant}' is not a QuantMode\n")
+            return 2
+        }
+        // apply what a host can take, then verify FAIL-CLOSED: any knob that did not take
+        // (unavailable backend, missing s16 twins) shows up as an identity mismatch below
+        set_wscale_f16(want.cpu.wscale_f16)
+        set_kquant_native(want.cpu.kquant_native)
+        set_kq_q40_native(want.cpu.kq_q40_native)
+        set_kq_q50_native(want.cpu.kq_q50_native)
+        set_kq_q51_native(want.cpu.kq_q51_native)
+        pin_kernel_backend(want.cpu.backend)
+        let want_ident = dlim_identity(want, IMAGE_VERSION)
+        let have_ident = dlim_identity(dlim_config_current(want.quant), IMAGE_VERSION)
+        if (have_ident != want_ident) {
+            to_log(LOG_ERROR, "dasllama-convert: --config could not be fully applied on this host (cross-box backend targeting lands later in the arc):\n  want {want_ident}\n  have {have_ident}\n")
+            return 2
+        }
+    }
     let tag = flavor_tag(cfg.flavor)
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
     to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
@@ -154,7 +243,7 @@ def main() : int {
     let ts = ref_time_ticks()
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
-        var m <- load_model_(cfg.model, cfg.quant)
+        var m <- load_model_(cfg.model, qm)
         let ts_load = ref_time_ticks()
         if (cfg.flavor == Flavor.metal) {
             if (!metal_model_servable(m) || !convert_model_to_metal_blob(m)) {

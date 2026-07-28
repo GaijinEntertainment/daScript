@@ -5,6 +5,7 @@ module dasllama_common shared public
 
 require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -1793,6 +1794,42 @@ def public get_kq_q51_native() : bool {
     return g_kq_q51_native
 }
 
+// ===== DlimConfiguration sources (dasllama_config) =====
+
+def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
+    // the one sanctioned backend-select side effect — the identity itself is a pure formatter
+    select_matmul_backend_for_load()
+    c.backend = active_kernel_backend()
+    c.q8_mr = active_q8_layout_mr()
+    c.q8_wbias = active_q8_wbias()
+    c.q8_kgroup = active_q8_kgroup()
+    c.kq_mr4 = active_kq_layout_mr(4)
+    c.kq_mr5 = active_kq_layout_mr(5)
+    c.kq_mr6 = active_kq_layout_mr(6)
+    c.kq_mr40 = active_kq_layout_mr(40)
+    c.q51_mr = active_q51_layout_mr()
+    // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
+    c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
+    c.kquant_native = g_kquant_native
+    c.kq_q40_native = g_kq_q40_native
+    c.kq_q50_native = g_kq_q50_native
+    c.kq_q51_native = g_kq_q51_native
+}
+
+def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {
+    if (get_metal_mode() == MetalMode.off || !has_decode_override("metal")) {
+        return false
+    }
+    c.mode = "{get_metal_mode()}"
+    return true
+}
+
+[init]
+def dlim_config_sources_register() {
+    set_dlim_cpu_source(@@dlim_cpu_source_impl)
+    set_dlim_metal_source(@@dlim_metal_source_impl)
+}
+
 def private count_fmt(a : array<KqFmt>; f : KqFmt) : int {
     var n = 0
     for (x in a) {
@@ -2764,7 +2801,7 @@ def moe_gpu_upload_resident(t : Model) {
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
     let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
-    if (cls_servable && env_flag("DASLLAMA_GPU_CLS", true)
+    if (cls_servable && gpu_want_cls_upload()
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
         set_moe_gpu_cls_off(t.wcls_off)
     }

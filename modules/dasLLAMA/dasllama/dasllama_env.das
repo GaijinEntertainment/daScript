@@ -372,6 +372,8 @@ def private reg_test(var o : array<EnvKnob>) {
       "Directory of audio corpus files for the transcription tests.")
     k(o, "TMPDIR", EnvKind.path, EnvArea.test, "/tmp",
       "Scratch directory for test artifacts; set by the OS on macOS.")
+    k(o, "TEMP", EnvKind.path, EnvArea.test, "",
+      "Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir).")
 }
 
 def private reg_example(var o : array<EnvKnob>) {

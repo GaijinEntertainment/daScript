@@ -6,6 +6,7 @@ module dasllama_math_vulkan shared public
 require dasllama/dasllama_math
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb + the q8/kq plane consts — the stride source
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_config  // DlimConfiguration — this module registers the vulkan source
 require dasllama/dasllama_par
 require dasllama/dasllama_vulkan_lens
 require vulkan
@@ -4302,6 +4303,85 @@ def private nonowning_buf(h : uint64) : Buffer {
     return b
 }
 
+// The coopmat-mode ladder, shared by vk_moe_init and the DlimConfiguration source — one
+// resolver, so the config's recorded mode can never drift from the mode the device runs.
+def private resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
+    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
+    var cmode = has_cm ? 3 : 0
+    if (has_cm) {
+        let mode = env_str("DASLLAMA_COOPMAT", "")
+        if (mode == "sdot4") {
+            cmode = 0
+        } elif (mode == "f16") {
+            cmode = 1
+        } elif (mode == "int8") {
+            cmode = 2
+        } elif (mode == "mm") {
+            cmode = 3
+        } elif (mode == "cm2" && has_cm2) {
+            cmode = 4
+        }
+    }
+    if (g_coopmat_mode_force >= 0) {
+        cmode = has_cm ? g_coopmat_mode_force : 0
+    }
+    if (cmode == 4 && !has_cm2) {
+        cmode = 3   // forced/requested cm2 without the extension: mm
+    }
+    return cmode
+}
+
+struct private VkHeapInfo {
+    budget : int64   // largest device-local heap's current budget (0 = no VK_EXT_memory_budget)
+    used : int64
+    size : int64
+}
+
+def private query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
+    var r = VkHeapInfo()
+    if (!device_extension_available(phys, "VK_EXT_memory_budget")) {
+        return r
+    }
+    var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
+    var mp2 = VkPhysicalDeviceMemoryProperties2()
+    unsafe {
+        mp2.pNext = addr<void?>(mb)
+    }
+    vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
+    var best = -1
+    for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
+        if (mp2.memoryProperties.memoryHeaps[i].flags.device_local
+                && (best < 0 || mb.heapBudget[i] > mb.heapBudget[best])) {
+            best = i
+        }
+    }
+    if (best >= 0 && mb.heapBudget[best] > 0ul) {
+        r.budget = int64(mb.heapBudget[best])
+        r.used = int64(mb.heapUsage[best])
+        r.size = int64(mp2.memoryProperties.memoryHeaps[best].size)
+    }
+    return r
+}
+
+// The pre-carve weight cap, shared by vk_moe_init and the DlimConfiguration source. Env wins
+// outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); auto rounds DOWN to 256 MB so
+// the recorded config (hence the flavor identity) does not churn with heap-budget wiggle.
+def private resolve_weight_cap(heap : VkHeapInfo) : int64 {
+    let vram_mb = gpu_want_vram_mb()
+    if (vram_mb > 0l) {
+        return vram_mb * 1_000_000l
+    }
+    if (has_env_variable("DASLLAMA_GPU_VRAM_MB")) {
+        return WEIGHT_CAP
+    }
+    var cap = WEIGHT_CAP
+    if (heap.budget > 0l) {
+        cap = clamp(heap.budget - VRAM_RESERVE, 0l, cap)
+        cap = cap / 256_000_000l * 256_000_000l
+    }
+    return cap
+}
+
 def private vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -4327,28 +4407,7 @@ def private vk_moe_init : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
-    g_gpu.coopmat_mode = g_gpu.has_coopmat ? 3 : 0
-    if (g_gpu.has_coopmat) {
-        let mode = env_str("DASLLAMA_COOPMAT", "")
-        if (mode == "sdot4") {
-            g_gpu.coopmat_mode = 0
-        } elif (mode == "f16") {
-            g_gpu.coopmat_mode = 1
-        } elif (mode == "int8") {
-            g_gpu.coopmat_mode = 2
-        } elif (mode == "mm") {
-            g_gpu.coopmat_mode = 3
-        } elif (mode == "cm2" && g_gpu.has_coopmat2) {
-            g_gpu.coopmat_mode = 4
-        }
-    }
-    if (g_coopmat_mode_force >= 0) {
-        g_gpu.coopmat_mode = g_gpu.has_coopmat ? g_coopmat_mode_force : 0
-    }
-    if (g_gpu.coopmat_mode == 4 && !g_gpu.has_coopmat2) {
-        g_gpu.coopmat_mode = 3   // forced/requested cm2 without the extension: mm
-    }
+    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
     if (g_gpu.has_coopmat && env_flag("DASLLAMA_VK_XFERQ", true)
@@ -4405,38 +4464,17 @@ def private vk_moe_init : bool {
         return false
     }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
-    // env wins outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); else live budget - reserve
-    g_gpu.weight_budget = WEIGHT_CAP
-    let vram_mb = gpu_want_vram_mb()
-    let vram_override = vram_mb > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
-    if (vram_mb > 0l) {
-        g_gpu.weight_budget = vram_mb * 1_000_000l
-    }
-    if (device_extension_available(g_gpu.phys, "VK_EXT_memory_budget")) {
-        var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
-        var mp2 = VkPhysicalDeviceMemoryProperties2()
-        unsafe {
-            mp2.pNext = addr<void?>(mb)
+    // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
+    let heap = query_heap_info(g_gpu.phys)
+    g_gpu.weight_budget = resolve_weight_cap(heap)
+    if (heap.budget > 0l) {
+        let vram_override = gpu_want_vram_mb() > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
+        // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
+        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - 2_147_483_648l)
+        if (vram_override && g_gpu.weight_budget > cliff) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
         }
-        vkGetPhysicalDeviceMemoryProperties2(g_gpu.phys, mp2)
-        var best = -1
-        for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
-            if (mp2.memoryProperties.memoryHeaps[i].flags.device_local
-                    && (best < 0 || mb.heapBudget[i] > mb.heapBudget[best])) {
-                best = i
-            }
-        }
-        if (best >= 0 && mb.heapBudget[best] > 0ul) {
-            let safe_cap = max(int64(mb.heapBudget[best]) - VRAM_RESERVE, 0l)
-            // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
-            let cliff = min(safe_cap, int64(mp2.memoryProperties.memoryHeaps[best].size) - 2_147_483_648l)
-            if (!vram_override) {
-                g_gpu.weight_budget = min(safe_cap, g_gpu.weight_budget)
-            } elif (g_gpu.weight_budget > cliff) {
-                to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
-            }
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {int64(mb.heapBudget[best]) / 1000000l} MB (used {int64(mb.heapUsage[best]) / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
-        }
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
     // stream-slot carve: exact loader-reported need, else the legacy constant (direct-upload paths)
     if (gpu_want_moe_stream() != 0l) {
@@ -8886,18 +8924,54 @@ def vulkan_moe_gpu_arm : bool {
     return true
 }
 
-// the vulkan flavor's config identity. ENV-OR-AUTO knobs only — resolving them (vk_moe_init)
-// would carve the stream reserve BEFORE the loader reports the model's slot need (518ae164a);
-// "auto" resolves deterministically per box and the image is local, so the identity is stable.
-def private vk_bake_tag : string {
+// Fill the caps-derived half of the vulkan config section from a physical device. Phys-level
+// queries only — vk_moe_init stays untouched, so the stream-reserve carve still happens AFTER
+// the loader reports the model's slot need (518ae164a).
+def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
+    let has_cm = cooperative_matrix_supported(phys)
+    let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
+    v.coopmat_mode = resolve_coopmat_mode(has_cm, has_cm2)
+    v.expert_q8n = v.coopmat_mode == 4
+    v.subgroup_size = int(subgroup_properties(phys).subgroupSize)
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    v.max_storage_range = int64(props.limits.maxStorageBufferRange)
+    v.vram_mb = resolve_weight_cap(query_heap_info(phys)) / 1_000_000l
+}
+
+// The DlimConfiguration vulkan source — RESOLVED values (the old tag folded raw env strings,
+// so "auto" hid device-derived byte differences and a moving heap budget).
+def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
     if (!vulkan_moe_gpu_arm()) {
+        return false
+    }
+    v.moe_layers = gpu_want_moe_layers()
+    v.moe_stream = gpu_want_moe_stream()
+    v.dn = gpu_want_dn()
+    v.attn = gpu_want_attn()
+    v.dnd = gpu_want_dnd()
+    v.shexp = gpu_want_shexp()
+    v.qkv = gpu_want_qkv()
+    v.cls = gpu_want_cls_upload()   // the WALK's gate, not the arm-intent (they had split defaults)
+    v.dense = gpu_want_dense()
+    v.dense_attn = gpu_want_dense_attn()
+    v.dense_shexp = gpu_want_dense_shexp()
+    if (g_gpu != null) {
+        vk_caps_fill(g_gpu.phys, v)
+    } else {
+        var inscope instance <- create_instance("dasLLAMA dlim config", make_api_version(1u, 3u, 0u))
+        volkLoadInstance(boost_value_to_vk(instance))
+        vk_caps_fill(select_physical_device(instance), v)
+    }
+    return true
+}
+
+def private vk_bake_tag : string {
+    var v : DlimVulkanConfig
+    if (!vk_dlim_source(v)) {
         return ""
     }
-    let cm = env_str("DASLLAMA_COOPMAT", "auto")
-    let vb = env_str("DASLLAMA_GPU_VRAM_MB", "auto")
-    return ("m{cm} b{vb}"
-        + " l{gpu_want_moe_layers()} s{gpu_want_moe_stream()}"
-        + " r{gpu_want_dn() ? 1 : 0}{gpu_want_attn() ? 1 : 0}{gpu_want_dnd() ? 1 : 0}{gpu_want_shexp() ? 1 : 0}{gpu_want_qkv() ? 1 : 0}{gpu_want_cls() ? 1 : 0}")
+    return dlim_vulkan_tag(v)
 }
 
 [init]
@@ -8907,6 +8981,7 @@ def dasllama_math_vulkan_register() {
         needs_repack = false, priority = -1, available = @@vulkan_backend_available))
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
     set_moe_gpu_bake_tag(@@vk_bake_tag)
+    set_dlim_vulkan_source(@@vk_dlim_source)
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)

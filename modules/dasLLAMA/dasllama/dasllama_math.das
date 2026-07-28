@@ -2119,6 +2119,12 @@ def public gpu_want_qkv : bool
 def public gpu_want_cls : bool
     => env_flag("DASLLAMA_GPU_CLS", false)
 
+//! The classifier UPLOAD gate (opt-OUT, default on when the tier is armed) — distinct from
+//! [[gpu_want_cls]], the opt-IN arm signal. One definition, shared by the upload walk and the
+//! DlimConfiguration identity, so the two can never disagree on the default again.
+def public gpu_want_cls_upload : bool
+    => env_flag("DASLLAMA_GPU_CLS", true)
+
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).
 def public set_moe_gpu_arm(name : string; f : function<() : bool>) {
