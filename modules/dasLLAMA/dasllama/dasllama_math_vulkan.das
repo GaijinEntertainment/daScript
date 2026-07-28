@@ -4807,8 +4807,8 @@ def private vk_import_declined(why : string) {
 }
 
 // P2: import a 4KB-aligned mapped-file window as a transfer_src buffer (VK_EXT_external_memory_host).
-// buf == 0 = declined, the caller falls back to the pinned copy — NVIDIA/Windows refuses READ-ONLY
-// file-backed pages (anon writable imports succeed; probe-verified 2026-07-28, _vk_import_probe.das)
+// buf == 0 = declined, the caller falls back to the pinned copy. NVIDIA/Windows refuses FILE-BACKED
+// pages in BOTH protections while anon imports succeed (full 2x2: _vk_import_probe.das, 2026-07-28)
 def private make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     let hb = HostBuf()
     if (ptr == null || bytes <= 0l || !device_extension_available(g_gpu.phys, "VK_EXT_external_memory_host")) {

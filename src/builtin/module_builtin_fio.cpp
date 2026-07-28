@@ -185,6 +185,7 @@ namespace das {
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_fmap_close ( void * data, uint64_t size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -449,6 +450,33 @@ namespace das {
             return nullptr;
         }
         void * data = mmap(nullptr, size_t(st.st_size), PROT_READ, MAP_SHARED, fd, 0);
+        fclose(f);
+        if ( data == MAP_FAILED ) return nullptr;
+        *size = uint64_t(st.st_size);
+        return data;
+    }
+
+    // the writable twin: a PAGE_READWRITE / PROT_WRITE SHARED mapping — writes go back to the
+    // file through the page cache; still no commit charge (not WRITECOPY). The consumer that
+    // wanted it: device APIs that refuse to import read-only pages (VK_EXT_external_memory_host
+    // on NVIDIA/Windows). Same ownership contract as fmap_open; fmap_close unmaps either kind.
+    void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) {
+        if ( !size ) context->throw_error_at(at, "fmap_open_rw: null size out-param");
+        *size = 0;
+        if ( !name ) context->throw_error_at(at, "fmap_open_rw: null path");
+        FILE * f = das_fopen_utf8(name, "r+b");   // the writable section needs write on the handle
+        if ( !f ) return nullptr;
+        das_filestat st;
+        int fd = fileno(f);
+        if ( das_fstat64(fd, st) != 0 ) {
+            fclose(f);
+            return nullptr;
+        }
+        if ( st.st_size == 0 || uint64_t(st.st_size) != uint64_t(size_t(st.st_size)) ) {
+            fclose(f);
+            return nullptr;
+        }
+        void * data = mmap(nullptr, size_t(st.st_size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         fclose(f);
         if ( data == MAP_FAILED ) return nullptr;
         *size = uint64_t(st.st_size);
@@ -2311,6 +2339,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fmap_open)>(*this, lib, "fmap_open",
                 SideEffects::modifyExternal, "builtin_fmap_open")
                     ->args({"path","size","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_fmap_open_rw)>(*this, lib, "fmap_open_rw",
+                SideEffects::modifyExternal, "builtin_fmap_open_rw")
+                    ->args({"path","size","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_fmap_close)>(*this, lib, "fmap_close",
                 SideEffects::modifyExternal, "builtin_fmap_close")
                     ->args({"data","size","context","line"})->unsafeOperation = true;
@@ -2552,7 +2583,7 @@ namespace das {
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, off_t offset) {
+void * mmap (void* start, size_t length, int prot, int /*flags*/, int fd, off_t offset) {
     HANDLE hmap;
     void* temp;
     size_t len;
@@ -2570,11 +2601,14 @@ void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, of
     // a 73 GB gguf mapping showed up as 73 GB of private bytes on top of the model itself
     // (measured 2026-07-27: 149.9 GB private for a 78 GB image). Read-only maps charge nothing,
     // match what POSIX already does here (PROT_READ), and fault loudly on an accidental write
-    // instead of silently privatizing the page.
-    hmap = CreateFileMapping((HANDLE)_get_osfhandle(fd), 0, PAGE_READONLY, 0, 0, 0);
+    // instead of silently privatizing the page. PROT_WRITE = a real shared writable view
+    // (PAGE_READWRITE, writes go back to the file) — the fmap_open_rw path; still no commit charge.
+    DWORD page = (prot & PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY;
+    DWORD access = (prot & PROT_WRITE) ? (FILE_MAP_READ | FILE_MAP_WRITE) : FILE_MAP_READ;
+    hmap = CreateFileMapping((HANDLE)_get_osfhandle(fd), 0, page, 0, 0, 0);
     if (!hmap)
         return MAP_FAILED;
-    temp = MapViewOfFileEx(hmap, FILE_MAP_READ, h, l, length, start);
+    temp = MapViewOfFileEx(hmap, access, h, l, length, start);
     if (!CloseHandle(hmap))
         fprintf(stderr, "unable to close file mapping handle\n");
     return temp ? temp : MAP_FAILED;

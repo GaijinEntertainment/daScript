@@ -88,6 +88,7 @@ namespace das {
     DAS_API vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args );
     DAS_API void builtin_map_file ( const FILE* _f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context*, LineInfoArg * at );
     DAS_API void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at );
+    DAS_API void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at );
     DAS_API void builtin_fmap_close ( void * data, uint64_t size, Context * context, LineInfoArg * at );
     DAS_API void * builtin_dwrite_open ( const char * name, uint64_t total_bytes, uint64_t band_bytes, Context * context, LineInfoArg * at );
     DAS_API bool builtin_dwrite_append ( void * h, void * data, uint64_t bytes, Context * context, LineInfoArg * at );
