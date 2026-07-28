@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dasLLAMA — LLM inference benchmarks · daslang</title>
-    <meta name="description" content="dasLLAMA — an LLM + speech-to-text inference engine written in daslang and JIT-compiled. Measured benchmarks vs llama.cpp on CPU and Metal, plus whisper.cpp, parakeet, ONNX-Runtime and NeMo, across Apple M1 Max, M4 Pro and M3 Air." />
+    <meta name="description" content="dasLLAMA — an LLM + speech-to-text inference engine written in daslang and JIT-compiled. LLM benchmarks vs llama.cpp on CPU and Metal across Apple M1 Max, M4 Pro and M3 Air; speech-to-text vs whisper.cpp, parakeet, ONNX-Runtime and NeMo on M1 Max and AMD Threadripper." />
     <meta name="keywords" content="daslang, dasLLAMA, llama.cpp, local LLM, LLM benchmark, Metal inference, whisper, parakeet, speech to text, ASR, omni model" />
     <link rel="canonical" href="https://daslang.io/dasllama.html" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://daslang.io/dasllama.html" />
     <meta property="og:site_name" content="daslang" />
     <meta property="og:title" content="dasLLAMA — local LLMs with audio in, faster than llama.cpp" />
-    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; audio/omni workloads run up to ~6× faster. Every number paired with its llama.cpp yardstick, methodology included." />
+    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; omni models with audio in run up to ~6× faster than llama.cpp's multimodal CLI. Every LLM number paired with its llama.cpp yardstick, methodology included." />
     <meta name="twitter:card" content="summary" />
 
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
@@ -254,9 +254,10 @@
                     dasLLAMA is an LLM + speech-to-text stack written entirely in daslang and
                     JIT-compiled — no hand-written assembly. Its auto-tuned JIT kernels consistently
                     outperform llama.cpp's hand-written universal kernels, on the CPU path and on
-                    Metal alike — and the advantage grows with batching and with audio input
-                    (Whisper, Parakeet) or omni models (Gemma, Qwen), where a CPU-only comparison
-                    against llama.cpp's audio encoders reaches ~6×.
+                    Metal alike. llama.cpp has no speech-to-text engine, so Whisper and Parakeet are
+                    measured against the dedicated ones instead — whisper.cpp, parakeet, ONNX Runtime,
+                    NeMo — and hold their own. The ~6× is omni models with audio in (Qwen3-Omni,
+                    Gemma-4), against llama.cpp's multimodal CLI on CPU.
                 </p>
                 <div class="forge-hero__ctas">
                     <a class="forge-btn-primary" href="#bench">$ view the scoreboard →</a>
