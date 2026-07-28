@@ -7006,6 +7006,156 @@ var private g_pf_env_capture = true
 var private g_pf_env_ncb = 0   // 0 = unset, fall back to the layer-derived default
 
 [init]
+// ===== Metal-4 tensor twin race (the tuner's crowning section) =====
+
+struct public MetalTensorRaceResult {
+    family : string
+    winner : string   // "tensor" | "simdgroup" | "" when the family could not race
+    base_ms : double
+    twin_ms : double
+    note : string
+}
+
+def private race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
+    var b = metal_new_buffer(dev, bytes)
+    if (src != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(b), src, bytes)
+        }
+    }
+    return b
+}
+
+def private race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
+    var b = metal_new_buffer(dev, 4ul)
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(b))
+        p[0] = v
+    }
+    return b
+}
+
+// best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
+def private race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
+    var best = -1.0lf
+    var err = ""
+    for (r in range(reps + 1)) {
+        var gpu_ms = 0.0lf
+        if (!with_compute_encoder_timed(queue, err, gpu_ms) $(enc) { invoke(blk, enc) }) {
+            return -1.0lf
+        }
+        if (r > 0 && (best < 0.0lf || gpu_ms < best)) {
+            best = gpu_ms
+        }
+    }
+    return best
+}
+
+def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = "mulmm_bf16", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let m = 512
+    let kdim = 2048
+    let ndim = 1024
+    var err = ""
+    var base_pso = pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err)
+    if (base_pso == null) {
+        res.note = "base pso: {err}"
+        return res
+    }
+    var twin_pso = pipeline_from_source(dev, metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, err)
+    if (twin_pso == null) {
+        // no tensor support on this box/toolchain — the simdgroup kernel keeps the crown
+        res.winner = "simdgroup"
+        res.note = "twin pso: {err}"
+        metal_release(base_pso)
+        return res
+    }
+    var xa : array<float>
+    var wb : array<uint16>
+    xa |> resize(m * kdim)
+    wb |> resize(ndim * kdim)
+    for (i in range(m * kdim)) {
+        xa[i] = 0.25 * float(i % 17 - 8)
+    }
+    for (i in range(ndim * kdim)) {
+        wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
+    }
+    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var bwb = race_buf(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wb[0])))
+    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
+    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bk = race_uniform_u32(dev, uint(kdim))
+    var bn = race_uniform_u32(dev, uint(ndim))
+    let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
+    let tg = uint3(128u, 1u, 1u)
+    res.base_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, base_pso)
+        kn_tgmem(enc, metal_bf16_mulmm_msl_tgmem, 0)
+        kn_buffer(enc, bwb, 0ul, 0)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_base, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_dispatch(enc, grid, tg)
+    }
+    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, twin_pso)
+        kn_buffer(enc, bwb, 0ul, 0)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_twin, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_dispatch(enc, grid, tg)
+    }
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } else {
+        // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
+        var maxref = 0.0lf
+        var maxdiff = 0.0lf
+        unsafe {
+            let pb = reinterpret<float?>(metal_buffer_contents(by_base))
+            let pt = reinterpret<float?>(metal_buffer_contents(by_twin))
+            for (i in range(m * ndim)) {
+                maxref = max(maxref, abs(double(pb[i])))
+                maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
+            }
+        }
+        if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+            res.winner = "simdgroup"
+            res.note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        } else {
+            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+        }
+    }
+    metal_release(bxa)
+    metal_release(bwb)
+    metal_release(by_base)
+    metal_release(by_twin)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(base_pso)
+    metal_release(twin_pso)
+    return res
+}
+
+//! Tuner entry (the runtime.metal_tensor crown): race every tensor pso twin against its
+//! shipped simdgroup kernel on THIS box — compile + output-match to qualify, faster GPU time
+//! takes the family's crown. Empty when there is no Metal device.
+def metal_tensor_race : array<MetalTensorRaceResult> {
+    var results : array<MetalTensorRaceResult>
+    var dev = metal_create_system_default_device()
+    if (dev == null) {
+        return <- results
+    }
+    var queue = metal_new_command_queue(dev)
+    results |> emplace(race_mulmm_bf16(dev, queue))
+    metal_release(queue)
+    metal_release(dev)
+    return <- results
+}
+
 def dasllama_metal_prefill_register() {
     // registered but dormant: only select_prefill_override("metal") (env rail
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call

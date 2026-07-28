@@ -21,6 +21,7 @@ require dasllama/dasllama_quant  // quantize templates + the Q4/Q8 reference qua
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
+require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — metal_tensor_race (Apple static_if half)
 require tuner_cli               // --tune-fast, shared with the other half
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
@@ -28,6 +29,7 @@ require math                     // mad (referenced by the cloned template bodie
 require daslib/json
 require daslib/json_boost
 require daslib/fio
+require daslib/strings_boost   // join — the metal_tensor crown list
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
 // perm it falls back to ON THIS BOX, so report() never restates one as a literal.
@@ -2044,6 +2046,28 @@ def main {
         print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran — the progress bar was scaled wrong; update the constant\n")
     }
 
+    // Metal-4 tensor twin race: each tensor pso twin runs against its shipped simdgroup kernel
+    // on this box's GPU; winners join the runtime "metal_tensor" crown list (empty = simdgroup
+    // everywhere — the pre-M5 expectation). Skips cleanly with no Metal device.
+    var metal_crowns : string
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var mt_wins : array<string>
+        var mt_ran = false
+        for (r in metal_tensor_race()) {
+            mt_ran = true
+            let mt_note = empty(r.note) ? "" : " ({r.note})"
+            tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
+            if (r.winner == "tensor") {
+                mt_wins |> push(r.family)
+            }
+        }
+        if (!mt_ran) {
+            tune_detail("METAL_TWIN: no Metal device — tensor race skipped\n")
+        }
+        metal_crowns = join(mt_wins, ",")
+        delete mt_wins
+    }
+
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
     // mirrors softmax's winner instead of paying its own sweep.
     // The "runtime" section snapshots the CURRENT runtime knobs (defaults unless this process changed
@@ -2063,7 +2087,7 @@ def main {
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
-        threads = get_total_hw_jobs()))
+        threads = get_total_hw_jobs(), metal_tensor = metal_crowns))
     var winners <- {
         "dot" => dotw, "axpy" => axpyw, "dot_f16" => dotf16w, "axpy_f16" => axpyf16w,
         "cvt_f32_to_f16" => cvt16w, "cvt_f16_to_f32" => cvt32w, "add_inplace" => addw,
