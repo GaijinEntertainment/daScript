@@ -23,6 +23,46 @@
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
+// arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.
+#if defined(__aarch64__) || defined(_M_ARM64)
+    #if defined(__APPLE__)
+        #include <sys/sysctl.h>
+    #elif defined(__linux__)
+        #include <sys/auxv.h>
+        #if __has_include(<asm/hwcap.h>)
+            #include <asm/hwcap.h>
+        #endif
+        // kernels predating a given extension omit the macro; the bit positions are ABI-stable
+        #ifndef HWCAP_ASIMDDP
+            #define HWCAP_ASIMDDP  (1u << 20)
+        #endif
+        #ifndef HWCAP_ASIMDRDM
+            #define HWCAP_ASIMDRDM (1u << 12)
+        #endif
+        #ifndef HWCAP_ASIMDHP
+            #define HWCAP_ASIMDHP  (1u << 10)
+        #endif
+        #ifndef HWCAP_ATOMICS
+            #define HWCAP_ATOMICS  (1u << 8)
+        #endif
+        #ifndef HWCAP_CRC32
+            #define HWCAP_CRC32    (1u << 7)
+        #endif
+        #ifndef HWCAP_SVE
+            #define HWCAP_SVE      (1u << 22)
+        #endif
+        #ifndef HWCAP_SHA3
+            #define HWCAP_SHA3     (1u << 17)
+        #endif
+        #ifndef HWCAP2_I8MM
+            #define HWCAP2_I8MM    (1u << 13)
+        #endif
+        #ifndef HWCAP2_BF16
+            #define HWCAP2_BF16    (1u << 14)
+        #endif
+    #endif
+#endif
+
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
 #if defined(_MSC_VER)
 #include <intrin.h>     // __cpuidex, _xgetbv
@@ -1984,16 +2024,10 @@ namespace das
 
 #if defined(__aarch64__) || defined(_M_ARM64)
     #if defined(__APPLE__)
-        #include <sys/sysctl.h>
         static bool das_sysctl_flag ( const char * name ) {
             int val = 0; size_t sz = sizeof(val);
             return sysctlbyname(name, &val, &sz, nullptr, 0)==0 && val!=0;
         }
-    #elif defined(__linux__)
-        #include <sys/auxv.h>
-        #if __has_include(<asm/hwcap.h>)
-            #include <asm/hwcap.h>
-        #endif
     #endif
 
     // Optional arm64 extensions, by LLVM target-feature name. Unknown names are false, as on x86 —
@@ -2011,33 +2045,6 @@ namespace das
         if ( strcmp(f, "sve")==0 )      return das_sysctl_flag("hw.optional.arm.FEAT_SVE");
         return false;
     #elif defined(__linux__)
-        #ifndef HWCAP_ASIMDDP
-            #define HWCAP_ASIMDDP  (1u << 20)
-        #endif
-        #ifndef HWCAP_ASIMDRDM
-            #define HWCAP_ASIMDRDM (1u << 12)
-        #endif
-        #ifndef HWCAP_ASIMDHP
-            #define HWCAP_ASIMDHP  (1u << 10)
-        #endif
-        #ifndef HWCAP_ATOMICS
-            #define HWCAP_ATOMICS  (1u << 8)
-        #endif
-        #ifndef HWCAP_CRC32
-            #define HWCAP_CRC32    (1u << 7)
-        #endif
-        #ifndef HWCAP_SVE
-            #define HWCAP_SVE      (1u << 22)
-        #endif
-        #ifndef HWCAP_SHA3
-            #define HWCAP_SHA3     (1u << 17)
-        #endif
-        #ifndef HWCAP2_I8MM
-            #define HWCAP2_I8MM    (1u << 13)
-        #endif
-        #ifndef HWCAP2_BF16
-            #define HWCAP2_BF16    (1u << 14)
-        #endif
         const unsigned long hw  = getauxval(AT_HWCAP);
         const unsigned long hw2 = getauxval(AT_HWCAP2);
         if ( strcmp(f, "dotprod")==0 )  return (hw  & HWCAP_ASIMDDP) != 0;
