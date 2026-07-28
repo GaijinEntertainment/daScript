@@ -4534,6 +4534,26 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
     }
 }
 
+// ===== Metal-4 tensor-lane crowns (the sidecar's "runtime"."metal_tensor" knob) =====
+// Comma-list of families whose TENSOR twin won this box's tune race; consulted once per
+// family at pso build. Default empty = simdgroup; a DAS_TUNE_MANIFEST copy force-crowns.
+var private g_tensor_crowns : table<string>
+
+def public set_metal_tensor_crowns(list : string) {
+    unsafe {
+        delete g_tensor_crowns
+    }
+    for (f in split(list, ",")) {
+        if (!empty(f)) {
+            g_tensor_crowns |> insert(f)
+        }
+    }
+}
+
+def public metal_tensor_crowned(family : string) : bool {
+    return key_exists(g_tensor_crowns, family)
+}
+
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
@@ -4583,6 +4603,11 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
+    let mtc = read_json_field(rt, "metal_tensor", "")
+    if (mtc != "") {
+        set_metal_tensor_crowns(mtc)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
+    }
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
         pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
