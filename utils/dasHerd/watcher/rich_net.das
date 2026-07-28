@@ -646,6 +646,18 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(message, false)}\}")
     }
 
+    def changelist_network(repository_id, worktree_path, action : string) {
+        //! fetch / pull / push / sync on the rail. The watcher decides the
+        //! exact steps (publish vs push, ff-only pull) from its own snapshot.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(action)) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_network\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"action\":" +
+            "{sprint_json(action, false)}\}")
+    }
+
     def request_worktree_commit_wip(repository_id, worktree_path,
                                     message : string) {
         if (!connected || empty(worktree_path) || empty(message)) return

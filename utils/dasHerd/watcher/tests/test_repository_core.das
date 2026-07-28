@@ -607,6 +607,74 @@ def test_repository_operation_step_lists(t : T?) {
             "   ", steps)), "a blank message is refused before git sees it")
         delete steps
     }
+    t |> run("network operations build guarded steps: ff-only pull, explicit publish") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "sync",
+            "topic", "origin/topic", steps), "")
+        t |> equal(length(steps), 3, "sync is fetch, then pull, then push")
+        t |> equal(steps[0].argv[3], "fetch")
+        t |> equal(steps[0].argv[4], "--prune")
+        t |> equal(steps[1].argv[3], "pull")
+        t |> equal(steps[1].argv[4], "--ff-only",
+            "NEVER a bare pull - a surprise merge commit is a silent lie")
+        t |> equal(steps[2].argv[3], "push")
+        t |> equal(length(steps[2].argv), 4,
+            "an existing upstream gets a plain push")
+        for (step in steps) {
+            t |> equal(step.timeout_ms, 120000l,
+                "network git gets its own budget, not the local 15s")
+            t |> equal(length(step.env), 1)
+            t |> equal(step.env[0], "GIT_TERMINAL_PROMPT=0",
+                "a credential prompt must fail fast, not eat the timeout")
+        }
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "push",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[4], "-u")
+        t |> equal(steps[0].argv[5], "origin")
+        t |> equal(steps[0].argv[6], "topic",
+            "no upstream means an explicit publish naming the remote")
+        t |> success(!empty(repository_operation_network_steps("D:/Work/tree",
+            "push", "", "", steps)), "detached HEAD cannot push")
+        t |> success(!empty(repository_operation_network_steps("D:/Work/tree",
+            "teleport", "topic", "origin/topic", steps)),
+            "unknown network actions error")
+        delete steps
+    }
+    t |> run("network failures classify: what happened, and whether retry helps") <| @(t : T?) {
+        var hint : string
+        var retryable = true
+        repository_classify_failure(
+            "! [rejected] topic -> topic (non-fast-forward)", hint, retryable)
+        t |> success(!empty(hint), "non-fast-forward explains itself")
+        t |> success(!retryable,
+            "retry fails identically until the user rebases - not retryable")
+        retryable = true
+        repository_classify_failure(
+            "fatal: Not possible to fast-forward, aborting.", hint, retryable)
+        t |> success(!empty(hint), "the ff-only pull refusal is recognised")
+        t |> success(!retryable)
+        retryable = true
+        repository_classify_failure(
+            "fatal: The current branch topic has no upstream branch.",
+            hint, retryable)
+        t |> success(!empty(hint))
+        t |> success(find(hint, "ublish") >= 0,
+            "the hint points at Publish, the button that fixes it")
+        t |> success(!retryable)
+        retryable = true
+        repository_classify_failure(
+            "fatal: could not read Username for 'https://github.com': " +
+            "terminal prompts disabled", hint, retryable)
+        t |> success(!empty(hint), "auth failures explain themselves")
+        t |> success(!retryable, "auth retries fail identically")
+        retryable = false
+        repository_classify_failure(
+            "fatal: unable to access 'https://github.com/x.git/': " +
+            "Could not resolve host", hint, retryable)
+        t |> success(!empty(hint))
+        t |> success(retryable, "a network blip is worth retrying")
+    }
     t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
         var steps : array<WorktreeOperationStep>
         repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",

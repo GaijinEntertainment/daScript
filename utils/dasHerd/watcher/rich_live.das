@@ -688,6 +688,31 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? {
     return JV((ok = true, action = args.action, paths <- acted))
 }
 
+[live_command(description = "Run a network git operation on the rail: fetch (always safe), pull (--ff-only, never a surprise merge), push (or publish when no upstream), sync (fetch then pull then push). Args: repository_id, worktree_path (empty = shown), action. Outcome rides herder_worktree_operation_state.")]
+def herder_git_sync(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.action != "fetch" && args.action != "pull"
+            && args.action != "push" && args.action != "sync") {
+        return JV((ok = false, error = "unknown network action '{args.action}'"))
+    }
+    if (changelist_rail_busy()) {
+        return JV((ok = false, error = "the operation rail is busy"))
+    }
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    g_client->changelist_network(args.repository_id, args.worktree_path,
+        args.action)
+    return JV((ok = true, action = args.action, branch = worktree.branch,
+        upstream_ref = worktree.upstream_ref, ahead = worktree.ahead,
+        behind = worktree.behind))
+}
+
 [live_command(description = "Retire a durable session: the record is ARCHIVED, never erased — it leaves the default list, keeps its events/mailbox/bundles/journal, and herder_session_restore brings it back. worktree_paths names the session's worktrees to delete in the same act (empty keeps them all). Args: herd_id, worktree_paths, force.")]
 def herder_session_retire(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {

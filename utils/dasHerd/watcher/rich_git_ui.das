@@ -1536,6 +1536,59 @@ def git_changelist_status(repository : RepositorySnapshot const;
     return GitWindowStatus(text = "staged {worktree.staged}   unstaged {worktree.unstaged}   untracked {worktree.untracked}   conflicted {worktree.conflicted}{ahead_behind}")
 }
 
+def network_ready : bool {
+    return (g_client != null && g_client.connected && !changelist_rail_busy())
+}
+
+def draw_changelist_network_row(repository : RepositorySnapshot const;
+                                worktree : WorktreeState const) {
+    //! The network four. Counted labels ("Push 3", "Pull 12") instead of
+    //! blind verbs, from the ahead/behind the status branch line already
+    //! carries; a branch with no upstream turns Push into an explicit
+    //! Publish that names the remote it will create.
+    let has_upstream = !empty(worktree.upstream_ref)
+    let detached = empty(worktree.branch)
+    if (button(GIT_NET_FETCH, (text = "Fetch",
+            enabled = network_ready())) && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "fetch")
+    }
+    same_line()
+    let pull_label = worktree.behind > 0 ? "Pull {worktree.behind}" : "Pull"
+    if (button(GIT_NET_PULL, (text = pull_label,
+            enabled = network_ready() && has_upstream))
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "pull")
+    }
+    same_line()
+    let push_label = (has_upstream
+        ? (worktree.ahead > 0 ? "Push {worktree.ahead}" : "Push")
+        : "Publish branch")
+    if (button(GIT_NET_PUSH, (text = push_label,
+            enabled = network_ready() && !detached
+                && (!has_upstream || worktree.ahead > 0)))
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "push")
+    }
+    same_line()
+    if (button(GIT_NET_SYNC, (text = "Sync",
+            enabled = network_ready() && has_upstream && !detached))
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "sync")
+    }
+    if (!has_upstream && !detached) {
+        same_line()
+        text_disabled(GIT_NET_NOTE, (text =
+            "no upstream - Publish creates origin/{worktree.branch}"))
+    } elif (detached) {
+        same_line()
+        text_disabled(GIT_NET_NOTE, (text = "detached HEAD - nothing to push"))
+    }
+}
+
 def draw_git_changelist_window() {
     var status = GitWindowStatus(text = "No worktree selected")
     var found = false
@@ -1565,6 +1618,7 @@ def draw_git_changelist_window() {
                             repository.record.id, worktree.path)
                     }
                     text_disabled(GIT_WORKTREE_PATH, (text = worktree.path))
+                    draw_changelist_network_row(repository, worktree)
                     separator()
                     if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
                         draw_commit_files(repository, worktree)

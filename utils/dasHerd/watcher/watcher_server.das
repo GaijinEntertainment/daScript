@@ -1740,6 +1740,17 @@ class DasHerdWatcherServer : HvWebServer {
                 "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
                 "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "changelist_network") {
+            let start_error = repository_operation_network(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.action)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":{sprint_json(incoming.action, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
         } elif (incoming.op == "worktree_commit_wip") {
             let detail = repository_operation_commit_wip(incoming.repository_id,
                 incoming.worktree_path, incoming.text)

@@ -23,6 +23,12 @@ let public WORKTREE_TIER_DIRTY = "dirty"
 let public WORKTREE_TIER_WARN = "warn"
 let public WORKTREE_TIER_GREEN = "green"
 let private GIT_TIMEOUT_MS = 15000l
+// Network git gets its own budget: a real push blows through the local 15s,
+// and a credential prompt would silently burn the whole window. Paired with
+// GIT_TERMINAL_PROMPT=0 so a missing credential fails FAST with "could not
+// read Username" — the words the failure classifier matches — instead of
+// hanging until this timeout reports a lie.
+let private GIT_NETWORK_TIMEOUT_MS = 120000l
 // Keep structured records on one ConPTY row. The current wire format carries
 // full hashes, author, subject, and parents; 240 columns wrapped ordinary
 // commit metadata into cursor-positioned screen fragments.
@@ -1015,6 +1021,37 @@ def private classify_failure(message : string; var hint : string&;
         retryable = true
         return
     }
+    if (find(lower, "non-fast-forward") >= 0
+            || find(lower, "not possible to fast-forward") >= 0
+            || find(lower, "[rejected]") >= 0) {
+        hint = ("The remote moved past this branch. Fetch, then rebase or " +
+            "merge the remote changes first; pushing or fast-forwarding " +
+            "again before that will fail the same way.")
+        return
+    }
+    if (find(lower, "no upstream") >= 0
+            || find(lower, "has no upstream branch") >= 0) {
+        hint = ("This branch has no upstream — there is nothing to pull from " +
+            "or push to yet. Publish the branch instead; that creates the " +
+            "upstream on origin.")
+        return
+    }
+    if (find(lower, "could not read username") >= 0
+            || find(lower, "could not read password") >= 0
+            || find(lower, "authentication failed") >= 0) {
+        hint = ("Credentials, not code: git could not authenticate to the " +
+            "remote and interactive prompts are disabled here. Sign in with " +
+            "your credential manager (or run the command in a terminal " +
+            "once); retrying before that will fail identically.")
+        return
+    }
+    if (find(lower, "connection") >= 0 || find(lower, "unable to access") >= 0
+            || find(lower, "timed out") >= 0) {
+        hint = ("The remote could not be reached — a network problem, not a " +
+            "repository one. Worth retrying.")
+        retryable = true
+        return
+    }
     if (find(lower, "exited 1") >= 0 && empty(strip(message))) {
         hint = "Git exited with an error but printed nothing. Open the terminal for the full output."
         retryable = true
@@ -1340,6 +1377,77 @@ def public repository_operation_commit(repository_id, worktree_path,
     if (!empty(steps_error)) return steps_error
     var recoveries : table<string; array<WorktreeOperationStep>>
     return operation_start("changelist_commit", repository_id, worktree_path,
+        steps, recoveries)
+}
+
+def private network_step(worktree_path : string; tail : array<string>;
+                         step_label, kind, command_name : string) : WorktreeOperationStep {
+    var argv <- ["git", "-C", worktree_path]
+    argv |> push_from(tail)
+    var env <- ["GIT_TERMINAL_PROMPT=0"]
+    return <- WorktreeOperationStep(argv <- argv, step_label = step_label,
+        kind = kind, command_name = command_name,
+        timeout_ms = GIT_NETWORK_TIMEOUT_MS, env <- env)
+}
+
+def public repository_operation_network_steps(worktree_path, action,
+                                              branch, upstream_ref : string;
+                                              var steps : array<WorktreeOperationStep>&) : string {
+    //! fetch / pull / push / sync as step lists. pull is NEVER bare — a
+    //! surprise merge commit in someone's worktree is exactly the class of
+    //! silent lie this app keeps removing; a non-fast-forward pull fails with
+    //! git's words and the classifier's hint. push without an upstream
+    //! becomes an explicit publish, naming the remote it creates.
+    delete steps
+    let publish = empty(upstream_ref)
+    if (action == "fetch" || action == "sync") {
+        var fetch_step <- network_step(worktree_path, ["fetch", "--prune"],
+            "fetching from the remote", "git-net-fetch", "git fetch")
+        steps |> emplace(fetch_step)
+    }
+    if (action == "pull" || action == "sync") {
+        var pull_step <- network_step(worktree_path, ["pull", "--ff-only"],
+            "pulling (fast-forward only)", "git-net-pull", "git pull")
+        steps |> emplace(pull_step)
+    }
+    if (action == "push" || action == "sync") {
+        if (publish && empty(branch)) {
+            delete steps
+            return "detached HEAD has no branch to push"
+        }
+        if (publish) {
+            var publish_step <- network_step(worktree_path,
+                ["push", "-u", "origin", branch],
+                "publishing branch {branch} to origin",
+                "git-net-push", "git push")
+            steps |> emplace(publish_step)
+        } else {
+            var push_step <- network_step(worktree_path, ["push"],
+                "pushing to {upstream_ref}", "git-net-push", "git push")
+            steps |> emplace(push_step)
+        }
+    }
+    if (empty(steps)) return "unknown network action '{action}'"
+    return ""
+}
+
+def public repository_operation_network(repository_id, worktree_path,
+                                        action : string) : string {
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    let worktree_index = find_worktree(g_repositories[repository_index],
+        worktree_path)
+    if (worktree_index < 0) return "unknown worktree"
+    let branch = g_repositories[repository_index].snapshot.worktrees[worktree_index].branch
+    let upstream_ref = g_repositories[repository_index].snapshot.worktrees[worktree_index].upstream_ref
+    var steps : array<WorktreeOperationStep>
+    let steps_error = repository_operation_network_steps(worktree_path, action,
+        branch, upstream_ref, steps)
+    if (!empty(steps_error)) return steps_error
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    return operation_start("changelist_{action}", repository_id, worktree_path,
         steps, recoveries)
 }
 
