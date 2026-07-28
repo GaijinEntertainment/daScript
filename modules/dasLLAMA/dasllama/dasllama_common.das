@@ -1667,7 +1667,39 @@ def conv_profile_report() {
     delete rows
 }
 
+// ===== streaming plan/fill (phase D of the .dlim arc) =====
+
+//! One recorded big-tensor conversion: load_big's call args, replayable — the fill pass
+//! re-derives the branch from (fmt, quant, disk type), so plan and fill cannot drift.
+struct FillJob {
+    name : string
+    woff : int64
+    n : int64
+    src_off : int64
+    fmt : KqFmt
+}
+
+var private g_fill_plan_mode = false
+var private g_fill_plan : array<FillJob>
+
+//! Arm plan recording: subsequent load_big calls append FillJobs instead of transcoding
+//! (smalls still load eagerly — fblob is small and every flavor keeps it).
+def fill_plan_begin {
+    g_fill_plan_mode = true
+    g_fill_plan |> clear()
+}
+
+//! Disarm and move the recorded plan out (empty = nothing recorded).
+def fill_plan_take(var out : array<FillJob>) {
+    g_fill_plan_mode = false
+    out <- g_fill_plan
+}
+
 def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
+    if (g_fill_plan_mode) {
+        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt))
+        return
+    }
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
     var kind = "f32 read (no quant)"
     if (fmt == KqFmt.k4) {
