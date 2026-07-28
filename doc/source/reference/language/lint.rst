@@ -2476,17 +2476,24 @@ disables the rule for the module — the right escape for a legitimately dense
 file such as a code emitter or a ported kernel. Suppress a single deliberate
 keep with ``// nolint:STYLE038`` on the ``def`` line.
 
---------------------------------------------
-SMT001 / SMT002 — solver-backed reachability
---------------------------------------------
+------------------------------------------------------
+SMT001–SMT008 — solver-backed reachability and defects
+------------------------------------------------------
 
-Two further codes live outside this module, in the opt-in ``smt`` module
+Eight further codes live outside this module, in the opt-in ``smt`` module
 (``-DDAS_SMT_DISABLED=OFF``), because they need a Z3 solver:
 
 * ``SMT001`` — a branch whose condition is unsatisfiable on every path that
   reaches it.
 * ``SMT002`` — a condition that is always true with no ``else``: a redundant
   guard. Default-off, seeded by ``seed_default_disabled``.
+* ``SMT003`` — division or modulo whose divisor is zero on every path reaching it.
+* ``SMT004`` — an ``assert``/``verify`` that cannot hold when reached.
+* ``SMT005`` — a ``while`` whose body can never run.
+* ``SMT006`` — a shift count outside ``0..31`` on every path reaching it.
+* ``SMT007`` — a subscript whose index is always negative.
+* ``SMT008`` — a ``&&``/``||`` condition that is constant whatever its inputs
+  are (the operands contradict, or the author meant the other operator).
 
 They are produced by ``modules/dasSMT/daslib/smt_lint.das``, report under the
 same ``31209`` code as the style rules, and honor ``// nolint:SMT001``. Unlike

@@ -62,9 +62,10 @@ def bad_else_branch(a : int) : int {
     return 0
 }
 
-// contradiction across a conjunction
+// a conjunction that contradicts itself is SMT008, not SMT001: the defect is in the
+// expression, not in the path that reaches it
 def bad_conjunction(a, b : int) : int {
-    if (a > b && b > a) {                               // smt_expect SMT001
+    if (a > b && b > a) {                               // smt_expect SMT008
         return 1
     }
     return 0

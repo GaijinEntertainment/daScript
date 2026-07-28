@@ -11,6 +11,12 @@ module smt_lint shared private
 //! Rules:
 //!   SMT001 — a branch whose condition is unsatisfiable on every path reaching it (suppress with '// nolint:SMT001')
 //!   SMT002 — a condition that is always true, with no else branch: a redundant guard (default-off; enable with 'options _enable_default_off_rules = true' or .lint_config)
+//!   SMT003 — division or modulo whose divisor is zero on every path reaching it
+//!   SMT004 — an assert/verify that cannot hold when reached: a guaranteed panic
+//!   SMT005 — a while loop whose condition cannot hold on entry, so the body never runs
+//!   SMT006 — a shift count outside 0..31 on every path reaching it
+//!   SMT007 — a subscript whose index is negative on every path reaching it
+//!   SMT008 — a &&/|| condition that is constant whatever its inputs are (the operands contradict, or the author meant the other operator)
 //!
 //! Only an UNSAT verdict is ever reported. Timeouts, unmodeled types, unproven
 //! integer overflow and anything the translation cannot represent all yield
@@ -59,6 +65,9 @@ def private dcc(p : Z3_context const) : Z3_context {
 
 class SmtLintVisitor : AstVisitor {
     sv : Solver
+    // Shares sv's context (so terms are interchangeable) but carries no path
+    // condition, which is what makes a "broken on its own" verdict possible.
+    aux : Solver
     ctx : Z3_context
 
     compile_time_errors : bool = false
@@ -78,6 +87,9 @@ class SmtLintVisitor : AstVisitor {
     env : table<uint64; Sym>
     // Locals whose address escaped: every read is a fresh symbol from now on.
     volatile_vars : table<uint64>
+    // `length(v)` as a symbolic non-negative int, one per container variable, so two
+    // reads of the same length agree.
+    len_of : table<uint64; Sym>
 
     // True once some condition already folded into the path condition contained
     // integer arithmetic we could not prove overflow-free.
@@ -88,6 +100,16 @@ class SmtLintVisitor : AstVisitor {
     // on that guard blames the user for code they never wrote.
     saw_generated_var : bool = false
 
+    st_fns : int = 0
+    st_fns_generic : int = 0
+    st_fns_other : int = 0
+    st_ifs : int = 0
+    st_unmodeled : int = 0
+    st_const : int = 0
+    st_generated : int = 0
+    st_arith : int = 0
+    st_queried : int = 0
+    st_budget : int = 0
     queries : int = 0
     max_queries : int = DEFAULT_MAX_QUERIES
     timeout_ms : uint = DEFAULT_TIMEOUT_MS
@@ -111,6 +133,15 @@ class SmtLintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
 
+    def private source_line_at(at : LineInfo) : string {
+        if (at.fileInfo == null || at.line == 0u) return ""
+        var src = ""
+        get_file_source_line(at.fileInfo, at.line) $(line) {
+            src = "{strip(line)}"
+        }
+        return src
+    }
+
     def smt_warning(text : string; at : LineInfo) : void {
         if (current_function != null && current_function.flags.generated) return
         let key = location_key(at)
@@ -118,13 +149,15 @@ class SmtLintVisitor : AstVisitor {
         reported_locations |> insert(key)
         if (is_suppressed(text, at)) return
         warning_count++
+        let src = source_line_at(at)
+        let msg = empty(src) ? text : "{text}\n    {src}"
         if (compile_time_errors) {
-            compiling_program() |> macro_style_warning(at, text)
+            compiling_program() |> macro_style_warning(at, msg)
         } elif (collect_warnings) {
-            warnings |> push("smt warning: {text} at {describe(at)}")
-            issues |> push(make_lint_issue(text, at))
+            warnings |> push("smt warning: {msg} at {describe(at)}")
+            issues |> push(make_lint_issue(msg, at))
         } else {
-            to_log(LOG_WARNING, "smt warning: {text} at {describe(at)}\n")
+            to_log(LOG_WARNING, "smt warning: {msg} at {describe(at)}\n")
         }
     }
 
@@ -168,6 +201,35 @@ class SmtLintVisitor : AstVisitor {
         let r = sv |> check()
         sv |> pop()
         return r
+    }
+
+    // Satisfiable with NO path condition: the expression is judged on its own.
+    def private query_standalone(cond : Z3_ast) : SmtResult {
+        if (queries >= max_queries || cond == null) return SmtResult.UNKNOWN
+        queries++
+        aux |> push()
+        aux |> add(sbool(cond))
+        let r = aux |> check()
+        aux |> pop()
+        return r
+    }
+
+    // A chain that is constant whatever its inputs are is a defect in the expression
+    // itself, not a redundancy given context. Top-level &&/|| only, so plain
+    // single-comparison folding stays with SMT001/SMT002.
+    def private check_standalone(ift : ExprIfThenElse?; c : Sym) : bool {
+        if (!(ift.cond is ExprOp2)) return false
+        let top = "{(ift.cond as ExprOp2).op}"
+        if (top != "&&" && top != "||") return false
+        if (query_standalone(c.ast) == SmtResult.UNSAT) {
+            smt_warning("SMT008: this condition can never hold, whatever its inputs are — the operands contradict each other", ift.at)
+            return true
+        }
+        if (query_standalone(Z3_mk_not(ctx, c.ast)) == SmtResult.UNSAT) {
+            smt_warning("SMT008: this condition always holds, whatever its inputs are — did you mean '{top == "||" ? "&&" : "||"}'?", ift.at)
+            return true
+        }
+        return false
     }
 
     // An int term is safe to reason about only if it cannot leave the 32-bit
@@ -352,12 +414,34 @@ class SmtLintVisitor : AstVisitor {
         return Sym(kind = t.kind, ast = Z3_mk_ite(ctx, c.ast, t.ast, f.ast))
     }
 
+    def private len_sym(call : ExprCall?) : Sym {
+        var arg = call.arguments[0]
+        if (arg != null && arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value).subexpr
+        }
+        if (arg == null || !(arg is ExprVar)) return fresh(SymKind.INT)
+        let v = (arg as ExprVar).variable
+        if (v == null) return fresh(SymKind.INT)
+        let key = var_key(v)
+        // A mutated container's length changes under us; one symbol would freeze it.
+        if (key_exists(volatile_vars, key)) return fresh(SymKind.INT)
+        if (key_exists(len_of, key)) return len_of?[key] ?? unknown_sym()
+        var sym = fresh(SymKind.INT)
+        let nn = SInt(ast = sym.ast, ctx = ctx)
+        sv |> add(nn >= 0)
+        len_of[key] = sym
+        return sym
+    }
+
     // `float(i)` / `double(i)` are NOT translated: unbounded Int -> Real -> FP is
     // measurably undecidable (it times out even on trivial goals), so it would
     // burn the whole query budget to answer UNKNOWN anyway.
     def private call_sym(call : ExprCall?; depth : int) : Sym {
         let k = kind_of(call._type)
         let name = "{call.name}"
+        if (k == SymKind.INT && name == "length" && length(call.arguments) == 1) {
+            return len_sym(call)
+        }
         if (length(call.arguments) == 1) {
             let a = to_sym(call.arguments[0], depth + 1)
             if (a.kind == k && k == SymKind.INT && name == "abs") {
@@ -411,6 +495,117 @@ class SmtLintVisitor : AstVisitor {
         return fresh(kind_of(expr._type))
     }
 
+    // ===== SMT003..SMT007: definite-defect checks =====
+    // Each asks "is this ALWAYS broken on the paths that reach it", never "could it
+    // be" — a merely-possible zero divisor would fire on every unconstrained value.
+
+    def private proven(cond : Z3_ast) : bool {
+        // cond holds on every path reaching here, and the path itself is reachable.
+        if (query_sat(Z3_mk_true(ctx)) != SmtResult.SAT) return false
+        return query_sat(Z3_mk_not(ctx, cond)) == SmtResult.UNSAT
+    }
+
+    def private check_divisor(op : ExprOp2?; b : Sym) : void {
+        if (b.kind != SymKind.INT || !overflow_free(b.ast)) return
+        let z = SInt(ast = b.ast, ctx = ctx)
+        if (proven((z == 0).ast)) {
+            let what = "{op.op}" == "%" ? "modulo" : "division"
+            smt_warning("SMT003: {what} by zero — the divisor is zero on every path that reaches here", op.at)
+        }
+    }
+
+    def private check_shift(op : ExprOp2?; b : Sym) : void {
+        if (b.kind != SymKind.INT || !overflow_free(b.ast)) return
+        let n = SInt(ast = b.ast, ctx = ctx)
+        var ok <- [dc((n >= 0).ast), dc((n < 32).ast)]
+        let in_range = Z3_mk_and(ctx, ok)
+        if (query_sat(Z3_mk_true(ctx)) != SmtResult.SAT) return
+        if (query_sat(in_range) == SmtResult.UNSAT) {
+            smt_warning("SMT006: shift count is outside 0..31 on every path that reaches here; the result is undefined", op.at)
+        }
+    }
+
+    def private check_index(at : ExprAt?; i : Sym) : void {
+        if (i.kind != SymKind.INT || !overflow_free(i.ast)) return
+        let n = SInt(ast = i.ast, ctx = ctx)
+        if (proven((n < 0).ast)) {
+            smt_warning("SMT007: index is negative on every path that reaches here", at.at)
+        }
+    }
+
+    // Walks operator/call/index nodes only. Statement nodes are never entered, so the
+    // env and path condition in force are exactly the ones at this program point.
+    def private scan_defects(e : ExpressionPtr; depth : int) : void {   // nolint:STYLE037 — exact-type 'is' ladder over the expression node kinds; one arm per kind
+        if (e == null || depth > MAX_TRANSLATE_DEPTH || queries >= max_queries) return
+        if (e is ExprRef2Value) {
+            scan_defects((e as ExprRef2Value).subexpr, depth + 1)
+            return
+        }
+        if (e is ExprOp1) {
+            scan_defects((e as ExprOp1).subexpr, depth + 1)
+            return
+        }
+        if (e is ExprOp3) {
+            let o3 = e as ExprOp3
+            scan_defects(o3.subexpr, depth + 1)
+            scan_defects(o3.left, depth + 1)
+            scan_defects(o3.right, depth + 1)
+            return
+        }
+        // `as` on handled types is exact, so ExprAt and ExprSafeAt need separate arms.
+        if (e is ExprAt) {
+            scan_at(e as ExprAt, depth)
+            return
+        }
+        if (e is ExprSafeAt) {
+            scan_at(e as ExprSafeAt, depth)
+            return
+        }
+        if (e is ExprField) {
+            scan_defects((e as ExprField).value, depth + 1)
+            return
+        }
+        if (e is ExprOp2) {
+            let o2 = e as ExprOp2
+            scan_defects(o2.left, depth + 1)
+            scan_defects(o2.right, depth + 1)
+            let ops = "{o2.op}"
+            if (ops == "/" || ops == "%" || ops == "/=" || ops == "%=") {
+                check_divisor(o2, to_sym(o2.right, 0))
+            } elif (ops == "<<" || ops == ">>" || ops == "<<=" || ops == ">>=") {
+                check_shift(o2, to_sym(o2.right, 0))
+            }
+            return
+        }
+        if (e is ExprCall) {
+            scan_args((e as ExprCall).arguments, depth)
+        } elif (e is ExprInvoke) {
+            scan_args((e as ExprInvoke).arguments, depth)
+        } elif (e is ExprAssert) {
+            scan_args((e as ExprAssert).arguments, depth)
+        }
+    }
+
+    def private scan_at(at : ExprAt?; depth : int) : void {
+        scan_defects(at.subexpr, depth + 1)
+        scan_defects(at.index, depth + 1)
+        check_index(at, to_sym(at.index, 0))
+    }
+
+    def private scan_args(args : dasvector`ptr`Expression const; depth : int) : void {
+        for (a in args) {
+            scan_defects(a, depth + 1)
+        }
+    }
+
+    // The scan translates sub-expressions, which touches the same per-condition state
+    // exec_if reads, so it is saved across the call.
+    def private defects(e : ExpressionPtr) : void {
+        let saved_gen = saw_generated_var
+        scan_defects(e, 0)
+        saw_generated_var = saved_gen
+    }
+
     // ===== havoc =====
 
     def private havoc(v : Variable?) : void {
@@ -462,6 +657,7 @@ class SmtLintVisitor : AstVisitor {
             if (v._type != null && v._type.flags.ref) {
                 make_volatile(v)
             } elif (v.init != null) {
+                defects(v.init)
                 var s = to_sym(v.init, 0)
                 if (s.kind == SymKind.UNKNOWN) {
                     havoc(v)
@@ -479,6 +675,8 @@ class SmtLintVisitor : AstVisitor {
         if (lhs != null && lhs is ExprVar) {
             let ev = lhs as ExprVar
             if (ev.variable != null && !key_exists(volatile_vars, var_key(ev.variable))) {
+                defects(lhs)
+                defects(rhs)
                 var s = to_sym(rhs, 0)
                 if (s.kind == SymKind.UNKNOWN) {
                     havoc(ev.variable)
@@ -495,12 +693,33 @@ class SmtLintVisitor : AstVisitor {
         return false
     }
 
+    // Why an if-node was or was not queried, in the order the reasons shadow each other.
+    def private classify_if(ift : ExprIfThenElse?; c : Sym) : void {
+        if (c.kind != SymKind.BOOL) {
+            st_unmodeled++
+        } elif (is_const_cond(ift.cond)) {
+            st_const++
+        } elif (ift.genFlags.generated || saw_generated_var) {
+            st_generated++
+        } elif (pc_arith_unproven || !overflow_free(c.ast)) {
+            st_arith++
+        } elif (queries >= max_queries) {
+            st_budget++
+        } else {
+            st_queried++
+        }
+    }
+
     def private exec_if(ift : ExprIfThenElse?) : bool {
+        st_ifs++
+        defects(ift.cond)
         saw_generated_var = false
         let c = to_sym(ift.cond, 0)
+        classify_if(ift, c)
         let may_report = (c.kind == SymKind.BOOL && !ift.genFlags.generated
             && !saw_generated_var && !is_const_cond(ift.cond)
-            && !pc_arith_unproven && overflow_free(c.ast))
+            && !pc_arith_unproven && overflow_free(c.ast)
+            && query_sat(Z3_mk_true(ctx)) == SmtResult.SAT)
         if (c.kind != SymKind.BOOL) {
             // Unmodeled condition: both branches stay possible, pc learns nothing.
             var t_term = false
@@ -517,7 +736,9 @@ class SmtLintVisitor : AstVisitor {
         let then_res = query_sat(c.ast)
         let else_res = query_sat(not_c)
         let has_else = ift.if_false != null
-        if (may_report) {
+        if (may_report && check_standalone(ift, c)) {
+            // Already reported against the expression itself.
+        } elif (may_report) {
             if (then_res == SmtResult.UNSAT) {
                 smt_warning("SMT001: this branch is unreachable — the condition cannot hold on any path that reaches it", ift.at)
             } elif (else_res == SmtResult.UNSAT) {
@@ -615,8 +836,16 @@ class SmtLintVisitor : AstVisitor {
         }
         var pushed = false
         if (cond != null) {
+            defects(cond)
+            saw_generated_var = false
             let c = to_sym(cond, 0)
             if (c.kind == SymKind.BOOL) {
+                if (!saw_generated_var && !is_const_cond(cond) && !pc_arith_unproven
+                    && overflow_free(c.ast)
+                    && query_sat(Z3_mk_true(ctx)) == SmtResult.SAT
+                    && query_sat(c.ast) == SmtResult.UNSAT) {
+                    smt_warning("SMT005: this loop never runs — the condition cannot hold on any path that reaches it", cond.at)
+                }
                 let saved = pc_arith_unproven
                 sv |> push()
                 assume_term(c.ast)
@@ -678,13 +907,41 @@ class SmtLintVisitor : AstVisitor {
             }
             return exec_loop_body(null, ef.body)
         }
-        if (stmt is ExprReturn || stmt is ExprBreak || stmt is ExprContinue) return true
+        if (stmt is ExprWith) return exec((stmt as ExprWith).body)
+        if (stmt is ExprTryCatch) {
+            // The try block may have stopped anywhere, so keep no facts from either.
+            let tc = stmt as ExprTryCatch
+            exec(tc.try_block)
+            havoc_everything()
+            exec(tc.catch_block)
+            havoc_everything()
+            return false
+        }
+        if (stmt is ExprLabel || stmt is ExprGoto) {
+            // Arbitrary control flow in: nothing established here is reliable.
+            havoc_everything()
+            return false
+        }
+        if (stmt is ExprReturn) {
+            defects((stmt as ExprReturn).subexpr)
+            return true
+        }
+        if (stmt is ExprBreak || stmt is ExprContinue) return true
         if (stmt is ExprAssert) {
             // Execution continues only if the assertion held.
             let ea = stmt as ExprAssert
+            defects(stmt)
             if (!empty(ea.arguments)) {
+                saw_generated_var = false
                 let c = to_sym(ea.arguments[0], 0)
                 if (c.kind == SymKind.BOOL) {
+                    if (!saw_generated_var && !is_const_cond(ea.arguments[0])
+                        && !pc_arith_unproven && overflow_free(c.ast)
+                        && query_sat(Z3_mk_true(ctx)) == SmtResult.SAT
+                        && query_sat(c.ast) == SmtResult.UNSAT) {
+                        let what = ea.isVerify ? "verify" : "assert"
+                        smt_warning("SMT004: this {what} always fails when reached — the condition cannot hold on any path that gets here", ea.at)
+                    }
                     assume_term(c.ast)
                 }
             }
@@ -692,6 +949,7 @@ class SmtLintVisitor : AstVisitor {
         }
         if (stmt is ExprCall) {
             let call = stmt as ExprCall
+            defects(stmt)
             return (call.func != null && "{call.name}" == "panic"
                 && call.func._module != null && "{call.func._module.name}" == "builtin")
         }
@@ -741,11 +999,18 @@ class SmtLintVisitor : AstVisitor {
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
+        st_fns++
+        if (fn.fromGeneric != null) {
+            st_fns_generic++
+        } elif (fn.flags.generated || fn.moreFlags.isTemplate || has_no_lint(fn)) {
+            st_fns_other++
+        }
         // Generics skipped: one instantiation's verdict cannot speak for the template.
         skip_function = (fn.flags.generated || fn.moreFlags.isTemplate
             || fn.fromGeneric != null || has_no_lint(fn))
         env |> clear()
         volatile_vars |> clear()
+        len_of |> clear()
         pc_arith_unproven = false
         queries = 0
         if (skip_function || fn.body == null) return
@@ -821,14 +1086,21 @@ class private EscapeScanner : AstVisitor {
             return
         }
         for (i in range(length(expr.arguments))) {
+            // Arrays/tables/structs pass by ref without flags.ref: test constness.
             var mutable_param = true
             if (expr.func != null && i < length(expr.func.arguments)) {
                 let pt = expr.func.arguments[i]._type
-                mutable_param = pt != null && pt.flags.ref && !pt.flags.constant
+                mutable_param = pt == null || !pt.flags.constant
             }
             if (mutable_param) {
                 note_arg(expr.arguments[i])
             }
+        }
+    }
+
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        for (a in expr.arguments) {
+            note_arg(a)
         }
     }
 
@@ -896,10 +1168,17 @@ def private setup_timeout(s : Solver; ms : uint) : void {
 def private run(prog : ProgramPtr; var astVisitor : SmtLintVisitor) : int {
     var s = make_solver()
     setup_timeout(s, astVisitor.timeout_ms)
+    var aux = make_solver(dcc(s.ctx))
+    setup_timeout(aux, astVisitor.timeout_ms)
     astVisitor.sv = s
+    astVisitor.aux = aux
     astVisitor.ctx = dcc(s.ctx)
     make_visitor(astVisitor) $(adapter) {
         visit(prog, adapter)
+    }
+    release(aux)
+    if (prog._options |> find_arg("_smt_lint_stats") ?as tBool ?? false) {
+        to_log(LOG_INFO, "STATS fns={astVisitor.st_fns} generic={astVisitor.st_fns_generic} other={astVisitor.st_fns_other} ifs={astVisitor.st_ifs} unmodeled={astVisitor.st_unmodeled} const={astVisitor.st_const} generated={astVisitor.st_generated} arith={astVisitor.st_arith} budget={astVisitor.st_budget} queried={astVisitor.st_queried}\n")
     }
     release(s)
     return astVisitor.warning_count

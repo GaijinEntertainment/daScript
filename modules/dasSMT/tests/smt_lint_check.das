@@ -106,15 +106,16 @@ def check_fixture(path : string) {
 }
 
 [export]
-def main {
+def main() : int {
     let here = dir_name(get_das_root() + "/modules/dasSMT/tests/x")
-    for (f in ["smt001_unreachable_branch.das", "smt002_always_true_condition.das"]) {
+    for (f in ["smt001_unreachable_branch.das", "smt002_always_true_condition.das",
+               "smt003_definite_defects.das"]) {
         check_fixture(path_join(here, f))
     }
-    if (g_failures == 0) {
-        to_log(LOG_INFO, "smt_lint: all fixtures OK\n")
-    } else {
-        panic("smt_lint: {g_failures} failure(s)")
+    if (g_failures != 0) {
+        to_log(LOG_ERROR, "smt_lint: {g_failures} failure(s)\n")
+        return 1
     }
-    return
+    to_log(LOG_INFO, "smt_lint: all fixtures OK\n")
+    return 0
 }

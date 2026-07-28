@@ -10,7 +10,7 @@ Enable with `-DDAS_SMT_DISABLED=OFF`.
 - `daslib/smt_boost.das` — raw-API helpers: context/solver lifecycle, error polling, array-argument wrappers
 - `daslib/smt_expr.das` — typed symbolic values (`SInt`/`SBool`/`SReal`/`SString`/`SBv8..64`, plus `SFloat`/`SDouble` over the IEEE FPA theory), Z3py-style solver/model API
 - `daslib/smt_macro.das` — `constrain` / `smt_formula` macros and `[smt_fn]` function lifting
-- `daslib/smt_lint.das` — `[lint_macro]` reachability lint (`SMT001` / `SMT002`); see below
+- `daslib/smt_lint.das` — `[lint_macro]` reachability and definite-defect lint (`SMT001`–`SMT008`); see below
 - `examples/` — `hello_z3.das` (raw C API), `hello_smtlib.das` (SMT-LIB text), `hello_api.das` (typed API), `atlas_packing.das` + `entity_placement.das` (showcases), `theorems.das` (`[smt_fn]` over Diophantine equations: Z3 solves Euler #9, but Fermat n=3 is undecidable)
 
 ## The three levels
@@ -75,7 +75,7 @@ def valid_cell(x, y : int) : bool {
 s |> add(valid_cell(ex, ey))    // whole function, loops unrolled, becomes one formula
 ```
 
-## Reachability lint (SMT001 / SMT002)
+## Reachability and definite-defect lint (SMT001–SMT008)
 
 `daslib/smt_lint.das` is a `[lint_macro]` that symbolically executes each function
 body, accumulating a path condition, and asks Z3 whether each branch condition can
@@ -90,6 +90,21 @@ require smt/daslib/smt_lint
 |---|---|
 | `SMT001` | a branch is unreachable: its condition is unsatisfiable on every path that reaches it |
 | `SMT002` | a condition is always true and has no `else`: the guard is redundant. **Default-off** — enable with `options _enable_default_off_rules = true` or a `.lint_config` entry |
+| `SMT003` | division or modulo whose divisor is zero on every path reaching it |
+| `SMT004` | an `assert`/`verify` that cannot hold when reached — a guaranteed panic |
+| `SMT005` | a `while` whose condition cannot hold on entry, so the body never runs |
+| `SMT006` | a shift count outside `0..31` on every path reaching it |
+| `SMT007` | a subscript whose index is negative on every path reaching it |
+| `SMT008` | a `&&`/`\|\|` condition that is constant *whatever its inputs are* |
+
+`SMT008` is the one that judges an expression on its own rather than in context, using
+a second solver that carries no path condition. `x != 1 \|\| x != 2` always holds (the
+author meant `&&`); `x > 5 && x < 3` never does. That distinction matters: always-true
+*given the enclosing guards* is a redundancy (`SMT002`, default-off, noisy), while
+always-true *on its own* is a defect in the expression, so it is default-on.
+
+`SMT003`–`SMT007` ask "is this ALWAYS broken here", never "could it be". A
+merely-possible zero divisor would fire on every unconstrained value.
 
 Both report as style warnings (error code `31209`) and honor `// nolint:SMT001` on
 the `if` line. That line is also where an else-branch finding is reported, so a
@@ -138,6 +153,13 @@ pass under-reports rather than guessing.
   before and after it, so no fact crosses the loop edge.
 - **Calls, fields and indices are opaque**, and each *occurrence* gets its own
   unknown — two reads of `p.x` are never assumed equal.
+- **Anything a callee might write is untracked.** A parameter is treated as writable
+  unless its type is `const` — arrays, tables and structs pass by reference *without*
+  `flags.ref` set, so testing that flag missed `arr |> push(x)` and left stale values
+  behind. Method calls are `ExprInvoke`, not `ExprCall`, and every variable argument
+  to one is treated as written for the same reason.
+- **`length(v)` is symbolic** and shared between reads of the same container, but only
+  while that container is never mutated — a pushed-to array's length changes under us.
 - **Generic instantiations are skipped entirely.** A specialized body's `at` points
   at the shared template, so a verdict there does not generalize: `if (a != a)` in
   `def f(a : auto(TT))` is dead for `TT=int` and live for `TT=float`, and a program
@@ -161,8 +183,12 @@ options _smt_lint_timeout_ms = 500
 options _smt_lint_max_queries = 400
 ```
 
+`options _smt_lint_stats = true` prints per-run counters (functions and `if`s seen,
+and why each was or was not queried). That is how the class-method coverage gap was
+found, and it is the first thing to check if the pass looks too quiet.
+
 Measured cost on large in-tree files (`utils/lint/main.das`, `daslib/aot_cpp.das`):
-11–51 ms, no findings.
+11–51 ms.
 
 ### Pass ordering caveat
 
