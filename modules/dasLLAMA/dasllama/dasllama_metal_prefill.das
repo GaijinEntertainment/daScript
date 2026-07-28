@@ -257,10 +257,10 @@ class MetalBf16MulMm {
 // (blob bound twice — half-scale + byte views), lowered to one tmm2d_q8b_f32. Raced vs the
 // simdgroup kernel by the tuner (runtime.metal_tensor crown "mulmm_q8"); dispatch identical.
 class MetalQ8MulMmT {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME blob buffer, byte view
-    @ssbo @binding = 2 @role = "read" xf : array<float>    // raw f32 activations
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, half-scale view
+    @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, byte view
+    @ssbo @binding = 2 xf : array<float>    // raw f32 activations
+    @ssbo @binding = 3 y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
 
@@ -281,9 +281,9 @@ class MetalQ8MulMmT {
 // binds, lowered to mpp matmul2d over tensor_inline views. Raced vs the simdgroup kernel by
 // the tuner (runtime.metal_tensor crown "mulmm_bf16"); dispatch shape identical (128 = 4 sg).
 class MetalBf16MulMmT {
-    @ssbo @binding = 0 @role = "weight" wbh : array<uint16> // bf16 W rows, halfword view
-    @ssbo @binding = 2 @role = "read" xf : array<float>   // raw f32 activations
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 0 wbh : array<uint16> // bf16 W rows, halfword view
+    @ssbo @binding = 2 xf : array<float>   // raw f32 activations
+    @ssbo @binding = 3 y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
 
@@ -1374,6 +1374,86 @@ class MetalMoeGemvQ51 {
     }
 }
 
+// Metal-4 staged-tile twin of MetalMoeMulMmMx4 — CONTIGUOUS (down-site) shape: flat f16 tiles
+// per K-chunk (per-element LUT dequant), bias folded as one extra rank-1 chunk (f16-staged —
+// parity-tolerance vs the base's f32 seed).
+class MetalMoeMulMmMx4T {
+    @ssbo @binding = 0 mxq4 : array<uint4>  // nibble plane, uint4 view
+    @ssbo @binding = 1 mxe : array<uint8>   // e8m0 scale plane
+    @ssbo @binding = 2 xf : array<float>
+    @ssbo @binding = 3 y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+    @ssbo @binding = 6 cnt : array<uint>
+    @ssbo @binding = 7 basep : array<uint>
+    @uniform @binding = 9 eblk : uint
+    @ssbo @binding = 12 wb : array<float>   // [ne x ndim] per-expert bias rows
+    @ssbo @binding = 13 vtab : array<float> // [16] signed doubled-e2m1 values
+    @uniform @binding = 14 hasb : uint
+    @workgroup twa : float16[1024]          // X chunk: 32 tokens x 32 k, flat row-major
+    @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
+
+    [metal_kernel(name="metal_moe_mulmm_mx4_t_msl")]
+    def metal_moe_mulmm_mx4_t {
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {   // threadgroup-uniform exit — cooperative-safe
+            return
+        }
+        let rbase = basep[e]
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2048]
+        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb < nkb) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(xf[(rbase + mBase + i / 32u) * kdim + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            i = lid
+            while (i < 2048u) {
+                let j = i / 32u
+                let k = i % 32u
+                let blk = e * eblk + (nBase + j) * nkb + kb
+                let sc = uint(mxe[blk])
+                let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
+                let byi = k % 16u
+                let u4 = mxq4[blk]
+                let w32 = byi < 4u ? u4.x : (byi < 8u ? u4.y : (byi < 12u ? u4.z : u4.w))
+                let nby = (w32 >> ((byi % 4u) * 8u)) & 255u
+                twb[i] = float16(vtab[int(k < 16u ? (nby & 15u) : (nby >> 4u))] * d)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        if (hasb != 0u) {
+            // rank-1 bias chunk: A col 0 = 1, W col 0 = wb[e][col]
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(i % 32u == 0u ? 1.0 : 0.0)
+                i += gl_WorkGroupSize.x
+            }
+            i = lid
+            while (i < 2048u) {
+                twb[i] = float16(i % 32u == 0u ? wb[e * ndim + nBase + i / 32u] : 0.0)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
+    }
+}
+
 // Gathered MXFP4 mul_mm — the gathered-GEMM shape with the mx4 A stage: each thread's 16-elem
 // half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Per-expert bias (hasb) seeds
 // the accumulator tiles (stride-0 loads of wb[e]) — ggml_add_id order, bias precedes the reduce.
@@ -1779,14 +1859,14 @@ class MetalMoeReduce {
 // bkt-indirect X rows cannot form a strided tensor view, so gate/up keep the simdgroup kernel
 // even when "moe_mulmm_q8" is crowned (the encode picks per dispatch).
 class MetalMoeMulMmQ8T {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // expert STACK blob, half-scale view
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
-    @ssbo @binding = 2 @role = "read" xf : array<float>
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 0 wsh : array<float16> // expert STACK blob, half-scale view
+    @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view
+    @ssbo @binding = 2 xf : array<float>
+    @ssbo @binding = 3 y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @ssbo @binding = 6 @role = "read" cnt : array<uint>
-    @ssbo @binding = 7 @role = "read" basep : array<uint>
+    @ssbo @binding = 6 cnt : array<uint>
+    @ssbo @binding = 7 basep : array<uint>
     @uniform @binding = 9 eblk : uint
 
     [metal_kernel(name="metal_moe_mulmm_q8_t_msl")]
@@ -4562,6 +4642,8 @@ var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgm
 var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
 var private g_pf_moe_mm_q8_tensor : bool // "moe_mulmm_q8" crowned (contiguous sites only)
 var private g_pf_pso_moe_mm_q8_t : MetalComputePipeline?
+var private g_pf_moe_mm_mx4_tensor : bool // "moe_mulmm_mx4" crowned (contiguous sites only)
+var private g_pf_pso_moe_mm_mx4_t : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -4691,6 +4773,10 @@ def public metal_prefill_shutdown {
     if (g_pf_pso_moe_mm_q8_t != null) {
         metal_release(g_pf_pso_moe_mm_q8_t)
         g_pf_pso_moe_mm_q8_t = null
+    }
+    if (g_pf_pso_moe_mm_mx4_t != null) {
+        metal_release(g_pf_pso_moe_mm_mx4_t)
+        g_pf_pso_moe_mm_mx4_t = null
     }
     if (g_pso_gemm != null) {
         metal_release(g_pso_gemm)
@@ -4963,6 +5049,10 @@ def private metal_prefill_init : bool {
     g_pf_pso_moe_wscale = pf_compile_pso(metal_moe_wscale_msl, metal_moe_wscale_msl_entry, metal_moe_wscale_msl_fastmath, ok)
     g_pf_pso_swiglu_oai = pf_compile_pso(metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, ok)
     g_pf_pso_moe_mm_mx4 = pf_compile_pso(metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, ok)
+    g_pf_moe_mm_mx4_tensor = metal_tensor_crowned("moe_mulmm_mx4")
+    if (g_pf_moe_mm_mx4_tensor) {
+        g_pf_pso_moe_mm_mx4_t = pf_compile_pso(metal_moe_mulmm_mx4_t_msl, metal_moe_mulmm_mx4_t_msl_entry, metal_moe_mulmm_mx4_t_msl_fastmath, ok)
+    }
     g_pf_pso_moe_mm_q51 = pf_compile_pso(metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, ok)
     g_pf_pso_dn_conv = pf_compile_pso(metal_dn_conv_msl, metal_dn_conv_msl_entry, metal_dn_conv_msl_fastmath, ok)
     g_pf_pso_dn_hist = pf_compile_pso(metal_dn_conv_hist_msl, metal_dn_conv_hist_msl_entry, metal_dn_conv_hist_msl_fastmath, ok)
@@ -5388,12 +5478,14 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 // gemma4 router-input norm rows (weightless rms * 1/sqrt(dim) * rscale, one tg per position)
 // the MXFP4 gathered expert mul_mm (gpt-oss)
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
-                              bx, by, bkdim, bndim, bcnt, bbase, bbkt, beblk, bnk, bgather, bwb, bhasb : MetalBuffer?) {
+                              bx, by, bkdim, bndim, bcnt, bbase, bbkt, beblk, bnk, bgather, bwb, bhasb : MetalBuffer?;
+                              contiguous : bool = false) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
     let mp = mx4_of(g_pf_dev, t, stack_off)
-    kn_pipeline(enc, g_pf_pso_moe_mm_mx4)
-    kn_tgmem(enc, metal_moe_mulmm_mx4_msl_tgmem, 0)
+    let twin = g_pf_moe_mm_mx4_tensor && contiguous && g_pf_pso_moe_mm_mx4_t != null
+    kn_pipeline(enc, twin ? g_pf_pso_moe_mm_mx4_t : g_pf_pso_moe_mm_mx4)
+    kn_tgmem(enc, twin ? metal_moe_mulmm_mx4_t_msl_tgmem : metal_moe_mulmm_mx4_msl_tgmem, 0)
     kn_buffer(enc, mp.qbuf, mp.qoff, 0)
     kn_buffer(enc, mp.sbuf, mp.soff, 1)
     kn_buffer(enc, bx, 0ul, 2)
@@ -6649,7 +6741,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
                             var bwb2 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
-                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0, bwb2, bhasb)
+                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0, bwb2, bhasb, contiguous = true)
                         } else {
                             pf_enc_moe_mm(enc, t, fe2, t.we2_offs[l], dim, npos, bmg, bmdn,
                                 u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0, contiguous = true)

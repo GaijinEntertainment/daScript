@@ -6,6 +6,7 @@ module dasllama_kernel_access shared public
 require daslib/ast
 require daslib/ast_boost
 require daslib/rtti
+require strings   // ends_with — generic-instance call names carry a module prefix
 
 // Interprocedural read/write classifier over a declared set of tracked module globals — the
 // shared analysis half of the GPU dispatch lenses (vulkan today, metal's @role next). Given a
@@ -198,12 +199,12 @@ class private AccessVisitor : AstVisitor {
         }
         if (cname == "coopmatLoad" || cname == "simdgroup_load"
                 || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
-                || cname == "tmm2d_tg_begin" || cname == "tmm2d_tg_step") {
+                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")) {
             // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
             // begin/step, only untracked locals/@workgroup tiles
             return
         }
-        if (cname == "tmm2d_tg_store") {
+        if (cname |> ends_with("tmm2d_tg_store")) {
             if (length(expr.arguments) == 5) {
                 var cur = expr.arguments[1]
                 if (cur is ExprRef2Value) {

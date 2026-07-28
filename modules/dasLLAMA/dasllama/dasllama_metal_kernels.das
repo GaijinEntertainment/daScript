@@ -3165,10 +3165,10 @@ class MetalSkReduce {
 // tmm2d_q8b_f32 each (raced via runtime.metal_tensor — crowns "gemmb_q8" / "gemmb_sk_q8" /
 // "gemm64b_q8"). The split-K twin passes the FULL row stride in blocks (ldwb) with a k-slice kk.
 class MetalQ8GemmBT {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 @role = "read" x : array<float>     // X [M' x n] f32 rows
-    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
+    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
+    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
+    @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
+    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @uniform @binding = 7 ys : uint
@@ -3188,10 +3188,10 @@ class MetalQ8GemmBT {
 }
 
 class MetalQ8GemmBSkT {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 @role = "read" x : array<float>     // X [32 x n] f32 rows
-    @ssbo @binding = 4 @role = "write" part : array<float>  // [ksplit x 32 x d] partial-C planes
+    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
+    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
+    @ssbo @binding = 3 x : array<float>     // X [32 x n] f32 rows
+    @ssbo @binding = 4 part : array<float>  // [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @uniform @binding = 8 ksplit : uint
@@ -3214,10 +3214,10 @@ class MetalQ8GemmBSkT {
 }
 
 class MetalQ8Gemm64BT {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 @role = "read" x : array<float>     // X [M' x n] f32 rows
-    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
+    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
+    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
+    @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
+    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
 
