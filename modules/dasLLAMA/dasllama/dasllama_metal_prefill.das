@@ -7587,7 +7587,7 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
     var bn = race_uniform_u32(dev, uint(ndim))
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, metal_bf16_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bwb, 0ul, 0)
@@ -7596,8 +7596,7 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
         kn_buffer(enc, bk, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_buffer(enc, bwb, 0ul, 0)
         kn_buffer(enc, bxa, 0ul, 2)
@@ -7605,7 +7604,7 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
         kn_buffer(enc, bk, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
@@ -7654,7 +7653,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     var bn = race_uniform_u32(dev, uint(ndim))
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
@@ -7664,8 +7663,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         kn_buffer(enc, bk, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
@@ -7674,7 +7672,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         kn_buffer(enc, bk, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
@@ -7745,7 +7743,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     var bg0 = race_uniform_u32(dev, 0u)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
@@ -7761,8 +7759,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_buffer(enc, bnk, 0ul, 10)
         kn_buffer(enc, bg0, 0ul, 11)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
@@ -7774,7 +7771,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_buffer(enc, bbase, 0ul, 7)
         kn_buffer(enc, beblk, 0ul, 9)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
@@ -7870,7 +7867,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     var bg0 = race_uniform_u32(dev, 0u)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, metal_moe_mulmm_mx4_msl_tgmem, 0)
         kn_buffer(enc, bnq, 0ul, 0)
@@ -7889,8 +7886,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_buffer(enc, bvt, 0ul, 13)
         kn_buffer(enc, bg0, 0ul, 14)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_tgmem(enc, metal_moe_mulmm_mx4_t_msl_tgmem, 0)
         kn_buffer(enc, bnq, 0ul, 0)
@@ -7906,7 +7902,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_buffer(enc, bvt, 0ul, 13)
         kn_buffer(enc, bg0, 0ul, 14)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
@@ -8005,7 +8001,7 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
     let doff = k6 ? uint64(nblk * 16) : 0ul
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, base_tgmem, 0)
         kn_buffer(enc, bs, doff, 0)
@@ -8016,8 +8012,7 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
         kn_buffer(enc, bk, 0ul, 5)
         kn_buffer(enc, bn, 0ul, 6)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_tgmem(enc, twin_tgmem, 0)
         kn_buffer(enc, bs, doff, 0)
@@ -8028,7 +8023,7 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
         kn_buffer(enc, bk, 0ul, 5)
         kn_buffer(enc, bn, 0ul, 6)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
@@ -8095,7 +8090,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         let agrid = uint3(uint(mp / 32), uint(hs / 64), uint(heads))
         let tg = uint3(128u, 1u, 1u)
         var res = MetalTensorRaceResult(family = "attn_qkmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
-        res.base_ms = race_time_ms(queue, 5) $(enc) {
+        race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
             kn_pipeline(enc, q_pso)
             kn_tgmem(enc, metal_attn_qk_mm_msl_tgmem, 0)
             kn_buffer(enc, bq, 0ul, 0)
@@ -8112,8 +8107,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_buffer(enc, uqrows, 0ul, 11)
             kn_buffer(enc, uwin, 0ul, 12)
             kn_dispatch(enc, qgrid, tg)
-        }
-        res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        }, $(enc) {
             kn_pipeline(enc, qt_pso)
             kn_tgmem(enc, metal_attn_qk_mm_t_msl_tgmem, 0)
             kn_buffer(enc, bq, 0ul, 0)
@@ -8130,7 +8124,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_buffer(enc, uqrows, 0ul, 11)
             kn_buffer(enc, uwin, 0ul, 12)
             kn_dispatch(enc, qgrid, tg)
-        }
+        })
         if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
             res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
             res.note = "dispatch failed"
@@ -8141,7 +8135,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         }
         out |> emplace(res)
         var res2 = MetalTensorRaceResult(family = "attn_avmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
-        res2.base_ms = race_time_ms(queue, 5) $(enc) {
+        race_pair_ms(queue, 5, res2.base_ms, res2.twin_ms, $(enc) {
             kn_pipeline(enc, a_pso)
             kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
@@ -8156,8 +8150,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_buffer(enc, uqoff, 0ul, 9)
             kn_buffer(enc, uqrows, 0ul, 10)
             kn_dispatch(enc, agrid, tg)
-        }
-        res2.twin_ms = race_time_ms(queue, 5) $(enc) {
+        }, $(enc) {
             kn_pipeline(enc, at_pso)
             kn_tgmem(enc, metal_attn_av_mm_t_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
@@ -8172,7 +8165,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_buffer(enc, uqoff, 0ul, 9)
             kn_buffer(enc, uqrows, 0ul, 10)
             kn_dispatch(enc, agrid, tg)
-        }
+        })
         if (res2.base_ms < 0.0lf || res2.twin_ms < 0.0lf) {
             res2.winner = res2.base_ms < 0.0lf ? "" : "simdgroup"
             res2.note = "dispatch failed"

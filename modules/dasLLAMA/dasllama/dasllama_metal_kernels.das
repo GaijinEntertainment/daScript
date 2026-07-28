@@ -7177,7 +7177,7 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var by_base = race_buf(dev, uint64(out_n * 4), null)
     var by_twin = race_buf(dev, uint64(out_n * 4), null)
     let tg = uint3(128u, 1u, 1u)
-    res.base_ms = race_time_ms(queue, 5) $(enc) {
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_tgmem(enc, base_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
@@ -7185,15 +7185,14 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bxa, 0ul, 3)
         invoke(bind_extra, enc, by_base)
         kn_dispatch(enc, grid, tg)
-    }
-    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+    }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 2)
         kn_buffer(enc, bxa, 0ul, 3)
         invoke(bind_extra, enc, by_twin)
         kn_dispatch(enc, grid, tg)
-    }
+    })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"

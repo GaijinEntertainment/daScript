@@ -2097,6 +2097,39 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
     return true
 }
 
+// interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
+// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side.
+def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : double&;
+                 base_blk : block<(enc : MetalComputeEncoder?) : void>;
+                 twin_blk : block<(enc : MetalComputeEncoder?) : void>) {
+    base_ms = -1.0lf
+    twin_ms = -1.0lf
+    var err = ""
+    var best_b = -1.0lf
+    var best_t = -1.0lf
+    for (r in range(reps + 1)) {
+        var g1 = 0.0lf
+        var g2 = 0.0lf
+        let okb = with_compute_encoder_timed(queue, err, g1) $(enc) {
+            invoke(base_blk, enc)
+        }
+        let okt = okb && with_compute_encoder_timed(queue, err, g2) $(enc) {
+            invoke(twin_blk, enc)
+        }
+        return if (!okb || !okt)
+        if (r > 0) {
+            if (best_b < 0.0lf || g1 < best_b) {
+                best_b = g1
+            }
+            if (best_t < 0.0lf || g2 < best_t) {
+                best_t = g2
+            }
+        }
+    }
+    base_ms = best_b
+    twin_ms = best_t
+}
+
 // best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
 def race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
     var best = -1.0lf
