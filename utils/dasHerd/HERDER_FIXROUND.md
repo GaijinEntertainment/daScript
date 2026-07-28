@@ -679,10 +679,12 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   reproduced in-repo: codex/dogfood-round-2 reads 81 unmerged against local
   master and 9 against origin/master (local master 108 behind). 60:
   `herd_archive` / `herd_restore` replace `herd_delete`; nothing erases a
-  record any more, and the control says "Retire", never "Delete". One
-  deviation from the note, awaiting Boris: the per-session jsonl files stay
-  where they are rather than moving beside the archived host files — the
-  surviving record already un-orphans them, and moving live paths is a risk.
+  record any more, and the control says "Retire", never "Delete". The note's
+  second half — moving the per-session jsonl files beside the archived host
+  files — was dropped, and Boris confirmed it: the files were orphaned BECAUSE
+  the record was erased, so a surviving record re-owns them; the move was only
+  tidying and it would fight restore, since the watcher holds live paths to
+  them. They stay put.
 - 60: herd_delete ERASES a session record — against the standing rule
   Boris set the same day: "if u ever hear 'delete' from me - slap me.
   boris never delets. boris may forget to save, but stories stay."

@@ -151,12 +151,16 @@ Both doors, the verdict, and the archive rule are in the build:
   empty space read as an unbuilt feature) plus a row tooltip carrying the
   verdict in words.
 
-DEVIATION from note 60, needs Boris: archiving does NOT move the session's
-`events.jsonl` / `mailbox.jsonl` / `bundles.jsonl` beside the archived host
-files. The record surviving already ends the orphaning the note was about, and
-moving files the watcher still holds paths to is a real hazard; the host stamp,
-journal and log already self-archive when the host exits. Say the word if the
-move should happen anyway.
+SETTLED (Boris, 2026-07-27): archiving does NOT move the session's
+`events.jsonl` / `mailbox.jsonl` / `bundles.jsonl`. They stay where they are.
+Note 60 asked for two things — keep the record AND move the files beside the
+archived host files — and only the first one was load-bearing: the files were
+orphaned BECAUSE the record was erased, so a surviving record gives them an
+owner again. The move was tidying, and it would fight restore, which is the
+point of archiving: the watcher holds live paths to those files, so moving
+them can break reads and restore would have to move them back. Leaving them
+costs nothing. (The host stamp, journal and log still self-archive on host
+exit, as they always did.)
 
 NOT PROVEN LIVE yet: unit tests + lint are green and the base-ref trap is
 reproduced (this worktree reads 81 unmerged vs local master, 9 vs
