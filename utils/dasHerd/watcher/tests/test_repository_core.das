@@ -41,6 +41,85 @@ def test_repository_porcelain_parsing(t : T?) {
         t |> equal(length(files), 1)
         t |> equal(files[0].path, "unicode-Привет.txt")
     }
+    t |> run("the status branch line carries the upstream, or says there is none") <| @(t : T?) {
+        var worktree = WorktreeState(path = "D:/Work/fixture")
+        var files : array<GitFileState>
+        repository_parse_status("## topic...borisbat/topic [ahead 2]\r\n",
+            worktree, files)
+        t |> equal(worktree.upstream_ref, "borisbat/topic")
+        // Measured live 2026-07-27 on codex/dogfood-round-2: a branch whose
+        // upstream IS the base, 9 ahead. The same worktree reads 81 unmerged
+        // against local master and 9 against origin/master, because local
+        // master sits 108 behind — the trap this whole design exists for.
+        repository_parse_status(
+            "## codex/dogfood-round-2...origin/master [ahead 9, behind 36]\r\n",
+            worktree, files)
+        t |> equal(worktree.upstream_ref, "origin/master")
+        t |> equal(worktree.ahead, 9)
+        t |> equal(worktree.behind, 36)
+        repository_parse_status("## topic...origin/topic\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "origin/topic",
+            "an in-sync branch prints no bracket")
+        repository_parse_status("## local-only\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "",
+            "no upstream means nothing else has a copy")
+        repository_parse_status("## HEAD (no branch)\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "")
+    }
+}
+
+[test]
+def test_repository_delete_safety_verdict(t : T?) {
+    t |> run("the verdict ladder blocks on the working tree, warns on redundancy") <| @(t : T?) {
+        let clean = WorktreeState(path = "D:/Work/tree", branch = "topic",
+            upstream_ref = "origin/topic", unmerged_known = true,
+            unmerged_base_ref = "origin/master")
+        t |> equal(repository_worktree_delete_tier(clean, ""),
+            WORKTREE_TIER_GREEN)
+        t |> equal(repository_worktree_delete_tier(clean, "dictation"),
+            WORKTREE_TIER_IN_USE, "a live session outranks every other fact")
+
+        let main_checkout <- WorktreeState(path = "D:/Work/daScript",
+            is_main = true)
+        t |> equal(repository_worktree_delete_tier(main_checkout, ""),
+            WORKTREE_TIER_MAIN)
+
+        // Untracked alone blocks: those files exist nowhere but this folder.
+        let junk <- WorktreeState(path = "D:/Work/tree", untracked = 3,
+            unmerged_known = true)
+        t |> equal(repository_worktree_delete_tier(junk, ""),
+            WORKTREE_TIER_DIRTY)
+    }
+    t |> run("only-here needs BOTH unmerged and unpushed, and never guesses") <| @(t : T?) {
+        // Pushed: the remote has every commit, so removing the folder loses
+        // nothing and duplicates nothing.
+        var pushed = WorktreeState(unmerged_known = true, unmerged_commits = 3,
+            upstream_ref = "origin/topic", ahead = 0)
+        t |> success(!repository_worktree_only_here(pushed),
+            "commits on an upstream are not 'only here'")
+        pushed.ahead = 1
+        t |> success(repository_worktree_only_here(pushed),
+            "commits ahead of the upstream exist only on this machine")
+
+        let no_upstream <- WorktreeState(unmerged_known = true,
+            unmerged_commits = 2)
+        t |> success(repository_worktree_only_here(no_upstream),
+            "no upstream at all means nothing else has a copy")
+        t |> equal(repository_worktree_delete_tier(no_upstream, ""),
+            WORKTREE_TIER_WARN, "redundancy warns, it never blocks")
+
+        // The count that could not be measured must not read as a warning OR
+        // as a clean bill of health.
+        let unknown <- WorktreeState(unmerged_commits = 7)
+        t |> success(!repository_worktree_only_here(unknown),
+            "an unresolved base never manufactures a warning")
+    }
+    t |> run("the base ref is the authoritative one, never local master") <| @(t : T?) {
+        t |> equal(repository_default_base_ref(RepositoryRecord()),
+            "origin/master")
+        t |> equal(repository_default_base_ref(
+            RepositoryRecord(base_ref = "origin/trunk")), "origin/trunk")
+    }
 }
 
 [test]

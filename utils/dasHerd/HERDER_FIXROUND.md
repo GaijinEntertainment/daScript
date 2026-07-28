@@ -671,6 +671,18 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   local master is 108 behind origin/master. A merged-check against the
   wrong baseline reports the exact OPPOSITE of the truth. Design proposal
   in the block below.
+- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now —
+  `upstream_ref` off the status branch line, `unmerged_*` against
+  origin/master with an origin/main retry and an honest "unknown", and a
+  `repository_worktree_delete_tier` verdict on the row, in its tooltip, in
+  the checklist, and on the `herder_worktree_retire_state` rail. The trap is
+  reproduced in-repo: codex/dogfood-round-2 reads 81 unmerged against local
+  master and 9 against origin/master (local master 108 behind). 60:
+  `herd_archive` / `herd_restore` replace `herd_delete`; nothing erases a
+  record any more, and the control says "Retire", never "Delete". One
+  deviation from the note, awaiting Boris: the per-session jsonl files stay
+  where they are rather than moving beside the archived host files — the
+  surviving record already un-orphans them, and moving live paths is a risk.
 - 60: herd_delete ERASES a session record — against the standing rule
   Boris set the same day: "if u ever hear 'delete' from me - slap me.
   boris never delets. boris may forget to save, but stories stay."

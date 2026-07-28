@@ -338,6 +338,132 @@ def herder_close_session(input : JsonValue?) : JsonValue? {
     return JV((ok = true, herd_id = args.herd_id))
 }
 
+struct HerderRetireWorktreeArgs {
+    repository_id : string
+    worktree_path : string
+    force : bool
+}
+
+struct HerderRetireSessionArgs {
+    herd_id : string
+    worktree_paths : array<string>
+    force : bool
+}
+
+def private worktree_verdict_jv(repository_id, worktree_path : string) : JsonValue? {
+    var worktree = WorktreeState()
+    if (!find_worktree_state(repository_id, worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{worktree_path}'"))
+    }
+    let claimed_by = herd_session_claiming(worktree_path)
+    // Every number names the ref it was measured against — an unqualified
+    // count is the exact ambiguity note 58 was filed about.
+    return JV((ok = true, worktree_path = worktree_path,
+        branch = worktree.branch, is_main = worktree.is_main,
+        tier = repository_worktree_delete_tier(worktree, claimed_by),
+        claimed_by = claimed_by,
+        staged = worktree.staged, unstaged = worktree.unstaged,
+        untracked = worktree.untracked, conflicted = worktree.conflicted,
+        unmerged_known = worktree.unmerged_known,
+        unmerged_commits = worktree.unmerged_commits,
+        unmerged_base_ref = worktree.unmerged_base_ref,
+        upstream_ref = worktree.upstream_ref, ahead = worktree.ahead,
+        only_here = repository_worktree_only_here(worktree)))
+}
+
+[live_command(description = "Read the retire-a-worktree verdict and every fact behind it: tier (in_use | main | dirty | warn | green), claiming session, working-tree counts, and unmerged commits WITH the base ref they were measured against. Args: repository_id, worktree_path.")]
+def herder_worktree_retire_state(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    if (empty(args.worktree_path)) {
+        return JV((ok = false, error = "worktree_path is required"))
+    }
+    return worktree_verdict_jv(args.repository_id, args.worktree_path)
+}
+
+[live_command(description = "Retire (delete) a worktree. Blocked while a session holds it or the working tree is dirty; force = true is the explicit 'delete anyway, N files lost' escape. The branch and its commits are never touched. Args: repository_id, worktree_path, force.")]
+def herder_worktree_retire(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    let claimed_by = herd_session_claiming(args.worktree_path)
+    let tier = repository_worktree_delete_tier(worktree, claimed_by)
+    if (tier == WORKTREE_TIER_IN_USE || tier == WORKTREE_TIER_MAIN) {
+        return JV((ok = false, tier = tier,
+            error = "{args.worktree_path} cannot be retired: {tier}"))
+    }
+    if (tier == WORKTREE_TIER_DIRTY && !args.force) {
+        return JV((ok = false, tier = tier,
+            error = "working tree is dirty; pass force to delete anyway"))
+    }
+    g_client->request_worktree_delete(args.repository_id, args.worktree_path,
+        args.force)
+    return JV((ok = true, tier = tier, worktree_path = args.worktree_path))
+}
+
+[live_command(description = "Rescue a dirty worktree mechanically: stage everything and commit it to the branch, which outlives the worktree. Args: repository_id, worktree_path.")]
+def herder_worktree_commit_wip(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    if (empty(worktree.branch)) {
+        return JV((ok = false,
+            error = "detached HEAD: a commit here would not be on any branch"))
+    }
+    g_client->request_worktree_commit_wip(args.repository_id,
+        args.worktree_path, "WIP: work in progress on {worktree.branch}")
+    return JV((ok = true, branch = worktree.branch))
+}
+
+[live_command(description = "Retire a durable session: the record is ARCHIVED, never erased — it leaves the default list, keeps its events/mailbox/bundles/journal, and herder_session_restore brings it back. worktree_paths names the session's worktrees to delete in the same act (empty keeps them all). Args: herd_id, worktree_paths, force.")]
+def herder_session_retire(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireSessionArgs>)
+    if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    for (record in g_client.herd_sessions) {
+        if (record.id != args.herd_id) continue
+        if (record.state == "running") {
+            return JV((ok = false,
+                error = "session is running; close it before retiring"))
+        }
+        g_client->request_herd_archive(args.herd_id, args.worktree_paths,
+            args.force)
+        return JV((ok = true, herd_id = args.herd_id,
+            archived = true, worktrees_offered = length(args.worktree_paths)))
+    }
+    return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
+}
+
+[live_command(description = "Bring an archived session back to the default list. Args: herd_id.")]
+def herder_session_restore(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireSessionArgs>)
+    if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    for (record in g_client.herd_sessions) {
+        if (record.id != args.herd_id) continue
+        if (!record.archived) {
+            return JV((ok = false, error = "session is not archived"))
+        }
+        g_client->request_herd_restore(args.herd_id)
+        return JV((ok = true, herd_id = args.herd_id))
+    }
+    return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
+}
+
 struct HerderTerminalInputArgs {
     text : string
     submit : bool

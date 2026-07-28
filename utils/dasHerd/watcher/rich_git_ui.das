@@ -31,13 +31,14 @@ require ./rich_commands.das
 require ./herd_sessions.das
 require ./rich_inspector_ui.das
 require ./rich_files_ui.das
-require ./rich_sessions_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
 var WORKTREE_CONFLICT_JOIN : table<int; EmptyMarkerState>
 
 var WORKTREE_ACTIVE_JOIN : table<int; EmptyMarkerState>
+
+var WORKTREE_ROW_TOOLTIP : table<int; NarrativeState>
 
 var WORKTREE_POPUP : table<int; PopupContextItemState>
 
@@ -118,6 +119,7 @@ def private active_herd_for_worktree(worktree_path : string) : int {
     let canonical = herd_canonical_worktree(worktree_path)
     var found = -1
     for (index, record in count(), g_client.herd_sessions) {
+        if (record.archived) continue
         if (record.state != "closed"
                 && herd_canonical_worktree(record.worktree_path) == canonical) {
             if (record.state == "running") return index
@@ -127,6 +129,36 @@ def private active_herd_for_worktree(worktree_path : string) : int {
         }
     }
     return found
+}
+
+// The "is it safe to delete this?" answer, on the row where the question is
+// asked (note 58). Every count names the ref it was measured against, because
+// a bare number against an unnamed base is what made the answer unreadable.
+def private worktree_retire_hint(worktree : WorktreeState const;
+                                 active_herd : int) : string {
+    let claimed_by = (active_herd >= 0
+        ? g_client.herd_sessions[active_herd].name : "")
+    let tier = repository_worktree_delete_tier(worktree, claimed_by)
+    if (tier == WORKTREE_TIER_MAIN) return "Main checkout — never deleted."
+    if (tier == WORKTREE_TIER_IN_USE) {
+        return "In use by session '{claimed_by}' — retire the session first."
+    }
+    let dirty = (worktree.staged + worktree.unstaged + worktree.untracked
+        + worktree.conflicted)
+    if (tier == WORKTREE_TIER_DIRTY) {
+        return ("{dirty} uncommitted files live only in this folder — " +
+            "retire offers to commit them to {worktree.branch} first.")
+    }
+    if (tier == WORKTREE_TIER_WARN) {
+        return ("Safe to delete. {worktree.unmerged_commits} commits vs " +
+            "{worktree.unmerged_base_ref} exist only on this machine — the " +
+            "branch {worktree.branch} keeps them either way.")
+    }
+    if (!worktree.unmerged_known) {
+        return "Safe to delete. Unmerged count unknown: no base ref resolved."
+    }
+    return ("Safe to delete. Nothing here that " +
+        "{worktree.unmerged_base_ref} does not already have.")
 }
 
 // Worktree -> session navigation (note 18): raise Sessions and attach the
@@ -203,8 +235,17 @@ def draw_repositories_window() {
                             ? "Session '{g_client.herd_sessions[active_herd].name}' is running here"
                             : "Session '{g_client.herd_sessions[active_herd].name}' is attached here (not running)"))
                     }
-                    same_line(WORKTREE_ACTIVE_JOIN[row])
+                } else {
+                    // An empty space is indistinguishable from a feature that
+                    // was never built — which is exactly the confusion note 58
+                    // was filed about. "No session" gets its own mark.
+                    icon_tinted("minus", GetTextLineHeight(), token_muted_color())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP,
+                            "No session works here")
+                    }
                 }
+                same_line(WORKTREE_ACTIVE_JOIN[row])
                 // Transparent label keeps the row id + snapshot text; the
                 // overlay draws MAIN / slash-tinted branch / amber dirty in
                 // the shared token palette (notes 18/20).
@@ -213,6 +254,10 @@ def draw_repositories_window() {
                 var row_clicked = false
                 with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
                     row_clicked = selectable(WORKTREE_ROW[row], (text = row_label))
+                }
+                if (IsItemHovered()) {
+                    set_tooltip(WORKTREE_ROW_TOOLTIP[row],
+                        worktree_retire_hint(worktree, active_herd))
                 }
                 if (row_clicked) {
                     ui_event("worktree-row-click {worktree.path}")
@@ -271,37 +316,15 @@ def draw_repositories_window() {
                         }
                     }
                     if (menu_item(WORKTREE_MENU_DELETE[row],
-                            (text = "Delete worktree...", shortcut = "",
+                            (text = "Retire worktree...", shortcut = "",
                              enabled = g_client != null && g_client.connected
                                 && !worktree.is_main))) {
-                        // Client-side pre-guards give the block dialog without
-                        // a round trip; the watcher re-checks on the request.
-                        let change_count = (worktree.staged + worktree.unstaged
-                            + worktree.untracked + worktree.conflicted)
-                        if (active_herd >= 0) {
-                            g_worktree_delete_block = WorktreeDeleteBlock(
-                                active = true,
-                                repository_id = repository.record.id,
-                                worktree_path = worktree.path,
-                                reason = "in_use",
-                                detail = "in use by session " +
-                                    "'{g_client.herd_sessions[active_herd].name}'")
-                        } elif (change_count > 0) {
-                            g_worktree_delete_block = WorktreeDeleteBlock(
-                                active = true,
-                                repository_id = repository.record.id,
-                                worktree_path = worktree.path,
-                                reason = "dirty",
-                                detail = "{worktree.staged} staged, " +
-                                    "{worktree.unstaged} unstaged, " +
-                                    "{worktree.untracked} untracked, " +
-                                    "{worktree.conflicted} conflicted")
-                        } else {
-                            g_confirm_repository = repository.record.id
-                            open_destructive_confirm("worktree_delete",
-                                worktree.path,
-                                "Delete worktree {worktree.path}?")
-                        }
+                        // Always the checklist: the verdict is what the user
+                        // came for, so it is shown BEFORE the attempt rather
+                        // than after a refusal (note 58's whole complaint).
+                        g_worktree_retire = WorktreeRetirePrompt(active = true,
+                            repository_id = repository.record.id,
+                            worktree_path = worktree.path)
                     }
                 }
                 if (worktree.is_main) separator(WORKTREE_SEPARATOR[row])

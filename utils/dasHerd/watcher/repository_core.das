@@ -14,6 +14,14 @@ require daslib/strings_boost
 require strings public
 
 let private REPOSITORY_CONFIG_VERSION = 1
+
+// Verdict tiers for retiring a worktree (note 58). in_use and main are hard
+// blocks; dirty blocks with escapes; warn is about REDUNDANCY, not risk.
+let public WORKTREE_TIER_IN_USE = "in_use"
+let public WORKTREE_TIER_MAIN = "main"
+let public WORKTREE_TIER_DIRTY = "dirty"
+let public WORKTREE_TIER_WARN = "warn"
+let public WORKTREE_TIER_GREEN = "green"
 let private GIT_TIMEOUT_MS = 15000l
 // Keep structured records on one ConPTY row. The current wire format carries
 // full hashes, author, subject, and parents; 240 columns wrapped ordinary
@@ -107,6 +115,15 @@ struct public WorktreeState {
     unstaged : int
     untracked : int
     conflicted : int
+    // Delete-safety facts (note 58). upstream_ref rides the status branch line
+    // for free. unmerged_* measure against the AUTHORITATIVE base, never local
+    // master: the same branch reads 45 unmerged against a local master sitting
+    // 108 behind, and 0 against origin/master — the convenient base inverts
+    // the answer. unmerged_known is false when no base ref could be resolved.
+    upstream_ref : string
+    unmerged_commits : int
+    unmerged_base_ref : string
+    unmerged_known : bool
     error : string
     review_base_ref : string
     review_merge_base : string
@@ -169,6 +186,8 @@ class private RepositoryRuntime {
     worktree_index : int
     refresh_pending : bool = true
     rerun_pending : bool
+    unmerged_base_ref : string
+    unmerged_tried_origin_main : bool
     review_phase : int
     review_session_id : string
     review_pending_path : string
@@ -752,10 +771,12 @@ def private git_capture(argv : array<string>; var output : string&) : int {
 
 def public repository_remove_worktree(repository_id, worktree_path : string;
                                       var reason : string&;
-                                      var detail : string&) : bool {
+                                      var detail : string&;
+                                      force : bool = false) : bool {
     //! Guarded removal. reason on failure: "unknown" | "main" | "dirty" |
     //! "error"; for "dirty" the detail carries `git status --porcelain` so the
-    //! client can brief a resolver session.
+    //! client can brief a resolver session. force skips the dirty guard — the
+    //! explicit "delete anyway, N files lost" escape, never a default.
     reason = ""
     detail = ""
     let repository_index = find_repository(repository_id)
@@ -777,27 +798,75 @@ def public repository_remove_worktree(repository_id, worktree_path : string;
         detail = "the main checkout cannot be deleted"
         return false
     }
-    var status_text : string
-    let status_exit = git_capture(["git", "-C", worktree_path,
-        "status", "--porcelain"], status_text)
-    if (status_exit != 0) {
-        reason = "error"
-        detail = "git status exited {status_exit}"
-        return false
-    }
-    if (!empty(strip(status_text))) {
-        reason = "dirty"
-        detail = (length(status_text) > 2000
-            ? slice(status_text, 0, 2000) + "\n..." : status_text)
-        return false
+    if (!force) {
+        var status_text : string
+        let status_exit = git_capture(["git", "-C", worktree_path,
+            "status", "--porcelain"], status_text)
+        if (status_exit != 0) {
+            reason = "error"
+            detail = "git status exited {status_exit}"
+            return false
+        }
+        if (!empty(strip(status_text))) {
+            reason = "dirty"
+            detail = (length(status_text) > 2000
+                ? slice(status_text, 0, 2000) + "\n..." : status_text)
+            return false
+        }
     }
     var remove_text : string
-    let remove_exit = git_capture(["git", "-C", checkout,
-        "worktree", "remove", worktree_path], remove_text)
+    let remove_argv <- (force
+        ? ["git", "-C", checkout, "worktree", "remove", "--force", worktree_path]
+        : ["git", "-C", checkout, "worktree", "remove", worktree_path])
+    let remove_exit = git_capture(remove_argv, remove_text)
     if (remove_exit != 0) {
         reason = "error"
         detail = (empty(strip(remove_text))
             ? "git worktree remove exited {remove_exit}" : strip(remove_text))
+        return false
+    }
+    let _ = repository_refresh(repository_id)
+    return true
+}
+
+def public repository_commit_worktree_wip(repository_id, worktree_path,
+                                          message : string;
+                                          var detail : string&) : bool {
+    //! The mechanical rescue before retiring a dirty worktree: stage
+    //! everything and commit it to the branch. The branch outlives the
+    //! worktree and keeps its name, so nothing needs judgment to be saved.
+    //! Refused on a detached HEAD, where the commit would be unreachable the
+    //! moment the worktree goes.
+    detail = ""
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        detail = "unknown repository"
+        return false
+    }
+    let worktree_index = find_worktree(g_repositories[repository_index],
+        worktree_path)
+    if (worktree_index < 0) {
+        detail = "unknown worktree"
+        return false
+    }
+    if (empty(g_repositories[repository_index].snapshot.worktrees[worktree_index].branch)) {
+        detail = "detached HEAD: a commit here would not be on any branch"
+        return false
+    }
+    var add_text : string
+    let add_exit = git_capture(["git", "-C", worktree_path, "add", "-A"],
+        add_text)
+    if (add_exit != 0) {
+        detail = (empty(strip(add_text))
+            ? "git add exited {add_exit}" : strip(add_text))
+        return false
+    }
+    var commit_text : string
+    let commit_exit = git_capture(["git", "-C", worktree_path, "commit",
+        "--no-verify", "-m", message], commit_text)
+    if (commit_exit != 0) {
+        detail = (empty(strip(commit_text))
+            ? "git commit exited {commit_exit}" : strip(commit_text))
         return false
     }
     let _ = repository_refresh(repository_id)
@@ -1085,6 +1154,21 @@ def private parse_counter(text, marker : string) : int {
     return to_int(slice(text, value_start, value_end))
 }
 
+def private parse_upstream_ref(line : string) : string {
+    //! `## branch...origin/branch [ahead 1]` -> `origin/branch`. A branch with
+    //! no upstream prints no `...` at all, which is the "nothing else has a
+    //! copy" half of the unpushed verdict. `..` is illegal inside a ref name,
+    //! so the separator is unambiguous.
+    let separator = find(line, "...")
+    if (separator < 0) return ""
+    var value = slice(line, separator + 3)
+    let bracket = find(value, " [")
+    if (bracket >= 0) {
+        value = slice(value, 0, bracket)
+    }
+    return strip(value)
+}
+
 def public repository_parse_status(text : string; var worktree : WorktreeState;
                                    var files : array<GitFileState>) {
     worktree.ahead = 0
@@ -1093,11 +1177,13 @@ def public repository_parse_status(text : string; var worktree : WorktreeState;
     worktree.unstaged = 0
     worktree.untracked = 0
     worktree.conflicted = 0
+    worktree.upstream_ref = ""
     for (raw_line in split(text, "\n")) {
         let line = trim_cr(raw_line)
         if (starts_with(line, "## ")) {
             worktree.ahead = parse_counter(line, "ahead ")
             worktree.behind = parse_counter(line, "behind ")
+            worktree.upstream_ref = parse_upstream_ref(line)
             continue
         }
         if (length(line) < 3) continue
@@ -1146,6 +1232,64 @@ def private launch_working_stats(var runtime : RepositoryRuntime?) {
             "--no-pager", "diff", "--numstat", "--find-renames", "--"],
         "git-working-numstat", path, launch_error)
     if (empty(runtime.refresh_session_id)) fail_refresh(runtime, launch_error)
+}
+
+def public repository_worktree_only_here(worktree : WorktreeState const) : bool {
+    //! "These commits exist nowhere else": unmerged from the authoritative
+    //! base AND not on any upstream. An unknown count is never "only here" —
+    //! an unresolved base must not manufacture a warning.
+    if (!worktree.unmerged_known || worktree.unmerged_commits <= 0) return false
+    return empty(worktree.upstream_ref) || worktree.ahead > 0
+}
+
+def public repository_worktree_delete_tier(worktree : WorktreeState const;
+                                           claimed_by : string) : string {
+    //! The settled verdict ladder for RETIRING A WORKTREE. Committed work is
+    //! never at risk here — `git worktree remove` leaves the branch intact —
+    //! so the only blocker below in_use is the working tree itself.
+    if (!empty(claimed_by)) return WORKTREE_TIER_IN_USE
+    if (worktree.is_main) return WORKTREE_TIER_MAIN
+    if (worktree.staged + worktree.unstaged + worktree.conflicted
+            + worktree.untracked > 0) return WORKTREE_TIER_DIRTY
+    if (repository_worktree_only_here(worktree)) return WORKTREE_TIER_WARN
+    return WORKTREE_TIER_GREEN
+}
+
+def public repository_default_base_ref(record : RepositoryRecord const) : string {
+    //! The AUTHORITATIVE base every unmerged count is measured against. A
+    //! configured base_ref wins; otherwise origin/master, with the origin/main
+    //! fallback tried once at the call site.
+    return empty(record.base_ref) ? "origin/master" : record.base_ref
+}
+
+def private launch_unmerged(var runtime : RepositoryRuntime?) {
+    let path = runtime.snapshot.worktrees[runtime.worktree_index].path
+    runtime.refresh_phase = 11
+    runtime.unmerged_base_ref = repository_default_base_ref(runtime.snapshot.record)
+    runtime.unmerged_tried_origin_main = false
+    var launch_error : string
+    runtime.refresh_session_id = launch_git(runtime,
+        ["git", "-C", path, "rev-list", "--count",
+            "{runtime.unmerged_base_ref}..HEAD"],
+        "git-unmerged", path, launch_error)
+    if (empty(runtime.refresh_session_id)) fail_refresh(runtime, launch_error)
+}
+
+def private relaunch_unmerged_on_main(var runtime : RepositoryRuntime?) : bool {
+    //! One retry against origin/main for repositories whose trunk is not
+    //! master. Anything still failing leaves unmerged_known false — an
+    //! unknown count must never read as zero.
+    if (runtime.unmerged_tried_origin_main
+        || runtime.unmerged_base_ref != "origin/master") return false
+    runtime.unmerged_tried_origin_main = true
+    runtime.unmerged_base_ref = "origin/main"
+    let path = runtime.snapshot.worktrees[runtime.worktree_index].path
+    var launch_error : string
+    runtime.refresh_session_id = launch_git(runtime,
+        ["git", "-C", path, "rev-list", "--count",
+            "{runtime.unmerged_base_ref}..HEAD"],
+        "git-unmerged", path, launch_error)
+    return !empty(runtime.refresh_session_id)
 }
 
 def private launch_review_step(var runtime : RepositoryRuntime?; phase : int;
@@ -1902,6 +2046,16 @@ def private task_overflow_message(session_id : string) : string {
     return "Git structured output exceeded the watcher raw-history limit; inspect session {session_id}"
 }
 
+def private advance_worktree(var runtime : RepositoryRuntime?) {
+    runtime.worktree_index++
+    if (runtime.worktree_index < length(runtime.snapshot.worktrees)) {
+        let _next_status_started = launch_status(runtime)
+        changed(runtime)
+    } else {
+        finish_refresh(runtime)
+    }
+}
+
 def private advance_refresh(var runtime : RepositoryRuntime?) {
     if (runtime.refresh_phase == 0) {
         if (runtime.refresh_pending) launch_inventory(runtime)
@@ -1914,6 +2068,16 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
         return
     }
     if (task.exit_code != 0l) {
+        // A missing base ref is a fact about the repository, not a refresh
+        // failure: retry once on origin/main, then carry "unknown" forward.
+        if (runtime.refresh_phase == 11) {
+            if (relaunch_unmerged_on_main(runtime)) return
+            runtime.snapshot.worktrees[runtime.worktree_index].unmerged_known = false
+            runtime.snapshot.worktrees[runtime.worktree_index].unmerged_commits = 0
+            runtime.snapshot.worktrees[runtime.worktree_index].unmerged_base_ref = ""
+            advance_worktree(runtime)
+            return
+        }
         fail_refresh(runtime, "git exited with {task.exit_code}: {task.output}")
         return
     }
@@ -1947,6 +2111,12 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
                 new_worktree.history_error = old_worktree.history_error
                 new_worktree.refs_loading = old_worktree.refs_loading
                 new_worktree.refs_error = old_worktree.refs_error
+                // Carry the delete-safety facts across the inventory swap or
+                // the verdict badge blinks to "unknown" on every refresh.
+                new_worktree.upstream_ref = old_worktree.upstream_ref
+                new_worktree.unmerged_commits = old_worktree.unmerged_commits
+                new_worktree.unmerged_base_ref = old_worktree.unmerged_base_ref
+                new_worktree.unmerged_known = old_worktree.unmerged_known
                 break
             }
         }
@@ -1973,6 +2143,14 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
         launch_working_stats(runtime)
         return
     }
+    if (runtime.refresh_phase == 11) {
+        let index = runtime.worktree_index
+        runtime.snapshot.worktrees[index].unmerged_commits = to_int(strip(output))
+        runtime.snapshot.worktrees[index].unmerged_base_ref = runtime.unmerged_base_ref
+        runtime.snapshot.worktrees[index].unmerged_known = true
+        advance_worktree(runtime)
+        return
+    }
     // Swap this worktree's file rows atomically only after its status and
     // numstat pair completes, so a refresh never blanks the changelist.
     let stats_path = runtime.snapshot.worktrees[runtime.worktree_index].path
@@ -1987,13 +2165,7 @@ def private advance_refresh(var runtime : RepositoryRuntime?) {
     }
     runtime.snapshot.files |> push_from(runtime.pending_refresh_files)
     runtime.pending_refresh_files |> clear()
-    runtime.worktree_index++
-    if (runtime.worktree_index < length(runtime.snapshot.worktrees)) {
-        let _next_status_started = launch_status(runtime)
-        changed(runtime)
-    } else {
-        finish_refresh(runtime)
-    }
+    launch_unmerged(runtime)
 }
 
 def private advance_review(var runtime : RepositoryRuntime?) {

@@ -121,6 +121,48 @@ finish; nothing else depends on it.
    first (it is smaller and Phase 3's reviewer summons benefit from it).
 3. **When ssh becomes real** — pull Phase 5 forward or leave it parked.
 
+## Retiring a workspace — BUILT 2026-07-27 (design below stands as the record)
+
+Both doors, the verdict, and the archive rule are in the build:
+
+- WorktreeState carries the delete-safety facts: `upstream_ref` (free, parsed
+  off the status branch line), `unmerged_commits` / `unmerged_base_ref` /
+  `unmerged_known` measured in a new refresh phase against the AUTHORITATIVE
+  base (`origin/master`, one retry on `origin/main`, then "unknown" — never
+  local master, never a silent zero).
+- `repository_worktree_delete_tier` is the settled ladder: in_use / main /
+  dirty / warn / green. `repository_worktree_only_here` needs BOTH unmerged
+  and unpushed, and an unknown count never manufactures a warning.
+- Door 1 (worktree): "Retire worktree..." always opens the CHECKLIST — the
+  verdict comes before the attempt, not after a refusal. Escapes: commit WIP
+  to the branch (`repository_commit_worktree_wip`, refused on detached HEAD),
+  the note-41 resolver session, and an explicit "delete anyway" that names the
+  files it loses (`--force`, never defaulted).
+- Door 2 (session): "Retire session..." archives the record and OFFERS each
+  worktree with its own verdict; blocked ones are checkboxes you cannot tick.
+- `herd_archive` / `herd_restore` replace `herd_delete` — note 60 closed. The
+  record survives archived, hidden behind a "Show N archived" toggle, and
+  holds no worktree while archived.
+- Rails, so the verdict is inspectable and every action commandable:
+  `herder_worktree_retire_state` (tier + every fact + the base ref each was
+  measured against), `herder_worktree_retire`, `herder_worktree_commit_wip`,
+  `herder_session_retire`, `herder_session_restore`.
+- Rows answer the question where it is asked: a muted "no session" mark (an
+  empty space read as an unbuilt feature) plus a row tooltip carrying the
+  verdict in words.
+
+DEVIATION from note 60, needs Boris: archiving does NOT move the session's
+`events.jsonl` / `mailbox.jsonl` / `bundles.jsonl` beside the archived host
+files. The record surviving already ends the orphaning the note was about, and
+moving files the watcher still holds paths to is a real hazard; the host stamp,
+journal and log already self-archive when the host exits. Say the word if the
+move should happen anyway.
+
+NOT PROVEN LIVE yet: unit tests + lint are green and the base-ref trap is
+reproduced (this worktree reads 81 unmerged vs local master, 9 vs
+origin/master, local master 108 behind), but no dialog has been driven in a
+running herder. UI is never proven from logic — that is the next session.
+
 ## Retiring a workspace — the two scenarios (Boris, 2026-07-27)
 
 Boris named the shape: two entry doors into ONE operation, because a

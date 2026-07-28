@@ -50,6 +50,9 @@ struct private WatcherWsMessage {
     repository_id : string
     repository_path : string
     worktree_path : string
+    // Archiving a session OFFERS its worktrees rather than taking them: the
+    // client names the ones the user accepted, and an empty list keeps them.
+    worktree_paths : array<string>
     new_worktree_path : string
     branch : string
     base_ref : string
@@ -67,6 +70,9 @@ struct private WatcherWsMessage {
     timeout_ms : int64
     control : bool
     raw : bool
+    // The explicit "delete anyway, N files lost" escape past the dirty guard.
+    // Never defaulted on: the client has to say it every time.
+    force : bool
     direction : string
     sender : string = ""
     subject : string
@@ -1328,7 +1334,7 @@ class DasHerdWatcherServer : HvWebServer {
         if (client == null || !client.raw || empty(client.session_id)) return
         var inscope chunk <- watcher_output_since(client.session_id, client.raw_offset)
         if (chunk.reset) {
-            let start_offset = chunk.next_offset - int64(length(chunk.bytes))
+            let start_offset = chunk.next_offset - long_length(chunk.bytes)
             send(client.channel, "\{\"type\":\"raw_reset\",\"offset\":{start_offset}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
         }
@@ -1611,7 +1617,7 @@ class DasHerdWatcherServer : HvWebServer {
                 detail = "in use by session '{running_user}'"
             } else {
                 ok = repository_remove_worktree(incoming.repository_id,
-                    incoming.worktree_path, reason, detail)
+                    incoming.worktree_path, reason, detail, incoming.force)
             }
             send(channel, "\{\"type\":\"worktree_delete_result\",\"ok\":{ok}," +
                 "\"reason\":{sprint_json(reason, false)}," +
@@ -1619,58 +1625,67 @@ class DasHerdWatcherServer : HvWebServer {
                 "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
                 "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
-        } elif (incoming.op == "herd_delete") {
-            var inscope removed = HerdSession()
-            let delete_error = herd_delete(incoming.herd_session_id, removed)
-            if (!empty(delete_error)) {
-                send_error(channel, delete_error)
+        } elif (incoming.op == "herd_archive") {
+            var inscope archived = HerdSession()
+            let archive_error = herd_archive(incoming.herd_session_id, archived)
+            if (!empty(archive_error)) {
+                send_error(channel, archive_error)
                 return
             }
-            // The record is gone; now try each of its worktrees under the
-            // same guards as a direct worktree delete. Blocked ones stay on
-            // disk and are reported with the reason.
-            var inscope targets : array<tuple<string; string>>
-            if (!empty(removed.worktree_path)) {
-                targets |> push(removed.repository_id => removed.worktree_path)
-            }
-            for (entry in removed.satellites) {
-                if (!empty(entry.worktree_path)) {
-                    targets |> push(entry.repository_id => entry.worktree_path)
-                }
-            }
+            // The record survives, archived. Its worktrees are a separate,
+            // OFFERED act: the client asks for them by listing them in
+            // worktree_paths, and each one still passes the normal guards.
             var inscope removed_parts : array<string>
             var inscope kept_parts : array<string>
-            for (target in targets) {
+            for (target_path in incoming.worktree_paths) {
+                let repository_id = herd_session_repository_for(archived,
+                    target_path)
                 var reason : string
                 var detail : string
                 var ok = false
-                let herd_user = herd_worktree_user(target._1)
+                let herd_user = herd_worktree_user(target_path)
                 let running_user = (empty(herd_user)
-                    ? watcher_running_worktree_user(target._1) : herd_user)
+                    ? watcher_running_worktree_user(target_path) : herd_user)
                 if (!empty(running_user)) {
                     reason = "in_use"
                     detail = "in use by session '{running_user}'"
                 } else {
-                    ok = repository_remove_worktree(target._0, target._1,
-                        reason, detail)
+                    ok = repository_remove_worktree(repository_id, target_path,
+                        reason, detail, incoming.force)
                 }
                 if (ok) {
-                    removed_parts |> push(sprint_json(target._1, false))
+                    removed_parts |> push(sprint_json(target_path, false))
                 } else {
-                    kept_parts |> push("\{\"path\":{sprint_json(target._1, false)}"
-                        + ",\"repository_id\":{sprint_json(target._0, false)}"
+                    kept_parts |> push("\{\"path\":{sprint_json(target_path, false)}"
+                        + ",\"repository_id\":{sprint_json(repository_id, false)}"
                         + ",\"reason\":{sprint_json(reason, false)}"
                         + ",\"detail\":{sprint_json(detail, false)}\}")
                 }
             }
             let removed_list = join(removed_parts, ",")
             let kept_list = join(kept_parts, ",")
-            send(channel, "\{\"type\":\"herd_delete_result\"," +
+            send(channel, "\{\"type\":\"herd_archive_result\"," +
                 "\"herd_session_id\":{sprint_json(incoming.herd_session_id, false)}," +
                 "\"removed\":[{removed_list}],\"kept\":[{kept_list}]\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             send_sessions(channel)
             send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_restore") {
+            let restore_error = herd_restore(incoming.herd_session_id)
+            if (!empty(restore_error)) {
+                send_error(channel, restore_error)
+                return
+            }
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "worktree_commit_wip") {
+            var detail : string
+            let ok = repository_commit_worktree_wip(incoming.repository_id,
+                incoming.worktree_path, incoming.text, detail)
+            send(channel, "\{\"type\":\"worktree_commit_wip_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(detail, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
         } elif (incoming.op == "attach") {
             if (watcher_find_session(incoming.session_id) < 0) {
                 send_error(channel, "unknown session")

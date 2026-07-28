@@ -89,6 +89,14 @@ struct WatcherWorktreeDeleteResult {
     worktree_path : string
 }
 
+struct WatcherWorktreeCommitWipResult {
+    @rename = "type" _type : string
+    ok : bool
+    detail : string
+    repository_id : string
+    worktree_path : string
+}
+
 struct WatcherHerdDeleteKept {
     path : string
     repository_id : string
@@ -546,17 +554,28 @@ struct PendingSay {
 }
 var g_input_queue : array<PendingSay>
 
-// A blocked worktree delete (in_use / dirty / main / error). The frame loop
-// opens the block modal when active; "dirty" adds the offer to launch a
-// resolver session briefed with the blocking state.
-struct WorktreeDeleteBlock {
+// The retire-a-worktree checklist (note 58). One dialog for both entry doors:
+// a worktree row and a session card. It holds only the IDENTITY of what is
+// being retired — the facts and the verdict are re-read from the live snapshot
+// every frame, so the checklist can never show a state the repository left.
+struct WorktreeRetirePrompt {
     active : bool
     repository_id : string
     worktree_path : string
-    reason : string
-    detail : string
+    // Set when this retire is part of retiring a SESSION: the worktree is
+    // offered alongside the session record, not deleted on its own.
+    herd_session_id : string
+    herd_session_name : string
+    // The user ticked the explicit "delete anyway" escape past the working
+    // tree. Reset every time the dialog opens; never sticky.
+    force_acknowledged : bool
+    // A refusal that came back from the watcher, which re-checks every guard.
+    server_reason : string
+    server_detail : string
+    // Result of the last rescue action, shown in place until the next one.
+    notice : string
 }
-var g_worktree_delete_block = WorktreeDeleteBlock()
+var g_worktree_retire = WorktreeRetirePrompt()
 
 // Deferred launcher open for the resolver offer: open_popup from inside the
 // block modal would nest the launcher under the popup being closed, so the
