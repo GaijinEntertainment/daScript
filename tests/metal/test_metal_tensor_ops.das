@@ -66,7 +66,7 @@ class TmmKernels {
         var wp = unsafe(addr(bqb[2]))
         var ap = unsafe(addr(xa[0]))
         var cp = unsafe(addr(oc[0]))
-        tmm2d_q8b_f32(8u, 16u, 2u, sp, wp, ap, 64u, cp, 16u, 64u)
+        tmm2d_q8b_f32(8u, 16u, 2u, sp, wp, ap, 64u, cp, 16u, 64u, 2u)
     }
 }
 

@@ -273,7 +273,7 @@ class MetalQ8MulMmT {
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim)
+        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u)
     }
 }
 
@@ -1772,6 +1772,39 @@ class MetalMoeReduce {
             j++
         }
         y[row * dim + gid] = acc
+    }
+}
+
+// Metal-4 tensor twin of MetalMoeMulMmQ8 — the CONTIGUOUS (gather=0, down-site) shape only:
+// bkt-indirect X rows cannot form a strided tensor view, so gate/up keep the simdgroup kernel
+// even when "moe_mulmm_q8" is crowned (the encode picks per dispatch).
+class MetalMoeMulMmQ8T {
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // expert STACK blob, half-scale view
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
+    @ssbo @binding = 2 @role = "read" xf : array<float>
+    @ssbo @binding = 3 @role = "write" y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+    @ssbo @binding = 6 @role = "read" cnt : array<uint>
+    @ssbo @binding = 7 @role = "read" basep : array<uint>
+    @uniform @binding = 9 eblk : uint
+
+    [metal_kernel(name="metal_moe_mulmm_q8_t_msl")]
+    def metal_moe_mulmm_q8_t {
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {   // threadgroup-uniform exit — cooperative-safe
+            return
+        }
+        let rbase = basep[e]
+        let nBase = gl_WorkGroupID.y * 64u
+        let blk0 = e * eblk + nBase * (kdim / 32u)
+        var sp = unsafe(addr(wsh[blk0 * 17u]))
+        var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
+        var ap = unsafe(addr(xf[(rbase + mBase) * kdim]))
+        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
+        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u)
     }
 }
 
@@ -4527,6 +4560,8 @@ var private g_pf_pso_mm : MetalComputePipeline?    // the production das mul_mm 
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
 var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
+var private g_pf_moe_mm_q8_tensor : bool // "moe_mulmm_q8" crowned (contiguous sites only)
+var private g_pf_pso_moe_mm_q8_t : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -4653,6 +4688,10 @@ def public metal_prefill_shutdown {
     }
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
+    if (g_pf_pso_moe_mm_q8_t != null) {
+        metal_release(g_pf_pso_moe_mm_q8_t)
+        g_pf_pso_moe_mm_q8_t = null
+    }
     if (g_pso_gemm != null) {
         metal_release(g_pso_gemm)
         g_pso_gemm = null
@@ -4913,6 +4952,10 @@ def private metal_prefill_init : bool {
     g_pf_pso_moe_bucket = pf_compile_pso(metal_moe_bucket_msl, metal_moe_bucket_msl_entry, metal_moe_bucket_msl_fastmath, ok)
     g_pf_pso_moe_reduce = pf_compile_pso(metal_moe_reduce_msl, metal_moe_reduce_msl_entry, metal_moe_reduce_msl_fastmath, ok)
     g_pf_pso_moe_mm_q8 = pf_compile_pso(metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, ok)
+    g_pf_moe_mm_q8_tensor = metal_tensor_crowned("moe_mulmm_q8")
+    if (g_pf_moe_mm_q8_tensor) {
+        g_pf_pso_moe_mm_q8_t = pf_compile_pso(metal_moe_mulmm_q8_t_msl, metal_moe_mulmm_q8_t_msl_entry, metal_moe_mulmm_q8_t_msl_fastmath, ok)
+    }
     g_pf_pso_moe_mm_k4 = pf_compile_pso(metal_moe_mulmm_k4_msl, metal_moe_mulmm_k4_msl_entry, metal_moe_mulmm_k4_msl_fastmath, ok)
     g_pf_pso_moe_mm_k5 = pf_compile_pso(metal_moe_mulmm_k5_msl, metal_moe_mulmm_k5_msl_entry, metal_moe_mulmm_k5_msl_fastmath, ok)
     g_pf_pso_moe_mm_k6 = pf_compile_pso(metal_moe_mulmm_k6_msl, metal_moe_mulmm_k6_msl_entry, metal_moe_mulmm_k6_msl_fastmath, ok)
@@ -5251,13 +5294,17 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
 // one gathered expert mul_mm site: grid (ceil(npos/32) tiles, rows/64, ne experts); the twin
 // exits tiles past the expert's padded count. bgather = 1 (bkt-indirect X) / 0 (bucket rows).
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;
-                          bx, by, bkdim, bndim, bcnt, bbase, bbkt, bes, bnk, bgather : MetalBuffer?) {
+                          bx, by, bkdim, bndim, bcnt, bbase, bbkt, bes, bnk, bgather : MetalBuffer?;
+                          contiguous : bool = false) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
     if (fmt == KqFmt.q8) {
         let bw = pf_blob_of(t, stack_off)
-        kn_pipeline(enc, g_pf_pso_moe_mm_q8)
-        kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+        let twin = g_pf_moe_mm_q8_tensor && contiguous && g_pf_pso_moe_mm_q8_t != null
+        kn_pipeline(enc, twin ? g_pf_pso_moe_mm_q8_t : g_pf_pso_moe_mm_q8)
+        if (!twin) {
+            kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+        }
         kn_buffer(enc, bw.buf, bw.boff, 0)
         kn_buffer(enc, bw.buf, bw.boff, 1)
         kn_buffer(enc, bx, 0ul, 2)
@@ -6605,7 +6652,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                                 u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0, bwb2, bhasb)
                         } else {
                             pf_enc_moe_mm(enc, t, fe2, t.we2_offs[l], dim, npos, bmg, bmdn,
-                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0)
+                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0, contiguous = true)
                         }
                         if (nsh > 0l) {
                             // shexp down into bxb2 (free post-residual) — bxb still feeds the reduce
@@ -7055,49 +7102,6 @@ def dasllama_metal_prefill_register() {
 
 // ===== Metal-4 tensor twin race (the tuner's crowning section) =====
 
-struct public MetalTensorRaceResult {
-    family : string
-    winner : string   // "tensor" | "simdgroup" | "" when the family could not race
-    base_ms : double
-    twin_ms : double
-    note : string
-}
-
-def private race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
-    var b = metal_new_buffer(dev, bytes)
-    if (src != null) {
-        unsafe {
-            memcpy(metal_buffer_contents(b), src, bytes)
-        }
-    }
-    return b
-}
-
-def private race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
-    var b = metal_new_buffer(dev, 4ul)
-    unsafe {
-        var p = reinterpret<uint?>(metal_buffer_contents(b))
-        p[0] = v
-    }
-    return b
-}
-
-// best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
-def private race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
-    var best = -1.0lf
-    var err = ""
-    for (r in range(reps + 1)) {
-        var gpu_ms = 0.0lf
-        if (!with_compute_encoder_timed(queue, err, gpu_ms) $(enc) { invoke(blk, enc) }) {
-            return -1.0lf
-        }
-        if (r > 0 && (best < 0.0lf || gpu_ms < best)) {
-            best = gpu_ms
-        }
-    }
-    return best
-}
-
 def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "mulmm_bf16", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let m = 512
@@ -7117,13 +7121,9 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
         metal_release(base_pso)
         return res
     }
-    var xa : array<float>
+    var xa <- race_x_f32(m * kdim)
     var wb : array<uint16>
-    xa |> resize(m * kdim)
     wb |> resize(ndim * kdim)
-    for (i in range(m * kdim)) {
-        xa[i] = 0.25 * float(i % 17 - 8)
-    }
     for (i in range(ndim * kdim)) {
         wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
     }
@@ -7157,24 +7157,10 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
+        res.winner = "simdgroup"
     } else {
-        // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
-        var maxref = 0.0lf
-        var maxdiff = 0.0lf
-        unsafe {
-            let pb = reinterpret<float?>(metal_buffer_contents(by_base))
-            let pt = reinterpret<float?>(metal_buffer_contents(by_twin))
-            for (i in range(m * ndim)) {
-                maxref = max(maxref, abs(double(pb[i])))
-                maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
-            }
-        }
-        if (maxdiff > 0.05lf * maxref + 1e-6lf) {
-            res.winner = "simdgroup"
-            res.note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
-        } else {
-            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-        }
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
     }
     metal_release(bxa)
     metal_release(bwb)
@@ -7206,25 +7192,8 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         metal_release(base_pso)
         return res
     }
-    var xa : array<float>
-    var blob : array<int8>
-    xa |> resize(m * kdim)
-    blob |> resize(ndim * nkb * 34)
-    for (i in range(m * kdim)) {
-        xa[i] = 0.25 * float(i % 17 - 8)
-    }
-    for (blk in range(ndim * nkb)) {
-        for (k in range(32)) {
-            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
-        }
-    }
-    unsafe {
-        var p8 = addr(blob[0])
-        for (blk in range(ndim * nkb)) {
-            var ph = reinterpret<float16?>(p8 + blk * 34)
-            ph[0] = float16(0.5 * float(1 << (blk % 3)))
-        }
-    }
+    var xa <- race_x_f32(m * kdim)
+    var blob <- race_q8_blob(ndim * nkb)
     var bw = race_buf(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
     var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
     var by_base = race_buf(dev, uint64(m * ndim * 4), null)
@@ -7257,24 +7226,10 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
         res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
+        res.winner = "simdgroup"
     } else {
-        // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
-        var maxref = 0.0lf
-        var maxdiff = 0.0lf
-        unsafe {
-            let pb = reinterpret<float?>(metal_buffer_contents(by_base))
-            let pt = reinterpret<float?>(metal_buffer_contents(by_twin))
-            for (i in range(m * ndim)) {
-                maxref = max(maxref, abs(double(pb[i])))
-                maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
-            }
-        }
-        if (maxdiff > 0.05lf * maxref + 1e-6lf) {
-            res.winner = "simdgroup"
-            res.note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
-        } else {
-            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-        }
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
     }
     metal_release(bw)
     metal_release(bxa)
@@ -7282,6 +7237,112 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     metal_release(by_twin)
     metal_release(bk)
     metal_release(bn)
+    metal_release(base_pso)
+    metal_release(twin_pso)
+    return res
+}
+
+def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = "moe_mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let ne = 4
+    let rows_per = 32
+    let m = ne * rows_per
+    let kdim = 2048
+    let ndim = 1024
+    let nkb = kdim / 32
+    let eblk = ndim * nkb
+    var err = ""
+    var base_pso = pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err)
+    if (base_pso == null) {
+        res.note = "base pso: {err}"
+        return res
+    }
+    var twin_pso = pipeline_from_source(dev, metal_moe_mulmm_q8_t_msl, metal_moe_mulmm_q8_t_msl_entry, metal_moe_mulmm_q8_t_msl_fastmath, err)
+    if (twin_pso == null) {
+        res.winner = "simdgroup"
+        res.note = "twin pso: {err}"
+        metal_release(base_pso)
+        return res
+    }
+    var xa <- race_x_f32(m * kdim)
+    var blob <- race_q8_blob(ne * eblk)
+    var cnt : array<uint>
+    var basep : array<uint>
+    var bkt : array<uint>
+    cnt |> resize(ne)
+    basep |> resize(ne)
+    bkt |> resize(m)
+    for (e in range(ne)) {
+        cnt[e] = uint(rows_per)
+        basep[e] = uint(e * rows_per)
+    }
+    for (i in range(m)) {
+        bkt[i] = uint(i)   // identity buckets: gather=0 semantics match
+    }
+    var bw = race_buf(dev, uint64(ne * eblk * 34), unsafe(addr<void?>(blob[0])))
+    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
+    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
+    var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
+    var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
+    var bk = race_uniform_u32(dev, uint(kdim))
+    var bn = race_uniform_u32(dev, uint(ndim))
+    var beblk = race_uniform_u32(dev, uint(eblk))
+    var bnk = race_uniform_u32(dev, 1u)
+    var bg0 = race_uniform_u32(dev, 0u)
+    let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
+    let tg = uint3(128u, 1u, 1u)
+    res.base_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, base_pso)
+        kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+        kn_buffer(enc, bw, 0ul, 0)
+        kn_buffer(enc, bw, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_base, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_buffer(enc, bcnt, 0ul, 6)
+        kn_buffer(enc, bbase, 0ul, 7)
+        kn_buffer(enc, bbkt, 0ul, 8)
+        kn_buffer(enc, beblk, 0ul, 9)
+        kn_buffer(enc, bnk, 0ul, 10)
+        kn_buffer(enc, bg0, 0ul, 11)
+        kn_dispatch(enc, grid, tg)
+    }
+    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, twin_pso)
+        kn_buffer(enc, bw, 0ul, 0)
+        kn_buffer(enc, bw, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_twin, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_buffer(enc, bcnt, 0ul, 6)
+        kn_buffer(enc, bbase, 0ul, 7)
+        kn_buffer(enc, beblk, 0ul, 9)
+        kn_dispatch(enc, grid, tg)
+    }
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
+    metal_release(bw)
+    metal_release(bxa)
+    metal_release(by_base)
+    metal_release(by_twin)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(beblk)
+    metal_release(bnk)
+    metal_release(bg0)
     metal_release(base_pso)
     metal_release(twin_pso)
     return res
@@ -7299,6 +7360,7 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     var queue = metal_new_command_queue(dev)
     results |> emplace(race_mulmm_bf16(dev, queue))
     results |> emplace(race_mulmm_q8(dev, queue))
+    results |> emplace(race_moe_mulmm_q8(dev, queue))
     metal_release(queue)
     metal_release(dev)
     return <- results

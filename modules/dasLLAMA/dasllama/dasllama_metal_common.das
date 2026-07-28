@@ -307,6 +307,9 @@ var g_pso_gemm_b : MetalComputePipeline?
 var g_pso_gemm_b_sk : MetalComputePipeline? // split-K twin (per-site policy)
 var g_pso_skred : MetalComputePipeline?     // the split-K plane reduce
 var g_pso_gemm64_b : MetalComputePipeline?  // 64-wide N tile (classifier site)
+var g_gemm_b_tensor : bool                  // crowned tensor twins selected (no tgmem bind)
+var g_gemm_b_sk_tensor : bool
+var g_gemm64_b_tensor : bool
 var g_pso_mm : MetalComputePipeline?        // the prefill module's MetalQ8MulMm (34B blob)
 var g_pso_attnb16 : MetalComputePipeline?
 var g_pso_attnb32 : MetalComputePipeline?
@@ -2017,3 +2020,99 @@ def public metal_prefill_declines() : table<string; int64> {
     return clone_to_move(g_prefill_declines_by_reason)
 }
 
+// ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
+
+struct public MetalTensorRaceResult {
+    family : string
+    winner : string   // "tensor" | "simdgroup" | "" when the family could not race
+    base_ms : double
+    twin_ms : double
+    note : string
+}
+
+def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
+    var b = metal_new_buffer(dev, bytes)
+    if (src != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(b), src, bytes)
+        }
+    }
+    return b
+}
+
+def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
+    var b = metal_new_buffer(dev, 4ul)
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(b))
+        p[0] = v
+    }
+    return b
+}
+
+// deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
+def race_q8_blob(nblk : int) : array<int8> {
+    var blob : array<int8>
+    blob |> resize(nblk * 34)
+    for (blk in range(nblk)) {
+        for (k in range(32)) {
+            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
+    unsafe {
+        var p8 = addr(blob[0])
+        for (blk in range(nblk)) {
+            var ph = reinterpret<float16?>(p8 + blk * 34)
+            ph[0] = float16(0.5 * float(1 << (blk % 3)))
+        }
+    }
+    return <- blob
+}
+
+// deterministic f32 activation panel for the races
+def race_x_f32(count : int) : array<float> {
+    var xa : array<float>
+    xa |> resize(count)
+    for (i in range(count)) {
+        xa[i] = 0.25 * float(i % 17 - 8)
+    }
+    return <- xa
+}
+
+// eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
+def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
+    var maxref = 0.0lf
+    var maxdiff = 0.0lf
+    unsafe {
+        let pb = reinterpret<float?>(metal_buffer_contents(ba))
+        let pt = reinterpret<float?>(metal_buffer_contents(bb))
+        for (i in range(count)) {
+            maxref = max(maxref, abs(double(pb[i])))
+            maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
+        }
+    }
+    if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+        note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        return false
+    }
+    return true
+}
+
+// best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
+def race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
+    var best = -1.0lf
+    var err = ""
+    for (r in range(reps + 1)) {
+        var gpu_ms = 0.0lf
+        var okr = false
+        okr = with_compute_encoder_timed(queue, err, gpu_ms) $(enc) {
+            invoke(blk, enc)
+        }
+        if (!okr) {
+            return -1.0lf
+        }
+        if (r > 0 && (best < 0.0lf || gpu_ms < best)) {
+            best = gpu_ms
+        }
+    }
+    return best
+}

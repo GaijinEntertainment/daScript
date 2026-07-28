@@ -22,6 +22,7 @@ require dasllama/dasllama_common // the runtime-knob getters (the profile's "run
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — metal_tensor_race (Apple static_if half)
+require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // --tune-fast, shared with the other half
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
@@ -2053,7 +2054,14 @@ def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false
-        for (r in metal_tensor_race()) {
+        var mt_all <- metal_tensor_race()
+        var mt_dec <- metal_tensor_race_decode()
+        mt_all |> reserve(length(mt_all) + length(mt_dec))
+        for (r in mt_dec) {
+            mt_all |> emplace(r)
+        }
+        delete mt_dec
+        for (r in mt_all) {
             mt_ran = true
             let mt_note = empty(r.note) ? "" : " ({r.note})"
             tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
@@ -2066,6 +2074,7 @@ def main {
         }
         metal_crowns = join(mt_wins, ",")
         delete mt_wins
+        delete mt_all
     }
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it

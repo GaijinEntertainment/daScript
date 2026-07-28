@@ -346,7 +346,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             mark_write_target(ctx, ecs.arguments[1])
         }
         // the tensor GEMMs write through their C pointer (arg 7 for the 10-arg forms, 11 for q8xq8)
-        if ((scn == "tmm2d_f32_bf16_f32" || scn == "tmm2d_q8b_f32") && length(ecs.arguments) == 10) {
+        if ((scn == "tmm2d_f32_bf16_f32" && length(ecs.arguments) == 10)
+                || (scn == "tmm2d_q8b_f32" && length(ecs.arguments) == 11)) {
             mark_write_target(ctx, ecs.arguments[7])
         }
         if ((scn == "tmm2d_q8_f32" || scn == "tmm2d_q8_f16s") && length(ecs.arguments) == 14) {
@@ -1203,24 +1204,24 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
         // interleaved-q8_0 W blocks (34B stride, quants pre-offset +2) x raw f32 activations:
         // f32 chunk accumulate, per-(col,chunk) W scale folded between chunks
         return build_string() $(var w) {
-            w |> write("static void {name}(device const half * ws, device const char * wq, device const float * a, uint lda, device float * c, uint ldc, uint kk) \{\n")
+            w |> write("static void {name}(device const half * ws, device const char * wq, device const float * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb) \{\n")
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, 32, false, true, false);\n")
             w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
             w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
             w |> write("    const uint nb = kk / 32u;\n")
             w |> write("    auto A0 = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)a, dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
-            w |> write("    auto W0 = {ct}((device int8_t *)wq, dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(nb * 34u)\});\n")
+            w |> write("    auto W0 = {ct}((device int8_t *)wq, dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldwb * 34u)\});\n")
             w |> write("    auto fT = op.get_destination_cooperative_tensor<decltype(A0), decltype(W0), float>();\n")
             w |> write("    for (uint16_t i = 0; i < fT.get_capacity(); ++i) \{ if (fT.is_valid_element(i)) fT[i] = 0.0f; \}\n")
             w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
             w |> write("        auto A = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
-            w |> write("        auto W = {ct}((device int8_t *)(wq + b * 34u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(nb * 34u)\});\n")
+            w |> write("        auto W = {ct}((device int8_t *)(wq + b * 34u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldwb * 34u)\});\n")
             w |> write("        auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
             w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
             w |> write("        op.run(A, W, cT);\n")
             w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) \{\n")
             w |> write("            auto ids = cT.get_multidimensional_index(i);\n")
-            w |> write("            fT[i] += cT[i] * float(ws[(uint(ids[0]) * nb + b) * 17u]);\n")
+            w |> write("            fT[i] += cT[i] * float(ws[(uint(ids[0]) * ldwb + b) * 17u]);\n")
             w |> write("        \} \}\n")
             w |> write("    \}\n")
             w |> write("    fT.store(C);\n")
@@ -1259,7 +1260,7 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
     let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))
-    let want_args = kind == "bf" || kind == "q8b" ? 10 : 14
+    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : 14)
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
