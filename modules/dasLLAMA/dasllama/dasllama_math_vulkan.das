@@ -4339,33 +4339,42 @@ struct private VkHeapInfo {
 
 def private query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
     var r = VkHeapInfo()
-    if (!device_extension_available(phys, "VK_EXT_memory_budget")) {
-        return r
-    }
+    // heap SIZE needs no extension — only the live budget/usage ride VK_EXT_memory_budget
+    let has_budget = device_extension_available(phys, "VK_EXT_memory_budget")
     var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
     var mp2 = VkPhysicalDeviceMemoryProperties2()
-    unsafe {
-        mp2.pNext = addr<void?>(mb)
+    if (has_budget) {
+        unsafe {
+            mp2.pNext = addr<void?>(mb)
+        }
     }
     vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
     var best = -1
     for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
-        if (mp2.memoryProperties.memoryHeaps[i].flags.device_local
-                && (best < 0 || mb.heapBudget[i] > mb.heapBudget[best])) {
+        if (!mp2.memoryProperties.memoryHeaps[i].flags.device_local) {
+            continue
+        }
+        // rank by live budget when the ext reports it, by raw size otherwise
+        if (best < 0) {
+            best = i
+        } elif (has_budget ? mb.heapBudget[i] > mb.heapBudget[best]
+                : mp2.memoryProperties.memoryHeaps[i].size > mp2.memoryProperties.memoryHeaps[best].size) {
             best = i
         }
     }
-    if (best >= 0 && mb.heapBudget[best] > 0ul) {
-        r.budget = int64(mb.heapBudget[best])
-        r.used = int64(mb.heapUsage[best])
+    if (best >= 0) {
         r.size = int64(mp2.memoryProperties.memoryHeaps[best].size)
+        if (has_budget && mb.heapBudget[best] > 0ul) {
+            r.budget = int64(mb.heapBudget[best])
+            r.used = int64(mb.heapUsage[best])
+        }
     }
     return r
 }
 
 // The pre-carve weight cap, shared by vk_moe_init and the DlimConfiguration source. Env wins
-// outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); auto rounds DOWN to 256 MB so
-// the recorded config (hence the flavor identity) does not churn with heap-budget wiggle.
+// outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); auto derives from heap SIZE, a
+// hardware constant — same number every run. Transient pressure is the memprio shield's job.
 def private resolve_weight_cap(heap : VkHeapInfo) : int64 {
     let vram_mb = gpu_want_vram_mb()
     if (vram_mb > 0l) {
@@ -4375,9 +4384,8 @@ def private resolve_weight_cap(heap : VkHeapInfo) : int64 {
         return WEIGHT_CAP
     }
     var cap = WEIGHT_CAP
-    if (heap.budget > 0l) {
-        cap = clamp(heap.budget - VRAM_RESERVE, 0l, cap)
-        cap = cap / 256_000_000l * 256_000_000l
+    if (heap.size > 0l) {
+        cap = clamp(heap.size - VRAM_RESERVE, 0l, cap)
     }
     return cap
 }
