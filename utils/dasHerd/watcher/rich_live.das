@@ -381,6 +381,20 @@ def herder_worktree_retire_state(input : JsonValue?) : JsonValue? {
     return worktree_verdict_jv(args.repository_id, args.worktree_path)
 }
 
+[live_command(description = "Open the retire-a-worktree checklist dialog on a worktree, exactly as the row's context menu does. Args: repository_id, worktree_path.")]
+def herder_worktree_retire_open(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    g_worktree_retire = WorktreeRetirePrompt(active = true,
+        repository_id = clone_string(args.repository_id),
+        worktree_path = clone_string(args.worktree_path))
+    return JV((ok = true, worktree_path = args.worktree_path))
+}
+
 [live_command(description = "Retire (delete) a worktree. Blocked while a session holds it or the working tree is dirty; force = true is the explicit 'delete anyway, N files lost' escape. The branch and its commits are never touched. Args: repository_id, worktree_path, force.")]
 def herder_worktree_retire(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {
@@ -404,6 +418,34 @@ def herder_worktree_retire(input : JsonValue?) : JsonValue? {
     g_client->request_worktree_delete(args.repository_id, args.worktree_path,
         args.force)
     return JV((ok = true, tier = tier, worktree_path = args.worktree_path))
+}
+
+[live_command(description = "Read the running worktree operation the retire dialog shows: kind, state (idle|running|ok|failed|cancelled), current step, and the full command log.")]
+def herder_worktree_operation_state(_input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var log <- [for (line in g_client.operation.log); JV(line)]
+    return JV((ok = true, kind = g_client.operation.kind,
+        state = g_client.operation.state,
+        worktree_path = g_client.operation.worktree_path,
+        step = g_client.operation.step,
+        step_index = g_client.operation.step_index,
+        step_count = g_client.operation.step_count,
+        error = g_client.operation.error,
+        revision = g_client.operation.revision,
+        queued = length(g_worktree_retire_queue),
+        log <- log))
+}
+
+[live_command(description = "Cancel the running worktree operation. Stops the run; whatever already completed stays done and stays in the log.")]
+def herder_worktree_operation_cancel(_input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    if (g_client.operation.state != "running") {
+        return JV((ok = false, error = "no operation is running"))
+    }
+    g_client->request_worktree_operation_cancel()
+    return JV((ok = true))
 }
 
 [live_command(description = "Rescue a dirty worktree mechanically: stage everything and commit it to the branch, which outlives the worktree. Args: repository_id, worktree_path.")]

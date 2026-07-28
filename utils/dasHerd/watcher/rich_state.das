@@ -89,6 +89,16 @@ struct WatcherWorktreeDeleteResult {
     worktree_path : string
 }
 
+struct WatcherWorktreeOperationEnvelope {
+    @rename = "type" _type : string
+    data : WorktreeOperation = WorktreeOperation()
+}
+
+struct WatcherHerdArchiveOffer {
+    path : string
+    repository_id : string
+}
+
 struct WatcherWorktreeCommitWipResult {
     @rename = "type" _type : string
     ok : bool
@@ -97,18 +107,10 @@ struct WatcherWorktreeCommitWipResult {
     worktree_path : string
 }
 
-struct WatcherHerdDeleteKept {
-    path : string
-    repository_id : string
-    reason : string
-    detail : string
-}
-
 struct WatcherHerdDeleteResult {
     @rename = "type" _type : string
     herd_session_id : string
-    removed : array<string>
-    kept : array<WatcherHerdDeleteKept>
+    offered : array<WatcherHerdArchiveOffer>
 }
 
 struct WatcherMailboxMessageEnvelope {
@@ -574,8 +576,19 @@ struct WorktreeRetirePrompt {
     server_detail : string
     // Result of the last rescue action, shown in place until the next one.
     notice : string
+    // The user passed the checklist and confirmed. Nothing destructive is
+    // sent before this flips, and it resets every time the dialog opens.
+    confirming : bool
 }
 var g_worktree_retire = WorktreeRetirePrompt()
+
+// Worktrees a session retire handed back, drained one at a time through the
+// same operation rail so each gets the same progress and cancel treatment.
+struct WorktreeRetireQueueEntry {
+    repository_id : string
+    worktree_path : string
+}
+var g_worktree_retire_queue : array<WorktreeRetireQueueEntry>
 
 // Deferred launcher open for the resolver offer: open_popup from inside the
 // block modal would nest the launcher under the popup being closed, so the

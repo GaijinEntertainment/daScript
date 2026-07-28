@@ -157,6 +157,26 @@ struct public RepositorySnapshot {
     failure_revision : int64
 }
 
+// A user-initiated worktree operation (retire, WIP-commit). These run on the
+// SAME task-session rail as Git observation instead of blocking the watcher
+// tick: `git worktree remove` deletes a whole tree and `git add -A` walks a
+// dirty one, neither of which is the "fast plumbing" the synchronous path was
+// written for. The UI stays in its dialog and watches this state.
+struct public WorktreeOperation {
+    kind : string
+    repository_id : string
+    worktree_path : string
+    // "idle" | "running" | "ok" | "failed" | "cancelled"
+    state : string = "idle"
+    step : string
+    step_index : int
+    step_count : int
+    error : string
+    // Every command and its output, in order — the dialog's collapsed log.
+    log : array<string>
+    revision : int64
+}
+
 struct public RepositoryAddRequest {
     path : string
     display_name : string
@@ -240,6 +260,14 @@ class private RepositoryRuntime {
 var private g_repositories : array<RepositoryRuntime?>
 var private g_config_path : string
 var private g_revision : int64
+
+// One user operation at a time — a retire is a deliberate single act, and one
+// slot is exactly what the one dialog can show.
+var private g_operation = WorktreeOperation()
+var private g_operation_phase : int
+var private g_operation_session_id : string
+var private g_operation_force : bool
+var private g_operation_message : string
 
 def public repository_default_config_path : string {
     var base : string
@@ -827,6 +855,199 @@ def public repository_remove_worktree(repository_id, worktree_path : string;
     }
     let _ = repository_refresh(repository_id)
     return true
+}
+
+def public repository_operation_revision : int64 => g_operation.revision
+
+def public repository_operation_json : string => sprint_json(g_operation, false)
+
+def private operation_touch() {
+    g_operation.revision++
+}
+
+def private operation_log(line : string) {
+    if (empty(strip(line))) return
+    g_operation.log |> push(line)
+}
+
+def private operation_fail(message : string) {
+    g_operation.state = "failed"
+    g_operation.error = message
+    g_operation.step = "failed"
+    g_operation_phase = 0
+    g_operation_session_id = ""
+    operation_log("ERROR: {message}")
+    operation_touch()
+}
+
+def private operation_finish() {
+    g_operation.state = "ok"
+    g_operation.step = "done"
+    g_operation.step_index = g_operation.step_count
+    g_operation_phase = 0
+    g_operation_session_id = ""
+    operation_touch()
+    let _ = repository_refresh(g_operation.repository_id)
+}
+
+def private operation_launch(argv : array<string>; kind, step : string;
+                             step_index : int) {
+    g_operation.step = step
+    g_operation.step_index = step_index
+    operation_log("$ " + join(argv, " "))
+    operation_touch()
+    let repository_index = find_repository(g_operation.repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        operation_fail("unknown repository")
+        return
+    }
+    var launch_error : string
+    g_operation_session_id = launch_git(g_repositories[repository_index], argv,
+        kind, g_operation.worktree_path, launch_error)
+    if (empty(g_operation_session_id)) operation_fail(launch_error)
+}
+
+def private operation_begin(kind, repository_id, worktree_path : string) : string {
+    if (g_operation.state == "running") {
+        return "another worktree operation is already running"
+    }
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    delete g_operation.log
+    g_operation = WorktreeOperation(kind = kind, repository_id = repository_id,
+        worktree_path = worktree_path, state = "running", step = "starting",
+        step_count = 2, revision = g_operation.revision + 1l)
+    g_operation_phase = 1
+    return ""
+}
+
+def public repository_operation_remove_worktree(repository_id, worktree_path : string;
+                                                force : bool) : string {
+    //! Starts the guarded removal on the task-session rail. Returns "" when it
+    //! STARTED — the outcome arrives through repository_operation_json.
+    let repository_index = find_repository(repository_id)
+    if (repository_index >= 0 && g_repositories[repository_index] != null) {
+        let checkout = g_repositories[repository_index].snapshot.record.checkout_path
+        if (repository_same_worktree_identity(worktree_path, checkout)) {
+            return "the main checkout cannot be deleted"
+        }
+        let worktree_index = find_worktree(g_repositories[repository_index],
+            worktree_path)
+        if (worktree_index >= 0
+                && g_repositories[repository_index].snapshot.worktrees[worktree_index].is_main) {
+            return "the main checkout cannot be deleted"
+        }
+    }
+    let begin_error = operation_begin("remove", repository_id, worktree_path)
+    if (!empty(begin_error)) return begin_error
+    g_operation_force = force
+    // force skips the dirty check entirely; that IS the escape, and re-asking
+    // would only stall the delete the user already accepted the cost of.
+    if (force) {
+        g_operation.step_count = 1
+        g_operation_phase = 2
+        operation_launch(["git", "-C",
+            g_repositories[find_repository(repository_id)].snapshot.record.checkout_path,
+            "worktree", "remove", "--force", worktree_path],
+            "git-worktree-remove", "removing worktree (forced)", 1)
+    } else {
+        operation_launch(["git", "-C", worktree_path, "status", "--porcelain"],
+            "git-worktree-precheck", "checking for uncommitted work", 1)
+    }
+    return ""
+}
+
+def public repository_operation_commit_wip(repository_id, worktree_path,
+                                           message : string) : string {
+    //! Stage-everything-and-commit, on the same rail. Refused on a detached
+    //! HEAD, where the commit would be unreachable once the worktree goes.
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    let worktree_index = find_worktree(g_repositories[repository_index],
+        worktree_path)
+    if (worktree_index < 0) return "unknown worktree"
+    if (empty(g_repositories[repository_index].snapshot.worktrees[worktree_index].branch)) {
+        return "detached HEAD: a commit here would not be on any branch"
+    }
+    let begin_error = operation_begin("commit_wip", repository_id, worktree_path)
+    if (!empty(begin_error)) return begin_error
+    g_operation_message = message
+    operation_launch(["git", "-C", worktree_path, "add", "-A"],
+        "git-wip-add", "staging every change", 1)
+    return ""
+}
+
+def public repository_operation_cancel : string {
+    //! Cancel is honest about what it can undo: it stops the RUN, and the log
+    //! keeps whatever already happened. A completed `git worktree remove` is
+    //! not put back.
+    if (g_operation.state != "running") return "no operation is running"
+    if (!empty(g_operation_session_id)) {
+        let _ = watcher_terminate(g_operation_session_id, "cancelled by user")
+    }
+    g_operation.state = "cancelled"
+    g_operation.step = "cancelled"
+    g_operation_phase = 0
+    g_operation_session_id = ""
+    operation_log("cancelled by user")
+    operation_touch()
+    let _ = repository_refresh(g_operation.repository_id)
+    return ""
+}
+
+def private advance_operation() {
+    if (g_operation_phase == 0 || empty(g_operation_session_id)) return
+    let task <- poll_task(g_operation_session_id)
+    if (!task.ready) return
+    let output = strip(task.output)
+    operation_log(output)
+    let checkout_index = find_repository(g_operation.repository_id)
+    let checkout = (checkout_index >= 0 && g_repositories[checkout_index] != null
+        ? g_repositories[checkout_index].snapshot.record.checkout_path : "")
+    if (g_operation.kind == "remove") {
+        if (g_operation_phase == 1) {
+            if (task.exit_code != 0l) {
+                operation_fail("git status exited {task.exit_code}")
+                return
+            }
+            if (!empty(output)) {
+                operation_fail("uncommitted or untracked work is present")
+                return
+            }
+            g_operation_phase = 2
+            operation_launch(["git", "-C", checkout, "worktree", "remove",
+                g_operation.worktree_path], "git-worktree-remove",
+                "removing worktree", 2)
+            return
+        }
+        if (task.exit_code != 0l) {
+            operation_fail(empty(output)
+                ? "git worktree remove exited {task.exit_code}" : output)
+            return
+        }
+        operation_finish()
+        return
+    }
+    if (g_operation_phase == 1) {
+        if (task.exit_code != 0l) {
+            operation_fail(empty(output) ? "git add exited {task.exit_code}" : output)
+            return
+        }
+        g_operation_phase = 2
+        operation_launch(["git", "-C", g_operation.worktree_path, "commit",
+            "--no-verify", "-m", g_operation_message], "git-wip-commit",
+            "committing to the branch", 2)
+        return
+    }
+    if (task.exit_code != 0l) {
+        operation_fail(empty(output) ? "git commit exited {task.exit_code}" : output)
+        return
+    }
+    operation_finish()
 }
 
 def public repository_commit_worktree_wip(repository_id, worktree_path,
@@ -2293,4 +2514,5 @@ def public repository_tick() {
         advance_commit_files(runtime)
         advance_refs(runtime)
     }
+    advance_operation()
 }

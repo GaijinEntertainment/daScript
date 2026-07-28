@@ -33,6 +33,8 @@ class WatcherRichClient : HvWebSocketClient {
     attached_id : string
     sessions : array<WatcherSessionInfo>
     repositories : array<RepositorySnapshot>
+    // The watcher's one running worktree operation, pushed as it progresses.
+    operation : WorktreeOperation = WorktreeOperation()
     herd_profiles : array<HerdProfile>
     herd_sessions : array<HerdSession>
     herd_revision : int64 = -1l
@@ -279,27 +281,28 @@ class WatcherRichClient : HvWebSocketClient {
             }
         } elif (envelope._type == "herd_archive_result") {
             var incoming = WatcherHerdDeleteResult()
-            if (sscan_json(body, incoming) && !empty(incoming.kept)) {
-                // The record is archived either way; a worktree the watcher
-                // kept comes back as its own checklist. The rest stay visible
-                // in the git panel with the same flow.
-                g_worktree_retire = WorktreeRetirePrompt(active = true,
-                    repository_id = clone_string(incoming.kept[0].repository_id),
-                    worktree_path = clone_string(incoming.kept[0].path),
-                    herd_session_id = clone_string(incoming.herd_session_id),
-                    server_reason = clone_string(incoming.kept[0].reason),
-                    server_detail = clone_string(incoming.kept[0].detail))
+            if (sscan_json(body, incoming) && !empty(incoming.offered)) {
+                // The record is already archived. Its worktrees queue up and
+                // drain one at a time through the same operation rail, so each
+                // gets the same checklist, progress and cancel.
+                delete g_worktree_retire_queue
+                g_worktree_retire_queue <- [for (offer in incoming.offered);
+                    WorktreeRetireQueueEntry(
+                        repository_id = clone_string(offer.repository_id),
+                        worktree_path = clone_string(offer.path))]
+                open_next_queued_retire()
+            }
+        } elif (envelope._type == "worktree_operation") {
+            var incoming = WatcherWorktreeOperationEnvelope()
+            if (sscan_json(body, incoming)) {
+                delete operation.log
+                operation <- incoming.data
             }
         } elif (envelope._type == "worktree_commit_wip_result") {
             var incoming = WatcherWorktreeCommitWipResult()
-            if (sscan_json(body, incoming)) {
-                g_worktree_retire.notice = (incoming.ok
-                    ? clone_string("Committed to the branch; the working tree is clean.")
-                    : clone_string("Could not commit: {incoming.detail}"))
-                if (incoming.ok) {
-                    g_worktree_retire.server_reason = ""
-                    g_worktree_retire.server_detail = ""
-                }
+            if (sscan_json(body, incoming) && !incoming.ok) {
+                g_worktree_retire.notice = clone_string(
+                    "Could not start the commit: {incoming.detail}")
             }
         } elif (envelope._type == "mailbox") {
             var incoming = WatcherMailboxMessageEnvelope()
@@ -579,6 +582,11 @@ class WatcherRichClient : HvWebSocketClient {
         send("\{\"op\":\"worktree_delete\",\"repository_id\":" +
             "{sprint_json(repository_id, false)},\"worktree_path\":" +
             "{sprint_json(worktree_path, false)},\"force\":{force}\}")
+    }
+
+    def request_worktree_operation_cancel() {
+        if (!connected) return
+        send("\{\"op\":\"worktree_operation_cancel\"\}")
     }
 
     def request_worktree_commit_wip(repository_id, worktree_path,
@@ -916,6 +924,18 @@ class WatcherRichClient : HvWebSocketClient {
 }
 
 var g_client : WatcherRichClient?
+
+def open_next_queued_retire() {
+    //! Pops the next worktree a session retire handed over and opens the same
+    //! checklist on it. Sequencing is the client's job because the watcher
+    //! runs one operation at a time.
+    if (empty(g_worktree_retire_queue)) return
+    let next = g_worktree_retire_queue[0]
+    g_worktree_retire_queue |> erase(0)
+    g_worktree_retire = WorktreeRetirePrompt(active = true,
+        repository_id = clone_string(next.repository_id),
+        worktree_path = clone_string(next.worktree_path))
+}
 
 def herd_session_claiming(worktree_path : string;
                           exclude_herd_id : string = "") : string {
