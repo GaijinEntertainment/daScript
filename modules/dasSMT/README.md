@@ -10,6 +10,7 @@ Enable with `-DDAS_SMT_DISABLED=OFF`.
 - `daslib/smt_boost.das` — raw-API helpers: context/solver lifecycle, error polling, array-argument wrappers
 - `daslib/smt_expr.das` — typed symbolic values (`SInt`/`SBool`/`SReal`/`SString`/`SBv8..64`, plus `SFloat`/`SDouble` over the IEEE FPA theory), Z3py-style solver/model API
 - `daslib/smt_macro.das` — `constrain` / `smt_formula` macros and `[smt_fn]` function lifting
+- `daslib/smt_lint.das` — `[lint_macro]` reachability lint (`SMT001` / `SMT002`); see below
 - `examples/` — `hello_z3.das` (raw C API), `hello_smtlib.das` (SMT-LIB text), `hello_api.das` (typed API), `atlas_packing.das` + `entity_placement.das` (showcases), `theorems.das` (`[smt_fn]` over Diophantine equations: Z3 solves Euler #9, but Fermat n=3 is undecidable)
 
 ## The three levels
@@ -73,6 +74,117 @@ def valid_cell(x, y : int) : bool {
 }
 s |> add(valid_cell(ex, ey))    // whole function, loops unrolled, becomes one formula
 ```
+
+## Reachability lint (SMT001 / SMT002)
+
+`daslib/smt_lint.das` is a `[lint_macro]` that symbolically executes each function
+body, accumulating a path condition, and asks Z3 whether each branch condition can
+hold on the paths that reach it. It finds contradictions no other lint in the tree
+can see — nothing else does value tracking across branches.
+
+```das
+require smt/daslib/smt_lint
+```
+
+| Code | Fires when |
+|---|---|
+| `SMT001` | a branch is unreachable: its condition is unsatisfiable on every path that reaches it |
+| `SMT002` | a condition is always true and has no `else`: the guard is redundant. **Default-off** — enable with `options _enable_default_off_rules = true` or a `.lint_config` entry |
+
+Both report as style warnings (error code `31209`) and honor `// nolint:SMT001` on
+the `if` line. That line is also where an else-branch finding is reported, so a
+suppression comment has one obvious home.
+
+```das
+def f(a : int) {
+    if (a > 10) {
+        if (a < 5) { ... }        // SMT001: cannot hold
+    }
+}
+
+def g(a : int) : int {
+    if (a > 7) return -1
+    if (a > 7) { ... }            // SMT001: the guard already returned
+}
+
+def h(a : int) : int {
+    assert(a > 100)
+    if (a < 0) { ... }            // SMT001: the assertion narrowed the range
+}
+```
+
+### What it will not tell you
+
+Only an `UNSAT` verdict is ever reported; every other outcome is silence, so the
+pass under-reports rather than guessing.
+
+- **Integer overflow.** `int` is modeled as unbounded SMT `Int`, which does not
+  wrap. Before reporting, every integer add/sub/mul/negate feeding the decision
+  must be provably inside the 32-bit signed range under the path condition — so a
+  genuine overflow guard (`let b = a + 1; if (b < a)`) stays silent, and so does
+  any condition whose arithmetic operands are unbounded.
+- **Only `int`, `bool`, `float`, `double`.** Other integer widths and `uint` are
+  opaque: the overflow bound above is written for 32-bit signed, and `%` / `/`
+  truncate toward zero in das, which neither `Z3_mk_mod` nor `Z3_mk_rem` matches.
+  For the same reason integer `/` and `%` are not translated.
+- **Floats are exact IEEE**, via the FPA theory rather than `SReal`, so `x != x`
+  is correctly treated as reachable (NaN) and `0.1 + 0.2 == 0.3` as false.
+  Int↔float casts are *not* translated — unbounded `Int → Real → FP` is not
+  decidable in practice (it times out on trivial goals).
+- **Anything aliased is untracked.** A local whose address is taken, that is
+  passed where a callee could write it, or that a closure can reach, is re-read as
+  a fresh unknown every time.
+- **Loops run once, abstractly.** Everything a loop body writes is forgotten
+  before and after it, so no fact crosses the loop edge.
+- **Calls, fields and indices are opaque**, and each *occurrence* gets its own
+  unknown — two reads of `p.x` are never assumed equal.
+- **Generic instantiations are skipped entirely.** A specialized body's `at` points
+  at the shared template, so a verdict there does not generalize: `if (a != a)` in
+  `def f(a : auto(TT))` is dead for `TT=int` and live for `TT=float`, and a program
+  this compile never sees can instantiate it either way.
+- **Literal conditions are left to STYLE010.** `if (false)` is constant folding, not
+  a path contradiction — and a `$v(...)` qmacro splice collapsing to a constant is
+  the macro author's intent.
+- **Macro-expanded arm syntax reports in expanded terms.** `daslib/match` rewrites
+  `match (b) { if (true) ... if (false) ... }` into `b == true` / `b == false`
+  without marking the nodes generated, so a finding there is logically right (the
+  second arm *is* exhaustive) while quoting a condition the source does not show.
+
+### Budget
+
+Every query carries a Z3 timeout, because FPA is bit-blasted and unbounded `*` is
+nonlinear. Defaults: 250 ms per query, 200 queries per function, translation depth
+64. Override per module:
+
+```das
+options _smt_lint_timeout_ms = 500
+options _smt_lint_max_queries = 400
+```
+
+Measured cost on large in-tree files (`utils/lint/main.das`, `daslib/aot_cpp.das`):
+11–51 ms, no findings.
+
+### Pass ordering caveat
+
+The lint pass runs **after** optimization, and the optimizer rewrites
+`if (c) { return x }` followed by `return y` into `return c ? x : y` — which leaves
+no if-node to analyze. Guard-style findings therefore only appear when the pass runs
+with optimizations off, the way `utils/lint/main.das` and `tests/smt_lint_check.das`
+compile their inputs:
+
+```das
+cop.lint_check = true
+cop.no_optimizations = true
+cop.no_infer_time_folding = true
+```
+
+Required through a plain `require` (optimizations on), the pass still catches
+contradictions the optimizer left standing, such as nested `if`s.
+
+`utils/lint/main.das` does not run this pass — it cannot `require` an opt-in module.
+`tests/smt_lint_check.das` is the driver; each fixture marks expected findings with
+a trailing `// smt_expect <CODE>` comment and the driver fails on both a missed
+detection and an unexpected one.
 
 ## Raw API
 

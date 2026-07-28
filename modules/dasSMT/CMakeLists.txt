@@ -141,5 +141,6 @@ struct.pack_into('<qQ',d,o+z[0]*16,16,0); open(sys.argv[1],'wb').write(d)
     ADD_EXAMPLE_RUN(modules/dasSMT/examples/entity_placement.das)
     ADD_EXAMPLE_RUN(modules/dasSMT/examples/theorems.das)
     ADD_EXAMPLE_RUN(modules/dasSMT/examples/smt_fn_errors.das FALSE)
+    ADD_EXAMPLE_RUN(modules/dasSMT/tests/smt_lint_check.das FALSE)
 
 ENDIF()
