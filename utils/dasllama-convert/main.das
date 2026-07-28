@@ -349,7 +349,9 @@ def main() : int {
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
         if (cfg.stream && cfg.flavor == Flavor.planar) {
-            apply_box_profile_runtime()
+            // NO apply_box_profile_runtime() here: it already ran before the --config override,
+            // and re-reading the sidecar would revert the config's pinned knobs AFTER the
+            // fail-closed identity verify (silently un-pinning a cross-box streamed bake)
             var mt = Model()
             var jobs : array<FillJob>
             var blk_ran = false
