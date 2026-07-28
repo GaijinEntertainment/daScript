@@ -3188,6 +3188,30 @@ set site, and any reference the analysis cannot classify — a capture, a
 ``flag && other`` read, an argument pass — all keep the rule silent.
 Init-``true`` separator flags never match. Suppress a deliberate keep with
 ``// nolint:STYLE041`` on the declaration line.
+=======
+--------------------------------------------
+SMT001 / SMT002 — solver-backed reachability
+--------------------------------------------
+
+Two further codes live outside this module, in the opt-in ``smt`` module
+(``-DDAS_SMT_DISABLED=OFF``), because they need a Z3 solver:
+
+* ``SMT001`` — a branch whose condition is unsatisfiable on every path that
+  reaches it.
+* ``SMT002`` — a condition that is always true with no ``else``: a redundant
+  guard. Default-off, seeded by ``seed_default_disabled``.
+
+They are produced by ``modules/dasSMT/daslib/smt_lint.das``, report under the
+same ``31209`` code as the style rules, and honor ``// nolint:SMT001``. Unlike
+every rule above, they track values across branches: a symbolic executor
+accumulates a path condition and asks the solver whether each branch can hold.
+
+``utils/lint/main.das`` does **not** run them — it cannot ``require`` an opt-in
+module. Enable them with ``require smt/daslib/smt_lint``, and note that
+guard-style findings need optimizations off (the optimizer rewrites
+``if (c) { return x }`` / ``return y`` into a ternary, leaving no if-node to
+analyze). See ``modules/dasSMT/README.md`` for the soundness limits and the
+query budget.
 
 -----
 Tests
@@ -3203,4 +3227,5 @@ Lint tests are in ``utils/lint/tests/``::
     ``daslib/perf_lint.das`` (performance lint source),
     ``daslib/style_lint.das`` (style lint source),
     ``daslib/dupe_detect.das`` (STYLE040 duplicate-region engine),
+    ``modules/dasSMT/daslib/smt_lint.das`` (SMT reachability lint source),
     ``utils/lint/main.das`` (unified standalone utility)

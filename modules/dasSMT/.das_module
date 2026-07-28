@@ -5,7 +5,7 @@ require daslib/fio
 [export]
 def initialize(project_path : string) {
     let daslib_paths = [
-        "smt_boost", "smt_expr", "smt_macro"
+        "smt_boost", "smt_expr", "smt_macro", "smt_lint"
     ]
     let bindings_paths = [
         "z3_const", "z3_enum", "z3_func", "z3_struct"
