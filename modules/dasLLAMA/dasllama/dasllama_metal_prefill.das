@@ -253,6 +253,27 @@ class MetalBf16MulMm {
     }
 }
 
+// Metal-4 tensor twin of MetalBf16MulMm: the SAME 32x64 tile per threadgroup off the same
+// binds, lowered to mpp matmul2d over tensor_inline views. Raced vs the simdgroup kernel by
+// the tuner (runtime.metal_tensor crown "mulmm_bf16"); dispatch shape identical (128 = 4 sg).
+class MetalBf16MulMmT {
+    @ssbo @binding = 0 @role = "weight" wbh : array<uint16> // bf16 W rows, halfword view
+    @ssbo @binding = 2 @role = "read" xf : array<float>   // raw f32 activations
+    @ssbo @binding = 3 @role = "write" y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+
+    [metal_kernel(name="metal_bf16_mulmm_t_msl")]
+    def metal_bf16_mulmm_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        var ap = unsafe(addr(xf[mBase * kdim]))
+        var wp = unsafe(addr(wbh[nBase * kdim]))
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_f32_bf16_f32(32u, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
+    }
+}
+
 // E-series PLE gather (GPU pre-step, stage 1): dequant token row slices of the Q8_0
 // per_layer_token_embd region straight into the LAYER-major side-input panel, sqrt(ple) folded.
 // One tg per (layer, position) slice; binds ride blob_of's q8 pair at the region base.
@@ -4480,6 +4501,7 @@ var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_add : MetalComputePipeline?
 var private g_pf_pso_mm : MetalComputePipeline?    // the production das mul_mm (34B q8 blocks + f32 X)
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
+var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -4841,7 +4863,10 @@ def private metal_prefill_init : bool {
     g_pf_pso_cat2 = pf_compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_pso_add = pf_compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
     g_pf_pso_mm = pf_compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok)
-    g_pf_pso_bf16_mm = pf_compile_pso(metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, ok)
+    g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
+    g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
+        ? pf_compile_pso(metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, ok)
+        : pf_compile_pso(metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, ok))
     g_pf_pso_ple_gather = pf_compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
     g_pf_pso_ple_finish = pf_compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
     g_pso_kq_mm4 = pf_compile_pso(metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, ok)
@@ -6173,7 +6198,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     kn_dispatch(enc, uint3(uint(c.n_layers), uint(npos), 1u), uint3(uint(ple_n), 1u, 1u))
                     let bwp = pf_bf16_of(t, t.ple_model_off)
                     kn_pipeline(enc, g_pf_pso_bf16_mm)
-                    kn_tgmem(enc, metal_bf16_mulmm_msl_tgmem, 0)
+                    if (!g_pf_bf16_mm_tensor) {
+                        kn_tgmem(enc, metal_bf16_mulmm_msl_tgmem, 0)
+                    }
                     kn_buffer(enc, bwp.buf, bwp.boff, 0)
                     kn_buffer(enc, bx, 0ul, 2)
                     kn_buffer(enc, bple_proj, 0ul, 3)
