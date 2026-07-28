@@ -46,6 +46,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
 
 ## Metal backend
 

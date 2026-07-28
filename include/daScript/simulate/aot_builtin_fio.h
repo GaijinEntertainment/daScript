@@ -95,6 +95,7 @@ namespace das {
     DAS_API bool builtin_dwrite_commit ( void * h, uint64_t bytes, Context * context, LineInfoArg * at );
     DAS_API uint64_t builtin_dwrite_stat ( void * h, int32_t which, Context * context, LineInfoArg * at );
     DAS_API bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at );
     DAS_API char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at );
     DAS_API char * builtin_basename ( const char * name, Context * context, LineInfoArg * at );
     DAS_API bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at );

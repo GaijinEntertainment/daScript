@@ -3310,6 +3310,18 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         var bases : array<void?>
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
+            // fault the source in AHEAD of the parallel transcode (in-loop faults serialize lanes)
+            if (env_flag("DASLLAMA_PREFETCH", true)) {
+                var pf_mb = 0l
+                for (bi in range(length(bases))) {
+                    if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
+                        pf_mb += sizes[bi] >> 20l
+                    }
+                }
+                if (pf_mb > 0l) {
+                    to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({pf_mb} MB across {length(shards)} shards)\n")
+                }
+            }
             var m <- parse_gguf_meta_shards(bases, sizes)
             unsafe {
                 load_gguf_parsed(t, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>), mode, ts_load)
@@ -3326,6 +3338,15 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
+        if (env_flag("DASLLAMA_PREFETCH", true)) {
+            var armed = false
+            unsafe {
+                armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
+            }
+            if (armed) {
+                to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
+            }
+        }
         var inscope m <- parse_gguf_meta(bytes)
         load_gguf_parsed(t, m, bytes, mode, ts_load)
     }

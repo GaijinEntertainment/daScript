@@ -229,6 +229,8 @@ def private reg_vulkan(var o : array<EnvKnob>) {
       "Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B.")
     k(o, "DASLLAMA_VK_XFERQ", EnvKind.flag, EnvArea.vulkan, "on",
       "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail.")
+    k(o, "DASLLAMA_PREFETCH", EnvKind.flag, EnvArea.engine, "on",
+      "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting.")
     k(o, "DASLLAMA_TRIM", EnvKind.flag, EnvArea.vulkan, "off",
       "Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity).")
     k(o, "DASLLAMA_VK_MEMPRIO", EnvKind.flag, EnvArea.vulkan, "on",

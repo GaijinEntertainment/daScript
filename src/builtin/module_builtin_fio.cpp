@@ -54,6 +54,7 @@ void * das_dwrite_band ( void * h, uint64_t * avail );
 bool das_dwrite_commit ( void * h, uint64_t bytes );
 uint64_t das_dwrite_stat ( void * h, int which );
 bool das_dwrite_close ( void * h );
+bool das_prefetch_map ( void * base, uint64_t bytes );
 
 namespace das {
 
@@ -502,6 +503,13 @@ namespace das {
     bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at ) {
         if ( !h ) context->throw_error_at(at, "dwrite_close: null writer");
         return das_dwrite_close(h);
+    }
+
+    // advisory readahead over a mapped range (PrefetchVirtualMemory / madvise WILLNEED) — the
+    // cold-conversion fix. false = the OS declined; reads still work, just cold.
+    bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) {
+        if ( !base && bytes ) context->throw_error_at(at, "prefetch_map: null base");
+        return das_prefetch_map(base, bytes);
     }
 
     // plain ftell/fseek take `long`, which is 32-bit on Windows (LLP64) — use the explicit
@@ -2324,6 +2332,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_dwrite_close)>(*this, lib, "dwrite_close",
                 SideEffects::modifyExternal, "builtin_dwrite_close")
                     ->args({"writer","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_prefetch_map)>(*this, lib, "prefetch_map",
+                SideEffects::modifyExternal, "builtin_prefetch_map")
+                    ->args({"base","bytes","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets",
                 SideEffects::modifyExternal, "builtin_fgets")
                     ->args({"file","context","line"});
@@ -2571,6 +2582,31 @@ void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, of
 
 int munmap ( void* start, size_t ) {
     return !UnmapViewOfFile(start);
+}
+
+#endif
+
+// ===== prefetch: advisory readahead over a mapped range =====
+
+#if DAS_NO_FILEIO
+
+bool das_prefetch_map ( void *, uint64_t ) { return false; }
+
+#else
+
+// Ask the OS to fault a mapped range in AHEAD of use — the cold-read fix (on-demand page
+// faults inside a parallel transcode loop serialize the lanes; measured 9x on Q4_K source).
+// Advisory: a false return means the OS declined — reads still work, just cold.
+bool das_prefetch_map ( void * base, uint64_t bytes ) {
+    if ( !base || bytes==0 ) return false;
+#ifdef _MSC_VER
+    WIN32_MEMORY_RANGE_ENTRY range;
+    range.VirtualAddress = base;
+    range.NumberOfBytes = (SIZE_T) bytes;
+    return PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0) != 0;
+#else
+    return madvise(base, (size_t)bytes, MADV_WILLNEED)==0;
+#endif
 }
 
 #endif
