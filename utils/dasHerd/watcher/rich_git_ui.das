@@ -65,6 +65,8 @@ var GIT_STATUS_UNSTAGE_MENU : table<int; ToggleState>
 
 var GIT_GROUP_CHECK : table<int; ToggleState>
 
+var GIT_GROUP_CHECK_JOIN : table<int; EmptyMarkerState>
+
 var GIT_STATUS_DISCARD_MENU : table<int; ToggleState>
 
 var GIT_DISCARD_LIST_ROW : table<int; NarrativeState>
@@ -674,7 +676,7 @@ def draw_git_file_group(repository : RepositorySnapshot const;
         selection_set_group(g_changelist_selection, repository.record.id,
             worktree.path, group, group_keys, GIT_GROUP_CHECK[group].value)
     }
-    same_line()
+    same_line(GIT_GROUP_CHECK_JOIN[group])
     let title = group == 0 ? "CONFLICTS" : (group == 1 ? "STAGED"
         : (group == 2 ? "MODIFIED" : "UNTRACKED"))
     text(GIT_GROUP_TITLE[group], (text = "{title}  {count}"))
