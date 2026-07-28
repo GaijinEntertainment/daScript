@@ -1142,11 +1142,12 @@ def private consume_event(line : string; render : bool) {
     }
     let kind = parts[0]
     if (kind == "plan") {
-        g_prog.scope = event_field(parts, "scope", "")
-        g_prog.outerTotal = to_int(event_field(parts, "total", "0"))
-        g_prog.outerDone = 0
-        g_prog.startTicks = ref_time_ticks()
-        g_prog.active = true
+        // a fresh scope: one relay sees both tuner halves, so the previous scope's kernel must go
+        g_prog = TuneProgress(
+            scope = event_field(parts, "scope", ""),
+            outerTotal = to_int(event_field(parts, "total", "0")),
+            startTicks = ref_time_ticks(),
+            active = true)
     } elif (kind == "begin") {
         g_prog.kernel = event_field(parts, "name", "")
         g_prog.innerTotal = to_int(event_field(parts, "total", "0"))

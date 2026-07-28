@@ -110,6 +110,24 @@ def test_a_spaced_value_truncates_but_does_not_corrupt(t : T?) {
     t |> success(line |> find("0/2") >= 0, "the counters are untouched")
 }
 
+// One relay sees both dasllama tuner halves, so a second plan must not inherit the first
+// scope's kernel — there is fixture setup between a plan and its first begin to show it in.
+[test]
+def test_a_new_plan_clears_the_previous_scope(t : T?) {
+    feed_plan(3)
+    tune_progress_feed("@tune begin name=leftover total=9")
+    tune_progress_feed("@tune step i=4 phase=finalists live=7")
+    tune_progress_feed("@tune end name=leftover winner=w verdict=holds")
+    t |> success(tune_progress_line(100) |> find("leftover") >= 0, "still the first scope here")
+    // second half starts; nothing from the first may survive into its opening frame
+    tune_progress_feed("@tune plan scope=second total=7")
+    let line = tune_progress_line(100)
+    t |> success(line |> find("leftover") < 0, "the previous scope's kernel is gone")
+    t |> success(line |> find("finalists") < 0, "and so is its pass")
+    t |> success(line |> find("live") < 0, "and its live count")
+    t |> success(line |> find("0/7") >= 0, "the new plan's counters are in place")
+}
+
 [test]
 def test_verbosity_parses_and_defaults(t : T?) {
     tune_set_verbosity("silent")
