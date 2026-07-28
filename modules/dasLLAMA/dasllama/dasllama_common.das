@@ -3875,6 +3875,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             && gguf_tensor_type(m, "per_layer_model_proj.weight") == GGML_TYPE_BF16)
         let kv = t.config.kv_dim
         let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
+        // streaming covers the q8-mode load_big rails; models with direct-write loaders
+        // (mx4 experts, grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the
+        // eager path proceeds with fully materialized planes and an empty job list
+        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.experts_mx4 || t.dn_grouped || t.ple_model_bf16)) {
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed — unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
+            g_fill_plan_mode = false
+        }
         let sz = layout_offsets(t)
         // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
         reserve_resize(t.fblob, sz.fblob_n)
@@ -3888,39 +3895,54 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             t.mxs |> reserve(sz.mx_n / 32l)
             t.mxs |> resize(sz.mx_n / 32l)
         }
+        // streaming: big q-halves never materialize (jobs stream them to the writer); scale
+        // halves are small (6-16%) and stay in RAM. Unstreamable features disarmed above.
+        let stream_q = g_fill_plan_mode
         if (sz.k4_n > 0l) {
-            t.k4q |> reserve((sz.k4_n / 256l) * K4_QSB)
-            t.k4q |> resize((sz.k4_n / 256l) * K4_QSB)
+            if (!stream_q) {
+                t.k4q |> reserve((sz.k4_n / 256l) * K4_QSB)
+                t.k4q |> resize((sz.k4_n / 256l) * K4_QSB)
+            }
             t.k4s |> reserve((sz.k4_n / 256l) * K4_SSB)
             t.k4s |> resize((sz.k4_n / 256l) * K4_SSB)
         }
         if (sz.k5_n > 0l) {
-            t.k5q |> reserve((sz.k5_n / 256l) * K5_QSB)
-            t.k5q |> resize((sz.k5_n / 256l) * K5_QSB)
+            if (!stream_q) {
+                t.k5q |> reserve((sz.k5_n / 256l) * K5_QSB)
+                t.k5q |> resize((sz.k5_n / 256l) * K5_QSB)
+            }
             t.k5s |> reserve((sz.k5_n / 256l) * K5_SSB)
             t.k5s |> resize((sz.k5_n / 256l) * K5_SSB)
         }
         if (sz.k6_n > 0l) {
-            t.k6q |> reserve((sz.k6_n / 256l) * K6_QSB)
-            t.k6q |> resize((sz.k6_n / 256l) * K6_QSB)
+            if (!stream_q) {
+                t.k6q |> reserve((sz.k6_n / 256l) * K6_QSB)
+                t.k6q |> resize((sz.k6_n / 256l) * K6_QSB)
+            }
             t.k6s |> reserve((sz.k6_n / 256l) * K6_SSB)
             t.k6s |> resize((sz.k6_n / 256l) * K6_SSB)
         }
         if (sz.q40_n > 0l) {
-            t.q40q |> reserve((sz.q40_n / 256l) * Q40_QSB)
-            t.q40q |> resize((sz.q40_n / 256l) * Q40_QSB)
+            if (!stream_q) {
+                t.q40q |> reserve((sz.q40_n / 256l) * Q40_QSB)
+                t.q40q |> resize((sz.q40_n / 256l) * Q40_QSB)
+            }
             t.q40s |> reserve((sz.q40_n / 256l) * Q40_SSB)
             t.q40s |> resize((sz.q40_n / 256l) * Q40_SSB)
         }
         if (sz.q51_n > 0l) {
-            t.q51q |> reserve((sz.q51_n / 32l) * Q51_QB)
-            t.q51q |> resize((sz.q51_n / 32l) * Q51_QB)
+            if (!stream_q) {
+                t.q51q |> reserve((sz.q51_n / 32l) * Q51_QB)
+                t.q51q |> resize((sz.q51_n / 32l) * Q51_QB)
+            }
             t.q51s |> reserve((sz.q51_n / 32l) * Q51_SB)
             t.q51s |> resize((sz.q51_n / 32l) * Q51_SB)
         }
         if (mode == QuantMode.q8) {
-            t.qblob |> reserve(sz.wblob_n)
-            t.qblob |> resize(sz.wblob_n)
+            if (!stream_q) {
+                t.qblob |> reserve(sz.wblob_n)
+                t.qblob |> resize(sz.wblob_n)
+            }
             t.qscales |> reserve(sz.wblob_n / 32l)
             t.qscales |> resize(sz.wblob_n / 32l)
         } elif (mode == QuantMode.q4_0) {
@@ -4156,9 +4178,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
         } elif (t.cls_q8) {
-            // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read
-            gguf_transcode_q8_0(m, bytes, "token_embd.weight", t.qblob, t.qscales, t.wcls_off, t.wcls_off / 32l, vocab * dim)
-            gguf_transcode_q8_0(m, bytes, "token_embd.weight", t.qblob, t.qscales, t.emb_q8_off, t.emb_q8_off / 32l, vocab * dim)
+            // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
+            // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
+            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
         } elif (cls_kq(t)) {
             // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
             // (the kq planes stay in disk order — no repack, so no second linear copy)
