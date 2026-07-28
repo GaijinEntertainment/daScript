@@ -2185,6 +2185,56 @@ def public set_moe_gpu_dry_bake_arm(f : function<(v : DlimVulkanConfig) : bool>)
 //! this process' env wants — the tier logs the exact mismatch).
 def public moe_gpu_dry_bake_arm(v : DlimVulkanConfig) : bool => invoke(g_moe_gpu_dry_bake, v)
 
+//! A baked-plan gather's mapped-file window (P2 imported mirrors): pointers into the flavor
+//! image's mapping + plane byte sizes. wq == null = no window recorded for (woff, fmt).
+typedef MoeGpuSliceWindow = tuple<wq : void?; ws : void?; wqb : int64; wsb : int64>
+
+[unused_argument(woff, fmt)]
+def private moe_gpu_no_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow {
+    return default<MoeGpuSliceWindow>
+}
+
+var private g_moe_gpu_slice_window = @@moe_gpu_no_slice_window
+
+//! The loader registers its slice-window provider (populated while slicing a flavor image);
+//! a GPU tier asks through [[moe_gpu_slice_window]] to import instead of copying.
+def public set_moe_gpu_slice_window_fn(f : function<(woff : int64; fmt : int) : MoeGpuSliceWindow>) {
+    g_moe_gpu_slice_window = f
+}
+
+def public moe_gpu_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow => invoke(g_moe_gpu_slice_window, woff, fmt)
+
+[unused_argument(base, bytes)]
+def private moe_gpu_no_unmap_notify(base : void?; bytes : uint64) {}
+
+var private g_moe_gpu_unmap_notify = @@moe_gpu_no_unmap_notify
+
+//! A GPU tier registers this to learn a model's mapping is about to unmap — imported device
+//! memory over that mapping must be released FIRST (the Model finalizer invokes it).
+def public set_moe_gpu_unmap_notify(f : function<(base : void?; bytes : uint64) : void>) {
+    g_moe_gpu_unmap_notify = f
+}
+
+def public moe_gpu_unmap_notify(base : void?; bytes : uint64) {
+    invoke(g_moe_gpu_unmap_notify, base, bytes)
+}
+
+[unused_argument(n, rows, fmt, stream)]
+def private moe_gpu_always_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool => true
+
+var private g_moe_gpu_would_accept = @@moe_gpu_always_accept
+
+//! A GPU tier registers its accept arithmetic (no side effects). The slice replay asks through
+//! [[moe_gpu_would_accept]] whether a gather the plan lacks is a refusal boundary — the bake
+//! never records refused gathers, so the walk's boundary attempt must re-refuse, not diverge.
+def public set_moe_gpu_would_accept_fn(f : function<(n : int64; rows : int64; fmt : int; stream : bool) : bool>) {
+    g_moe_gpu_would_accept = f
+}
+
+def public moe_gpu_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool {
+    return invoke(g_moe_gpu_would_accept, n, rows, fmt, stream)
+}
+
 def private moe_gpu_no_bake_tag : string => ""
 
 var private g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
@@ -2272,13 +2322,17 @@ def public moe_gpu_upload_stack(wq : array<uint8> | #; ws : array<uint8> | #; wo
     if (!g_moe_gpu_installed) {
         return false
     }
-    var wsp : uint8 const?   // q8n stacks carry no scale plane — an empty ws hands the tier null
+    // empty planes hand the tier null: q8n stacks carry no scale plane, and the slice replay's
+    // refusal-boundary serve is empty on purpose (the tier refuses on arithmetic, no bytes read)
+    var wqp : uint8 const?
+    if (!empty(wq)) {
+        wqp = unsafe(addr<uint8 const?>(wq[0]))
+    }
+    var wsp : uint8 const?
     if (!empty(ws)) {
         wsp = unsafe(addr<uint8 const?>(ws[0]))
     }
-    unsafe {
-        return invoke(g_moe_gpu_upload, addr<uint8 const?>(wq[0]), wsp, woff, n, rows, fmt, stream)
-    }
+    return invoke(g_moe_gpu_upload, wqp, wsp, woff, n, rows, fmt, stream)
 }
 
 //! Fused MoE FFN on the GPU tier — the whole gate+up -> act -> requant -> down chain of the

@@ -429,6 +429,28 @@ var private g_vk_bake_plan : array<VkPlanEntry>
 var private g_vk_bake_cursor = 0l
 var private g_vk_bake_role = VkBakeRole.none
 
+// P2 imported mirrors: the mapped-blob window of each sliced gather, keyed woff*8+fmt (the
+// marks convention) — the stream-mirror path imports these instead of copying to pinned RAM
+struct private SliceWindow {
+    wq : void?
+    ws : void?
+    wq_bytes : int64
+    ws_bytes : int64
+}
+
+var private g_vk_slice_windows : table<int64; SliceWindow>
+
+def private vk_slice_window_provider(woff : int64; fmt : int) : MoeGpuSliceWindow {
+    let k = woff * 8l + int64(fmt)
+    if (!key_exists(g_vk_slice_windows, k)) {
+        return default<MoeGpuSliceWindow>
+    }
+    unsafe {
+        let w & = g_vk_slice_windows[k]
+        return (wq = w.wq, ws = w.ws, wqb = w.wq_bytes, wsb = w.ws_bytes)
+    }
+}
+
 //! The upload walk declares its current stage here (collect stamps it, slice verifies it).
 def vulkan_bake_role(r : VkBakeRole) {
     g_vk_bake_role = r
@@ -459,6 +481,7 @@ def vulkan_bake_slice_begin {
     g_vk_bake = VkBakeMode.slice
     g_vk_bake_role = VkBakeRole.none
     g_vk_bake_cursor = 0l
+    g_vk_slice_windows |> clear()
 }
 
 //! Disarm after a successful flavor load; a partially-consumed plan means the walk diverged
@@ -513,19 +536,36 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     if (g_vk_bake != VkBakeMode.slice) {
         return false
     }
-    // plan divergence DECLINES to live gathers mid-walk (seamless: matched entries were byte-identical)
+    // the bake records only ACCEPTED gathers — serve a would-refuse mismatch EMPTY (the refusal is pure arithmetic), hold the cursor: the walk re-refuses, rolls back, and re-syncs with the plan
     if (g_vk_bake_cursor >= long_length(t.vkplan)) {
+        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
+            wq |> resize(0)
+            ws |> resize(0)
+            return true
+        }
         to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} — regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
     }
     let e = t.vkplan[int(g_vk_bake_cursor)]
     if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows || e.role != int(g_vk_bake_role)) {
+        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
+            wq |> resize(0)
+            ws |> resize(0)
+            return true
+        }
         to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) — regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
     }
     g_vk_bake_cursor++
+    // record the mapped window (P2: the stream-mirror path imports it instead of copying)
+    unsafe {
+        g_vk_slice_windows |> insert(e.woff * 8l + int64(fmt), SliceWindow(
+            wq = e.wq_bytes > 0l ? addr<void?>(t.vkblob[e.wq_off]) : null,
+            ws = e.ws_bytes > 0l ? addr<void?>(t.vkblob[e.ws_off]) : null,
+            wq_bytes = e.wq_bytes, ws_bytes = e.ws_bytes))
+    }
     // int-indexed destinations: a >2GB plane would resize truncated and then memcpy past it
     assert(e.wq_bytes <= 2_147_483_647l && e.ws_bytes <= 2_147_483_647l,
         "vulkan image: a baked plane exceeds the int-indexed array cap")
@@ -1081,6 +1121,8 @@ def finalize(var t : Model) {
         }
     }
     if (t.image_map != null) {
+        // imported device memory over this mapping (P2 mirrors) must release BEFORE the unmap
+        moe_gpu_unmap_notify(t.image_map, t.image_bytes)
         unsafe {
             fmap_close(t.image_map, t.image_bytes)
         }
@@ -2223,6 +2265,7 @@ def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {
 def dlim_config_sources_register() {
     set_dlim_cpu_source(@@dlim_cpu_source_impl)
     set_dlim_metal_source(@@dlim_metal_source_impl)
+    set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
 }
 
 def private count_fmt(a : array<KqFmt>; f : KqFmt) : int {
@@ -3643,7 +3686,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         fill_plan_take(jobs)
         t.tok <- load_tokenizer_auto(path)
         unsafe {
-            ok = invoke(blk, m, temp_array(reinterpret<uint8?>(addr(bytes[0])), long_length(bytes), type<uint8>))
+            ok = invoke(blk, m, temp_array(addr<uint8?>(bytes[0]), long_length(bytes), type<uint8>))
         }
     }
     fclose(f)
