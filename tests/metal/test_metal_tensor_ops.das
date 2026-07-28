@@ -100,6 +100,20 @@ class TmmKernels {
     }
 }
 
+// Metal-4 availability probe: the tensor ops need the MPP framework + MSL 4.0 (macOS 26) —
+// absent on older runners, where the GPU half must skip (a compile failure there is not a
+// regression; on a Metal-4 box the real kernels still assert loudly).
+def private metal4_available(dev : MetalDevice?) : bool {
+    var err = ""
+    let src = "#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\nusing namespace metal;\nkernel void probe() \{\}\n"
+    var lib = metal_new_library_from_source(dev, src, false, err)
+    if (lib == null) {
+        return false
+    }
+    metal_release(lib)
+    return true
+}
+
 def private fill_oracle(var o : TmmKernels?) {
     o.xa |> resize(M * KK)
     o.wb |> resize(N * KK)
@@ -180,6 +194,10 @@ def test_tensor_ops(t : T?) {
             with_metal_device() <| $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                if (!metal4_available(dev)) {
+                    feint("Metal-4 tensor ops unavailable (needs macOS 26 / MSL 4.0); GPU compare skipped\n")
                     return
                 }
                 var queue = metal_new_command_queue(dev)
