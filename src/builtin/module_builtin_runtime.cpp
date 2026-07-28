@@ -24,8 +24,19 @@
 #include "../parser/parser_impl.h"
 
 // arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.
+// Guarded to arm64, so no other target's translation unit is affected by anything here.
 #if defined(__aarch64__) || defined(_M_ARM64)
-    #if defined(__APPLE__)
+    #if defined(_WIN32)
+        // IsProcessorFeaturePresent + the PF_ARM_* constants; nothing else in this TU's include
+        // graph pulls windows.h in, so without this the arm64 Windows build does not compile.
+        #ifndef NOMINMAX
+            #define NOMINMAX
+        #endif
+        #ifndef WIN32_LEAN_AND_MEAN
+            #define WIN32_LEAN_AND_MEAN
+        #endif
+        #include <windows.h>
+    #elif defined(__APPLE__)
         #include <sys/sysctl.h>
     #elif defined(__linux__)
         #include <sys/auxv.h>
