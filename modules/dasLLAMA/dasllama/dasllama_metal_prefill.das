@@ -253,6 +253,30 @@ class MetalBf16MulMm {
     }
 }
 
+// Metal-4 tensor twin of MetalQ8MulMm: the SAME 32x64 tile per threadgroup off the same binds
+// (blob bound twice — half-scale + byte views), lowered to one tmm2d_q8b_f32. Raced vs the
+// simdgroup kernel by the tuner (runtime.metal_tensor crown "mulmm_q8"); dispatch identical.
+class MetalQ8MulMmT {
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME blob buffer, byte view
+    @ssbo @binding = 2 @role = "read" xf : array<float>    // raw f32 activations
+    @ssbo @binding = 3 @role = "write" y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+
+    [metal_kernel(name="metal_q8_mulmm_t_msl")]
+    def metal_q8_mulmm_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        let blk0 = nBase * (kdim / 32u)
+        var sp = unsafe(addr(wsh[blk0 * 17u]))
+        var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
+        var ap = unsafe(addr(xf[mBase * kdim]))
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim)
+    }
+}
+
 // Metal-4 tensor twin of MetalBf16MulMm: the SAME 32x64 tile per threadgroup off the same
 // binds, lowered to mpp matmul2d over tensor_inline views. Raced vs the simdgroup kernel by
 // the tuner (runtime.metal_tensor crown "mulmm_bf16"); dispatch shape identical (128 = 4 sg).
@@ -4502,6 +4526,7 @@ var private g_pf_pso_add : MetalComputePipeline?
 var private g_pf_pso_mm : MetalComputePipeline?    // the production das mul_mm (34B q8 blocks + f32 X)
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
+var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -4862,7 +4887,10 @@ def private metal_prefill_init : bool {
     g_pf_pso_copy = pf_compile_pso(metal_pf_copy_msl, metal_pf_copy_msl_entry, metal_pf_copy_msl_fastmath, ok)
     g_pf_pso_cat2 = pf_compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_pso_add = pf_compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
-    g_pf_pso_mm = pf_compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok)
+    g_pf_mm_tensor = metal_tensor_crowned("mulmm_q8")
+    g_pf_pso_mm = (g_pf_mm_tensor
+        ? pf_compile_pso(metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, ok)
+        : pf_compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok))
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
     g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
         ? pf_compile_pso(metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, ok)
@@ -5043,7 +5071,9 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
 // yoff places the K/V outputs past a continuation's existing panel rows.
 def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; mp, d : int64; yoff : uint64 = 0ul) {
     kn_pipeline(enc, g_pf_pso_mm)
-    kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
+    if (!g_pf_mm_tensor) {
+        kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
+    }
     kn_buffer(enc, bwblob, wboff, 0)
     kn_buffer(enc, bwblob, wboff, 1)
     kn_buffer(enc, bx, 0ul, 2)
@@ -7006,6 +7036,23 @@ var private g_pf_env_capture = true
 var private g_pf_env_ncb = 0   // 0 = unset, fall back to the layer-derived default
 
 [init]
+def dasllama_metal_prefill_register() {
+    // registered but dormant: only select_prefill_override("metal") (env rail
+    // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
+    register_prefill_override("metal", @@metal_prefill_forward)
+    register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
+    g_pf_env_mulmm = env_flag("DASLLAMA_METAL_MULMM", true)
+    g_pf_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
+    g_pf_env_attn = env_flag("DASLLAMA_METAL_ATTN", true)
+    g_pf_env_unretained = env_flag("DASLLAMA_METAL_UNRETAINED", false)
+    g_pf_env_capture = env_flag("DASLLAMA_METAL_PF_CAPTURE", true)
+    g_pf_env_ncb = env_int("DASLLAMA_METAL_NCB", 0)
+    if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
+        g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")
+    }
+}
+
 // ===== Metal-4 tensor twin race (the tuner's crowning section) =====
 
 struct public MetalTensorRaceResult {
@@ -7140,6 +7187,106 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
     return res
 }
 
+def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = "mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let m = 512
+    let kdim = 2048
+    let ndim = 1024
+    let nkb = kdim / 32
+    var err = ""
+    var base_pso = pipeline_from_source(dev, metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, err)
+    if (base_pso == null) {
+        res.note = "base pso: {err}"
+        return res
+    }
+    var twin_pso = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+    if (twin_pso == null) {
+        res.winner = "simdgroup"
+        res.note = "twin pso: {err}"
+        metal_release(base_pso)
+        return res
+    }
+    var xa : array<float>
+    var blob : array<int8>
+    xa |> resize(m * kdim)
+    blob |> resize(ndim * nkb * 34)
+    for (i in range(m * kdim)) {
+        xa[i] = 0.25 * float(i % 17 - 8)
+    }
+    for (blk in range(ndim * nkb)) {
+        for (k in range(32)) {
+            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
+    unsafe {
+        var p8 = addr(blob[0])
+        for (blk in range(ndim * nkb)) {
+            var ph = reinterpret<float16?>(p8 + blk * 34)
+            ph[0] = float16(0.5 * float(1 << (blk % 3)))
+        }
+    }
+    var bw = race_buf(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
+    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
+    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bk = race_uniform_u32(dev, uint(kdim))
+    var bn = race_uniform_u32(dev, uint(ndim))
+    let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
+    let tg = uint3(128u, 1u, 1u)
+    res.base_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, base_pso)
+        kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
+        kn_buffer(enc, bw, 0ul, 0)
+        kn_buffer(enc, bw, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_base, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_dispatch(enc, grid, tg)
+    }
+    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, twin_pso)
+        kn_buffer(enc, bw, 0ul, 0)
+        kn_buffer(enc, bw, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_twin, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_dispatch(enc, grid, tg)
+    }
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } else {
+        // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
+        var maxref = 0.0lf
+        var maxdiff = 0.0lf
+        unsafe {
+            let pb = reinterpret<float?>(metal_buffer_contents(by_base))
+            let pt = reinterpret<float?>(metal_buffer_contents(by_twin))
+            for (i in range(m * ndim)) {
+                maxref = max(maxref, abs(double(pb[i])))
+                maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
+            }
+        }
+        if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+            res.winner = "simdgroup"
+            res.note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        } else {
+            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+        }
+    }
+    metal_release(bw)
+    metal_release(bxa)
+    metal_release(by_base)
+    metal_release(by_twin)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(base_pso)
+    metal_release(twin_pso)
+    return res
+}
+
 //! Tuner entry (the runtime.metal_tensor crown): race every tensor pso twin against its
 //! shipped simdgroup kernel on THIS box — compile + output-match to qualify, faster GPU time
 //! takes the family's crown. Empty when there is no Metal device.
@@ -7151,24 +7298,8 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     }
     var queue = metal_new_command_queue(dev)
     results |> emplace(race_mulmm_bf16(dev, queue))
+    results |> emplace(race_mulmm_q8(dev, queue))
     metal_release(queue)
     metal_release(dev)
     return <- results
-}
-
-def dasllama_metal_prefill_register() {
-    // registered but dormant: only select_prefill_override("metal") (env rail
-    // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
-    register_prefill_override("metal", @@metal_prefill_forward)
-    register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
-    g_pf_env_mulmm = env_flag("DASLLAMA_METAL_MULMM", true)
-    g_pf_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
-    g_pf_env_attn = env_flag("DASLLAMA_METAL_ATTN", true)
-    g_pf_env_unretained = env_flag("DASLLAMA_METAL_UNRETAINED", false)
-    g_pf_env_capture = env_flag("DASLLAMA_METAL_PF_CAPTURE", true)
-    g_pf_env_ncb = env_int("DASLLAMA_METAL_NCB", 0)
-    if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
-        g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")
-    }
 }

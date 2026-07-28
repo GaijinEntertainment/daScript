@@ -86,7 +86,7 @@ def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op 
 // tmm2d tensor builtins (dasMetal): pointer operands — C is written, the rest are read.
 // Returns the C-argument index, or -1 for any other call.
 def private tmm2d_c_arg(cname : string) : int {
-    if (cname == "tmm2d_f32_bf16_f32") {
+    if (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8b_f32") {
         return 7
     }
     return cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" ? 11 : -1

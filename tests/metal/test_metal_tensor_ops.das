@@ -29,6 +29,8 @@ class TmmKernels {
     @ssbo @binding = 5 wq : array<int8>      // W: N x KK int8 quants
     @ssbo @binding = 6 wsf : array<float>    // ws: N x NB weight block scales
     @ssbo @binding = 7 wsh : array<uint16>   // ws as binary16 halfwords (the f16s twin)
+    @ssbo @binding = 8 bsh : array<float16>  // q8b: 34B-interleaved W blob, half-scale view
+    @ssbo @binding = 9 bqb : array<int8>     // q8b: the SAME blob layout, byte view
 
     [metal_kernel(name="tmm_bf16_msl"), marker(no_coverage)]
     def tmm_bf16_k {
@@ -56,6 +58,15 @@ class TmmKernels {
         var vp = unsafe(addr(wsh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8_f16s(8u, 16u, 2u, ap, 64u, sp, 2u, wp, 64u, vp, 2u, cp, 16u, 64u)
+    }
+
+    [metal_kernel(name="tmm_q8b_msl"), marker(no_coverage)]
+    def tmm_q8b_k {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xa[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8b_f32(8u, 16u, 2u, sp, wp, ap, 64u, cp, 16u, 64u)
     }
 }
 
@@ -85,6 +96,15 @@ def private fill_oracle(var o : TmmKernels?) {
         o.wsf[i] = v
         o.wsh[i] = uint16(f32_to_f16(v))       // powers of two are f16-exact
     }
+    // q8b blob: block (j*NB+b) = 2B f16 scale + 32 int8 quants, integer-valued and pow2-scaled
+    o.bsh |> resize(N * NB * 17)
+    o.bqb |> resize(N * NB * 34)
+    for (blk in range(N * NB)) {
+        o.bsh[blk * 17] = float16(0.5 * float(1 << (blk % 3)))
+        for (k in range(32)) {
+            o.bqb[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
 }
 
 [test]
@@ -93,6 +113,7 @@ def test_tensor_ops(t : T?) {
         t |> success(find(tmm_bf16_msl, "__das_tmm2d_bf_8_16_2") >= 0, "bf helper generated")
         t |> success(find(tmm_q8_msl, "__das_tmm2d_q8_8_16_2") >= 0, "q8 helper generated")
         t |> success(find(tmm_q8h_msl, "__das_tmm2d_q8h_8_16_2") >= 0, "q8h helper generated")
+        t |> success(find(tmm_q8b_msl, "__das_tmm2d_q8b_8_16_2") >= 0, "q8b helper generated")
         t |> success(find(tmm_bf16_msl, "MetalPerformancePrimitives") >= 0, "MPP include present")
         t |> success(find(tmm_bf16_msl, "mpp::tensor_ops") >= 0, "namespace present")
         t |> success(find(tmm_bf16_msl, "__das_tmm2d_bf_8_16_2(") < find(tmm_bf16_msl, "kernel void"), "helper precedes the kernel")
@@ -110,6 +131,9 @@ def test_tensor_ops(t : T?) {
         want_q8 := oracle.oc
         oracle->tmm_q8h_k()
         want_q8h := oracle.oc
+        var want_q8b : array<float>
+        oracle->tmm_q8b_k()
+        want_q8b := oracle.oc
         var nz = 0
         for (v in want_q8) {
             nz += v != 0.0 ? 1 : 0
@@ -130,10 +154,12 @@ def test_tensor_ops(t : T?) {
                 var bwq = buf_upload(dev, oracle.wq)
                 var bwsf = buf_upload(dev, oracle.wsf)
                 var bwsh = buf_upload(dev, oracle.wsh)
+                var bbsh = buf_upload(dev, oracle.bsh)
+                var bbqb = buf_upload(dev, oracle.bqb)
                 gpu_bad = 0
-                for (which in range(3)) {
-                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : tmm_q8h_msl)
-                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : tmm_q8h_msl_entry)
+                for (which in range(4)) {
+                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : tmm_q8b_msl))
+                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : tmm_q8b_msl_entry))
                     var perr : string
                     var pso = pipeline_from_source(dev, src, entry, false, perr)
                     t |> success(pso != null, "pipeline {entry}: {perr}")
@@ -143,16 +169,16 @@ def test_tensor_ops(t : T?) {
                     }
                     var boc = buf_fill(dev, M * N, 0.0)
                     let tew = metal_pipeline_thread_execution_width(pso)
-                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh]
+                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb]
                     var rerr : string
                     let tpg = uint(tew) * SGS
                     let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr)
                     t |> success(ran, "dispatch {entry}: {rerr}")
                     if (ran) {
-                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : want_q8h))
+                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : want_q8b)))
                         if (bad != 0) {
                             var got <- buf_download(boc, M * N, type<float>)
-                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : want_q8h))
+                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : want_q8b)))
                             var shown = 0
                             for (i in range(M * N)) {
                                 if (got[i] != wref[i] && shown < 4) {
@@ -181,6 +207,8 @@ def test_tensor_ops(t : T?) {
                 metal_release(bwq)
                 metal_release(bwsf)
                 metal_release(bwsh)
+                metal_release(bbsh)
+                metal_release(bbqb)
                 metal_release(queue)
             }
             if (gpu_bad >= 0) {

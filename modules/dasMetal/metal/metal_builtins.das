@@ -349,3 +349,31 @@ def public tmm2d_q8_f16s(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : f
         }
     }
 }
+
+//! Interleaved-q8_0 W blocks x RAW f32 activations (the production MulMm dataflow). `wsh` is the
+//! blob's f16-scale view at the tile's first block (row j chunk b scale at (j*nb+b)*17); `wqb`
+//! the byte view pre-offset to that block's quants (+2 done by the caller — row j chunk b quant k
+//! at (j*nb+b)*34 + k). f32 chunk accumulate, W scale folded between chunks.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * nb + b
+                    var ch = 0.0
+                    for (k in range(32)) {
+                        ch += a[r * int(lda) + b * 32 + k] * float(wqb[blk * 34 + k])
+                    }
+                    facc += ch * float(wsh[blk * 17])
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
