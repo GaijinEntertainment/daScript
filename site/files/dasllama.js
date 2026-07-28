@@ -184,11 +184,14 @@
   // Each category names the exact das flavor and the exact llama.cpp flavor it is measured
   // against. "stock" at -ngl 0 -nopo 1 is a genuine CPU number; without -nopo llama.cpp
   // op-offloads big-batch work to Metal and the row would not be CPU at all.
+  // Labels stay vendor-neutral so they survive x86: "accel" is whatever accelerated math path
+  // the box has (Accelerate/AMX on Apple, MKL or AOCL elsewhere), and every GPU backend is one
+  // "gpu" category — which one ran is in the row's receipt.
   var LANES = [
-    { backend: 'cpu',    das: 'tuned', ref: 'clean-cpu', label: 'generic neon-64' },
-    { backend: 'cpu',    das: 'accel', ref: 'stock',     label: 'cpu + AMX' },
-    { backend: 'metal',  das: 'tuned', ref: 'stock',     label: 'as shipped' },
-    { backend: 'vulkan', das: 'tuned', ref: 'stock',     label: 'vulkan' }
+    { backend: 'cpu',    das: 'tuned', ref: 'clean-cpu', label: 'cpu' },
+    { backend: 'cpu',    das: 'accel', ref: 'stock',     label: 'cpu + accel' },
+    { backend: 'metal',  das: 'tuned', ref: 'stock',     label: 'gpu' },
+    { backend: 'vulkan', das: 'tuned', ref: 'stock',     label: 'gpu' }
   ];
 
   function tok(r, k) { return (r.tests && r.tests[k]) ? r.tests[k].tok_s : 0; }
