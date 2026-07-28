@@ -56,6 +56,13 @@ def profile_threads() : int {
     if (!empty(env)) {
         return max(to_int(env), 1)
     }
+    // Intel hybrid (12th-gen+/Core Ultra) tripwire: the rig pins against the slow cores on
+    // Apple but has NO E-core avoidance on x86 yet — measuring through E-cores would publish
+    // garbage that looks plausible. Fail loudly until P/E pinning is implemented.
+    let cpu = platform_cpu()
+    if (find(cpu, "Intel") >= 0 && (find(cpu, "th Gen") >= 0 || find(cpu, "Core(TM) Ultra") >= 0)) {
+        panic("profile_threads: Intel hybrid CPU detected ({cpu}) — P/E pinning is not implemented; set DASLLAMA_THREADS + affinity manually or implement the P-core mask first")
+    }
     let phys = physical_perf_cores()
     return phys > 0 ? min(16, phys) : 16
 }
