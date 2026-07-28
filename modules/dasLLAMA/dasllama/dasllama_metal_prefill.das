@@ -4096,6 +4096,62 @@ class MetalAttnAV {
 // The ggml-geometry attention pair (v21 lessons applied to the trio's QK/AV GEMMs — the old
 // 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate, owning 24ms of the 3B window).
 // QK: S[h] = scale * Q_h . K_h^T, 32x64 C tiles; DASLLAMA_METAL_ATTN=0 pins the trio (hs % 64 != 0 too).
+
+// Metal-4 staged-tile twin of MetalAttnQKMm: flat f16 tiles per head-dim chunk (Q pre-scaled
+// at staging like the base), same causal/window block skips (threadgroup-uniform).
+class MetalAttnQKMmT {
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 k : array<float>
+    @ssbo @binding = 2 att : array<float>
+    @uniform @binding = 3 qd : uint
+    @uniform @binding = 4 kv_dim : uint
+    @uniform @binding = 5 head_size : uint
+    @uniform @binding = 6 kv_mul : uint
+    @uniform @binding = 7 npos : uint
+    @uniform @binding = 8 np32 : uint
+    @uniform @binding = 9 scale : float
+    @uniform @binding = 10 qoff : uint
+    @uniform @binding = 11 qrows : uint
+    @uniform @binding = 12 window : uint
+    @workgroup twa : float16[1024]          // Q chunk: 32 queries x 32 k, flat (pre-scaled)
+    @workgroup twb : float16[2048]          // K chunk: 64 keys x 32 k, flat
+
+    [metal_kernel(name="metal_attn_qk_mm_t_msl")]
+    def metal_attn_qk_mm_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        if (nBase > qoff + mBase + 31u ||
+                (window > 0u && qoff + mBase + 1u > window && nBase + 64u <= qoff + mBase + 1u - window)) {
+            return
+        }
+        let h = gl_WorkGroupID.z
+        let kvhoff = (h / kv_mul) * head_size
+        let qhoff = h * head_size
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2048]
+        var cp = unsafe(addr(att[h * qrows * np32 + mBase * np32 + nBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb * 32u < head_size) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(q[(mBase + i / 32u) * qd + qhoff + kb * 32u + i % 32u] * scale)
+                i += gl_WorkGroupSize.x
+            }
+            i = lid
+            while (i < 2048u) {
+                twb[i] = float16(k[(nBase + i / 32u) * kv_dim + kvhoff + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, np32)
+    }
+}
+
 class MetalAttnQKMm {
     @ssbo @binding = 0 @role = "read" q : array<float4>    // [mp x qd/4], roped
     @ssbo @binding = 1 @role = "read" k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
@@ -4209,6 +4265,57 @@ class MetalAttnQKMm {
 // AV: O_h = P_h . V_h — C tile 32 tokens x 64 V-columns, k walks the causally limited position
 // axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (causal
 // softmax zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
+
+// Metal-4 staged-tile twin of MetalAttnAVMm: P x V over flat f16 tiles; V staged TRANSPOSED
+// (col-major source) with pad positions >= npos zeroed (0 * stale-NaN would poison the tile).
+class MetalAttnAVMmT {
+    @ssbo @binding = 0 att : array<float>
+    @ssbo @binding = 1 v : array<float>
+    @ssbo @binding = 2 xb : array<float>
+    @uniform @binding = 3 qd : uint
+    @uniform @binding = 4 kv_dim : uint
+    @uniform @binding = 5 head_size : uint
+    @uniform @binding = 6 kv_mul : uint
+    @uniform @binding = 7 npos : uint
+    @uniform @binding = 8 np32 : uint
+    @uniform @binding = 9 qoff : uint
+    @uniform @binding = 10 qrows : uint
+    @workgroup twa : float16[1024]          // P chunk: 32 tokens x 32 positions, flat
+    @workgroup twb : float16[2048]          // V chunk: 64 v-cols x 32 positions, flat (transposed)
+
+    [metal_kernel(name="metal_attn_av_mm_t_msl")]
+    def metal_attn_av_mm_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let vBase = gl_WorkGroupID.y * 64u
+        let h = gl_WorkGroupID.z
+        let kvhoff = (h / kv_mul) * head_size
+        let lid = gl_LocalInvocationID.x
+        let klimit = min(qoff + mBase + 32u, np32)   // P rows here are zero past qoff+mBase+31
+        var acc : float[2048]
+        var cp = unsafe(addr(xb[mBase * qd + h * head_size + vBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb * 32u < klimit) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(att[h * qrows * np32 + (mBase + i / 32u) * np32 + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            i = lid
+            while (i < 2048u) {
+                let pos = kb * 32u + i % 32u
+                twb[i] = pos < npos ? float16(v[pos * kv_dim + kvhoff + vBase + i / 32u]) : float16(0.0)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, qd)
+    }
+}
+
 class MetalAttnAVMm {
     @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] normalized P
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
@@ -4844,6 +4951,10 @@ var private g_pf_kq_mm5_tensor : bool     // "kq_mulmm_k5" crowned
 var private g_pso_kq_mm5_t : MetalComputePipeline?
 var private g_pf_kq_mm6_tensor : bool     // "kq_mulmm_k6" crowned
 var private g_pso_kq_mm6_t : MetalComputePipeline?
+var private g_pf_qkmm_tensor : bool       // "attn_qkmm" crowned
+var private g_pso_qkmm_t : MetalComputePipeline?
+var private g_pf_avmm_tensor : bool       // "attn_avmm" crowned
+var private g_pso_avmm_t : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -5156,6 +5267,14 @@ def public metal_prefill_shutdown {
         metal_release(g_pso_qkmm)
         g_pso_qkmm = null
     }
+    if (g_pso_qkmm_t != null) {
+        metal_release(g_pso_qkmm_t)
+        g_pso_qkmm_t = null
+    }
+    if (g_pso_avmm_t != null) {
+        metal_release(g_pso_avmm_t)
+        g_pso_avmm_t = null
+    }
     if (g_pso_avmm != null) {
         metal_release(g_pso_avmm)
         g_pso_avmm = null
@@ -5254,6 +5373,14 @@ def private metal_prefill_init : bool {
     g_pf_pso_kq6 = pf_compile_pso(metal_kq_gemv_k6_msl, metal_kq_gemv_k6_msl_entry, metal_kq_gemv_k6_msl_fastmath, ok)
     g_pso_qkmm = pf_compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pso_avmm = pf_compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
+    g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
+    if (g_pf_qkmm_tensor) {
+        g_pso_qkmm_t = pf_compile_pso(metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, ok)
+    }
+    g_pf_avmm_tensor = metal_tensor_crowned("attn_avmm")
+    if (g_pf_avmm_tensor) {
+        g_pso_avmm_t = pf_compile_pso(metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, ok)
+    }
     g_pf_pso_gemv = pf_compile_pso(metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, ok)
     g_pf_pso_moe_router = pf_compile_pso(metal_moe_router_msl, metal_moe_router_msl_entry, metal_moe_router_msl_fastmath, ok)
     g_pf_pso_moe_router_b = pf_compile_pso(metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, ok)
@@ -5834,8 +5961,9 @@ def private enc_rope(enc : MetalComputeEncoder?; bv, bcos, bsin, bn, bhs, bnpair
 // The key grid spans nk64 (= np32's value — existing rows + the chunk on a continuation);
 // bqoff/bqrows carry the causal shift and the score slab's row extent.
 def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt, bqd, bkvd, bhs, bkvm, bnp, bnp32, bscale, bqoff, bqrows, bwin : MetalBuffer?; mp, nk64, heads : int64) {
-    kn_pipeline(enc, g_pso_qkmm)
-    kn_tgmem(enc, metal_attn_qk_mm_msl_tgmem, 0)
+    let twinq = g_pf_qkmm_tensor && g_pso_qkmm_t != null
+    kn_pipeline(enc, twinq ? g_pso_qkmm_t : g_pso_qkmm)
+    kn_tgmem(enc, twinq ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem, 0)
     kn_buffer(enc, bq, 0ul, 0)
     kn_buffer(enc, bk, 0ul, 1)
     kn_buffer(enc, batt, 0ul, 2)
@@ -5857,8 +5985,9 @@ def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt, bqd, bkvd, bhs, 
 }
 
 def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb, bqd, bkvd, bhs, bkvm, bnp, bnp32, bqoff, bqrows : MetalBuffer?; mp, heads, head_size : int64) {
-    kn_pipeline(enc, g_pso_avmm)
-    kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
+    let twina = g_pf_avmm_tensor && g_pso_avmm_t != null
+    kn_pipeline(enc, twina ? g_pso_avmm_t : g_pso_avmm)
+    kn_tgmem(enc, twina ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem, 0)
     kn_buffer(enc, batt, 0ul, 0)
     kn_buffer(enc, bv, 0ul, 1)
     kn_buffer(enc, bxb, 0ul, 2)
@@ -7920,6 +8049,172 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
     return res
 }
 
+// attention pair races: synthetic Q/K/V; BOTH att/xb outputs pre-zeroed (causal-skipped tiles
+// stay unwritten in both kernels — fresh-buffer garbage would flake the envelope compare).
+def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : array<MetalTensorRaceResult> {
+    var out : array<MetalTensorRaceResult>
+    let heads = 8
+    let hs = 128
+    let qd = heads * hs
+    let kvd = qd
+    let mp = 128
+    let np32 = 128
+    var err = ""
+    var q_pso = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
+    var qt_pso = pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
+    var a_pso = pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
+    var at_pso = pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
+    if (q_pso == null || qt_pso == null || a_pso == null || at_pso == null) {
+        out |> emplace(MetalTensorRaceResult(family = "attn_qkmm", winner = q_pso != null ? "simdgroup" : "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "pso: {err}"))
+        out |> emplace(MetalTensorRaceResult(family = "attn_avmm", winner = a_pso != null ? "simdgroup" : "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "pso: {err}"))
+    } else {
+        var qv <- race_x_f32(mp * qd)
+        var kv <- race_x_f32(np32 * kvd)
+        var pv <- race_x_f32(mp * np32 * heads)
+        var zeros : array<float>
+        zeros |> resize(heads * mp * np32)
+        var bq = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(qv[0])))
+        var bkk = race_buf(dev, uint64(np32 * kvd * 4), unsafe(addr<void?>(kv[0])))
+        var bp = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(pv[0])))
+        var batt_b = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(zeros[0])))
+        var batt_t = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(zeros[0])))
+        var bxb_b = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
+        var bxb_t = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
+        var uqd = race_uniform_u32(dev, uint(qd))
+        var ukvd = race_uniform_u32(dev, uint(kvd))
+        var uhs = race_uniform_u32(dev, uint(hs))
+        var ukvm = race_uniform_u32(dev, 1u)
+        var unp = race_uniform_u32(dev, uint(np32))
+        var unp32 = race_uniform_u32(dev, uint(np32))
+        var uqoff = race_uniform_u32(dev, 0u)
+        var uqrows = race_uniform_u32(dev, uint(mp))
+        var uwin = race_uniform_u32(dev, 0u)
+        let fscale = 0.125
+        var uscale = race_buf(dev, 4ul, unsafe(addr<void?>(fscale)))
+        let qgrid = uint3(uint(mp / 32), uint(np32 / 64), uint(heads))
+        let agrid = uint3(uint(mp / 32), uint(hs / 64), uint(heads))
+        let tg = uint3(128u, 1u, 1u)
+        var res = MetalTensorRaceResult(family = "attn_qkmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+        res.base_ms = race_time_ms(queue, 5) $(enc) {
+            kn_pipeline(enc, q_pso)
+            kn_tgmem(enc, metal_attn_qk_mm_msl_tgmem, 0)
+            kn_buffer(enc, bq, 0ul, 0)
+            kn_buffer(enc, bkk, 0ul, 1)
+            kn_buffer(enc, batt_b, 0ul, 2)
+            kn_buffer(enc, uqd, 0ul, 3)
+            kn_buffer(enc, ukvd, 0ul, 4)
+            kn_buffer(enc, uhs, 0ul, 5)
+            kn_buffer(enc, ukvm, 0ul, 6)
+            kn_buffer(enc, unp, 0ul, 7)
+            kn_buffer(enc, unp32, 0ul, 8)
+            kn_buffer(enc, uscale, 0ul, 9)
+            kn_buffer(enc, uqoff, 0ul, 10)
+            kn_buffer(enc, uqrows, 0ul, 11)
+            kn_buffer(enc, uwin, 0ul, 12)
+            kn_dispatch(enc, qgrid, tg)
+        }
+        res.twin_ms = race_time_ms(queue, 5) $(enc) {
+            kn_pipeline(enc, qt_pso)
+            kn_tgmem(enc, metal_attn_qk_mm_t_msl_tgmem, 0)
+            kn_buffer(enc, bq, 0ul, 0)
+            kn_buffer(enc, bkk, 0ul, 1)
+            kn_buffer(enc, batt_t, 0ul, 2)
+            kn_buffer(enc, uqd, 0ul, 3)
+            kn_buffer(enc, ukvd, 0ul, 4)
+            kn_buffer(enc, uhs, 0ul, 5)
+            kn_buffer(enc, ukvm, 0ul, 6)
+            kn_buffer(enc, unp, 0ul, 7)
+            kn_buffer(enc, unp32, 0ul, 8)
+            kn_buffer(enc, uscale, 0ul, 9)
+            kn_buffer(enc, uqoff, 0ul, 10)
+            kn_buffer(enc, uqrows, 0ul, 11)
+            kn_buffer(enc, uwin, 0ul, 12)
+            kn_dispatch(enc, qgrid, tg)
+        }
+        if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+            res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+            res.note = "dispatch failed"
+        } elif (!race_envelope_ok(batt_b, batt_t, heads * mp * np32, res.note)) {
+            res.winner = "simdgroup"
+        } else {
+            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+        }
+        out |> emplace(res)
+        var res2 = MetalTensorRaceResult(family = "attn_avmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+        res2.base_ms = race_time_ms(queue, 5) $(enc) {
+            kn_pipeline(enc, a_pso)
+            kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
+            kn_buffer(enc, bp, 0ul, 0)
+            kn_buffer(enc, bkk, 0ul, 1)
+            kn_buffer(enc, bxb_b, 0ul, 2)
+            kn_buffer(enc, uqd, 0ul, 3)
+            kn_buffer(enc, ukvd, 0ul, 4)
+            kn_buffer(enc, uhs, 0ul, 5)
+            kn_buffer(enc, ukvm, 0ul, 6)
+            kn_buffer(enc, unp, 0ul, 7)
+            kn_buffer(enc, unp32, 0ul, 8)
+            kn_buffer(enc, uqoff, 0ul, 9)
+            kn_buffer(enc, uqrows, 0ul, 10)
+            kn_dispatch(enc, agrid, tg)
+        }
+        res2.twin_ms = race_time_ms(queue, 5) $(enc) {
+            kn_pipeline(enc, at_pso)
+            kn_tgmem(enc, metal_attn_av_mm_t_msl_tgmem, 0)
+            kn_buffer(enc, bp, 0ul, 0)
+            kn_buffer(enc, bkk, 0ul, 1)
+            kn_buffer(enc, bxb_t, 0ul, 2)
+            kn_buffer(enc, uqd, 0ul, 3)
+            kn_buffer(enc, ukvd, 0ul, 4)
+            kn_buffer(enc, uhs, 0ul, 5)
+            kn_buffer(enc, ukvm, 0ul, 6)
+            kn_buffer(enc, unp, 0ul, 7)
+            kn_buffer(enc, unp32, 0ul, 8)
+            kn_buffer(enc, uqoff, 0ul, 9)
+            kn_buffer(enc, uqrows, 0ul, 10)
+            kn_dispatch(enc, agrid, tg)
+        }
+        if (res2.base_ms < 0.0lf || res2.twin_ms < 0.0lf) {
+            res2.winner = res2.base_ms < 0.0lf ? "" : "simdgroup"
+            res2.note = "dispatch failed"
+        } elif (!race_envelope_ok(bxb_b, bxb_t, mp * qd, res2.note)) {
+            res2.winner = "simdgroup"
+        } else {
+            res2.winner = res2.twin_ms < res2.base_ms ? "tensor" : "simdgroup"
+        }
+        out |> emplace(res2)
+        metal_release(bq)
+        metal_release(bkk)
+        metal_release(bp)
+        metal_release(batt_b)
+        metal_release(batt_t)
+        metal_release(bxb_b)
+        metal_release(bxb_t)
+        metal_release(uqd)
+        metal_release(ukvd)
+        metal_release(uhs)
+        metal_release(ukvm)
+        metal_release(unp)
+        metal_release(unp32)
+        metal_release(uqoff)
+        metal_release(uqrows)
+        metal_release(uwin)
+        metal_release(uscale)
+    }
+    if (q_pso != null) {
+        metal_release(q_pso)
+    }
+    if (qt_pso != null) {
+        metal_release(qt_pso)
+    }
+    if (a_pso != null) {
+        metal_release(a_pso)
+    }
+    if (at_pso != null) {
+        metal_release(at_pso)
+    }
+    return <- out
+}
+
 //! Tuner entry (the runtime.metal_tensor crown): race every tensor pso twin against its
 //! shipped simdgroup kernel on THIS box — compile + output-match to qualify, faster GPU time
 //! takes the family's crown. Empty when there is no Metal device.
@@ -7934,6 +8229,9 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     results |> emplace(race_mulmm_q8(dev, queue))
     results |> emplace(race_moe_mulmm_q8(dev, queue))
     results |> emplace(race_moe_mulmm_mx4(dev, queue))
+    for (r in race_attn_pair(dev, queue)) {
+        results |> emplace(r)
+    }
     results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k4",
         metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, metal_kq_mulmm_k4_msl_tgmem,
         metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, metal_kq_mulmm_k4_t_msl_tgmem, 32, false))
