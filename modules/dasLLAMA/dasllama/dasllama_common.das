@@ -1762,6 +1762,10 @@ def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn
 
 var private g_fill_plan_mode = false
 var private g_fill_plan : array<FillJob>
+// field -> the plane's LAYOUT byte total, recorded at sizing: a layout can hold allocated-but-
+// never-written holes (glm4moe's dense-lead shexp slices), so the streamed plane must be sized
+// and gap-filled from the layout — a job-sum concatenation SHIFTS everything past the first hole
+var private g_stream_plane_total : table<string; int64>
 
 //! The regions the eager repack stage WOULD build for `t` — same gates, same walkers (the
 //! collector halves), so the streamed fill's per-job repack cannot drift from the eager one.
@@ -1813,8 +1817,29 @@ def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : in
     return (qb = j.n, sb = 0l, rfmt = 0)   // q8: 1 byte/elem quants; scales handled as floats
 }
 
-//! Total bytes the streamed fill will append for `field` (page padding NOT included).
+// a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock)
+def private stream_job_qoff(j : FillJob) : int64 {
+    if (j.fmt == KqFmt.k4) {
+        return (j.woff / 256l) * K4_QSB
+    } elif (j.fmt == KqFmt.k5) {
+        return (j.woff / 256l) * K5_QSB
+    } elif (j.fmt == KqFmt.k6) {
+        return (j.woff / 256l) * K6_QSB
+    } elif (j.fmt == KqFmt.q40) {
+        return (j.woff / 256l) * Q40_QSB
+    } elif (j.fmt == KqFmt.q51) {
+        return (j.woff / 32l) * Q51_QB
+    }
+    return j.woff
+}
+
+//! Total bytes the streamed fill will append for `field` (page padding NOT included) — the
+//! LAYOUT size when the sizing pass recorded one (holes included), else the job sum.
 def stream_plane_bytes(t : Model; jobs : array<FillJob>; field : string) : int64 {
+    let lt = g_stream_plane_total?[field] ?? 0l
+    if (lt > 0l) {
+        return lt
+    }
     var total = 0l
     for (j in jobs) {
         if (stream_field_of(t, j.fmt) == field) {
@@ -1822,6 +1847,22 @@ def stream_plane_bytes(t : Model; jobs : array<FillJob>; field : string) : int64
         }
     }
     return total
+}
+
+// append `gap` zero bytes — a layout hole the jobs never cover (never-written plane space)
+def private stream_zero_fill(gap : int64; var zeros : array<uint8>;
+                             append : block<(p : void?; nbytes : uint64) : void>) {
+    var left = gap
+    if (left > 0l && empty(zeros)) {
+        zeros |> resize(1048576)
+    }
+    while (left > 0l) {
+        let chunk = min(left, long_length(zeros))
+        unsafe {
+            invoke(append, addr<void?>(zeros[0]), uint64(chunk))
+        }
+        left -= chunk
+    }
 }
 
 //! Execute every recorded job targeting `field`: transcode into a job-sized temp (load_big's
@@ -1846,8 +1887,12 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     var temp_s : array<uint8>
     var temp_sf : array<float>
     var scratch : array<float>
+    var zeros : array<uint8>
+    var cursor = 0l   // plane bytes appended so far — layout holes between jobs zero-fill
     for (j in mine) {
         let sh = stream_job_shape(t, j)
+        stream_zero_fill(stream_job_qoff(j) - cursor, zeros, append)
+        cursor = stream_job_qoff(j) + sh.qb
         temp_q |> resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = "q8 transcode (Q8_0 verbatim)"
@@ -1948,6 +1993,8 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
             }
         }
     }
+    // the layout's tail past the last job (never-written space) completes the plane
+    stream_zero_fill(stream_plane_bytes(t, jobs, field) - cursor, zeros, append)
     if (field == "qblob" && g_wscale_f16) {
         // the epilogue: scales are complete and repacked; qscales16 lands BEFORE its field
         // writes (qblob precedes qscales/qscales16 in Model field order)
@@ -1959,6 +2006,7 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     delete temp_s
     delete temp_sf
     delete scratch
+    delete zeros
     return true
 }
 
@@ -4266,6 +4314,16 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // streaming: big q-halves never materialize (jobs stream them to the writer); scale
         // halves are small (6-16%) and stay in RAM. Unstreamable features disarmed above.
         let stream_q = g_fill_plan_mode
+        if (stream_q) {
+            // the streamed save sizes each q-plane from the LAYOUT (holes included), not the job sum
+            g_stream_plane_total |> clear()
+            g_stream_plane_total["k4q"] = (sz.k4_n / 256l) * K4_QSB
+            g_stream_plane_total["k5q"] = (sz.k5_n / 256l) * K5_QSB
+            g_stream_plane_total["k6q"] = (sz.k6_n / 256l) * K6_QSB
+            g_stream_plane_total["q40q"] = (sz.q40_n / 256l) * Q40_QSB
+            g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
+            g_stream_plane_total["qblob"] = mode == QuantMode.q8 ? sz.wblob_n : 0l
+        }
         if (sz.k4_n > 0l) {
             if (!stream_q) {
                 t.k4q |> reserve((sz.k4_n / 256l) * K4_QSB)
