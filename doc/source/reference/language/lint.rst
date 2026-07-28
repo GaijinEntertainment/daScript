@@ -1399,6 +1399,9 @@ every call site:
     // a helper that sizes a caller's buffer marks the PARAMETER, since the
     // destination arrives by reference and the call site cannot see the field
     def scratch_resize(@scratch var a : array<numT>; need : int64) { ... }
+    
+    // a clear()-recycled module global is declared the same way (annotation after `var`)
+    var @scratch g_stage : array<MemRange>
 
 **What the scan deliberately ignores.** Arguments to ``panic(...)`` — a panic is
 fatal in daslang, not an exception, so its interpolated message is on the abort
@@ -1408,7 +1411,9 @@ expands into. And indirect calls through a function pointer or lambda, which
 cannot be resolved statically — annotate the implementations they reach.
 
 Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
-leg genuinely runs once; ``@scratch`` on a reused destination; ``// nolint``
+leg genuinely runs once; ``@scratch`` on a reused destination (field, by-ref
+parameter, or module global — sizing calls, table indexing, and reference
+bindings to it all count); ``// nolint``
 with a reason (honored at either end of a chain, so a suppression written where
 the code lives works even when the report anchors elsewhere); and
 ``DAS_LINT_DISABLE=PERF028`` for a whole run, which needs no source edit and is

@@ -142,7 +142,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 var g_dev : MetalDevice?
 var g_queue : MetalCommandQueue?
 var g_failed = false
-var g_regions : table<uint64; MetalBuffer?>  // base address -> resident weight/scale/norm region
+var @scratch g_regions : table<uint64; MetalBuffer?>  // base address -> resident region; upload-once, steady-state [] is a hit
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -188,7 +188,7 @@ struct MetalDecodeStepTrace {
     ge : double
 }
 
-var g_step_trace : array<MetalDecodeStepTrace>
+var @scratch g_step_trace : array<MetalDecodeStepTrace>   // capacity-capped trace ring (g_step_trace_cap bounds it)
 var g_step_trace_cap = 0l
 var g_step_trace_t0 = 0l
 
@@ -207,7 +207,7 @@ struct KVMirror {
     bytes : uint64        // slice size (k + v planes)
 }
 
-var g_mirrors : table<uint64; KVMirror>
+var @scratch g_mirrors : table<uint64; KVMirror>   // per-session mirrors; hot [] after key_exists is a hit
 var g_mirror_bytes = 0ul
 var g_tick = 0l
 var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4096) reads at use
@@ -218,7 +218,7 @@ var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4
 var g_arena : MetalBuffer?
 var g_arena_bytes = 0ul
 var g_arena_epoch = 0l   // bumps on every grow-rebuild — pre-encoded steps referencing the old buffer are stale
-var g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorted by off, coalesced
+var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorted by off, coalesced
 
 // ===== decode PSO + resource globals (declared here, not kernels.das, so [metal_dispatch]-generated
 // builders — co-located with their kernel class, some in prefill.das — see the pipeline they
@@ -307,6 +307,9 @@ var g_pso_gemm_b : MetalComputePipeline?
 var g_pso_gemm_b_sk : MetalComputePipeline? // split-K twin (per-site policy)
 var g_pso_skred : MetalComputePipeline?     // the split-K plane reduce
 var g_pso_gemm64_b : MetalComputePipeline?  // 64-wide N tile (classifier site)
+var g_gemm_b_tensor : bool                  // crowned tensor twins selected (no tgmem bind)
+var g_gemm_b_sk_tensor : bool
+var g_gemm64_b_tensor : bool
 var g_pso_mm : MetalComputePipeline?        // the prefill module's MetalQ8MulMm (34B blob)
 var g_pso_attnb16 : MetalComputePipeline?
 var g_pso_attnb32 : MetalComputePipeline?
@@ -392,6 +395,11 @@ def require_or_panic(kind : string; why : string) {
     }
 }
 
+// the failure leg's message fetch — hot code checks metal_command_buffer_failed (no alloc)
+[cold_path]
+def cb_error_text(cb : MetalCommandBuffer?) : string => metal_command_buffer_error(cb)
+
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalDecodeDecline) {
     g_declines++
     g_declines_by_reason["{why}"]++
@@ -399,6 +407,7 @@ def decline(why : MetalDecodeDecline) {
 }
 
 // the `feature` flavor: records a need_* key per missing bit, and the required-mode panic names them
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalDecodeDecline; missing : MetalNeed) {
     g_declines++
     g_declines_by_reason["{why}"]++
@@ -406,12 +415,14 @@ def decline(why : MetalDecodeDecline; missing : MetalNeed) {
     require_or_panic("decode", "{why} {missing}")
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def batch_decline(why : MetalDecodeDecline) {
     g_batch_declines++
     g_batch_declines_by_reason["{why}"]++
     require_or_panic("batch decode", "{why}")
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def batch_decline(why : MetalDecodeDecline; missing : MetalNeed) {
     g_batch_declines++
     g_batch_declines_by_reason["{why}"]++
@@ -724,7 +735,7 @@ def kq_load_gpu_supported(t : Model) : bool {
 // ===== zero-copy logits: bytesNoCopy wrappers over session-owned storage =====
 // Writes land straight into s.logits (no landing memcpy); borrowed, no deallocator. Gated on
 // 16KB page alignment + page-rounded capacity; the pointer is revalidated on every lookup.
-var g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
+var @scratch g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
 
 def nc_logits_for(dev : MetalDevice?; s : Session) : MetalBuffer? {
     let p : uint64 = intptr(unsafe(addr(s.logits[0])))
@@ -912,6 +923,7 @@ def private mirror_ceiling_bytes : uint64 {
 // release-all rebuild at `want` (clamped to the ceiling): every mirror re-uploads via its
 // watermark, and the epoch bump invalidates any pre-encoded step whose kernels reference the
 // OLD arena buffer. Callers must ensure nothing is pinned and no step is in flight.
+[cold_path]   // arena (re)construction — the grow event, not the per-step path
 def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     for (mr in values(g_mirrors)) {
         mirror_release(mr)
@@ -974,6 +986,7 @@ def mirror_reserve(total : uint64) : bool {
 // release-all rebuild sized for `total` — the batch driver's fragmentation fallback when the
 // per-session prepares can't pack a step that DOES fit capacity-wise (exact-fit demand around
 // older residents can strand contiguity). Callers unpin first; false = past the ceiling.
+[cold_path]   // arena defrag = the occasional rebuild leg
 def mirror_defrag(total : uint64) : bool {
     let ceil_bytes = mirror_ceiling_bytes()
     if (total > ceil_bytes || !empty(g_pin) || g_arena == null) {
@@ -1110,7 +1123,7 @@ struct DnMirror {
     pos : int64                         // next position the GPU state expects (forward-only)
     tick : int64
 }
-var g_dn_mirrors : table<uint64; DnMirror>
+var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
 let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest evicts; a returning
                             // evicted session declines unless it restarts at pos 0 or off CPU state
 
@@ -1201,15 +1214,20 @@ def dn_mirror_flip(uid : uint64; pos : int64) {
     }
 }
 
+[cold_path]   // one-time: fills the 512B FWHT sign table on first touch
+def private signs_buffer_build() {
+    var signs : array<float>
+    tq4_fill_signs(signs, 128l)
+    g_signs = metal_new_buffer(g_dev, 512ul)
+    unsafe {
+        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
+    }
+    delete signs
+}
+
 def signs_buffer() : MetalBuffer? {
     if (g_signs == null) {
-        var signs : array<float>
-        tq4_fill_signs(signs, 128l)
-        g_signs = metal_new_buffer(g_dev, 512ul)
-        unsafe {
-            memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
-        }
-        delete signs
+        signs_buffer_build()
     }
     return g_signs
 }
@@ -1346,8 +1364,8 @@ var private g_pipe_debug = false    // DASLLAMA_METAL_PIPE_DEBUG, resolved once 
 var private g_mirror_cap_env = 4096   // DASLLAMA_METAL_KV_MIRROR_MB, resolved at init; the default stands until then
 var g_hz_strict = false             // DASLLAMA_METAL_HAZARD_STRICT: undeclared dispatch panics
 var g_hz_dirty = false              // an undeclared dispatch ran — the next gate must barrier
-var g_hz_stage : array<MemRange>    // the next dispatch's declared ranges
-var g_hz_pend : array<MemRange>     // unbarriered ranges live on the encoder
+var @scratch g_hz_stage : array<MemRange>    // the next dispatch's declared ranges (clear()-recycled)
+var @scratch g_hz_pend : array<MemRange>     // unbarriered ranges live on the encoder (clear()-recycled)
 var g_hz_barriers = 0l              // lifetime barrier count (chase prints the per-step delta)
 var g_hz_gated = 0l                 // lifetime gated dispatches — the coverage check's twin
 var g_hz_undeclared = 0l            // conservative fallbacks taken (0 once migration completes)
@@ -1454,9 +1472,9 @@ struct KBind {
 }
 
 var g_gr_on = false
-var g_gr_nodes : array<KNode>
-var g_gr_binds : array<KBind>
-var g_gr_ranges : array<MemRange>
+var @scratch g_gr_nodes : array<KNode>      // capture-rail arrays: grown once, clear()-recycled per capture
+var @scratch g_gr_binds : array<KBind>
+var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
@@ -1546,7 +1564,7 @@ struct KSched {
     nodes : int
 }
 
-var g_gr_scheds : table<uint64; KSched>
+var @scratch g_gr_scheds : table<uint64; KSched>
 var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
 
 [cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
@@ -1576,6 +1594,7 @@ def private gr_shape_hash : uint64 {
 
 // level[j] = 1 + max level of any conflicting predecessor; scan partitioned per buffer id.
 // An UNDECLARED node has no edges and would float freely — refuse and keep capture order.
+[cold_path]   // schedule compile — once per shape class, inside the g_gr_scheds miss
 def private gr_schedule(var sched : KSched) : bool {
     let n = length(g_gr_nodes)
     sched.nodes = n
@@ -1710,27 +1729,27 @@ def public set_metal_decode_hazard(paranoid, strict : bool) {
 
 var g_lp_active = false
 var g_lp_cbs : array<MetalCommandBuffer?>
-var g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>
-var g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
+var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
+var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
 var g_lp_err = false            // sticky per-step dispatch-error signal for sync callers
-var g_lp_sessions : array<Session?>
-var g_lp_positions : array<int64>
-var g_lp_koffs : array<uint64>
-var g_lp_voffs : array<uint64>
-var g_lp_caps : array<int64>
+var @scratch g_lp_sessions : array<Session?>
+var @scratch g_lp_positions : array<int64>
+var @scratch g_lp_koffs : array<uint64>
+var @scratch g_lp_voffs : array<uint64>
+var @scratch g_lp_caps : array<int64>
 var g_lp_nrows = 0l
 var g_lp_layers = 0l
 var g_lp_seq = 0l
 var g_lp_vocab = 0l
 // hetero (gemma4): per-layer row bytes + slab bases within a mirror plane (uniform models:
 // lbase_l == l * cap * rowb_l — captured at encode, one array per step)
-var g_lp_lrowb : array<int64>
-var g_lp_lkbase : array<int64>   // per (row i, layer l) flattened i * n_layers + l (caps differ per row)
-var g_lp_lvbase : array<int64>
+var @scratch g_lp_lrowb : array<int64>
+var @scratch g_lp_lkbase : array<int64>   // per (row i, layer l) flattened i * n_layers + l (caps differ per row)
+var @scratch g_lp_lvbase : array<int64>
 var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff stat's anchor
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
@@ -1744,8 +1763,8 @@ def finish_pending_step {
     metal_wait_until_completed(g_lp_cbs[length(g_lp_cbs) - 1])
     var err = ""
     for (c_i in g_lp_cbs) {
-        if (empty(err)) {
-            err = metal_command_buffer_error(c_i)
+        if (empty(err) && metal_command_buffer_failed(c_i)) {
+            err = cb_error_text(c_i)
         }
         g_sched_b_ms += (metal_command_buffer_kernel_end_time(c_i) - metal_command_buffer_kernel_start_time(c_i)) * 1000.0lf
     }
@@ -1874,6 +1893,7 @@ def weight_caches_stale() : bool {
     return weights_epoch() != g_weight_cache_epoch
 }
 
+[cold_path]   // live-reload only
 def weight_caches_flush_on_reload {
     if (!weight_caches_stale()) {
         return
@@ -1976,6 +1996,7 @@ enum MetalPrefillDecline {
 var g_prefill_declines = 0l
 var g_prefill_declines_by_reason : table<string; int64>
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalPrefillDecline) {
     g_prefill_declines++
     g_prefill_declines_by_reason["{why}"]++
@@ -1984,6 +2005,7 @@ def decline(why : MetalPrefillDecline) {
     }
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalPrefillDecline; missing : MetalNeed) {
     g_prefill_declines++
     g_prefill_declines_by_reason["{why}"]++
@@ -1998,3 +2020,132 @@ def public metal_prefill_declines() : table<string; int64> {
     return clone_to_move(g_prefill_declines_by_reason)
 }
 
+// ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
+
+struct public MetalTensorRaceResult {
+    family : string
+    winner : string   // "tensor" | "simdgroup" | "" when the family could not race
+    base_ms : double
+    twin_ms : double
+    note : string
+}
+
+def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
+    var b = metal_new_buffer(dev, bytes)
+    if (src != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(b), src, bytes)
+        }
+    }
+    return b
+}
+
+def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
+    var b = metal_new_buffer(dev, 4ul)
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(b))
+        p[0] = v
+    }
+    return b
+}
+
+// deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
+def race_q8_blob(nblk : int) : array<int8> {
+    var blob : array<int8>
+    blob |> resize(nblk * 34)
+    for (blk in range(nblk)) {
+        for (k in range(32)) {
+            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
+    unsafe {
+        var p8 = addr(blob[0])
+        for (blk in range(nblk)) {
+            var ph = reinterpret<float16?>(p8 + blk * 34)
+            ph[0] = float16(0.5 * float(1 << (blk % 3)))
+        }
+    }
+    return <- blob
+}
+
+// deterministic f32 activation panel for the races
+def race_x_f32(count : int) : array<float> {
+    var xa : array<float>
+    xa |> resize(count)
+    for (i in range(count)) {
+        xa[i] = 0.25 * float(i % 17 - 8)
+    }
+    return <- xa
+}
+
+// eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
+def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
+    var maxref = 0.0lf
+    var maxdiff = 0.0lf
+    unsafe {
+        let pb = reinterpret<float?>(metal_buffer_contents(ba))
+        let pt = reinterpret<float?>(metal_buffer_contents(bb))
+        for (i in range(count)) {
+            maxref = max(maxref, abs(double(pb[i])))
+            maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
+        }
+    }
+    if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+        note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        return false
+    }
+    return true
+}
+
+// interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
+// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side.
+def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : double&;
+                 base_blk : block<(enc : MetalComputeEncoder?) : void>;
+                 twin_blk : block<(enc : MetalComputeEncoder?) : void>) {
+    base_ms = -1.0lf
+    twin_ms = -1.0lf
+    var err = ""
+    var best_b = -1.0lf
+    var best_t = -1.0lf
+    for (r in range(reps + 1)) {
+        var g1 = 0.0lf
+        var g2 = 0.0lf
+        let okb = with_compute_encoder_timed(queue, err, g1) $(enc) {
+            invoke(base_blk, enc)
+        }
+        let okt = okb && with_compute_encoder_timed(queue, err, g2) $(enc) {
+            invoke(twin_blk, enc)
+        }
+        return if (!okb || !okt)
+        if (r > 0) {
+            if (best_b < 0.0lf || g1 < best_b) {
+                best_b = g1
+            }
+            if (best_t < 0.0lf || g2 < best_t) {
+                best_t = g2
+            }
+        }
+    }
+    base_ms = best_b
+    twin_ms = best_t
+}
+
+// best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
+def race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
+    var best = -1.0lf
+    var err = ""
+    for (r in range(reps + 1)) {
+        var gpu_ms = 0.0lf
+        var okr = false
+        okr = with_compute_encoder_timed(queue, err, gpu_ms) $(enc) {
+            invoke(blk, enc)
+        }
+        if (!okr) {
+            return -1.0lf
+        }
+        if (r > 0 && (best < 0.0lf || gpu_ms < best)) {
+            best = gpu_ms
+        }
+    }
+    return best
+}

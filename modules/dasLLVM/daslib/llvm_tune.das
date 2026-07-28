@@ -136,15 +136,87 @@ def tune_manifest_path() : string {
     return sidecar_for(empty(app) ? running_binary() : app)
 }
 
-    //! True when the sidecar predates the binary that runs (or builds) the app. A stale sidecar
-    //! reads as ABSENT everywhere and is regenerated, so measurements never outlive the binary
-    //! that made them — which is what kills the copy-a-stale-file trap.
+var private g_box_identity = ""
+
+    //! This box's tune identity: platform|arch|hardware|OS-build|cpu. Measurements are a
+    //! property of the box AND its OS (GPU fallback perf moves with macOS updates), so a
+    //! sidecar carrying a different identity reads as stale — the cross-box-copy hazard.
+def tune_box_identity() : string {
+    if (!empty(g_box_identity)) {
+        return g_box_identity
+    }
+    var hw = ""
+    let plat = get_platform_name()
+    if (plat == "windows") {
+        hw = "{get_env_variable("PROCESSOR_IDENTIFIER")}|{get_env_variable("OS")}"
+    } elif (plat == "osx") {
+        unsafe {
+            popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
+                while (!feof(f)) {
+                    let ln = strip(fgets(f))
+                    if (!empty(ln)) {
+                        hw = empty(hw) ? ln : "{hw}|{ln}"
+                    }
+                }
+            }
+        }
+    } else {
+        unsafe {
+            popen("uname -r 2>/dev/null") $(f) {
+                hw = strip(fgets(f))
+            }
+        }
+        fopen("/proc/cpuinfo", "rb") $(f) {
+            if (f != null) {
+                while (!feof(f)) {
+                    let ln = fgets(f)
+                    if (ln |> starts_with("model name")) {
+                        let ix = find(ln, ":")
+                        hw = "{hw}|{strip(slice(ln, ix + 1))}"
+                        break
+                    }
+                }
+            }
+        }
+    }
+    g_box_identity = "{plat}|{get_architecture_name()}|{hw}"
+    return g_box_identity
+}
+
+// provenance.box of the sidecar at `path`, "" when absent/unreadable — cached per path+mtime
+// (the staleness gate runs per [tuned] compile read; one parse per file per process is enough)
+var private g_box_cache : table<string; string>
+
+def private sidecar_box(path : string; mkey : string) : string {
+    let key = "{path}@{mkey}"
+    if (g_box_cache |> key_exists(key)) {
+        return g_box_cache[key]
+    }
+    var box = ""
+    let text = fread(path)
+    if (!empty(text)) {
+        var err = ""
+        var doc = read_json(text, err)
+        if (doc != null) {
+            box = doc?["provenance"]?["box"] ?? ""
+            delete_json(doc)
+        }
+    }
+    g_box_cache[key] = box
+    return box
+}
+
+    //! True when the sidecar predates the running binary OR carries a different box identity
+    //! (missing counts as different — pre-identity files re-tune once); a stale sidecar reads
+    //! as ABSENT everywhere, killing the copy-a-stale-file and copy-from-another-box traps.
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
     return false if (!stat(path, sfs))   // absent is "missing", not "stale"
     var bfs : FStat
-    return false if (!stat(running_binary(), bfs))
-    return sfs.mtime < bfs.mtime
+    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
+        return true
+    }
+    return sidecar_box(path, "{sfs.mtime}") != tune_box_identity()
 }
 
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
@@ -211,7 +283,7 @@ def private load_sidecar_doc(path : string) : JsonValue? {
 // refresh "provenance" and write the document back
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
     update(doc, "provenance", JV((binary = running_binary(), platform = get_platform_name(),
-        arch = get_architecture_name())))
+        arch = get_architecture_name(), box = tune_box_identity())))
     return fwrite(path, write_json(doc))
 }
 
