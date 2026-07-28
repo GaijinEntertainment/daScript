@@ -3,10 +3,9 @@
 Design notes for replacing the tuner's current terminal output (a per-variant firehose that
 mostly restates the sidecar JSON) with a progress display.
 
-**Status.** §1 (live relay), §2/§3 (event protocol + renderer), §4 (`daslib/tty` + binding), §7
-(clargs flags), §8 (`gen_tune_probe` honours `--tune-fast`, `ROUNDS` 6 → 3), the §9 up-front
-promise, the emitters in both real dasLLAMA tuner halves, and the docs are **built and tested**.
-Still open: the §5 watchdog migration (events + `STATE` counters).
+**Status.** Shipped. Everything below is built and tested; the operative reference is
+`skills/tune.md` (user-facing) and `skills/llvm_tune.md` (internals). This file is the record of
+why it is shaped this way.
 
 Framework reference: `skills/llvm_tune.md` (internals), `skills/tune.md` (user-facing).
 
