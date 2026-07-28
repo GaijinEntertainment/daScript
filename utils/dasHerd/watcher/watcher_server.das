@@ -53,6 +53,10 @@ struct private WatcherWsMessage {
     // Archiving a session OFFERS its worktrees rather than taking them: the
     // client names the ones the user accepted, and an empty list keeps them.
     worktree_paths : array<string>
+    // The discard classes ride separately — each needs a different git
+    // command, and conflating them destroys staged work (changelist_discard).
+    staged_paths : array<string>
+    untracked_paths : array<string>
     new_worktree_path : string
     branch : string
     base_ref : string
@@ -1711,6 +1715,18 @@ class DasHerdWatcherServer : HvWebServer {
             send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
                 "\"detail\":{sprint_json(start_error, false)}," +
                 "\"action\":{sprint_json(incoming.action, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "changelist_discard") {
+            let start_error = repository_operation_discard(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.worktree_paths, incoming.staged_paths,
+                incoming.untracked_paths)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":\"discard\"," +
                 "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
                 "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)

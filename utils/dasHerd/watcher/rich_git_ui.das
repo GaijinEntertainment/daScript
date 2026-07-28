@@ -65,6 +65,10 @@ var GIT_STATUS_UNSTAGE_MENU : table<int; ToggleState>
 
 var GIT_GROUP_CHECK : table<int; ToggleState>
 
+var GIT_STATUS_DISCARD_MENU : table<int; ToggleState>
+
+var GIT_DISCARD_LIST_ROW : table<int; NarrativeState>
+
 var GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
 
 var GIT_COMMIT_AUTHOR_TEXT : table<int; NarrativeState>
@@ -392,6 +396,8 @@ def changelist_selection_actions(repository : RepositorySnapshot const;
     delete unstage_paths
     for (file in repository.files) {
         if (file.worktree_path != worktree.path) continue
+        // No early break: an "MM" file sits in BOTH the staged and modified
+        // groups, and each row's selection feeds its own verb.
         for (group in range(4)) {
             if (!git_file_in_group(file, group)) continue
             if (selection_contains(g_changelist_selection,
@@ -402,7 +408,202 @@ def changelist_selection_actions(repository : RepositorySnapshot const;
                     stage_paths |> push(file.path)
                 }
             }
-            break
+        }
+    }
+}
+
+def changelist_selection_discards(repository : RepositorySnapshot const;
+                                  worktree : WorktreeState const;
+                                  var modified_paths : array<string>&;
+                                  var staged_paths : array<string>&;
+                                  var untracked_paths : array<string>&;
+                                  var conflicted : int&) {
+    //! Splits the selection into the three discard classes — each runs a
+    //! DIFFERENT git command. Conflicts are counted, never listed: discarding
+    //! one side of a conflict is a separate decision, out of scope here.
+    delete modified_paths
+    delete staged_paths
+    delete untracked_paths
+    conflicted = 0
+    for (file in repository.files) {
+        if (file.worktree_path != worktree.path) continue
+        for (group in range(4)) {
+            if (!git_file_in_group(file, group)
+                    || !selection_contains(g_changelist_selection,
+                        selection_key(git_group_scope(group), file.path))) continue
+            if (group == 0) {
+                conflicted++
+            } elif (group == 1) {
+                staged_paths |> push(file.path)
+            } elif (group == 2) {
+                modified_paths |> push(file.path)
+            } else {
+                untracked_paths |> push(file.path)
+            }
+        }
+    }
+}
+
+def discard_measure_file(base, rel : string) {
+    let st = stat(path_join(base, rel))
+    g_git_discard.display_paths |> push(rel)
+    g_git_discard.file_count++
+    if (st.is_valid && !st.is_dir) {
+        g_git_discard.total_bytes += int64(st.size)
+    }
+}
+
+def discard_measure_walk(base, rel : string) {
+    let clean_rel = ends_with(rel, "/") ? slice(rel, 0, length(rel) - 1) : rel
+    let full = path_join(base, clean_rel)
+    let st = stat(full)
+    if (!st.is_valid || !st.is_dir) {
+        discard_measure_file(base, clean_rel)
+        return
+    }
+    g_git_discard.walked_dirs++
+    var inscope names : array<string>
+    dir(full) $(name) {
+        if (name != "." && name != "..") {
+            names |> push(clone_string(name))
+        }
+    }
+    for (name in names) {
+        discard_measure_walk(base, "{clean_rel}/{name}")
+    }
+}
+
+def open_discard_prompt(repository : RepositorySnapshot const;
+                        worktree : WorktreeState const) {
+    delete g_git_discard.modified_paths
+    delete g_git_discard.staged_paths
+    delete g_git_discard.untracked_paths
+    delete g_git_discard.display_paths
+    g_git_discard.repository_id = repository.record.id
+    g_git_discard.worktree_path = worktree.path
+    g_git_discard.branch = worktree.branch
+    g_git_discard.conflicted_count = 0
+    g_git_discard.file_count = 0
+    g_git_discard.total_bytes = 0l
+    g_git_discard.walked_dirs = 0
+    g_git_discard.confirming = false
+    changelist_selection_discards(repository, worktree,
+        g_git_discard.modified_paths, g_git_discard.staged_paths,
+        g_git_discard.untracked_paths, g_git_discard.conflicted_count)
+    for (path in g_git_discard.staged_paths) {
+        discard_measure_file(worktree.path, path)
+    }
+    for (path in g_git_discard.modified_paths) {
+        discard_measure_file(worktree.path, path)
+    }
+    // Untracked entries can be whole directories ("dir/" rows) — walk them so
+    // the confirmation names every file git clean will actually delete.
+    for (path in g_git_discard.untracked_paths) {
+        discard_measure_walk(worktree.path, path)
+    }
+    g_git_discard.pending_open = true
+}
+
+def discard_bytes_label(total : int64) : string {
+    if (total >= 1048576l) {
+        return "{total / 1048576l} MB"
+    }
+    if (total >= 1024l) {
+        return "{total / 1024l} KB"
+    }
+    return "{total} bytes"
+}
+
+def draw_git_discard_popup() {
+    if (g_git_discard.pending_open) {
+        g_git_discard.pending_open = false
+        open_popup(GIT_DISCARD_DIALOG)
+    }
+    popup_modal(GIT_DISCARD_DIALOG.PUBLIC, (text = "Discard changes",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+        let modified = length(g_git_discard.modified_paths)
+        let staged = length(g_git_discard.staged_paths)
+        let untracked = length(g_git_discard.untracked_paths)
+        text_disabled(GIT_DISCARD_PATH, (text = g_git_discard.worktree_path))
+        if (staged > 0) {
+            text(GIT_DISCARD_STAGED_LINE, (text =
+                "{staged} staged {staged == 1 ? "file" : "files"} — index AND working tree reset to HEAD"))
+        }
+        if (modified > 0) {
+            text(GIT_DISCARD_MODIFIED_LINE, (text =
+                "{modified} edited {modified == 1 ? "file" : "files"} — unstaged edits restored from the index"))
+        }
+        if (untracked > 0) {
+            let walked = (g_git_discard.walked_dirs > 0
+                ? " ({g_git_discard.walked_dirs} {g_git_discard.walked_dirs == 1 ? "folder" : "folders"} expanded)"
+                : "")
+            text(GIT_DISCARD_UNTRACKED_LINE, (text =
+                "{untracked} untracked {untracked == 1 ? "entry" : "entries"} deleted from disk{walked}"))
+        }
+        if (g_git_discard.conflicted_count > 0) {
+            text_disabled(GIT_DISCARD_CONFLICT_NOTE, (text =
+                "{g_git_discard.conflicted_count} conflicted " +
+                "{g_git_discard.conflicted_count == 1 ? "file stays" : "files stay"}: " +
+                "discarding one side of a conflict is its own decision — " +
+                "resolve or stage the resolution instead."))
+        }
+        separator(GIT_DISCARD_LIST_SEPARATOR)
+        var shown = 0
+        for (path in g_git_discard.display_paths) {
+            if (shown >= 20) {
+                text_disabled(GIT_DISCARD_MORE, (text =
+                    "+{length(g_git_discard.display_paths) - 20} more"))
+                break
+            }
+            text_disabled(GIT_DISCARD_LIST_ROW[shown], (text = path))
+            shown++
+        }
+        with_style((ImGuiCol.Text, token_warning_color())) {
+            text(GIT_DISCARD_SENTENCE, (text =
+                "{g_git_discard.file_count} {g_git_discard.file_count == 1 ? "file" : "files"}, " +
+                "{discard_bytes_label(g_git_discard.total_bytes)}. These changes " +
+                "exist nowhere else and cannot be recovered."))
+        }
+        // The non-destructive alternative comes FIRST, because it exists and
+        // is one command. A user who wanted the folder clean, not the work
+        // gone, should not have to know the difference.
+        if (button(GIT_DISCARD_COMMIT_WIP, (text = "Commit WIP to the branch instead",
+                enabled = g_client != null && !empty(g_git_discard.branch)))
+                && g_client != null) {
+            g_client->request_worktree_commit_wip(g_git_discard.repository_id,
+                g_git_discard.worktree_path,
+                "WIP: work in progress on {g_git_discard.branch}")
+            close_current_popup(GIT_DISCARD_DIALOG)
+        }
+        if (button(GIT_DISCARD_ARM, (text =
+                "Discard {g_git_discard.file_count} {g_git_discard.file_count == 1 ? "file" : "files"}...",
+                enabled = g_client != null && !changelist_rail_busy()))) {
+            g_git_discard.confirming = true
+        }
+        same_line()
+        if (button(GIT_DISCARD_CANCEL, (text = "Cancel"))) {
+            g_git_discard.confirming = false
+            close_current_popup(GIT_DISCARD_DIALOG)
+        }
+        if (g_git_discard.confirming) {
+            separator(GIT_DISCARD_CONFIRM_SEPARATOR)
+            with_style((ImGuiCol.Text, token_warning_color())) {
+                text(GIT_DISCARD_CONFIRM_TEXT, (text =
+                    "Destroy these changes? There is no undo."))
+            }
+            if (button(GIT_DISCARD_CONFIRM_GO, (text = "Yes, discard"))
+                    && g_client != null) {
+                g_git_discard.confirming = false
+                g_client->changelist_discard(g_git_discard.repository_id,
+                    g_git_discard.worktree_path, g_git_discard.modified_paths,
+                    g_git_discard.staged_paths, g_git_discard.untracked_paths)
+                selection_clear(g_changelist_selection)
+                close_current_popup(GIT_DISCARD_DIALOG)
+            }
+            same_line()
+            if (button(GIT_DISCARD_CONFIRM_NO, (text = "No"))) {
+                g_git_discard.confirming = false
+            }
         }
     }
 }
@@ -429,6 +630,22 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
             enabled = !busy && unstage_count > 0)) && g_client != null) {
         g_client->changelist_action(repository.record.id, worktree.path,
             "unstage", unstage_paths)
+    }
+    var modified_paths : array<string>
+    var staged_paths : array<string>
+    var untracked_paths : array<string>
+    var conflicted = 0
+    changelist_selection_discards(repository, worktree, modified_paths,
+        staged_paths, untracked_paths, conflicted)
+    let discard_count = (length(modified_paths) + length(staged_paths)
+        + length(untracked_paths))
+    let discard_word = discard_count == 1 ? "file" : "files"
+    // The destructive verb lives ONLY here, never on a one-pixel icon, and
+    // the ellipsis is honest: it opens the confirmation, it does not act.
+    if (menu_item(GIT_STATUS_DISCARD_MENU[file_row],
+            (text = "Discard {discard_count} {discard_word}...", shortcut = "",
+            enabled = !busy && discard_count > 0))) {
+        open_discard_prompt(repository, worktree)
     }
 }
 
@@ -1316,6 +1533,7 @@ def draw_git_changelist_window() {
             }
         }
         if (!found) text_disabled("Select a worktree to inspect its changelist")
+        draw_git_discard_popup()
     }
     separator(GIT_CHANGELIST_STATUS_SEPARATOR)
     if (status.error || status.busy) {

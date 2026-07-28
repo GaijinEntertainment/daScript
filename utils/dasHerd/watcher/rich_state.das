@@ -671,6 +671,31 @@ var g_inspector = GitInspectorState()
 // the worktree the Changes view is showing.
 var g_changelist_selection = GitChangelistSelection()
 
+// The discard confirmation. Discard is the FIRST genuinely unrecoverable
+// action in the app — everything retire touches survives somewhere; discard
+// destroys the only copy. The prompt snapshots WHAT will be discarded (per
+// class, because each class runs a different git command) and measures it in
+// files and bytes, expanding untracked directories so the count is per-file
+// truth rather than one "dir/" row.
+struct GitDiscardPrompt {
+    pending_open : bool
+    repository_id : string
+    worktree_path : string
+    branch : string
+    modified_paths : array<string>
+    staged_paths : array<string>
+    untracked_paths : array<string>
+    // The expanded per-file list shown to the user (untracked dirs walked).
+    display_paths : array<string>
+    conflicted_count : int
+    file_count : int
+    total_bytes : int64
+    walked_dirs : int
+    confirming : bool
+}
+
+var g_git_discard = GitDiscardPrompt()
+
 var g_prepare_worker = InspectorPrepareWorker()
 
 var g_jobque_owned = false

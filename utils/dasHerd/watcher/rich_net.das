@@ -614,6 +614,25 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(paths, false)}\}")
     }
 
+    def changelist_discard(repository_id, worktree_path : string;
+                           modified_paths : array<string>;
+                           staged_paths : array<string>;
+                           untracked_paths : array<string>) {
+        //! The unrecoverable one. The caller (dialog or rail) owns the
+        //! confirmation; this only carries the three class lists, because
+        //! each needs a different git command.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || (empty(modified_paths) && empty(staged_paths)
+                    && empty(untracked_paths))) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_discard\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"worktree_paths\":" +
+            "{sprint_json(modified_paths, false)},\"staged_paths\":" +
+            "{sprint_json(staged_paths, false)},\"untracked_paths\":" +
+            "{sprint_json(untracked_paths, false)}\}")
+    }
+
     def request_worktree_commit_wip(repository_id, worktree_path,
                                     message : string) {
         if (!connected || empty(worktree_path) || empty(message)) return

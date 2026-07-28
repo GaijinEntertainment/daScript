@@ -540,6 +540,55 @@ def test_repository_operation_step_lists(t : T?) {
         t |> equal(length(steps), 0)
         delete steps
     }
+    t |> run("the three discard spellings stay distinct - confusing them destroys staged work") <| @(t : T?) {
+        var argv : array<string>
+        let paths <- ["src/main.das"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_worktree", argv), "")
+        t |> equal(argv[4], "checkout")
+        t |> equal(argv[5], "--",
+            "discard_worktree restores from the INDEX - a staged part survives")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_all", argv), "")
+        t |> equal(argv[4], "checkout")
+        t |> equal(argv[5], "HEAD",
+            "discard_all resets index AND worktree to HEAD")
+        t |> equal(argv[6], "--")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_untracked", argv), "")
+        t |> equal(argv[4], "clean")
+        t |> equal(argv[5], "-f")
+        t |> equal(argv[6], "--", "no directory row, no -d")
+        let with_dir <- ["stray.txt", "junk/"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", with_dir, "discard_untracked", argv), "")
+        t |> equal(argv[6], "-d",
+            "a dir/ row adds -d - clean refuses directories without it")
+        t |> equal(argv[7], "--")
+    }
+    t |> run("discard builds one operation with a step per class, staged first") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        let modified <- ["m.das"]
+        let staged <- ["s.das"]
+        let untracked <- ["u.txt"]
+        t |> equal(repository_operation_discard_steps("D:/Work/tree",
+            modified, staged, untracked, steps), "")
+        t |> equal(length(steps), 3)
+        t |> equal(steps[0].step_label, "discarding 1 staged file")
+        t |> equal(steps[0].argv[5], "HEAD")
+        t |> equal(steps[1].step_label, "discarding 1 edited file")
+        t |> equal(steps[1].argv[5], "--")
+        t |> equal(steps[2].step_label, "deleting 1 untracked file")
+        t |> equal(steps[2].argv[4], "clean")
+        let no_paths : array<string>
+        t |> equal(repository_operation_discard_steps("D:/Work/tree",
+            no_paths, staged, no_paths, steps), "")
+        t |> equal(length(steps), 1, "empty classes contribute no step")
+        t |> success(!empty(repository_operation_discard_steps("D:/Work/tree",
+            no_paths, no_paths, no_paths, steps)),
+            "nothing to discard is an error, not an empty operation")
+        delete steps
+    }
     t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
         var steps : array<WorktreeOperationStep>
         repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",

@@ -524,8 +524,17 @@ def herder_changelist_state(input : JsonValue?) : JsonValue? {
             var unstage_paths : array<string>
             changelist_selection_actions(repository, worktree, stage_paths,
                 unstage_paths)
+            var modified_paths : array<string>
+            var staged_paths : array<string>
+            var untracked_paths : array<string>
+            var conflicted = 0
+            changelist_selection_discards(repository, worktree,
+                modified_paths, staged_paths, untracked_paths, conflicted)
             var stage_list <- [for (p in stage_paths); JV(p)]
             var unstage_list <- [for (p in unstage_paths); JV(p)]
+            var discard_modified <- [for (p in modified_paths); JV(p)]
+            var discard_staged <- [for (p in staged_paths); JV(p)]
+            var discard_untracked <- [for (p in untracked_paths); JV(p)]
             return JV((ok = true, repository_id = args.repository_id,
                 worktree_path = args.worktree_path,
                 selection_count = selection_count(g_changelist_selection),
@@ -533,6 +542,15 @@ def herder_changelist_state(input : JsonValue?) : JsonValue? {
                 notice = g_client.changelist_notice,
                 stage_eligible <- stage_list,
                 unstage_eligible <- unstage_list,
+                discard_modified <- discard_modified,
+                discard_staged <- discard_staged,
+                discard_untracked <- discard_untracked,
+                discard_conflicted_held = conflicted,
+                discard_prompt_open = (GIT_DISCARD_DIALOG.open
+                    || g_git_discard.pending_open),
+                discard_prompt_files = g_git_discard.file_count,
+                discard_prompt_bytes = g_git_discard.total_bytes,
+                discard_prompt_armed = g_git_discard.confirming,
                 rows <- rows))
         }
     }
@@ -579,13 +597,46 @@ def herder_changelist_select(input : JsonValue?) : JsonValue? {
     return JV((ok = false, error = "unknown repository '{args.repository_id}'"))
 }
 
-[live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage, paths (empty = derive from the current selection). Outcome rides herder_worktree_operation_state.")]
+[live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage|discard, paths (empty = derive from the current selection; discard ALWAYS derives, split by class). Discard is unrecoverable — this rail IS the explicit second confirmation. Outcome rides herder_worktree_operation_state.")]
 def herder_changelist_action(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {
         return JV((ok = false, error = "watcher is not connected"))
     }
     var args = from_JV(input, type<HerderChangelistArgs>)
     changelist_target(args)
+    if (args.action == "discard") {
+        if (changelist_rail_busy()) {
+            return JV((ok = false, error = "the operation rail is busy"))
+        }
+        for (repository in g_client.repositories) {
+            if (repository.record.id != args.repository_id) continue
+            for (worktree in repository.worktrees) {
+                if (worktree.path != args.worktree_path) continue
+                var modified_paths : array<string>
+                var staged_paths : array<string>
+                var untracked_paths : array<string>
+                var conflicted = 0
+                changelist_selection_discards(repository, worktree,
+                    modified_paths, staged_paths, untracked_paths, conflicted)
+                let total = (length(modified_paths) + length(staged_paths)
+                    + length(untracked_paths))
+                if (total == 0) {
+                    return JV((ok = false,
+                        error = "nothing discardable is selected"))
+                }
+                g_client->changelist_discard(args.repository_id,
+                    args.worktree_path, modified_paths, staged_paths,
+                    untracked_paths)
+                return JV((ok = true, action = "discard",
+                    modified = length(modified_paths),
+                    staged = length(staged_paths),
+                    untracked = length(untracked_paths),
+                    conflicted_held = conflicted))
+            }
+        }
+        return JV((ok = false,
+            error = "unknown worktree '{args.worktree_path}'"))
+    }
     if (args.action != "stage" && args.action != "unstage") {
         return JV((ok = false, error = "unknown action '{args.action}'"))
     }

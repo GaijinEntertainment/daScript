@@ -629,6 +629,28 @@ def public repository_build_files_action_argv(worktree_path : string;
     } elif (action == "unstage") {
         command <- ["git", "--literal-pathspecs", "-C", worktree_path,
             "reset", "--quiet", "HEAD", "--"]
+    } elif (action == "discard_worktree") {
+        // Unstaged tracked edits: restore from the INDEX, so a staged part of
+        // the same file survives. Never spell this `checkout HEAD` — that is
+        // discard_all, and confusing the two silently destroys staged work.
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+            "checkout", "--"]
+    } elif (action == "discard_all") {
+        // Throw the change away entirely: index AND worktree reset to HEAD.
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+            "checkout", "HEAD", "--"]
+    } elif (action == "discard_untracked") {
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+            "clean", "-f"]
+        // Porcelain reports a wholly-untracked directory as one "dir/" row;
+        // clean refuses directories without -d.
+        for (file_path in paths) {
+            if (ends_with(file_path, "/")) {
+                command |> push("-d")
+                break
+            }
+        }
+        command |> push("--")
     } else {
         return "file action is not implemented"
     }
@@ -1189,6 +1211,77 @@ def public repository_operation_changelist_steps(worktree_path, action : string;
         command_name = action == "stage" ? "git add" : "git reset")
     steps |> emplace(step)
     return ""
+}
+
+def public repository_operation_discard_steps(worktree_path : string;
+                                              modified_paths : array<string>;
+                                              staged_paths : array<string>;
+                                              untracked_paths : array<string>;
+                                              var steps : array<WorktreeOperationStep>&) : string {
+    //! One operation, up to three steps — each class of change needs a
+    //! DIFFERENT git command, and getting the spelling wrong destroys work.
+    //! Staged goes first: `checkout HEAD` covers both sides of those files,
+    //! so a later `checkout --` step never resurrects half of one.
+    delete steps
+    if (empty(modified_paths) && empty(staged_paths) && empty(untracked_paths)) {
+        return "nothing to discard"
+    }
+    if (!empty(staged_paths)) {
+        var argv : array<string>
+        let argv_error = repository_build_files_action_argv(worktree_path,
+            staged_paths, "discard_all", argv)
+        if (!empty(argv_error)) return argv_error
+        let count = length(staged_paths)
+        var step <- WorktreeOperationStep(argv <- argv,
+            step_label = "discarding {count} staged {count == 1 ? "file" : "files"}",
+            kind = "git-changelist-discard", command_name = "git checkout")
+        steps |> emplace(step)
+    }
+    if (!empty(modified_paths)) {
+        var argv : array<string>
+        let argv_error = repository_build_files_action_argv(worktree_path,
+            modified_paths, "discard_worktree", argv)
+        if (!empty(argv_error)) return argv_error
+        let count = length(modified_paths)
+        var step <- WorktreeOperationStep(argv <- argv,
+            step_label = "discarding {count} edited {count == 1 ? "file" : "files"}",
+            kind = "git-changelist-discard", command_name = "git checkout")
+        steps |> emplace(step)
+    }
+    if (!empty(untracked_paths)) {
+        var argv : array<string>
+        let argv_error = repository_build_files_action_argv(worktree_path,
+            untracked_paths, "discard_untracked", argv)
+        if (!empty(argv_error)) return argv_error
+        let count = length(untracked_paths)
+        var step <- WorktreeOperationStep(argv <- argv,
+            step_label = "deleting {count} untracked {count == 1 ? "file" : "files"}",
+            kind = "git-changelist-discard", command_name = "git clean")
+        steps |> emplace(step)
+    }
+    return ""
+}
+
+def public repository_operation_discard(repository_id, worktree_path : string;
+                                        modified_paths : array<string>;
+                                        staged_paths : array<string>;
+                                        untracked_paths : array<string>) : string {
+    //! The one genuinely unrecoverable operation in the app. The CALLER owns
+    //! the confirmation; this refuses only what is structurally wrong.
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    if (find_worktree(g_repositories[repository_index], worktree_path) < 0) {
+        return "unknown worktree"
+    }
+    var steps : array<WorktreeOperationStep>
+    let steps_error = repository_operation_discard_steps(worktree_path,
+        modified_paths, staged_paths, untracked_paths, steps)
+    if (!empty(steps_error)) return steps_error
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    return operation_start("changelist_discard", repository_id, worktree_path,
+        steps, recoveries)
 }
 
 def public repository_operation_changelist(repository_id, worktree_path,
