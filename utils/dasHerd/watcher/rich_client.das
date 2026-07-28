@@ -217,22 +217,25 @@ def private command_new_session() {
     open_launcher_modal()
 }
 
-// Checklist rows are drawn through a shared helper, so their state cannot be
-// auto-declared at the call site the way a direct widget call would be.
-var WORKTREE_RETIRE_ROW_SESSION : NarrativeState
+// Checklist rows are drawn through a shared helper, so every widget inside it
+// renders once PER ROW in a single frame. A bare same_line() would take its
+// identity from its one source location and collide with itself; both states
+// are indexed by row instead.
+var WORKTREE_RETIRE_ROW_JOIN : table<int; EmptyMarkerState>
 
-var WORKTREE_RETIRE_ROW_TREE : NarrativeState
+var WORKTREE_RETIRE_ROW_TEXT : table<int; NarrativeState>
 
-var WORKTREE_RETIRE_ROW_COMMITS : NarrativeState
+let private RETIRE_ROW_SESSION = 0
+let private RETIRE_ROW_TREE = 1
+let private RETIRE_ROW_COMMITS = 2
 
-def private checklist_row(var state : NarrativeState; passing : bool;
-                          caption : string) {
+def private checklist_row(row : int; passing : bool; caption : string) {
     //! One fact, its pass/fail glyph, and what it means. Never a bare colour:
     //! the sentence has to carry the meaning on its own.
     icon_tinted(passing ? "check" : "warning", GetTextLineHeight(),
         passing ? token_added_color() : token_warning_color())
-    same_line()
-    text(state, (text = caption))
+    same_line(WORKTREE_RETIRE_ROW_JOIN[row])
+    text(WORKTREE_RETIRE_ROW_TEXT[row], (text = caption))
 }
 
 def private worktree_change_summary(worktree : WorktreeState const) : string {
@@ -272,28 +275,28 @@ def private draw_worktree_retire_popup() {
                 "This worktree is not in the Git inventory yet — refresh the " +
                 "repository before retiring it."))
         }
-        checklist_row(WORKTREE_RETIRE_ROW_SESSION, empty(claimed_by),
+        checklist_row(RETIRE_ROW_SESSION, empty(claimed_by),
             (empty(claimed_by)
                 ? "No session is working here."
                 : "Session '{claimed_by}' is working here — retire it first."))
-        checklist_row(WORKTREE_RETIRE_ROW_TREE, empty(changes),
+        checklist_row(RETIRE_ROW_TREE, empty(changes),
             (empty(changes)
                 ? "Working tree is clean."
                 : "{changes} — these files exist only in this folder."))
         // The unpushed line is about REDUNDANCY, not risk: removing a worktree
         // cannot lose a commit, the branch keeps every one of them.
         if (!worktree.unmerged_known) {
-            checklist_row(WORKTREE_RETIRE_ROW_COMMITS, true,
+            checklist_row(RETIRE_ROW_COMMITS, true,
                 "Commits: no base ref to compare against — count unknown.")
         } elif (worktree.unmerged_commits == 0) {
-            checklist_row(WORKTREE_RETIRE_ROW_COMMITS, true,
+            checklist_row(RETIRE_ROW_COMMITS, true,
                 "Nothing here that {worktree.unmerged_base_ref} does not have.")
         } elif (repository_worktree_only_here(worktree)) {
-            checklist_row(WORKTREE_RETIRE_ROW_COMMITS, false,
+            checklist_row(RETIRE_ROW_COMMITS, false,
                 "{worktree.unmerged_commits} commits vs {worktree.unmerged_base_ref} " +
                 "exist only on this machine; nothing else has a copy.")
         } else {
-            checklist_row(WORKTREE_RETIRE_ROW_COMMITS, true,
+            checklist_row(RETIRE_ROW_COMMITS, true,
                 "{worktree.unmerged_commits} commits vs {worktree.unmerged_base_ref}, " +
                 "all pushed to {worktree.upstream_ref}.")
         }
