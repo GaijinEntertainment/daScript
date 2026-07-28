@@ -298,6 +298,12 @@ def main() : int {
         to_log(LOG_ERROR, "dasllama-convert: --trim is a vulkan-flavor property (add -f vulkan)\n")
         return 2
     }
+    if (cfg.flavor == Flavor.metal) {
+        // the metal donor contract: the blob transform reads ROW-MAJOR planes, so the mint pins
+        // the portable backend (repack interleaves are unreadable by the drivers). Portable's
+        // layout numbers are box-independent — the metal identity converges across boxes
+        pin_kernel_backend("portable")
+    }
     if (cfg.flavor == Flavor.vulkan) {
         // OFFLINE bake: the walk's accept/refuse arithmetic runs against the config's numbers,
         // the gathers collect, and no Vulkan call is made — no instance, no device, no VRAM
