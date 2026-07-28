@@ -25,6 +25,7 @@ require dasllama/dasllama_math          // apply_box_profile_runtime + select_ma
 require dasllama/dasllama_image         // the .dlim rail itself
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
 require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
+require dasllama/dasllama_gguf          // GGUFMeta — the streaming block's mapping handle
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -66,6 +67,9 @@ struct ConvertArgs {
 
     @clarg_doc = "P3 trim (with -f vulkan): drop the big CPU weight families from the image — pure resident-driver dense models only; serve with DASLLAMA_TRIM=1"
     trim : bool
+
+    @clarg_doc = "Streaming conversion (planar q8): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
+    stream : bool
 
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
@@ -270,13 +274,59 @@ def main() : int {
         return 0
     }
 
+    if (cfg.stream && cfg.flavor != Flavor.planar) {
+        to_log(LOG_ERROR, "dasllama-convert: --stream covers the planar flavor (metal/vulkan bakes convert eagerly)\n")
+        return 2
+    }
     var rc = 0
+    var did_stream = false
     let ts = ref_time_ticks()
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
-        if (cfg.flavor == Flavor.vulkan) {
-            vulkan_bake_begin()   // the load's GPU walk collects into the bake blob (dry — no uploads)
+        if (cfg.stream && cfg.flavor == Flavor.planar) {
+            apply_box_profile_runtime()
+            var mt = Model()
+            var jobs : array<FillJob>
+            var blk_ran = false
+            let sok = load_gguf_streaming(cfg.model, qm, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8> const#) {
+                blk_ran = true
+                if (empty(jobs)) {
+                    to_log(LOG_INFO, "dasllama-convert: streaming unavailable for this model — writing eagerly from RAM\n")
+                }
+                return save_model_image_streaming(mt, gm, gbytes, jobs, out, tag, qs)
+            }
+            if (sok || blk_ran) {
+                did_stream = true
+                rc = sok ? 0 : 1
+                if (rc != 0) {
+                    to_log(LOG_ERROR, "dasllama-convert: streamed write of '{out}' failed — see the error above\n")
+                }
+            } else {
+                to_log(LOG_INFO, "dasllama-convert: streaming declined (split shards?) — converting eagerly\n")
+            }
+            delete jobs
+            delete mt
         }
+        if (!did_stream) {
+            if (cfg.flavor == Flavor.vulkan) {
+                vulkan_bake_begin()   // the load's GPU walk collects into the bake blob (dry — no uploads)
+            }
+            stream_eager_convert(cfg, qm, qs, out, tag, rc)
+        }
+    }
+    if (rc == 0 && did_stream) {
+        var st : FStat
+        let bytes = stat(out, st) ? int64(st.size) : 0l
+        let total_ms = int64(get_time_usec(ts)) / 1000l
+        to_log(LOG_INFO, "dasllama-convert: wrote {bytes >> 20l} MB (streamed) in {total_ms} ms total\n")
+    }
+    return rc
+}
+
+// the pre-streaming eager conversion body, verbatim (load whole -> flavor transform -> save)
+def private stream_eager_convert(cfg : ConvertArgs; qm : QuantMode; qs, out, tag : string; var rc : int&) {
+    let ts = ref_time_ticks()
+    {
         var m <- load_model_(cfg.model, qm)
         let ts_load = ref_time_ticks()
         if (cfg.flavor == Flavor.metal) {
@@ -307,5 +357,4 @@ def main() : int {
         }
         delete m
     }
-    return rc
 }

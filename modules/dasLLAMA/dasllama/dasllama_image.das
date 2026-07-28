@@ -568,6 +568,141 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
     return save_image(t, path, tag, quant)
 }
 
+//! save_image's STREAMING twin (Model-only): fields with recorded FillJobs stream through
+//! fill_stream_plane; empty `jobs` degrades to the eager save exactly. Call from
+//! load_gguf_streaming's block (m/bytes must be alive); keep the tails in step with save_image.
+def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8> | #;
+                               var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
+    let tmp_path = "{path}.{ref_time_ticks()}.tmp"
+    let dcfg = dlim_config_current(quant)
+    let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
+    var fend = 0ul
+    var meta_off = 0ul
+    var meta_bytes = 0ul
+    var nsections = 0
+    var meta <- new MemSerializer()
+    var warch = Archive(reading = false, stream = meta)
+    var sections : array<ImgSection>
+    let ts_meta = ref_time_ticks()
+    serialize_image_meta(warch, t)
+    to_log(LOG_INFO, "dasLLAMA image: meta serialize {get_time_usec(ts_meta) / 1000}ms\n")
+    var scalar_blob <- meta->extractData()
+    unsafe {
+        delete meta
+    }
+    // preallocation: the generic total (streamed fields are empty, contributing 0) plus each
+    // streamed plane's exact bytes + a page of padding, plus the pending-wscale qscales16
+    // (absent until the epilogue). Over-reserve is free — dwrite_close truncates.
+    var extra = 0ul
+    for (fname in ["qblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
+        let sb = stream_plane_bytes(t, jobs, fname)
+        if (sb > 0l) {
+            extra += uint64(sb) + uint64(IMAGE_PAGE)
+        }
+    }
+    if (t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales)) {
+        extra += uint64(long_length(t.qscales) * 2l) + uint64(IMAGE_PAGE)
+    }
+    var regs : array<StreamReg>
+    stream_collect_regions(t, regs)
+    var fill_ok = true
+    var w = w_open(tmp_path, image_total_bytes(t, uint64(long_length(scalar_blob)) + SECTION_TABLE_SLACK) + extra)
+    if (w.ok) {
+        w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — patched after close
+        let ts_planes = ref_time_ticks()
+        apply(t) $(name : string; var field) {
+            static_if (typeinfo is_array(field)) {
+                static_if (!typeinfo is_string(field[0])) {
+                    if (stream_plane_bytes(t, jobs, name) > 0l) {
+                        let padded = pad_to_page(w.cur)
+                        w_zeros(w, padded - w.cur)
+                        let at = w.cur
+                        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+                            fill_ok = false
+                        }
+                        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
+                    } else {
+                        write_plane(w, sections, name, field)
+                    }
+                }
+            }
+        }
+        let planes_ms = int64(get_time_usec(ts_planes)) / 1000l
+        let planes_mb = int64(w.cur) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image: streamed planes write {planes_ms}ms ({planes_mb} MB at {planes_ms > 0l ? planes_mb * 1000l / planes_ms : 0l} MB/s)\n")
+        var smeta <- new MemSerializer()
+        var sarch = Archive(reading = false, stream = smeta)
+        var m_ident = ident
+        var m_cfg = dlim_config_json(dcfg)
+        sarch |> serialize(m_ident)
+        sarch |> serialize(m_cfg)
+        sarch |> serialize(sections)
+        var meta_blob <- smeta->extractData()
+        meta_blob |> push_from(scalar_blob)
+        nsections = length(sections)
+        meta_off = w.cur
+        meta_bytes = uint64(long_length(meta_blob))
+        if (meta_bytes > 0ul) {
+            unsafe {
+                w_append(w, addr<void?>(meta_blob[0]), meta_bytes)
+            }
+        }
+        fend = pad_to_page(w.cur)
+        w_zeros(w, fend - w.cur)
+        delete meta_blob
+        unsafe {
+            delete smeta
+        }
+        delete sections
+    }
+    delete scalar_blob
+    delete regs
+    var ok = w_close(w) && fill_ok
+    if (ok) {
+        var hdr : array<uint8>
+        hdr |> resize(int(IMAGE_HEADER_BYTES))
+        store_u32(hdr, 0, IMAGE_MAGIC)
+        store_u32(hdr, 4, uint(IMAGE_VERSION))
+        store_u32(hdr, 8, uint(IMAGE_PAGE))
+        store_u32(hdr, 12, uint(nsections))
+        store_u64(hdr, 16, meta_off)
+        store_u64(hdr, 24, meta_bytes)
+        store_u64(hdr, 32, fend)
+        store_u64(hdr, 40, hash(ident))
+        ok = false
+        fopen(tmp_path, "r+b") $(hf) {
+            if (hf != null) {
+                fseek(hf, 0l, seek_set)
+                ok = int64(hf |> fwrite(hdr)) == IMAGE_HEADER_BYTES
+            }
+        }
+        if (!ok) {
+            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' header patch failed — image save aborted\n")
+        }
+        delete hdr
+    }
+    if (ok) {
+        var st : FStat
+        if (!stat(tmp_path, st) || st.size != fend) {
+            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(fend)} — disk full? image save aborted\n")
+            ok = false
+        }
+    }
+    if (!ok) {
+        if (stat(tmp_path).is_valid && !remove(tmp_path)) {
+            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed — clean it up by hand\n")
+        }
+        return false
+    }
+    // POSIX rename-over is atomic; Windows needs remove-then-rename (a concurrent reader may
+    // regenerate in the window)
+    if (rename(tmp_path, path) || (remove(path) && rename(tmp_path, path))) {
+        return true
+    }
+    to_log(LOG_ERROR, "dasLLAMA image: could not move '{tmp_path}' over '{path}'\n")
+    return false
+}
+
 // ===== load =====
 
 // one plane: validate the section against the mapping, then borrow it in place

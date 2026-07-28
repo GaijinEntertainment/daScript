@@ -196,28 +196,21 @@ def private compact_kq_scale_strip(var ks : array<uint8>) {
 
 // ===== CPU repack walkers (backend grp<mr> interleave, in place at load) =====
 
-// A repack work item: one mr-aligned row-chunk of a weight region. fmt: 0 = q8 (qblob/qscales),
-// 1 = mx4 (mxq/mxs), 4/5/6 = the kq plane pairs. Chunking splits huge regions (the classifier) for
-// load balance; 1024 is a multiple of every backend mr, so row groups never straddle a boundary.
-struct private RepackReg {
-    off : int64
-    n : int64
-    d : int64
-    fmt : int
-}
-
-def private push_repack(var regs : array<RepackReg>; fmt : int; off, n, d : int64) {
+// A repack work item is common's StreamReg (fmt: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = kq).
+// Chunking splits huge regions (the classifier) for load balance; 1024 is a multiple of every
+// backend mr, so row groups never straddle a boundary.
+def private push_repack(var regs : array<StreamReg>; fmt : int; off, n, d : int64) {
     var r0 = 0l
     while (r0 < d) {
         let rc = min(1024l, d - r0)
-        regs |> push(RepackReg(off = off + r0 * n, n = n, d = rc, fmt = fmt))
+        regs |> push(StreamReg(off = off + r0 * n, n = n, d = rc, fmt = fmt))
         r0 += rc
     }
 }
 
 // Run every collected repack across the jobque — regions are disjoint, so any lane count is
 // bit-exact. Workers touch hoisted raw pointers + the hoisted backend fn values only.
-def private repack_regions(var t : Model; regs : array<RepackReg>) {
+def private repack_regions(var t : Model; regs : array<StreamReg>) {
     if (empty(regs)) {
         return
     }
@@ -254,7 +247,7 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
         if (!empty(t.q40s)) { q40sp = addr(t.q40s[0]) }
         if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
         if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
-        let rp = addr<RepackReg const?>(regs[0])
+        let rp = addr<StreamReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
         maybe_parallel_for(0, nr, njobs) $(rb, re) {
@@ -284,11 +277,10 @@ def private repack_regions(var t : Model; regs : array<RepackReg>) {
 // Repack every Q8 2D weight tensor in qblob/qscales into the active backend's interleaved layout,
 // IN PLACE, once at load. Mirrors forward()'s per-tensor offsets/shapes exactly; the embedding +
 // norms live in fblob and are never touched.
-def private repack_q8_weights(var t : Model) {
+def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
-    var regs : array<RepackReg>
     for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP/NextN block at index n_layers
         let kv = layer_kv_dim(c, l)
         let qd = layer_qd(c, l)
@@ -379,13 +371,18 @@ def private repack_q8_weights(var t : Model) {
     if (c.n_layer_nextn > 0l && t.mtp_ehproj_fmt == KqFmt.q8) {   // NextN eh_proj: 2*dim -> dim
         push_repack(regs, 0, t.mtp_ehproj_off, 2l * dim, dim)
     }
+}
+
+def private repack_q8_weights(var t : Model) {
+    var regs : array<StreamReg>
+    collect_q8_regions(t, regs)
     repack_regions(t, regs)
     t.mx4_repacked = true
     delete regs
 }
 
 // route one kq-tagged tensor to its format's plane pair (q8 tags no-op — those live in qblob)
-def private push_repack_kq(var regs : array<RepackReg>; fmt : KqFmt; woff, n, d : int64) {
+def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d : int64) {
     if (fmt == KqFmt.k4) {
         push_repack(regs, 4, woff, n, d)
     } elif (fmt == KqFmt.k5) {
@@ -400,10 +397,9 @@ def private push_repack_kq(var regs : array<RepackReg>; fmt : KqFmt; woff, n, d 
 // Repack every K-quant-tagged weight tensor into the active backend's grp<mr> kq layout, IN
 // PLACE — the kq sibling of repack_q8_weights, called only when the backend carries kq slots.
 // The tied/untied classifier repacks too: embed_row gathers its rows through the grp layout after.
-def private repack_kq_weights(var t : Model) {
+def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     let c = t.config
     let dim = c.dim
-    var regs : array<RepackReg>
     for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP/NextN block at index n_layers
         let kv = layer_kv_dim(c, l)
         let qd = layer_qd(c, l)
@@ -454,6 +450,11 @@ def private repack_kq_weights(var t : Model) {
     if (c.n_layer_nextn > 0l) {   // NextN eh_proj (no-op for q8 tags)
         push_repack_kq(regs, t.mtp_ehproj_fmt, t.mtp_ehproj_off, 2l * dim, dim)
     }
+}
+
+def private repack_kq_weights(var t : Model) {
+    var regs : array<StreamReg>
+    collect_kq_regions(t, regs)
     repack_regions(t, regs)
     delete regs
 }
@@ -465,7 +466,7 @@ def private repack_mx4_stacks(var t : Model) {
     let c = t.config
     let dim = c.dim
     let ege = dim * c.n_ff_exp
-    var regs : array<RepackReg>
+    var regs : array<StreamReg>
     for (l in range64(c.n_layers)) {
         for (e in range64(c.n_expert)) {
             let base = e * ege
@@ -480,11 +481,10 @@ def private repack_mx4_stacks(var t : Model) {
 
 // q51-native expert stacks -> the active backend's grp<mr> q51 layout (per-stack: a model can
 // mix q51 downs with k4 gates, e.g. gemma-4-26B-A4B). No-op unless a stack is tagged q51.
-def private repack_q51_stacks(var t : Model) {
+def private collect_q51_regions(t : Model; var regs : array<StreamReg>) {
     let c = t.config
     let dim = c.dim
     let ege = dim * c.n_ff_exp
-    var regs : array<RepackReg>
     for (l in range64(c.n_layers)) {
         let f1q = fmt_at(t.we1_fmt, l) == KqFmt.q51
         let f2q = fmt_at(t.we2_fmt, l) == KqFmt.q51
@@ -505,11 +505,30 @@ def private repack_q51_stacks(var t : Model) {
             }
         }
     }
+}
+
+def private repack_q51_stacks(var t : Model) {
+    var regs : array<StreamReg>
+    collect_q51_regions(t, regs)
     if (!empty(regs)) {
         repack_regions(t, regs)
         to_log(LOG_INFO, "dasLLAMA: q51 expert planes repacked to grp{active_q51_layout_mr()}\n")
     }
     delete regs
+}
+
+// StreamRepackFn: one region through the active backend's repack, on caller-supplied pointers
+// (the streamed fill biases the q pointer into its temp; scales stay in the RAM plane)
+def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
+    unsafe {
+        if (fmt == 0) {
+            invoke(g_repack_q8q8, reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
+        } elif (fmt == 2) {
+            invoke(g_repack_q51, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+        } else {
+            invoke(g_repack_kq, fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+        }
+    }
 }
 
 // ===== GPU tier gathers (prepared planes -> device-layout bytes) =====
@@ -817,4 +836,5 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 def private register_layout_hooks {
     register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
         @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q8n)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one)
 }
