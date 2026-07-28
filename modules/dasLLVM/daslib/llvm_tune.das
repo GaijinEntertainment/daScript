@@ -1060,7 +1060,8 @@ def tune_progress_kernel_step(i : int; phase : string; live : int) {
     emit_event("step", "i={i} phase={phase} live={live}")
 }
 
-//! Leave a kernel. `verdict` is `holds`, `beats` or `rejected`.
+//! Leave a kernel. `verdict` is `holds`, `beats`, `rejected` or `skipped`. Every `kernel_begin`
+//! needs one, or the outer counter never reaches its plan.
 def tune_progress_kernel_end(name, winner, verdict : string) {
     emit_event("end", "name={name} winner={winner} verdict={verdict}")
 }

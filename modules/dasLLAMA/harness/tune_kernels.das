@@ -151,7 +151,13 @@ def private kernel_begin(name : string) : int64 {
 }
 
 def private kernel_done(name : string; t0 : int64) {
-    // report() already emitted the end event with its verdict; this is just the timing marker
+    // A bench that returned early — an unsupported ISA, no -jit — never reached report(), so it
+    // emitted no end event and recorded no row. Close it here, or the bar stops one short of its
+    // plan forever and every consumer's counters stall with it.
+    if (empty(g_results) || g_results[length(g_results) - 1].kernel != name) {
+        tune_progress_kernel_end(name, "", "skipped")
+        g_results |> emplace(KernelResult(kernel = name, winner = "", fallback = shipped_fallback(name)))
+    }
     tune_detail("TUNE_KERNEL_TIME {name} {get_time_usec(t0) / 1000} ms\n")
 }
 
@@ -2025,7 +2031,7 @@ def main {
     var changed = 0
     for (r in g_results) {
         let note = (r.winner == "" || r.winner == r.fallback) ? "" : "  (shipped fallback {r.fallback})"
-        print("  {r.kernel}: {r.winner}{note}\n")
+        print("  {r.kernel}: {empty(r.winner) ? "skipped" : r.winner}{note}\n")
         if (r.winner != "" && r.winner != r.fallback) {
             changed++
         }
