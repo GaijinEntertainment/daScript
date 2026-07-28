@@ -85,12 +85,13 @@ def private is_setop2(op : das_string) : bool {
 def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op == "+++" || op == "---"
 
 // tmm2d tensor builtins (dasMetal): pointer operands — C is written, the rest are read.
-// Returns the C-argument index, or -1 for any other call.
+// Returns the C-argument index, or -1 for any other call. Suffix match, like the tg-protocol
+// arms: resolved call names may carry a module/instance prefix.
 def private tmm2d_c_arg(cname : string) : int {
-    if (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8b_f32") {
+    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
         return 7
     }
-    return cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" ? 11 : -1
+    return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
 
 class private AccessVisitor : AstVisitor {
