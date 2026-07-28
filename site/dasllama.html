@@ -52,36 +52,7 @@
   .dl-run .amber { color: var(--amber); }
   .dl-run .metric { color: var(--fg); }
 
-  /* toggles */
-  .dl-toggles { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; margin: 8px 0 26px; }
-  .dl-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-  .dl-seg button {
-    font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim);
-    background: transparent; border: 0; padding: 8px 15px; cursor: pointer;
-    transition: background 80ms ease, color 80ms ease; white-space: nowrap;
-  }
-  .dl-seg button + button { border-left: 1px solid var(--rule); }
-  .dl-seg button:hover { color: var(--fg); }
-  .dl-seg button.is-active { background: var(--amber); color: #17130a; }
-  .dl-seg__caption { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.1em; }
-
-  /* diverging ratio bars (LLM) */
-  .dl-bars { display: flex; flex-direction: column; gap: 7px; }
-  .dl-bar { display: grid; grid-template-columns: 172px 1fr 58px; align-items: center; gap: 14px; }
-  .dl-bar__label { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); text-align: right; }
-  .dl-bar__track { position: relative; height: 20px; background: var(--bg-2); border: 1px solid var(--rule); border-radius: 4px; }
-  .dl-bar__center { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--fg-faint); opacity: 0.7; }
-  .dl-bar__fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; }
-  .dl-bar--win .dl-bar__fill { background: var(--amber); }
-  .dl-bar--loss .dl-bar__fill { background: #7a4a3c; }
-  .dl-bar__val { font-family: var(--font-mono); font-size: 12px; text-align: left; }
-  .dl-bar--win .dl-bar__val { color: var(--amber); }
-  .dl-bar--loss .dl-bar__val { color: var(--fg-dim); }
-  .dl-bar--tie .dl-bar__fill { background: var(--fg-faint); }
-  .dl-bar--tie .dl-bar__val { color: var(--fg-dim); }
   .dl-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
-  .dl-axis { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin: 10px 0 0; padding: 0 58px 0 172px; }
-
   .dl-win { color: var(--amber); }
   .dl-loss { color: var(--fg-dim); }
 
@@ -101,9 +72,8 @@
   .dl-num { text-align: right; color: var(--fg); }
   .dl-dim { color: var(--fg-faint); }
   .dl-td-model { color: var(--fg); }
-  .dl-plat { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin-top: 14px; }
 
-  /* per-model benchmark table — one row per das ÷ llama.cpp pair */
+  /* pair tables — one row per das measurement ÷ its reference (§ 01 LLM, § 02 ASR, § 03 audio in) */
   .forge-p--wide { max-width: 780px; }
 
   .dl-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 28px; margin: 26px 0 4px; }
@@ -140,11 +110,12 @@
   .dl-table--bench thead th.is-sorted::after { content: ' ▲'; font-size: 8px; }
   .dl-table--bench thead th.is-sorted.is-desc::after { content: ' ▼'; }
   .dl-table--bench tbody tr.dl-row { cursor: pointer; }
+  .dl-table--bench tbody tr.dl-row--flat { cursor: default; }
   .dl-table--bench tbody td { padding: 8px 9px; white-space: nowrap; }
   .dl-table--bench thead th { padding: 12px 9px; }
-  /* group boundary: a hairline before each phase block, so "das | lcpp | ratio" reads as a unit */
+  /* group boundary: a hairline before each metric block, so "das | ref | ratio" reads as a unit */
   .dl-table--bench th.dl-grp-start, .dl-table--bench td.dl-grp-start { border-left: 1px solid var(--rule); }
-  .dl-table--bench .dl-lane, .dl-table--bench .dl-box { color: var(--fg-dim); }
+  .dl-table--bench .dl-dim2 { color: var(--fg-dim); }
   .dl-table--bench .dl-model-sub { color: var(--fg-faint); font-size: 10.5px; }
   .dl-table--bench tbody tr[data-receipt] td { padding: 0 11px; }
   /* pre-wrap + break-anywhere, NOT `pre`: a receipt's longest command line would otherwise set the
@@ -157,27 +128,6 @@
   .dl-bench-receipt b { color: var(--amber); font-weight: 400; }
   .dl-empty { font-family: var(--font-mono); font-size: 12px; color: var(--fg-faint); padding: 22px 14px; text-align: center; }
 
-  /* ASR */
-  .dl-asr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-  .dl-asr-model { border: 1px solid var(--rule); border-radius: 8px; padding: 20px 22px; background: var(--bg-2); }
-  .dl-asr-model__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
-  .dl-asr-model__name { font-family: var(--font-sans); font-size: 17px; font-weight: 600; color: var(--fg); }
-  .dl-asr-model__ref { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
-  .dl-asr-row { display: grid; grid-template-columns: 120px 1fr 108px; align-items: center; gap: 12px; padding: 5px 0; }
-  .dl-asr-row__file { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-dim); display: flex; justify-content: space-between; padding-right: 6px; }
-  .dl-asr-row__dur { color: var(--fg-faint); }
-  .dl-asr-row__track { height: 14px; background: var(--bg-3); border-radius: 3px; overflow: hidden; }
-  .dl-asr-row__fill { height: 100%; background: var(--green); border-radius: 3px; }
-  .dl-asr-row__speed { font-family: var(--font-mono); font-size: 12px; color: var(--green); text-align: right; }
-  .dl-asr-row__xrt { color: var(--fg-faint); font-size: 10px; }
-
-  /* blowout callouts */
-  .dl-blowouts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
-  .dl-blowout { border: 1px solid var(--amber-dim); border-radius: 10px; padding: 26px 28px; background: linear-gradient(180deg, rgba(232,161,58,0.06), transparent); }
-  .dl-blowout__n { font-family: var(--font-sans); font-size: 52px; font-weight: 600; letter-spacing: -0.03em; color: var(--amber); line-height: 1; }
-  .dl-blowout__t { font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--fg); margin-top: 12px; }
-  .dl-blowout__s { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin-top: 6px; }
-
   /* caveats */
   .dl-caveats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
   .dl-caveat { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--rule); }
@@ -185,9 +135,7 @@
   .dl-caveat__v { font-size: 14px; line-height: 1.55; color: var(--fg-dim); }
 
   @media (max-width: 900px) {
-    .dl-asr-grid, .dl-blowouts, .dl-caveats, .dl-lanes { grid-template-columns: 1fr; }
-    .dl-bar { grid-template-columns: 110px 1fr 52px; }
-    .dl-axis { padding: 0 52px 0 110px; }
+    .dl-caveats, .dl-lanes { grid-template-columns: 1fr; }
     .dl-filters label { width: 100%; }
     .dl-filters select { flex: 1; max-width: none; }
   }
@@ -315,68 +263,35 @@ def main() {
                 <div><dt>as shipped</dt><dd>das Metal vs <em>stock</em> Metal at <code>-ngl 99</code> &mdash; both engines in their default, fastest configuration.</dd></div>
             </dl>
 
-            <div class="dl-filters">
-                <label>model <select class="js-bench-filter" data-field="model"></select></label>
-                <label>machine <select class="js-bench-filter" data-field="box"></select></label>
-                <label>category <select class="js-bench-filter" data-field="lane"></select></label>
-                <button class="dl-filters__reset js-bench-reset" type="button">reset</button>
-            </div>
-
-            <div class="dl-table-wrap">
-                <table class="dl-table dl-table--bench">
-                    <thead>
-                        <tr>
-                            <th class="js-bench-sort" data-sort="model">model</th>
-                            <th class="js-bench-sort" data-sort="box">machine</th>
-                            <th class="js-bench-sort" data-sort="lane">category</th>
-                            <th class="js-bench-sort dl-num" data-sort="size">size GB</th>
-                            <th class="js-bench-sort dl-num dl-grp dl-grp-start" data-sort="pp_das">pp512 das</th>
-                            <th class="js-bench-sort dl-num" data-sort="pp_ref">lcpp</th>
-                            <th class="js-bench-sort dl-num dl-grp" data-sort="pp_ratio">ratio</th>
-                            <th class="js-bench-sort dl-num dl-grp dl-grp-start" data-sort="tg_das">tg128 das</th>
-                            <th class="js-bench-sort dl-num" data-sort="tg_ref">lcpp</th>
-                            <th class="js-bench-sort dl-num dl-grp" data-sort="tg_ratio">ratio</th>
-                        </tr>
-                    </thead>
-                    <tbody id="bench-table-body"></tbody>
-                </table>
-            </div>
+            <div class="dl-filters" id="bench-filters"></div>
+            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="bench-table"></table></div>
             <div class="dl-caption" id="bench-caption"></div>
         </div>
     </section>
 
-    <!-- § 02 ASR -->
-    <section class="forge-section">
+    <!-- § 02 speech-to-text (pair table from profile_asr_<box>.json) -->
+    <section class="forge-section" id="asr" hidden>
         <div class="forge-container">
             <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>speech-to-text</span></div>
-            <h2 class="forge-h2">Competitive with the dedicated engines on CPU.</h2>
-            <p class="forge-p">Transcription time, CPU only, greedy decode. Bars show speed relative to the reference CLI (longer = faster); the small figure is real-time factor — seconds of audio per second of compute. Note the macOS *-cli tools do get Apple's AMX matrix unit here, so this isn't scalar-only on their side.</p>
+            <h2 class="forge-h2">Transcription, clip by clip.</h2>
+            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side. Canary-Qwen runs an un-quantized fp32 decoder and trails on the longest clip &mdash; a known follow-up, visible in the table rather than written around.</p>
 
-            <div class="dl-toggles">
-                <span class="dl-seg__caption">machine</span>
-                <div class="dl-seg">
-                    <button class="js-asr-box" data-box="m1" type="button">Apple M1 Max</button>
-                    <button class="js-asr-box is-active" data-box="zen2" type="button">Threadripper 3990X</button>
-                </div>
-            </div>
-
-            <div class="dl-asr-grid" id="asr-models"></div>
-            <div class="dl-plat" id="asr-plat"></div>
+            <div class="dl-filters" id="asr-filters"></div>
+            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="asr-table"></table></div>
+            <div class="dl-caption" id="asr-caption"></div>
         </div>
     </section>
 
-    <!-- § 03 audio-chat blowout -->
-    <section class="forge-section">
+    <!-- § 03 audio in — omni chat models, reference is llama.cpp's mtmd -->
+    <section class="forge-section" id="audiochat" hidden>
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>audio-chat models</span></div>
-            <div class="forge-bench__grid">
-                <div>
-                    <h2 class="forge-h2">Where the CPU-only gap is widest: audio chat.</h2>
-                    <p class="forge-p">This is a narrow, CPU-only slice: llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder. das's optimized fp32 scalar encoder comes out well ahead on that path — a GPU build of llama.cpp would tell a different story.</p>
-                    <p class="forge-p" style="color:var(--fg-faint);font-size:13px">Canary-Qwen 2.5B (the only engine with a SALM reference, NeMo) — das leads on short dictation clips: 0.66× on jfk, 0.77× on jfk3. It trails on a 3-minute clip where it runs an un-quantized fp32 decoder — a known follow-up.</p>
-                </div>
-                <div class="dl-blowouts" id="audiochat-cards"></div>
-            </div>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>audio in</span></div>
+            <h2 class="forge-h2">Omni models, audio straight into the prompt.</h2>
+            <p class="forge-p forge-p--wide">The one audio workload llama.cpp does cover: omni chat models taking audio in, run through <code>llama-mtmd-cli</code>. This is a narrow CPU-only slice &mdash; llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder, and das's optimized fp32 encoder comes out well ahead on that path. A GPU build of llama.cpp would tell a different story.</p>
+
+            <div class="dl-filters" id="audiochat-filters"></div>
+            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="audiochat-table"></table></div>
+            <div class="dl-caption" id="audiochat-caption"></div>
         </div>
     </section>
 
