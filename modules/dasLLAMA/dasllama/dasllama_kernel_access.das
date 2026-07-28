@@ -197,8 +197,28 @@ class private AccessVisitor : AstVisitor {
             return
         }
         if (cname == "coopmatLoad" || cname == "simdgroup_load"
-                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode") {
-            return   // src argument is a plain read — the generic read pass records it
+                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
+                || cname == "tmm2d_tg_begin" || cname == "tmm2d_tg_step") {
+            // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
+            // begin/step, only untracked locals/@workgroup tiles
+            return
+        }
+        if (cname == "tmm2d_tg_store") {
+            if (length(expr.arguments) == 5) {
+                var cur = expr.arguments[1]
+                if (cur is ExprRef2Value) {
+                    cur = (cur as ExprRef2Value).subexpr
+                }
+                if (cur is ExprVar) {
+                    let pn = string((cur as ExprVar).name)
+                    let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                    if (!empty(bn)) {
+                        claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+                        writes |> insert(bn)
+                    }
+                }
+            }
+            return
         }
         let tci = tmm2d_c_arg(cname)
         if (tci >= 0) {

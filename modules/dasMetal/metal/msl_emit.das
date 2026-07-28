@@ -51,6 +51,7 @@ struct private MslCtx {
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
+    tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk" (decl suppressed on GPU)
     self_name : string
 }
 
@@ -352,6 +353,18 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         if ((scn == "tmm2d_q8_f32" || scn == "tmm2d_q8_f16s") && length(ecs.arguments) == 14) {
             mark_write_target(ctx, ecs.arguments[11])
+        }
+        if (scn == "tmm2d_tg_store" && length(ecs.arguments) == 5) {
+            mark_write_target(ctx, ecs.arguments[1])
+        }
+        if (scn == "tmm2d_tg_begin" && length(ecs.arguments) == 5) {
+            var acc0 = ecs.arguments[0]
+            if (acc0 is ExprRef2Value) {
+                acc0 = (acc0 as ExprRef2Value).subexpr
+            }
+            if (acc0 is ExprVar) {
+                ctx.tg_accs[string((acc0 as ExprVar).name)] = ""   // params fill at emit time
+            }
         }
         for (arg in ecs.arguments) {
             scan_body(ctx, arg)
@@ -1257,6 +1270,91 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
     }
 }
 
+// acc arg (position 0 of every tg-protocol call) -> the das variable name, MSL-mangled
+def private tg_acc_name(var ctx : MslCtx; e : Expression?) : string {
+    var a = e
+    if (a is ExprRef2Value) {
+        a = (a as ExprRef2Value).subexpr
+    }
+    if (a is ExprVar) {
+        return msl_safe_name(string((a as ExprVar).name))
+    }
+    err(ctx, e.at, "tmm2d_tg_*: acc must be a plain local variable")
+    return "__bad_acc"
+}
+
+def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_begin takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[4], "kk (chunk K width)")
+    if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
+    }
+    note(ctx, "call.tmm2d_tg_begin")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, false);")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
+    lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
+}
+
+def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 6) {
+        err(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let ta = emit_value(ctx, ec.arguments[1])
+    let tb = emit_value(ctx, ec.arguments[2])
+    let m = tmm2d_const_uint(ctx, ec.arguments[3], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[4], "n (tile cols)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[5], "kk (chunk K width)")
+    if (m == 0u || n == 0u || kk == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_step")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __A = __tgt_{acc}((threadgroup half *){ta}, dextents<int32_t, 2>({int(kk)}, {int(m)}));")
+    lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(kk)}, {int(n)}));")
+    lines |> push("{indent}    auto __c = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __c);")
+    lines |> push("{indent}    for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] += __c[__i]; \}")
+    lines |> push("{indent}\}")
+}
+
+def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_store takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let cp = emit_value(ctx, ec.arguments[1])
+    let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
+    let ldc = emit_value(ctx, ec.arguments[4])
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_store")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __C = tensor<device float, dextents<int32_t, 2>, tensor_inline>({cp}, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int({ldc})\});")
+    lines |> push("{indent}    __tgf_{acc}.store(__C);")
+    lines |> push("{indent}\}")
+}
+
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
     let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))
@@ -1295,6 +1393,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         emit_stmt(ctx, (e as ExprWith).body, indent, lines)
     } elif (e is ExprLet) {
         for (v in (e as ExprLet).variables) {
+            if (key_exists(ctx.tg_accs, string(v.name))) {
+                continue   // staged-GEMM accumulator: CPU-replay state only — the GPU uses a cooperative tensor
+            }
             let sgname = sgmat_type_name(v._type)
             if (!empty(sgname)) {
                 let sgVarName = string(v.name)
@@ -1471,6 +1572,12 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_sgmat_multiply(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32") {
             emit_tmm2d(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_begin") {
+            emit_tmm2d_tg_begin(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_step") {
+            emit_tmm2d_tg_step(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_store") {
+            emit_tmm2d_tg_store(ctx, ec, indent, lines)
         } else {
             err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering — only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
@@ -1713,9 +1820,9 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         helper_text = join(hs, "\n") + "\n"
     }
     var mpp_include = ""
-    if (!empty(ctx.gen_helpers)) {
-        // Metal-4 tensor ops: the MPP include + namespace, then the generated helpers in
-        // pinned (sorted) order — table iteration order is hash-based
+    if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs)) {
+        // Metal-4 tensor ops: the MPP include + namespace (the tg protocol emits inline —
+        // no helpers, include still required), then generated helpers in pinned (sorted) order
         mpp_include = "#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\nusing namespace mpp::tensor_ops;\n"
         var gh <- [for (k in keys(ctx.gen_helpers)); k]
         gh |> sort()
