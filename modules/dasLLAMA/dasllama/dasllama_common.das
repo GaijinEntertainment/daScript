@@ -734,6 +734,10 @@ def private blob_only_panic(t : Model; what : string) {
     if (t.metal_blob) {
         panic("dasLLAMA: CPU {what} on a blob-only metal-flavor model — serve it on the GPU (set_metal_mode / fix the declined gate) or load the CPU-flavor image (metal mode off at load_model)")
     }
+    if (t.planes_trimmed) {
+        // the resident overrides need an f32-KV session — the commonest decline on a trimmed image
+        panic("dasLLAMA: CPU {what} on a planes-trimmed vulkan-flavor image — the resident driver must serve it (create the session with KVDtype.f32, keep the tier armed) or rebake without --trim")
+    }
 }
 
 def has_decode_override(name : string) : bool {

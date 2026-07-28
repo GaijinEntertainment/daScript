@@ -238,7 +238,15 @@ def private bind_gpu_slot(si : int) {
     install_slot_marks(si)
     set_gpu_tier_want(g_slots[si].gpu_want)
     moe_gpu_tier_arm()
-    moe_gpu_upload_resident(g_slots[si].model)
+    // a vulkan-flavor image re-binds by SLICING its baked planes (the same rail its load used);
+    // on a planes-trimmed image a live re-gather would panic — the slice is the only path
+    if (!empty(g_slots[si].model.vkplan)) {
+        vulkan_bake_slice_begin()
+        moe_gpu_upload_resident(g_slots[si].model)
+        vulkan_bake_slice_end(g_slots[si].model)
+    } else {
+        moe_gpu_upload_resident(g_slots[si].model)
+    }
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
     g_slots[si].sw_count ++
@@ -1206,7 +1214,7 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     var idx = 0
     for (text in inputs) {
         let toks <- encode(cur_model(), text, true, false)
-        prompt_tokens += int64(length(toks))
+        prompt_tokens += long_length(toks)
         var vec = embed(cur_model(), text)
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
@@ -1287,7 +1295,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0) {
-    let np = int64(length(prompt))
+    let np = long_length(prompt)
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
@@ -1539,7 +1547,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
             bad_request(srv, writer, render_error)
             return
         }
-        let required = int64(length(prompt)) + (truncation == "auto" ? max_new : 1l)
+        let required = long_length(prompt) + (truncation == "auto" ? max_new : 1l)
         if (required <= cur_model().config.seq_len || truncation != "auto") {
             break
         }
@@ -1931,7 +1939,7 @@ def private handle_streams(var resp : HttpResponse?) : http_status {
                 id = st.id, model = mname,
                 state = st.state == StreamState.prefilling ? "prefilling" : "decoding",
                 age_s = age_seconds(st.t_admit),
-                n_prompt = int64(length(st.prompt)), n_cached = st.n_cached,
+                n_prompt = long_length(st.prompt), n_cached = st.n_cached,
                 n_prefilled = st.n_prefilled, n_gen = st.n_gen, max_new = st.max_new,
                 ttft_ms = float(st.ttft_us) / 1000.0,
                 prompt_head = st.prompt_head, gen_tail = utf8_trim_partial_end(string(st.gen_tail_bytes))))
@@ -1940,7 +1948,7 @@ def private handle_streams(var resp : HttpResponse?) : http_status {
             out.streams |> push(OaiStreamInfo(
                 id = q.id, model = mname, state = "queued",
                 age_s = q.t_submit != 0l ? age_seconds(q.t_submit) : 0.0,
-                n_prompt = int64(length(q.prompt)), max_new = q.max_new))
+                n_prompt = long_length(q.prompt), max_new = q.max_new))
         }
         for (d in sch.recent_done) {
             out.streams |> push(OaiStreamInfo(
