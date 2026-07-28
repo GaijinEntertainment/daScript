@@ -7671,6 +7671,141 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     return res
 }
 
+def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = "moe_mulmm_mx4", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let ne = 4
+    let rows_per = 32
+    let m = ne * rows_per
+    let kdim = 2048
+    let ndim = 1024
+    let nkb = kdim / 32
+    let eblk = ndim * nkb
+    var err = ""
+    var base_pso = pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err)
+    if (base_pso == null) {
+        res.note = "base pso: {err}"
+        return res
+    }
+    var twin_pso = pipeline_from_source(dev, metal_moe_mulmm_mx4_t_msl, metal_moe_mulmm_mx4_t_msl_entry, metal_moe_mulmm_mx4_t_msl_fastmath, err)
+    if (twin_pso == null) {
+        res.winner = "simdgroup"
+        res.note = "twin pso: {err}"
+        metal_release(base_pso)
+        return res
+    }
+    var xa <- race_x_f32(m * kdim)
+    var nplane : array<uint>
+    nplane |> resize(ne * eblk * 4)   // 16B nibbles per block
+    for (i in range(ne * eblk * 4)) {
+        nplane[i] = uint(i) * 2654435761u
+    }
+    var eplane : array<uint8>
+    eplane |> resize(ne * eblk)
+    for (i in range(ne * eblk)) {
+        eplane[i] = uint8(125 + i % 4)   // e8m0 near 1.0 — no overflow across the fold
+    }
+    var vtabh : array<float>
+    vtabh |> resize(16)
+    for (i in range(8)) {
+        let v = float(fixed_array(0, 1, 2, 3, 4, 6, 8, 12)[i])
+        vtabh[i] = v
+        vtabh[i + 8] = -v
+    }
+    var cnt : array<uint>
+    var basep : array<uint>
+    var bkt : array<uint>
+    cnt |> resize(ne)
+    basep |> resize(ne)
+    bkt |> resize(m)
+    for (e in range(ne)) {
+        cnt[e] = uint(rows_per)
+        basep[e] = uint(e * rows_per)
+    }
+    for (i in range(m)) {
+        bkt[i] = uint(i)
+    }
+    var bnq = race_buf(dev, uint64(ne * eblk * 16), unsafe(addr<void?>(nplane[0])))
+    var bee = race_buf(dev, uint64(ne * eblk), unsafe(addr<void?>(eplane[0])))
+    var bvt = race_buf(dev, uint64(16 * 4), unsafe(addr<void?>(vtabh[0])))
+    var bwbb = race_buf(dev, uint64(ne * ndim * 4), null)
+    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
+    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
+    var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
+    var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
+    var bk = race_uniform_u32(dev, uint(kdim))
+    var bn = race_uniform_u32(dev, uint(ndim))
+    var beblk = race_uniform_u32(dev, uint(eblk))
+    var bnk = race_uniform_u32(dev, 1u)
+    var bg0 = race_uniform_u32(dev, 0u)
+    let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
+    let tg = uint3(128u, 1u, 1u)
+    res.base_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, base_pso)
+        kn_tgmem(enc, metal_moe_mulmm_mx4_msl_tgmem, 0)
+        kn_buffer(enc, bnq, 0ul, 0)
+        kn_buffer(enc, bee, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_base, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_buffer(enc, bcnt, 0ul, 6)
+        kn_buffer(enc, bbase, 0ul, 7)
+        kn_buffer(enc, bbkt, 0ul, 8)
+        kn_buffer(enc, beblk, 0ul, 9)
+        kn_buffer(enc, bnk, 0ul, 10)
+        kn_buffer(enc, bg0, 0ul, 11)
+        kn_buffer(enc, bwbb, 0ul, 12)
+        kn_buffer(enc, bvt, 0ul, 13)
+        kn_buffer(enc, bg0, 0ul, 14)
+        kn_dispatch(enc, grid, tg)
+    }
+    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, twin_pso)
+        kn_tgmem(enc, metal_moe_mulmm_mx4_t_msl_tgmem, 0)
+        kn_buffer(enc, bnq, 0ul, 0)
+        kn_buffer(enc, bee, 0ul, 1)
+        kn_buffer(enc, bxa, 0ul, 2)
+        kn_buffer(enc, by_twin, 0ul, 3)
+        kn_buffer(enc, bk, 0ul, 4)
+        kn_buffer(enc, bn, 0ul, 5)
+        kn_buffer(enc, bcnt, 0ul, 6)
+        kn_buffer(enc, bbase, 0ul, 7)
+        kn_buffer(enc, beblk, 0ul, 9)
+        kn_buffer(enc, bwbb, 0ul, 12)
+        kn_buffer(enc, bvt, 0ul, 13)
+        kn_buffer(enc, bg0, 0ul, 14)
+        kn_dispatch(enc, grid, tg)
+    }
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
+    metal_release(bnq)
+    metal_release(bee)
+    metal_release(bvt)
+    metal_release(bwbb)
+    metal_release(bxa)
+    metal_release(by_base)
+    metal_release(by_twin)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(beblk)
+    metal_release(bnk)
+    metal_release(bg0)
+    metal_release(base_pso)
+    metal_release(twin_pso)
+    return res
+}
+
 // one kq mulmm race: random quant planes + constant f16 scales (any bit pattern is a valid
 // plane — the twin-vs-base envelope doubles as a layout-agreement check). k6 binds the d plane
 // at its tail offset; k4/k5 bind the compact scale blocks at 0.
@@ -7798,6 +7933,7 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     results |> emplace(race_mulmm_bf16(dev, queue))
     results |> emplace(race_mulmm_q8(dev, queue))
     results |> emplace(race_moe_mulmm_q8(dev, queue))
+    results |> emplace(race_moe_mulmm_mx4(dev, queue))
     results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k4",
         metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, metal_kq_mulmm_k4_msl_tgmem,
         metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, metal_kq_mulmm_k4_t_msl_tgmem, 32, false))
