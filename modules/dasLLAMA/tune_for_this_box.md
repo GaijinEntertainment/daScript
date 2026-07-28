@@ -75,7 +75,7 @@ Axes are ~independent (unroll ⊥ width ⊥ TB ⊥ threads) — sweep them separ
 to `<app>.tune.json` beside the app (the root script the process runs, else the binary;
 `DAS_TUNE_MANIFEST` env overrides) — shared with the `[tune]` generator winners. The
 `"kernels"` section = the compile-time kernel perms (`[tuned]` reads them, precedence
-`perm=` pin > sidecar > the kernel's `fallback=` > `vec8_u2`; the `[tune]` families' perms
+`perm=` pin > sidecar > the kernel's `fallback=` chain (per-ISA) > `vec8_u2`; the `[tune]` families' perms
 live in the same map); the `"runtime"` object = the runtime knobs above, applied by
 `load_model` (logged per entry) or explicitly via `apply_box_profile_runtime(path)`. Direct
 `load_gguf` users opt in by calling the latter. A sidecar OLDER than the running binary is
@@ -175,7 +175,10 @@ marked `for [tune = 1] (...)` (several loops may share the tag — they get the 
 an EXPLICIT return type (the variants registry is typed from `function_to_type(template)`; an
 inferred return lands as `:auto` and won't match the clones), add a `[tuned]` reconstitution
 stub `<name>` (empty body) — with `fallback="<perm>"` when the shipped hand hints aren't
-`vec8_u2`, so bit-identity of the shipped default holds (that's the invariant) — then a
+`vec8_u2`, so bit-identity of the shipped default holds (that's the invariant). `fallback=` is
+a `;`-chain of `suffix` or `suffix:requires` entries, first passing entry wins, so ONE
+annotation can ship a different default per ISA (`fallback="vec8_u8:dotprod;plain"`); a bare
+name is just a one-entry chain. Then a
 `[dasllama_grid(src="<name>_template")]` + bench block in `tune_kernels.das`, passing the
 fallback as `report(...)`'s baseline. `modules/dasLLAMA/tests/test_tune/test_tuned/test_grid.das` are
 the patterns.

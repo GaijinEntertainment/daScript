@@ -64,6 +64,9 @@ STATE: dict[str, object] = {
     "child_exit_code": None,
     "restart_delay": 0.0,
     "stage": None,
+    # Progress of an in-flight tune, folded from llvm_tune's @tune events. Counters only —
+    # nothing here is an estimate, because the tuner cannot know how long it has left.
+    "tune": {},
 }
 
 
@@ -565,6 +568,50 @@ def advance_stage(stage: dict[str, object], message: str, now: float) -> dict[st
     return fields
 
 
+# llvm_tune emits structured progress as `@tune <kind> k=v ...` lines. A supervised child never
+# owns a terminal, so it forwards these instead of drawing a bar — that is exactly what makes
+# them ours to consume. Values never contain spaces (llvm_tune's contract), so a plain split is
+# enough. Consuming these is why the log no longer needs to infer structure from prose.
+TUNE_EVENT_PREFIX = "@tune "
+
+
+def parse_tune_event(message: str) -> tuple[str, dict[str, str]] | None:
+    """Return (kind, fields) for a `@tune ...` line, or None. Never raises on malformed input."""
+    if not message.startswith(TUNE_EVENT_PREFIX):
+        return None
+    parts = message[len(TUNE_EVENT_PREFIX):].split()
+    if not parts:
+        return None
+    fields = {}
+    for token in parts[1:]:
+        key, sep, value = token.partition("=")
+        if sep:
+            fields[key] = value
+    return parts[0], fields
+
+
+def apply_tune_event(tune: dict[str, object], kind: str, fields: dict[str, str]) -> None:
+    """Fold one progress event into the published tune state. Counters only; no prediction."""
+    def as_int(key: str) -> int:
+        try:
+            return int(fields.get(key, ""))
+        except ValueError:
+            return 0
+    if kind == "plan":
+        tune.clear()
+        tune.update(scope=fields.get("scope", ""), done=0, total=as_int("total"))
+    elif kind == "begin":
+        tune.update(kernel=fields.get("name", ""), round=0, rounds=as_int("total"),
+                    phase="", live=0)
+    elif kind == "step":
+        tune.update(round=as_int("i"), phase=fields.get("phase", ""), live=as_int("live"))
+    elif kind == "end":
+        # the per-round fields describe an in-flight kernel; leaving them set between kernels
+        # publishes an incoherent state (round=47 against rounds=0) that a status page renders
+        tune["done"] = int(tune.get("done", 0)) + 1
+        tune.update(round=0, rounds=0, phase="", live=0)
+
+
 def stream_child(
     proc: subprocess.Popen[str],
     logger: logging.Logger,
@@ -573,8 +620,29 @@ def stream_child(
     stage: dict[str, object],
 ) -> None:
     assert proc.stdout is not None
+    # Per child, and published immediately: the tune-bootstrap restart is the normal first-run
+    # path, and the relaunched child emits no tune events at all. Without clearing here, the
+    # control page would keep showing the finished tune's counters for the rest of the run.
+    tune: dict[str, object] = {}
+    set_state(tune={})
     for line in proc.stdout:
         message = line.rstrip("\r\n")
+        event = parse_tune_event(message)
+        if event is not None:
+            kind, fields = event
+            apply_tune_event(tune, kind, fields)
+            # A tune is hundreds of steps; publish every one for the control page but log only
+            # the kernel boundaries, or the log becomes the flood these events exist to replace.
+            set_state(tune=dict(tune))
+            if kind in ("plan", "end"):
+                # the child's stdout is arbitrary bytes, so a line could carry a field named
+                # like one of emit()'s own: "pid"/"kind" would be a duplicate kwarg (TypeError,
+                # killing this daemon thread and with it stage detection AND tune_restart_seen),
+                # "ts"/"event" would silently shadow the log envelope
+                safe = {k: v for k, v in fields.items()
+                        if k not in ("pid", "kind", "ts", "event")}
+                emit(logger, "tune", pid=proc.pid, kind=kind, **safe)
+            continue
         if "llvm_tune: restart to apply the winners" in message:
             tune_restart_seen.set()
         match = re.search(

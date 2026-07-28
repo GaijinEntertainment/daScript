@@ -17,6 +17,7 @@ File I/O, networking, URI parsing, terminal output, and binary serialization.
    generated/uriparser.rst
    generated/uriparser_boost.rst
    generated/ansi_colors.rst
+   generated/tty.rst
    generated/archive.rst
    generated/command_line.rst
    generated/logger.rst

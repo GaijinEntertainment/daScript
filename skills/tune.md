@@ -265,6 +265,61 @@ and is a no-op when the table is empty. Call it at startup:
 log_tune_status("myapp")   // or iterate tune_status() yourself
 ```
 
+## What a tune shows
+
+A tune is minutes of work spread over a chain of child processes, so before
+the wait the framework says both that it is tuning and that the process will
+restart afterwards. During the wait it shows a progress display:
+
+```text
+
+[#####-------------]  9/25   dot_q8q8   finalists 47/80   4 live   1m12s
+```
+
+Outer counter (kernels done), the kernel being tuned, the screening pass and
+its round counter, how many grid rows are still in contention, and observed
+elapsed. **Nothing there is predicted** — the segments are far too uneven for
+an ETA to mean anything, so none is offered.
+
+Three verbosity levels, selected by `--tune-quiet` / `--tune-verbose` on the
+application (or `DAS_TUNE_VERBOSITY` directly):
+
+`silent`
+    Nothing at all.
+
+`normal` (default)
+    The display, and the closing summary.
+
+`verbose`
+    Every line the tuner prints, and no display.
+
+### Progress events
+
+The display is driven by events the tuner emits as prefixed lines on stdout —
+a pipe is the only channel that spans the process chain:
+
+```text
+
+@tune plan scope=dasllama_kernels total=25
+@tune begin name=dot total=20
+@tune step i=5 phase=narrowing live=12
+@tune end name=dot winner=vec8_u2 verdict=holds
+```
+
+A process **renders** the display when its own stdout is a terminal, and
+otherwise **forwards** the events untouched, so whatever is capturing it (a
+supervisor, a parent tuner) can render instead. Forwarding is unconditional;
+verbosity gates only what a human sees. That is what lets `silent` mean
+literally nothing on a terminal while a supervised run still records the full
+event stream.
+
+Raw tuner output is muted only while a display is actually live, so a tuner
+that emits no events keeps printing exactly as it always did.
+
+A harness emits events with `tune_progress_plan` / `_kernel_begin` /
+`_kernel_step` / `_kernel_end`. A different front end (a GUI, a status page)
+consumes them with `tune_progress_feed` and renders `tune_progress_line`.
+
 ## Writing a harness
 
 A tuner is an ordinary `[export] def main` compiled with

@@ -24,12 +24,13 @@ hand-copy trap). Several libraries share one file: tuners UPSERT their own keys
 
 ## The annotation set
 
-- `[tune_perm(<gen args>)]` — one grid row; args pass to the generator + fold into the JIT DLL key. `suffix=` renames; `requires=` is a fallback-eligibility hint.
+- `[tune_perm(<gen args>)]` — one grid row; args pass to the generator + fold into the JIT DLL key. `suffix=` renames; `requires=` is a fallback-eligibility hint (`,` = AND of `|`-separated ORs, matched against host CPU features + `DAS_JIT_*_FORCE_FEATURES`). Evaluated by the public `tune_requires_ok(expr)`; `tune_pick_fallback(chain)` runs the same rule over a `;`-chain of `suffix` / `suffix:requires` entries — that is what gives dasLLAMA's `[tuned]` a per-ISA default from ONE annotation, since its perms are generated and have no row to hang `requires=` on. **`cpu_supports` answers on arm64 as of this work** (sysctl / AT_HWCAP / IsProcessorFeaturePresent, LLVM target-feature spellings); before that it was x86-only and fail-closed, so any arm gate silently never fired.
 - `[tune(gen="key", fallback="suffix;chain")]` — closes the perm bracket (applies run in declaration order). Needs an explicit return type. `fallback=` is a `;`-chain, first `requires=`-passing perm wins; `reference` forces the original body.
 - `[tune_companion(fn="sibling", gen="key")]` — between the perms and `tune()`; stamps a sibling with the SAME perm from the same entry (two-function coherence).
 - `[tune_scope(name="lib", tuner="rel/path.das", covers="modA;modB")]` — on a dummy struct in the **library** module owning the kernels; names the tuner unit that regenerates this library's keys in the app sidecar. `tuner=` resolves against the declaring file. `covers=` extends the DEMAND to other modules' kernels: completeness = a sidecar entry for every `[tune]` + non-`perm=`-pinned `[tuned]` fn across declaring+covered modules (AST-derived — `module_kernel_fnames`); a tuner missing a demanded kernel re-tunes every start and the startup warning NAMES it (`tune_sidecar_missing_entries`). Reading winners needs no scope — every `[tune]`/`[tuned]` reads the app sidecar. **Visibility trap:** the default-auto pass fires only for roots that SEE llvm_tune — the scope-owning library must `require llvm/daslib/llvm_tune public` (re-export llvm_tune ALONE — a blanket public that also re-exports jobque_boost floods requirers with ambiguities like `Stream`).
 - `[tune_policy(missing = fallback|warn|error|auto|restart)]` — on the app's `main`. `error` = dev mode (fail compile, print tuner cmd). `auto` = tune at runtime + re-exec — **and the DEFAULT since 2026-07-12 ("untuned does not start")**: any root-with-`main` app whose libs declare scopes gets it with NO annotation (the `TuneDefaultPolicy` infer pass injects it; root detection = the anonymous module name; the appended `tune_policy` marker annotation is the once-only/dedup). Escapes: `DAS_TUNE_POLICY=fallback` (CI kill switch), the host's `-documentation` policy for documentation/reflection roots (all `[tune]` transforms and policy are inert; query through `is_building_documentation()`), the standing gates, and structurally any root without `main` — dastest test files never tune. `DAS_TUNE_POLICY` env overrides any declared flavor.
 - `tune_status()` — runtime rows (fname, suffix, source manifest/fallback/reference, scope, path); populated when `[tune_policy]` is present. Log at startup.
+- **Progress events** — `tune_progress_plan/_kernel_begin/_kernel_step/_kernel_end` emit `@tune <kind> k=v` lines from a tuner; `tune_progress_feed/_line/_active/_reset` is the consumer seam. `run_scope_tuner` relays them. **One rule decides who draws: a process renders when its OWN stdout is a terminal (`daslib/tty`), otherwise it forwards events verbatim.** Forwarding is unconditional; `DAS_TUNE_VERBOSITY` (`silent`/`normal`/`verbose`, set by `--tune-quiet`/`--tune-verbose`) gates only the human-visible half — that is how `silent` means nothing on a terminal while a supervisor still gets every event. Raw tuner chatter is muted **only while a display is live**, so a tuner that emits no events prints exactly as before (adopting the protocol must never be a prerequisite for being visible). Nothing displayed is ever predicted — no ETA, no expected duration.
 - `[tune_manifest]` is GONE (2026-07-12) — the per-app sidecar made it redundant; its root-module-only restamp rail died with it.
 
 ## The load-bearing facts (learned the hard way)
@@ -54,6 +55,20 @@ hand-copy trap). Several libraries share one file: tuners UPSERT their own keys
 `modules/dasLLAMA/harness/dasllama_tuner.das` (repo-only) is the scope tuner — a wrapper spawning
 `gen_tune_probe.das` (the `[tune]` generator grid) then `tune_kernels.das` (the `[tuned]`
 loop-hint grid + the `"runtime"` knob snapshot), both upserting the one env-pointed sidecar.
+`--tune-fast` narrows both, but they are shaped differently: `tune_kernels` screens progressively
+(20/80 → 4/8/20 — the `phase` on a step event is `screening`/`narrowing`/`finalists`, and `live`
+is what `screening_keep` already computes), while `gen_tune_probe` is a flat best-of-N and only
+drops 6 → 3. Its confirm pass is deliberately NOT cut — a correctness gate, not a budget.
+The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
+
+**The shipped fallback has ONE source.** `[tuned]` banks each kernel's resolved fallback and
+`[dasllama_fallbacks]` (a dummy struct in `tune_kernels.das`, declared after the requires that
+pull the kernels in) emits `dasllama_tuned_fallbacks() : table<string;string>` from that bank.
+`report()` looks the baseline up there rather than taking a literal — which matters because the
+baseline is not cosmetic: a sub-0.5% win reverts to it, and that decides what lands in the
+sidecar. A per-ISA chain resolves per box, so a literal could not have followed it. The bank
+survives the module hop because it is read by a macro in the SAME macro module (`dasllama_tune`);
+the cross-macro-module trap still applies to anything else.
 `tune_kernels` records explicit shipped-fallback entries for kernels it doesn't sweep yet
 (dot_bf16, add_scale_inplace, the tq4 codec four, dot_q8q8_f16s) — a missing demanded key
 would re-tune every start. Adding a `[tuned]` kernel ⇒ add its key to tune_kernels' winners
