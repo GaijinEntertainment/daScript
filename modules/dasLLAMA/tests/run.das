@@ -54,6 +54,8 @@ def private suite_files(name : string) : array<string> {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
+    } elif (name == "image-vulkan") {
+        return <- [ "modules/dasLLAMA/tests/test_model_image_vulkan.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
@@ -114,7 +116,7 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | all)\n")
         return 2
     }
     var tmp = get_env_variable("TMPDIR")
@@ -141,6 +143,12 @@ def main() : int {
         if (!empty(cfg.family)) {
             envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
         }
+    }
+    if (cfg.suite == "image-vulkan") {
+        // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
+        // the bake itself is DRY (no device calls), so this is safe on GPU-less boxes too
+        envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
+            : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
     }
     // the full gate holds the 8B/70B tails — the stock 1200s dastest wall is an arm-mode budget
     let tmo = cfg.full ? 3600 : 1200

@@ -62,6 +62,10 @@ carrier, model-free, runs in CI) `smol metal tower whisper voxtral`; the voxtral
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
 135M — genuine near-ties flip on ~0.02 gaps under ~0.75 cross-backend noise).
+The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFLINE vulkan
+bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
+vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
+GPU-less boxes), and the flavor image round-trips the plan verbatim.
 
 ## Blob-only Metal fixtures (the two-model pattern)
 
