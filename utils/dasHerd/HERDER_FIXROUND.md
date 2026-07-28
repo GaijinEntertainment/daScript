@@ -671,6 +671,22 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   local master is 108 behind origin/master. A merged-check against the
   wrong baseline reports the exact OPPOSITE of the truth. Design proposal
   in the block below.
+- 61: (Boris, live) SWITCHING TO A BIG FILE TOOK 21 SECONDS. Clicking
+  codex.cmd then utils/dasFormatter/ds_parser.cpp: "it takes forever to
+  switch." Measured on the perf rail, which answered it outright —
+  `inspect_ready prep_ms=21662` and `21029` for ds_parser.cpp against
+  `prep_ms=0` for codex.cmd. The inspector state named the cause:
+  `view_syntax_span_count 148590` on a 716,680-byte file that git reports
+  `binary: true`, for a diff with `diff_row_count: 0`. It is 716 KB across
+  SEVEN lines (generated parser tables), which is the worst possible shape for
+  tree-sitter. Worse, the view renders anything over 128 KB through the
+  virtualised path and draws only visible runs, so nearly all 148,590 spans
+  were computed and thrown away. FIXED: a 256 KB cap drops the language before
+  the two tree_sitter_source_document calls (and the markdown pass), which
+  yields the same document with no parse and no spans. Measured after:
+  prep 21029 ms -> 327 ms, ready 24788 ms -> 617 ms, view text still fully
+  present at 737,857 characters. Every hand-written source file in the tree is
+  well under the cap and still highlights.
 - 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now —
   `upstream_ref` off the status branch line, `unmerged_*` against
   origin/master with an origin/main retry and an honest "unknown", and a

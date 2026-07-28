@@ -19,6 +19,15 @@ require math
 
 let private MAX_BINARY_PREVIEW_PIXELS = 64l * 1024l * 1024l
 
+// Above this, a file is served as plain text instead of being parsed and
+// highlighted. Measured on utils/dasFormatter/ds_parser.cpp (716 KB of
+// generated C++): tree-sitter plus the two full-syntax projections took 21.0
+// SECONDS and produced 148,590 spans, for a diff with zero hunks. The view
+// renders anything over 128 KB through the virtualised path, drawing only the
+// visible runs, so nearly all of that work was thrown away. 256 KB keeps
+// highlighting for every hand-written source file in the tree.
+let private MAX_SYNTAX_HIGHLIGHT_BYTES = 256 * 1024
+
 enum public InspectorPrepareEventKind {
     ready
     started
@@ -352,10 +361,17 @@ def private prepare_worker_main(var jobs : Channel?&;
                     }
                     let old_source = inspector_reconstruct_old_source(
                         view_source, prepared_patch)
+                    // Past the cap, drop the language: tree_sitter_source_document
+                    // with no language builds the same document without parsing
+                    // or spans, so a huge file opens instantly as plain text
+                    // instead of stalling the inspector for twenty seconds.
+                    let highlight_language = (max(length(view_source),
+                            length(old_source)) > MAX_SYNTAX_HIGHLIGHT_BYTES
+                        ? "" : language)
                     var full_old <- tree_sitter_source_document(
-                        old_source, language, job.generation)
+                        old_source, highlight_language, job.generation)
                     var full_new <- tree_sitter_source_document(
-                        view_source, language, job.generation)
+                        view_source, highlight_language, job.generation)
                     var prepared_old <- inspector_project_full_syntax(
                         full_old, prepared_patch.old_aligned_text,
                         prepared_patch.rows, true, job.generation)
@@ -391,7 +407,9 @@ def private prepare_worker_main(var jobs : Channel?&;
                                 line_index = line, kind = TextSourceLineMarkKind.added))
                         }
                         view_document <- full_new
-                        if (language == "markdown") {
+                        // Same cap for the markdown render pass, which parses
+                        // and lays out the whole document up front.
+                        if (highlight_language == "markdown") {
                             var prepared_markdown <- md_parse(view_source)
                             if (!prepared_markdown.ok) {
                                 failure = (empty(prepared_markdown.error)
