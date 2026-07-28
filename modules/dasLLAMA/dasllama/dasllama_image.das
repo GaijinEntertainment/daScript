@@ -796,7 +796,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         var t = Model()
         let metal_first = get_metal_mode() != MetalMode.off && has_decode_override("metal")
         let vk_cfg = metal_first ? "" : moe_gpu_bake_tag()
-        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        let vk_tag = vk_cfg   // dlim_vulkan_tag already carries the "vulkan|" prefix ("" = tier absent)
         var loaded = false
         if (vk_tag != "") {
             vulkan_bake_slice_begin()
@@ -836,7 +836,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         // the vulkan flavor: the GPU walk slices the baked device-layout planes off the mapping
         // instead of re-gathering; ANY vulkan config switch changes the tag and rebakes below
         let vk_cfg = want_metal ? "" : moe_gpu_bake_tag()
-        let vk_tag = vk_cfg == "" ? "" : "vulkan|{vk_cfg}"
+        let vk_tag = vk_cfg   // dlim_vulkan_tag already carries the "vulkan|" prefix ("" = tier absent)
         if (vk_tag != "") {
             let img_v = image_path_for(path, vk_tag)
             vulkan_bake_slice_begin()

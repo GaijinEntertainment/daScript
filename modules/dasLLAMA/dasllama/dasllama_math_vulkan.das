@@ -3994,6 +3994,8 @@ struct private GpuState {
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
+    dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
+    msr : int64              // maxStorageBufferRange — device-queried at init, config-supplied when dry
     @do_not_delete stacks : array<VkStack>
     // the resident driver's weight arenas, one per format present (see the arena section). Separate
     // from `stacks` on purpose: the two tiers never co-arm on one model, and the arena has no
@@ -4390,11 +4392,83 @@ def private resolve_weight_cap(heap : VkHeapInfo) : int64 {
     return cap
 }
 
+// stream-slot carve: exact loader-reported need, else the legacy constant (direct-upload paths).
+// One helper — the dry init must carve exactly as the live one does.
+def private carve_stream_reserve {
+    if (gpu_want_moe_stream() != 0l) {
+        let need = moe_gpu_stream_need()
+        if (need > 0l) {
+            g_gpu.stream_reserve = 2l * need
+        } elif (gpu_want_moe_stream() > 0l) {
+            g_gpu.stream_reserve = STREAM_RESERVE
+        }
+        g_gpu.weight_budget = max(g_gpu.weight_budget - g_gpu.stream_reserve, 0l)
+    }
+}
+
+var private g_vk_dry_want = false
+var private g_vk_dry_cfg = DlimVulkanConfig()
+
+// fill the env-else-programmatic wants half of a config section (the caps half is the
+// device's / the dry config's) — shared by the live source and the dry arm's verify
+def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
+    v.moe_layers = gpu_want_moe_layers()
+    v.moe_stream = gpu_want_moe_stream()
+    v.dn = gpu_want_dn()
+    v.attn = gpu_want_attn()
+    v.dnd = gpu_want_dnd()
+    v.shexp = gpu_want_shexp()
+    v.qkv = gpu_want_qkv()
+    v.cls = gpu_want_cls_upload()   // the WALK's gate, not the arm-intent (they had split defaults)
+    v.dense = gpu_want_dense()
+    v.dense_attn = gpu_want_dense_attn()
+    v.dense_shexp = gpu_want_dense_shexp()
+}
+
+//! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic
+//! against the config's numbers, gathers collect into the bake blob, and no Vulkan call is
+//! made — no instance, no device, no VRAM. The converter's `-f vulkan` rail.
+def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
+    // the walk's gates read env-else-programmatic wants — a bake whose config disagrees with
+    // them would write an image whose identity lies about its own plan. Fail closed, name both.
+    var w = v
+    vk_dlim_wants_fill(w)
+    if (dlim_vulkan_tag(w) != dlim_vulkan_tag(v)) {
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: dry-bake config disagrees with this process' wants (set the DASLLAMA_GPU_* knobs to match)\n  config {dlim_vulkan_tag(v)}\n  wants  {dlim_vulkan_tag(w)}\n")
+        return false
+    }
+    g_vk_dry_want = true
+    g_vk_dry_cfg = v
+    set_moe_gpu_layer_count(v.moe_layers)
+    if (!moe_gpu_tier_installed()) {
+        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+    }
+    return true
+}
+
 def private vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
     }
     if (g_gpu != null) {
+        return true
+    }
+    if (g_vk_dry_want) {
+        // DlimVulkanConfig numbers feed the SAME arithmetic — a dry bake cannot drift from live
+        if (g_vk_dry_cfg.subgroup_size < 32) {
+            to_log(LOG_ERROR, "dasLLAMA vulkan tier: config subgroupSize {g_vk_dry_cfg.subgroup_size} < 32 — bake declined\n")
+            g_init_failed = true
+            return false
+        }
+        g_gpu = new GpuState()
+        g_gpu.dry = true
+        g_gpu.coopmat_mode = g_vk_dry_cfg.coopmat_mode
+        g_gpu.has_coopmat = g_vk_dry_cfg.coopmat_mode > 0
+        g_gpu.has_coopmat2 = g_vk_dry_cfg.coopmat_mode == 4
+        g_gpu.rows_per_wg = int64((WG_X + uint(g_vk_dry_cfg.subgroup_size) - 1u) / uint(g_vk_dry_cfg.subgroup_size))
+        g_gpu.msr = g_vk_dry_cfg.max_storage_range
+        g_gpu.weight_budget = g_vk_dry_cfg.vram_mb * 1_000_000l
+        carve_stream_reserve()
         return true
     }
     g_init_failed = true   // cleared only on full success
@@ -4472,6 +4546,9 @@ def private vk_moe_init : bool {
         return false
     }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
+    var pdp : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
+    g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
     // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
     let heap = query_heap_info(g_gpu.phys)
     g_gpu.weight_budget = resolve_weight_cap(heap)
@@ -4484,16 +4561,7 @@ def private vk_moe_init : bool {
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
-    // stream-slot carve: exact loader-reported need, else the legacy constant (direct-upload paths)
-    if (gpu_want_moe_stream() != 0l) {
-        let need = moe_gpu_stream_need()
-        if (need > 0l) {
-            g_gpu.stream_reserve = 2l * need
-        } elif (gpu_want_moe_stream() > 0l) {
-            g_gpu.stream_reserve = STREAM_RESERVE
-        }
-        g_gpu.weight_budget = max(g_gpu.weight_budget - g_gpu.stream_reserve, 0l)
-    }
+    carve_stream_reserve()
     // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
     if (env_flag("DASLLAMA_VK_REBAR", true)) {
         var rmp : VkPhysicalDeviceMemoryProperties
@@ -4678,7 +4746,8 @@ def private stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws
 def private make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // q8n has no scale plane (wscap 0) — floor the buffer so its descriptor slot stays valid
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
-                     wqbuf = make_device_buf(wqcap, xfer_shared), wsbuf = make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
+                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -4716,13 +4785,15 @@ def private ensure_gemv_scratch(si : int) {
 // memory the copy engine DMA-streams into a slot per prefill). No VRAM spent here.
 def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, rows : int64; fmt : int) : bool {
     let pb = stack_plane_bytes(n, rows, fmt)
-    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws,
-                         hwq = make_host_buf(pb.wq, false, [xfer_shared = true]),
-                         hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true]))
-    unsafe {
-        par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
-        if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
-            par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
+    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws)
+    if (!g_gpu.dry) {
+        ss.hwq = make_host_buf(pb.wq, false, [xfer_shared = true])
+        ss.hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true])
+        unsafe {
+            par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
+            if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
+                par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
+            }
         }
     }
     if (length(g_gpu.stream_stacks) % 3 == 2) {   // walk order gate/up/down: this one is a down
@@ -4757,8 +4828,10 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
         return false
     }
     let si = make_stack_shell(woff, rows * n, fmt, wqbytes, wsbytes)
-    upload_region(g_gpu.stacks[si].wqbuf, wq, wqbytes)
-    upload_region(g_gpu.stacks[si].wsbuf, ws, wsbytes)
+    if (!g_gpu.dry) {
+        upload_region(g_gpu.stacks[si].wqbuf, wq, wqbytes)
+        upload_region(g_gpu.stacks[si].wsbuf, ws, wsbytes)
+    }
     g_gpu.resident_bytes += wqbytes + wsbytes
     return true
 }
@@ -4769,8 +4842,10 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
     if (stream) {
         for (_i in range(n)) {
             let k = length(g_gpu.stream_stacks) - 1
-            destroy_host_buf(g_gpu.stream_stacks[k].hwq)
-            destroy_host_buf(g_gpu.stream_stacks[k].hws)
+            if (!g_gpu.dry) {
+                destroy_host_buf(g_gpu.stream_stacks[k].hwq)
+                destroy_host_buf(g_gpu.stream_stacks[k].hws)
+            }
             g_gpu.stream_stacks |> resize(k)
         }
         return
@@ -4780,8 +4855,10 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
         assert(!g_gpu.stacks[k].gemv_made && !g_gpu.stacks[k].batch_made && !g_gpu.stacks[k].cls_made,
             "dasLLAMA vulkan tier: dropping a stack with live dispatch state")
         g_gpu.resident_bytes -= g_gpu.stacks[k].wqbytes + g_gpu.stacks[k].wsbytes
-        destroy_device_buf(g_gpu.stacks[k].wqbuf)
-        destroy_device_buf(g_gpu.stacks[k].wsbuf)
+        if (!g_gpu.dry) {
+            destroy_device_buf(g_gpu.stacks[k].wqbuf)
+            destroy_device_buf(g_gpu.stacks[k].wsbuf)
+        }
         g_gpu.stacks |> resize(k)
     }
 }
@@ -4791,6 +4868,14 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
 def vk_drop_model_state {
     if (g_gpu == null) {
+        return
+    }
+    if (g_gpu.dry) {
+        // dry bake owns no device objects — reset the accounting shells only
+        g_gpu.stacks |> clear()
+        g_gpu.stream_stacks |> clear()
+        g_gpu.arenas |> clear()
+        g_gpu.resident_bytes = 0l
         return
     }
     vk_check(vkQueueWaitIdle(g_gpu.queue), null)
@@ -4974,15 +5059,13 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
     let sbytes = max(cap_blocks * bb.ws, 64l)
     // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
-    var lp : VkPhysicalDeviceProperties
-    vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
-    let shard_cap = int64(lp.limits.maxStorageBufferRange)
+    let shard_cap = g_gpu.msr
     if (qbytes > shard_cap || sbytes > shard_cap) {
         to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
         return false
     }
     var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
-                     wqbuf = make_device_buf(qbytes), wsbuf = make_device_buf(sbytes))
+                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(qbytes), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sbytes))
     g_gpu.arenas |> insert(fmt, a)
     return true
 }
@@ -5002,9 +5085,11 @@ def private arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; f
         let blk = a.blocks
         a.blocks += need
         let bb = arena_block_bytes(fmt)
-        upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
-        if (bb.ws > 0l) {
-            upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+        if (!g_gpu.dry) {
+            upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
+            if (bb.ws > 0l) {
+                upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+            }
         }
         return blk
     }
@@ -5474,6 +5559,9 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} > {AR_MAX_DIM} or head_size {head_size} > 256 exceeds the workgroup row slabs\n")
         return false
     }
+    if (g_gpu.dry) {
+        return true   // guards above ARE the plan decision; everything below is device state
+    }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
                  hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,
@@ -5525,6 +5613,9 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
 //! rms_final], dim floats each, exactly the layout the layer w_offs index. Under qk_norm the
 //! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
 def vk_rdec_upload_norms(norms : array<float>) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
     upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), long_length(norms) * 4l)
     // the fused-rail constants: eps/ascale past the norm rows, and (under qk_norm) a copy of the
@@ -5551,6 +5642,9 @@ def vk_rdec_upload_norms(norms : array<float>) {
 //! once per layer after prepare. `w_ffn_off`/`w_next_off` are the rms_ffn[l] and rms_att[l+1]
 //! (or rms_final for the last layer) offsets in the norms buffer (dim-element units).
 def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_set_layer before prepare")
     while (long_length(g_rd.layers) <= l) {
         g_rd.layers |> emplace(RLayer())
@@ -5669,6 +5763,9 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
 //! Register the classifier plane (arena block + format) and build the prologue / final-norm / cls
 //! sets. Call after all layers are set.
 def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_set_cls before prepare")
     let dim = g_rd.dim
     let vocab = g_rd.vocab
@@ -8950,20 +9047,15 @@ def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
 // The DlimConfiguration vulkan source — RESOLVED values (the old tag folded raw env strings,
 // so "auto" hid device-derived byte differences and a moving heap budget).
 def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
+    if (g_vk_dry_want) {
+        // an offline bake IS its config — echo it, never probe (there may be no device at all)
+        v = g_vk_dry_cfg
+        return true
+    }
     if (!vulkan_moe_gpu_arm()) {
         return false
     }
-    v.moe_layers = gpu_want_moe_layers()
-    v.moe_stream = gpu_want_moe_stream()
-    v.dn = gpu_want_dn()
-    v.attn = gpu_want_attn()
-    v.dnd = gpu_want_dnd()
-    v.shexp = gpu_want_shexp()
-    v.qkv = gpu_want_qkv()
-    v.cls = gpu_want_cls_upload()   // the WALK's gate, not the arm-intent (they had split defaults)
-    v.dense = gpu_want_dense()
-    v.dense_attn = gpu_want_dense_attn()
-    v.dense_shexp = gpu_want_dense_shexp()
+    vk_dlim_wants_fill(v)
     if (g_gpu != null) {
         vk_caps_fill(g_gpu.phys, v)
     } else {
@@ -8990,6 +9082,7 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
     set_moe_gpu_bake_tag(@@vk_bake_tag)
     set_dlim_vulkan_source(@@vk_dlim_source)
+    set_moe_gpu_dry_bake_arm(@@vulkan_dry_bake_arm)
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)

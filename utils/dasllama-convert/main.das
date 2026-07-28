@@ -13,7 +13,8 @@ options stack = 65536   // dasLLAMA program-root convention (options stack does 
 // The config is EXPLICIT (DlimConfiguration): `--dump-config` prints/writes this box's config as
 // JSON; `--config x.json` bakes against a supplied one — applied knob-by-knob, then verified
 // fail-closed against the resulting identity, so a knob that did not take is an error, never a
-// silently different image.
+// silently different image. `-f vulkan` bakes OFFLINE: the GPU walk's accept/refuse arithmetic
+// runs against the config's numbers (dry tier), gathers collect into vkblob — no VRAM touched.
 //
 // Conversion is I/O bound at both ends: the transcode is ~5% of wall time, the rest is reading the
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
@@ -130,7 +131,7 @@ def private flavor_tag(f : Flavor) : string {
         if (cfg == "") {
             panic("dasllama-convert: --flavor vulkan needs the vulkan tier armed (see DASLLAMA_GPU_* in modules/dasLLAMA/ENVIRONMENT.md)")
         }
-        return "vulkan|{cfg}"
+        return cfg   // dlim_vulkan_tag already carries the "vulkan|" prefix
     }
     return ""
 }
@@ -190,6 +191,8 @@ def main() : int {
     // the backend pin must precede the identity: image_identity names the active kernel backend
     apply_box_profile_runtime()
     var qm = cfg.quant
+    var want = DlimConfiguration()
+    var have_want = false
     if (cfg.config != "") {
         var text = ""
         fopen(cfg.config, "rb") $(f) {
@@ -201,7 +204,6 @@ def main() : int {
             to_log(LOG_ERROR, "dasllama-convert: cannot read --config '{cfg.config}'\n")
             return 2
         }
-        var want = DlimConfiguration()
         if (!dlim_config_from_json(text, want)) {
             to_log(LOG_ERROR, "dasllama-convert: --config '{cfg.config}' is not a DlimConfiguration JSON\n")
             return 2
@@ -224,6 +226,26 @@ def main() : int {
             to_log(LOG_ERROR, "dasllama-convert: --config could not be fully applied on this host (cross-box backend targeting lands later in the arc):\n  want {want_ident}\n  have {have_ident}\n")
             return 2
         }
+        have_want = true
+    }
+    if (cfg.flavor == Flavor.vulkan) {
+        // OFFLINE bake: the walk's accept/refuse arithmetic runs against the config's numbers,
+        // the gathers collect, and no Vulkan call is made — no instance, no device, no VRAM
+        var vkc = DlimVulkanConfig()
+        if (have_want && want.vulkan_on) {
+            vkc = want.vulkan
+        } else {
+            let probed = dlim_config_current("{qm}")
+            if (!probed.vulkan_on) {
+                to_log(LOG_ERROR, "dasllama-convert: --flavor vulkan needs the vulkan tier armed (DASLLAMA_GPU=1, see modules/dasLLAMA/ENVIRONMENT.md) or a --config carrying a vulkan section\n")
+                return 2
+            }
+            vkc = probed.vulkan
+        }
+        if (!moe_gpu_dry_bake_arm(vkc)) {
+            to_log(LOG_ERROR, "dasllama-convert: offline vulkan bake could not arm — see the log above\n")
+            return 2
+        }
     }
     let tag = flavor_tag(cfg.flavor)
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
@@ -243,6 +265,9 @@ def main() : int {
     let ts = ref_time_ticks()
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
+        if (cfg.flavor == Flavor.vulkan) {
+            vulkan_bake_begin()   // the load's GPU walk collects into the bake blob (dry — no uploads)
+        }
         var m <- load_model_(cfg.model, qm)
         let ts_load = ref_time_ticks()
         if (cfg.flavor == Flavor.metal) {
@@ -250,6 +275,10 @@ def main() : int {
                 to_log(LOG_ERROR, "dasllama-convert: this config has no metal-servable blob flavor\n")
                 rc = 1
             }
+        }
+        if (rc == 0 && cfg.flavor == Flavor.vulkan && !vulkan_bake_take(m)) {
+            to_log(LOG_ERROR, "dasllama-convert: the GPU walk collected nothing — the tier declined this model under the supplied config\n")
+            rc = 1
         }
         if (rc == 0 && !save_model_image(m, out, tag)) {
             to_log(LOG_ERROR, "dasllama-convert: writing '{out}' failed — see the error above\n")

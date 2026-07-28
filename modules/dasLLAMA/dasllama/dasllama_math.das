@@ -6,6 +6,7 @@ module dasllama_math shared public
 require math
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
@@ -2168,6 +2169,21 @@ var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
 def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
     g_moe_gpu_expert_q8n = f
 }
+
+[unused_argument(v)]
+def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
+
+var private g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake
+
+//! A GPU tier registers its OFFLINE-bake arm here: the load walk runs its full accept/refuse
+//! arithmetic against the config's numbers, gathers collect, and no device call is made.
+def public set_moe_gpu_dry_bake_arm(f : function<(v : DlimVulkanConfig) : bool>) {
+    g_moe_gpu_dry_bake = f
+}
+
+//! Arm the offline bake (false = no GPU backend in this build, or the config disagrees with
+//! this process' env wants — the tier logs the exact mismatch).
+def public moe_gpu_dry_bake_arm(v : DlimVulkanConfig) : bool => invoke(g_moe_gpu_dry_bake, v)
 
 def private moe_gpu_no_bake_tag : string => ""
 

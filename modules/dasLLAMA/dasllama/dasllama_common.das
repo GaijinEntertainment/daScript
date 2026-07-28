@@ -389,8 +389,11 @@ def private repack_q51_stacks(var t : Model) {
 // flavor load's walk skips the transforms and copies the mapped blob back, plan-checked.
 
 //! One baked gather of the vulkan flavor's plan — walk order, offsets into Model.vkblob.
+//! `role` records WHICH walk stage produced it (VkBakeRole) — the trim pass (P3) and the
+//! slice verifier both key on it.
 struct VkPlanEntry {
     fmt : int
+    role : int
     woff : int64
     n : int64
     rows : int64
@@ -398,6 +401,20 @@ struct VkPlanEntry {
     wq_bytes : int64
     ws_off : int64
     ws_bytes : int64
+}
+
+//! The upload-walk stage a baked gather belongs to — set by the walk, stamped per entry.
+enum VkBakeRole {
+    none
+    cls
+    dense
+    shexp
+    dn
+    attn
+    qkv
+    expert          //!< resident expert stack (VRAM)
+    expert_stream   //!< streamed expert stack (pinned mirror; CPU planes stay — decode runs there)
+    arena           //!< resident-driver arena plane (dense models)
 }
 
 enum private VkBakeMode {
@@ -410,10 +427,17 @@ var private g_vk_bake = VkBakeMode.off
 var private g_vk_bake_blob : array<uint8>
 var private g_vk_bake_plan : array<VkPlanEntry>
 var private g_vk_bake_cursor = 0l
+var private g_vk_bake_role = VkBakeRole.none
+
+//! The upload walk declares its current stage here (collect stamps it, slice verifies it).
+def vulkan_bake_role(r : VkBakeRole) {
+    g_vk_bake_role = r
+}
 
 //! Arm collection for the next model load's GPU walk (the vulkan-flavor bake).
 def vulkan_bake_begin {
     g_vk_bake = VkBakeMode.collect
+    g_vk_bake_role = VkBakeRole.none
     g_vk_bake_blob |> clear()
     g_vk_bake_plan |> clear()
 }
@@ -433,6 +457,7 @@ def vulkan_bake_take(var t : Model) : bool {
 //! Arm slicing for a mapped vulkan-flavor load: the walk reads t.vkblob instead of gathering.
 def vulkan_bake_slice_begin {
     g_vk_bake = VkBakeMode.slice
+    g_vk_bake_role = VkBakeRole.none
     g_vk_bake_cursor = 0l
 }
 
@@ -470,11 +495,13 @@ def private vk_bake_append(a : array<uint8>) : int64 {
     return off
 }
 
+// Called AFTER the tier accepted the upload/placement (a refused gather must not enter the
+// plan — the slice path would replay the refusal's absence and diverge).
 def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uint8>) {
     if (g_vk_bake != VkBakeMode.collect) {
         return
     }
-    var e = VkPlanEntry(fmt = fmt, woff = woff, n = n, rows = rows,
+    var e = VkPlanEntry(fmt = fmt, role = int(g_vk_bake_role), woff = woff, n = n, rows = rows,
                         wq_bytes = long_length(wq), ws_bytes = long_length(ws))
     e.wq_off = vk_bake_append(wq)
     e.ws_off = vk_bake_append(ws)
@@ -493,8 +520,8 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
         return false
     }
     let e = t.vkplan[int(g_vk_bake_cursor)]
-    if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} woff {woff} {n}x{rows}) — regathering live from here\n")
+    if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows || e.role != int(g_vk_bake_role)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) — regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
     }
@@ -523,7 +550,6 @@ def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : 
         return
     }
     invoke(g_layout_gather, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-    vk_bake_collect(0, woff, n, rows, wq, ws)
 }
 
 def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
@@ -533,7 +559,6 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
         return
     }
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-    vk_bake_collect(int(fmt), woff, n, rows, wq, ws)
 }
 
 def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
@@ -544,7 +569,6 @@ def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_row
         return
     }
     invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-    vk_bake_collect(6, woff, n, rows, wq, no_ws)
 }
 
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
@@ -2095,7 +2119,11 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
             : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))) : 1l
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
     }
-    return moe_gpu_upload_stack(wq, ws, woff, n, rows, int(f), stream)
+    let ok = moe_gpu_upload_stack(wq, ws, woff, n, rows, int(f), stream)
+    if (ok) {
+        vk_bake_collect(int(f), woff, n, rows, wq, ws)
+    }
+    return ok
 }
 
 //! What a whole-model resident load would cost on the device. The resident driver is all-or-nothing
@@ -2225,6 +2253,9 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, rows, t.kq_repacked, kmr, wq, ws)
     }
     let blk = rdec_place(wq, ws, n, rows, int(f))
+    if (blk >= 0l) {
+        vk_bake_collect(int(f), woff, n, rows, wq, ws)
+    }
     delete wq
     delete ws
     return blk
@@ -2259,6 +2290,7 @@ def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : K
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
 def resident_upload(t : Model; seq_cap : int64) : bool {
     g_rdec_active = false
+    vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed() || t.quant != QuantMode.q8 || t.config.n_expert > 0l) {
         return false
     }
@@ -2801,6 +2833,7 @@ def moe_gpu_upload_resident(t : Model) {
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
     let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
+    vulkan_bake_role(VkBakeRole.cls)
     if (cls_servable && gpu_want_cls_upload()
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
         set_moe_gpu_cls_off(t.wcls_off)
@@ -2808,6 +2841,7 @@ def moe_gpu_upload_resident(t : Model) {
     // dense (attention-side) planes second — DASLLAMA_GPU_DENSE=1 / gpu_dense opt-in. Arch-agnostic:
     // recurrent layers carry the deltanet triple, attention layers the q/o pair (k/v stay CPU — small).
     // Layer-ascending; each successful upload marks its plane, a budget stop ends the walk.
+    vulkan_bake_role(VkBakeRole.dense)
     if (gpu_want_dense()) {
         var dense_marked = 0l
         var dense_stop = false
@@ -2856,6 +2890,7 @@ def moe_gpu_upload_resident(t : Model) {
     }
     // shared-expert triples — DASLLAMA_GPU_SHEXP=1 opt-in. Dense (every token, every layer, one
     // fixed weight set) so residency carries no miss term; q8 only (the repack registers them fmt 0).
+    vulkan_bake_role(VkBakeRole.shexp)
     if (gpu_want_shexp() && t.config.n_ff_shexp > 0l && !t.config.moe_dense_shexp) {
         let nsh = t.config.n_ff_shexp
         let she = dim * nsh
@@ -2891,6 +2926,7 @@ def moe_gpu_upload_resident(t : Model) {
     // deltanet triples third — DASLLAMA_GPU_DN=1 opt-in: each recurrent layer's qkv/z-gate/
     // out-proj planes + the layer mark that routes its whole prefill attention through the
     // device chain. Layer-ascending; a budget stop leaves later layers CPU, a partial triple rolls back.
+    vulkan_bake_role(VkBakeRole.dn)
     if (dn_want) {
         var dn_marked = 0l
         var dn_stop = false
@@ -2934,6 +2970,7 @@ def moe_gpu_upload_resident(t : Model) {
     // attention quads fourth — DASLLAMA_GPU_ATTN=1 opt-in: each servable full-attention layer's
     // q|gate/k/v/wo planes + the layer mark that routes its whole prefill attention through the
     // device chain. Layer-ascending; a budget stop rolls back the partial quad.
+    vulkan_bake_role(VkBakeRole.attn)
     if (at_want) {
         let c = t.config
         // NEOX rope only (partial rotary implies NEOX per the loader); the chain has no bias /
@@ -2998,6 +3035,7 @@ def moe_gpu_upload_resident(t : Model) {
     // attention q/k/v triples — DASLLAMA_GPU_QKV=1 opt-in. LAST of the dense rails ON PURPOSE: it
     // is the lowest-value one and an earlier section exhausting stacks/VRAM starves those behind it
     // (a 224-stack cap once cut 6 DN layers = -14% tg). Pays only where GPU reads beat CPU reads.
+    vulkan_bake_role(VkBakeRole.qkv)
     if (gpu_want_qkv()) {
         var qkv_marked = 0l
         for (l in range64(layers)) {
@@ -3035,6 +3073,7 @@ def moe_gpu_upload_resident(t : Model) {
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: q/k/v of {qkv_marked} attention layers resident\n")
         }
     }
+    vulkan_bake_role(VkBakeRole.expert)
     for (i in range64(want)) {
         let l = layers - 1l - i
         let f1 = fmt_at(t.we1_fmt, l)
@@ -3073,6 +3112,7 @@ def moe_gpu_upload_resident(t : Model) {
     // streamed tail: DASLLAMA_GPU_MOE_STREAM=N marks the next N layers below the resident set for
     // prefill streaming — device-layout planes gathered into pinned host mirrors the tier DMAs per
     // prefill. CPU planes stay (decode runs them); the walk is contiguous descending.
+    vulkan_bake_role(VkBakeRole.expert_stream)
     var sfrom = from_l
     for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
         let l = from_l - 1l - i
