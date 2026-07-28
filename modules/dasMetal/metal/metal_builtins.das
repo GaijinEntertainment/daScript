@@ -377,3 +377,54 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
         }
     }
 }
+
+// ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
+// For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
+// k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.
+// `acc` is an m*n float @workgroup (or local) scratch — the CPU-replay accumulator; on GPU the
+// emitter keys a persistent cooperative tensor to the acc VARIABLE and never touches the array.
+// run() OVERWRITES a cooperative destination (probe-proven), so step folds explicitly.
+
+//! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step: acc[r][j] += ta[r][k] * tb[j][k] over one staged chunk — ta flat [m][kk] f16,
+//! tb flat [n][kk] f16, both row-major. Call between the same barriers the staging uses.
+[sideeffects]
+def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
+            }
+            acc[r * int(n) + j] += facc
+        }
+    }
+}
+
+//! store: C[r][j] = acc[r][j] (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = acc[r * int(n) + j]
+            }
+        }
+    }
+}
