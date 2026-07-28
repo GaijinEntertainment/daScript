@@ -1147,8 +1147,10 @@ def private git_commit_at(path : string) : string {
     return hex ? out : ""
 }
 
+// -uno: tracked modifications only — untracked files (.dlim caches, our .sha sidecars) don't
+// change what was built, and counting them would taint every reference tree as dirty
 def private git_dirty_at(path : string) : bool {
-    return !empty(strip(run_capture("git -C \"{path}\" status --porcelain 2>&1", false)))
+    return !empty(strip(run_capture("git -C \"{path}\" status --porcelain -uno 2>&1", false)))
 }
 
 //! Version line for the whisper.cpp checkout (whisper-cli AND parakeet-cli — one tree). A dirty
