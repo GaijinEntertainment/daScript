@@ -469,6 +469,70 @@ class MetalKqMulMmK4 {
     }
 }
 
+// Metal-4 staged-tile twin of MetalKqMulMmK4: flat f16 tiles per K-chunk, per-element kmask
+// scale decode + nibble dequant (same math as the base's va — identical staged values).
+class MetalKqMulMmK4T {
+    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d, dmin at 8*blk)
+    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view
+    @ssbo @binding = 3 xf : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup twa : float16[1024]          // X chunk: 32 tokens x 32 k, flat row-major
+    @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
+
+    [metal_kernel(name="metal_kq_mulmm_k4_t_msl")]
+    def metal_kq_mulmm_k4_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2048]
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb < nkb) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(xf[(mBase + i / 32u) * kdim + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            let sb = kb / 8u
+            let js = kb % 8u
+            i = lid
+            while (i < 2048u) {
+                let j = i / 32u
+                let e = i % 32u
+                let blk = (nBase + j) * nsb + sb
+                let sv = ks4[blk]
+                var sc = 0u
+                var mn = 0u
+                if (js < 4u) {
+                    sc = (sv.y >> (8u * js)) & 63u
+                    mn = (sv.z >> (8u * js)) & 63u
+                } else {
+                    let j2 = js - 4u
+                    let hi = sv.w >> (8u * j2)
+                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
+                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
+                }
+                let dsc = float(ksh[blk * 8u]) * float(sc)
+                let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
+                let q = (kqu[blk * 32u + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                twb[i] = float16(dsc * float(q) - dmn)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
+    }
+}
+
 class MetalKqMulMmK5 {
     @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks (the Q4_K form)
     @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
@@ -567,6 +631,136 @@ class MetalKqMulMmK5 {
         for [unroll_full] (i in range(8)) {
             simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
         }
+    }
+}
+
+// Metal-4 staged-tile twin of MetalKqMulMmK5 (K4's scale decode + the qh high-bit plane).
+class MetalKqMulMmK5T {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>    // qs at 40*blk, qh at 40*blk+32
+    @ssbo @binding = 3 xf : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup twa : float16[1024]
+    @workgroup twb : float16[2048]
+
+    [metal_kernel(name="metal_kq_mulmm_k5_t_msl")]
+    def metal_kq_mulmm_k5_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2048]
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb < nkb) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(xf[(mBase + i / 32u) * kdim + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            let sb = kb / 8u
+            let js = kb % 8u
+            i = lid
+            while (i < 2048u) {
+                let j = i / 32u
+                let e = i % 32u
+                let blk = (nBase + j) * nsb + sb
+                let sv = ks4[blk]
+                var sc = 0u
+                var mn = 0u
+                if (js < 4u) {
+                    sc = (sv.y >> (8u * js)) & 63u
+                    mn = (sv.z >> (8u * js)) & 63u
+                } else {
+                    let j2 = js - 4u
+                    let hi = sv.w >> (8u * j2)
+                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
+                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
+                }
+                let dsc = float(ksh[blk * 8u]) * float(sc)
+                let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
+                let u = kqu[blk * 40u + (js / 2u) * 8u + e / 4u]
+                let hu = kqu[blk * 40u + 32u + e / 4u]
+                let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
+                twb[i] = float16(dsc * float(q) - dmn)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
+    }
+}
+
+// Metal-4 staged-tile twin of MetalKqMulMmK6 (per-element ql|qh compose x signed sub-scale —
+// same real product as the base's pre-scaled fma form, which is bit-identical by construction).
+class MetalKqMulMmK6T {
+    @ssbo @binding = 0 kdh : array<float16> // d plane (scale buffer at byte nsb*16)
+    @ssbo @binding = 1 ksc : array<uint4>   // 16B sub-scale blocks, same buffer at 0
+    @ssbo @binding = 2 kqu : array<uint>    // ql at 48*blk, qh at 48*blk+32
+    @ssbo @binding = 3 xf : array<float>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup twa : float16[1024]
+    @workgroup twb : float16[2048]
+
+    [metal_kernel(name="metal_kq_mulmm_k6_t_msl")]
+    def metal_kq_mulmm_k6_t {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2048]
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        var kb = 0u
+        while (kb < nkb) {
+            var i = lid
+            while (i < 1024u) {
+                twa[i] = float16(xf[(mBase + i / 32u) * kdim + kb * 32u + i % 32u])
+                i += gl_WorkGroupSize.x
+            }
+            let sb = kb / 8u
+            let js = kb % 8u
+            let half6 = js / 4u
+            let gg = js % 4u
+            let nsh = (gg / 2u) * 4u
+            let hsh = gg * 2u
+            i = lid
+            while (i < 2048u) {
+                let j = i / 32u
+                let e = i % 32u
+                let blk = (nBase + j) * nsb + sb
+                let dall = float(kdh[blk])
+                let ile = e / 16u
+                let k = (e % 16u) / 4u
+                let c = e % 4u
+                let si = half6 * 8u + gg * 2u + ile
+                let sv = ksc[blk]
+                let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+                let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+                let dsc = dall * s6
+                let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+                let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
+                let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
+                twb[i] = float16(dsc * float(q) - dsc * 32.0)
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
     }
 }
 
@@ -4644,6 +4838,12 @@ var private g_pf_moe_mm_q8_tensor : bool // "moe_mulmm_q8" crowned (contiguous s
 var private g_pf_pso_moe_mm_q8_t : MetalComputePipeline?
 var private g_pf_moe_mm_mx4_tensor : bool // "moe_mulmm_mx4" crowned (contiguous sites only)
 var private g_pf_pso_moe_mm_mx4_t : MetalComputePipeline?
+var private g_pf_kq_mm4_tensor : bool     // "kq_mulmm_k4" crowned
+var private g_pso_kq_mm4_t : MetalComputePipeline?
+var private g_pf_kq_mm5_tensor : bool     // "kq_mulmm_k5" crowned
+var private g_pso_kq_mm5_t : MetalComputePipeline?
+var private g_pf_kq_mm6_tensor : bool     // "kq_mulmm_k6" crowned
+var private g_pso_kq_mm6_t : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pso_qkmm : MetalComputePipeline?
@@ -4777,6 +4977,18 @@ def public metal_prefill_shutdown {
     if (g_pf_pso_moe_mm_mx4_t != null) {
         metal_release(g_pf_pso_moe_mm_mx4_t)
         g_pf_pso_moe_mm_mx4_t = null
+    }
+    if (g_pso_kq_mm4_t != null) {
+        metal_release(g_pso_kq_mm4_t)
+        g_pso_kq_mm4_t = null
+    }
+    if (g_pso_kq_mm5_t != null) {
+        metal_release(g_pso_kq_mm5_t)
+        g_pso_kq_mm5_t = null
+    }
+    if (g_pso_kq_mm6_t != null) {
+        metal_release(g_pso_kq_mm6_t)
+        g_pso_kq_mm6_t = null
     }
     if (g_pso_gemm != null) {
         metal_release(g_pso_gemm)
@@ -5023,8 +5235,20 @@ def private metal_prefill_init : bool {
     g_pf_pso_ple_gather = pf_compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
     g_pf_pso_ple_finish = pf_compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
     g_pso_kq_mm4 = pf_compile_pso(metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, ok)
+    g_pf_kq_mm4_tensor = metal_tensor_crowned("kq_mulmm_k4")
+    if (g_pf_kq_mm4_tensor) {
+        g_pso_kq_mm4_t = pf_compile_pso(metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, ok)
+    }
     g_pso_kq_mm5 = pf_compile_pso(metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, ok)
+    g_pf_kq_mm5_tensor = metal_tensor_crowned("kq_mulmm_k5")
+    if (g_pf_kq_mm5_tensor) {
+        g_pso_kq_mm5_t = pf_compile_pso(metal_kq_mulmm_k5_t_msl, metal_kq_mulmm_k5_t_msl_entry, metal_kq_mulmm_k5_t_msl_fastmath, ok)
+    }
     g_pso_kq_mm6 = pf_compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
+    g_pf_kq_mm6_tensor = metal_tensor_crowned("kq_mulmm_k6")
+    if (g_pf_kq_mm6_tensor) {
+        g_pso_kq_mm6_t = pf_compile_pso(metal_kq_mulmm_k6_t_msl, metal_kq_mulmm_k6_t_msl_entry, metal_kq_mulmm_k6_t_msl_fastmath, ok)
+    }
     g_pf_pso_kq4 = pf_compile_pso(metal_kq_gemv_k4_msl, metal_kq_gemv_k4_msl_entry, metal_kq_gemv_k4_msl_fastmath, ok)
     g_pf_pso_kq5 = pf_compile_pso(metal_kq_gemv_k5_msl, metal_kq_gemv_k5_msl_entry, metal_kq_gemv_k5_msl_fastmath, ok)
     g_pf_pso_kq6 = pf_compile_pso(metal_kq_gemv_k6_msl, metal_kq_gemv_k6_msl_entry, metal_kq_gemv_k6_msl_fastmath, ok)
@@ -5229,12 +5453,19 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     let bq = kq_quants_of(g_pf_dev, t, fmt, woff)
     let bs = kq_scales_of(g_pf_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
-        kn_pipeline(enc, g_pso_kq_mm6)
-        kn_tgmem(enc, metal_kq_mulmm_k6_msl_tgmem, 0)
+        let twin6 = g_pf_kq_mm6_tensor && g_pso_kq_mm6_t != null
+        kn_pipeline(enc, twin6 ? g_pso_kq_mm6_t : g_pso_kq_mm6)
+        kn_tgmem(enc, twin6 ? metal_kq_mulmm_k6_t_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.doff, 0)
+    } elif (fmt == KqFmt.k4) {
+        let twin4 = g_pf_kq_mm4_tensor && g_pso_kq_mm4_t != null
+        kn_pipeline(enc, twin4 ? g_pso_kq_mm4_t : g_pso_kq_mm4)
+        kn_tgmem(enc, twin4 ? metal_kq_mulmm_k4_t_msl_tgmem : metal_kq_mulmm_k4_msl_tgmem, 0)
+        kn_buffer(enc, bs.buf, bs.soff, 0)
     } else {
-        kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_mm4 : g_pso_kq_mm5)
-        kn_tgmem(enc, fmt == KqFmt.k4 ? metal_kq_mulmm_k4_msl_tgmem : metal_kq_mulmm_k5_msl_tgmem, 0)
+        let twin5 = g_pf_kq_mm5_tensor && g_pso_kq_mm5_t != null
+        kn_pipeline(enc, twin5 ? g_pso_kq_mm5_t : g_pso_kq_mm5)
+        kn_tgmem(enc, twin5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k5_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     }
     kn_buffer(enc, bs.buf, bs.soff, 1)
@@ -7440,6 +7671,120 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     return res
 }
 
+// one kq mulmm race: random quant planes + constant f16 scales (any bit pattern is a valid
+// plane — the twin-vs-base envelope doubles as a layout-agreement check). k6 binds the d plane
+// at its tail offset; k4/k5 bind the compact scale blocks at 0.
+def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
+                          base_src, base_entry : string; base_fm : bool; base_tgmem : uint64;
+                          twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
+                          qu_per_sb : int; k6 : bool) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let m = 512
+    let kdim = 2048
+    let ndim = 1024
+    let nsb = kdim / 256
+    var err = ""
+    var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
+    if (base_pso == null) {
+        res.note = "base pso: {err}"
+        return res
+    }
+    var twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
+    if (twin_pso == null) {
+        res.winner = "simdgroup"
+        res.note = "twin pso: {err}"
+        metal_release(base_pso)
+        return res
+    }
+    var xa <- race_x_f32(m * kdim)
+    let nblk = ndim * nsb
+    var qplane : array<uint>
+    qplane |> resize(nblk * qu_per_sb)
+    for (i in range(nblk * qu_per_sb)) {
+        qplane[i] = uint(i) * 2654435761u   // deterministic pseudo-random bit pattern
+    }
+    // scales: k4/k5 = compact 16B blocks; k6 = int8 sub-scale plane + the f16 d tail
+    var splane : array<uint8>
+    let sbytes = k6 ? nblk * 16 + nblk * 2 : nblk * 16
+    splane |> resize(sbytes)
+    if (k6) {
+        for (i in range(nblk * 16)) {
+            splane[i] = uint8(2)
+        }
+        unsafe {
+            var ph = addr<float16?>(splane[nblk * 16])
+            for (b in range(nblk)) {
+                ph[b] = float16(0.25)
+            }
+        }
+    } else {
+        unsafe {
+            var ph = addr<float16?>(splane[0])
+            for (b in range(nblk)) {
+                ph[b * 8] = float16(0.25)       // d
+                ph[b * 8 + 1] = float16(0.25)   // dmin
+            }
+        }
+        for (b in range(nblk)) {
+            for (kx in range(4, 12)) {
+                splane[b * 16 + kx] = uint8(17)   // kmask bytes: small scales, both halves
+            }
+        }
+    }
+    var bq = race_buf(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
+    var bs = race_buf(dev, uint64(sbytes), unsafe(addr<void?>(splane[0])))
+    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
+    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bk = race_uniform_u32(dev, uint(kdim))
+    var bn = race_uniform_u32(dev, uint(ndim))
+    let doff = k6 ? uint64(nblk * 16) : 0ul
+    let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
+    let tg = uint3(128u, 1u, 1u)
+    res.base_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, base_pso)
+        kn_tgmem(enc, base_tgmem, 0)
+        kn_buffer(enc, bs, doff, 0)
+        kn_buffer(enc, bs, 0ul, 1)
+        kn_buffer(enc, bq, 0ul, 2)
+        kn_buffer(enc, bxa, 0ul, 3)
+        kn_buffer(enc, by_base, 0ul, 4)
+        kn_buffer(enc, bk, 0ul, 5)
+        kn_buffer(enc, bn, 0ul, 6)
+        kn_dispatch(enc, grid, tg)
+    }
+    res.twin_ms = race_time_ms(queue, 5) $(enc) {
+        kn_pipeline(enc, twin_pso)
+        kn_tgmem(enc, twin_tgmem, 0)
+        kn_buffer(enc, bs, doff, 0)
+        kn_buffer(enc, bs, 0ul, 1)
+        kn_buffer(enc, bq, 0ul, 2)
+        kn_buffer(enc, bxa, 0ul, 3)
+        kn_buffer(enc, by_twin, 0ul, 4)
+        kn_buffer(enc, bk, 0ul, 5)
+        kn_buffer(enc, bn, 0ul, 6)
+        kn_dispatch(enc, grid, tg)
+    }
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
+    metal_release(bq)
+    metal_release(bs)
+    metal_release(bxa)
+    metal_release(by_base)
+    metal_release(by_twin)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(base_pso)
+    metal_release(twin_pso)
+    return res
+}
+
 //! Tuner entry (the runtime.metal_tensor crown): race every tensor pso twin against its
 //! shipped simdgroup kernel on THIS box — compile + output-match to qualify, faster GPU time
 //! takes the family's crown. Empty when there is no Metal device.
@@ -7453,6 +7798,15 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     results |> emplace(race_mulmm_bf16(dev, queue))
     results |> emplace(race_mulmm_q8(dev, queue))
     results |> emplace(race_moe_mulmm_q8(dev, queue))
+    results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k4",
+        metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, metal_kq_mulmm_k4_msl_tgmem,
+        metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, metal_kq_mulmm_k4_t_msl_tgmem, 32, false))
+    results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k5",
+        metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, metal_kq_mulmm_k5_msl_tgmem,
+        metal_kq_mulmm_k5_t_msl, metal_kq_mulmm_k5_t_msl_entry, metal_kq_mulmm_k5_t_msl_fastmath, metal_kq_mulmm_k5_t_msl_tgmem, 40, false))
+    results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k6",
+        metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, metal_kq_mulmm_k6_msl_tgmem,
+        metal_kq_mulmm_k6_t_msl, metal_kq_mulmm_k6_t_msl_entry, metal_kq_mulmm_k6_t_msl_fastmath, metal_kq_mulmm_k6_t_msl_tgmem, 48, true))
     metal_release(queue)
     metal_release(dev)
     return <- results
