@@ -635,7 +635,13 @@ def stream_child(
             # the kernel boundaries, or the log becomes the flood these events exist to replace.
             set_state(tune=dict(tune))
             if kind in ("plan", "end"):
-                emit(logger, "tune", pid=proc.pid, kind=kind, **fields)
+                # the child's stdout is arbitrary bytes, so a line could carry a field named
+                # like one of emit()'s own: "pid"/"kind" would be a duplicate kwarg (TypeError,
+                # killing this daemon thread and with it stage detection AND tune_restart_seen),
+                # "ts"/"event" would silently shadow the log envelope
+                safe = {k: v for k, v in fields.items()
+                        if k not in ("pid", "kind", "ts", "event")}
+                emit(logger, "tune", pid=proc.pid, kind=kind, **safe)
             continue
         if "llvm_tune: restart to apply the winners" in message:
             tune_restart_seen.set()
