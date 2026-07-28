@@ -111,6 +111,7 @@ def private setup_layout_preset(dock_id : uint) {
 var private MENU_ERROR_POPUP : PopupContextItemState
 var private MENU_ERROR_COPY : ToggleState
 var private MENU_ERROR_SEND : ToggleState
+var private MENU_ERROR_FIX : ToggleState
 
 def private menu_status_busy_count() : int {
     var count = 0
@@ -181,7 +182,8 @@ def private draw_menu_status_cluster() {
             (color = token_error_color(), text = error_text))
         set_item_tooltip(MENU_STATUS_ERROR_TIP, (text = full_error))
         draw_error_context(MENU_ERROR_POPUP, MENU_ERROR_COPY,
-            MENU_ERROR_SEND, "menu_error", "Watcher", full_error)
+            MENU_ERROR_SEND, "menu_error", "Watcher", full_error,
+            MENU_ERROR_FIX)
         same_line()
         if (icon_button_draw("##menu-error-dismiss", "close", line)) {
             g_client.error = ""
@@ -249,6 +251,27 @@ def private worktree_change_summary(worktree : WorktreeState const) : string {
 
 var WORKTREE_RETIRE_LOG_ROW : table<int; NarrativeState>
 
+// The failure log opens itself once per failure, then leaves the header alone
+// so a user who collapses it is not fought every frame.
+var g_retire_log_forced = false
+
+def private operation_failure_brief(operation : WorktreeOperation const) : string {
+    //! Everything the agent needs and nothing it has to ask for: the command
+    //! that failed, git's own words, and the whole transcript.
+    return build_string() $(var writer) {
+        writer |> write("The operation FAILED at step {operation.step_index} ")
+        writer |> write("of {operation.step_count}.\n\nGit reported:\n")
+        writer |> write("{operation.error}\n")
+        if (!empty(operation.hint)) {
+            writer |> write("\nWhat that usually means:\n{operation.hint}\n")
+        }
+        writer |> write("\nFull command log:\n")
+        for (line in operation.log) {
+            writer |> write("{line}\n")
+        }
+    }
+}
+
 let private SPINNER_FRAMES = "|/-\\"
 
 def private draw_retire_operation(operation : WorktreeOperation const) {
@@ -275,11 +298,25 @@ def private draw_retire_operation(operation : WorktreeOperation const) {
                 "Cancelled. Whatever already ran is in the log."))
         }
     } else {
+        // Git's own words, in full and in the error colour — never summarised
+        // away, because they are the only first-hand account of the failure.
         with_style((ImGuiCol.Text, token_error_color())) {
-            text(WORKTREE_RETIRE_OP_STEP, (text = "Failed: {operation.error}"))
+            text_wrapped(WORKTREE_RETIRE_OP_STEP,
+                (text = "Failed: {operation.error}"))
+        }
+        if (!empty(operation.hint)) {
+            text_wrapped(WORKTREE_RETIRE_OP_HINT, (text = operation.hint))
         }
     }
-    // Collapsed by default: the log is there when it is wanted, not in the way.
+    // Collapsed while things are going well; a failure opens it, because that
+    // is the moment the log is the whole point.
+    if (operation.state == "failed" && !g_retire_log_forced) {
+        g_retire_log_forced = true
+        WORKTREE_RETIRE_LOG.pending_open = true
+    }
+    if (operation.state == "running") {
+        g_retire_log_forced = false
+    }
     collapsing_header(WORKTREE_RETIRE_LOG, (text =
             "Operation log ({length(operation.log)} lines)",
             closable = false, flags = ImGuiTreeNodeFlags.None)) {
@@ -321,6 +358,42 @@ def private draw_worktree_retire_popup() {
                     g_client->request_worktree_operation_cancel()
                 }
             } else {
+                if (operation.state == "failed") {
+                    // The full output lives in a real PTY; the log above is a
+                    // digest of it. This is the way to the whole thing.
+                    if (button(WORKTREE_RETIRE_TERMINAL,
+                            (text = "Open in terminal",
+                             enabled = !empty(operation.session_id)))) {
+                        g_client->attach_session(operation.session_id)
+                        g_open_terminal_pending = true
+                        g_focus_terminal_pending = true
+                    }
+                    same_line()
+                    // When all else fails: hand the whole failure to an agent,
+                    // in the worktree it happened in.
+                    if (button(WORKTREE_RETIRE_FIX_SESSION,
+                            (text = "Start a session to fix this..."))) {
+                        start_error_session("Retiring the worktree {path}",
+                            operation_failure_brief(operation), path)
+                        close_current_popup(WORKTREE_RETIRE_DIALOG)
+                    }
+                    same_line()
+                    // Only offered when trying again could actually differ —
+                    // a retry against a permanent failure wastes the user's
+                    // time and teaches them to distrust the button.
+                    if (button(WORKTREE_RETIRE_RETRY, (text = "Try again",
+                            enabled = operation.retryable))) {
+                        g_worktree_retire.active = true
+                        g_client->request_worktree_delete(repository_id, path,
+                            WORKTREE_RETIRE_FORCE.value)
+                    }
+                    if (!operation.retryable) {
+                        set_item_tooltip(WORKTREE_RETIRE_RETRY_TIP, (text =
+                            "This failure will not change on its own — " +
+                            "retrying would fail the same way."))
+                    }
+                    same_line()
+                }
                 if (button(WORKTREE_RETIRE_DONE, (text = "Close"))) {
                     close_current_popup(WORKTREE_RETIRE_DIALOG)
                     open_next_queued_retire()

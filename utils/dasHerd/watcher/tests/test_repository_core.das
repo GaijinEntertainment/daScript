@@ -114,6 +114,30 @@ def test_repository_delete_safety_verdict(t : T?) {
         t |> success(!repository_worktree_only_here(unknown),
             "an unresolved base never manufactures a warning")
     }
+    t |> run("a recognised failure explains itself and says whether retrying helps") <| @(t : T?) {
+        // The exact line git produced live on 2026-07-27, retiring
+        // D:/Work/daScript-ci-30233791631: it emptied the folder, could not
+        // remove the folder itself, and asked an interactive question. Proven
+        // non-transient — a second delete attempt failed the same way.
+        var hint : string
+        var retryable = false
+        repository_classify_failure(
+            "Deletion of directory 'D:/Work/daScript-ci-30233791631' failed. " +
+            "Should I try again? (y/n)", hint, retryable)
+        t |> success(!empty(hint), "the locked-folder failure must explain itself")
+        t |> success(find(hint, "locked") >= 0,
+            "the explanation names the cause, not git's question")
+        t |> success(retryable, "a lock can be released, so retry is offered")
+
+        var unknown_hint : string
+        var unknown_retryable = true
+        repository_classify_failure("something nobody has ever seen",
+            unknown_hint, unknown_retryable)
+        t |> equal(unknown_hint, "",
+            "an unrecognised failure invents no explanation")
+        t |> success(!unknown_retryable,
+            "and never claims a retry will help when we do not know")
+    }
     t |> run("the base ref is the authoritative one, never local master") <| @(t : T?) {
         t |> equal(repository_default_base_ref(RepositoryRecord()),
             "origin/master")

@@ -100,17 +100,23 @@ var REPOSITORY_ERROR_COPY : table<int; ToggleState>
 
 var REPOSITORY_ERROR_SEND : table<int; ToggleState>
 
+var REPOSITORY_ERROR_FIX : table<int; ToggleState>
+
 var CHANGELIST_ERROR_POPUP : PopupContextItemState
 
 var CHANGELIST_ERROR_COPY : ToggleState
 
 var CHANGELIST_ERROR_SEND : ToggleState
 
+var CHANGELIST_ERROR_FIX : ToggleState
+
 var ACTIVITY_ERROR_POPUP : PopupContextItemState
 
 var ACTIVITY_ERROR_COPY : ToggleState
 
 var ACTIVITY_ERROR_SEND : ToggleState
+
+var ACTIVITY_ERROR_FIX : ToggleState
 
 // Index of a non-closed herd session claiming this worktree, or -1. A running
 // session prefers over an exited one so the marker reflects the live claimant.
@@ -207,7 +213,8 @@ def draw_repositories_window() {
                     REPOSITORY_ERROR_COPY[repository_row],
                     REPOSITORY_ERROR_SEND[repository_row],
                     "repository_error_{repository_row}", "Repository",
-                    repository.error)
+                    repository.error,
+                    REPOSITORY_ERROR_FIX[repository_row])
             }
             for (worktree in repository.worktrees) {
                 var branch = worktree.branch
@@ -1150,7 +1157,7 @@ def draw_git_changelist_window() {
     if (status.error) {
         draw_error_context(CHANGELIST_ERROR_POPUP, CHANGELIST_ERROR_COPY,
             CHANGELIST_ERROR_SEND, "changelist_error", "Git Changelist",
-            status.text)
+            status.text, CHANGELIST_ERROR_FIX, g_selected_worktree_path)
     }
 }
 
@@ -1203,7 +1210,7 @@ def draw_git_activity_window() {
     if (status.error) {
         draw_error_context(ACTIVITY_ERROR_POPUP, ACTIVITY_ERROR_COPY,
             ACTIVITY_ERROR_SEND, "activity_error", "Git Activity",
-            status.text)
+            status.text, ACTIVITY_ERROR_FIX, g_selected_worktree_path)
     }
 }
 

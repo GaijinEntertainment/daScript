@@ -431,6 +431,9 @@ def herder_worktree_operation_state(_input : JsonValue?) : JsonValue? {
         step_index = g_client.operation.step_index,
         step_count = g_client.operation.step_count,
         error = g_client.operation.error,
+        hint = g_client.operation.hint,
+        retryable = g_client.operation.retryable,
+        session_id = g_client.operation.session_id,
         revision = g_client.operation.revision,
         queued = length(g_worktree_retire_queue),
         log <- log))

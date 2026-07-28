@@ -31,6 +31,9 @@ require strings
 require ./rich_state.das
 require ./rich_net.das
 require ./rich_focus.das
+// For the shared "start a session to fix this" escape on every error surface.
+// The launcher does not depend on the inspector, so this stays acyclic.
+require ./rich_launcher_ui.das
 
 var FOCUS_HINT_TOOLTIP : NarrativeState
 
@@ -50,10 +53,16 @@ var PREVIEW_ERROR_COPY : ToggleState
 
 var PREVIEW_ERROR_SEND : ToggleState
 
+var PREVIEW_ERROR_FIX : ToggleState
+
+var INSPECTOR_ERROR_FIX : ToggleState
+
 def draw_error_context(var popup_state : PopupContextItemState;
                        var copy_state : ToggleState;
                        var send_state : ToggleState;
-                       popup_id, context, message : string) {
+                       popup_id, context, message : string;
+                       var fix_state : ToggleState;
+                       worktree_path : string = "") {
     popup_context_item(popup_state,
             (str_id = popup_id, flags = ImGuiPopupFlags.MouseButtonRight)) {
         if (menu_item(copy_state, (text = "Copy error"))) {
@@ -66,6 +75,12 @@ def draw_error_context(var popup_state : PopupContextItemState;
                     && !empty(g_client.selected_id)))) {
             g_client->post_error_request(context, message)
             g_status = "Error sent to session agent"
+        }
+        // When all else fails, on EVERY error surface, not just the ones that
+        // happened to think of it: hand it to a fresh agent where it happened.
+        if (menu_item(fix_state, (text = "Start a session to fix this...",
+                enabled = g_client != null && g_client.connected))) {
+            start_error_session(context, message, worktree_path)
         }
     }
 }
@@ -133,7 +148,7 @@ def draw_binary_preview() {
         if (!empty(g_inspector.preview_error)) {
             draw_error_context(PREVIEW_ERROR_POPUP, PREVIEW_ERROR_COPY,
                 PREVIEW_ERROR_SEND, "preview_error", "File Preview",
-                g_inspector.preview_error)
+                g_inspector.preview_error, PREVIEW_ERROR_FIX)
         }
         return
     }
@@ -814,7 +829,7 @@ def draw_file_inspector_window() {
     if (status.error) {
         draw_error_context(INSPECTOR_ERROR_POPUP, INSPECTOR_ERROR_COPY,
             INSPECTOR_ERROR_SEND, "inspector_error", "File Inspector",
-            status.text)
+            status.text, INSPECTOR_ERROR_FIX)
     }
 }
 

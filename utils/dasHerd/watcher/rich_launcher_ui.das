@@ -269,6 +269,37 @@ def prepare_resolver_launcher(repository_id, worktree_path, task_brief : string)
     LAUNCHER_TASK.has_pending = true
 }
 
+def start_error_session(context, detail, worktree_path : string) {
+    //! The "when all else fails" escape, shared by every error surface: hand
+    //! the failure to an agent, in the place it happened. The worktree falls
+    //! back to the current selection so an error with no place of its own
+    //! still lands somewhere real rather than nowhere.
+    var target = worktree_path
+    let repository_id = g_selected_repository_id
+    if (empty(target)) {
+        target = g_selected_worktree_path
+    } else {
+        // A worktree we just failed to delete may be half-gone; if the
+        // observer no longer knows it, run in the repository instead of a
+        // directory that may not exist.
+        var probe = WorktreeState()
+        if (!find_worktree_state("", target, probe)) {
+            target = g_selected_worktree_path
+        }
+    }
+    return if (empty(target))
+    g_selected_worktree_path = target
+    g_selection_explicit = true
+    prepare_launcher(repository_id, target)
+    LAUNCHER_NAME.pending_value = "fix: {context}"
+    LAUNCHER_NAME.has_pending = true
+    LAUNCHER_TASK.pending_value = ("{context} failed.\n\n{detail}\n" +
+        "Work out WHY this failed and fix the cause. Report what you found " +
+        "and what you changed. Do not retry blindly.")
+    LAUNCHER_TASK.has_pending = true
+    g_launch_resolver_pending = true
+}
+
 // The launcher is a MODAL dialog (note 3): while it is up the rest of the UI
 // dims and ignores input — it is not a dockable pane.
 def open_launcher_modal() {

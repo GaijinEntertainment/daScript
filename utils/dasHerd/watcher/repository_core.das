@@ -172,6 +172,15 @@ struct public WorktreeOperation {
     step_index : int
     step_count : int
     error : string
+    // What the error MEANS, in words, when we recognise it. An error the user
+    // cannot act on is the same as no error at all.
+    hint : string
+    // Whether trying the same thing again could plausibly work. A retry
+    // offered against a permanent failure just wastes the user's time.
+    retryable : bool
+    // The task session that ran (or is running) the current step, so the UI
+    // can open the real terminal and read the whole thing.
+    session_id : string
     // Every command and its output, in order — the dialog's collapsed log.
     log : array<string>
     revision : int64
@@ -870,12 +879,88 @@ def private operation_log(line : string) {
     g_operation.log |> push(line)
 }
 
+// Git's own words are the truth, but they are rarely the ANSWER. Each pattern
+// here turns a recognised failure into what the user should do about it, and
+// says whether trying again could possibly help.
+def public repository_classify_failure(message : string; var hint : string&;
+                                       var retryable : bool&) {
+    classify_failure(message, hint, retryable)
+}
+
+def private classify_failure(message : string; var hint : string&;
+                             var retryable : bool&) {
+    hint = ""
+    retryable = false
+    let lower = to_lower(message)
+    if (find(lower, "should i try again") >= 0
+            || find(lower, "failed to delete") >= 0
+            || find(lower, "could not remove") >= 0) {
+        // Seen live: git emptied the folder, then could not remove the folder
+        // itself, so the worktree stayed registered. That is always a handle.
+        hint = ("The folder is locked by another process — something still " +
+            "has it open: a shell whose current directory is inside it, an " +
+            "editor, or a running build. Git deleted the CONTENTS but could " +
+            "not remove the folder, so the worktree is still registered. " +
+            "Close whatever holds it first; retrying before that will fail " +
+            "the same way.")
+        retryable = true
+        return
+    }
+    if (find(lower, "could not be deleted") >= 0) {
+        hint = ("Git's side is clean now — the worktree is no longer " +
+            "registered. What is left is an empty folder that Windows will " +
+            "not delete because a process still holds it open. Close that " +
+            "process and remove the folder by hand, or hand this to a " +
+            "session.")
+        return
+    }
+    if (find(lower, "validation failed") >= 0) {
+        hint = ("Git refuses to remove a worktree whose .git is already gone, " +
+            "even with --force. The registration has to be pruned instead.")
+        retryable = true
+        return
+    }
+    if (find(lower, "index.lock") >= 0) {
+        hint = ("Another git process is holding this repository's index lock. " +
+            "Wait for it to finish, then retry.")
+        retryable = true
+        return
+    }
+    if (find(lower, "is dirty") >= 0 || find(lower, "contains modified") >= 0
+            || find(lower, "untracked") >= 0) {
+        hint = ("Git found work in the tree after the check passed — " +
+            "something wrote to it in between. Re-open the checklist to see " +
+            "the current state.")
+        retryable = true
+        return
+    }
+    if (find(lower, "not a working tree") >= 0
+            || find(lower, "not a git repository") >= 0) {
+        hint = ("The folder is no longer a worktree — its .git is gone, which " +
+            "is what a half-finished delete leaves behind. Only the stale " +
+            "registration remains; removing it again clears that.")
+        retryable = true
+        return
+    }
+    if (find(lower, "exited 1") >= 0 && empty(strip(message))) {
+        hint = "Git exited with an error but printed nothing. Open the terminal for the full output."
+        retryable = true
+    }
+}
+
 def private operation_fail(message : string) {
     g_operation.state = "failed"
     g_operation.error = message
     g_operation.step = "failed"
+    classify_failure(message, g_operation.hint, g_operation.retryable)
+    // A step that failed may have left git sitting at a prompt (the delete
+    // retry question does exactly that), and a live git keeps holding the very
+    // locks the user is trying to clear. The record and its output survive
+    // termination, so the terminal button still works afterwards.
+    if (!empty(g_operation_session_id)) {
+        let _ = watcher_terminate(g_operation_session_id, "operation failed")
+    }
     g_operation_phase = 0
-    g_operation_session_id = ""
     operation_log("ERROR: {message}")
     operation_touch()
 }
@@ -904,6 +989,9 @@ def private operation_launch(argv : array<string>; kind, step : string;
     var launch_error : string
     g_operation_session_id = launch_git(g_repositories[repository_index], argv,
         kind, g_operation.worktree_path, launch_error)
+    // Publish the session id even on failure: the terminal is where the full
+    // output lives, and a failed step is exactly when it is wanted.
+    g_operation.session_id = g_operation_session_id
     if (empty(g_operation_session_id)) operation_fail(launch_error)
 }
 
@@ -1011,7 +1099,24 @@ def private advance_operation() {
     if (g_operation.kind == "remove") {
         if (g_operation_phase == 1) {
             if (task.exit_code != 0l) {
-                operation_fail("git status exited {task.exit_code}")
+                // A worktree whose .git is already gone has NO working tree
+                // left to protect — which is exactly what the dirty guard
+                // exists for. This is the half-removed state a previous failed
+                // delete leaves behind, and refusing to clean it up would
+                // strand the user forever. Proceed to the forced removal.
+                if (find(to_lower(output), "not a git repository") >= 0) {
+                    operation_log("working tree is already gone; " +
+                        "removing the stale registration")
+                    g_operation_phase = 2
+                    operation_launch(["git", "-C", checkout, "worktree",
+                        "remove", "--force", g_operation.worktree_path],
+                        "git-worktree-remove",
+                        "removing a worktree whose files are already gone", 2)
+                    return
+                }
+                // Git's own words, not our paraphrase of its exit code.
+                operation_fail(empty(output)
+                    ? "git status exited {task.exit_code}" : output)
                 return
             }
             if (!empty(output)) {
@@ -1024,9 +1129,39 @@ def private advance_operation() {
                 "removing worktree", 2)
             return
         }
-        if (task.exit_code != 0l) {
+        if (g_operation_phase == 2 && task.exit_code != 0l) {
+            // Git refuses to remove a worktree whose .git is already gone,
+            // even with --force. `prune` is the command for that state, and
+            // it is the only way the app can finish a job a previous failure
+            // left half-done. It touches administrative metadata only.
+            if (find(to_lower(output), "validation failed") >= 0) {
+                operation_log("git cannot remove a worktree with no .git; " +
+                    "pruning the stale registration instead")
+                g_operation_phase = 3
+                g_operation.step_count = 3
+                operation_launch(["git", "-C", checkout, "worktree", "prune"],
+                    "git-worktree-prune",
+                    "pruning the stale registration", 3)
+                return
+            }
             operation_fail(empty(output)
                 ? "git worktree remove exited {task.exit_code}" : output)
+            return
+        }
+        if (task.exit_code != 0l) {
+            operation_fail(empty(output)
+                ? "git worktree prune exited {task.exit_code}" : output)
+            return
+        }
+        var folder_stat : FStat
+        let folder_left = (g_operation_phase == 3
+            && stat(g_operation.worktree_path, folder_stat)
+            && folder_stat.is_dir)
+        if (folder_left) {
+            // Registration cleared, folder still there: say exactly that,
+            // rather than reporting a success the user can see is not one.
+            operation_fail("the stale registration is gone, but the folder " +
+                "{g_operation.worktree_path} could not be deleted")
             return
         }
         operation_finish()
@@ -1034,7 +1169,8 @@ def private advance_operation() {
     }
     if (g_operation_phase == 1) {
         if (task.exit_code != 0l) {
-            operation_fail(empty(output) ? "git add exited {task.exit_code}" : output)
+            operation_fail(empty(output)
+                ? "git add exited {task.exit_code}" : output)
             return
         }
         g_operation_phase = 2
