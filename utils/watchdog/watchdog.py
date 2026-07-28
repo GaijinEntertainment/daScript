@@ -606,8 +606,10 @@ def apply_tune_event(tune: dict[str, object], kind: str, fields: dict[str, str])
     elif kind == "step":
         tune.update(round=as_int("i"), phase=fields.get("phase", ""), live=as_int("live"))
     elif kind == "end":
+        # the per-round fields describe an in-flight kernel; leaving them set between kernels
+        # publishes an incoherent state (round=47 against rounds=0) that a status page renders
         tune["done"] = int(tune.get("done", 0)) + 1
-        tune.update(rounds=0, live=0)
+        tune.update(round=0, rounds=0, phase="", live=0)
 
 
 def stream_child(
