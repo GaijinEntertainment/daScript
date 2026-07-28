@@ -64,6 +64,61 @@ def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8")
     return "{gguf_path}.{hash(image_identity(tag, quant))}.dlim"
 }
 
+//! What list/GC tooling reads from an image WITHOUT loading it: the header fields plus the
+//! meta head's baked identity and embedded config JSON (empty when the version's layout is
+//! unknown — pre-v7 images carry no readable head).
+struct DlimPeek {
+    valid : bool          //!< magic/page/bounds all sane (any version)
+    version : int
+    bytes : int64
+    identity : string
+    config_json : string
+}
+
+def image_peek(path : string) : DlimPeek {
+    var p = DlimPeek()
+    var msize = 0ul
+    var base : void?
+    unsafe {
+        base = fmap_open(path, addr(msize))
+    }
+    if (base == null || int64(msize) < IMAGE_HEADER_BYTES) {
+        if (base != null) {
+            unsafe(fmap_close(base, msize))
+        }
+        return p
+    }
+    var bp = unsafe(reinterpret<uint8 const?>(base))
+    p.bytes = int64(msize)
+    p.version = int(read_u32(bp, 4l))
+    let meta_off = read_u64(bp, 16l)
+    let meta_bytes = read_u64(bp, 24l)
+    p.valid = (read_u32(bp, 0l) == IMAGE_MAGIC && read_u32(bp, 8l) == uint(IMAGE_PAGE)
+        && read_u64(bp, 32l) == msize && meta_bytes != 0ul && meta_bytes <= msize
+        && meta_off <= msize - meta_bytes && meta_bytes <= uint64(INT_MAX))
+    if (p.valid && p.version >= 7) {
+        var head : array<uint8>
+        head |> resize(int(min(meta_bytes, 65536ul)))
+        unsafe {
+            memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
+        }
+        var hmeta <- new MemSerializer(head)
+        var harch = Archive(reading = true, stream = hmeta)
+        harch |> serialize(p.identity)
+        harch |> serialize(p.config_json)
+        if (!hmeta->OK()) {
+            p.identity = ""
+            p.config_json = ""
+        }
+        delete head
+        unsafe {
+            delete hmeta
+        }
+    }
+    unsafe(fmap_close(base, msize))
+    return p
+}
+
 def private pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page

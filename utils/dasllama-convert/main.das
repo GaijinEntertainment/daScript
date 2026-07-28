@@ -71,6 +71,15 @@ struct ConvertArgs {
     @clarg_doc = "Streaming conversion (planar q8): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
     stream : bool
 
+    @clarg_doc = "List every .dlim beside -m (a GGUF, or a directory): size, version, verdict, baked identity"
+    list : bool
+
+    @clarg_doc = "GC beside -m: old-version and unreadable .dlim files (never a loadable image — another box's bake reads as OTHER and stays). DRY-RUN unless --apply"
+    clean : bool
+
+    @clarg_doc = "With --clean: actually delete (the default is a dry-run listing)"
+    apply : bool
+
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
 
@@ -127,6 +136,87 @@ def private quant_from_string(s : string; var q : QuantMode&) : bool {
         return false
     }
     return true
+}
+
+// identities this box would produce right now, across flavors and quants — the CURRENT verdict
+def private current_identities : table<string> {
+    var idents : table<string>
+    for (q in ["q8", "fp32", "q4_0"]) {
+        idents |> insert(image_identity("", q))
+        idents |> insert(image_identity(METAL_IMAGE_TAG, q))
+        let vk = moe_gpu_bake_tag()
+        if (vk != "") {
+            idents |> insert(image_identity(vk, q))
+        }
+    }
+    return <- idents
+}
+
+def private image_verdict(p : DlimPeek; current : table<string>) : string {
+    if (!p.valid) {
+        return "BROKEN"
+    }
+    if (p.version != IMAGE_VERSION) {
+        return "STALE v{p.version}"
+    }
+    return key_exists(current, p.identity) ? "CURRENT" : "OTHER"
+}
+
+// list = the inventory; clean = GC of what can never load again (BROKEN + version-stale).
+// A loadable image is NEVER removed: OTHER may be another box's bake carried here on purpose.
+def private list_images(cfg : ConvertArgs) : int {
+    var st : FStat
+    if (!stat(cfg.model, st)) {
+        to_log(LOG_ERROR, "dasllama-convert: no such path '{cfg.model}'\n")
+        return 2
+    }
+    let dirp = st.is_dir ? cfg.model : dir_name(cfg.model)
+    let base = st.is_dir ? "" : base_name(cfg.model)
+    var current <- current_identities()
+    var n = 0
+    var stale = 0
+    var removed = 0
+    var freed = 0l
+    dir(dirp) $(name : string) {
+        if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base)))) {
+            return
+        }
+        let full = path_join(dirp, name)
+        let p = image_peek(full)
+        let verdict = image_verdict(p, current)
+        n++
+        if (!cfg.clean) {
+            let idnote = empty(p.identity) ? "" : "  {p.identity}"
+            to_log(LOG_INFO, "dasllama-convert: {name}\n")
+            to_log(LOG_INFO, "dasllama-convert:   {p.bytes >> 20l} MB  v{p.version}  {verdict}{idnote}\n")
+            return
+        }
+        return if (p.valid && p.version == IMAGE_VERSION)   // CURRENT or OTHER: loadable — stays
+        stale++
+        if (!cfg.apply) {
+            to_log(LOG_INFO, "dasllama-convert: would remove {name} ({p.bytes >> 20l} MB, {verdict})\n")
+            return
+        }
+        if (remove(full)) {
+            removed++
+            freed += p.bytes
+            to_log(LOG_INFO, "dasllama-convert: removed {name} ({p.bytes >> 20l} MB, {verdict})\n")
+        } else {
+            to_log(LOG_WARNING, "dasllama-convert: could not remove {name} — in use?\n")
+        }
+    }
+    if (!cfg.clean) {
+        to_log(LOG_INFO, "dasllama-convert: {n} image(s)\n")
+    } elif (cfg.apply) {
+        to_log(LOG_INFO, "dasllama-convert: removed {removed} of {stale} stale image(s), reclaimed {freed >> 20l} MB\n")
+    } else {
+        to_log(LOG_INFO, "dasllama-convert: {stale} stale of {n} image(s) — rerun with --apply to remove\n")
+    }
+    if (cfg.clean && cfg.apply && !st.is_dir) {
+        sweep_stale_tmp(cfg.model)
+    }
+    delete current
+    return 0
 }
 
 def private flavor_tag(f : Flavor) : string {
@@ -186,6 +276,11 @@ def main() : int {
         to_log(LOG_ERROR, "dasllama-convert: --model is required\n\n")
         print_help(get_command_info(type<ConvertArgs>), "dasllama-convert")
         return 2
+    }
+    if (cfg.list || cfg.clean) {
+        // verdicts compare against this box's CURRENT identities — same pin the load path takes
+        apply_box_profile_runtime()
+        return list_images(cfg)
     }
     if (!stat(cfg.model).is_valid) {
         to_log(LOG_ERROR, "dasllama-convert: no such GGUF '{cfg.model}'\n")

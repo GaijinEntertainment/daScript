@@ -1141,7 +1141,10 @@ def model_weights_bytes(t : Model) : int64 {
         + long_length(t.mxq) + long_length(t.mxs)
         + long_length(t.bf16blob) * 2l
         + long_length(t.k4q) + long_length(t.k4s) + long_length(t.k5q) + long_length(t.k5s)
-        + long_length(t.k6q) + long_length(t.k6s) + long_length(t.q40q) + long_length(t.q40s))
+        + long_length(t.k6q) + long_length(t.k6s) + long_length(t.q40q) + long_length(t.q40s)
+        + long_length(t.q51q) + long_length(t.q51s)
+        + long_length(t.mblob) + long_length(t.vkblob)
+        + long_length(t.embq) + long_length(t.embs))
 }
 
 // ===== Arch registry: per-architecture blocks + chat template =====
