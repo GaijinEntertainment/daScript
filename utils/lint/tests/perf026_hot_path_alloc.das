@@ -25,7 +25,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:5
+expect 31208:7
 
 require daslib/perf_lint
 
@@ -107,4 +107,56 @@ def bad_new_delete() : int {
         delete p
     }
     return v
+}
+
+// 9. a @scratch module GLOBAL is declared intent too — the capture-rail shape: a
+//    clear()-recycled array that grows once and is reused; its unmarked neighbour still reports
+var @scratch g_reused : array<int>
+var g_fresh : array<int>
+
+[no_alloc]
+def bad_only_the_unmarked_global() {
+    g_reused |> push(1)
+    g_reused |> pop()   // pop rides the escape too (shrink of a reused buffer is a store)
+    g_fresh |> push(2)
+}
+
+// 10. indexing a @scratch TABLE is the declared pool / residency-cache shape (insert-on-first-
+//     touch, steady-state lookup); an unmarked table's [] still reports its insert-on-read
+var @scratch g_pool : table<int; int>
+var g_plain : table<int; int>
+
+[no_alloc]
+def bad_only_the_unmarked_table(k : int) : int {
+    unsafe {
+        return g_pool[k] + g_plain[k]
+    }
+}
+
+// 11. a local REFERENCE binding carries its destination's scratch-ness (the pool free-list
+//     idiom: `var lst & = pool.buckets[b]`)
+var @scratch g_buckets : table<int; array<int>>
+
+[no_alloc]
+def good_scratch_through_ref(b : int) : int {
+    var lst & = unsafe(g_buckets[b])
+    lst |> push(1)
+    let v = lst[length(lst) - 1]
+    lst |> pop()
+    return v
+}
+
+// 12. a nolint ANYWHERE along the chain suppresses — the sink may bottom in daslib, so the
+//     honest line is often an intermediate call site in a required module
+def deep_alloc12(var a : array<int>) {
+    a |> reserve(64)
+}
+
+def mid_hop12(var a : array<int>) {
+    deep_alloc12(a)   // nolint:PERF026 — chain-middle suppression is honored
+}
+
+[no_alloc]
+def good_chain_middle_nolint(var a : array<int>) {
+    mid_hop12(a)
 }

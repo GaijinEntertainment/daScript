@@ -98,3 +98,4 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-07-25 `modules/dasLLAMA/benchmarks/prefill_metal_chase.das` -> `history/dasLLAMA/benchmarks/prefill_metal_chase.das` - Metal prefill chase instrument (arc shipped)
 - 2026-07-25 `modules/dasLLAMA/benchmarks/bench_metal_framing.das` -> `history/dasLLAMA/benchmarks/bench_metal_framing.das` - Metal framing-overhead bench (arc shipped)
 - 2026-07-25 `modules/dasLLAMA/benchmarks/gguf_perf.das` -> `history/dasLLAMA/benchmarks/gguf_perf.das` - gguf load-time bench (the .dlim rail made it moot)
+- 2026-07-27 `modules/dasLLVM/TUNE_PROGRESS_PLAN.md` -> `history/compiler/TUNE_PROGRESS_UX.md` - tune progress-display design (events + single renderer; arc shipped, operative content in skills/tune.md)

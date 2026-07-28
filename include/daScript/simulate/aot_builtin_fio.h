@@ -108,6 +108,8 @@ namespace das {
     DAS_API const FILE * builtin_stdin();
     DAS_API const FILE * builtin_stdout();
     DAS_API const FILE * builtin_stderr();
+    DAS_API bool builtin_is_terminal ( int32_t fd );
+    DAS_API int32_t builtin_terminal_width ();
     DAS_API int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );

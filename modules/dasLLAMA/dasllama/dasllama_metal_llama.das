@@ -1026,8 +1026,7 @@ def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true
 // a row BELOW the watermark in its OWN slab and never runs the recurrent branch
 def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bool = false) : bool {
     metal_wait_until_completed(r.cb)
-    let err = metal_command_buffer_error(r.cb)
-    let ok = empty(err)
+    let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
         let l = c.n_layers
@@ -1054,7 +1053,7 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
             s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal MTP draft: dispatch failed ({err})\n")   // nolint:PERF028,PERF026 — error path on a failed draft dispatch
+        to_log(LOG_ERROR, "dasLLAMA metal MTP draft: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path on a failed draft dispatch
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1063,6 +1062,7 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
 //! forward_mtp's GPU twin: the draft head against a resident blob model. `pos` is the trunk
 //! position (n_past); the draft row lands at pos-1 (rotary is delta-invariant). Needs a
 //! GPU-current session (KV mirror holds rows [0, pos)) and GPU logits. false = declined.
+[hot_path]
 def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam : bool = false) : bool {
     let c = t.config
     if (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
@@ -1095,13 +1095,14 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
 
 //! forward_mtp(..., false)'s GPU twin — the continuation-window SEAM: write the draft head's
 //! KV row pos-1 from (embed(token), the pre-window mtp_h) without touching logits or mtp_h.
+[hot_path]
 def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool {
     return metal_mtp_draft_forward(t, s, token, pos, true)
 }
 
 // ===== MTP B=2 same-slab verify (the spec step's trunk forward) =====
 
-var private g_vrt : array<uint>   // per-layer 2-row route entries: uint4(koff_el+lbase, voff_el+lbase, cap, cnt_i)
+var private @scratch g_vrt : array<uint>   // per-layer 2-row route entries: uint4(koff_el+lbase, voff_el+lbase, cap, cnt_i)
 
 // verify shape gate: f16 KV, silu FFN (dense or routed MoE ± shexp), no epilogue exotics.
 // Weight sites are fmt-generic (enc_verify_site / enc_moe_gemv — the load gate vets kernel
@@ -1392,8 +1393,7 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
 // land the verify: KV rows + row0 logits -> s.mtp_logits, row1 -> s.logits; accept/reject bookkeeping is the caller's
 def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : int64) : bool {
     metal_wait_until_completed(r.cb)
-    let err = metal_command_buffer_error(r.cb)
-    let ok = empty(err)
+    let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
         unsafe {
@@ -1415,7 +1415,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
             memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), c.vocab_size * 4l)
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({err})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1424,7 +1424,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
 //! mtp_spec_eval's GPU twin: draft + B=2 same-slab verify, wholly on the metal decode path.
 //! Cold/decline paths fall back to one plain (GPU) forward — output-invariant either way.
 //! Reject is ~free: row0 IS the truth decode, the dn shadow region flips in — no re-forward.
-[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
+[hot_path]
 def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
     let pos = s.n_past
@@ -1648,11 +1648,10 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
 def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
     let ts_wait = ref_time_ticks()
     metal_wait_until_completed(r.cb)
-    let err = metal_command_buffer_error(r.cb)
+    let ok = !metal_command_buffer_failed(r.cb)
     g_gpu_ms += (metal_command_buffer_gpu_end_time(r.cb) - metal_command_buffer_gpu_start_time(r.cb)) * 1000.0lf
     let wait_us = int64(get_time_usec(ts_wait))
     g_us_wait += wait_us
-    let ok = empty(err)
     if (ok) {
         let ts_rb = ref_time_ticks()
         let c = t.config
@@ -1702,7 +1701,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 ge = metal_command_buffer_gpu_end_time(r.cb)))
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({err}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({cb_error_text(r.cb)}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -1877,9 +1876,8 @@ def private discard_pre {
     g_pre.valid = false
     if (r.committed) {
         metal_wait_until_completed(r.cb)
-        let err = metal_command_buffer_error(r.cb)
-        if (!empty(err)) {
-            to_log(LOG_ERROR, "dasLLAMA metal decode: discarded pre-step failed ({err})\n")   // nolint:PERF028,PERF026 — error path on a discarded pre-step
+        if (metal_command_buffer_failed(r.cb)) {
+            to_log(LOG_ERROR, "dasLLAMA metal decode: discarded pre-step failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path on a discarded pre-step
         }
     }
     release_step(r)
@@ -1962,7 +1960,7 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
 //! The DecodeOverrideFn: runs one token step's whole llama layer stack GPU-resident against the
 //! session's KV mirror. true = done (KV row stored CPU-side too, s.x = final residual, s.logits
 //! when the GPU classifier gates pass); false = declined, the caller runs the CPU layer loop.
-[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
+[hot_path]
 def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool {
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
@@ -2079,11 +2077,11 @@ def public set_metal_batch_addrms_unfused(v : bool) {
 // (eval_batch's contract) — OPT-IN for benches only: DASLLAMA_METAL_BATCH_PIPE=1, gpu-logits only.
 var private g_b_pipe = false
 // per-step scratch reused across calls (row table image + per-row mirror slices)
-var private g_b_rte : array<uint>
-var private g_b_koffs : array<uint64>
-var private g_b_voffs : array<uint64>
-var private g_b_caps : array<int64>
-var private g_b_ulays : array<MetalBuffer?>   // per-layer uniforms, pooled per step
+var private @scratch g_b_rte : array<uint>
+var private @scratch g_b_koffs : array<uint64>
+var private @scratch g_b_voffs : array<uint64>
+var private @scratch g_b_caps : array<int64>
+var private @scratch g_b_ulays : array<MetalBuffer?>   // per-layer uniforms, pooled per step
 
 // the model half is decode_shape_decline; per batch: uniform f16/f32 KV, every row within the
 // attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
@@ -2153,7 +2151,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
-[no_env, no_io]   // no_alloc pending: the encoder's graph-capture push surface is its own audit
+[hot_path]
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
         discard_pre()
@@ -2504,8 +2502,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let ts_enc = ref_time_ticks()
     let ncb = min(g_bncb, c.n_layers)
     let lay_per_cb = (c.n_layers + ncb - 1l) / ncb
-    var cbs : array<MetalCommandBuffer?>
-    cbs |> reserve(int(ncb))
+    var cbs : array<MetalCommandBuffer?>   // nolint:PERF026 — two steps' cb lists are alive at once (this one + the pending g_lp_cbs), so a reused global cannot serve; bounded by ncb
+    cbs |> reserve(int(ncb))   // nolint:PERF026 — see above
     // concurrent-encode rail: a concurrent encoder + explicit barriers ONLY at real buffer hazards
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
     // (g_skip) run stays on the serial encoder so a skipped stage can't leave a dependent unbarriered.
@@ -2923,7 +2921,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             metal_end_encoding(enc)
             metal_release(enc)
             metal_commit(cb)
-            cbs |> push(cb)
+            cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
             cb = metal_new_command_buffer_unretained(g_queue)
             enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
             // fresh encoder + in-order queue serialize cross-cb hazards — start the tracker clean
@@ -2982,7 +2980,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
-    cbs |> push(cb)
+    cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
     hz_arm(false)   // disarm the oracle with the encoder — a leaked arm would eat the next CAPTURE's stage
     g_us_bencode += int64(get_time_usec(ts_enc))
     // optimistic watermark at commit: the in-order queue writes row pos before any later-committed

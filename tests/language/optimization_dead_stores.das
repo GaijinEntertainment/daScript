@@ -97,7 +97,7 @@ def target_impure_reads(x : int) : int {
     var u = 0 // nolint:LINT010 -- deliberate dead init
     u = x * 109 // LIVE: the kept bare rhs below still reads u
     var t = 0 // nolint:LINT010 -- deliberate dead init
-    t = bump() + u // dead store, impure rhs: the call survives as a bare statement
+    t = bump() + u // nolint:LINT010 -- dead store, but operator-topped impure rhs: stays WHOLE
     return x
 }
 
@@ -315,10 +315,12 @@ def test_dead_stores_fired(t : T?) {
             t |> success(has(b, "bump"), "side-effecting rhs kept: {b}")
             t |> success(!has(b, "= bump"), "dead store stripped to a bare call: {b}")
         }
-        t |> run("kept bare rhs still counts as a read") @(t : T?) {
+        t |> run("operator-topped impure rhs keeps its store whole") @(t : T?) {
+            // stripping to a bare `bump() + u` would trip the top-level no-side-effect lint
+            // when a reused shared module re-lints its optimized AST — the store must survive
             let b = body_of(t, "target_impure_reads")
             t |> success(has(b, "* 109"), "store read by the kept rhs stays: {b}")
-            t |> success(!has(b, "= bump"), "dead store stripped to a bare statement: {b}")
+            t |> success(has(b, "= bump"), "operator-topped dead store kept whole: {b}")
         }
         t |> run("addr() disqualifies the variable") @(t : T?) {
             let b = body_of(t, "target_alias")

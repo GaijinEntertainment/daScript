@@ -4999,7 +4999,7 @@ struct Session {
     mtp_h_pos1 : int64
     mtp_cat : array<float>         // eh_proj input [enorm(embed(tok)) ; hnorm(h)] (2*dim)
     mtp_cat_b : array<float>       // prompt-warm eh_proj concat image ((npos-1) x 2*dim, scratch-sized per warm)
-    mtp_xb_save : array<float>     // prompt-warm x_b preservation (the warm's eh_proj output rides x_b for the arch blocks; consumers like mtp_verify_row0 / embed_forward need the trunk hiddens back)
+    @scratch mtp_xb_save : array<float>     // prompt-warm x_b preservation (the warm's eh_proj output rides x_b for the arch blocks; consumers like mtp_verify_row0 / embed_forward need the trunk hiddens back)
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
@@ -5239,6 +5239,26 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
     }
 }
 
+// ===== Metal-4 tensor-lane crowns (the sidecar's "runtime"."metal_tensor" knob) =====
+// Comma-list of families whose TENSOR twin won this box's tune race; consulted once per
+// family at pso build. Default empty = simdgroup; a DAS_TUNE_MANIFEST copy force-crowns.
+var private g_tensor_crowns : table<string>
+
+def public set_metal_tensor_crowns(list : string) {
+    unsafe {
+        delete g_tensor_crowns
+    }
+    for (f in split(list, ",")) {
+        if (!empty(f)) {
+            g_tensor_crowns |> insert(f)
+        }
+    }
+}
+
+def public metal_tensor_crowned(family : string) : bool {
+    return key_exists(g_tensor_crowns, family)
+}
+
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
@@ -5288,6 +5308,11 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
+    let mtc = read_json_field(rt, "metal_tensor", "")
+    if (mtc != "") {
+        set_metal_tensor_crowns(mtc)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
+    }
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
         pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
@@ -5436,7 +5461,7 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
 // Precompute the prefill RoPE cos/sin table once: cos_tab[pi*half + j] = cos((start_pos+pi)*freq[j]),
 // sin likewise. freq[j] is position-independent (hoisted out of the position loop); mscale folds
 // in here. Built once before the layer loop, reused across all heads/layers. Bit-identical to classic.
-def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
+def private build_rope_table(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
     let c = t.config
     let half = head_size / 2l
     let scale = c.rope_mscale   // scales cos/sin — ggml applies mscale to NORM and NEOX alike (mistral3 YaRN)
@@ -5464,7 +5489,7 @@ def private build_rope_table(var cos_tab : array<float>; var sin_tab : array<flo
 // build_rope_table's batched-decode twin: row pi's angle uses positions[pi] instead of start_pos+pi
 // (batch rows come from different sequences at unrelated positions). Bit-identical per row to the
 // npos=1 decode table at that position, so rope_batch_tab consumes it unchanged.
-def private build_rope_table_rows(var cos_tab : array<float>; var sin_tab : array<float>; t : Model;
+def private build_rope_table_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model;
                                   theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
                                   use_ff : bool = true) {
     let c = t.config

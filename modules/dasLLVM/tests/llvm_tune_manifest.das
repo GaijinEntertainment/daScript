@@ -5,6 +5,8 @@ require daslib/module_path
 require daslib/strings_boost
 require daslib/fio
 require strings
+require daslib/json
+require daslib/json_boost
 
 // Per-app sidecar round-trip, declaration-free: copy the client template into a temp
 // directory (the sidecar resolves beside the ROOT SCRIPT — <client>.tune.json), spawn it
@@ -14,9 +16,14 @@ require strings
 // the daslang binary: STALE reads as absent, so the stamps drop back to fallback.
 
 def private spawn_client(cmd : string; var lines : array<string>) : int {
-    // cmd.exe /c strips the first and last quote of a line that starts with a quote —
-    // wrap in a sacrificial outer pair on windows (same trap as the daspkg popen incident)
-    let full = get_platform_name() == "windows" ? "\"{cmd}\"" : cmd
+    // verbose: the `llvm_tune: <fn> <- <perm>` stamp lines this test reads are the stamped-truth
+    // proof, and they are verbose-only now (one per kernel is a wall in front of a real app)
+    let env = (get_platform_name() == "windows"
+        ? "set DAS_TUNE_VERBOSITY=verbose&& "
+        : "DAS_TUNE_VERBOSITY=verbose ")
+    // cmd.exe /c strips the first and last quote of a line that starts with a quote — but the env
+    // prefix now leads, so the line never starts with a quote and no sacrificial wrap is needed
+    let full = "{env}{cmd}"
     var rc : int
     unsafe {
         rc = popen_timeout(full, 300.0) $(f) {
@@ -101,6 +108,35 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {
     }
     t |> success(!staleStampedK2)  // stale winners must not stamp
     t |> success(staleResult6)     // fallback k1 tier: 2+3+1
+
+    // BOX-IDENTITY gate: a sidecar written on another box (foreign provenance.box) reads as
+    // stale even when fresher than the binary — the cross-box-copy hazard. Rewrite the file
+    // with the box swapped, touch it fresh, and the client must fall back again.
+    let sidecarText = fread(sidecarPath)
+    t |> success(find(sidecarText, "\"box\"") >= 0, "provenance carries the box identity stamp")
+    var jerr = ""
+    var jdoc = read_json(sidecarText, jerr)
+    t |> success(jdoc != null, "sidecar parses: {jerr}")
+    unsafe {
+        var prov = jdoc?["provenance"]
+        if (prov != null) {
+            update(prov, "box", JV("some-other-box|foreign-arch|foreign-hw"))
+        }
+    }
+    fwrite(sidecarPath, write_json(jdoc))
+    delete_json(jdoc)
+    var flines : array<string>
+    let rcf = spawn_client("\"{bin}\" -jit \"{clientPath}\"", flines)
+    t |> equal(rcf, 0)
+    var foreignStampedK2 = false
+    var foreignResult6 = false
+    for (ln in flines) {
+        foreignStampedK2 ||= ln |> starts_with("llvm_tune: man_add <- k2")
+        foreignResult6 ||= ln == "RESULT 6"
+    }
+    t |> success(!foreignStampedK2)  // foreign-box winners must not stamp
+    t |> success(foreignResult6)     // fallback tier again
+    delete flines
 
     remove(sidecarPath)
     remove(clientPath)

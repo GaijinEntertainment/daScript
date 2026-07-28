@@ -23,6 +23,57 @@
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
+// arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.
+// Guarded to arm64, so no other target's translation unit is affected by anything here.
+#if defined(__aarch64__) || defined(_M_ARM64)
+    #if defined(_WIN32)
+        // IsProcessorFeaturePresent + the PF_ARM_* constants; nothing else in this TU's include
+        // graph pulls windows.h in, so without this the arm64 Windows build does not compile.
+        #ifndef NOMINMAX
+            #define NOMINMAX
+        #endif
+        #ifndef WIN32_LEAN_AND_MEAN
+            #define WIN32_LEAN_AND_MEAN
+        #endif
+        #include <windows.h>
+    #elif defined(__APPLE__)
+        #include <sys/sysctl.h>
+    #elif defined(__linux__)
+        #include <sys/auxv.h>
+        #if __has_include(<asm/hwcap.h>)
+            #include <asm/hwcap.h>
+        #endif
+        // kernels predating a given extension omit the macro; the bit positions are ABI-stable
+        #ifndef HWCAP_ASIMDDP
+            #define HWCAP_ASIMDDP  (1u << 20)
+        #endif
+        #ifndef HWCAP_ASIMDRDM
+            #define HWCAP_ASIMDRDM (1u << 12)
+        #endif
+        #ifndef HWCAP_ASIMDHP
+            #define HWCAP_ASIMDHP  (1u << 10)
+        #endif
+        #ifndef HWCAP_ATOMICS
+            #define HWCAP_ATOMICS  (1u << 8)
+        #endif
+        #ifndef HWCAP_CRC32
+            #define HWCAP_CRC32    (1u << 7)
+        #endif
+        #ifndef HWCAP_SVE
+            #define HWCAP_SVE      (1u << 22)
+        #endif
+        #ifndef HWCAP_SHA3
+            #define HWCAP_SHA3     (1u << 17)
+        #endif
+        #ifndef HWCAP2_I8MM
+            #define HWCAP2_I8MM    (1u << 13)
+        #endif
+        #ifndef HWCAP2_BF16
+            #define HWCAP2_BF16    (1u << 14)
+        #endif
+    #endif
+#endif
+
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
 #if defined(_MSC_VER)
 #include <intrin.h>     // __cpuidex, _xgetbv
@@ -1982,6 +2033,54 @@ namespace das
         #endif
     }
 
+#if defined(__aarch64__) || defined(_M_ARM64)
+    #if defined(__APPLE__)
+        static bool das_sysctl_flag ( const char * name ) {
+            int val = 0; size_t sz = sizeof(val);
+            return sysctlbyname(name, &val, &sz, nullptr, 0)==0 && val!=0;
+        }
+    #endif
+
+    // Optional arm64 extensions, by LLVM target-feature name. Unknown names are false, as on x86 —
+    // a kernel gated on one must never register where its instructions would trap.
+    static bool das_arm64_feature ( const char * f ) {
+    #if defined(__APPLE__)
+        if ( strcmp(f, "dotprod")==0 )  return das_sysctl_flag("hw.optional.arm.FEAT_DotProd");
+        if ( strcmp(f, "i8mm")==0 )     return das_sysctl_flag("hw.optional.arm.FEAT_I8MM");
+        if ( strcmp(f, "bf16")==0 )     return das_sysctl_flag("hw.optional.arm.FEAT_BF16");
+        if ( strcmp(f, "fullfp16")==0 ) return das_sysctl_flag("hw.optional.arm.FEAT_FP16");
+        if ( strcmp(f, "lse")==0 )      return das_sysctl_flag("hw.optional.arm.FEAT_LSE");
+        if ( strcmp(f, "rdm")==0 )      return das_sysctl_flag("hw.optional.arm.FEAT_RDM");
+        if ( strcmp(f, "sha3")==0 )     return das_sysctl_flag("hw.optional.arm.FEAT_SHA3");
+        if ( strcmp(f, "crc")==0 )      return das_sysctl_flag("hw.optional.armv8_crc32");
+        if ( strcmp(f, "sve")==0 )      return das_sysctl_flag("hw.optional.arm.FEAT_SVE");
+        return false;
+    #elif defined(__linux__)
+        const unsigned long hw  = getauxval(AT_HWCAP);
+        const unsigned long hw2 = getauxval(AT_HWCAP2);
+        if ( strcmp(f, "dotprod")==0 )  return (hw  & HWCAP_ASIMDDP) != 0;
+        if ( strcmp(f, "i8mm")==0 )     return (hw2 & HWCAP2_I8MM) != 0;
+        if ( strcmp(f, "bf16")==0 )     return (hw2 & HWCAP2_BF16) != 0;
+        if ( strcmp(f, "fullfp16")==0 ) return (hw  & HWCAP_ASIMDHP) != 0;
+        if ( strcmp(f, "lse")==0 )      return (hw  & HWCAP_ATOMICS) != 0;
+        if ( strcmp(f, "rdm")==0 )      return (hw  & HWCAP_ASIMDRDM) != 0;
+        if ( strcmp(f, "sha3")==0 )     return (hw  & HWCAP_SHA3) != 0;
+        if ( strcmp(f, "crc")==0 )      return (hw  & HWCAP_CRC32) != 0;
+        if ( strcmp(f, "sve")==0 )      return (hw  & HWCAP_SVE) != 0;
+        return false;
+    #elif defined(_WIN32)
+        if ( strcmp(f, "dotprod")==0 )
+            return IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE) != 0;
+        if ( strcmp(f, "crc")==0 )
+            return IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE) != 0;
+        return false;
+    #else
+        (void)f;
+        return false;
+    #endif
+    }
+#endif
+
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
     static void das_cpuidex ( int leaf, int subleaf, int * regs ) {
         #if defined(_MSC_VER)
@@ -2011,7 +2110,14 @@ namespace das
     // on cpu_supports can never register where its instructions can't execute.
     bool das_cpu_supports ( const char * feature ) {
         if ( !feature ) return false;
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#if defined(__aarch64__) || defined(_M_ARM64)
+        // arm64 has no cpuid: macOS answers via sysctl, Linux via the AT_HWCAP auxv words, Windows
+        // via IsProcessorFeaturePresent. Names are the LLVM target-feature spellings, so they match
+        // what DAS_JIT_ARM64_FORCE_FEATURES and `llc -mattr` take verbatim (same rule as AMX above).
+        if ( strcmp(feature, "neon")==0 ) return true;      // baseline on every arm64
+        if ( strcmp(feature, "fp-armv8")==0 ) return true;  // ditto
+        return das_arm64_feature(feature);
+#elif defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
         int r0[4] = {0,0,0,0};
         das_cpuidex(0, 0, r0);                                  // r0[0] = max basic leaf
         int r1[4] = {0,0,0,0};

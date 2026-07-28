@@ -3717,11 +3717,13 @@ def exp4(x : float4) : float4 {
 //! Index of the max element, first-index-wins on ties — the greedy-decode argmax. Chunked team
 //! scan (serial 151-262k-vocab scan idled every lane 210-284us/token); combine folds candidates
 //! in index order with strict >, so the result is bit-identical to the serial loop for ANY split.
+let ARGMAX_MAX_CHUNKS = 64   // partials cap: enough for any current box's lanes*2
+
 def public parallel_argmax(x : float const?; n : int64) : int64 {
     if (n <= 1l) {
         return 0l
     }
-    let nch = int(min(int64(get_dispatch_lanes()) * 2l, n / 4096l))
+    let nch = int(min(min(int64(get_dispatch_lanes()) * 2l, n / 4096l), int64(ARGMAX_MAX_CHUNKS)))
     unsafe {
         if (nch <= 1) {
             var best = 0l
@@ -3732,10 +3734,10 @@ def public parallel_argmax(x : float const?; n : int64) : int64 {
             }
             return best
         }
-        var cm : array<float>
-        var ci : array<int64>
-        cm |> resize(nch)
-        ci |> resize(nch)
+        // fixed-size worker partials: no heap on the hot path (fork-pool context clones forbid
+        // a global scratch); ARGMAX_MAX_CHUNKS caps chunking, not correctness
+        var cm : float[ARGMAX_MAX_CHUNKS]
+        var ci : int64[ARGMAX_MAX_CHUNKS]
         var cmp = addr(cm[0])
         var cip = addr(ci[0])
         let nn = n
@@ -3764,8 +3766,6 @@ def public parallel_argmax(x : float const?; n : int64) : int64 {
                 best = ci[c]
             }
         }
-        delete cm
-        delete ci
         return best
     }
 }
