@@ -224,7 +224,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_detail("  {names[i]}: {best[i]} us  ({delta}% vs {baseline}){mark}\n")
     }
     if (winner < 0) {
-        print("  {kernel}: no passing variant\n")
+        tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
         g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
         return ""

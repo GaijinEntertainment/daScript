@@ -1198,6 +1198,24 @@ def tune_detail(text : string) {
     print(text)
 }
 
+//! Print a line that must be seen even while a display is live — a failure, not chatter. Wipes
+//! the bar's line first so the text is not written over it, and leaves the display armed so the
+//! next event redraws the bar underneath. Use `tune_detail` for anything mutable.
+def tune_progress_note(text : string) {
+    if (tune_verbosity() == "silent") return
+    if (g_prog.drawn) {
+        let cols = terminal_columns()
+        let wipe = build_string() $(w) {
+            for (_i in range(max(0, cols - 1))) {
+                w |> write(" ")
+            }
+        }
+        print("\r{wipe}\r")
+        g_prog.drawn = false
+    }
+    print(text)
+}
+
 //! Close a live display, so whatever prints next starts on its own line. A tuner that emitted
 //! progress calls this before it returns; the relay does it automatically when a child exits.
 def tune_progress_finish() {
