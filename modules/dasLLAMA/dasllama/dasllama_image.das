@@ -119,6 +119,84 @@ def image_peek(path : string) : DlimPeek {
     return p
 }
 
+//! One .dlim sibling of a GGUF, as list/GC tooling sees it (converter --list, the server page).
+struct DlimImageInfo {
+    file : string         //!< basename
+    path : string
+    bytes : int64
+    version : int
+    verdict : string      //!< CURRENT | OTHER | STALE vN | BROKEN
+    identity : string
+}
+
+//! The identities THIS box would produce right now, across flavors and quants — the CURRENT
+//! verdict's reference set. Callers pin the box profile first (same ordering as the load path).
+def dlim_current_identities : table<string> {
+    var idents : table<string>
+    for (q in ["q8", "fp32", "q4_0"]) {
+        idents |> insert(image_identity("", q))
+        idents |> insert(image_identity(METAL_IMAGE_TAG, q))
+        let vk = moe_gpu_bake_tag()
+        if (vk != "") {
+            idents |> insert(image_identity(vk, q))
+        }
+    }
+    return <- idents
+}
+
+def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
+    if (!p.valid) {
+        return "BROKEN"
+    }
+    if (p.version != IMAGE_VERSION) {
+        return "STALE v{p.version}"
+    }
+    return key_exists(current, p.identity) ? "CURRENT" : "OTHER"
+}
+
+//! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
+def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
+    var out : array<DlimImageInfo>
+    var st : FStat
+    if (!stat(gguf_path, st)) {
+        return <- out
+    }
+    let dirp = st.is_dir ? gguf_path : dir_name(gguf_path)
+    let base = st.is_dir ? "" : base_name(gguf_path)
+    var current <- dlim_current_identities()
+    dir(dirp) $(name : string) {
+        if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base)))) {
+            return
+        }
+        let full = path_join(dirp, name)
+        let p = image_peek(full)
+        out |> push(DlimImageInfo(file = name, path = full, bytes = p.bytes, version = p.version,
+                                  verdict = dlim_image_verdict(p, current), identity = p.identity))
+    }
+    delete current
+    return <- out
+}
+
+//! The dlim GC: remove what can never load again (BROKEN + version-stale) beside `gguf_path`.
+//! NEVER a loadable image — OTHER may be another box's bake carried here on purpose.
+//! apply = false is a dry run (stale counted, nothing removed).
+def dlim_clean(gguf_path : string; apply : bool) : tuple<total : int; stale : int; removed : int; freed : int64> {
+    var r = (total = 0, stale = 0, removed = 0, freed = 0l)
+    var inv <- dlim_inventory(gguf_path)
+    for (im in inv) {
+        r.total++
+        continue if (im.verdict != "BROKEN" && !(im.verdict |> starts_with("STALE")))
+        r.stale++
+        if (apply && remove(im.path)) {
+            r.removed++
+            r.freed += im.bytes
+            to_log(LOG_INFO, "dasLLAMA image: GC removed {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
+        }
+    }
+    delete inv
+    return r
+}
+
 def private pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page

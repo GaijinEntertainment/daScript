@@ -138,84 +138,43 @@ def private quant_from_string(s : string; var q : QuantMode&) : bool {
     return true
 }
 
-// identities this box would produce right now, across flavors and quants — the CURRENT verdict
-def private current_identities : table<string> {
-    var idents : table<string>
-    for (q in ["q8", "fp32", "q4_0"]) {
-        idents |> insert(image_identity("", q))
-        idents |> insert(image_identity(METAL_IMAGE_TAG, q))
-        let vk = moe_gpu_bake_tag()
-        if (vk != "") {
-            idents |> insert(image_identity(vk, q))
-        }
-    }
-    return <- idents
-}
-
-def private image_verdict(p : DlimPeek; current : table<string>) : string {
-    if (!p.valid) {
-        return "BROKEN"
-    }
-    if (p.version != IMAGE_VERSION) {
-        return "STALE v{p.version}"
-    }
-    return key_exists(current, p.identity) ? "CURRENT" : "OTHER"
-}
-
-// list = the inventory; clean = GC of what can never load again (BROKEN + version-stale).
-// A loadable image is NEVER removed: OTHER may be another box's bake carried here on purpose.
+// list = the inventory; clean = GC of what can never load again (both via the dasllama_image
+// library — the server's /v1/images + startup GC ride the same functions)
 def private list_images(cfg : ConvertArgs) : int {
     var st : FStat
     if (!stat(cfg.model, st)) {
         to_log(LOG_ERROR, "dasllama-convert: no such path '{cfg.model}'\n")
         return 2
     }
-    let dirp = st.is_dir ? cfg.model : dir_name(cfg.model)
-    let base = st.is_dir ? "" : base_name(cfg.model)
-    var current <- current_identities()
-    var n = 0
-    var stale = 0
-    var removed = 0
-    var freed = 0l
-    dir(dirp) $(name : string) {
-        if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base)))) {
-            return
-        }
-        let full = path_join(dirp, name)
-        let p = image_peek(full)
-        let verdict = image_verdict(p, current)
-        n++
-        if (!cfg.clean) {
-            let idnote = empty(p.identity) ? "" : "  {p.identity}"
-            to_log(LOG_INFO, "dasllama-convert: {name}\n")
-            to_log(LOG_INFO, "dasllama-convert:   {p.bytes >> 20l} MB  v{p.version}  {verdict}{idnote}\n")
-            return
-        }
-        return if (p.valid && p.version == IMAGE_VERSION)   // CURRENT or OTHER: loadable — stays
-        stale++
-        if (!cfg.apply) {
-            to_log(LOG_INFO, "dasllama-convert: would remove {name} ({p.bytes >> 20l} MB, {verdict})\n")
-            return
-        }
-        if (remove(full)) {
-            removed++
-            freed += p.bytes
-            to_log(LOG_INFO, "dasllama-convert: removed {name} ({p.bytes >> 20l} MB, {verdict})\n")
-        } else {
-            to_log(LOG_WARNING, "dasllama-convert: could not remove {name} — in use?\n")
-        }
-    }
     if (!cfg.clean) {
-        to_log(LOG_INFO, "dasllama-convert: {n} image(s)\n")
-    } elif (cfg.apply) {
-        to_log(LOG_INFO, "dasllama-convert: removed {removed} of {stale} stale image(s), reclaimed {freed >> 20l} MB\n")
+        var inv <- dlim_inventory(cfg.model)
+        for (im in inv) {
+            let idnote = empty(im.identity) ? "" : "  {im.identity}"
+            to_log(LOG_INFO, "dasllama-convert: {im.file}\n")
+            to_log(LOG_INFO, "dasllama-convert:   {im.bytes >> 20l} MB  v{im.version}  {im.verdict}{idnote}\n")
+        }
+        to_log(LOG_INFO, "dasllama-convert: {length(inv)} image(s)\n")
+        delete inv
+        return 0
+    }
+    if (!cfg.apply) {
+        var inv <- dlim_inventory(cfg.model)
+        for (im in inv) {
+            if (im.verdict == "BROKEN" || im.verdict |> starts_with("STALE")) {
+                to_log(LOG_INFO, "dasllama-convert: would remove {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
+            }
+        }
+        delete inv
+    }
+    let r = dlim_clean(cfg.model, cfg.apply)
+    if (cfg.apply) {
+        to_log(LOG_INFO, "dasllama-convert: removed {r.removed} of {r.stale} stale image(s), reclaimed {r.freed >> 20l} MB\n")
+        if (!st.is_dir) {
+            sweep_stale_tmp(cfg.model)
+        }
     } else {
-        to_log(LOG_INFO, "dasllama-convert: {stale} stale of {n} image(s) — rerun with --apply to remove\n")
+        to_log(LOG_INFO, "dasllama-convert: {r.stale} stale of {r.total} image(s) — rerun with --apply to remove\n")
     }
-    if (cfg.clean && cfg.apply && !st.is_dir) {
-        sweep_stale_tmp(cfg.model)
-    }
-    delete current
     return 0
 }
 
