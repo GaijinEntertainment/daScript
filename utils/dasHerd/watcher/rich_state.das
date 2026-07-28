@@ -696,6 +696,11 @@ struct GitDiscardPrompt {
 
 var g_git_discard = GitDiscardPrompt()
 
+// Non-zero while a Changelist commit is in flight: the operation revision at
+// click time. The message box clears only when THAT commit lands ok — never
+// on a stale success from an earlier operation.
+var g_commit_clear_watch : int64
+
 var g_prepare_worker = InspectorPrepareWorker()
 
 var g_jobque_owned = false

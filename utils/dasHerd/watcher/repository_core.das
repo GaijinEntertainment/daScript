@@ -1305,6 +1305,44 @@ def public repository_operation_changelist(repository_id, worktree_path,
         steps, recoveries)
 }
 
+def public repository_operation_commit_steps(worktree_path, message : string;
+                                             var steps : array<WorktreeOperationStep>&) : string {
+    //! A REAL commit of what is staged — nothing more. No `-a` (never
+    //! silently widen what the user staged), and no `--no-verify`: unlike the
+    //! WIP rescue, a real commit runs the repository's hooks, and a hook
+    //! failure is a normal outcome that lands in the failure UX with git's
+    //! own words.
+    delete steps
+    if (empty(strip(message))) return "a commit message is required"
+    var step <- WorktreeOperationStep(
+        argv <- ["git", "-C", worktree_path, "commit", "-m", message],
+        step_label = "committing staged changes",
+        kind = "git-changelist-commit", command_name = "git commit")
+    steps |> emplace(step)
+    return ""
+}
+
+def public repository_operation_commit(repository_id, worktree_path,
+                                       message : string) : string {
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    let worktree_index = find_worktree(g_repositories[repository_index],
+        worktree_path)
+    if (worktree_index < 0) return "unknown worktree"
+    if (empty(g_repositories[repository_index].snapshot.worktrees[worktree_index].branch)) {
+        return "detached HEAD: a commit here would not be on any branch"
+    }
+    var steps : array<WorktreeOperationStep>
+    let steps_error = repository_operation_commit_steps(worktree_path, message,
+        steps)
+    if (!empty(steps_error)) return steps_error
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    return operation_start("changelist_commit", repository_id, worktree_path,
+        steps, recoveries)
+}
+
 def public repository_operation_remove_worktree(repository_id, worktree_path : string;
                                                 force : bool) : string {
     //! Starts the guarded removal on the task-session rail. Returns "" when it

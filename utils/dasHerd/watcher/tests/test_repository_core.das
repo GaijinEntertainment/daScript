@@ -589,6 +589,24 @@ def test_repository_operation_step_lists(t : T?) {
             "nothing to discard is an error, not an empty operation")
         delete steps
     }
+    t |> run("a real commit takes the staged set only and runs the hooks") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        t |> equal(repository_operation_commit_steps("D:/Work/tree",
+            "a real message", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[3], "commit")
+        t |> equal(steps[0].argv[4], "-m")
+        t |> equal(steps[0].argv[5], "a real message")
+        for (argument in steps[0].argv) {
+            t |> success(argument != "--no-verify",
+                "a real commit must run the repository's hooks")
+            t |> success(argument != "-a",
+                "commit never silently widens beyond what is staged")
+        }
+        t |> success(!empty(repository_operation_commit_steps("D:/Work/tree",
+            "   ", steps)), "a blank message is refused before git sees it")
+        delete steps
+    }
     t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
         var steps : array<WorktreeOperationStep>
         repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",

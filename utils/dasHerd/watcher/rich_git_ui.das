@@ -748,7 +748,8 @@ def draw_git_file_group(repository : RepositorySnapshot const;
 def draw_git_status_groups(repository : RepositorySnapshot const;
                            worktree : WorktreeState const) {
     //! The Changes view: CONFLICTS / STAGED / MODIFIED / UNTRACKED with
-    //! multiselect, per-row stage/unstage, and the row context menu.
+    //! multiselect, per-row stage/unstage, the row context menu, and the
+    //! commit box under the groups.
     selection_scope(g_changelist_selection, repository.record.id, worktree.path)
     var file_row = 0
     var total = 0
@@ -757,6 +758,60 @@ def draw_git_status_groups(repository : RepositorySnapshot const;
     }
     if (total == 0) {
         text_disabled("Working tree is clean - nothing to stage, discard, or commit")
+    }
+    draw_changelist_commit_box(repository, worktree)
+}
+
+def changelist_commit_message : string {
+    // The widget global is module-private; the live rail reads through this.
+    return COMMIT_MESSAGE_INPUT.value
+}
+
+def draw_changelist_commit_box(repository : RepositorySnapshot const;
+                               worktree : WorktreeState const) {
+    // The box clears only when ITS commit lands ok, watched by operation
+    // revision — a stale success from an earlier operation never eats a
+    // message the user is still writing.
+    if (g_commit_clear_watch != 0l && g_client != null
+            && g_client.operation.kind == "changelist_commit"
+            && g_client.operation.revision > g_commit_clear_watch) {
+        if (g_client.operation.state == "ok") {
+            COMMIT_MESSAGE_INPUT.pending_value = ""
+            COMMIT_MESSAGE_INPUT.has_pending = true
+            g_commit_clear_watch = 0l
+        } elif (g_client.operation.state != "running") {
+            // Failed or cancelled: the message stays, ready to retry.
+            g_commit_clear_watch = 0l
+        }
+    }
+    separator(GIT_COMMIT_SEPARATOR)
+    input_text_multiline(COMMIT_MESSAGE_INPUT, (text = "##commit-message",
+        size = float2(-1.0f, GetTextLineHeight() * 4.0f)))
+    let staged = worktree.staged
+    let busy = changelist_rail_busy()
+    let message_ready = !empty(strip(COMMIT_MESSAGE_INPUT.value))
+    let detached = empty(worktree.branch)
+    if (button(GIT_COMMIT_GO, (text =
+            "Commit {staged} staged {staged == 1 ? "file" : "files"}",
+            enabled = !busy && staged > 0 && message_ready && !detached
+                && g_client != null))
+            && g_client != null) {
+        g_commit_clear_watch = g_client.operation.revision
+        g_client->changelist_commit(repository.record.id, worktree.path,
+            strip(COMMIT_MESSAGE_INPUT.value))
+    }
+    // A disabled button explains itself, or it teaches nothing.
+    if (detached) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text =
+            "detached HEAD: a commit here would not be on any branch"))
+    } elif (staged == 0) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text =
+            "nothing is staged; commit takes the STAGED group only"))
+    } elif (!message_ready) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text = "write a commit message"))
     }
 }
 
@@ -1604,6 +1659,8 @@ def draw_git_activity_window() {
 
 def git_ui_init() {
     GIT_TREE_FILTER.value = 0
+    // Commit messages outgrow the 256-byte default; sized before first frame.
+    COMMIT_MESSAGE_INPUT.capacity = 4096
 }
 
 def draw_repositories_dock() {

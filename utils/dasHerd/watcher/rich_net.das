@@ -633,6 +633,19 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(untracked_paths, false)}\}")
     }
 
+    def changelist_commit(repository_id, worktree_path, message : string) {
+        //! A real commit of the staged set, on the rail, hooks and all. The
+        //! message rides the request — never re-read from UI state when the
+        //! step launches.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(strip(message))) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_commit\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"text\":" +
+            "{sprint_json(message, false)}\}")
+    }
+
     def request_worktree_commit_wip(repository_id, worktree_path,
                                     message : string) {
         if (!connected || empty(worktree_path) || empty(message)) return

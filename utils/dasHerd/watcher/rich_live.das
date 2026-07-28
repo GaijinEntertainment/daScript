@@ -479,6 +479,7 @@ struct HerderChangelistArgs {
     selected : bool
     action : string
     paths : array<string>
+    message : string
 }
 
 def private changelist_target(var args : HerderChangelistArgs) {
@@ -551,6 +552,9 @@ def herder_changelist_state(input : JsonValue?) : JsonValue? {
                 discard_prompt_files = g_git_discard.file_count,
                 discard_prompt_bytes = g_git_discard.total_bytes,
                 discard_prompt_armed = g_git_discard.confirming,
+                staged_count = worktree.staged,
+                commit_message = changelist_commit_message(),
+                commit_in_flight = g_commit_clear_watch != 0l,
                 rows <- rows))
         }
     }
@@ -636,6 +640,17 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? {
         }
         return JV((ok = false,
             error = "unknown worktree '{args.worktree_path}'"))
+    }
+    if (args.action == "commit") {
+        if (empty(strip(args.message))) {
+            return JV((ok = false, error = "a commit message is required"))
+        }
+        if (changelist_rail_busy()) {
+            return JV((ok = false, error = "the operation rail is busy"))
+        }
+        g_client->changelist_commit(args.repository_id, args.worktree_path,
+            strip(args.message))
+        return JV((ok = true, action = "commit"))
     }
     if (args.action != "stage" && args.action != "unstage") {
         return JV((ok = false, error = "unknown action '{args.action}'"))
