@@ -53,15 +53,15 @@ struct ImgSection {
 // the box + knob identity an image is valid for; folded into filename AND header. A PURE
 // formatter of DlimConfiguration — the backend-select side effect lives in the config's cpu
 // source, so callers need no ordering ritual. `tag` distinguishes kinds sharing one source path.
-def image_identity(tag : string = "") : string {
-    return dlim_identity(dlim_config_current(), IMAGE_VERSION, tag)
+def image_identity(tag : string = ""; quant : string = "q8") : string {
+    return dlim_identity(dlim_config_current(quant), IMAGE_VERSION, tag)
 }
 
 // the image path for (gguf, current identity) — knob combos coexist as separate files
 // (the full 64-bit hash keeps that deterministic in practice; the header check would catch
 // a collision loudly, but two identities fighting over one path re-save forever)
-def image_path_for(gguf_path : string; tag : string = "") : string {
-    return "{gguf_path}.{hash(image_identity(tag))}.dlim"
+def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
+    return "{gguf_path}.{hash(image_identity(tag, quant))}.dlim"
 }
 
 def private pad_to_page(cur : uint64) : uint64 {
@@ -418,12 +418,12 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! Serialize a loaded weight-carrying struct as a prepared image: array planes page-aligned raw
 //! (borrowed back at load), everything else archived. Tmp+rename: atomic on POSIX; on Windows a
 //! brief missing-file window lets a concurrent reader regenerate. Caller supplies `serialize_image_meta`/`image_post_load` (`_::` dispatch).
-def save_image(var t; path : string; tag : string = "") : bool {
+def save_image(var t; path : string; tag : string = ""; quant : string = "q8") : bool {
     // per-writer tmp name: concurrent savers (parallel test workers on one cache miss) must
     // not clobber each other's half-written file; last atomic rename wins with same content
     let tmp_path = "{path}.{ref_time_ticks()}.tmp"
     // one config snapshot serves the meta embed AND the header hash — they must agree
-    let dcfg = dlim_config_current()
+    let dcfg = dlim_config_current(quant)
     let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
     var fend = 0ul
     var meta_off = 0ul
@@ -563,8 +563,8 @@ def save_image(var t; path : string; tag : string = "") : bool {
 
 //! Model entry point (the AudioTower one is load_audio_tower's cache in dasllama_audio).
 //! `tag` names the flavor (METAL_IMAGE_TAG for blob-only metal-flavor models, "" planar).
-def save_model_image(var t : Model; path : string; tag : string = "") : bool {
-    return save_image(t, path, tag)
+def save_model_image(var t : Model; path : string; tag : string = ""; quant : string = "q8") : bool {
+    return save_image(t, path, tag, quant)
 }
 
 // ===== load =====
@@ -592,7 +592,7 @@ def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
 //! Map a prepared image and rebuild the struct with zero O(model) work: array plane fields borrow
 //! the mapping (finalizer forgets + unmaps), archive blob restores everything else. false = absent /
 //! wrong identity / wrong version — caller regenerates from gguf. Same `_::` contract as save_image.
-def load_image(path : string; var t; tag : string = "") : bool {
+def load_image(path : string; var t; tag : string = ""; quant : string = "q8") : bool {
     if (!stat(path).is_valid) {
         return false
     }
@@ -635,7 +635,7 @@ def load_image(path : string; var t; tag : string = "") : bool {
         unsafe(fmap_close(base, msize))
         return false
     }
-    let want_ident = image_identity(tag)
+    let want_ident = image_identity(tag, quant)
     if (read_u64(bp, 40l) != hash(want_ident)) {
         // same version ⇒ the meta head is readable: say WHAT the image was baked for, not
         // just that a 64-bit hash missed (bounds were validated above)
@@ -773,8 +773,8 @@ def private guard_interp_gguf_load(path : string) {
 }
 
 //! Model entry point — see load_image (`tag` = the flavor, like save_model_image).
-def load_model_image(path : string; var t : Model; tag : string = "") : bool {
-    if (!load_image(path, t, tag)) {
+def load_model_image(path : string; var t : Model; tag : string = ""; quant : string = "q8") : bool {
+    if (!load_image(path, t, tag, quant)) {
         return false
     }
     // AFTER the plane borrows (image_post_load runs before them, when every array is still

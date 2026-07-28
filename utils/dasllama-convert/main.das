@@ -248,10 +248,11 @@ def main() : int {
         }
     }
     let tag = flavor_tag(cfg.flavor)
-    let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    let qs = "{qm}"
+    let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag, qs)
     to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
-    to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
+    to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag, qs)}\n")
 
     if (!cfg.keep_stale_tmp) {
         sweep_stale_tmp(cfg.model)
@@ -280,7 +281,7 @@ def main() : int {
             to_log(LOG_ERROR, "dasllama-convert: the GPU walk collected nothing — the tier declined this model under the supplied config\n")
             rc = 1
         }
-        if (rc == 0 && !save_model_image(m, out, tag)) {
+        if (rc == 0 && !save_model_image(m, out, tag, qs)) {
             to_log(LOG_ERROR, "dasllama-convert: writing '{out}' failed — see the error above\n")
             rc = 1
         }
