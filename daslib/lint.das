@@ -45,6 +45,10 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
 }
 
 class LintVisitor : AstVisitor {
+    // LINT014 is decided after the body: a `var` argument that is returned needs its mutability
+    // for the move (a non-copyable result cannot move from a const argument). Arguments are
+    // collected before the body, so a `return <arg>` just removes its candidate
+    lint014_candidates : array<Variable const?>
     //! AST visitor that performs lint checks.
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
@@ -225,7 +229,24 @@ class LintVisitor : AstVisitor {
         branch_depth = 0
         ds_entries |> clear()
     }
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        if (expr.subexpr != null && expr.subexpr is ExprVar) {
+            let ev = expr.subexpr as ExprVar
+            let idx = lint014_candidates |> find_index(ev.variable)
+            if (idx >= 0) {
+                lint014_candidates |> erase(idx)
+            }
+        }
+    }
+
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
+        // LINT014 — report unwritten var arguments that were not returned either
+        if (!noLint && genericDepth == 0) {
+            for (v in lint014_candidates) {
+                lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at)
+            }
+        }
+        lint014_candidates |> clear()
         // LINT010 — emit final dead-store warnings for any still-pending stores
         if (!noLint && genericDepth == 0) {
             for (e in ds_entries) {
@@ -372,7 +393,7 @@ class LintVisitor : AstVisitor {
                 || v.isAccessUnused) {
             return
         }
-        lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at)
+        lint014_candidates |> push(v)
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
