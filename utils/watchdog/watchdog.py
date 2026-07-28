@@ -618,7 +618,11 @@ def stream_child(
     stage: dict[str, object],
 ) -> None:
     assert proc.stdout is not None
+    # Per child, and published immediately: the tune-bootstrap restart is the normal first-run
+    # path, and the relaunched child emits no tune events at all. Without clearing here, the
+    # control page would keep showing the finished tune's counters for the rest of the run.
     tune: dict[str, object] = {}
+    set_state(tune={})
     for line in proc.stdout:
         message = line.rstrip("\r\n")
         event = parse_tune_event(message)
