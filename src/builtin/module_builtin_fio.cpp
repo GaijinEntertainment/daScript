@@ -43,9 +43,11 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
 #define getchar_wrapper getchar
 #endif
 
-// The direct sequential writer (dwrite_*): cache-bypassing, strictly-ascending append, used by
-// bulk producers that already know their total size — measured 2060 MB/s vs 275 MB/s for the same
-// volume through buffered fwrite, and it leaves the page cache to whatever the producer is READING.
+// The direct sequential writer (dwrite_*): strictly-ascending append for bulk producers that
+// already know their total size — measured 2060 MB/s vs 275 MB/s for the same volume through
+// buffered fwrite. Cache-bypassing where the platform offers it (FILE_FLAG_NO_BUFFERING on
+// Windows, F_NOCACHE on macOS); the generic POSIX arm is buffered write + posix_fadvise
+// DONTNEED — the page cache is still touched, just released, so the producer's READS keep it.
 // Implemented per-platform at the bottom of this file (same split as the mmap shim above); the
 // handle owns an aligned bounce buffer, so callers append any pointer at any size.
 void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_bytes );
@@ -187,6 +189,13 @@ namespace das {
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_fmap_close ( void * data, uint64_t size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void * builtin_dwrite_open ( const char * name, uint64_t total_bytes, uint64_t band_bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_dwrite_append ( void * h, void * data, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void * builtin_dwrite_band ( void * h, uint64_t * avail, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_dwrite_commit ( void * h, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    uint64_t builtin_dwrite_stat ( void * h, int32_t which, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB

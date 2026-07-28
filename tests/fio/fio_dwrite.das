@@ -61,10 +61,11 @@ def test_dwrite(t : T?) {
             total += sz
         }
         t |> success(ok, "every append accepted")
-        // bounce accounting: nothing here was band-sized from an aligned source, so every byte
-        // staged through the band and none went direct
-        t |> equal(uint64(total), unsafe(dwrite_stat(w, 3)), "bounce bytes == appended bytes")
-        t |> equal(0ul, unsafe(dwrite_stat(w, 2)), "no direct bytes on sub-band appends")
+        // stat accounting: the direct-vs-bounce split is platform-dependent (win32 demands
+        // sector-aligned sources, the POSIX arm takes any band-sized run direct) — the portable
+        // contract is conservation, plus the sub-sector pieces must stage through the band
+        t |> equal(uint64(total), unsafe(dwrite_stat(w, 2)) + unsafe(dwrite_stat(w, 3)), "direct + bounce == appended bytes")
+        t |> success(unsafe(dwrite_stat(w, 3)) > 0ul, "sub-sector pieces staged through the band")
         t |> success(unsafe(dwrite_close(w)), "close flushed the tail and truncated")
         verify_file_bytes(t, fname, total, "odd-size appends")
         delete payload

@@ -655,7 +655,8 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     var model_field = ""
     var jerr = ""
-    var js = read_json(string(req.body), jerr)
+    let body_text = string(req.body)
+    var js = read_json(body_text, jerr)
     defer() {
         unsafe {
             delete js
@@ -663,6 +664,10 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     if (js != null) {
         model_field = js?["model"] ?? ""
+    } elif (!empty(body_text)) {
+        // a malformed body must NOT fall through to the default slot — that would bake the
+        // wrong model on a typo (an empty body legitimately means "the default")
+        return resp |> JSON(error_body("request body is not valid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
     let si = slot_index(model_field)
     if (si < 0) {
@@ -3084,11 +3089,22 @@ def shutdown_server() {
         if (asr_events != null) {
             asr_events |> channel_remove
         }
+        // a still-running worker holds a channel ref, and channel_remove throws on outstanding
+        // refs — leave the channel to the worker (its exit release is safe on the live object;
+        // the worker can't be cancelled, its child process runs minutes) instead of aborting stop
         if (bench_events != null) {
-            bench_events |> channel_remove
+            if (g_bench_state == "running") {
+                to_log(LOG_WARNING, "dasllama-server: shutdown with a bench still running — channel left to the worker\n")
+            } else {
+                bench_events |> channel_remove
+            }
         }
         if (bake_events != null) {
-            bake_events |> channel_remove
+            if (g_bake_state == "running") {
+                to_log(LOG_WARNING, "dasllama-server: shutdown with a bake still running — channel left to the worker\n")
+            } else {
+                bake_events |> channel_remove
+            }
         }
     }
     delete g_bench_log
