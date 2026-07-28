@@ -2287,7 +2287,7 @@ def public get_kq_q51_native() : bool {
 def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     // the one sanctioned backend-select side effect — the identity itself is a pure formatter
     select_matmul_backend_for_load()
-    c.backend = active_kernel_backend()
+    c.backend = dlim_backend_name()   // the cross-box bake's target alias when one is armed
     c.q8_mr = active_q8_layout_mr()
     c.q8_wbias = active_q8_wbias()
     c.q8_kgroup = active_q8_kgroup()

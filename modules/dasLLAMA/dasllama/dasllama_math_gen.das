@@ -569,11 +569,11 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     delete ts
 }
 
-// the backend repack slot: layout/wbias/kgroup companions decide interleave, plane bias, and
-// k-byte grouping — so a bias128-mr16 stamp gets biased grp16 weights and an smmla stamp gets
-// the kg8 row-pair plane from the same load path that gives grp4 its plain weights
+// the backend repack slot. Numbers come through math's active_* getters — value-identical to
+// the stamped companions during normal serving (activation caches from them), and the
+// cross-box bake override's one seam
 def private repack_q8q8_gen(var wp : int8?; var sp : float?; n, d : int64) {
-    repack_q8q8_grp(wp, sp, n, d, int64(q8q8_layout_gen()), int64(q8q8_wbias_gen()), int64(q8q8_kgroup_gen()))
+    repack_q8q8_grp(wp, sp, n, d, active_q8_layout_mr(), active_q8_wbias(), active_q8_kgroup())
 }
 
 //! mr-generalized MXFP4 plane repack (mr=4 reproduces the old hand arm64-laneq mx interleave
@@ -626,7 +626,7 @@ def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
 // the backend mx4 repack slot: same layout companion as the Q8 repack — planes and weights
 // interleave at the ONE stamped mr
 def private repack_mx4_gen(var np : uint8?; var ep : uint8?; n, d : int64) {
-    repack_mx4_grp(np, ep, n, d, int64(q8q8_layout_gen()))
+    repack_mx4_grp(np, ep, n, d, active_q8_layout_mr())
 }
 
 // ===== the q51 GEMV family (self-anchored — q51 does NOT ride the Q8 mr; its grid is
@@ -691,9 +691,9 @@ def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
     delete ts
 }
 
-// the backend q51 repack slot: the family's OWN layout companion decides the interleave
+// the backend q51 repack slot: the family's layout number via math's override-aware getter
 def private repack_q51_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
-    repack_q51_grp(qp, sp, n, d, int64(q51q8_layout_gen()))
+    repack_q51_grp(qp, sp, n, d, active_q51_layout_mr())
 }
 
 //! One row's dot off the grp<mr> q51 planes, scalar — the q51 stub's reference body and the
@@ -1136,13 +1136,13 @@ def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr 
 // the backend kq repack slot: same layout companion as the Q8/mx4 repacks — one stamped mr
 def private repack_kq_gen(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {
     if (fmt == 4) {
-        repack_k4_grp(kq, ks, n, d, int64(k4q8_layout_gen()))
+        repack_k4_grp(kq, ks, n, d, active_kq_layout_mr(4))
     } elif (fmt == 5) {
-        repack_k5_grp(kq, ks, n, d, int64(k5q8_layout_gen()))
+        repack_k5_grp(kq, ks, n, d, active_kq_layout_mr(5))
     } elif (fmt == 40) {
-        repack_q40_grp(kq, ks, n, d, int64(q40q8_layout_gen()))
+        repack_q40_grp(kq, ks, n, d, active_kq_layout_mr(40))
     } else {
-        repack_k6_grp(kq, ks, n, d, int64(k6q8_layout_gen()))
+        repack_k6_grp(kq, ks, n, d, active_kq_layout_mr(6))
     }
 }
 
@@ -2109,6 +2109,9 @@ def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 c
 
 [init]
 def dasllama_math_gen_register() {
+    // the cross-box override's q51 reach: x64-gen keeps disk-order q51 slots, so the generic
+    // grp<mr> q51 repack registers here for bakes whose TARGET has grp q51 planes
+    set_bake_q51_repack(@@repack_q51_gen)
     // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout
     // must be evaluated at selection time, not [init] — [init]s run before the JIT installs
     // generated code (the slice C mr8 bug); arm64 needs no availability predicate.

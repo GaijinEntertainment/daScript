@@ -2699,27 +2699,77 @@ def private kq_layout_grp4_fmt(fmt : int) : int => 4
 def private q8_wbias_zero() : int => 0
 def private q8_kgroup_four() : int => 4
 
+// ===== cross-box bake: repack by NUMBERS =====
+// The getters below are the one layout authority; a foreign-backend bake overrides them with the target's numbers — the generic grp<mr> repacks produce the exact bytes, and the local kernels never serve them (the foreign identity cannot load here)
+var private g_bake_cpu_override = false
+var private g_bake_cpu = DlimCpuConfig()
+
+//! The backend name the dlim identity reports — the bake alias when a cross-box bake is armed.
+def dlim_backend_name() : string => g_bake_cpu_override ? g_bake_cpu.backend : active_kernel_backend()
+
+//! Pin the backend a bake targets: a registered name pins normally; a FOREIGN name arms
+//! repack-by-numbers (the gen tier's generic grp<mr> primitives produce the target layout,
+//! the identity reports the target backend). false = no route — the caller fail-closes.
+def pin_backend_for_bake(cpu : DlimCpuConfig) : bool {
+    if (key_exists(g_kernel_backends, cpu.backend)) {
+        pin_kernel_backend(cpu.backend)
+        return active_kernel_backend() == cpu.backend
+    }
+    select_matmul_backend_for_load()   // the load enters repack stages only under a repack backend
+    if (!kernel_backend_needs_repack(active_kernel_backend())) {
+        to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family — none is active here\n")
+        return false
+    }
+    g_bake_cpu = cpu
+    g_bake_cpu_override = true
+    return true
+}
+
+def clear_bake_backend_override() {
+    g_bake_cpu_override = false
+}
+
 //! The Q8 interleave (mr) of the ACTIVE backend's weight layout — cached at activation from
 //! KernelBackend.q8_layout (4 for every hand tier; the stamped mr on the gen backend).
-def active_q8_layout_mr() : int64 => g_active_q8_layout_mr
+def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_active_q8_layout_mr
 
 //! The active backend's kq plane interleave for `fmt` (4/5/6) — per-format since the kq v2
 //! family split; the loader freezes these onto the Model at repack time.
-def active_kq_layout_mr(fmt : int) : int64 => int64(invoke(g_active_kq_layout, fmt))
+def active_kq_layout_mr(fmt : int) : int64 {
+    if (g_bake_cpu_override) {
+        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : g_bake_cpu.kq_mr6))
+    }
+    return int64(invoke(g_active_kq_layout, fmt))
+}
 
 //! The active backend's q51 plane interleave — 1 (disk order) on every hand tier; the stamped
 //! mr on the arm64-gen backend (the self-anchored q51 GEMV family).
-def active_q51_layout_mr() : int64 => g_active_q51_layout_mr
+def active_q51_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q51_mr : g_active_q51_layout_mr
 
 //! The weight-plane bias of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_wbias (0 for every hand tier; 128 on a bias128 gen stamp). The mx4->Q8
 //! expand biases its LUT writes to match.
-def active_q8_wbias() : int64 => g_active_q8_wbias
+def active_q8_wbias() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_wbias : g_active_q8_wbias
 
 //! The plane kgroup of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_kgroup (4 for every hand tier; 8 on an smmla gen stamp). The mx4->Q8
 //! expand's positional map and the batch token-tail generic read it.
-def active_q8_kgroup() : int64 => g_active_q8_kgroup
+def active_q8_kgroup() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_kgroup : g_active_q8_kgroup
+
+// the q51 repack for a bake whose target has grp<mr> q51 planes: some LOCAL registrations
+// leave repack_q51 unset (x64-gen keeps disk-order q51 slots), so the gen module registers its
+// generic q51 repack here for the override path to reach
+var private g_bake_q51_repack = @@repack_q51_identity
+
+def set_bake_q51_repack(f : RepackQ51Fn) {
+    g_bake_q51_repack = f
+}
+
+//! The q51 repack the LOAD path invokes — the gen generic under a cross-box override with a
+//! grp<mr> q51 target, else the active backend's slot.
+def active_repack_q51() : RepackQ51Fn {
+    return g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
+}
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]

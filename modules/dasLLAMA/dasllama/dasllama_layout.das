@@ -217,7 +217,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
     let rq8 = g_repack_q8q8
     let rkq = g_repack_kq
     let rmx = g_repack_mx4
-    let rq51 = g_repack_q51
+    let rq51 = active_repack_q51()   // override-aware: a cross-box q51 target needs the gen generic
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
@@ -524,7 +524,7 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
         if (fmt == 0) {
             invoke(g_repack_q8q8, reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
         } elif (fmt == 2) {
-            invoke(g_repack_q51, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } else {
             invoke(g_repack_kq, fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         }

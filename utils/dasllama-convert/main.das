@@ -274,17 +274,22 @@ def main() : int {
             return 2
         }
         // apply what a host can take, then verify FAIL-CLOSED: any knob that did not take
-        // (unavailable backend, missing s16 twins) shows up as an identity mismatch below
+        // (missing s16 twins, no repack family for a foreign backend) shows up as an identity
+        // mismatch below. A FOREIGN backend name arms repack-by-numbers: the local generic
+        // grp<mr> primitives produce the target's exact plane bytes from the config's numbers.
         set_wscale_f16(want.cpu.wscale_f16)
         set_kquant_native(want.cpu.kquant_native)
         set_kq_q40_native(want.cpu.kq_q40_native)
         set_kq_q50_native(want.cpu.kq_q50_native)
         set_kq_q51_native(want.cpu.kq_q51_native)
-        pin_kernel_backend(want.cpu.backend)
+        if (!pin_backend_for_bake(want.cpu)) {
+            to_log(LOG_ERROR, "dasllama-convert: --config targets '{want.cpu.backend}' and this host has no repack family to bake it with\n")
+            return 2
+        }
         let want_ident = dlim_identity(want, IMAGE_VERSION)
         let have_ident = dlim_identity(dlim_config_current(want.quant), IMAGE_VERSION)
         if (have_ident != want_ident) {
-            to_log(LOG_ERROR, "dasllama-convert: --config could not be fully applied on this host (cross-box backend targeting lands later in the arc):\n  want {want_ident}\n  have {have_ident}\n")
+            to_log(LOG_ERROR, "dasllama-convert: --config could not be fully applied on this host:\n  want {want_ident}\n  have {have_ident}\n")
             return 2
         }
         have_want = true
