@@ -41,6 +41,8 @@ seven more kinds that way will rot. Replace the phase integer with a STEP LIST
 before adding anything.
 
 - `struct WorktreeOperationStep { argv : array<string>; label : string; kind : string }`
+  — plus a per-step timeout override and env additions (note 2026-07-28: the
+  network steps need both; see Step 4).
 - `g_operation_steps : array<WorktreeOperationStep>` plus a cursor.
 - `advance_operation` becomes: poll → log → on non-zero exit consult a per-step
   failure policy → advance the cursor → launch the next step or finish.
@@ -103,6 +105,23 @@ Rules that must hold:
   silently omitting the button.
 - Discard runs on the operation rail, not the single-flight file action: it can
   touch thousands of files.
+- **One rail for everything that touches the index (note, 2026-07-28).** The
+  single-flight file action and the operation rail are independent gates —
+  nothing stops a discard launching while a stage is in flight, and `git add`
+  and `git checkout --` both take `.git/index.lock`. Put ALL index-touching
+  actions on the operation rail (stage/unstage become one-step operations) so
+  there is a single serialization point; retire the client-side
+  `git_action_loading` path for these rather than adding a second guard.
+
+### UI affordances (note, 2026-07-28)
+
+The per-row `+` / `-` icon buttons alone are iffy — small targets, and
+invisible as a multiselect verb. Add a right-click context menu on the rows as
+well: it names the actions (Stage / Unstage / Discard…), operates on the
+current selection (right-click on a selected row acts on the whole selection;
+on an unselected row selects it first, the file-manager convention), and is
+where discard lives so a destructive verb is never a one-pixel-miss away from
+a safe one. Keep the icons for the single-file quick path.
 
 ### The confirmation, and why discard is different
 
@@ -115,6 +134,13 @@ It therefore gets the strictest treatment, modelled on the retire checklist:
 - Never a bare "are you sure". Name the count and the bytes, list the paths
   (elided past ~20 with "+N more"), and say the sentence plainly: *these
   changes exist nowhere else and cannot be recovered.*
+- **Untracked directories under-count (note, 2026-07-28).** `git status
+  --porcelain` collapses a wholly-untracked directory into one `?? dir/` row,
+  so a count built from rows lies about what `git clean` will destroy — and
+  `git clean -f` without `-d` refuses the path outright. Before showing the
+  confirmation, expand any `dir/` row (walk it, or `git status --porcelain
+  -uall`) so the count and bytes are per-file truth; `-d` is then only the
+  execution detail.
 - Offer the non-destructive alternative FIRST, because it exists and is one
   command: commit the WIP to the branch (`repository_operation_commit_wip`,
   already built). A user who wanted the folder clean, not the work gone,
@@ -142,6 +168,15 @@ It therefore gets the strictest treatment, modelled on the retire checklist:
 
 All four are network operations: the rail is mandatory, cancel matters, and the
 log is the only way to see what a remote said.
+
+**The 15-second timeout kills these (note, 2026-07-28).** Every `launch_git`
+runs under `GIT_TIMEOUT_MS = 15000l` (repository_core.das:25) — fine for local
+git, fatal for a real push or fetch, and a credentials prompt silently burns
+the full 15s and dies as a timeout. Network steps need (a) their own, much
+longer timeout carried per step, and (b) `GIT_TERMINAL_PROMPT=0` in the
+environment so a missing credential fails fast with "could not read Username"
+— which is the string the classifier below matches. Without (b) the auth
+pattern never fires; users see a timeout instead of the truth.
 
 | action | steps | notes |
 |---|---|---|

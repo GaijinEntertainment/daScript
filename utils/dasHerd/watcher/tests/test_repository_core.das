@@ -442,6 +442,73 @@ def test_repository_review_parsing(t : T?) {
 }
 
 [test]
+def test_repository_operation_step_lists(t : T?) {
+    t |> run("retire builds the precheck/remove list with its recovery graph") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        var recoveries : table<string; array<WorktreeOperationStep>>
+        repository_operation_remove_steps("D:/Work/main", "D:/Work/tree",
+            false, steps, recoveries)
+        t |> equal(length(steps), 2)
+        t |> equal(steps[0].argv[1], "-C")
+        t |> equal(steps[0].argv[2], "D:/Work/tree",
+            "the dirty precheck runs in the WORKTREE, not the checkout")
+        t |> equal(steps[0].argv[3], "status")
+        t |> equal(steps[0].expectation, "empty_output")
+        t |> equal(steps[0].expect_message,
+            "uncommitted or untracked work is present")
+        t |> equal(steps[0].recover_match, "not a git repository")
+        t |> equal(steps[0].recover_name, "force_remove")
+        t |> equal(steps[1].argv[2], "D:/Work/main",
+            "the removal runs from the main checkout")
+        t |> equal(steps[1].argv[4], "remove")
+        t |> equal(steps[1].argv[length(steps[1].argv) - 1], "D:/Work/tree")
+        t |> equal(steps[1].recover_match, "validation failed")
+        t |> equal(steps[1].recover_name, "prune")
+        t |> success(key_exists(recoveries, "force_remove"))
+        t |> success(key_exists(recoveries, "prune"))
+        t |> equal(length(recoveries["force_remove"]), 1)
+        t |> equal(recoveries["force_remove"][0].argv[5], "--force")
+        t |> equal(recoveries["force_remove"][0].recover_name, "prune",
+            "the forced fallback still recovers into prune")
+        t |> equal(length(recoveries["prune"]), 1)
+        t |> equal(recoveries["prune"][0].argv[4], "prune")
+        t |> success(recoveries["prune"][0].require_folder_gone,
+            "prune success still fails honestly when the folder survives")
+        delete steps
+        delete recoveries
+    }
+    t |> run("forced retire is one step and keeps the prune fallback") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        var recoveries : table<string; array<WorktreeOperationStep>>
+        repository_operation_remove_steps("D:/Work/main", "D:/Work/tree",
+            true, steps, recoveries)
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[5], "--force")
+        t |> equal(steps[0].recover_name, "prune")
+        t |> success(!key_exists(recoveries, "force_remove"),
+            "an already-forced removal has no forced fallback")
+        t |> success(key_exists(recoveries, "prune"))
+        delete steps
+        delete recoveries
+    }
+    t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",
+            steps)
+        t |> equal(length(steps), 2)
+        t |> equal(steps[0].argv[3], "add")
+        t |> equal(steps[0].argv[4], "-A")
+        t |> equal(steps[1].argv[3], "commit")
+        t |> equal(steps[1].argv[4], "--no-verify",
+            "the rescue must not be blocked by a hook")
+        t |> equal(steps[1].argv[length(steps[1].argv) - 1], "rescue message")
+        t |> equal(steps[0].timeout_ms, 0l,
+            "local git keeps the default timeout")
+        delete steps
+    }
+}
+
+[test]
 def test_repository_relative_file_path_contract(t : T?) {
     t |> run("file previews cannot escape their observed worktree") <| @(t : T?) {
         t |> success(repository_valid_relative_file_path("src/main.das"))

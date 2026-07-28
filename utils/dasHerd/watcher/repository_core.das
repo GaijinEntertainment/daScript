@@ -186,6 +186,36 @@ struct public WorktreeOperation {
     revision : int64
 }
 
+// One git step of a worktree operation. Everything advance_operation() needs
+// to run the step and judge its exit lives HERE — the machine has no per-kind
+// knowledge, so a new operation is a new step list, never a new phase ladder.
+struct public WorktreeOperationStep {
+    argv : array<string>
+    // Dialog step text while running ("removing worktree").
+    step_label : string
+    // Watcher session kind ("git-worktree-remove").
+    kind : string
+    // Names the command in a bare-exit failure ("git status exited 128").
+    command_name : string
+    // "" requires exit 0; "empty_output" additionally requires silence;
+    // "tolerate" accepts any exit as a normal outcome.
+    expectation : string
+    // The failure message when empty_output is violated.
+    expect_message : string
+    // A failing step whose output contains recover_match (lowercase) switches
+    // to the recovery list named recover_name instead of failing.
+    recover_match : string
+    recover_name : string
+    // The honest log line written when that recovery fires.
+    recover_log : string
+    // Post-success guard (retire): fail unless the worktree folder is gone.
+    require_folder_gone : bool
+    // 0 keeps GIT_TIMEOUT_MS; network steps carry their own budget.
+    timeout_ms : int64
+    // KEY=VALUE riders for this step's process (GIT_TERMINAL_PROMPT=0).
+    env : array<string>
+}
+
 struct public RepositoryAddRequest {
     path : string
     display_name : string
@@ -273,10 +303,14 @@ var private g_revision : int64
 // One user operation at a time — a retire is a deliberate single act, and one
 // slot is exactly what the one dialog can show.
 var private g_operation = WorktreeOperation()
-var private g_operation_phase : int
 var private g_operation_session_id : string
-var private g_operation_force : bool
-var private g_operation_message : string
+// The step list drives the machine: cursor is the RUNNING step's index within
+// g_operation_steps, steps_done counts consumed steps across recovery swaps
+// (a step that failed into a recovery consumed its display slot).
+var private g_operation_steps : array<WorktreeOperationStep>
+var private g_operation_recoveries : table<string; array<WorktreeOperationStep>>
+var private g_operation_cursor : int
+var private g_operation_steps_done : int
 
 def public repository_default_config_path : string {
     var base : string
@@ -948,6 +982,13 @@ def private classify_failure(message : string; var hint : string&;
     }
 }
 
+def private operation_clear_steps() {
+    delete g_operation_steps
+    delete g_operation_recoveries
+    g_operation_cursor = 0
+    g_operation_steps_done = 0
+}
+
 def private operation_fail(message : string) {
     g_operation.state = "failed"
     g_operation.error = message
@@ -960,7 +1001,7 @@ def private operation_fail(message : string) {
     if (!empty(g_operation_session_id)) {
         let _ = watcher_terminate(g_operation_session_id, "operation failed")
     }
-    g_operation_phase = 0
+    operation_clear_steps()
     operation_log("ERROR: {message}")
     operation_touch()
 }
@@ -969,17 +1010,17 @@ def private operation_finish() {
     g_operation.state = "ok"
     g_operation.step = "done"
     g_operation.step_index = g_operation.step_count
-    g_operation_phase = 0
     g_operation_session_id = ""
+    operation_clear_steps()
     operation_touch()
     let _ = repository_refresh(g_operation.repository_id)
 }
 
-def private operation_launch(argv : array<string>; kind, step : string;
-                             step_index : int) {
-    g_operation.step = step
-    g_operation.step_index = step_index
-    operation_log("$ " + join(argv, " "))
+def private operation_launch_step() {
+    let index = g_operation_cursor
+    g_operation.step = g_operation_steps[index].step_label
+    g_operation.step_index = g_operation_steps_done + 1
+    operation_log("$ " + join(g_operation_steps[index].argv, " "))
     operation_touch()
     let repository_index = find_repository(g_operation.repository_id)
     if (repository_index < 0 || g_repositories[repository_index] == null) {
@@ -987,15 +1028,19 @@ def private operation_launch(argv : array<string>; kind, step : string;
         return
     }
     var launch_error : string
-    g_operation_session_id = launch_git(g_repositories[repository_index], argv,
-        kind, g_operation.worktree_path, launch_error)
+    g_operation_session_id = launch_git(g_repositories[repository_index],
+        g_operation_steps[index].argv, g_operation_steps[index].kind,
+        g_operation.worktree_path, launch_error,
+        g_operation_steps[index].timeout_ms, g_operation_steps[index].env)
     // Publish the session id even on failure: the terminal is where the full
     // output lives, and a failed step is exactly when it is wanted.
     g_operation.session_id = g_operation_session_id
     if (empty(g_operation_session_id)) operation_fail(launch_error)
 }
 
-def private operation_begin(kind, repository_id, worktree_path : string) : string {
+def private operation_start(kind, repository_id, worktree_path : string;
+                            var steps : array<WorktreeOperationStep>;
+                            var recoveries : table<string; array<WorktreeOperationStep>>) : string {
     if (g_operation.state == "running") {
         return "another worktree operation is already running"
     }
@@ -1003,12 +1048,99 @@ def private operation_begin(kind, repository_id, worktree_path : string) : strin
     if (repository_index < 0 || g_repositories[repository_index] == null) {
         return "unknown repository"
     }
+    if (empty(steps)) return "operation has no steps"
     delete g_operation.log
     g_operation = WorktreeOperation(kind = kind, repository_id = repository_id,
         worktree_path = worktree_path, state = "running", step = "starting",
-        step_count = 2, revision = g_operation.revision + 1l)
-    g_operation_phase = 1
+        step_count = length(steps), revision = g_operation.revision + 1l)
+    operation_clear_steps()
+    g_operation_steps <- steps
+    g_operation_recoveries <- recoveries
+    operation_launch_step()
     return ""
+}
+
+def public repository_operation_remove_steps(checkout, worktree_path : string;
+                                             force : bool;
+                                             var steps : array<WorktreeOperationStep>&;
+                                             var recoveries : table<string; array<WorktreeOperationStep>>&) {
+    //! The retire step list. Recovery graph: a precheck that finds no .git
+    //! skips to the forced removal (nothing left to protect); a removal git
+    //! refuses because .git is gone falls through to `worktree prune`.
+    delete steps
+    delete recoveries
+    let remove_recover_log = ("git cannot remove a worktree with no .git; " +
+        "pruning the stale registration instead")
+    var remove_step <- WorktreeOperationStep(
+        argv <- ["git", "-C", checkout, "worktree", "remove", worktree_path],
+        step_label = "removing worktree", kind = "git-worktree-remove",
+        command_name = "git worktree remove",
+        recover_match = "validation failed", recover_name = "prune",
+        recover_log = remove_recover_log)
+    if (force) {
+        // force skips the dirty check entirely; that IS the escape, and
+        // re-asking would only stall the delete the user already accepted the
+        // cost of.
+        remove_step.argv <- ["git", "-C", checkout, "worktree", "remove",
+            "--force", worktree_path]
+        remove_step.step_label = "removing worktree (forced)"
+        steps |> emplace(remove_step)
+    } else {
+        var precheck <- WorktreeOperationStep(
+            argv <- ["git", "-C", worktree_path, "status", "--porcelain"],
+            step_label = "checking for uncommitted work",
+            kind = "git-worktree-precheck", command_name = "git status",
+            expectation = "empty_output",
+            expect_message = "uncommitted or untracked work is present",
+            recover_match = "not a git repository",
+            recover_name = "force_remove",
+            recover_log = ("working tree is already gone; " +
+                "removing the stale registration"))
+        steps |> emplace(precheck)
+        steps |> emplace(remove_step)
+        // A worktree whose .git is already gone has NO working tree left to
+        // protect — which is exactly what the dirty guard exists for. This is
+        // the half-removed state a previous failed delete leaves behind, and
+        // refusing to clean it up would strand the user forever.
+        var forced <- WorktreeOperationStep(
+            argv <- ["git", "-C", checkout, "worktree", "remove", "--force",
+                worktree_path],
+            step_label = "removing a worktree whose files are already gone",
+            kind = "git-worktree-remove", command_name = "git worktree remove",
+            recover_match = "validation failed", recover_name = "prune",
+            recover_log = remove_recover_log)
+        var force_list : array<WorktreeOperationStep>
+        force_list |> emplace(forced)
+        recoveries["force_remove"] <- force_list
+    }
+    // Git refuses to remove a worktree whose .git is already gone, even with
+    // --force. `prune` is the command for that state, and it is the only way
+    // the app can finish a job a previous failure left half-done. It touches
+    // administrative metadata only.
+    var prune <- WorktreeOperationStep(
+        argv <- ["git", "-C", checkout, "worktree", "prune"],
+        step_label = "pruning the stale registration",
+        kind = "git-worktree-prune", command_name = "git worktree prune",
+        require_folder_gone = true)
+    var prune_list : array<WorktreeOperationStep>
+    prune_list |> emplace(prune)
+    recoveries["prune"] <- prune_list
+}
+
+def public repository_operation_commit_wip_steps(worktree_path, message : string;
+                                                 var steps : array<WorktreeOperationStep>&) {
+    delete steps
+    var add_step <- WorktreeOperationStep(
+        argv <- ["git", "-C", worktree_path, "add", "-A"],
+        step_label = "staging every change", kind = "git-wip-add",
+        command_name = "git add")
+    steps |> emplace(add_step)
+    var commit_step <- WorktreeOperationStep(
+        argv <- ["git", "-C", worktree_path, "commit", "--no-verify", "-m",
+            message],
+        step_label = "committing to the branch", kind = "git-wip-commit",
+        command_name = "git commit")
+    steps |> emplace(commit_step)
 }
 
 def public repository_operation_remove_worktree(repository_id, worktree_path : string;
@@ -1016,35 +1148,25 @@ def public repository_operation_remove_worktree(repository_id, worktree_path : s
     //! Starts the guarded removal on the task-session rail. Returns "" when it
     //! STARTED — the outcome arrives through repository_operation_json.
     let repository_index = find_repository(repository_id)
-    if (repository_index >= 0 && g_repositories[repository_index] != null) {
-        let checkout = g_repositories[repository_index].snapshot.record.checkout_path
-        if (repository_same_worktree_identity(worktree_path, checkout)) {
-            return "the main checkout cannot be deleted"
-        }
-        let worktree_index = find_worktree(g_repositories[repository_index],
-            worktree_path)
-        if (worktree_index >= 0
-                && g_repositories[repository_index].snapshot.worktrees[worktree_index].is_main) {
-            return "the main checkout cannot be deleted"
-        }
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
     }
-    let begin_error = operation_begin("remove", repository_id, worktree_path)
-    if (!empty(begin_error)) return begin_error
-    g_operation_force = force
-    // force skips the dirty check entirely; that IS the escape, and re-asking
-    // would only stall the delete the user already accepted the cost of.
-    if (force) {
-        g_operation.step_count = 1
-        g_operation_phase = 2
-        operation_launch(["git", "-C",
-            g_repositories[find_repository(repository_id)].snapshot.record.checkout_path,
-            "worktree", "remove", "--force", worktree_path],
-            "git-worktree-remove", "removing worktree (forced)", 1)
-    } else {
-        operation_launch(["git", "-C", worktree_path, "status", "--porcelain"],
-            "git-worktree-precheck", "checking for uncommitted work", 1)
+    let checkout = g_repositories[repository_index].snapshot.record.checkout_path
+    if (repository_same_worktree_identity(worktree_path, checkout)) {
+        return "the main checkout cannot be deleted"
     }
-    return ""
+    let worktree_index = find_worktree(g_repositories[repository_index],
+        worktree_path)
+    if (worktree_index >= 0
+            && g_repositories[repository_index].snapshot.worktrees[worktree_index].is_main) {
+        return "the main checkout cannot be deleted"
+    }
+    var steps : array<WorktreeOperationStep>
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    repository_operation_remove_steps(checkout, worktree_path, force, steps,
+        recoveries)
+    return operation_start("remove", repository_id, worktree_path, steps,
+        recoveries)
 }
 
 def public repository_operation_commit_wip(repository_id, worktree_path,
@@ -1061,12 +1183,11 @@ def public repository_operation_commit_wip(repository_id, worktree_path,
     if (empty(g_repositories[repository_index].snapshot.worktrees[worktree_index].branch)) {
         return "detached HEAD: a commit here would not be on any branch"
     }
-    let begin_error = operation_begin("commit_wip", repository_id, worktree_path)
-    if (!empty(begin_error)) return begin_error
-    g_operation_message = message
-    operation_launch(["git", "-C", worktree_path, "add", "-A"],
-        "git-wip-add", "staging every change", 1)
-    return ""
+    var steps : array<WorktreeOperationStep>
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    repository_operation_commit_wip_steps(worktree_path, message, steps)
+    return operation_start("commit_wip", repository_id, worktree_path, steps,
+        recoveries)
 }
 
 def public repository_operation_cancel : string {
@@ -1079,8 +1200,8 @@ def public repository_operation_cancel : string {
     }
     g_operation.state = "cancelled"
     g_operation.step = "cancelled"
-    g_operation_phase = 0
     g_operation_session_id = ""
+    operation_clear_steps()
     operation_log("cancelled by user")
     operation_touch()
     let _ = repository_refresh(g_operation.repository_id)
@@ -1088,102 +1209,59 @@ def public repository_operation_cancel : string {
 }
 
 def private advance_operation() {
-    if (g_operation_phase == 0 || empty(g_operation_session_id)) return
+    if (g_operation.state != "running" || empty(g_operation_session_id)
+            || g_operation_cursor >= length(g_operation_steps)) return
     let task <- poll_task(g_operation_session_id)
     if (!task.ready) return
     let output = strip(task.output)
     operation_log(output)
-    let checkout_index = find_repository(g_operation.repository_id)
-    let checkout = (checkout_index >= 0 && g_repositories[checkout_index] != null
-        ? g_repositories[checkout_index].snapshot.record.checkout_path : "")
-    if (g_operation.kind == "remove") {
-        if (g_operation_phase == 1) {
-            if (task.exit_code != 0l) {
-                // A worktree whose .git is already gone has NO working tree
-                // left to protect — which is exactly what the dirty guard
-                // exists for. This is the half-removed state a previous failed
-                // delete leaves behind, and refusing to clean it up would
-                // strand the user forever. Proceed to the forced removal.
-                if (find(to_lower(output), "not a git repository") >= 0) {
-                    operation_log("working tree is already gone; " +
-                        "removing the stale registration")
-                    g_operation_phase = 2
-                    operation_launch(["git", "-C", checkout, "worktree",
-                        "remove", "--force", g_operation.worktree_path],
-                        "git-worktree-remove",
-                        "removing a worktree whose files are already gone", 2)
-                    return
-                }
-                // Git's own words, not our paraphrase of its exit code.
-                operation_fail(empty(output)
-                    ? "git status exited {task.exit_code}" : output)
-                return
-            }
-            if (!empty(output)) {
-                operation_fail("uncommitted or untracked work is present")
-                return
-            }
-            g_operation_phase = 2
-            operation_launch(["git", "-C", checkout, "worktree", "remove",
-                g_operation.worktree_path], "git-worktree-remove",
-                "removing worktree", 2)
+    let cursor = g_operation_cursor
+    if (task.exit_code != 0l && g_operation_steps[cursor].expectation != "tolerate") {
+        let recover_name = g_operation_steps[cursor].recover_name
+        if (!empty(g_operation_steps[cursor].recover_match)
+                && find(to_lower(output),
+                    g_operation_steps[cursor].recover_match) >= 0
+                && key_exists(g_operation_recoveries, recover_name)) {
+            operation_log(g_operation_steps[cursor].recover_log)
+            // The failed step consumed its display slot; the recovery list
+            // continues the numbering from there.
+            g_operation_steps_done++
+            var recovery_steps <- g_operation_recoveries[recover_name]
+            g_operation_recoveries |> erase(recover_name)
+            g_operation_steps <- recovery_steps
+            g_operation_cursor = 0
+            g_operation.step_count = (g_operation_steps_done
+                + length(g_operation_steps))
+            operation_launch_step()
             return
         }
-        if (g_operation_phase == 2 && task.exit_code != 0l) {
-            // Git refuses to remove a worktree whose .git is already gone,
-            // even with --force. `prune` is the command for that state, and
-            // it is the only way the app can finish a job a previous failure
-            // left half-done. It touches administrative metadata only.
-            if (find(to_lower(output), "validation failed") >= 0) {
-                operation_log("git cannot remove a worktree with no .git; " +
-                    "pruning the stale registration instead")
-                g_operation_phase = 3
-                g_operation.step_count = 3
-                operation_launch(["git", "-C", checkout, "worktree", "prune"],
-                    "git-worktree-prune",
-                    "pruning the stale registration", 3)
-                return
-            }
-            operation_fail(empty(output)
-                ? "git worktree remove exited {task.exit_code}" : output)
-            return
-        }
-        if (task.exit_code != 0l) {
-            operation_fail(empty(output)
-                ? "git worktree prune exited {task.exit_code}" : output)
-            return
-        }
+        // Git's own words, not our paraphrase of its exit code.
+        operation_fail(empty(output)
+            ? "{g_operation_steps[cursor].command_name} exited {task.exit_code}"
+            : output)
+        return
+    }
+    if (g_operation_steps[cursor].expectation == "empty_output" && !empty(output)) {
+        operation_fail(g_operation_steps[cursor].expect_message)
+        return
+    }
+    if (g_operation_steps[cursor].require_folder_gone) {
         var folder_stat : FStat
-        let folder_left = (g_operation_phase == 3
-            && stat(g_operation.worktree_path, folder_stat)
-            && folder_stat.is_dir)
-        if (folder_left) {
+        if (stat(g_operation.worktree_path, folder_stat) && folder_stat.is_dir) {
             // Registration cleared, folder still there: say exactly that,
             // rather than reporting a success the user can see is not one.
             operation_fail("the stale registration is gone, but the folder " +
                 "{g_operation.worktree_path} could not be deleted")
             return
         }
+    }
+    g_operation_steps_done++
+    g_operation_cursor++
+    if (g_operation_cursor >= length(g_operation_steps)) {
         operation_finish()
         return
     }
-    if (g_operation_phase == 1) {
-        if (task.exit_code != 0l) {
-            operation_fail(empty(output)
-                ? "git add exited {task.exit_code}" : output)
-            return
-        }
-        g_operation_phase = 2
-        operation_launch(["git", "-C", g_operation.worktree_path, "commit",
-            "--no-verify", "-m", g_operation_message], "git-wip-commit",
-            "committing to the branch", 2)
-        return
-    }
-    if (task.exit_code != 0l) {
-        operation_fail(empty(output) ? "git commit exited {task.exit_code}" : output)
-        return
-    }
-    operation_finish()
+    operation_launch_step()
 }
 
 def public repository_commit_worktree_wip(repository_id, worktree_path,
@@ -1402,15 +1480,26 @@ def public repository_commit_file_view_argv(worktree_path : string;
 def private launch_git(var runtime : RepositoryRuntime?; argv : array<string>;
                        kind, worktree_path : string;
                        var error_message : string&) : string {
+    let no_env : array<string>
+    return launch_git(runtime, argv, kind, worktree_path, error_message,
+        0l, no_env)
+}
+
+def private launch_git(var runtime : RepositoryRuntime?; argv : array<string>;
+                       kind, worktree_path : string;
+                       var error_message : string&;
+                       timeout_ms : int64; env : array<string>) : string {
     var inscope request = WatcherLaunchRequest(
         cwd = runtime.snapshot.record.checkout_path,
         display_name = "Git: " + join(argv, " "), kind = kind,
         target_id = runtime.snapshot.record.target_id,
         repository_id = runtime.snapshot.record.id,
         worktree_path = worktree_path,
-        columns = GIT_CAPTURE_COLUMNS, rows = GIT_CAPTURE_ROWS, timeout_ms = GIT_TIMEOUT_MS,
+        columns = GIT_CAPTURE_COLUMNS, rows = GIT_CAPTURE_ROWS,
+        timeout_ms = timeout_ms > 0l ? timeout_ms : GIT_TIMEOUT_MS,
         drain_quiet_ms = WATCHER_STRUCTURED_DRAIN_QUIET_MS)
     request.argv := argv
+    request.env := env
     let _pruned = watcher_prune_completed_sessions(kind,
         runtime.snapshot.record.id, worktree_path)
     let result = watcher_launch(request)

@@ -78,6 +78,9 @@ struct public WatcherLaunchRequest {
     timeout_ms : int64
     // 0 keeps the conservative interactive default (DEFAULT_DRAIN_QUIET_MS).
     drain_quiet_ms : int64
+    // Extra KEY=VALUE entries merged over the inherited environment for the
+    // child process (in-process ConPTY launches only).
+    env : array<string>
 }
 
 def public watcher_kind_is_agent(kind : string) : bool => starts_with(kind, "agent-")
@@ -806,7 +809,7 @@ def private pump_host_session(var session : WatcherSession?; now_ms : int64) {
     link->process_event_que()
     if (!empty(link.received)) {
         session.last_data_ms = now_ms
-        session.output_bytes += int64(length(link.received))
+        session.output_bytes += long_length(link.received)
         retain_raw_output(session, link.received)
         if (session.output_file != null) {
             let _ = fwrite(session.output_file, link.received)
@@ -966,7 +969,7 @@ def private seed_ring_from_journal(var session : WatcherSession?) : int64 {
             if (length(chunk) < 64 * 1024) chunk |> resize(64 * 1024)
         }
     }
-    session.output_bytes = session.raw_history_start + int64(length(session.raw_history))
+    session.output_bytes = session.raw_history_start + long_length(session.raw_history)
     terminal_feed_bytes(session.terminal, session.raw_history)
     return total
 }
@@ -1161,6 +1164,9 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     persisted_request.columns = columns
     persisted_request.rows = rows
     persisted_request.agent_token = ""
+    // Env riders never persist: the value can be a secret, and session.json
+    // outlives the process that needed it.
+    persisted_request.env |> clear()
     if (!write_text_file(path_join(session_dir, "session.json"), sprint_json(persisted_request, true))) {
         unsafe { delete session }
         return WatcherLaunchResult(error = "could not write session metadata")
@@ -1206,8 +1212,14 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         }
     } else {
         if (!empty(child_argv)) {
-            var inscope launched <- terminal_launch_argv(child_argv, request.cwd, columns, rows)
-            session.terminal := launched
+            if (!empty(request.env)) {
+                var inscope launched <- terminal_launch_argv_env(child_argv,
+                    request.cwd, request.env, columns, rows)
+                session.terminal := launched
+            } else {
+                var inscope launched <- terminal_launch_argv(child_argv, request.cwd, columns, rows)
+                session.terminal := launched
+            }
         } else {
             var inscope launched <- terminal_launch(request.command_line, request.cwd, columns, rows)
             session.terminal := launched
@@ -1287,7 +1299,7 @@ def public watcher_tick(maximum_bytes_per_session : int = 64 * 1024) {
         let status = terminal_poll(session.terminal, bounded_bytes)
         if (status == TerminalPollStatus.data) {
             session.last_data_ms = now_ms
-            session.output_bytes += int64(length(session.terminal.read_buffer))
+            session.output_bytes += long_length(session.terminal.read_buffer)
             retain_raw_output(session, session.terminal.read_buffer)
             if (session.output_file != null) {
                 let _ = fwrite(session.output_file, session.terminal.read_buffer)
@@ -1332,7 +1344,7 @@ def public watcher_output_since(session_id : string; requested_offset : int64;
         let source = int(offset - session.raw_history_start)
         result.bytes |> resize(int(count))
         unsafe {
-            memcpy(addr(result.bytes[0]), addr(session.raw_history[source]), int(count))
+            memcpy(addr(result.bytes[0]), addr(session.raw_history[source]), count)
         }
     }
     result.next_offset = offset + count
@@ -1596,7 +1608,7 @@ def private input_session(var session : WatcherSession?; text : string; client_i
         let error = session_transport_error(session)
         return empty(error) ? "input write failed" : error
     }
-    session.input_bytes += int64(length(text))
+    session.input_bytes += long_length(text)
     return ""
 }
 
@@ -1770,7 +1782,7 @@ def private flush_pending_notifications(var session : WatcherSession?) {
     while (delivered < length(session.pending_notifications)) {
         let pending & = unsafe(session.pending_notifications[delivered])
         if (!session_write_text(session, pending.text)) break
-        session.input_bytes += int64(length(pending.text))
+        session.input_bytes += long_length(pending.text)
         if (!empty(pending.message_id)) {
             let _ = watcher_mailbox_set_notification(session.id, pending.message_id)
             append_event(session, "mailbox_notified",
