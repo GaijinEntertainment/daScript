@@ -22,6 +22,7 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require live/live_commands
 require ./rich_tokens.das public
+require ./changelist_selection.das public
 require ./watcher_core.das
 require ./repository_core.das
 require ./herd_sessions.das
@@ -103,6 +104,15 @@ struct WatcherWorktreeCommitWipResult {
     @rename = "type" _type : string
     ok : bool
     detail : string
+    repository_id : string
+    worktree_path : string
+}
+
+struct WatcherChangelistActionResult {
+    @rename = "type" _type : string
+    ok : bool
+    detail : string
+    action : string
     repository_id : string
     worktree_path : string
 }
@@ -656,6 +666,10 @@ var g_tree_model_identity : string
 var g_tree_focus_ref : string
 
 var g_inspector = GitInspectorState()
+
+// The Changelist multiselect (changelist_selection.das) — one set, scoped to
+// the worktree the Changes view is showing.
+var g_changelist_selection = GitChangelistSelection()
 
 var g_prepare_worker = InspectorPrepareWorker()
 

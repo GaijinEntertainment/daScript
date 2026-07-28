@@ -491,6 +491,55 @@ def test_repository_operation_step_lists(t : T?) {
         delete steps
         delete recoveries
     }
+    t |> run("multi-path actions build one literal argv or none at all") <| @(t : T?) {
+        var argv : array<string>
+        let paths <- ["src/main.das", "with space.txt", ":(glob)**.das"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "stage", argv), "")
+        t |> equal(argv[1], "--literal-pathspecs")
+        t |> equal(argv[4], "add")
+        t |> equal(argv[5], "--")
+        t |> equal(argv[6], "src/main.das")
+        t |> equal(argv[7], "with space.txt")
+        t |> equal(argv[8], ":(glob)**.das")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "unstage", argv), "")
+        t |> equal(argv[4], "reset")
+        t |> equal(argv[6], "HEAD")
+        t |> equal(argv[7], "--")
+        t |> equal(argv[length(argv) - 1], ":(glob)**.das")
+        // One bad path fails the WHOLE action — never a partial argv.
+        let poisoned <- ["src/main.das", "../outside.txt"]
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", poisoned, "stage", argv)))
+        t |> equal(length(argv), 0, "a rejected action leaves argv empty")
+        let no_paths : array<string>
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", no_paths, "stage", argv)))
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "sideload", argv)),
+            "unknown actions still error rather than building an argv")
+    }
+    t |> run("changelist actions are one rail step with a counted label") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        let paths <- ["a.das", "b.das"]
+        t |> equal(repository_operation_changelist_steps(
+            "D:/Work/tree", "stage", paths, steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].step_label, "staging 2 files")
+        t |> equal(steps[0].kind, "git-changelist-stage")
+        t |> equal(steps[0].argv[4], "add")
+        let single <- ["a.das"]
+        t |> equal(repository_operation_changelist_steps(
+            "D:/Work/tree", "unstage", single, steps), "")
+        t |> equal(steps[0].step_label, "unstaging 1 file")
+        t |> equal(steps[0].argv[4], "reset")
+        let poisoned <- ["../outside.txt"]
+        t |> success(!empty(repository_operation_changelist_steps(
+            "D:/Work/tree", "stage", poisoned, steps)))
+        t |> equal(length(steps), 0)
+        delete steps
+    }
     t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
         var steps : array<WorktreeOperationStep>
         repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",

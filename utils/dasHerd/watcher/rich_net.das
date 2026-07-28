@@ -62,6 +62,8 @@ class WatcherRichClient : HvWebSocketClient {
     git_action_loading : bool
     git_action_file_path : string
     git_action_status : string
+    // A changelist action the watcher refused to start (rail busy, bad path).
+    changelist_notice : string
     git_failure_revisions : table<string; int64>
     git_failure_baseline_ready : bool
     connect_count : int64
@@ -297,6 +299,14 @@ class WatcherRichClient : HvWebSocketClient {
             if (sscan_json(body, incoming)) {
                 delete operation.log
                 operation <- incoming.data
+            }
+        } elif (envelope._type == "changelist_action_result") {
+            var incoming = WatcherChangelistActionResult()
+            if (sscan_json(body, incoming)) {
+                // A refusal to START (rail busy, bad path) — a failure of the
+                // running operation itself rides the operation broadcast.
+                changelist_notice = (incoming.ok ? ""
+                    : clone_string("Could not {incoming.action}: {incoming.detail}"))
             }
         } elif (envelope._type == "worktree_commit_wip_result") {
             var incoming = WatcherWorktreeCommitWipResult()
@@ -587,6 +597,21 @@ class WatcherRichClient : HvWebSocketClient {
     def request_worktree_operation_cancel() {
         if (!connected) return
         send("\{\"op\":\"worktree_operation_cancel\"\}")
+    }
+
+    def changelist_action(repository_id, worktree_path, action : string;
+                          paths : array<string>) {
+        //! Multi-file stage/unstage on the watcher's operation rail. Outcome
+        //! rides the worktree_operation broadcast; a refusal to start comes
+        //! back as changelist_action_result.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(paths)) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_action\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"action\":" +
+            "{sprint_json(action, false)},\"worktree_paths\":" +
+            "{sprint_json(paths, false)}\}")
     }
 
     def request_worktree_commit_wip(repository_id, worktree_path,

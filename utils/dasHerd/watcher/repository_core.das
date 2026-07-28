@@ -608,26 +608,41 @@ def public repository_build_commit_file_diff_argv(worktree_path : string;
     return ""
 }
 
+def public repository_build_files_action_argv(worktree_path : string;
+                                              paths : array<string>;
+                                              action : string;
+                                              var argv : array<string>&) : string {
+    //! One git command over MANY worktree-relative paths. Every path passes
+    //! the escape check or the WHOLE action fails with an empty argv — never
+    //! a partial argv.
+    delete argv
+    if (empty(paths)) return "no files were named"
+    for (file_path in paths) {
+        if (!repository_valid_relative_file_path(file_path)) {
+            return "invalid worktree-relative file path: {file_path}"
+        }
+    }
+    var inscope command : array<string>
+    if (action == "stage") {
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+            "add", "--"]
+    } elif (action == "unstage") {
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+            "reset", "--quiet", "HEAD", "--"]
+    } else {
+        return "file action is not implemented"
+    }
+    command |> push_from(paths)
+    argv := command
+    return ""
+}
+
 def public repository_build_file_action_argv(worktree_path : string;
                                              file_path : string;
                                              action : string;
                                              var argv : array<string>&) : string {
-    delete argv
-    if (!repository_valid_relative_file_path(file_path)) {
-        return "invalid worktree-relative file path"
-    }
-    if (action == "stage") {
-        var inscope command <- ["git", "--literal-pathspecs", "-C", worktree_path,
-            "add", "--", file_path]
-        argv := command
-    } elif (action == "unstage") {
-        var inscope command <- ["git", "--literal-pathspecs", "-C", worktree_path,
-            "reset", "--quiet", "HEAD", "--", file_path]
-        argv := command
-    } else {
-        return "file action is not implemented"
-    }
-    return ""
+    var inscope paths <- [file_path]
+    return repository_build_files_action_argv(worktree_path, paths, action, argv)
 }
 
 def public repository_file_action_argv(repository_id : string;
@@ -902,6 +917,8 @@ def public repository_remove_worktree(repository_id, worktree_path : string;
 
 def public repository_operation_revision : int64 => g_operation.revision
 
+def public repository_operation_busy : bool => g_operation.state == "running"
+
 def public repository_operation_json : string => sprint_json(g_operation, false)
 
 def private operation_touch() {
@@ -1014,6 +1031,10 @@ def private operation_finish() {
     operation_clear_steps()
     operation_touch()
     let _ = repository_refresh(g_operation.repository_id)
+    // Staging changes what the PR view shows; a removed worktree makes this a
+    // harmless "unknown worktree".
+    let _review = repository_review(g_operation.repository_id,
+        g_operation.worktree_path)
 }
 
 def private operation_launch_step() {
@@ -1043,6 +1064,11 @@ def private operation_start(kind, repository_id, worktree_path : string;
                             var recoveries : table<string; array<WorktreeOperationStep>>) : string {
     if (g_operation.state == "running") {
         return "another worktree operation is already running"
+    }
+    // The single-flight file action (PR view) writes the same index this rail
+    // is about to touch; two concurrent gits fight over .git/index.lock.
+    if (watcher_kind_running("git-stage") || watcher_kind_running("git-unstage")) {
+        return "a Git file action is still running; wait for it to finish"
     }
     let repository_index = find_repository(repository_id)
     if (repository_index < 0 || g_repositories[repository_index] == null) {
@@ -1141,6 +1167,49 @@ def public repository_operation_commit_wip_steps(worktree_path, message : string
         step_label = "committing to the branch", kind = "git-wip-commit",
         command_name = "git commit")
     steps |> emplace(commit_step)
+}
+
+def public repository_operation_changelist_steps(worktree_path, action : string;
+                                                 paths : array<string>;
+                                                 var steps : array<WorktreeOperationStep>&) : string {
+    //! One rail step per changelist action. Stage and unstage both take the
+    //! index lock, which is why these run on the SAME rail as every other
+    //! index-touching operation instead of a parallel single-flight guard.
+    delete steps
+    var argv : array<string>
+    let argv_error = repository_build_files_action_argv(worktree_path, paths,
+        action, argv)
+    if (!empty(argv_error)) return argv_error
+    let count = length(paths)
+    let files_word = count == 1 ? "file" : "files"
+    var step <- WorktreeOperationStep(
+        argv <- argv,
+        step_label = "{action == "stage" ? "staging" : "unstaging"} {count} {files_word}",
+        kind = "git-changelist-{action}",
+        command_name = action == "stage" ? "git add" : "git reset")
+    steps |> emplace(step)
+    return ""
+}
+
+def public repository_operation_changelist(repository_id, worktree_path,
+                                           action : string;
+                                           paths : array<string>) : string {
+    //! Starts a multi-file changelist action on the operation rail. Returns
+    //! "" when it STARTED — the outcome rides the operation broadcast.
+    let repository_index = find_repository(repository_id)
+    if (repository_index < 0 || g_repositories[repository_index] == null) {
+        return "unknown repository"
+    }
+    if (find_worktree(g_repositories[repository_index], worktree_path) < 0) {
+        return "unknown worktree"
+    }
+    var steps : array<WorktreeOperationStep>
+    let steps_error = repository_operation_changelist_steps(worktree_path,
+        action, paths, steps)
+    if (!empty(steps_error)) return steps_error
+    var recoveries : table<string; array<WorktreeOperationStep>>
+    return operation_start("changelist_{action}", repository_id, worktree_path,
+        steps, recoveries)
 }
 
 def public repository_operation_remove_worktree(repository_id, worktree_path : string;

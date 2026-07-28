@@ -834,6 +834,20 @@ class DasHerdWatcherServer : HvWebServer {
                 "another Git file action is still running")
             return
         }
+        // The operation rail may be mid-`git add`; a second git would fight
+        // it over .git/index.lock. Refuse rather than queue: the click is
+        // cheap to repeat, a wedged index lock is not.
+        if (repository_operation_busy()) {
+            client.action_request_id = incoming.request_id
+            client.action_repository_id = incoming.repository_id
+            client.action_worktree_path = incoming.worktree_path
+            client.action_file_path = incoming.file_path
+            client.action = incoming.action
+            client.action_session_id = ""
+            self.send_git_file_action(client, false, "failed",
+                "a worktree operation is running; try again when it finishes")
+            return
+        }
         client.action_request_id = incoming.request_id
         client.action_repository_id = incoming.repository_id
         client.action_worktree_path = incoming.worktree_path
@@ -1686,6 +1700,20 @@ class DasHerdWatcherServer : HvWebServer {
                 return
             }
             send_herd_sessions(client, true)
+        } elif (incoming.op == "changelist_action") {
+            // Multi-file stage/unstage on the operation rail: one serialized
+            // git per repository, progress and failure ride the operation
+            // broadcast the retire dialog already watches.
+            let start_error = repository_operation_changelist(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.action, incoming.worktree_paths)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":{sprint_json(incoming.action, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
         } elif (incoming.op == "worktree_commit_wip") {
             let detail = repository_operation_commit_wip(incoming.repository_id,
                 incoming.worktree_path, incoming.text)

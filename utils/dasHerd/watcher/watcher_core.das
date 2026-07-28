@@ -1601,6 +1601,19 @@ def public watcher_prune_completed_sessions(kind : string;
     return removed
 }
 
+def public watcher_kind_running(kind : string) : bool {
+    //! True while any session of this kind is still producing output. The
+    //! index-lock guard between the single-flight file action and the
+    //! operation rail queries THIS instead of keeping a flag that orphaned
+    //! sessions would leave stuck.
+    for (session in g_sessions) {
+        if (session != null && session.kind == kind && !session.drained) {
+            return true
+        }
+    }
+    return false
+}
+
 def private input_session(var session : WatcherSession?; text : string; client_id : int) : string {
     if (session.controller_id != 0 && session.controller_id != client_id) return "controller lease is held by another client"
     if (session.state != "running" || session.drained) return "session is not running"

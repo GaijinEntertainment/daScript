@@ -52,6 +52,19 @@ var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
 var GIT_FILE_ROW : table<int; ToggleState>
 
+// Changes-view rows keep their OWN identity tables — sharing GIT_FILE_ROW
+// with the PR views would collide two widgets on one identity the frame the
+// user switches tabs.
+var GIT_STATUS_ROW : table<int; ToggleState>
+
+var GIT_STATUS_ROW_POPUP : table<int; PopupContextItemState>
+
+var GIT_STATUS_STAGE_MENU : table<int; ToggleState>
+
+var GIT_STATUS_UNSTAGE_MENU : table<int; ToggleState>
+
+var GIT_GROUP_CHECK : table<int; ToggleState>
+
 var GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
 
 var GIT_COMMIT_AUTHOR_TEXT : table<int; NarrativeState>
@@ -360,42 +373,174 @@ def focused_file_label(repository_id, worktree_path,
         ? "[AGENT] {file_path}" : file_path)
 }
 
+def changelist_rail_busy : bool {
+    // The operation rail is one slot, and the PR view's single-flight action
+    // takes the same index lock — either one running disables the verbs.
+    return (g_client != null
+        && (g_client.git_action_loading || g_client.operation.state == "running"))
+}
+
+def changelist_selection_actions(repository : RepositorySnapshot const;
+                                 worktree : WorktreeState const;
+                                 var stage_paths : array<string>&;
+                                 var unstage_paths : array<string>&) {
+    //! Splits the current selection into what each verb can act on: stage
+    //! takes CONFLICTS (that is how a resolution is marked), MODIFIED and
+    //! UNTRACKED; unstage takes STAGED. Groups are re-derived from the LIVE
+    //! status codes, never cached — a refresh may have reclassified a row.
+    delete stage_paths
+    delete unstage_paths
+    for (file in repository.files) {
+        if (file.worktree_path != worktree.path) continue
+        for (group in range(4)) {
+            if (!git_file_in_group(file, group)) continue
+            if (selection_contains(g_changelist_selection,
+                    selection_key(git_group_scope(group), file.path))) {
+                if (group == 1) {
+                    unstage_paths |> push(file.path)
+                } else {
+                    stage_paths |> push(file.path)
+                }
+            }
+            break
+        }
+    }
+}
+
+def draw_changelist_row_menu(repository : RepositorySnapshot const;
+                             worktree : WorktreeState const;
+                             file_row : int; busy : bool) {
+    var stage_paths : array<string>
+    var unstage_paths : array<string>
+    changelist_selection_actions(repository, worktree, stage_paths,
+        unstage_paths)
+    let stage_count = length(stage_paths)
+    let unstage_count = length(unstage_paths)
+    let stage_word = stage_count == 1 ? "file" : "files"
+    let unstage_word = unstage_count == 1 ? "file" : "files"
+    if (menu_item(GIT_STATUS_STAGE_MENU[file_row],
+            (text = "Stage {stage_count} {stage_word}", shortcut = "",
+            enabled = !busy && stage_count > 0)) && g_client != null) {
+        g_client->changelist_action(repository.record.id, worktree.path,
+            "stage", stage_paths)
+    }
+    if (menu_item(GIT_STATUS_UNSTAGE_MENU[file_row],
+            (text = "Unstage {unstage_count} {unstage_word}", shortcut = "",
+            enabled = !busy && unstage_count > 0)) && g_client != null) {
+        g_client->changelist_action(repository.record.id, worktree.path,
+            "unstage", unstage_paths)
+    }
+}
+
 def draw_git_file_group(repository : RepositorySnapshot const;
                         worktree : WorktreeState const;
                         group : int; var file_row : int&) : int {
-    var count = 0
-    for (file in repository.files) {
-        if (file.worktree_path == worktree.path && git_file_in_group(file, group)) count++
-    }
+    let comparison = git_group_scope(group)
+    let group_keys <- [for (file in repository.files);
+        selection_key(comparison, file.path);
+        where file.worktree_path == worktree.path && git_file_in_group(file, group)]
+    let count = length(group_keys)
     if (count == 0) return 0
+    let busy = changelist_rail_busy()
+    // Tri-state select-all: a click on ALL clears, anything else selects all.
+    let group_state = selection_group_state(g_changelist_selection, group_keys)
+    GIT_GROUP_CHECK[group].value = group_state == 2
+    var check_clicked = false
+    if (group_state == 1) {
+        with_item_flag(ImGuiItemFlags.None | ImGuiItemFlagsPrivate.MixedValue, true) {
+            check_clicked = checkbox(GIT_GROUP_CHECK[group], "##group-check-{group}")
+        }
+    } else {
+        check_clicked = checkbox(GIT_GROUP_CHECK[group], "##group-check-{group}")
+    }
+    if (check_clicked) {
+        selection_set_group(g_changelist_selection, repository.record.id,
+            worktree.path, group, group_keys, GIT_GROUP_CHECK[group].value)
+    }
+    same_line()
     let title = group == 0 ? "CONFLICTS" : (group == 1 ? "STAGED"
         : (group == 2 ? "MODIFIED" : "UNTRACKED"))
     text(GIT_GROUP_TITLE[group], (text = "{title}  {count}"))
     separator(GIT_GROUP_SEPARATOR[group])
-    let comparison = git_group_scope(group)
     for (file in repository.files) {
         if (file.worktree_path != worktree.path || !git_file_in_group(file, group)) continue
-        GIT_FILE_ROW[file_row].value = (g_inspector.repository_id == repository.record.id
-            && g_inspector.worktree_path == worktree.path
-            && g_inspector.file_path == file.path
-            && g_inspector.comparison == comparison)
+        let key = selection_key(comparison, file.path)
+        GIT_STATUS_ROW[file_row].value = selection_contains(
+            g_changelist_selection, key)
         let old_label = !empty(file.old_path) ? "  (from {file.old_path})" : ""
         let display_path = focused_file_label(
             repository.record.id, worktree.path, file.path)
-        if (selectable(GIT_FILE_ROW[file_row],
-                (text = "{file.code}  {display_path}{old_label}##{comparison}:{file.path}"))) {
-            ui_event("status-file-click {comparison}:{file.path}")
-            if (g_client != null) {
-                g_client->inspect_file(repository.record.id, worktree.path,
-                    file.path, comparison)
-                FILE_INSPECTOR_WIN.open = true
-                FILE_INSPECTOR_WIN.pending_raise = true
+        let row_text = "{file.code}  {display_path}{old_label}"
+        var selected = false
+        with_item_flag(ImGuiItemFlags.None | ImGuiItemFlagsPrivate.AllowOverlap, true) {
+            with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
+                selected = selectable(GIT_STATUS_ROW[file_row],
+                    (text = "{row_text}##status:{comparison}:{file.path}"))
             }
+        }
+        // Right-click on an unselected row selects it first (the file-manager
+        // convention), so the menu always acts on what the user is over.
+        if (IsItemClicked(ImGuiMouseButton.Right)
+                && !selection_contains(g_changelist_selection, key)) {
+            selection_plain_click(g_changelist_selection, repository.record.id,
+                worktree.path, group, key)
+        }
+        var action_clicked = false
+        decorate_git_file_row("status:{comparison}:{file.path}", row_text,
+            file.added_lines, file.deleted_lines, file.stats_known,
+            file.binary, group != 1,
+            busy ? "" : (group == 1 ? "minus" : "add"),
+            group == 1 ? "Unstage this file"
+                : (group == 0 ? "Stage the resolution" : "Stage this file"),
+            action_clicked)
+        if (action_clicked && g_client != null) {
+            var single <- [file.path]
+            g_client->changelist_action(repository.record.id, worktree.path,
+                group == 1 ? "unstage" : "stage", single)
+        } elif (selected) {
+            ui_event("status-file-click {comparison}:{file.path}")
+            let io & = unsafe(GetIO())
+            if (io.KeyShift) {
+                selection_range_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, group_keys, key)
+            } elif (io.KeyCtrl) {
+                selection_toggle_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, key)
+            } else {
+                selection_plain_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, key)
+                if (g_client != null) {
+                    g_client->inspect_file(repository.record.id, worktree.path,
+                        file.path, comparison)
+                    FILE_INSPECTOR_WIN.open = true
+                    FILE_INSPECTOR_WIN.pending_raise = true
+                }
+            }
+        }
+        popup_context_item(GIT_STATUS_ROW_POPUP[file_row],
+                (str_id = "status-menu:{comparison}:{file.path}",
+                flags = ImGuiPopupFlags.MouseButtonRight)) {
+            draw_changelist_row_menu(repository, worktree, file_row, busy)
         }
         file_row++
     }
     dummy(GIT_GROUP_SPACING[group], (size = float2(0.0f, GetStyle().ItemSpacing.y)))
     return count
+}
+
+def draw_git_status_groups(repository : RepositorySnapshot const;
+                           worktree : WorktreeState const) {
+    //! The Changes view: CONFLICTS / STAGED / MODIFIED / UNTRACKED with
+    //! multiselect, per-row stage/unstage, and the row context menu.
+    selection_scope(g_changelist_selection, repository.record.id, worktree.path)
+    var file_row = 0
+    var total = 0
+    for (group in range(4)) {
+        total += draw_git_file_group(repository, worktree, group, file_row)
+    }
+    if (total == 0) {
+        text_disabled("Working tree is clean - nothing to stage, discard, or commit")
+    }
 }
 
 
@@ -1078,6 +1223,19 @@ def git_changelist_status(repository : RepositorySnapshot const;
             ? "Running Git..." : g_client.git_action_status)
         return GitWindowStatus(text = action, busy = true)
     }
+    if (g_client != null && !empty(g_client.changelist_notice)) {
+        return GitWindowStatus(text = g_client.changelist_notice, error = true)
+    }
+    if (g_client != null && starts_with(g_client.operation.kind, "changelist_")) {
+        if (g_client.operation.state == "running") {
+            return GitWindowStatus(text = g_client.operation.step, busy = true)
+        }
+        if (g_client.operation.state == "failed") {
+            // The rail's failure, with git's words; the hint rides the error
+            // context menu the status line already offers.
+            return GitWindowStatus(text = g_client.operation.error, error = true)
+        }
+    }
     if (repository.refreshing) {
         return GitWindowStatus(text = "Refreshing repository...", busy = true)
     }
@@ -1139,7 +1297,19 @@ def draw_git_changelist_window() {
                     if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
                         draw_commit_files(repository, worktree)
                     } else {
-                        draw_shared_pr_files(repository, worktree)
+                        tab_bar(GIT_CHANGELIST_TABS,
+                            (text = "Changelist views", flags = ImGuiTabBarFlags.None)) {
+                            tab_item(CHANGELIST_CHANGES_TAB.PUBLIC,
+                                (text = "Changes", closable = false,
+                                flags = ImGuiTabItemFlags.None)) {
+                                draw_git_status_groups(repository, worktree)
+                            }
+                            tab_item(CHANGELIST_PR_TAB.PUBLIC,
+                                (text = "PR result", closable = false,
+                                flags = ImGuiTabItemFlags.None)) {
+                                draw_shared_pr_files(repository, worktree)
+                            }
+                        }
                     }
                     status = git_changelist_status(repository, worktree)
                 }

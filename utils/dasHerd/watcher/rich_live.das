@@ -470,6 +470,158 @@ def herder_worktree_commit_wip(input : JsonValue?) : JsonValue? {
     return JV((ok = true, branch = worktree.branch))
 }
 
+struct HerderChangelistArgs {
+    repository_id : string
+    worktree_path : string
+    mode : string
+    group : int = -1
+    path : string
+    selected : bool
+    action : string
+    paths : array<string>
+}
+
+def private changelist_target(var args : HerderChangelistArgs) {
+    // Empty scope means "the worktree the Changelist is showing".
+    if (empty(args.repository_id)) {
+        args.repository_id = g_selected_repository_id
+    }
+    if (empty(args.worktree_path)) {
+        args.worktree_path = g_selected_worktree_path
+    }
+}
+
+def private changelist_group_keys(repository : RepositorySnapshot const;
+                                  worktree_path : string; group : int) : array<string> {
+    return <- [for (file in repository.files);
+        selection_key(git_group_scope(group), file.path);
+        where file.worktree_path == worktree_path
+            && git_file_in_group(file, group)]
+}
+
+[live_command(description = "Read the Changelist Changes view: every status row (path, code, group 0-3 = conflicts/staged/modified/untracked, selected), the selection set, what stage/unstage would act on, and whether the rail is busy. Args: repository_id, worktree_path (empty = the shown worktree).")]
+def herder_changelist_state(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    for (repository in g_client.repositories) {
+        if (repository.record.id != args.repository_id) continue
+        for (worktree in repository.worktrees) {
+            if (worktree.path != args.worktree_path) continue
+            var rows : array<JsonValue?>
+            for (group in range(4)) {
+                let comparison = git_group_scope(group)
+                for (file in repository.files) {
+                    if (file.worktree_path != worktree.path
+                            || !git_file_in_group(file, group)) continue
+                    rows |> push(JV((path = file.path, code = file.code,
+                        group = group,
+                        selected = selection_contains(g_changelist_selection,
+                            selection_key(comparison, file.path)))))
+                }
+            }
+            var stage_paths : array<string>
+            var unstage_paths : array<string>
+            changelist_selection_actions(repository, worktree, stage_paths,
+                unstage_paths)
+            var stage_list <- [for (p in stage_paths); JV(p)]
+            var unstage_list <- [for (p in unstage_paths); JV(p)]
+            return JV((ok = true, repository_id = args.repository_id,
+                worktree_path = args.worktree_path,
+                selection_count = selection_count(g_changelist_selection),
+                busy = changelist_rail_busy(),
+                notice = g_client.changelist_notice,
+                stage_eligible <- stage_list,
+                unstage_eligible <- unstage_list,
+                rows <- rows))
+        }
+    }
+    return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+}
+
+[live_command(description = "Drive the Changelist selection exactly as the mouse would. Args: repository_id, worktree_path (empty = shown), mode = plain|toggle|range|group|clear, group (0-3), path (file path for plain/toggle/range), selected (for group).")]
+def herder_changelist_select(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.mode == "clear") {
+        selection_clear(g_changelist_selection)
+        return JV((ok = true, selection_count = 0))
+    }
+    for (repository in g_client.repositories) {
+        if (repository.record.id != args.repository_id) continue
+        if (args.group < 0 || args.group > 3) {
+            return JV((ok = false, error = "group must be 0-3"))
+        }
+        let key = selection_key(git_group_scope(args.group), args.path)
+        if (args.mode == "plain") {
+            selection_plain_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, key)
+        } elif (args.mode == "toggle") {
+            selection_toggle_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, key)
+        } elif (args.mode == "range") {
+            let group_keys <- changelist_group_keys(repository,
+                args.worktree_path, args.group)
+            selection_range_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, group_keys, key)
+        } elif (args.mode == "group") {
+            let group_keys <- changelist_group_keys(repository,
+                args.worktree_path, args.group)
+            selection_set_group(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, group_keys, args.selected)
+        } else {
+            return JV((ok = false, error = "unknown mode '{args.mode}'"))
+        }
+        return JV((ok = true,
+            selection_count = selection_count(g_changelist_selection)))
+    }
+    return JV((ok = false, error = "unknown repository '{args.repository_id}'"))
+}
+
+[live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage, paths (empty = derive from the current selection). Outcome rides herder_worktree_operation_state.")]
+def herder_changelist_action(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.action != "stage" && args.action != "unstage") {
+        return JV((ok = false, error = "unknown action '{args.action}'"))
+    }
+    var paths : array<string>
+    if (!empty(args.paths)) {
+        paths := args.paths
+    } else {
+        for (repository in g_client.repositories) {
+            if (repository.record.id != args.repository_id) continue
+            for (worktree in repository.worktrees) {
+                if (worktree.path != args.worktree_path) continue
+                var stage_paths : array<string>
+                var unstage_paths : array<string>
+                changelist_selection_actions(repository, worktree,
+                    stage_paths, unstage_paths)
+                if (args.action == "stage") {
+                    paths <- stage_paths
+                } else {
+                    paths <- unstage_paths
+                }
+            }
+        }
+    }
+    if (empty(paths)) {
+        return JV((ok = false,
+            error = "nothing the action could apply to; select rows or pass paths"))
+    }
+    if (changelist_rail_busy()) {
+        return JV((ok = false, error = "the operation rail is busy"))
+    }
+    g_client->changelist_action(args.repository_id, args.worktree_path,
+        args.action, paths)
+    var acted <- [for (p in paths); JV(p)]
+    return JV((ok = true, action = args.action, paths <- acted))
+}
+
 [live_command(description = "Retire a durable session: the record is ARCHIVED, never erased — it leaves the default list, keeps its events/mailbox/bundles/journal, and herder_session_restore brings it back. worktree_paths names the session's worktrees to delete in the same act (empty keeps them all). Args: herd_id, worktree_paths, force.")]
 def herder_session_retire(input : JsonValue?) : JsonValue? {
     if (g_client == null || !g_client.connected) {
