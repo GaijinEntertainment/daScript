@@ -205,18 +205,31 @@
     return lines.join('\n');
   }
 
-  // "measured YYYY-MM-DD → YYYY-MM-DD · reference @ shas" — the when-and-against-what line
+  // "measured YYYY-MM-DD → YYYY-MM-DD · reference @ shas" — the when-and-against-what line.
+  // Commit abbreviation length varies by reporting tool (llama-bench emits 7 chars, git 9), so
+  // shas where one is a prefix of the other are the same build and merge to the longer form.
   function measuredLine(rows) {
-    var dates = {}, refs = {};
+    var dates = {}, byEngine = {};
     rows.forEach(function (p) {
       if (p.das.date) dates[p.das.date] = 1;
       if (p.ref.date) dates[p.ref.date] = 1;
-      var tag = p.ref.engine + (p.ref.sha ? ' @ ' + p.ref.sha : '');
-      refs[tag] = 1;
+      var shas = byEngine[p.ref.engine] = byEngine[p.ref.engine] || [];
+      var sha = p.ref.sha || '';
+      var merged = false;
+      for (var i = 0; i < shas.length; i++) {
+        if (!sha || shas[i].indexOf(sha) === 0) { merged = true; break; }
+        if (sha.indexOf(shas[i]) === 0) { shas[i] = sha; merged = true; break; }
+      }
+      if (!merged && sha) shas.push(sha);
+    });
+    var refs = [];
+    Object.keys(byEngine).sort().forEach(function (e) {
+      var shas = byEngine[e];
+      refs.push(shas.length ? shas.sort().map(function (s) { return e + ' @ ' + s; }).join(', ') : e);
     });
     var ds = Object.keys(dates).sort();
     var span = ds.length ? (ds[0] === ds[ds.length - 1] ? ds[0] : ds[0] + ' → ' + ds[ds.length - 1]) : '';
-    return ['measured ' + span, Object.keys(refs).sort().join(', ')].filter(Boolean).join(' · ');
+    return ['measured ' + span, refs.join(', ')].filter(Boolean).join(' · ');
   }
 
   /* ── § 01 LLM: pair rows from the records ───────────────────── */
