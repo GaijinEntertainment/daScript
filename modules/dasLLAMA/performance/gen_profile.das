@@ -189,8 +189,8 @@ def main() {
         aff = to_int(get_env_variable("DAS_JOBQUE_AFFINITY"))
     }
     if (aff > 0) {
-        let lcpp_aff = lcpp_affinity_args(threads)
-        prof.platform.affinity = empty(lcpp_aff) ? "das jobque mode {aff}" : "das jobque mode {aff}; llama-bench{lcpp_aff}"
+        let lcpp_aff = argv_line(lcpp_affinity_argv(threads))
+        prof.platform.affinity = empty(lcpp_aff) ? "das jobque mode {aff}" : "das jobque mode {aff}; llama-bench {lcpp_aff}"
     }
     logger_info("profile.llm.gen", "run start", JV({"box" => JV(box_name()), "tier" => JV(cfg.tier),
         "requested_threads" => JV(threads), "dispatch_lanes" => JV(lanes), "affinity" => JV(aff), "lcpp" => JV(lcpp_commit)}))

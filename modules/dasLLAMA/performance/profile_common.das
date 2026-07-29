@@ -83,15 +83,16 @@ def affinity_on() : bool {
 //! llama-bench affinity arguments (leading space; "" when affinity is off): the first `threads`
 //! physical cores as a logical-CPU mask — SMT siblings are adjacent on Windows, so even bits
 //! (16 -> 0x55555555) — plus --cpu-strict so the pins hold. The das-side mirror is jobque affinity.
-def lcpp_affinity_args(threads : int) : string {
-    if (!affinity_on()) {
-        return ""
+def lcpp_affinity_argv(threads : int) : array<string> {
+    var args : array<string>
+    if (affinity_on()) {
+        var mask = 0ul
+        for (i in range(min(threads, 32))) {
+            mask |= 1ul << uint64(2 * i)
+        }
+        args <- ["--cpu-mask", "0x{mask:x}", "--cpu-strict", "1"]
     }
-    var mask = 0ul
-    for (i in range(min(threads, 32))) {
-        mask |= 1ul << uint64(2 * i)
-    }
-    return " --cpu-mask 0x{mask:x} --cpu-strict 1"
+    return <- args
 }
 
 // Models at or above this are large-tier (deferred unless --tier large|all). 6 GiB splits the
@@ -340,6 +341,35 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
     }))
     tail_out = length(acc) > keep_tail ? slice(acc, length(acc) - keep_tail) : acc
     return rc
+}
+
+//! Capture twin of [[run_and_stream]] — argv spawn (no shell parse, the Windows cmd quoting
+//! traps can't bite), stdout+stderr merged by popen_argv, whole output returned trimmed.
+def run_capture_argv(args : array<string>) : string {
+    var out = ""
+    unsafe {
+        popen_argv(args, 0.0, $(f) {
+            if (f != null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
+                out = fread_to_eof(f)
+            }
+        })
+    }
+    return strip(out)
+}
+
+//! The display form of an argv for receipts — one line, elements with spaces quoted.
+def argv_line(args : array<string>) : string {
+    let line = build_string() $(w) {
+        var first = true
+        for (a in args) {
+            if (!first) {
+                w |> write(" ")
+            }
+            first = false
+            w |> write(find(a, " ") >= 0 ? "\"{a}\"" : a)
+        }
+    }
+    return "{line}"
 }
 
 // Run `cmd`, return its trimmed stdout (first line only when `first_line`). Uses fread_to_eof (fio's
@@ -1197,11 +1227,15 @@ def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
 //! whisper.cpp parakeet-cli / whisper-cli — one process per clip (load is ~ms; parse_cli_ms
 //! subtracts it regardless). Best over `reps`. Returns the winning command line too — the receipt.
 def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
-    let flags = cli == "whisper-cli" ? "-bs 1 -bo 1 -nf -ng" : "-ng"
+    var args <- [whisper_cpp_bin(cli), "-m", model_path, "-f", wav_path, "-t", "{threads}"]
+    if (cli == "whisper-cli") {
+        args |> push_from(["-bs", "1", "-bo", "1", "-nf"])
+    }
+    args |> push("-ng")
     var best = -1.0lf
-    cmd_out = "{whisper_cpp_bin(cli)} -m {model_path} -f {wav_path} -t {threads} {flags}"
+    cmd_out = argv_line(args)
     for (_rep in range(reps)) {
-        let ms = parse_cli_ms(run_capture("{cmd_out} 2>&1", false))
+        let ms = parse_cli_ms(run_capture_argv(args))
         if (ms > 0.0lf && (best < 0.0lf || ms < best)) {
             best = ms
         }
@@ -1214,10 +1248,12 @@ def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd
 //! total − load) is the whole-set engine time. A block-count mismatch (an unreadable clip
 //! mid-list) discards the rep — a partial cumulative total would mispair. Best over `reps`.
 def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threads, reps : int; var cmd_out : string&) : double {
-    cmd_out = "{whisper_cpp_bin(cli)} -m {model_path} -t {threads} -ng {join(wav_paths, " ")}"
+    var args <- [whisper_cpp_bin(cli), "-m", model_path, "-t", "{threads}", "-ng"]
+    args |> push_from(wav_paths)
+    cmd_out = argv_line(args)
     var best = -1.0lf
     for (_rep in range(reps)) {
-        let out = run_capture("{cmd_out} 2>&1", false)
+        let out = run_capture_argv(args)
         var blocks = 0
         for (line in split(out, "\n")) {
             if (find(line, "_print_timings") >= 0 && find(line, "total time") >= 0) {
@@ -1240,10 +1276,12 @@ def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threa
 //! Best total over `reps`.
 def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
     var best = -1.0lf
-    cmd_out = ("{mtmd_bin()} -m {model_path} --mmproj {mmproj_path} --audio {wav_path} " +
-        "-p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t {threads}")
+    let args <- [mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
+                 "-p", "Transcribe the audio.", "--temp", "0", "--jinja", "--reasoning", "off",
+                 "-ngl", "0", "-t", "{threads}"]
+    cmd_out = argv_line(args)
     for (_rep in range(reps)) {
-        let r = parse_mtmd_ms(run_capture("{cmd_out} 2>&1", false))
+        let r = parse_mtmd_ms(run_capture_argv(args))
         if (r.total > 0.0lf && (best < 0.0lf || r.total < best)) {
             best = r.total
         }
@@ -1253,15 +1291,15 @@ def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int
 
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
 //! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
-def asr_pybench_cmd(tool, handle : string; clips : array<string>; threads, reps : int) : string {
-    let wav_args = build_string() $(w) {
-        for (c in clips) {
-            w |> write(" --wav {asr_corpus_dir()}{c}")
-        }
+def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int) : array<string> {
+    var args <- (tool == "onnx"
+        ? [onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", handle]
+        : [nemo_py(), "{asr_dir()}/canary_qwen_bench.py"])
+    args |> push_from(["--threads", "{threads}", "--reps", "{reps}"])
+    for (c in clips) {
+        args |> push_from(["--wav", "{asr_corpus_dir()}{c}"])
     }
-    return (tool == "onnx"
-        ? "{onnx_py()} {asr_dir()}/onnx_bench.py --variant {handle} --threads {threads} --reps {reps}{wav_args}"
-        : "{nemo_py()} {asr_dir()}/canary_qwen_bench.py --threads {threads} --reps {reps}{wav_args}")
+    return <- args
 }
 
 // ===== Reference-engine version capture (B4 — never hand-typed) =====
@@ -1728,20 +1766,6 @@ struct LlamaBenchRow {
 
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
 //! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
-def run_llama_bench(cmd : string; var rows : array<LlamaBenchRow>) : bool {
-    // _popen hands the string to `cmd /c` verbatim; a command that starts with a quote and
-    // contains more quotes loses its first and last quote to cmd's strip rule (`cmd /?`), breaking
-    // the binary path — one extra outer pair is the documented workaround (safe either way).
-    // Shell-free popen_argv (fio's run_and_capture) would sidestep cmd, but callers hand us a
-    // full shell string here
-    let shell = is_windows() ? "\"{cmd}\"" : cmd
-    var out = ""
-    unsafe {
-        popen(shell) $(f) {
-            if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
-                out = fread_to_eof(f)
-            }
-        }
-    }
-    return sscan_json(out, rows)
+def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>) : bool {
+    return sscan_json(run_capture_argv(args), rows)
 }

@@ -205,15 +205,22 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     }
     let backend = ngl != 0 ? "metal" : "cpu"
     let t0 = ref_time_ticks()
-    let aff = ngl == 0 && affinity_on() ? lcpp_affinity_args(threads) : ""
+    var args <- [bin, "-m", path, "-ngl", "{ngl}"]
     // -nopo 1 = --no-op-offload: without it a stock build at -ngl 0 still ships big-batch ops
     // with host weights to Metal (26B: MTL0 193MB, +33% pp) — not a CPU number
-    let np = nopo ? " -nopo 1" : ""
-    let cmd = "\"{bin}\" -m \"{path}\" -ngl {ngl}{np} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {cfg.reps} -o json"
+    if (nopo) {
+        args |> push_from(["-nopo", "1"])
+    }
+    args |> push_from(["-t", "{threads}"])
+    if (ngl == 0) {
+        args |> push_from(lcpp_affinity_argv(threads))
+    }
+    args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
+    let cmd = argv_line(args)
     to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
     var rows : array<LlamaBenchRow>
-    if (!run_llama_bench(cmd, rows) || empty(rows)) {
+    if (!run_llama_bench(args, rows) || empty(rows)) {
         to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
         logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
         failed |> push("{file} ref {flavor} {backend}")
@@ -330,9 +337,9 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             }
         }
         to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
-        let cmd = asr_pybench_cmd(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
-        rr.cmd = cmd
-        let out = run_capture("{cmd} 2>&1", false)
+        let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
+        rr.cmd = argv_line(pyargs)
+        let out = run_capture_argv(pyargs)
         for (wav in spec.buckets) {
             var audio_s = -1.0lf
             let ms = parse_bench_best(out, wav, audio_s)

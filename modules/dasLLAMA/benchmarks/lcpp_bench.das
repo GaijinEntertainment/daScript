@@ -485,10 +485,14 @@ def main() {
         var refRows : array<LlamaBenchRow>
         var refCmd = ""
         if (!empty(cfg.ref)) {
-            let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
-            refCmd = "\"{cfg.ref}\" -m \"{mpath}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
+            var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
+            if (!gpu) {
+                refArgs |> push_from(lcpp_affinity_argv(threads))
+            }
+            refArgs |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
+            refCmd = argv_line(refArgs)
             say(fmt, "ref: {refCmd}\n")
-            if (!run_llama_bench(refCmd, refRows)) {
+            if (!run_llama_bench(refArgs, refRows)) {
                 say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
             }
             for (rr in refRows) {

@@ -59,9 +59,10 @@ def llama_bench_bin(ngl : int) : string {
 // (n_gen=0 prefill, n_prompt=0 decode) into an LlmBaseline. prefill/emission stay -1 on failure.
 def bench_one(display, path : string; threads, nprompt, ngen, ngl : int) : LlmBaseline {
     // affinity args pin the bench to distinct physical cores on the boxes that pin (see profile_common)
-    let cmd = "\"{llama_bench_bin(ngl)}\" -m \"{path}\" -ngl {ngl} -t {threads}{lcpp_affinity_args(threads)} -p {nprompt} -n {ngen} -o json"
+    var args <- [llama_bench_bin(ngl), "-m", path, "-ngl", "{ngl}", "-t", "{threads}"]
+    args |> push_from(lcpp_affinity_argv(threads), ["-p", "{nprompt}", "-n", "{ngen}", "-o", "json"])
     var rows : array<LlamaBenchRow>
-    if (!run_llama_bench(cmd, rows)) {
+    if (!run_llama_bench(args, rows)) {
         return LlmBaseline(model = display, prefill_tok_s = -1.0lf, emission_tok_s = -1.0lf, lcpp_commit = "", n_params = 0l)
     }
     var prefill = -1.0lf
