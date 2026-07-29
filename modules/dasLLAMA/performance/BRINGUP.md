@@ -75,6 +75,10 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 - **LLM**: the public catalog ggufs (see `pub_catalog()` in `gen_bench_records.das`) into a
   models dir; `export DASLLAMA_MODELS_DIR=<dir>`. Reuse an existing models dir when the box has
   one — do NOT re-download tens of GB (fetch script: `plans/m4_fetch_models.sh` pattern).
+- **The same filename exists in multiple HF repos with different bytes** — lmstudio's and
+  unsloth's `Mistral-Small-...-Q4_K_M.gguf` differ (416 bytes of metadata, different sha).
+  The `.sha` sidecar names the exact build; a fetch that fails the sidecar gate benches a
+  DIFFERENT file, not a re-download glitch — find the right repo, never waive the gate.
 - **ASR**: whisper/parakeet ggml carriers into `$WHISPER_CPP/models` (`WHISPER_CPP_MODELS`
   overrides — pointing it at the LLM models dir keeps ONE dir per box); the audio-chat ggufs +
   mmproj files live with the LLM models. Absent models skip with a warning — partial boards

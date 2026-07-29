@@ -384,6 +384,22 @@ def private check_all() : bool {
         let good = stat(spec.py).is_valid
         to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: {spec.name} — {good ? "ok" : "missing (those refs will skip)"} ({spec.py})\n")
     }
+    // pre-warm the onnx reference models: the first-ever run of a variant downloads its
+    // weights, and that download eats the sweep's whole ref-leg budget (~90 s on zen2 —
+    // the leg fails "nothing measured" while HF streams). One warm clip per catalog
+    // variant here = every sweep leg starts hot.
+    if (stat(onnx_py()).is_valid) {
+        for (vkey in ["v2-int8", "int8", "whisper-tiny-int8", "whisper-turbo-int8"]) {
+            let t0 = ref_time_ticks()
+            let out = run_capture_argv([onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", vkey,
+                                        "--reps", "1", "--wav", "{asr_corpus_dir()}jfk.wav",
+                                        "--out", asr_pybench_out_path()])
+            let rows = find(out, "BENCH") >= 0 || find(fread(asr_pybench_out_path()), "BENCH") >= 0
+            to_log(rows ? LOG_INFO : LOG_WARNING,
+                "setup_asr_rig: onnx {vkey} pre-warm — {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
+            ok = ok && rows
+        }
+    }
     to_log(LOG_INFO, "setup_asr_rig: export WHISPER_CPP={whisper_cpp_root()}\n")
     to_log(LOG_INFO, "setup_asr_rig: export MTMD_BIN={mtmd_bin()}\n")
     to_log(LOG_INFO, "setup_asr_rig: export ONNX_PY={onnx_py()}\n")
