@@ -7,6 +7,7 @@ require dasllama/dasllama            // the facade: load_model's image cache is 
 require dasllama/dasllama_whisper
 require dasllama/dasllama_gguf       // rd_u32/rd_u16 — the wav fixture reader
 require dasllama/dasllama_image
+require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require daslib/jobque_boost
 require daslib/archive
@@ -214,6 +215,16 @@ def test_image_mechanics(t : T?) {
         t |> success(load_image(path, m2b, "img-probe"), "re-saved image maps")
         delete m2b
 
+        // the v7 meta head: peek reads version + identity + embedded config WITHOUT loading,
+        // and the embedded config re-derives the exact identity the image was baked under
+        let pk = image_peek(path)
+        t |> success(pk.valid, "peek: header sane")
+        t |> equal(pk.version, IMAGE_VERSION, "peek: version")
+        t |> equal(pk.identity, image_identity("img-probe"), "peek: baked identity string")
+        var pcfg = DlimConfiguration()
+        t |> success(dlim_config_from_json(pk.config_json, pcfg), "peek: embedded config JSON parses")
+        t |> equal(dlim_identity(pcfg, IMAGE_VERSION, "img-probe"), pk.identity, "peek: config re-derives the identity")
+
         var m3 = ImgProbe()
         t |> success(!load_image(path, m3, "wrong-tag"), "identity mismatch declines")
         patch_u32(t, path, 4l, 0xDEADu)
@@ -261,6 +272,19 @@ def test_image_mechanics(t : T?) {
         }
         t |> success(caught, "forget on an owned locked array is a loud error")
         delete owned
+    }
+    t |> run("DlimConfiguration JSON round-trips with the identity intact") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let dc = dlim_config_current("q8")
+        let js = dlim_config_json(dc)
+        t |> success(!empty(js), "config serializes")
+        var back = DlimConfiguration()
+        t |> success(dlim_config_from_json(js, back), "JSON parses back")
+        t |> equal(dlim_identity(back, IMAGE_VERSION), dlim_identity(dc, IMAGE_VERSION), "identity survives the round trip")
+        var junk = DlimConfiguration()
+        t |> success(!dlim_config_from_json("not a config", junk), "garbage declines")
     }
 }
 

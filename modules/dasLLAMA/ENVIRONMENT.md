@@ -27,6 +27,8 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
 | `DASLLAMA_CALLER_PRIO` | number | unset | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
 | `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
+| `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
+| `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 | `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
@@ -44,6 +46,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
 
 ## Metal backend
 
@@ -90,6 +93,12 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 |---|---|---|---|
 | `DASLLAMA_COOPMAT` | number | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | number | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
+| `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
+| `DASLLAMA_VK_FUSE` | flag | on | Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B. |
+| `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
+| `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
+| `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
+| `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash-attention kernel; 0 falls back to the chunked path. |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
@@ -144,6 +153,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASMETAL_LAB_PASSES` | number | 4 | Passes per round in the Metal MoE lab. |
 | `DASMETAL_LAB_ATTN_NSGS` | number | 16 | Simdgroups per threadgroup in the Metal attention lab. |
 | `DASMETAL_LAB_DUMP_MSL` | flag | off | Dump generated MSL from the Metal labs instead of running it. |
+| `PROBE_PATH` | path | _wcliff.bin | Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test. |
+| `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 
 ## Profiling and baselines
 
@@ -179,6 +190,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |
 | `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
 | `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
+| `TEMP` | path | unset | Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir). |
 
 ## Examples and tutorials
 

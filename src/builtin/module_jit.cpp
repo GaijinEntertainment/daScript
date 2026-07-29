@@ -695,6 +695,12 @@ extern "C" {
         new (block->node) SimNode_JitBlock(*static_cast<LineInfo*>(lineInfo), (JitBlockFunction) bodyNode, blk, ad);
     }
 
+    DAS_API uint64_t jit_ad_by_sid ( uint64_t sid, Context * context ) {
+        if ( !context || !context->tabAdLookup ) return 0;
+        auto it = context->tabAdLookup->find(sid);
+        return it != context->tabAdLookup->end() ? it->second : 0;
+    }
+
     DAS_API void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at ) {
         FPE_DISABLE;
         TextWriter ssw;
@@ -806,6 +812,7 @@ extern "C" {
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
     void *das_get_jit_make_block() { return (void *)&jit_make_block; }
+    void *das_get_jit_ad_by_sid() { return (void *)&jit_ad_by_sid; }
     void *das_get_jit_debug() { return (void *)&jit_debug; }
     void *das_get_jit_iterator_iterate() { return (void *)&builtin_iterator_iterate; }
     void *das_get_jit_iterator_delete() { return (void *)&builtin_iterator_delete; }
@@ -1427,6 +1434,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_epilogue");
             addExtern<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
                 SideEffects::none, "das_get_jit_make_block");
+            addExtern<DAS_BIND_FUN(das_get_jit_ad_by_sid)>(*this, lib, "get_jit_ad_by_sid",
+                SideEffects::none, "das_get_jit_ad_by_sid");
             addExtern<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",
                 SideEffects::none, "das_get_jit_debug");
             addExtern<DAS_BIND_FUN(das_get_jit_iterator_iterate)>(*this, lib, "get_jit_iterator_iterate",
@@ -1632,6 +1641,31 @@ DAS_API void jit_run_web_lifecycle ( das::Context * ctx, void * updateFn,
     }
     if ( shutdownFn ) ((void(*)(das::Context*))shutdownFn)(ctx);
 #endif
+}
+
+// Standalone-exe main guard: the generated entry (llvm_exe.das) routes das main through this
+// so a runtime exception prints and exits nonzero instead of unwinding out of the entry with
+// no message (hosted runs get this boundary from their runWithCatch call sites; a bare exe
+// had none — fix for the silent-exit-127 class). resultKind: 0 = void main, 1 = int main
+// (value = exit code), 2 = bool main (true -> 0, false -> 1).
+DAS_API int32_t jit_run_main_guarded ( das::Context * ctx, void * mainFn, int32_t resultKind ) {
+    int32_t rc = 0;
+    bool ok = ctx->runWithCatch([&]() {
+        if ( resultKind == 1 ) {
+            rc = ((int32_t(*)(das::Context*))mainFn)(ctx);
+        } else if ( resultKind == 2 ) {
+            rc = ((bool(*)(das::Context*))mainFn)(ctx) ? 0 : 1;
+        } else {
+            ((void(*)(das::Context*))mainFn)(ctx);
+        }
+    });
+    if ( !ok ) {
+        das::TextPrinter tp;
+        tp << "EXCEPTION: " << (ctx->getException() ? ctx->getException() : "unknown") << "\n";
+        tp.output();    // TextWriter's dtor only frees its buffer — output() is what prints
+        return 1;
+    }
+    return rc;
 }
 
 DAS_API void das_ensure_environment () {

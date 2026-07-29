@@ -27,6 +27,7 @@ require daslib/regex_boost
 require daslib/apply
 require daslib/algorithm
 require daslib/ansi_colors
+require daslib/tty
 require daslib/jobque_boost
 require daslib/jobque_profile
 require daslib/apply_in_context
@@ -215,11 +216,13 @@ def document_module_fio(_root : string) {
     var mod = [get_module("fio_core"), find_module("fio")]
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
+        group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|prefetch_map)$%%),
         group_by_regex("File manipulation", mod, %regex~(f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),
         group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
+        group_by_regex("Terminal queries", mod, %regex~(is_terminal|terminal_width)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|spawn_argv|popen_argv|popen_argv_pipe|popen_timed_out|run_and_capture|get_env_variable|set_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
@@ -646,6 +649,15 @@ def document_module_ansi_colors(_root : string) {
         group_by_regex("Styles", mod, %regex~.*(bold_str|dim_str|underline_str|reset_str)$%%)
     )
     document("ANSI terminal color and style helpers", mod, "ansi_colors.rst", groups)
+}
+
+def document_module_tty(_root : string) {
+    var mod = find_module("tty")
+    var groups <- array<DocGroup>(
+        group_by_regex("Terminal detection", mod, %regex~.*(is_stream_terminal|is_stdin_terminal|is_stdout_terminal|is_stderr_terminal)$%%),
+        group_by_regex("Terminal geometry", mod, %regex~.*(terminal_columns)$%%)
+    )
+    document("Terminal capability probes", mod, "tty.rst", groups)
 }
 
 def document_module_algorithm(_root : string) {
@@ -1839,6 +1851,7 @@ def main {
     // document daslib modules
     document_module_algorithm(root)
     document_module_ansi_colors(root)
+    document_module_tty(root)
     document_module_apply_in_context(root)
     document_module_apply(root)
     document_module_archive(root)

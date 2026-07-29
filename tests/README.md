@@ -502,6 +502,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | struct.das | Struct operations | |
 | table.das | Table operations | |
 | table_value_key.das | Table value/key access | |
+| trap_block_ann.das | Block with `annotationData` filled by a `[block_macro]` — runs under JIT, and a standalone exe is still emitted (the LLVM backend used to store a trap in the block's global instead) | |
+| _trap_block_ann_helper.das | *(helper)* `[block_macro]` whose `finish()` fills `annotationData`/`annotationDataSid` | |
 | try_recover.das | Try/recover codegen | |
 | tuple.das | Tuple operations | |
 | type_constructors.das | Type constructor codegen | |
@@ -572,6 +574,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | block.das | Block creation and invocation | |
 | block_invoke.das | Block invocation — twice, nested chaining, value capture, ref passing | |
 | block_access_function_arg.das | Nested block accessing outer lambda variable via helper | |
+| block_annotation_data.das | Block `annotationData` round-trip — `[block_ann_data]` writes it in finalize, `testBlockAnnotationData` reads it back off the runtime block; must agree across interpreter / C++ AOT (`adBySid`) / LLVM JIT (`jit_ad_by_sid`) | |
 | block_args_nested.das | Deeply nested blocks — int, ref, ptr, struct passthrough | |
 | block_variable.das | Local block variables — void/result × no-arg/with-arg × value/cmres | |
 | block_vs_local_block.das | Pipe `<\|` block vs local block variable invoke | |

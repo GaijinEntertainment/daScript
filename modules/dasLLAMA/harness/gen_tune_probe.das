@@ -43,10 +43,16 @@ require daslib/random
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
+require tuner_cli              // --tune-fast, shared with tune_kernels
 require math
 require strings
 
-let ROUNDS = 6
+// This half is a flat best-of-N with no screening phase to narrow, so the round count is the
+// only budget dial --tune-fast has. The confirm pass is deliberately NOT cut: it is a
+// correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
+let ROUNDS_FULL = 6
+let ROUNDS_FAST = 3
+var ROUNDS = ROUNDS_FULL
 
 struct Fixture {
     n, d, ntok, nb : int64
@@ -652,7 +658,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
             var shown = 0
             for (i in range(length(yk))) {
                 if (abs(yk[i] - kfx.yref[i]) > tol && shown < 6) {
-                    print("  DBG k{kfx.fmt} tile {suffix} n={kfx.n}: y[{i}] (tok {i / int(kfx.d)} col {i % int(kfx.d)}) = {yk[i]} want {kfx.yref[i]}\n")
+                    tune_detail("  DBG k{kfx.fmt} tile {suffix} n={kfx.n}: y[{i}] (tok {i / int(kfx.d)} col {i % int(kfx.d)}) = {yk[i]} want {kfx.yref[i]}\n")
                     shown++
                 }
             }
@@ -667,7 +673,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
             var shown = 0
             for (i in range(length(ykg))) {
                 if (abs(ykg[i] - kfx.yref[i]) > tol && shown < 6) {
-                    print("  DBG k{kfx.fmt} gemv {suffix} n={kfx.n}: y[{i}] = {ykg[i]} want {kfx.yref[i]}\n")
+                    tune_detail("  DBG k{kfx.fmt} gemv {suffix} n={kfx.n}: y[{i}] = {ykg[i]} want {kfx.yref[i]}\n")
                     shown++
                 }
             }
@@ -766,8 +772,18 @@ def close_to_q51_ref(fx : Q51Fixture; y : array<float>; mr : int64; var maxdiff 
     return ok
 }
 
-// reference walks the layout companion's resolve (grp1/disk in the tuner process)
-def private q51_mr_of(sfx : string) : int64 => sfx == "mr8" ? 8l : (sfx == "mr4" ? 4l : int64(q51q8_layout_gen()))
+// per-variant plane interleave off the layout companion registry — declined perms report the
+// reference resolve (the lockstep rail). Trusting the SUFFIX instead repacks planes to a grp
+// the declined-to-reference kernel then walks at the companion mr — the zen2 maxdiff-120 trap.
+def private q51_layout_mrs() : table<string; int> {
+    var mrs : table<string; int>
+    var lvs <- q51q8_layout_gen_variants()
+    for (v in lvs) {
+        mrs[v._0] = invoke(v._1)
+    }
+    delete lvs
+    return <- mrs
+}
 
 // The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
@@ -775,6 +791,7 @@ def q51_tune_family() : string {
     var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
     var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
     var tvs <- q51q8_gemv_gen_variants()
+    var mrs <- q51_layout_mrs()
     var best = ""
     var bestDt = 2147483647
     var y : array<float>
@@ -782,7 +799,7 @@ def q51_tune_family() : string {
     var yh : array<float>
     yh |> resize(int(hfx.d))
     for (v in tvs) {
-        let mr = q51_mr_of(v._0)
+        let mr = int64(mrs?[v._0] ?? q51q8_layout_gen())
         var sq := sfx.qq
         var ss := sfx.qs
         var hq := hfx.qq
@@ -797,10 +814,12 @@ def q51_tune_family() : string {
         run_q51_gemv(v._1, hfx, hq, hs, mr, yh)
         ok = close_to_q51_ref(hfx, yh, mr, maxdiff) && ok
         if (!ok) {
+            // best = "" rejects the family; the shared cleanup past the loop frees everything
+            // (deleting tvs HERE, mid-iteration, is the locked-array trap)
             print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
             delete sq; delete ss; delete hq; delete hs
-            delete sfx; delete hfx; delete tvs; delete y; delete yh
-            return ""
+            best = ""
+            break
         }
         var dt = 2147483647
         for (_rep in range(3)) {
@@ -809,7 +828,7 @@ def q51_tune_family() : string {
             dt = min(dt, get_time_usec(t0))
         }
         let gb = double(sfx.d * sfx.nb * 24l) / double(max(dt, 1)) / 1000.0lf
-        print("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
+        tune_detail("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
         if (dt < bestDt) {
             bestDt = dt
             best = v._0
@@ -819,6 +838,7 @@ def q51_tune_family() : string {
     delete sfx
     delete hfx
     delete tvs
+    delete mrs
     delete y
     delete yh
     return best
@@ -926,7 +946,8 @@ def kq_tune_family(fmt : int64) : string {
         hbest[i] = 1.0e30lf
     }
     let HOT_REPS = 16
-    for (_r in range(ROUNDS)) {   // interleaved best-of within the family
+    for (r in range(ROUNDS)) {   // interleaved best-of within the family
+        tune_progress_kernel_step(r + 1, "best-of", length(tvs))
         for (vi in range(nv)) {
             let mi = kq_mr_index(kmrs, vmr[vi])
             let t0 = ref_time_ticks()
@@ -960,7 +981,7 @@ def kq_tune_family(fmt : int64) : string {
         if (best[vi] < best[winner]) {
             winner = vi
         }
-        print("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
+        tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
     let wname = tvs[winner]._0
     delete ky
@@ -1069,7 +1090,7 @@ def test_mode : bool {
                 var shown = 0
                 for (i in range(length(y))) {
                     if (abs(y[i] - fx.yref[i]) > max(CLOSE_ABS, CLOSE_REL * abs(fx.yref[i])) && shown < 6) {
-                        print("  DBG {v._0} n={fx.n}: y[{i}] (tok {i / int(fx.d)} col {i % int(fx.d)}) = {y[i]} want {fx.yref[i]}\n")
+                        tune_detail("  DBG {v._0} n={fx.n}: y[{i}] (tok {i / int(fx.d)} col {i % int(fx.d)}) = {y[i]} want {fx.yref[i]}\n")
                         shown++
                     }
                 }
@@ -1084,7 +1105,7 @@ def test_mode : bool {
                 var shown = 0
                 for (i in range(length(yg))) {
                     if (abs(yg[i] - fx.yref[i]) > max(CLOSE_ABS, CLOSE_REL * abs(fx.yref[i])) && shown < 6) {
-                        print("  DBG gemv {v._0} n={fx.n}: y[{i}] = {yg[i]} want {fx.yref[i]}\n")
+                        tune_detail("  DBG gemv {v._0} n={fx.n}: y[{i}] = {yg[i]} want {fx.yref[i]}\n")
                         shown++
                     }
                 }
@@ -1112,7 +1133,7 @@ def test_mode : bool {
                 var shown = 0
                 for (i in range(length(ym))) {
                     if (abs(ym[i] - mfx.yref[i]) > max(CLOSE_ABS, CLOSE_REL * abs(mfx.yref[i])) && shown < 6) {
-                        print("  DBG mx4 {v._0} n={mfx.n}: y[{i}] = {ym[i]} want {mfx.yref[i]}\n")
+                        tune_detail("  DBG mx4 {v._0} n={mfx.n}: y[{i}] = {ym[i]} want {mfx.yref[i]}\n")
                         shown++
                     }
                 }
@@ -1342,6 +1363,9 @@ def private confirm_and_write(winner : string) : bool {
 
 def tune_mode_run : bool {
     let tune_total_t0 = ref_time_ticks()
+    // q8q8 + four kq formats + q51 + the end-to-end confirm
+    tune_progress_plan("dasllama_generators", 7)
+    tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
     // batch shape: fat STREAMING ffn like the kq fixture — the old 2048x512x64 kv-projection was
     // L2-hot; divergent crowns still pass the e2e confirm gate before shipping
     var fx <- build_fixture(2048l, 8192l, 256l)
@@ -1395,7 +1419,7 @@ def tune_mode_run : bool {
         }
     }
     if (skipped > 0) {
-        print("skipped {skipped} declined perm(s) — the shared reference body benches once as '{repname}'\n")
+        tune_detail("skipped {skipped} declined perm(s) — the shared reference body benches once as '{repname}'\n")
     }
     delete wtab
     let nv = length(vs)
@@ -1467,7 +1491,8 @@ def tune_mode_run : bool {
     // the hot shape runs HOT_REPS back-to-back per timing sample: 1MB of weights stays
     // cache-resident, so the sample measures compute, not the first-touch stream
     let HOT_REPS = 16
-    for (_r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
+    for (r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
+        tune_progress_kernel_step(r + 1, "best-of", length(vs))
         for (vi in range(nv)) {
             let t0 = ref_time_ticks()
             run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
@@ -1499,7 +1524,7 @@ def tune_mode_run : bool {
         if (best[vi] < best[winner]) {
             winner = vi
         }
-        print("{vs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} / hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
+        tune_detail("{vs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} / hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
     // the merged winner: the batch bench picks the tile knobs (and with them the layout);
     // the HOT decode bench picks gkstep among the rows sharing those tile knobs (the
@@ -1513,22 +1538,29 @@ def tune_mode_run : bool {
         }
     }
     if (merged != winner) {
-        print("tile winner {vs[winner]._0} + hot decode winner within '{wkey}' -> {vs[merged]._0}\n")
+        tune_detail("tile winner {vs[winner]._0} + hot decode winner within '{wkey}' -> {vs[merged]._0}\n")
     }
     // the kq families tune separately — one manifest entry per format, tile-best wins (the
     // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
     // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
     // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
-    print("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
+    tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
+    tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
     var kok = true
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
         let kq_t0 = ref_time_ticks()
+        tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
         let w = kq_tune_family(fmt)
-        print("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
+        tune_detail("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
+        tune_progress_kernel_end("k{fmt}q8_tile_gen", w, empty(w) ? "rejected" : "beats")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
         if (empty(w)) {
-            kok = false
+            // gate failure (the broken perm is named above): record the always-correct
+            // reference body so the scope still COMPLETES — a missing key re-tunes every start
+            let wok = tune_manifest_set(entry, "reference")
+            print("{entry} winner: reference (gate-failure fallback) {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
+            kok = kok && wok
         } else {
             let wok = tune_manifest_set(entry, w)
             print("{entry} winner: {w} {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
@@ -1536,19 +1568,27 @@ def tune_mode_run : bool {
         }
     }
     let q51_t0 = ref_time_ticks()
+    tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
     let qw = q51_tune_family()
-    print("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
+    tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
+    tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
     if (empty(qw)) {
-        kok = false
+        // same gate-failure fallback as the kq loop: complete the scope on the reference body
+        let qok = tune_manifest_set("q51q8_gemv_gen", "reference")
+        print("q51q8_gemv_gen winner: reference (gate-failure fallback) {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
+        kok = kok && qok
     } else {
         let qok = tune_manifest_set("q51q8_gemv_gen", qw)
         print("q51q8_gemv_gen winner: {qw} {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
         kok = kok && qok
     }
     let confirm_t0 = ref_time_ticks()
+    tune_progress_kernel_begin("confirm_e2e_prefill", 0)
     let ok = confirm_and_write(vs[merged]._0) && kok
-    print("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
-    print("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
+    tune_detail("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
+    tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
+    tune_progress_finish()
+    tune_detail("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
     delete y
     delete yg
     delete yh
@@ -1581,6 +1621,9 @@ def main {
     if (!jit_enabled()) {
         print("run with -jit — the generator only fires under the LLVM JIT\n")
         return
+    }
+    if (tuner_fast_requested()) {
+        ROUNDS = ROUNDS_FAST
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips

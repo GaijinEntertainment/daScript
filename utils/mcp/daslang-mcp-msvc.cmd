@@ -45,9 +45,14 @@ rem Capture the script dir BEFORE any `shift` (plain `shift` also shifts %0, so
 rem %~dp0 would otherwise stop pointing at this launcher's folder).
 set "MCPDIR=%~dp0"
 
-rem Prefer the single-config (Ninja) binary, fall back to the MSVC Release layout.
-set "DASLANG=%MCPDIR%..\..\bin\daslang.exe"
-if not exist "%DASLANG%" set "DASLANG=%MCPDIR%..\..\bin\Release\daslang.exe"
+rem The supervisor resolves the binary (newest of the single-config bin\ and the
+rem MSVC bin\Release\ layouts) and passes it in DASLANG_MCP_BIN. Standalone runs
+rem fall back to the MSVC Release layout first -- when both layouts exist,
+rem first-wins on bin\daslang.exe silently ran a STALE binary whose DAS_BUILD_ID
+rem no longer matched the tree's dynamic modules (every native `require` failed).
+set "DASLANG=%MCPDIR%..\..\bin\Release\daslang.exe"
+if not exist "%DASLANG%" set "DASLANG=%MCPDIR%..\..\bin\daslang.exe"
+if defined DASLANG_MCP_BIN set "DASLANG=%DASLANG_MCP_BIN%"
 
 rem First arg selects the server. A *.exe selects a prebuilt server binary in
 rem bin/ (the AOT cpp-mcp) run directly; otherwise it's an interpreted .das

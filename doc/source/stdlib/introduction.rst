@@ -163,6 +163,7 @@ Developer tools
 ---------------
 
 * :doc:`ansi_colors <generated/ansi_colors>` — ANSI terminal color escape sequences
+* :doc:`tty <generated/tty>` — terminal capability probes (is it a terminal, how wide)
 * :doc:`command_line <generated/command_line>` — command-line argument parsing helpers
 * :doc:`das_source_formatter <generated/das_source_formatter>` — daslang source code formatter
 * :doc:`das_source_formatter_fio <generated/das_source_formatter_fio>` — file-based source code formatting

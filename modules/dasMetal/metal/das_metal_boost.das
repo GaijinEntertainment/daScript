@@ -92,7 +92,7 @@ def public metal_log_leaks_if_any : int64 {
 //! (the source participates so two kernels sharing an entry name cannot collide). Drain releases
 //! everything — the cache owns its pipelines.
 struct public MetalPipelineCache {
-    cache : table<string; MetalComputePipeline?>
+    @scratch cache : table<string; MetalComputePipeline?>   // compile-once PSO residency; steady-state [] is a hit
 }
 
 def public pipeline_cached(var pc : MetalPipelineCache; dev : MetalDevice?; source, entry : string; fastmath : bool; var error : string&) : MetalComputePipeline? {
@@ -124,7 +124,7 @@ def public cache_drain(var pc : MetalPipelineCache) {
 //! bucket — deterministic for fixed-shape drivers). Acquired buffers stay owned by the caller
 //! until released back; drain frees the free lists only.
 struct public MetalBufferPool {
-    free_bufs : table<uint64; array<MetalBuffer?>>
+    @scratch free_bufs : table<uint64; array<MetalBuffer?>>   // size-bucketed free lists; recycle is the design
 }
 
 def private pool_bucket(bytes : uint64) : uint64 {

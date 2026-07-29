@@ -38,6 +38,25 @@ def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType
 //! stamped from one manifest entry so both decline in lockstep (M4).
 let GEMM_REFERENCE_MR = 4
 
+//! GPU-tier device-plane shape of the Q8 rail: 32-weight blocks, 32B quants + one f16 scale
+//! halfword per block. Every q8 plane sizing (gathers, arena/stack math) derives from these.
+let Q8_BLOCK_ELEMS = 32l
+let Q8_QPB = 32l   // quant bytes per block
+let Q8_SPB = 2l    // scale bytes per block (f16 halfword)
+
+//! kq superblock element count, and the DEVICE scale-row stride: the gathers decode every kq
+//! format's scales to 20B rows on device (kq_ssb below is the DISK/plane stride, per format).
+let KQ_SUPERBLOCK_ELEMS = 256l
+let KQ_DEV_SSB = 20l
+
+//! q5_1 per-32-block plane strides: 16B nibbles + 4B qh quants, f16 d + f16 m scales.
+let Q51_QPB = 20l
+let Q51_SPB = 4l
+
+//! q8n: the same q8 weights as gguf-native 34B interleaved blocks ({f16 d; int8 qs[32]}) —
+//! ONE plane (no separate scale plane), the cm2 decode-in-load device layout.
+let Q8N_BPB = 34l
+
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
 //! Q6_K, 40 = Q4_0). The ONE stride source for every fmt-branched kq walker/kernel/repack —
 //! an unknown id panics instead of silently walking another format's stride.

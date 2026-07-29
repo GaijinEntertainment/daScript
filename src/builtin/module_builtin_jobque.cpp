@@ -107,7 +107,7 @@ namespace das {
     void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         while ( true ) {
             unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
+            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
                 bool continue_waiting = (mRemaining>0) && pipe.empty();
                 return !continue_waiting;
             }) ) {
@@ -139,7 +139,7 @@ namespace das {
 
     bool Channel::popWithTimeout ( int timeoutMs, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         unique_lock<mutex> uguard(mCompleteMutex);
-        if ( !mCond.wait_for(uguard, chrono::milliseconds(timeoutMs), [&]() {
+        if ( !mCond.wait_for(uguard, std::chrono::milliseconds(timeoutMs), [&]() {
             return !pipe.empty() || mRemaining <= 0;
         }) ) {
             return false;
@@ -325,7 +325,7 @@ namespace das {
     void Stream::pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
         while ( true ) {
             unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
+            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
                 bool continue_waiting = (mRemaining>0) && pipe.empty();
                 return !continue_waiting;
             }) ) {
@@ -361,7 +361,7 @@ namespace das {
         vector<uint8_t> item;
         {
             unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, chrono::milliseconds(timeoutMs), [&]() {
+            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(timeoutMs), [&]() {
                 return !pipe.empty() || mRemaining <= 0;
             }) ) {
                 return false;

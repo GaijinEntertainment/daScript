@@ -6,6 +6,7 @@ module dasllama_kernel_access shared public
 require daslib/ast
 require daslib/ast_boost
 require daslib/rtti
+require strings   // ends_with — generic-instance call names carry a module prefix
 
 // Interprocedural read/write classifier over a declared set of tracked module globals — the
 // shared analysis half of the GPU dispatch lenses (vulkan today, metal's @role next). Given a
@@ -83,6 +84,16 @@ def private is_setop2(op : das_string) : bool {
 
 def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op == "+++" || op == "---"
 
+// tmm2d tensor builtins (dasMetal): pointer operands — C is written, the rest are read.
+// Returns the C-argument index, or -1 for any other call. Suffix match, like the tg-protocol
+// arms: resolved call names may carry a module/instance prefix.
+def private tmm2d_c_arg(cname : string) : int {
+    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
+        return 7
+    }
+    return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
+}
+
 class private AccessVisitor : AstVisitor {
     tracked : table<string>
     fieldMode : bool               // tracked names are class FIELDS (metal): match self.<name>
@@ -92,6 +103,10 @@ class private AccessVisitor : AstVisitor {
     callees : table<string>        // non-intrinsic call names, for the driver's same-module recursion
     claimed : table<string>        // pure-write target tokens, keyed name:line:column — infer
                                    // CLONES subtrees during rewrites, so pointer identity misses
+    ptrs : table<string; string>   // buffer-pointer local -> its tracked buffer; the init
+                                   // (`var p = unsafe(addr(buf[..]))`) is claimed, and each USE
+                                   // decides the direction: a modeled intrinsic arg reads or
+                                   // writes precisely, anything else restores a conservative read
     err : string
 
     def is_tracked(name : das_string) : bool => key_exists(tracked, string(name))
@@ -110,6 +125,35 @@ class private AccessVisitor : AstVisitor {
         }
         if (ACCESS_DEBUG) {
             print("[access-dbg] write {name} at={int(node.at.line)}:{int(node.at.column)} also_read={also_read}\n")
+        }
+    }
+
+    // record buffer-pointer locals: `var p = unsafe(addr(buf[..]))` (post-infer ExprRef2Ptr;
+    // pre-infer a bare `addr` call). The buf node is claimed — its direction comes from p's uses.
+    def override preVisitExprLet(expr : ExprLet?) : void {
+        for (v in expr.variables) {
+            var init = v.init
+            if (init == null) {
+                continue
+            }
+            if (init is ExprRef2Value) {
+                init = (init as ExprRef2Value).subexpr
+            }
+            if (init is ExprUnsafe) {   // pre-infer bodies keep the unsafe() wrapper node
+                init = (init as ExprUnsafe).body
+            }
+            var sub : Expression?
+            if (init is ExprRef2Ptr) {
+                sub = (init as ExprRef2Ptr).subexpr
+            } elif (init is ExprCall && (init as ExprCall).name == "addr" && length((init as ExprCall).arguments) == 1) {
+                sub = (init as ExprCall).arguments[0]
+            }
+            continue if (sub == null || !(sub is ExprAt))
+            var node : Expression const?
+            let name = write_root_name(sub, tracked, fieldMode, node)
+            continue if (empty(name))
+            ptrs[string(v.name)] = name
+            claimed |> insert("{name}:{node.at.line}:{node.at.column}")
         }
     }
 
@@ -140,9 +184,9 @@ class private AccessVisitor : AstVisitor {
     def override preVisitExprCall(expr : ExprCall?) : void {
         let cname = string(expr.name)
         // GPU intrinsics that take a whole array and write (or only read) through it:
-        // dasSpirv coopmat pair + the dasMetal simdgroup pair store through arg 1;
-        // tg_store_float4(dst, idx, v) stores through arg 0
-        if (cname == "coopmatStore" || cname == "simdgroup_store") {
+        // dasSpirv coopmat pair (+ the cm2 tensor-addressed forms) + the dasMetal simdgroup
+        // pair store through arg 1; tg_store_float4(dst, idx, v) stores through arg 0
+        if (cname == "coopmatStore" || cname == "simdgroup_store" || cname == "coopmatStoreTensor") {
             if (length(expr.arguments) >= 2) {
                 note_write(expr.arguments[1], false)
             }
@@ -154,8 +198,50 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
-        if (cname == "coopmatLoad" || cname == "simdgroup_load") {
-            return   // src argument is a plain read — the generic read pass records it
+        if (cname == "coopmatLoad" || cname == "simdgroup_load"
+                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
+                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")) {
+            // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
+            // begin/step, only untracked locals/@workgroup tiles
+            return
+        }
+        if (cname |> ends_with("tmm2d_tg_store")) {
+            if (length(expr.arguments) == 5) {
+                var cur = expr.arguments[1]
+                if (cur is ExprRef2Value) {
+                    cur = (cur as ExprRef2Value).subexpr
+                }
+                if (cur is ExprVar) {
+                    let pn = string((cur as ExprVar).name)
+                    let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                    if (!empty(bn)) {
+                        claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+                        writes |> insert(bn)
+                    }
+                }
+            }
+            return
+        }
+        let tci = tmm2d_c_arg(cname)
+        if (tci >= 0) {
+            // pointer operands resolve through the ptr-map: C writes, the rest read
+            for (i in range(3, length(expr.arguments))) {
+                var cur = expr.arguments[i]
+                if (cur is ExprRef2Value) {
+                    cur = (cur as ExprRef2Value).subexpr
+                }
+                continue if (!(cur is ExprVar))
+                let pn = string((cur as ExprVar).name)
+                let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                continue if (empty(bn))
+                claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+                if (i == tci) {
+                    writes |> insert(bn)
+                } else {
+                    reads |> insert(bn)
+                }
+            }
+            return
         }
         callees |> insert(cname)
         // the ratchet: a tracked buffer passed WHOLE to a call we do not model could be written
@@ -184,6 +270,9 @@ class private AccessVisitor : AstVisitor {
             if (ACCESS_DEBUG) {
                 print("[access-dbg] read {expr.name} at={int(expr.at.line)}:{int(expr.at.column)}\n")
             }
+        } elif (key_exists(ptrs, string(expr.name)) && !key_exists(claimed, "{expr.name}:{expr.at.line}:{expr.at.column}")) {
+            // unmodeled use of a buffer-pointer local — conservative read of its buffer
+            reads |> insert(ptrs[string(expr.name)])
         }
         return expr
     }

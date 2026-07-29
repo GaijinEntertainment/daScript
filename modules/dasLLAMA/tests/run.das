@@ -34,8 +34,8 @@ struct RunArgs {
     @clarg_doc = "Repeat count — explicit only (default 1, never best-of-N)"
     nreps : int = 1
 
-    @clarg_doc = "daslang binary (default ./bin/daslang — run from the repo root)"
-    das : string = "./bin/daslang"
+    @clarg_doc = "daslang binary (default: the binary running this script — a hardcoded ./bin/daslang picked up a STALE top-level exe on the MSVC layout)"
+    das : string = ""
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -54,6 +54,8 @@ def private suite_files(name : string) : array<string> {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
+    } elif (name == "image-vulkan") {
+        return <- [ "modules/dasLLAMA/tests/test_model_image_vulkan.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
@@ -114,26 +116,50 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | all)\n")
         return 2
     }
-    let tmp = empty(get_env_variable("TMPDIR")) ? "/tmp" : get_env_variable("TMPDIR")
+    var tmp = get_env_variable("TMPDIR")
+    if (empty(tmp)) {
+        tmp = get_env_variable("TEMP")   // the Windows spelling; TMPDIR is the POSIX one
+    }
+    if (empty(tmp)) {
+        tmp = "/tmp"
+    }
     // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
     // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
     // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
-    var envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1"
-    if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
-        envs = "{envs} DASLLAMA_TEST_FAMILY='{cfg.family}'"
+    // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
+    let win = get_platform_name() == "windows"
+    var envs = ""
+    if (win) {
+        envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={cfg.arm}\"&& ")
+            + "set \"DASLLAMA_CPU_PREFILL=1\"&& set \"DASLLAMA_METAL_HAZARD_STRICT=1\"&& ")
+        if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
+            envs = "{envs}set \"DASLLAMA_TEST_FAMILY={cfg.family}\"&& "
+        }
+    } else {
+        envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
+        if (!empty(cfg.family)) {
+            envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
+        }
+    }
+    if (cfg.suite == "image-vulkan") {
+        // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
+        // the bake itself is DRY (no device calls), so this is safe on GPU-less boxes too
+        envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
+            : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
     }
     // the full gate holds the 8B/70B tails — the stock 1200s dastest wall is an arm-mode budget
     let tmo = cfg.full ? 3600 : 1200
     let reps = max(cfg.nreps, 1)
+    let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
     var failures = 0
     for (rep in range(reps)) {
         for (file in files) {
             let tag = base_name(file)
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
-            let cmd = "{envs} \"{cfg.das}\" -jit dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
+            let cmd = "{envs}\"{das_exe}\" -jit dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()

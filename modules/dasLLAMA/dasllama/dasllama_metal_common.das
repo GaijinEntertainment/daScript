@@ -10,6 +10,7 @@ require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + t
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
 // Shared infrastructure for the dasMetal resident drivers (the format-matrix arc's W1 split):
 // device/queue init, buffer pools, the weight-region + block_q8_0-blob + cat-blob caches, the
@@ -34,115 +35,10 @@ var g_attn_single_max = 64l
 // the fused add+rms kernel's threadgroup row slab — wider models take the unfused pair
 let ADD_RMS_MAX_DIM = 4096l
 
-// why a step declined to the CPU path — every gate reports its FIRST failing clause, and the
-// declines-by-reason tables make silent coverage regressions observable (the support-matrix test
-// asserts these names as strings; renaming a value is a test-visible change)
-enum MetalDecodeDecline {
-    none                // supported — the step runs on the GPU
-    quant_mode          // weights not loaded under QuantMode.q8
-    kquant_native       // per-tensor K-quant planes: not readable as qblob offsets (kernels = W4)
-    arch                // RETIRED (family waves A): the arch-name check is gone — non-std block
-                        // sets decline `graph`, feature-flag configs decline `feature` per bit
-    backend_repack      // repack backend: interleaved weight layout unreadable by the GPU kernels
-    rope_mode           // rope tables off
-    config              // RETIRED (family waves A): split into `feature` + the per-need
-                        // `need_*` keys in the declines-by-reason table
-    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
-    feature             // the model needs layer-stack features this path's kernels don't
-                        // implement — each missing bit records a `need_*` key alongside
-    shape               // head/dim alignment outside the kernel grids
-    layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
-    kv_dtype            // session KV codec not uniform f16/f32 (the mirror moves raw row bytes)
-    depth               // RETIRED (M2.4): the chunked/partD attention scans any depth — capacity
-                        // limits surface as `mirror` (the arena cannot hold the session's slice)
-    no_uid              // session without a real uid (mirror keying)
-    rope_rows           // the position's rope row not built
-    batch_dim_cap       // RETIRED (M2.6): the batch add+rms falls back to the unfused pair past
-                        // the fused slab, and the GEMM's fixed K-tiles serve any dim at B > 4
-    device              // metal_decode_init failed (no device / PSO build failure)
-    mirror              // the mirror arena cannot hold the KV slice
-    gpu_error           // dispatch failed at execution time
-    planar              // weights not in the blob-image form (the drivers are blob-only —
-                        // load_model under metal mode transforms/maps the metal flavor)
-    dn_state            // deltanet recurrent state not GPU-resident for this position (state is
-                        // forward-only and NOT re-derivable — no watermark repair exists)
-}
-
-//! Layer-stack features a model's graph needs beyond the base llama dense block — ONE derivation
-//! (`metal_needs`) feeds every GPU gate; each path holds its own implemented-set mask and declines
-//! `feature` on the difference, recording a `need_*` key per missing bit.
-bitfield MetalNeed {
-    neox            // NEOX rope pairing (j, j+hs/2) — qwen2/qwen3/phi3/gemma/gptoss
-    qkv_bias        // additive bias on the Q/K/V projections — qwen2/glm4moe/gptoss
-    qk_norm         // per-head RMSNorm on Q/K before rope — qwen3/gemma3+/qwen35
-    v_norm          // weightless per-head RMSNorm on V — gemma4
-    partial_rope    // rope_dim < head_size rotates only the first rope_dim dims — qwen35/glm4moe
-    q_gated         // 2x-wide Q, out ⊙ σ(gate) before wo — qwen35
-    attn_scale      // attention-score scale override (not 1/sqrt(hs)) — gemma4
-    softcap         // attention-logit soft cap — gemma2
-    sliding         // sliding-window attention span — gemma2/3/4, gptoss
-    sinks           // per-head sink logit in the softmax denominator — gptoss
-    out_bias        // additive bias on the attention output projection — gptoss
-    pre_post_norm   // extra post-attention / post-FFN norms — gemma2/3/4
-    out_scale       // per-layer scalar on the layer output — gemma4
-    geglu           // GeGLU FFN activation (gelu, not silu) — gemma2/3/4
-    ple             // per-layer embeddings — gemma4 E-series
-    qd_neq_dim      // n_heads*head_size != dim (query width differs from the residual) — qwen3
-}
-
-//! The feature set model `t` needs from a resident GPU driver — derived from the loaded config
-//! (per-file truth: loader-detected flags included). Graph-shape needs are NOT bits here — the
-//! block set declares those (`attn_is_std` / `ffn_is_dense`) and the gates decline `graph` first.
-def metal_needs(t : Model) : MetalNeed {
-    let c = t.config
-    var n : MetalNeed
-    n.neox = c.rope_neox
-    n.qkv_bias = c.attn_qkv_bias
-    n.qk_norm = c.qk_norm
-    n.v_norm = c.v_norm
-    n.partial_rope = c.rope_dim > 0l && c.rope_dim != c.head_size
-    n.q_gated = c.q_gated
-    n.attn_scale = c.attn_scale > 0.0
-    n.softcap = c.attn_logit_softcap > 0.0
-    n.sliding = c.sliding_window > 0l
-    n.sinks = c.attn_sinks
-    n.out_bias = c.attn_out_bias
-    n.pre_post_norm = c.pre_post_norm
-    n.out_scale = c.layer_out_scale
-    n.geglu = c.ffn_act != FfnAct.silu
-    n.ple = c.n_embd_per_layer > 0l
-    n.qd_neq_dim = c.n_heads * c.head_size != c.dim
-    return n
-}
-
-def metal_missing_needs(t : Model; ok : MetalNeed) : MetalNeed {
-    return metal_needs(t) & ~ok
-}
-
-// one `need_*` key per missing bit — the support-matrix cells assert these names as strings
-def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
-    if (missing.neox) { tab["need_neox"]++ }
-    if (missing.qkv_bias) { tab["need_qkv_bias"]++ }
-    if (missing.qk_norm) { tab["need_qk_norm"]++ }
-    if (missing.v_norm) { tab["need_v_norm"]++ }
-    if (missing.partial_rope) { tab["need_partial_rope"]++ }
-    if (missing.q_gated) { tab["need_q_gated"]++ }
-    if (missing.attn_scale) { tab["need_attn_scale"]++ }
-    if (missing.softcap) { tab["need_softcap"]++ }
-    if (missing.sliding) { tab["need_sliding"]++ }
-    if (missing.sinks) { tab["need_sinks"]++ }
-    if (missing.out_bias) { tab["need_out_bias"]++ }
-    if (missing.pre_post_norm) { tab["need_pre_post_norm"]++ }
-    if (missing.out_scale) { tab["need_out_scale"]++ }
-    if (missing.geglu) { tab["need_geglu"]++ }
-    if (missing.ple) { tab["need_ple"]++ }
-    if (missing.qd_neq_dim) { tab["need_qd_neq_dim"]++ }
-}
-
 var g_dev : MetalDevice?
 var g_queue : MetalCommandQueue?
 var g_failed = false
-var g_regions : table<uint64; MetalBuffer?>  // base address -> resident weight/scale/norm region
+var @scratch g_regions : table<uint64; MetalBuffer?>  // base address -> resident region; upload-once, steady-state [] is a hit
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -188,7 +84,7 @@ struct MetalDecodeStepTrace {
     ge : double
 }
 
-var g_step_trace : array<MetalDecodeStepTrace>
+var @scratch g_step_trace : array<MetalDecodeStepTrace>   // capacity-capped trace ring (g_step_trace_cap bounds it)
 var g_step_trace_cap = 0l
 var g_step_trace_t0 = 0l
 
@@ -207,7 +103,7 @@ struct KVMirror {
     bytes : uint64        // slice size (k + v planes)
 }
 
-var g_mirrors : table<uint64; KVMirror>
+var @scratch g_mirrors : table<uint64; KVMirror>   // per-session mirrors; hot [] after key_exists is a hit
 var g_mirror_bytes = 0ul
 var g_tick = 0l
 var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4096) reads at use
@@ -218,7 +114,7 @@ var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4
 var g_arena : MetalBuffer?
 var g_arena_bytes = 0ul
 var g_arena_epoch = 0l   // bumps on every grow-rebuild — pre-encoded steps referencing the old buffer are stale
-var g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorted by off, coalesced
+var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorted by off, coalesced
 
 // ===== decode PSO + resource globals (declared here, not kernels.das, so [metal_dispatch]-generated
 // builders — co-located with their kernel class, some in prefill.das — see the pipeline they
@@ -307,6 +203,9 @@ var g_pso_gemm_b : MetalComputePipeline?
 var g_pso_gemm_b_sk : MetalComputePipeline? // split-K twin (per-site policy)
 var g_pso_skred : MetalComputePipeline?     // the split-K plane reduce
 var g_pso_gemm64_b : MetalComputePipeline?  // 64-wide N tile (classifier site)
+var g_gemm_b_tensor : bool                  // crowned tensor twins selected (no tgmem bind)
+var g_gemm_b_sk_tensor : bool
+var g_gemm64_b_tensor : bool
 var g_pso_mm : MetalComputePipeline?        // the prefill module's MetalQ8MulMm (34B blob)
 var g_pso_attnb16 : MetalComputePipeline?
 var g_pso_attnb32 : MetalComputePipeline?
@@ -392,6 +291,11 @@ def require_or_panic(kind : string; why : string) {
     }
 }
 
+// the failure leg's message fetch — hot code checks metal_command_buffer_failed (no alloc)
+[cold_path]
+def cb_error_text(cb : MetalCommandBuffer?) : string => metal_command_buffer_error(cb)
+
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalDecodeDecline) {
     g_declines++
     g_declines_by_reason["{why}"]++
@@ -399,6 +303,7 @@ def decline(why : MetalDecodeDecline) {
 }
 
 // the `feature` flavor: records a need_* key per missing bit, and the required-mode panic names them
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalDecodeDecline; missing : MetalNeed) {
     g_declines++
     g_declines_by_reason["{why}"]++
@@ -406,12 +311,14 @@ def decline(why : MetalDecodeDecline; missing : MetalNeed) {
     require_or_panic("decode", "{why} {missing}")
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def batch_decline(why : MetalDecodeDecline) {
     g_batch_declines++
     g_batch_declines_by_reason["{why}"]++
     require_or_panic("batch decode", "{why}")
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def batch_decline(why : MetalDecodeDecline; missing : MetalNeed) {
     g_batch_declines++
     g_batch_declines_by_reason["{why}"]++
@@ -691,40 +598,11 @@ def mx4_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffe
     }
 }
 
-// the kq formats the Metal kernels implement — anything else (the q4_0 QAT tier, future
-// formats) must DECLINE kquant_native instead of falling into a wrong-layout kernel branch
-// (the dispatchers below treat "not k4/k6" as k5)
-def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6
-}
-
-def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
-    for (f in a) {
-        if (!kq_fmt_gpu_supported(f)) {
-            return false
-        }
-    }
-    return true
-}
-
-// every tensor fmt a kq load can route to a GPU kernel — the decode/batch/prefill gates all
-// clause on this (the MoE expert planes never reach the llama-family GPU graph, so we1/2/3
-// stay out of scope)
-def kq_load_gpu_supported(t : Model) : bool {
-    if (!t.kquant_native) {
-        return true
-    }
-    return ((kq_fmts_gpu_supported(t.wq_fmt) && kq_fmts_gpu_supported(t.wk_fmt) &&
-             kq_fmts_gpu_supported(t.wv_fmt) && kq_fmts_gpu_supported(t.wo_fmt)) &&
-        (kq_fmts_gpu_supported(t.w1_fmt) && kq_fmts_gpu_supported(t.w2_fmt) &&
-             kq_fmts_gpu_supported(t.w3_fmt)) &&
-        (kq_fmt_gpu_supported(t.wcls_fmt) && kq_fmt_gpu_supported(t.emb_fmt)))
-}
 
 // ===== zero-copy logits: bytesNoCopy wrappers over session-owned storage =====
 // Writes land straight into s.logits (no landing memcpy); borrowed, no deallocator. Gated on
 // 16KB page alignment + page-rounded capacity; the pointer is revalidated on every lookup.
-var g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
+var @scratch g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
 
 def nc_logits_for(dev : MetalDevice?; s : Session) : MetalBuffer? {
     let p : uint64 = intptr(unsafe(addr(s.logits[0])))
@@ -852,26 +730,6 @@ def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
     }
 }
 
-//! Cross-layer KV sharing (gemma-4 E-series): does layer l either own its rows or share a
-//! byte-compatible source? A shared layer aliases its source's mirror slab / prefill panel via
-//! kv_row_prefix, so the source must own rows and match l's class geometry exactly.
-def kv_share_ok(t : Model; l : int64) : bool {
-    if (l >= long_length(t.kv_src)) {   // the MTP draft slab owns its rows
-        return true
-    }
-    let src = t.kv_src[l]
-    if (src == l) {
-        return true
-    }
-    return (src >= 0l && src < l && t.kv_src[src] == src && !layer_is_recurrent(t.config, src) &&
-        layer_kv_dim(t.config, l) == layer_kv_dim(t.config, src) &&
-        layer_head_size(t.config, l) == layer_head_size(t.config, src))
-}
-
-//! true when layer l reads another layer's KV (no rows of its own — Q-only attention)
-def kv_shared_layer(t : Model; l : int64) : bool {
-    return l < long_length(t.kv_src) && t.kv_src[l] != l
-}
 
 // Hetero-safe per-layer mirror addressing (gemma4's two kv-head classes): every KV codec is
 // linear bytes-per-element for kvd % 32 == 0, so the layout_offsets element prefix scales
@@ -912,6 +770,7 @@ def private mirror_ceiling_bytes : uint64 {
 // release-all rebuild at `want` (clamped to the ceiling): every mirror re-uploads via its
 // watermark, and the epoch bump invalidates any pre-encoded step whose kernels reference the
 // OLD arena buffer. Callers must ensure nothing is pinned and no step is in flight.
+[cold_path]   // arena (re)construction — the grow event, not the per-step path
 def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     for (mr in values(g_mirrors)) {
         mirror_release(mr)
@@ -974,6 +833,7 @@ def mirror_reserve(total : uint64) : bool {
 // release-all rebuild sized for `total` — the batch driver's fragmentation fallback when the
 // per-session prepares can't pack a step that DOES fit capacity-wise (exact-fit demand around
 // older residents can strand contiguity). Callers unpin first; false = past the ceiling.
+[cold_path]   // arena defrag = the occasional rebuild leg
 def mirror_defrag(total : uint64) : bool {
     let ceil_bytes = mirror_ceiling_bytes()
     if (total > ceil_bytes || !empty(g_pin) || g_arena == null) {
@@ -1087,13 +947,6 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
 }
 
 
-// Wave D serve gate for the deltanet kernel set: fixed d_state 128 (the scan/l2/gate lane math
-// bakes 32 lanes x 4), conv taps <= 8 (hist registers). β/α projections: q8 planes ride the
-// site GEMVs; f32-on-disk (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.
-def dn_metal_ok(t : Model) : bool {
-    let c = t.config
-    return c.ssm_d_state == 128l && c.ssm_d_conv >= 2l && c.ssm_d_conv <= 8l
-}
 
 // ===== deltanet recurrent-state mirrors (Wave D) — per-session GPU S + conv state =====
 // Forward-only, NOT re-derivable: pos 0 zeroes, s.dn_pos == pos syncs from CPU, else decline;
@@ -1110,7 +963,7 @@ struct DnMirror {
     pos : int64                         // next position the GPU state expects (forward-only)
     tick : int64
 }
-var g_dn_mirrors : table<uint64; DnMirror>
+var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
 let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest evicts; a returning
                             // evicted session declines unless it restarts at pos 0 or off CPU state
 
@@ -1201,15 +1054,20 @@ def dn_mirror_flip(uid : uint64; pos : int64) {
     }
 }
 
+[cold_path]   // one-time: fills the 512B FWHT sign table on first touch
+def private signs_buffer_build() {
+    var signs : array<float>
+    tq4_fill_signs(signs, 128l)
+    g_signs = metal_new_buffer(g_dev, 512ul)
+    unsafe {
+        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
+    }
+    delete signs
+}
+
 def signs_buffer() : MetalBuffer? {
     if (g_signs == null) {
-        var signs : array<float>
-        tq4_fill_signs(signs, 128l)
-        g_signs = metal_new_buffer(g_dev, 512ul)
-        unsafe {
-            memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
-        }
-        delete signs
+        signs_buffer_build()
     }
     return g_signs
 }
@@ -1221,110 +1079,7 @@ def private moe_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.
 
 // one MoE weight stack's (fmt, offset) serve check: base offset = the format's BIND alignment
 // (q8/k4/k5 %256, k6's d-plane pair %512); per-expert stride = the in-kernel index unit
-// (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
-def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
-    if (fmt == KqFmt.q8) {
-        return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
-    }
-    if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
-        return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
-    }
-    if (fmt == KqFmt.k6) {
-        return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
-    }
-    if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
-        return off >= 0l && (off % 128l) == 0l && (ege % 32l) == 0l
-    }
-    return false
-}
 
-// The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
-// + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
-// gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
-def moe_metal_ok(t : Model) : bool {
-    let c = t.config
-    if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
-            (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0)) {
-        return false
-    }
-    if (t.experts_mx4) {
-        // gpt-oss: softmax_weight top-k on raw logits, router + per-expert biases, clamped
-        // swiglu, disk-order mx4 stacks (the CPU laneq repack has no GPU carry)
-        if (c.moe_gate != MoeGate.softmax_weight || c.ffn_act != FfnAct.swiglu_oai ||
-                !c.moe_router_bias || !c.moe_exps_bias || c.moe_dense_shexp || c.n_ff_shexp > 0l ||
-                t.mx4_repacked ||
-                t.router_b_off < 0l || t.web1_off < 0l || t.web2_off < 0l || t.web3_off < 0l) {
-            return false
-        }
-    } elif (c.moe_dense_shexp) {
-        if (c.moe_gate != MoeGate.softmax || !c.norm_topk_prob ||
-                c.moe_router_bias || c.moe_exps_bias || c.n_ff_shexp > 0l ||
-                c.ffn_act != FfnAct.gelu || t.moe_router_scale_off < 0l || t.moe_down_scale_off < 0l ||
-                t.rms_pre_ffn2_off < 0l || t.rms_post_ffn1_off < 0l || t.rms_post_ffn2_off < 0l ||
-                long_length(t.w1_offs) < c.n_layers) {
-            return false
-        }
-    } elif (c.moe_gate != MoeGate.softmax ||
-            c.moe_router_bias || c.moe_exps_bias || c.ffn_act != FfnAct.silu) {
-        // norm_topk_prob both ways: renorm = select gmode 0 (qwen3moe/qwen35moe), no-renorm =
-        // gmode 2 (qwen2moe)
-        return false
-    } elif (c.n_ff_shexp > 0l) {
-        // sigmoid-gated shared expert (qwen35moe): q8 wsh planes at base + l*she ride the
-        // dense site kernels — base + stride %256 (bind), nsh %64 (prefill C tiles)
-        let she = c.dim * c.n_ff_shexp
-        if (!c.moe_shexp_gated ||
-                (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
-                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
-            return false
-        }
-    }
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    let nfe = c.n_ff_exp
-    let ege = c.dim * nfe
-    // select holds 8 logits per lane (ne <= 256); %64 dims = the gathered mul_mm C tiles
-    if (ne < 1l || ne > 256l || k < 1l || k > 16l || k > ne || nfe <= 0l ||
-            (c.dim % 64l) != 0l || (nfe % 64l) != 0l ||
-            ne * ege > 3800000000l ||   // uint32 in-kernel indices (q8 byte view = elements * 34/32)
-            t.router_off < 0l || empty(t.we1_offs) || empty(t.we2_offs) || empty(t.we3_offs)) {
-        return false
-    }
-    if (t.experts_mx4) {
-        // mx4 binds: nibble bytes at off/2 (%4 => off %8), E8M0 at off/32 (%4 => off %128)
-        if ((ege % 32l) != 0l) {
-            return false
-        }
-        for (l in range64(c.n_layers)) {
-            if (t.we1_offs[l] < 0l || (t.we1_offs[l] % 128l) != 0l ||
-                    t.we2_offs[l] < 0l || (t.we2_offs[l] % 128l) != 0l ||
-                    t.we3_offs[l] < 0l || (t.we3_offs[l] % 128l) != 0l) {
-                return false
-            }
-        }
-        return true
-    }
-    for (l in range64(c.n_layers)) {
-        let f1 = moe_fmt_at(t.we1_fmt, l)
-        let f2 = moe_fmt_at(t.we2_fmt, l)
-        let f3 = moe_fmt_at(t.we3_fmt, l)
-        // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
-        // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
-        let sb1 = f1 == KqFmt.k4 || f1 == KqFmt.k5 || f1 == KqFmt.k6
-        let sb3 = f3 == KqFmt.k4 || f3 == KqFmt.k5 || f3 == KqFmt.k6
-        let sb2 = f2 == KqFmt.k4 || f2 == KqFmt.k5 || f2 == KqFmt.k6
-        if (!moe_site_ok(f1, t.we1_offs[l], ege) ||
-                !moe_site_ok(f2, t.we2_offs[l], ege) ||
-                !moe_site_ok(f3, t.we3_offs[l], ege) ||
-                ((sb1 || sb3) && (c.dim % 256l) != 0l) ||
-                (sb2 && (nfe % 256l) != 0l) ||
-                ((f1 == KqFmt.q51 || f3 == KqFmt.q51) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (f2 == KqFmt.q51 && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
-            return false
-        }
-    }
-    return true
-}
 
 
 // ===== the range tracker (the dispatch port; since P3 the batch rail's only hazard system) =====
@@ -1346,8 +1101,8 @@ var private g_pipe_debug = false    // DASLLAMA_METAL_PIPE_DEBUG, resolved once 
 var private g_mirror_cap_env = 4096   // DASLLAMA_METAL_KV_MIRROR_MB, resolved at init; the default stands until then
 var g_hz_strict = false             // DASLLAMA_METAL_HAZARD_STRICT: undeclared dispatch panics
 var g_hz_dirty = false              // an undeclared dispatch ran — the next gate must barrier
-var g_hz_stage : array<MemRange>    // the next dispatch's declared ranges
-var g_hz_pend : array<MemRange>     // unbarriered ranges live on the encoder
+var @scratch g_hz_stage : array<MemRange>    // the next dispatch's declared ranges (clear()-recycled)
+var @scratch g_hz_pend : array<MemRange>     // unbarriered ranges live on the encoder (clear()-recycled)
 var g_hz_barriers = 0l              // lifetime barrier count (chase prints the per-step delta)
 var g_hz_gated = 0l                 // lifetime gated dispatches — the coverage check's twin
 var g_hz_undeclared = 0l            // conservative fallbacks taken (0 once migration completes)
@@ -1454,9 +1209,9 @@ struct KBind {
 }
 
 var g_gr_on = false
-var g_gr_nodes : array<KNode>
-var g_gr_binds : array<KBind>
-var g_gr_ranges : array<MemRange>
+var @scratch g_gr_nodes : array<KNode>      // capture-rail arrays: grown once, clear()-recycled per capture
+var @scratch g_gr_binds : array<KBind>
+var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
@@ -1546,7 +1301,7 @@ struct KSched {
     nodes : int
 }
 
-var g_gr_scheds : table<uint64; KSched>
+var @scratch g_gr_scheds : table<uint64; KSched>
 var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
 
 [cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
@@ -1576,6 +1331,7 @@ def private gr_shape_hash : uint64 {
 
 // level[j] = 1 + max level of any conflicting predecessor; scan partitioned per buffer id.
 // An UNDECLARED node has no edges and would float freely — refuse and keep capture order.
+[cold_path]   // schedule compile — once per shape class, inside the g_gr_scheds miss
 def private gr_schedule(var sched : KSched) : bool {
     let n = length(g_gr_nodes)
     sched.nodes = n
@@ -1710,27 +1466,27 @@ def public set_metal_decode_hazard(paranoid, strict : bool) {
 
 var g_lp_active = false
 var g_lp_cbs : array<MetalCommandBuffer?>
-var g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>
-var g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
+var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
+var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
 var g_lp_err = false            // sticky per-step dispatch-error signal for sync callers
-var g_lp_sessions : array<Session?>
-var g_lp_positions : array<int64>
-var g_lp_koffs : array<uint64>
-var g_lp_voffs : array<uint64>
-var g_lp_caps : array<int64>
+var @scratch g_lp_sessions : array<Session?>
+var @scratch g_lp_positions : array<int64>
+var @scratch g_lp_koffs : array<uint64>
+var @scratch g_lp_voffs : array<uint64>
+var @scratch g_lp_caps : array<int64>
 var g_lp_nrows = 0l
 var g_lp_layers = 0l
 var g_lp_seq = 0l
 var g_lp_vocab = 0l
 // hetero (gemma4): per-layer row bytes + slab bases within a mirror plane (uniform models:
 // lbase_l == l * cap * rowb_l — captured at encode, one array per step)
-var g_lp_lrowb : array<int64>
-var g_lp_lkbase : array<int64>   // per (row i, layer l) flattened i * n_layers + l (caps differ per row)
-var g_lp_lvbase : array<int64>
+var @scratch g_lp_lrowb : array<int64>
+var @scratch g_lp_lkbase : array<int64>   // per (row i, layer l) flattened i * n_layers + l (caps differ per row)
+var @scratch g_lp_lvbase : array<int64>
 var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff stat's anchor
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
@@ -1744,8 +1500,8 @@ def finish_pending_step {
     metal_wait_until_completed(g_lp_cbs[length(g_lp_cbs) - 1])
     var err = ""
     for (c_i in g_lp_cbs) {
-        if (empty(err)) {
-            err = metal_command_buffer_error(c_i)
+        if (empty(err) && metal_command_buffer_failed(c_i)) {
+            err = cb_error_text(c_i)
         }
         g_sched_b_ms += (metal_command_buffer_kernel_end_time(c_i) - metal_command_buffer_kernel_start_time(c_i)) * 1000.0lf
     }
@@ -1874,6 +1630,7 @@ def weight_caches_stale() : bool {
     return weights_epoch() != g_weight_cache_epoch
 }
 
+[cold_path]   // live-reload only
 def weight_caches_flush_on_reload {
     if (!weight_caches_stale()) {
         return
@@ -1976,6 +1733,7 @@ enum MetalPrefillDecline {
 var g_prefill_declines = 0l
 var g_prefill_declines_by_reason : table<string; int64>
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalPrefillDecline) {
     g_prefill_declines++
     g_prefill_declines_by_reason["{why}"]++
@@ -1984,6 +1742,7 @@ def decline(why : MetalPrefillDecline) {
     }
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def decline(why : MetalPrefillDecline; missing : MetalNeed) {
     g_prefill_declines++
     g_prefill_declines_by_reason["{why}"]++
@@ -1998,3 +1757,132 @@ def public metal_prefill_declines() : table<string; int64> {
     return clone_to_move(g_prefill_declines_by_reason)
 }
 
+// ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
+
+struct public MetalTensorRaceResult {
+    family : string
+    winner : string   // "tensor" | "simdgroup" | "" when the family could not race
+    base_ms : double
+    twin_ms : double
+    note : string
+}
+
+def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
+    var b = metal_new_buffer(dev, bytes)
+    if (src != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(b), src, bytes)
+        }
+    }
+    return b
+}
+
+def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
+    var b = metal_new_buffer(dev, 4ul)
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(b))
+        p[0] = v
+    }
+    return b
+}
+
+// deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
+def race_q8_blob(nblk : int) : array<int8> {
+    var blob : array<int8>
+    blob |> resize(nblk * 34)
+    for (blk in range(nblk)) {
+        for (k in range(32)) {
+            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
+    unsafe {
+        var p8 = addr(blob[0])
+        for (blk in range(nblk)) {
+            var ph = reinterpret<float16?>(p8 + blk * 34)
+            ph[0] = float16(0.5 * float(1 << (blk % 3)))
+        }
+    }
+    return <- blob
+}
+
+// deterministic f32 activation panel for the races
+def race_x_f32(count : int) : array<float> {
+    var xa : array<float>
+    xa |> resize(count)
+    for (i in range(count)) {
+        xa[i] = 0.25 * float(i % 17 - 8)
+    }
+    return <- xa
+}
+
+// eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
+def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
+    var maxref = 0.0lf
+    var maxdiff = 0.0lf
+    unsafe {
+        let pb = reinterpret<float?>(metal_buffer_contents(ba))
+        let pt = reinterpret<float?>(metal_buffer_contents(bb))
+        for (i in range(count)) {
+            maxref = max(maxref, abs(double(pb[i])))
+            maxdiff = max(maxdiff, abs(double(pt[i]) - double(pb[i])))
+        }
+    }
+    if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+        note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        return false
+    }
+    return true
+}
+
+// interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
+// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side.
+def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : double&;
+                 base_blk : block<(enc : MetalComputeEncoder?) : void>;
+                 twin_blk : block<(enc : MetalComputeEncoder?) : void>) {
+    base_ms = -1.0lf
+    twin_ms = -1.0lf
+    var err = ""
+    var best_b = -1.0lf
+    var best_t = -1.0lf
+    for (r in range(reps + 1)) {
+        var g1 = 0.0lf
+        var g2 = 0.0lf
+        let okb = with_compute_encoder_timed(queue, err, g1) $(enc) {
+            invoke(base_blk, enc)
+        }
+        let okt = okb && with_compute_encoder_timed(queue, err, g2) $(enc) {
+            invoke(twin_blk, enc)
+        }
+        return if (!okb || !okt)
+        if (r > 0) {
+            if (best_b < 0.0lf || g1 < best_b) {
+                best_b = g1
+            }
+            if (best_t < 0.0lf || g2 < best_t) {
+                best_t = g2
+            }
+        }
+    }
+    base_ms = best_b
+    twin_ms = best_t
+}
+
+// best GPU time over `reps` dispatches after one warmup; <0 on dispatch failure
+def race_time_ms(queue : MetalCommandQueue?; reps : int; blk : block<(enc : MetalComputeEncoder?) : void>) : double {
+    var best = -1.0lf
+    var err = ""
+    for (r in range(reps + 1)) {
+        var gpu_ms = 0.0lf
+        var okr = false
+        okr = with_compute_encoder_timed(queue, err, gpu_ms) $(enc) {
+            invoke(blk, enc)
+        }
+        if (!okr) {
+            return -1.0lf
+        }
+        if (r > 0 && (best < 0.0lf || gpu_ms < best)) {
+            best = gpu_ms
+        }
+    }
+    return best
+}

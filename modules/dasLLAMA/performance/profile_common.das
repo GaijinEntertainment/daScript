@@ -305,7 +305,9 @@ def run_capture(cmd : string; first_line : bool) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
-            out = fread_to_eof(f)
+            if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
+                out = fread_to_eof(f)
+            }
         }
     }
     out = strip(out)
@@ -321,8 +323,22 @@ def run_capture(cmd : string; first_line : bool) : string {
 // The running daslang's version, via the box's binary (DASLANG_BIN, default bin/daslang from the
 // repo-root cwd these tools run in). Takes the last token of the first --version line ("0.6.3").
 def das_version() : string {
-    let bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
-    let line = run_capture("{bin} --version", true)
+    // shell-free spawn (fio's run_and_capture → popen_argv), so no cmd and no quote/option traps;
+    // CreateProcess still wants backslashes in the program path (probe-verified: `bin/daslang`
+    // fails to spawn, `bin\daslang` runs), hence the normalize
+    var bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
+    if (is_windows()) {
+        bin = replace(bin, "/", "\\")
+    }
+    var out = ""
+    if (run_and_capture([bin, "--version"], out) != 0) {
+        return "unknown"
+    }
+    var line = strip(out)
+    let nl = find(line, "\n")
+    if (nl >= 0) {
+        line = slice(line, 0, nl)
+    }
     let toks <- split(line, " ")
     return empty(toks) ? "unknown" : toks[length(toks) - 1]
 }
@@ -436,15 +452,18 @@ def private platform_ram_gb() : int {
     }
     let gib = 1024.0 * 1024.0 * 1024.0
     if (is_windows()) {
-        // wmic emits "TotalPhysicalMemory=68632934400"
-        let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value", false)
+        // wmic emits "TotalPhysicalMemory=68632934400"; clean Windows 11 24H2+ installs ship
+        // without wmic (it survives in-place upgrades), so fall through to CIM when it yields
+        // nothing — and 2>nul keeps the miss off the console
+        let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value 2>nul", false)
         for (ln in split(raw, "\n")) {
             let i = find(ln, "=")
             if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
                 return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
             }
         }
-        return 0
+        let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"", true)
+        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
     }
     if (is_macos()) {
         return int(to_float(run_capture("sysctl -n hw.memsize", true)) / gib + 0.5)
@@ -473,20 +492,55 @@ def private line_value(raw, key : string) : string {
     return ""
 }
 
+// display-adapter names that belong to a virtual/remote stack (Parsec, RDP, Hyper-V, VMware,
+// Citrix, the driverless fallback), not the physical GPU; matched case-insensitively
+def private is_virtual_gpu(name : string) : bool {
+    let low = to_lower(name)
+    for (marker in fixed_array("virtual", "remote display", "basic display", "hyper-v", "vmware", "citrix")) {
+        if (find(low, marker) >= 0) {
+            return true
+        }
+    }
+    return false
+}
+
+// first non-virtual adapter, else the first at all — remote-desktop stacks enumerate their
+// virtual display ahead of the physical GPU
+def private pick_gpu_name(names : array<string>) : string {
+    for (name in names) {
+        if (!is_virtual_gpu(name)) {
+            return name
+        }
+    }
+    return empty(names) ? "" : names[0]
+}
+
 def private platform_gpu() : string {
     let ov = get_env_variable("DASLLAMA_GPU_NAME")
     if (!empty(ov)) {
         return ov
     }
     if (is_windows()) {
-        let raw = run_capture("wmic path win32_VideoController get name /value", false)
+        // wmic emits "Name=..." lines where present; clean Windows 11 24H2+ installs ship without
+        // it (survives in-place upgrades), so fall through to the same probe via CIM
+        var inscope names : array<string>
+        let raw = run_capture("wmic path win32_VideoController get name /value 2>nul", false)
         for (ln in split(raw, "\n")) {
             let i = find(ln, "Name=")
             if (i >= 0) {
-                return strip(slice(ln, i + length("Name=")))
+                names |> push(strip(slice(ln, i + length("Name="))))
             }
         }
-        return ""
+        if (empty(names)) {
+            let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController).Name\"", false)
+            for (ln in split(ps, "\n")) {
+                let name = strip(ln)
+                if (!empty(name)) {
+                    names |> push(name)
+                }
+            }
+        }
+        return pick_gpu_name(names)
     }
     if (is_macos()) {
         let raw = run_capture("system_profiler SPDisplaysDataType", false)
@@ -895,6 +949,74 @@ struct BenchRun {
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor
+    @optional env : string      // the arming environment `cmd` was run under — see [[bench_env_line]].
+                                // Load-bearing: most GPU/tier levers arm via env, so a `cmd` alone
+                                // does NOT reproduce a row and two configs can look identical
+}
+
+// Every env var the dasLLAMA engine + the tune rail consult. Capturing the WHOLE set (not a curated
+// "interesting" subset) is deliberate: an unrecorded var is exactly how two different configs come
+// to look like the same row.
+let private BENCH_ENV_VARS = fixed_array(
+    "DAS_JOBQUE_AFFINITY", "DAS_JOBQUE_TEAM_RANK_GATE", "DAS_JOBQUE_THREADS",
+    "DAS_TUNE_MANIFEST", "DAS_TUNE_MODE",
+    "DASLLAMA_ACCEL", "DASLLAMA_ACCEL_F16", "DASLLAMA_ACCEL_F16_STRIPS", "DASLLAMA_ACCEL_MIN_MMAC",
+    "DASLLAMA_ACCEL_MIN_NTOK", "DASLLAMA_ALLOW_INTERP_LOAD", "DASLLAMA_BATCH_GRID_2D",
+    "DASLLAMA_BENCH_VERBOSE", "DASLLAMA_BOX", "DASLLAMA_CALLER_PRIO", "DASLLAMA_CONV_PROF",
+    "DASLLAMA_COOPMAT", "DASLLAMA_CPU", "DASLLAMA_CPU_PREFILL", "DASLLAMA_EXPERT_REUSE",
+    "DASLLAMA_FUSED_DECODE", "DASLLAMA_GPU", "DASLLAMA_GPU_ATTN", "DASLLAMA_GPU_CLS",
+    "DASLLAMA_GPU_COMBINE", "DASLLAMA_GPU_DENSE", "DASLLAMA_GPU_DENSE_ATTN",
+    "DASLLAMA_GPU_DENSE_SHEXP", "DASLLAMA_GPU_DN", "DASLLAMA_GPU_DND", "DASLLAMA_GPU_HEAT",
+    "DASLLAMA_GPU_MIN_CTX", "DASLLAMA_GPU_MOE_LAYERS", "DASLLAMA_GPU_MOE_STREAM",
+    "DASLLAMA_GPU_NAME", "DASLLAMA_GPU_PROF", "DASLLAMA_GPU_QKV", "DASLLAMA_GPU_SHEXP",
+    "DASLLAMA_GPU_VRAM_MB", "DASLLAMA_IMAGE", "DASLLAMA_METAL_ATTN", "DASLLAMA_METAL_ATTN_D",
+    "DASLLAMA_METAL_ATTN_SINGLE", "DASLLAMA_METAL_BATCH_CONCURRENT", "DASLLAMA_METAL_BATCH_FUSE",
+    "DASLLAMA_METAL_BATCH_GEMM_MIN", "DASLLAMA_METAL_BATCH_MM", "DASLLAMA_METAL_BATCH_MV",
+    "DASLLAMA_METAL_BATCH_MV8", "DASLLAMA_METAL_BATCH_NCB", "DASLLAMA_METAL_BATCH_PIPE",
+    "DASLLAMA_METAL_BATCH_SK", "DASLLAMA_METAL_DECODE_CONCURRENT", "DASLLAMA_METAL_DECODE_SKIP",
+    "DASLLAMA_METAL_FUSE", "DASLLAMA_METAL_GEMV_TG", "DASLLAMA_METAL_HAZARD_PARANOID",
+    "DASLLAMA_METAL_HAZARD_STRICT", "DASLLAMA_METAL_KQ_B8", "DASLLAMA_METAL_KV_MIRROR_MB",
+    "DASLLAMA_METAL_LOGITS", "DASLLAMA_METAL_MULMM", "DASLLAMA_METAL_NCB",
+    "DASLLAMA_METAL_PF_CAPTURE", "DASLLAMA_METAL_PIPE_DEBUG", "DASLLAMA_METAL_PREFILL_SKIP",
+    "DASLLAMA_METAL_SCHED", "DASLLAMA_METAL_SPEC", "DASLLAMA_METAL_UNRETAINED",
+    "DASLLAMA_MM_SMALL", "DASLLAMA_MODELS_DIR", "DASLLAMA_MTP_DEBUG", "DASLLAMA_NOISY",
+    "DASLLAMA_OS", "DASLLAMA_PIN_BACKEND", "DASLLAMA_PIN_PREFILL", "DASLLAMA_RAM_GB",
+    "DASLLAMA_THREADS", "DASLLAMA_TRUTH_REFRESH", "DASLLAMA_VK_FA", "DASLLAMA_VK_HAZARD_PARANOID",
+    "DASLLAMA_VK_HAZARD_TRACE", "DASLLAMA_VK_MEMPRIO", "DASLLAMA_VK_REBAR", "DASLLAMA_VK_XFERQ")
+
+// quote on anything a shell reads as syntax, not just spaces — full cross-shell escaping is not
+// well-defined (cmd and POSIX disagree on the rules), so widen the trigger rather than pretend
+def private shell_quote(s : string) : string {
+    var bare = !empty(s)
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            bare = bare && (is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/'
+                || c == '\\' || c == ':' || c == '=' || c == '-' || c == '+' || c == ',')
+        }
+    }
+    return bare ? s : "\"{s}\""
+}
+
+//! The run's REAL invocation, from the process argv — binary, interpreter flags, script and args
+//! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
+//! and silently drops anything the arg parser did not model.
+def bench_cmd_line() : string {
+    var parts <- [for (a in get_command_line_arguments()); shell_quote(a)]
+    let line = join(parts, " ")
+    delete parts
+    return line
+}
+
+//! The set members of [[BENCH_ENV_VARS]] that are actually set, as a copy-pasteable `K=V ...`
+//! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
+def bench_env_line() : string {
+    var parts <- [for (name in BENCH_ENV_VARS);
+        "{name}={shell_quote(get_env_variable(name))}";
+        where has_env_variable(name)]
+    let line = join(parts, " ")
+    delete parts
+    return line
 }
 
 //! One GGUF's identity plus every run measured against it. `gguf` (the exact filename) is the
@@ -1000,9 +1122,15 @@ struct LlamaBenchRow {
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
 //! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
 def run_llama_bench(cmd : string; var rows : array<LlamaBenchRow>) : bool {
+    // _popen hands the string to `cmd /c` verbatim; a command that starts with a quote and
+    // contains more quotes loses its first and last quote to cmd's strip rule (`cmd /?`), breaking
+    // the binary path — one extra outer pair is the documented workaround (safe either way).
+    // Shell-free popen_argv (fio's run_and_capture) would sidestep cmd, but callers hand us a
+    // full shell string here
+    let shell = is_windows() ? "\"{cmd}\"" : cmd
     var out = ""
     unsafe {
-        popen(cmd) $(f) {
+        popen(shell) $(f) {
             if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
                 out = fread_to_eof(f)
             }

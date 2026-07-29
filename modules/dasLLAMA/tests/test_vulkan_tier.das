@@ -23,6 +23,16 @@ require math
 // model's activations enter. The gelu arm stays untested until a gelu-MoE q8 fixture exists.
 // Without dasVulkan (or with no Vulkan device) every check feints cleanly.
 
+// The CPU-reference arms' tolerances were derived against the sdot4 reference kernels — pin
+// that mode ahead of the router's fastest-path default (mm) so the oracles stay deterministic.
+// The coopmat kernels' numeric envelope is validated by the drift-class model gates, not here.
+[init]
+def private pin_reference_gemm_mode {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        vk_force_coopmat_mode(0)
+    }
+}
+
 let N = 96l         // model dim (x row length), %32
 let NFE = 64l       // expert FFN dim, %32
 let NE = 3l         // experts in each synthetic stack

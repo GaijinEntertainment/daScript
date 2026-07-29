@@ -214,9 +214,9 @@ AST types (TypeDecl, Expression, Function, Structure, Enumeration, Variable, Mak
 
 Quick rules:
 - AST nodes have **unique ownership** — don't insert the same pointer into two parents; use `clone_type` / `clone_expression` / `clone_function` / `clone_variable` / `clone_structure` to duplicate.
-- AST pointers use plain `=` and pass-by-value. **No `var inscope`, no `<-`** for them. `var inscope` is only for the residual smart_ptr types.
+- AST pointers use plain `=` and pass-by-value. **No `var inscope`, no `<-`** for them. `var inscope` is for OWNED locals that should finalize at scope exit (smart_ptr types, plain arrays/structs) — never for gc_node AST pointers.
 - Tools that build AST at runtime (outside the compile pipeline) must wrap their scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
-- daslang has garbage collection, but plain `var arr : array<T>` does NOT finalize on scope exit. Either declare with `var inscope` (smart_ptr only), call `delete` explicitly, or move out via `<-`. Per-frame leaks in hot paths usually trace to a local `var arr` never deleted.
+- daslang has garbage collection, but plain `var arr : array<T>` does NOT finalize on scope exit. Either declare with `var inscope` (finalize-at-scope-exit — serves plain arrays/structs as well as the smart_ptr types; Boris-confirmed + compile-verified 2026-07-26), call `delete` explicitly, or move out via `<-`. Per-frame leaks in hot paths usually trace to a local `var arr` never deleted.
 
 Full migration table (when reading older docs that say `var inscope` or `<-` for AST types): **`skills/gc_migration.md`**.
 
@@ -304,7 +304,7 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 - **`where` and `shared` are reserved words too** — `where` is the comprehension filter keyword and
   `shared` the module modifier; both are a syntax error as a variable name (`let where = ...`,
   `let shared = ...`). Rename (`sink_pos`, `shared_node`); hit while writing PERF026-028
-- **`label`, `expect`, and `pass` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS` — `pass` is the no-op statement) — using any as a parameter/variable name is a syntax error; rename (`tag`, `want`, `cpass`)
+- **`label`, `expect`, `pass`, and `explicit` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS`/`DAS_EXPLICIT` — `pass` is the no-op statement, `explicit` the generic-parameter modifier you see in `array<T> explicit` signatures) — using any as a parameter/variable name is a syntax error; rename (`tag`, `want`, `cpass`, `declared`)
 - **`range`/`urange`/`range64`/`urange64` are lexer TYPE tokens** (`DAS_TRANGE` etc., like `int`) — unusable as struct-field, parameter, or annotation-argument names (`@range = ...` is a syntax error); the grammar whitelists them back to a plain name only in call position, which is why `range(10)` works. Rename (`rng`, `span`); grammar-verified 2026-07-23
 - **Literal `{`/`}` in string literals must be escaped `\{`/`\}`** — unescaped `{...}` is interpolation. Bites when embedding shader/C source as inline strings. String literals may span multiple lines (raw newlines are legal); probe-verified 2026-07-11
 - String builder requires `unsafe` or `options persistent_heap` if returned

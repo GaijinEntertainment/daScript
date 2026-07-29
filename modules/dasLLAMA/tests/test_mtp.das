@@ -253,3 +253,58 @@ def test_mtp_invariance_27b(t : T?) {
         delete tr
     }
 }
+
+// GLM-4.5-Air Q4_K_M — the only NON-RECURRENT MTP model we have, so this is the sole arm covering
+// mtp_spec_eval's `recr_mask == 0` reject branch (a rejected draft consumes the verify's own row-0
+// logits + h0 instead of paying a second full forward; every qwen35 MTP file is a deltanet hybrid
+// and takes the restore-and-re-advance branch instead). It is also the first arch combining
+// attn_qkv_bias with a NextN block — the shape where the qkv/out bias arrays were sized by the
+// TRUNK layer count, so blk.<n_layers>.attn_{q,k,v}.bias never loaded and the draft read past the
+// end of t.bq. And glm4moe ships nextn.embed_tokens/shared_head_head as copies of the trunk's own
+// tables, which the loader shape-checks rather than disabling the head over.
+// Large tier (~73 GB, 2 shards): DASLLAMA_PARITY_FULL=1.
+[test]
+def test_mtp_invariance_glm(t : T?) {
+    t |> run("MTP self-spec output-invariance (GLM-4.5-Air Q4_K_M, non-recurrent reject path)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "glm45air/Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf")
+        if (!model_available(t, path)) return
+        var tr <- load_model(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
+        t |> equal(tr.config.n_layer_nextn, 1l)    // head ENABLED, not disabled over the table copies
+        t |> equal(tr.config.n_layers, 46l)        // block_count 47 - nextn 1
+        // the two properties that make this arm load-bearing — asserted so a future file losing
+        // either tells us the coverage moved instead of silently passing
+        t |> equal(tr.config.recr_mask, 0ul)
+        t |> success(tr.config.attn_qkv_bias, "glm4moe carries qkv bias (the layers_ld sizing case)")
+        tr.config.seq_len = 2048l
+        with_pinned_kernels() {
+            // A CODE prompt on purpose. Strict token-identity is only meaningful on a NEAR-TIE-FREE
+            // fixture: on K-quant planes the accept path reads BATCH-kernel logits (mm_gemm/mm_b_f)
+            // while plain decode reads GEMV (mm_kq), and those differ in reduction order — a
+            // legitimate FP difference that `with_pinned_kernels` does NOT cover (it pins attention
+            // mode, activations and deltanet, not the matmul family). At Q4_K that delta is far
+            // below the model's own quantization error, so on tie-dense PROSE the two paths pick
+            // differently at ties and identity fails for no defect (measured: prose diverges every
+            // run, this fixture is bit-identical at 95% accept). Code is strongly determined ⇒ no
+            // ties to break ⇒ identity is a real assertion. Same reasoning as the 27B arm's
+            // deliberately near-tie-free counting fixture.
+            // FOLLOW-UP: a margin-gated arm can cover prose — assert that any divergence sits below
+            // the quantization noise floor; mtp_verify_logits already computes the margin.
+            let code <- encode(tr, "def fibonacci(n):", true, false)
+            let total = length(code) + 40
+            var nd = 0l
+            var na = 0l
+            let ref_ids <- gen_plain(tr, code, total)
+            let spec_ids <- gen_spec(tr, code, total, nd, na)
+            t |> success(same(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
+            t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts)")
+            // a 100%-accept run would leave the reject branch untouched and the arm would prove
+            // nothing about it — so require that at least one draft was actually rejected
+            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected — reject branch covered")
+        }
+        delete tr
+    }
+}

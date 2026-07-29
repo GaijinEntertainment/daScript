@@ -547,9 +547,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                 }
                 let role = find_arg(field.annotation, "role") ?as tString ?? ""
                 if (empty(role)) {
-                    if (!lensed) {
-                        macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has no @role (read/write/readwrite/weight/alias) — un-lensed classes declare their hazard intent")
-                    }
+                    pass   // optional everywhere: undeclared = the body derivation is the truth
                 } elif (!role_ok(role)) {
                     macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} has unknown @role '{role}' (read/write/readwrite/weight/alias)")
                 }

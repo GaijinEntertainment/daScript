@@ -5,6 +5,7 @@ options stack = 131072   // by-value Sessions in the kq + quantized-KV arms (tes
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — pulls the engine + arch registrations + (on Apple) the metal prefill override
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
+require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — min-npos setter + stats + the shutdown/leak rail
 require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — decode shutdown (the kq/quantized-KV arms touch the decode driver)
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate

@@ -5,6 +5,8 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.c
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
+require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see Lever.real)
+require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
 require ?das_accelerate dasllama/dasllama_math_accelerate   // nolint:STYLE030 — the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require daslib/jobque_boost
@@ -93,6 +95,16 @@ struct Args {
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
 
+    @clarg_name = "mtp-ab"
+    @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
+    mtp_ab : bool
+
+    @clarg_doc = "Prompt corpus for the tg-real row (segments split on lines of two percent signs; default: data/wikitext2_prompts.txt beside this bench)"
+    prompts : string = ""
+
+    @clarg_doc = "After each tg-real arm's timed reps, run one UNTIMED window with forward_profile buckets — the per-section time split of that arm. With --mtp-ab this is what attributes draft vs verify vs classifier"
+    prof : bool
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -104,6 +116,79 @@ def private synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l
 
 def private build_prompt(n : int64; seed : int64) : array<int64> {
     return <- [for (i in range64(n)); synth_id(i, seed)]
+}
+
+// One in-process A/B lever: both arms run under a SINGLE model load, so cross-run drift cancels and
+// the pair is directly comparable. Arms ride the test name (" dense=off" / " dense=on"), which keeps
+// both inside one BenchRun and leaves the (box, engine, backend, flavor) upsert identity intact.
+// Adding a lever — including one pulled over from an archived bench — is one row in levers_of().
+struct private Lever {
+    flag : string    // the CLI spelling, for diagnostics: --<flag>-ab
+    tag : string     // the row suffix key
+    route : function<(on : bool) : void>
+    env : string     // env that must arm the uploads first; "" when the lever needs none
+    real : bool      // this lever is only meaningful under REAL greedy continuation, so it runs the
+                     // tg-real row instead of the llama-bench pp/tg rows (synthetic ids would
+                     // measure something the lever cannot affect and read as a valid result)
+}
+
+def private levers_of(cfg : Args) : array<Lever> {
+    var out : array<Lever>
+    if (cfg.dense_ab) {
+        out |> emplace(Lever(flag = "dense", tag = "dense", route = @@set_moe_gpu_dense_route,
+                             env = "DASLLAMA_GPU_DENSE"))
+    }
+    if (cfg.comb_ab) {
+        out |> emplace(Lever(flag = "comb", tag = "comb", route = @@set_gpu_combine_route, env = ""))
+    }
+    if (cfg.dn_ab) {
+        out |> emplace(Lever(flag = "dn", tag = "dn", route = @@set_moe_gpu_dn_route,
+                             env = "DASLLAMA_GPU_DN"))
+    }
+    if (cfg.attn_ab) {
+        out |> emplace(Lever(flag = "attn", tag = "attn", route = @@set_moe_gpu_attn_route,
+                             env = "DASLLAMA_GPU_ATTN"))
+    }
+    if (cfg.prefill_ab) {
+        out |> emplace(Lever(flag = "prefill", tag = "gpuprefill", route = @@set_moe_gpu_prefill_route,
+                             env = "DASLLAMA_GPU_MOE_LAYERS"))
+    }
+    if (cfg.mtp_ab) {
+        // set_mtp_spec must be live BEFORE the prefill — it warms the draft head's KV
+        out |> emplace(Lever(flag = "mtp", tag = "mtp", route = @@set_mtp_spec, env = "", real = true))
+    }
+    return <- out
+}
+
+// Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
+// both A/B arms pay it identically so it cancels for judging.
+def private argmax_logit(s : Session; vocab : int64) : int64 {
+    var best = 0l
+    var bv = s.logits[0]
+    for (v in range64(vocab)) {
+        if (s.logits[v] > bv) {
+            bv = s.logits[v]
+            best = v
+        }
+    }
+    return best
+}
+
+// Prompt corpus: segments separated by lines of two percent signs, '#' segments skipped.
+def private load_corpus(path : string) : array<string> {
+    var texts : array<string>
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            panic("lcpp_bench: can't open prompt corpus {path}")
+        }
+        for (p in split(fread(f), "%%")) {
+            let tp = strip(p)
+            if (!empty(tp) && !starts_with(tp, "#")) {
+                texts |> push(clone_string(tp))
+            }
+        }
+    }
+    return <- texts
 }
 
 // progress line — stdout in txt mode, stderr when stdout carries the md table / json records
@@ -164,10 +249,15 @@ def main() {
     let plen = max(int64(cfg.plen), 0l)
     let ngen = max(int64(cfg.ngen), 0l)
     let reps = max(cfg.reps, 1)
-    if ((cfg.dense_ab ? 1 : 0) + (cfg.comb_ab ? 1 : 0) + (cfg.dn_ab ? 1 : 0) + (cfg.attn_ab ? 1 : 0) + (cfg.prefill_ab ? 1 : 0) > 1) {
-        print("warning: --dense-ab / --comb-ab / --dn-ab / --attn-ab / --prefill-ab are mutually exclusive — running the first only\n")
+    var levers <- levers_of(cfg)
+    if (length(levers) > 1) {
+        var names <- [for (l in levers); "--{l.flag}-ab"]
+        print("warning: A/B levers are mutually exclusive ({join(names, " ")}) — running --{levers[0].flag}-ab only\n")
+        delete names
+        levers |> resize(1)
     }
-    let ab = cfg.dense_ab || cfg.comb_ab || cfg.dn_ab || cfg.attn_ab || cfg.prefill_ab
+    let ab = !empty(levers)
+    let real_row = ab && levers[0].real
     var fmt = cfg.output
     if (ab && fmt != OutFmt.txt) {
         print("warning: -o {cfg.output} with an A/B lever — records cover the plain protocol only, falling back to txt\n")
@@ -205,31 +295,58 @@ def main() {
     if (gpu) {
         set_metal_mode(MetalMode.required)   // before load_model — pins the portable backend, activates the metal overrides
     }
-    if (cfg.dense_ab && !has_env_variable("DASLLAMA_GPU_DENSE")) {
-        print("warning: --dense-ab without DASLLAMA_GPU_DENSE=1 — no dense marks, both arms identical\n")
+    // an unarmed lever silently measures the SAME thing twice — the one A/B failure that looks
+    // like a real result, so it warns rather than being left to the reader
+    if (ab && !empty(levers[0].env) && !has_env_variable(levers[0].env)
+            && !(cfg.prefill_ab && has_env_variable("DASLLAMA_GPU_MOE_STREAM"))) {
+        print("warning: --{levers[0].flag}-ab without {levers[0].env}=1 — nothing armed, both arms identical\n")
     }
-    if (cfg.dn_ab && !has_env_variable("DASLLAMA_GPU_DN")) {
-        print("warning: --dn-ab without DASLLAMA_GPU_DN=1 — no deltanet marks, both arms identical\n")
-    }
-    if (cfg.attn_ab && !has_env_variable("DASLLAMA_GPU_ATTN")) {
-        print("warning: --attn-ab without DASLLAMA_GPU_ATTN=1 — no attention marks, both arms identical\n")
-    }
-    if (cfg.prefill_ab && !has_env_variable("DASLLAMA_GPU_MOE_LAYERS") && !has_env_variable("DASLLAMA_GPU_MOE_STREAM")) {
-        print("warning: --prefill-ab without DASLLAMA_GPU_MOE_LAYERS/_STREAM — no resident expert layers, both arms identical\n")
-    }
-    say(fmt, "loading {cfg.model}\n")
-    var results : array<RowStat>
-    var modelArch = ""
-    var activeB = 0.0lf
-    var execFmt = ""
+    // -m accepts a comma-separated list: one process benches every model in turn, so a sweep
+    // pays the compile/startup cost once; a single -m path behaves exactly as before
+    // trim: `-m "a.gguf, b.gguf"` is the natural spelling, and an untrimmed path fails to open
+    var model_list <- [for (m in split(cfg.model, ",")); strip(m)]
+    var mdRows : array<array<string>>
+    var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        for (mpath in model_list) {
+        continue if (empty(mpath))
+        say(fmt, "loading {mpath}\n")
+        var results : array<RowStat>
+        var modelArch = ""
+        var activeB = 0.0lf
+        var execFmt = ""
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
-        var t <- load_model_cached(cfg.model, cfg.quant)
-        t.config.seq_len = min(t.config.seq_len, max(plen, ngen) + 8l)   // cap the KV allocation
+        var t <- load_model_cached(mpath, cfg.quant)
+        // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
+        var inscope toks : array<array<int64>>
+        if (real_row) {
+            var tk <- load_tokenizer_auto(mpath)
+            var texts <- load_corpus(empty(cfg.prompts)
+                ? path_join(get_this_module_dir(), "data/wikitext2_prompts.txt") : cfg.prompts)
+            var maxlen = 0l
+            for (tx in texts) {
+                var ids <- encode(tk, tx, false)
+                maxlen = max(maxlen, long_length(ids))
+                toks |> emplace(ids)
+            }
+            delete texts
+            delete tk
+            if (empty(toks)) {
+                panic("lcpp_bench: prompt corpus tokenized to nothing — --{levers[0].flag}-ab needs real prompts")
+            }
+            t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
+        } else {
+            t.config.seq_len = min(t.config.seq_len, max(plen, ngen) + 8l)   // cap the KV allocation
+        }
         let c = t.config
+        // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
+        // and the row would read as a valid 1.00x result. Fail closed instead.
+        if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
+            panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
+        }
         say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
@@ -237,21 +354,88 @@ def main() {
         var s <- make_run_state(c)
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
-            if (cfg.dense_ab) {
-                dtag = arm == 0 ? " dense=off" : " dense=on"
-                set_moe_gpu_dense_route(arm != 0)
-            } elif (cfg.comb_ab) {
-                dtag = arm == 0 ? " comb=off" : " comb=on"
-                set_gpu_combine_route(arm != 0)
-            } elif (cfg.dn_ab) {
-                dtag = arm == 0 ? " dn=off" : " dn=on"
-                set_moe_gpu_dn_route(arm != 0)
-            } elif (cfg.attn_ab) {
-                dtag = arm == 0 ? " attn=off" : " attn=on"
-                set_moe_gpu_attn_route(arm != 0)
-            } elif (cfg.prefill_ab) {
-                dtag = arm == 0 ? " gpuprefill=off" : " gpuprefill=on"
-                set_moe_gpu_prefill_route(arm != 0)
+            if (ab) {
+                dtag = " {levers[0].tag}={arm == 0 ? "off" : "on"}"
+                invoke(levers[0].route, arm != 0)
+            }
+            if (real_row) {
+                // REAL greedy continuation: fresh session per prompt (no KV/recurrent bleed),
+                // prefill untimed as llama-bench excludes the prompt, argmax inside the timed loop
+                // (both arms pay it, so it cancels). NOT comparable to the synthetic tg row.
+                let mtp_on = cfg.mtp_ab && arm != 0
+                var drafted = 0l
+                var accepted = 0l
+                var tps : array<double>
+                for (_rep in range(reps)) {
+                    var total_us = 0l
+                    var rep_gen = 0l
+                    for (pi in range(length(toks))) {
+                        var rs <- make_run_state(c)
+                        let pl = long_length(toks[pi])
+                        forward_prefill(t, rs, toks[pi], pl, 0l)
+                        let t0 = ref_time_ticks()
+                        if (mtp_on) {
+                            rs.n_past = pl   // forward_prefill leaves n_past alone; mtp_spec_eval drives it
+                            var tok = argmax_logit(rs, c.vocab_size)
+                            var gen = 0l
+                            while (gen < ngen) {
+                                var acc = 0l   // the id is unused — only the 1-vs-2 advance is timed
+                                gen += mtp_spec_eval(t, rs, tok, acc) ? 2l : 1l
+                                tok = argmax_logit(rs, c.vocab_size)
+                            }
+                            rep_gen += gen   // a trailing accept may overshoot by 1 — count what ran
+                        } else {
+                            var pos = pl
+                            for (_g in range64(ngen)) {
+                                forward(t, rs, argmax_logit(rs, c.vocab_size), pos)
+                                pos++
+                            }
+                            rep_gen += ngen
+                        }
+                        total_us += int64(get_time_usec(t0))
+                        drafted += rs.mtp_drafted   // session-lifetime counters — harvest before the free
+                        accepted += rs.mtp_accepted
+                        delete rs
+                    }
+                    tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
+                }
+                let st = row_stat("tg-real{ngen}{dtag}", tps)
+                say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
+                if (mtp_on) {
+                    let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%)\n")
+                }
+                results |> push(st)
+                delete tps
+                if (cfg.prof) {
+                    // untimed bucket window for THIS arm — the prefill lands BEFORE the reset, so
+                    // the report is pure decode (or pure draft+verify on the on arm). Running it
+                    // per arm is the point: the off/on bucket delta is what attributes the draft.
+                    var ps <- make_run_state(c)
+                    let pl0 = long_length(toks[0])
+                    forward_prefill(t, ps, toks[0], pl0, 0l)
+                    forward_profile_reset()
+                    if (mtp_on) {
+                        ps.n_past = pl0
+                        var ptok = argmax_logit(ps, c.vocab_size)
+                        var pgen = 0l
+                        while (pgen < ngen) {
+                            var pacc = 0l
+                            pgen += mtp_spec_eval(t, ps, ptok, pacc) ? 2l : 1l
+                            ptok = argmax_logit(ps, c.vocab_size)
+                        }
+                    } else {
+                        var ppos = pl0
+                        for (_g in range64(ngen)) {
+                            forward(t, ps, argmax_logit(ps, c.vocab_size), ppos)
+                            ppos++
+                        }
+                    }
+                    say(fmt, "--- forward_profile: {st.test} ---\n")
+                    forward_profile_report()
+                    delete ps
+                }
+                continue
             }
             if (plen > 0l) {
                 let warm <- build_prompt(plen, 999l)
@@ -294,46 +478,44 @@ def main() {
         }
         delete s
         delete t
-    }
-    // the reference runs AFTER our model is freed — one model process at a time, per the protocol
-    var refRows : array<LlamaBenchRow>
-    var refCmd = ""
-    if (!empty(cfg.ref)) {
-        let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
-        refCmd = "\"{cfg.ref}\" -m \"{cfg.model}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
-        say(fmt, "ref: {refCmd}\n")
-        if (!run_llama_bench(refCmd, refRows)) {
-            say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
+        // the reference runs AFTER our model is freed — one model in memory at a time
+        var refRows : array<LlamaBenchRow>
+        var refCmd = ""
+        if (!empty(cfg.ref)) {
+            let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
+            refCmd = "\"{cfg.ref}\" -m \"{mpath}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
+            say(fmt, "ref: {refCmd}\n")
+            if (!run_llama_bench(refCmd, refRows)) {
+                say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
+            }
+            for (rr in refRows) {
+                let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
+                say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+            }
         }
-        for (rr in refRows) {
-            let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
-            say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+        if (fmt == OutFmt.txt) {
+            delete results
+            delete refRows
+            continue
         }
-    }
-    if (fmt == OutFmt.txt) {
-        return
-    }
-    let backend = gpu ? "metal" : "cpu"
-    let gguf = base_name(cfg.model)
-    if (fmt == OutFmt.md) {
-        let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
-        let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
-        var rows : array<array<string>>
-        rows |> reserve(length(results) + length(refRows))
-        for (st in results) {
-            var row <- ["das", gguf, backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
-            rows |> emplace(row)
+        let backend = gpu ? "metal" : "cpu"
+        let gguf = base_name(mpath)
+        if (fmt == OutFmt.md) {
+            for (st in results) {
+                var row <- ["das", gguf, backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            for (rr in refRows) {
+                let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
+                let sd = rr.stddev_ts
+                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            delete results
+            delete refRows
+            continue
         }
-        for (rr in refRows) {
-            let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
-            let sd = rr.stddev_ts
-            var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
-            rows |> emplace(row)
-        }
-        print(render_md_table(headers, aligns, rows))
-        return
-    }
-    // -o json: the public bench records — one BenchModel, das run + optional llama.cpp sibling
+    // -o json: the public bench records — one BenchModel per gguf, das run + optional llama.cpp sibling
     let hw = gather_hardware()
     let date = format_time(get_clock(), "%Y-%m-%d")
     let box = box_name()
@@ -342,11 +524,10 @@ def main() {
         arch = modelArch,
         quant = quant_str(cfg.quant),
         active_b = activeB,
-        size_bytes = int64(stat(cfg.model).size))
+        size_bytes = int64(stat(mpath).size))
     if (!empty(refRows)) {
         m.params_b = double(refRows[0].model_n_params) / 1.0e9lf
     }
-    let argstr = join(get_cli_arguments(), " ")
     var dr = BenchRun(
         engine = "das",
         backend = backend,
@@ -354,7 +535,8 @@ def main() {
         box = box,
         threads = threads,
         date = date,
-        cmd = "bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- {argstr}",
+        cmd = bench_cmd_line(),
+        env = bench_env_line(),
         sha = run_capture("git rev-parse --short HEAD", true),
         version = das_version(),
         tune = tune_summary(),
@@ -380,9 +562,21 @@ def main() {
         }
         m.runs |> emplace(rr)
     }
-    var models : array<BenchModel>
-    models |> emplace(m)
-    let text = sprint_json(models, true)
+    jsonModels |> emplace(m)
+    delete results
+    delete refRows
+    }   // model loop
+    }   // with_job_que
+    if (fmt == OutFmt.md) {
+        let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
+        let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
+        print(render_md_table(headers, aligns, mdRows))
+        return
+    }
+    if (fmt != OutFmt.json) {
+        return
+    }
+    let text = sprint_json(jsonModels, true)
     if (!empty(cfg.json_path)) {
         var wrote = false
         fopen(cfg.json_path, "wb") $(f) {

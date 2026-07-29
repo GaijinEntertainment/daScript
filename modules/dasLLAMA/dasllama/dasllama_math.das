@@ -6,6 +6,7 @@ module dasllama_math shared public
 require math
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
 require dasllama/dasllama_par  // maybe_parallel_for: thread-or-inline a kernel body on a runtime size flag
@@ -2119,6 +2120,12 @@ def public gpu_want_qkv : bool
 def public gpu_want_cls : bool
     => env_flag("DASLLAMA_GPU_CLS", false)
 
+//! The classifier UPLOAD gate (opt-OUT, default on when the tier is armed) — distinct from
+//! [[gpu_want_cls]], the opt-IN arm signal. One definition, shared by the upload walk and the
+//! DlimConfiguration identity, so the two can never disagree on the default again.
+def public gpu_want_cls_upload : bool
+    => env_flag("DASLLAMA_GPU_CLS", true)
+
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).
 def public set_moe_gpu_arm(name : string; f : function<() : bool>) {
@@ -2153,6 +2160,96 @@ def public set_moe_gpu_budget_hooks(budget : function<() : int64>; plane : funct
 //! Device-local bytes the armed tier may spend on resident weights (0 = no tier).
 def public moe_gpu_weight_budget() : int64 => invoke(g_moe_gpu_budget_report)
 
+def private moe_gpu_no_q8n : bool => false
+var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
+
+//! The tier asks the loader to gather q8 EXPERT stacks as gguf-native q8n blocks (fmt 6, the
+//! cm2 decode-in-load layout, no scale plane). Registered beside the budget hooks; the probe
+//! may create the device — it must answer before the first gather.
+def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
+    g_moe_gpu_expert_q8n = f
+}
+
+[unused_argument(v)]
+def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
+
+var private g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake
+
+//! A GPU tier registers its OFFLINE-bake arm here: the load walk runs its full accept/refuse
+//! arithmetic against the config's numbers, gathers collect, and no device call is made.
+def public set_moe_gpu_dry_bake_arm(f : function<(v : DlimVulkanConfig) : bool>) {
+    g_moe_gpu_dry_bake = f
+}
+
+//! Arm the offline bake (false = no GPU backend in this build, or the config disagrees with
+//! this process' env wants — the tier logs the exact mismatch).
+def public moe_gpu_dry_bake_arm(v : DlimVulkanConfig) : bool => invoke(g_moe_gpu_dry_bake, v)
+
+//! A baked-plan gather's mapped-file window (P2 imported mirrors): pointers into the flavor
+//! image's mapping + plane byte sizes. wq == null = no window recorded for (woff, fmt).
+typedef MoeGpuSliceWindow = tuple<wq : void?; ws : void?; wqb : int64; wsb : int64>
+
+[unused_argument(woff, fmt)]
+def private moe_gpu_no_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow {
+    return default<MoeGpuSliceWindow>
+}
+
+var private g_moe_gpu_slice_window = @@moe_gpu_no_slice_window
+
+//! The loader registers its slice-window provider (populated while slicing a flavor image);
+//! a GPU tier asks through [[moe_gpu_slice_window]] to import instead of copying.
+def public set_moe_gpu_slice_window_fn(f : function<(woff : int64; fmt : int) : MoeGpuSliceWindow>) {
+    g_moe_gpu_slice_window = f
+}
+
+def public moe_gpu_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow => invoke(g_moe_gpu_slice_window, woff, fmt)
+
+[unused_argument(base, bytes)]
+def private moe_gpu_no_unmap_notify(base : void?; bytes : uint64) {}
+
+var private g_moe_gpu_unmap_notify = @@moe_gpu_no_unmap_notify
+
+//! A GPU tier registers this to learn a model's mapping is about to unmap — imported device
+//! memory over that mapping must be released FIRST (the Model finalizer invokes it).
+def public set_moe_gpu_unmap_notify(f : function<(base : void?; bytes : uint64) : void>) {
+    g_moe_gpu_unmap_notify = f
+}
+
+def public moe_gpu_unmap_notify(base : void?; bytes : uint64) {
+    invoke(g_moe_gpu_unmap_notify, base, bytes)
+}
+
+[unused_argument(n, rows, fmt, stream)]
+def private moe_gpu_always_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool => true
+
+var private g_moe_gpu_would_accept = @@moe_gpu_always_accept
+
+//! A GPU tier registers its accept arithmetic (no side effects). The slice replay asks through
+//! [[moe_gpu_would_accept]] whether a gather the plan lacks is a refusal boundary — the bake
+//! never records refused gathers, so the walk's boundary attempt must re-refuse, not diverge.
+def public set_moe_gpu_would_accept_fn(f : function<(n : int64; rows : int64; fmt : int; stream : bool) : bool>) {
+    g_moe_gpu_would_accept = f
+}
+
+def public moe_gpu_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool {
+    return invoke(g_moe_gpu_would_accept, n, rows, fmt, stream)
+}
+
+def private moe_gpu_no_bake_tag : string => ""
+
+var private g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
+
+//! The GPU tier's config-identity tag for the vulkan-flavor image ("" = tier absent/unarmed —
+//! no flavor). Everything that shapes the load-time GPU walk must fold in: a config switch
+//! must miss the flavor's identity and rebake.
+def public set_moe_gpu_bake_tag(f : function<() : string>) {
+    g_moe_gpu_bake_tag = f
+}
+
+def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
+
+def public moe_gpu_expert_q8n() : bool => invoke(g_moe_gpu_expert_q8n)
+
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.
 def public moe_gpu_plane_bytes(n, rows : int64; fmt : int) : int64 => invoke(g_moe_gpu_plane_bytes_fn, n, rows, fmt)
 
@@ -2164,6 +2261,17 @@ def public moe_gpu_tier_installed : bool {
 def public set_moe_gpu_total_layers(n : int64) {
     g_moe_gpu_total_layers = n
 }
+
+var private g_moe_gpu_stream_need = 0l
+
+//! Loader contract: worst-case streamed-slot bytes of THIS model (2x gate/up + down device
+//! planes of the largest expert layer, via moe_gpu_plane_bytes). The tier carves its stream
+//! reserve from this instead of a fixed guess; 0 = unknown (tier falls back to its constant).
+def public set_moe_gpu_stream_need(bytes : int64) {
+    g_moe_gpu_stream_need = bytes
+}
+
+def public moe_gpu_stream_need() : int64 => g_moe_gpu_stream_need
 
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
@@ -2214,9 +2322,17 @@ def public moe_gpu_upload_stack(wq : array<uint8> | #; ws : array<uint8> | #; wo
     if (!g_moe_gpu_installed) {
         return false
     }
-    unsafe {
-        return invoke(g_moe_gpu_upload, addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), woff, n, rows, fmt, stream)
+    // empty planes hand the tier null: q8n stacks carry no scale plane, and the slice replay's
+    // refusal-boundary serve is empty on purpose (the tier refuses on arithmetic, no bytes read)
+    var wqp : uint8 const?
+    if (!empty(wq)) {
+        wqp = unsafe(addr<uint8 const?>(wq[0]))
     }
+    var wsp : uint8 const?
+    if (!empty(ws)) {
+        wsp = unsafe(addr<uint8 const?>(ws[0]))
+    }
+    return invoke(g_moe_gpu_upload, wqp, wsp, woff, n, rows, fmt, stream)
 }
 
 //! Fused MoE FFN on the GPU tier — the whole gate+up -> act -> requant -> down chain of the
@@ -2583,27 +2699,77 @@ def private kq_layout_grp4_fmt(fmt : int) : int => 4
 def private q8_wbias_zero() : int => 0
 def private q8_kgroup_four() : int => 4
 
+// ===== cross-box bake: repack by NUMBERS =====
+// The getters below are the one layout authority; a foreign-backend bake overrides them with the target's numbers — the generic grp<mr> repacks produce the exact bytes, and the local kernels never serve them (the foreign identity cannot load here)
+var private g_bake_cpu_override = false
+var private g_bake_cpu = DlimCpuConfig()
+
+//! The backend name the dlim identity reports — the bake alias when a cross-box bake is armed.
+def dlim_backend_name() : string => g_bake_cpu_override ? g_bake_cpu.backend : active_kernel_backend()
+
+//! Pin the backend a bake targets: a registered name pins normally; a FOREIGN name arms
+//! repack-by-numbers (the gen tier's generic grp<mr> primitives produce the target layout,
+//! the identity reports the target backend). false = no route — the caller fail-closes.
+def pin_backend_for_bake(cpu : DlimCpuConfig) : bool {
+    if (key_exists(g_kernel_backends, cpu.backend)) {
+        pin_kernel_backend(cpu.backend)
+        return active_kernel_backend() == cpu.backend
+    }
+    select_matmul_backend_for_load()   // the load enters repack stages only under a repack backend
+    if (!kernel_backend_needs_repack(active_kernel_backend())) {
+        to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family — none is active here\n")
+        return false
+    }
+    g_bake_cpu = cpu
+    g_bake_cpu_override = true
+    return true
+}
+
+def clear_bake_backend_override() {
+    g_bake_cpu_override = false
+}
+
 //! The Q8 interleave (mr) of the ACTIVE backend's weight layout — cached at activation from
 //! KernelBackend.q8_layout (4 for every hand tier; the stamped mr on the gen backend).
-def active_q8_layout_mr() : int64 => g_active_q8_layout_mr
+def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_active_q8_layout_mr
 
 //! The active backend's kq plane interleave for `fmt` (4/5/6) — per-format since the kq v2
 //! family split; the loader freezes these onto the Model at repack time.
-def active_kq_layout_mr(fmt : int) : int64 => int64(invoke(g_active_kq_layout, fmt))
+def active_kq_layout_mr(fmt : int) : int64 {
+    if (g_bake_cpu_override) {
+        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : g_bake_cpu.kq_mr6))
+    }
+    return int64(invoke(g_active_kq_layout, fmt))
+}
 
 //! The active backend's q51 plane interleave — 1 (disk order) on every hand tier; the stamped
 //! mr on the arm64-gen backend (the self-anchored q51 GEMV family).
-def active_q51_layout_mr() : int64 => g_active_q51_layout_mr
+def active_q51_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q51_mr : g_active_q51_layout_mr
 
 //! The weight-plane bias of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_wbias (0 for every hand tier; 128 on a bias128 gen stamp). The mx4->Q8
 //! expand biases its LUT writes to match.
-def active_q8_wbias() : int64 => g_active_q8_wbias
+def active_q8_wbias() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_wbias : g_active_q8_wbias
 
 //! The plane kgroup of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_kgroup (4 for every hand tier; 8 on an smmla gen stamp). The mx4->Q8
 //! expand's positional map and the batch token-tail generic read it.
-def active_q8_kgroup() : int64 => g_active_q8_kgroup
+def active_q8_kgroup() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_kgroup : g_active_q8_kgroup
+
+// the q51 repack for a bake whose target has grp<mr> q51 planes: some LOCAL registrations
+// leave repack_q51 unset (x64-gen keeps disk-order q51 slots), so the gen module registers its
+// generic q51 repack here for the override path to reach
+var private g_bake_q51_repack = @@repack_q51_identity
+
+def set_bake_q51_repack(f : RepackQ51Fn) {
+    g_bake_q51_repack = f
+}
+
+//! The q51 repack the LOAD path invokes — the gen generic under a cross-box override with a
+//! grp<mr> q51 target, else the active backend's slot.
+def active_repack_q51() : RepackQ51Fn {
+    return g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
+}
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]
@@ -3551,11 +3717,13 @@ def exp4(x : float4) : float4 {
 //! Index of the max element, first-index-wins on ties — the greedy-decode argmax. Chunked team
 //! scan (serial 151-262k-vocab scan idled every lane 210-284us/token); combine folds candidates
 //! in index order with strict >, so the result is bit-identical to the serial loop for ANY split.
+let ARGMAX_MAX_CHUNKS = 64   // partials cap: enough for any current box's lanes*2
+
 def public parallel_argmax(x : float const?; n : int64) : int64 {
     if (n <= 1l) {
         return 0l
     }
-    let nch = int(min(int64(get_dispatch_lanes()) * 2l, n / 4096l))
+    let nch = int(min(min(int64(get_dispatch_lanes()) * 2l, n / 4096l), int64(ARGMAX_MAX_CHUNKS)))
     unsafe {
         if (nch <= 1) {
             var best = 0l
@@ -3566,10 +3734,10 @@ def public parallel_argmax(x : float const?; n : int64) : int64 {
             }
             return best
         }
-        var cm : array<float>
-        var ci : array<int64>
-        cm |> resize(nch)
-        ci |> resize(nch)
+        // fixed-size worker partials: no heap on the hot path (fork-pool context clones forbid
+        // a global scratch); ARGMAX_MAX_CHUNKS caps chunking, not correctness
+        var cm : float[ARGMAX_MAX_CHUNKS]
+        var ci : int64[ARGMAX_MAX_CHUNKS]
         var cmp = addr(cm[0])
         var cip = addr(ci[0])
         let nn = n
@@ -3598,8 +3766,6 @@ def public parallel_argmax(x : float const?; n : int64) : int64 {
                 best = ci[c]
             }
         }
-        delete cm
-        delete ci
         return best
     }
 }

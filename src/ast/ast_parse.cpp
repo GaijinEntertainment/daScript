@@ -399,7 +399,7 @@ namespace das {
                     return false;
                 }
                 auto info = access->getModuleInfo(mod, fileName);
-                auto module = Module::requireEx(mod, allowPromoted, modRec.name);
+                auto module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName);
                 if ( !module ) {
                     if ( !info.moduleName.empty() ) {
                         mod = info.moduleName;
@@ -407,7 +407,7 @@ namespace das {
                             *log << string(tab,'\t') << " resolved as " << mod << "\n";
                         }
                     }
-                    module = Module::requireEx(mod, allowPromoted, modRec.name); // try native with that name AGAIN (promoted?)
+                    module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
                         auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
                             return reqM.moduleName == mod;

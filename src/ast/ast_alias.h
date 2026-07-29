@@ -74,7 +74,11 @@ namespace das {
                 out.anyWrite |= v->write;
                 out.baseVar = v;
                 out.base = v->variable;
-                out.path.assign(rpath.rbegin(), rpath.rend());
+                // dagor: das::vector maps to dag::Vector, whose iterator assign casts to a raw
+                // pointer, so a reverse_iterator range does not compile. Copy in reverse by hand.
+                out.path.clear();
+                out.path.reserve(rpath.size());
+                for ( size_t i=rpath.size(); i!=0; --i ) out.path.push_back(rpath[i-1]);
                 if ( spine ) for ( auto n : seen ) spine->insert(n);
                 return true;
             } else {

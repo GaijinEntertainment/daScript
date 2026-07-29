@@ -151,6 +151,14 @@ namespace das {
 #else
             opts.fastMathEnabled = fastmath ? YES : NO;
 #endif
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+            // pin the newest MSL the OS offers: the DEFAULT tracks the SDK the binary was
+            // LINKED against, so a module built under an older CLT silently loses metal_tensor
+            // (mpp/dextents undeclared) on the same OS — probe-verified on the m4 box
+            if (@available(macOS 26.0, *)) {
+                opts.languageVersion = MTLLanguageVersion4_0;
+            }
+#endif
             NSString * nsSrc = [NSString stringWithUTF8String:src];
             if ( nsSrc == nil ) {   // invalid UTF-8 — a nil source would raise an ObjC exception below
                 error = ctx->allocateString("metal_new_library_from_source: MSL source is not valid UTF-8", at);
@@ -503,6 +511,16 @@ namespace das {
         [(__bridge id<MTLCommandBuffer>)(void *) cb waitUntilCompleted];
     }
 
+    // the hot-path probe: status check only, no string — metal_command_buffer_error allocates
+    // its message, so per-step success checks use this and fetch the text on the failure leg
+    bool metal_command_buffer_failed ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at ) {
+        if ( !cb ) ctx->throw_error_at(at, "metal_command_buffer_failed: null command buffer");
+        @autoreleasepool {
+            id<MTLCommandBuffer> c = (__bridge id<MTLCommandBuffer>)(void *) cb;
+            return c.status == MTLCommandBufferStatusError;
+        }
+    }
+
     char * metal_command_buffer_error ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at ) {
         if ( !cb ) ctx->throw_error_at(at, "metal_command_buffer_error: null command buffer");
         @autoreleasepool {
@@ -701,6 +719,9 @@ namespace das {
                     ->args({"command_buffer", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_command_buffer_error)>(*this, lib, "metal_command_buffer_error",
                 SideEffects::modifyExternal, "metal_command_buffer_error")
+                    ->args({"command_buffer", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_command_buffer_failed)>(*this, lib, "metal_command_buffer_failed",
+                SideEffects::modifyExternal, "metal_command_buffer_failed")
                     ->args({"command_buffer", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_command_buffer_gpu_start_time)>(*this, lib, "metal_command_buffer_gpu_start_time",
                 SideEffects::modifyExternal, "metal_command_buffer_gpu_start_time")

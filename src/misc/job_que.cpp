@@ -167,7 +167,7 @@ namespace das {
 #else
         int hw = static_cast<int>(thread::hardware_concurrency());
 #endif
-        return jobque_thread_count(max(1, hw));
+        return jobque_thread_count(das::max<int>(1, hw));
     }
 
 #endif
@@ -555,7 +555,7 @@ namespace das {
             int spinUs = mSpinUs.load(std::memory_order_relaxed);
             bool teamMode = mTeamMode.load(std::memory_order_relaxed) != 0;
             if ( (spinUs > 0 || teamMode) && !mShutdown.load(std::memory_order_relaxed) ) {
-                auto deadline = chrono::steady_clock::now() + chrono::microseconds(spinUs);
+                auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(spinUs);
                 for (;;) {
                     if ( mShutdown.load(std::memory_order_relaxed) ) break;
                     // limit drift-out: exit the spin window; the dormant branch at the top of the
@@ -570,7 +570,7 @@ namespace das {
                         // window, same as a fifo raid restarting the loop. Team activity keeps
                         // the worker hot even when the gate starves it of chunks, so a decode
                         // stream of gated tiny ops never drains the pool into parked/wake churn.
-                        deadline = chrono::steady_clock::now() + chrono::microseconds(spinUs);
+                        deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(spinUs);
                     }
                     // try_lock, NOT lock: every spinner that sees the same count blip races here, and
                     // blocking losers would queue on the mutex — a convoy the dispatcher's next push
@@ -594,7 +594,7 @@ namespace das {
                         if ( gotJob ) break;
                     }
                     jobque_spin_pause();
-                    if ( chrono::steady_clock::now() >= deadline ) break;
+                    if ( std::chrono::steady_clock::now() >= deadline ) break;
                 }
             }
             if ( goDormant ) continue;   // top-of-loop dormant branch parks us
@@ -929,7 +929,7 @@ namespace das {
                 deque<Job> consumerFifoJobs;
                 {
                     unique_lock<mutex> producerFifoLock(producerFifoMutex);
-                    if (condition.wait_for(producerFifoLock, chrono::milliseconds(mSleepMs), [&]() {return producerFifoJobs.size() > 0; })) {
+                    if (condition.wait_for(producerFifoLock, std::chrono::milliseconds(mSleepMs), [&]() {return producerFifoJobs.size() > 0; })) {
                         consumerFifoJobs.swap(producerFifoJobs);
                     } else {
                         this_thread::yield();

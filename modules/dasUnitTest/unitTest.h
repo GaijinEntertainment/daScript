@@ -203,6 +203,9 @@ struct TestObjectNotLocal {
     int fooData;
 };
 
+// hands a TestObjectNotLocal to a block: das has no other way to obtain a value of a non-local type
+DAS_MOD_API void testNotLocalObject(const das::TBlock<void, TestObjectNotLocal> & blk, das::Context * context, das::LineInfoArg * lineinfo);
+
 struct TestObjectNotNullPtr {
     int fooData;
 };
@@ -212,6 +215,8 @@ DAS_MOD_API int *getPtr();
 
 DAS_MOD_API void testFields ( das::Context * ctx );
 DAS_MOD_API void test_das_string(const das::Block & block, das::Context * context, das::LineInfoArg * lineinfo);
+DAS_MOD_API uint64_t testBlockAnnotationData(const das::Block & blk, das::Context * context, das::LineInfoArg * at);
+DAS_MOD_API uint64_t testBlockAnnotationDataPayload();
 DAS_MOD_API void testPipedDefaults(int32_t a, float b, const das::TBlock<void, int32_t, float> & blk, das::Context * context, das::LineInfoArg * at);
 DAS_MOD_API vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
 
@@ -370,6 +375,10 @@ __forceinline EntityId intToEid(int value) {
 
 __forceinline int32_t eidToInt(EntityId id) {
     return id.value;
+}
+
+__forceinline bool eidNot(EntityId id) {
+    return id.value == -1;
 }
 
 // C++-registered distinct type (`distinct NativeId = int` declared from C++ via

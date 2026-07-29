@@ -110,6 +110,10 @@ def private reg_engine(var o : array<EnvKnob>) {
       "A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch.")
     k(o, "DASLLAMA_TRUTH_REFRESH", EnvKind.flag, EnvArea.engine, "off",
       "Regenerate the stored parity truth files instead of comparing against them.")
+    k(o, "DASLLAMA_CONV_PROF", EnvKind.flag, EnvArea.engine, "off",
+      "Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor.")
+    k(o, "DASLLAMA_ALLOW_INTERP_LOAD", EnvKind.flag, EnvArea.engine, "off",
+      "Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB.")
 }
 
 def private reg_gpu_tier(var o : array<EnvKnob>) {
@@ -219,6 +223,20 @@ def private reg_vulkan(var o : array<EnvKnob>) {
       "Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4.")
     k(o, "DASLLAMA_MM_SMALL", EnvKind.number, EnvArea.vulkan, "32",
       "Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L.")
+    k(o, "DASLLAMA_MM_SMALLD", EnvKind.number, EnvArea.vulkan, "64",
+      "Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument.")
+    k(o, "DASLLAMA_VK_FUSE", EnvKind.flag, EnvArea.vulkan, "on",
+      "Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B.")
+    k(o, "DASLLAMA_VK_XFERQ", EnvKind.flag, EnvArea.vulkan, "on",
+      "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail.")
+    k(o, "DASLLAMA_PREFETCH", EnvKind.flag, EnvArea.engine, "on",
+      "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting.")
+    k(o, "DASLLAMA_VK_IMPORT", EnvKind.flag, EnvArea.vulkan, "on",
+      "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path.")
+    k(o, "DASLLAMA_TRIM", EnvKind.flag, EnvArea.vulkan, "off",
+      "Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity).")
+    k(o, "DASLLAMA_VK_MEMPRIO", EnvKind.flag, EnvArea.vulkan, "on",
+      "Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours.")
     k(o, "DASLLAMA_VK_FA", EnvKind.flag, EnvArea.vulkan, "on",
       "Vulkan flash-attention kernel; 0 falls back to the chunked path.")
     k(o, "DASLLAMA_VK_REBAR", EnvKind.flag, EnvArea.vulkan, "on",
@@ -302,6 +320,10 @@ def private reg_benchmark(var o : array<EnvKnob>) {
       "Simdgroups per threadgroup in the Metal attention lab.")
     k(o, "DASMETAL_LAB_DUMP_MSL", EnvKind.flag, EnvArea.benchmark, "off",
       "Dump generated MSL from the Metal labs instead of running it.")
+    k(o, "PROBE_PATH", EnvKind.path, EnvArea.benchmark, "_wcliff.bin",
+      "Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test.")
+    k(o, "PROBE_GB", EnvKind.number, EnvArea.benchmark, "50",
+      "Gigabytes the write-cliff probe writes before reporting.")
 }
 
 def private reg_profiling(var o : array<EnvKnob>) {
@@ -356,6 +378,8 @@ def private reg_test(var o : array<EnvKnob>) {
       "Directory of audio corpus files for the transcription tests.")
     k(o, "TMPDIR", EnvKind.path, EnvArea.test, "/tmp",
       "Scratch directory for test artifacts; set by the OS on macOS.")
+    k(o, "TEMP", EnvKind.path, EnvArea.test, "",
+      "Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir).")
 }
 
 def private reg_example(var o : array<EnvKnob>) {

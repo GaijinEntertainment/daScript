@@ -55,9 +55,24 @@ Ranked and monotonic matters: a tune runs many codegen/link cycles, and a naive 
 between stages once per kernel variant. Health is logged only on transition plus a heartbeat, so a
 long quiet run stays quiet.
 
-Stages are currently detected from the child's own log prose, which is brittle by nature. The
-planned replacement is an explicit `das-stage: <name>` token emitted by the program under a
-`DAS_STAGE_EVENTS` env gate, with these regexes kept as fallback.
+Stages are still detected from the child's own log prose, which is brittle by nature. The planned
+replacement is an explicit `das-stage: <name>` token emitted by the program, with these regexes
+kept as fallback.
+
+### Tune progress
+
+The one part no longer inferred from prose. `llvm_tune` emits structured progress as
+`@tune <kind> k=v ...` lines, and a supervised child never owns a terminal, so it *forwards* those
+events rather than drawing a progress bar — which is what makes them ours to consume.
+
+The watchdog folds them into `STATE["tune"]` (`scope`, `done`/`total` kernels, `kernel`,
+`round`/`rounds`, `phase`, `live`) for the control plugin's status route, and logs a `tune` event
+only at `plan` and `end` — a real tune is hundreds of steps, and logging each one would recreate
+the flood these events exist to replace. On a measured run that is **26 log records from 551
+events**, where the whole raw tuner output used to be JSON-wrapped into the log line by line.
+
+Every field is a counter. Nothing is an estimate: the tuner cannot know how long it has left, so
+no ETA is published and none should be synthesized from these numbers.
 
 ## Control plugin
 
@@ -72,7 +87,7 @@ in a supervisor. A plugin that fails to import is reported and skipped, never fa
 program alive outranks being able to reconfigure it.
 
 `host.read_state()` publishes supervision state (`child_pid`, `child_started_at`,
-`child_exit_code`, `restart_delay`, `stage`) for the plugin's status route.
+`child_exit_code`, `restart_delay`, `stage`, `tune`) for the plugin's status route.
 
 ## Shipping it
 

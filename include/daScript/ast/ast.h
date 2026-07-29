@@ -1181,7 +1181,7 @@ namespace das
         }
         friend DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );
         static Module * require ( const string & name );
-        static Module * requireEx ( const string & name, bool allowPromoted, const string & requireName = string() );
+        static Module * requireEx ( const string & name, bool allowPromoted, const string & requireName = string(), const string & expectedFileName = string() );
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );

@@ -16,9 +16,11 @@ require strings
 // tier executes (RESULT 7 = 2+3+k2).
 
 def private tune_env(policy : string) : string {
+    // verbose: the per-kernel `<fn> <- <perm>` stamp lines this test asserts on are the
+    // stamped-truth proof, and they are verbose-only now (34 of them is a wall before an app starts)
     return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_POLICY={policy}&& " :
-        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_POLICY={policy} ")
+        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY={policy}&& " :
+        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY={policy} ")
 }
 
 // env prefix leads, so no sacrificial-quote wrap is needed (cmd.exe only strips a LEADING quote)
