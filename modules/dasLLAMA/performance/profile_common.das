@@ -1144,7 +1144,20 @@ def nemo_py() : string {
 // rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
 // BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 def mtmd_bin() : string {
-    return normalize(env_str("MTMD_BIN", "../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli"))
+    let env = env_str("MTMD_BIN", "")
+    if (!empty(env)) {
+        return normalize(env)
+    }
+    // same cmake-layout probe as whisper_cpp_bin: MSVC multi-config, Ninja, Mac/Make
+    let root = "../llama.cpp-mtmd-ref/build-cpu/bin"
+    for (c in [normalize("{root}/Release/llama-mtmd-cli.exe"),
+               normalize("{root}/llama-mtmd-cli.exe"),
+               normalize("{root}/llama-mtmd-cli")]) {
+        if (stat(c).is_valid) {
+            return c
+        }
+    }
+    return normalize("{root}/llama-mtmd-cli")
 }
 
 // The python bench scripts live beside the corpus (asr/); these tools run from the repo-root cwd.
