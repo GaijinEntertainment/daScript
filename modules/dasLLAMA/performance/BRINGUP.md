@@ -84,11 +84,26 @@ removes the cold-map variance the tripwire otherwise fights. Bake AFTER the firs
 exists (image identity is box- and knob-specific; the converter applies the box profile itself):
 
 ```sh
+# STEP ZERO, every time: GC stale images and check space — this box once carried 748 GB of
+# stale identities and a 22 GB bake died mid-write on the ceiling
+bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir> --clean --apply
+df -h <models-dir>
+
+# smoke ONE small and ONE big model end-to-end before committing to the batch — the two
+# failure size-classes are different (a tiny model never exercises the >2 GiB plane paths)
 for m in <models-dir>/*.gguf; do
     bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"           # planar (CPU cells)
 done
-# Apple boxes additionally: -f metal for the gpu cells; --list / --clean manage the cache
+# Apple boxes additionally: -f metal for the gpu cells (some configs legitimately have no
+# metal-servable blob flavor — the converter says so and exits nonzero; that is a decline,
+# not a failure). Already-valid images are a no-op (~10 s each, load-and-verify).
 ```
+
+Expected wall-clock (M1 Max, NVMe ~6 GB/s image writes, catalog of 8): a FULL re-bake of both
+flavors is **~5–6 minutes total**. Per model: bake time is dominated by reading + transcoding
+the GGUF, not the write — the 22 GB 35B ≈ 19 s planar / 10 s metal, the 16–19 GB class ≈ 7–15 s
+per flavor, the 7–8 GB class ≈ 4–7 s. A re-run over valid images completes in ~2 minutes of
+verify-and-skip.
 
 ## 5. Sweep
 
