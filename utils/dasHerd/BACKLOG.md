@@ -14,6 +14,14 @@ review capacity is the bottleneck the arcs exist to fix.
   worktree is a branch, so this is cross-branch by construction), results
   labeled with the branch @ folder identity, click = select that worktree
   and open the file.
+- **Which Changelist tab is home?** Boris's mental model of "the
+  changelist" includes the branch's COMMITTED files (the PR result view);
+  the arc's tab split made Changes (working-tree dirt) the default, so a
+  committed file "disappeared" from the window he was looking at. Interim:
+  the clean-tree message now points at the PR result tab. To discuss:
+  default to PR result when the tree is clean, merge the two views into
+  one grouped list (CONFLICTS/STAGED/MODIFIED/UNTRACKED + COMMITTED vs
+  base), or keep tabs and remember the last choice.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is

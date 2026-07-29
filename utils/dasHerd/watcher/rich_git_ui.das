@@ -794,6 +794,8 @@ def draw_git_status_groups(repository : RepositorySnapshot const;
     }
     if (total == 0) {
         text_disabled("Working tree is clean - nothing to stage, discard, or commit")
+        text_disabled(GIT_CHANGES_CLEAN_HINT, (text =
+            "The branch's outgoing files are under the PR result tab"))
     }
     draw_changelist_commit_box(repository, worktree)
 }
