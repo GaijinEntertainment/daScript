@@ -4,3 +4,4 @@ corpus/
 results_raw.tsv
 baseline_*.log
 .venv-*/
+patches/*.sha

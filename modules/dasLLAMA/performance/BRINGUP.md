@@ -62,7 +62,21 @@ different bytes — fix it (usually the box's ffmpeg decoded hp0 differently: co
 `hp0x2.wav` from a manifest-clean box), never waive it. `--libri` adds the 25-clip LibriSpeech
 set (Parakeet-v3 dictation stats; ~350 MB one-time fetch).
 
-## 4. Sweep
+## 4. Pre-bake the images
+
+Sweeps run on pre-baked `.dlim` images — the converter streams the transcode (far lower peak
+memory than an in-load conversion), and every das cell then maps instead of converting, which
+removes the cold-map variance the tripwire otherwise fights. Bake AFTER the first tuned run
+exists (image identity is box- and knob-specific; the converter applies the box profile itself):
+
+```sh
+for m in <models-dir>/*.gguf; do
+    bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"           # planar (CPU cells)
+done
+# Apple boxes additionally: -f metal for the gpu cells; --list / --clean manage the cache
+```
+
+## 5. Sweep
 
 ```sh
 # tune happens automatically on first run ([tune_policy missing=auto]); Parsec/remote-desktop OFF
