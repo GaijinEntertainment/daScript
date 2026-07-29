@@ -442,38 +442,56 @@ def tune_summary() : string {
     return s
 }
 
-//! The bench cells' provenance gate: REFUSE to measure unless every gen kernel stamps a
-//! manifest winner. A stale/absent sidecar silently downgrades every ``[tune]`` kernel to its
-//! fallback with only [I]-level warnings — the m4 pilot shipped a full board that way.
-//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the explicit dev-run escape (numbers never publishable).
+//! The bench cells' provenance gate: REFUSE to measure on fallback kernel winners. A
+//! stale/absent sidecar silently downgrades every ``[tune]`` kernel with only [I]-level
+//! warnings — the m4 pilot shipped a full board that way. Under ``DAS_TUNE_MANIFEST`` the
+//! stamps apply but ``tune_status()`` does not populate (framework gap, ledgered), so the
+//! env-pinned path gates on the FILE: present, newer than the binary, carrying kernels —
+//! exactly the observed failure modes. ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape.
 def tune_gate() : bool {
-    var st <- tune_status()
-    var total = 0
-    var bad = 0
-    var sample = ""
-    for (r in st) {
-        total++
-        if (r.source != "manifest") {
-            bad++
-            if (empty(sample)) {
-                sample = tune_row_str(r)
+    var why = ""
+    let mpath = get_env_variable("DAS_TUNE_MANIFEST")
+    if (!empty(mpath)) {
+        var mst : FStat
+        var bst : FStat
+        let args <- get_command_line_arguments()
+        if (!stat(mpath, mst)) {
+            why = "DAS_TUNE_MANIFEST='{mpath}' does not exist — every kernel runs its fallback"
+        } elif (stat(args[0], bst) && bst.mtime > mst.mtime) {
+            why = "DAS_TUNE_MANIFEST='{mpath}' is OLDER than the binary ({args[0]}) — the staleness rule drops every kernel to its fallback"
+        } elif (find(fread(mpath), "\"kernels\"") < 0) {
+            why = "DAS_TUNE_MANIFEST='{mpath}' carries no kernels section — not a minted manifest"
+        }
+    } else {
+        // per-script sidecar world: tune_status populates — require all-manifest stamps
+        var st <- tune_status()
+        var total = 0
+        var bad = 0
+        var sample = ""
+        for (r in st) {
+            total++
+            if (r.source != "manifest") {
+                bad++
+                if (empty(sample)) {
+                    sample = tune_row_str(r)
+                }
             }
         }
+        delete st
+        if (total == 0) {
+            why = "tune_status is EMPTY — the cell cannot prove its kernel provenance"
+        } elif (bad > 0) {
+            why = "{bad}/{total} kernels stamp non-manifest winners (first: {sample}) — stale or absent sidecar"
+        }
     }
-    delete st
-    var why = ""
-    if (total == 0) {
-        why = "tune_status is EMPTY — the cell cannot prove its kernel provenance"
-    } elif (bad > 0) {
-        why = "{bad}/{total} kernels stamp non-manifest winners (first: {sample}) — stale or absent sidecar"
-    } else {
+    if (empty(why)) {
         return true
     }
     if (env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
         to_log(LOG_WARNING, "tune gate: {why} — measuring anyway (DASLLAMA_ALLOW_UNTUNED=1, numbers are NOT publishable)\n")
         return true
     }
-    to_log(LOG_ERROR, "tune gate: {why}. Re-mint the box manifest (any tuned tool run with DAS_TUNE_MANIFEST newer than the binary re-tunes it), then retry; DASLLAMA_ALLOW_UNTUNED=1 overrides for dev runs\n")
+    to_log(LOG_ERROR, "tune gate: {why}. Mint with: DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>; DASLLAMA_ALLOW_UNTUNED=1 overrides for dev runs\n")
     return false
 }
 
