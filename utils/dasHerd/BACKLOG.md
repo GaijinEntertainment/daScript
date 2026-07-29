@@ -72,6 +72,19 @@ review capacity is the bottleneck the arcs exist to fix.
   agent→agent artifact handoff through the same store. Baseline
   fallback for plain shells: quoted path typed into the PTY. GLFW gives
   the host the drop callback; the watcher owns storage + delivery.
+- **Voice: hook up ASR and TTS (filed 2026-07-29, for later).** The
+  pieces exist in-house — whisper/Voxtral ASR + Silero-VAD (the Telegram
+  dictation bot is this exact flow running daily) and the Kokoro TTS rail
+  from the tutorial recordings. The scenario that earns it: saying "look
+  at that" WITHOUT interrupting the workflow — voice as the hands-free
+  door to the mailbox verbs. Design notes from Boris, to honor: (1)
+  listening may come FIRST — he suspects he'd enjoy TTS (agent replies,
+  attention summaries read aloud) before he's comfortable speaking; ship
+  the ears before demanding the voice. (2) "what is said vs what is
+  printed" is a first-class design topic, as big as the plumbing — the
+  spoken channel is a SUMMARY channel with its own editorial rules, not a
+  screen reader. Adoption is allowed to be gradual; the feature must not
+  assume the user talks.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
