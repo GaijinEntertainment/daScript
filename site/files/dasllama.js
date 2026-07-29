@@ -556,6 +556,7 @@
     if (el) {
       var best = 0;
       buildAudioRows(recs, 'audio-chat').forEach(function (r) {
+        if (r.noted) return;   // caveated rows never front the page (same rule as the mock)
         if (r.speed > best) best = r.speed;
       });
       if (best > 1) el.textContent = best >= 3 ? String(Math.floor(best)) : best.toFixed(1);
@@ -563,6 +564,7 @@
     var top = null;
     buildLLMPairs(recs).forEach(function (r) {
       if (r.noted || !(r.pp_ratio > 1) || !(r.tg_ratio > 1)) return;   // caveated rows never front the page
+      if (!(r.das.files && r.das.files.length)) return;               // nor rows without full input receipts
       if (!top || r.pp_ratio * r.tg_ratio > top.pp_ratio * top.tg_ratio) top = r;
     });
     if (!top) return;

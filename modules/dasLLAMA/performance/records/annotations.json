@@ -11,5 +11,12 @@
   "gguf": "canary-qwen-2.5b-decoder-f16.gguf",
   "engine": "das",
   "comment": "The decoder runs un-quantized fp32 - the token-parity configuration; long clips pay the most for it. Quantizing the decoder is open work."
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "m4",
+  "engine": "llama-mtmd-cli",
+  "workload": "audio-chat",
+  "comment": "On jfk.wav the reference's decode phase runs away (41.7 s of generation vs 30 ms on jfk3.wav; reproduced 3x with --temp 0 --reasoning off) - the two engines emit different amounts of text there, so that clip's ratio is a behavior difference, not a speed measurement."
  }
 ]
