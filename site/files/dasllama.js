@@ -39,12 +39,16 @@
     return esc(text) + (sub ? ' <span class="dl-model-sub">' + esc(sub) + '</span>' : '');
   }
 
-  // the ✱ tooltip IS the note — hover reads it without opening the receipt
-  function noteMark(r) {
+  // Noted rows carry the note ON the model cell: hovering anywhere in the cell shows the note
+  // itself (CSS tooltip, instant), the ✱ just marks the row. Emits the full <td> so the note
+  // rides a data attribute.
+  function modelCell(r, inner) {
+    if (!r.noted) return '<td class="dl-td-model">' + inner + '</td>';
     var t = [r.modelNote,
       r.das && r.das.comment ? 'das: ' + r.das.comment : '',
       r.ref && r.ref.comment ? 'reference: ' + r.ref.comment : ''].filter(Boolean).join('\n');
-    return ' <span class="dl-note-mark" title="' + esc(t).replace(/"/g, '&quot;') + '">✱</span>';
+    return '<td class="dl-td-model" data-note="' + esc(t).replace(/"/g, '&quot;') + '">' +
+      inner + ' <span class="dl-note-mark">✱</span></td>';
   }
 
   /* ── generic pair table ─────────────────────────────────────────
@@ -309,7 +313,7 @@
         // m.quant is the runtime activation mode, not the file's weight format — the weight
         // format is in the model name, and exec_fmt in the receipt spells it out exactly.
         { key: 'model', label: 'model', get: function (r) { return r.model; },
-          cell: function (r) { return notedCell(r.model, r.arch) + (r.noted ? noteMark(r) : ''); },
+          cell: function (r) { return modelCell(r, notedCell(r.model, r.arch)); },
           cls: 'dl-td-model' },
         { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
@@ -400,7 +404,7 @@
         tiebreak: function (a, b) { return a.audio_s - b.audio_s || a.tool.localeCompare(b.tool); },
         cols: [
           { key: 'model', label: 'model', get: function (r) { return r.model; },
-            cell: function (r) { return notedCell(r.model, '') + (r.noted ? noteMark(r) : ''); },
+            cell: function (r) { return modelCell(r, notedCell(r.model, '')); },
             cls: 'dl-td-model' },
           { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
             cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },

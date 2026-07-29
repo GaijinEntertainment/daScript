@@ -131,8 +131,20 @@
   .dl-bench-receipt b { color: var(--amber); font-weight: 400; }
   .dl-empty { font-family: var(--font-mono); font-size: 12px; color: var(--fg-faint); padding: 22px 14px; text-align: center; }
   /* annotated row: the mark says "there is a hand-written note in this receipt" */
-  .dl-note-mark { color: var(--amber); font-size: 11px; cursor: help; }
+  .dl-note-mark { color: var(--amber); font-size: 11px; }
   .dl-bench-receipt .dl-receipt-note { color: var(--amber); }   /* the hand-written note stands out from the receipt plumbing */
+  /* the note itself, instantly, from anywhere in the model cell — not a delayed balloon on a 10px glyph */
+  td[data-note] { position: relative; cursor: help; }
+  td[data-note]:hover::after {
+    content: attr(data-note);
+    position: absolute; left: 12px; top: calc(100% - 4px); z-index: 40;
+    width: max-content; max-width: 460px;
+    background: var(--bg-2); border: 1px solid var(--rule); border-left: 2px solid var(--amber);
+    border-radius: 6px; padding: 10px 12px;
+    color: var(--fg); font-size: 11.5px; line-height: 1.55;
+    white-space: pre-line; text-transform: none; letter-spacing: normal;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  }
 
   /* caveats */
   .dl-caveats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
