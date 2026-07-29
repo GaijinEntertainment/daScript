@@ -2770,6 +2770,45 @@ def set_bake_q51_repack(f : RepackQ51Fn) {
 def active_repack_q51() : RepackQ51Fn {
     return g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
 }
+
+// The bake twins (registered by math_gen like set_bake_q51_repack): override-getter bodies that
+// only ever run inline on the converter main thread. The REGISTERED slots stay global-free —
+// the eager loader fans them across pool lanes, whose contexts can't read this module's globals.
+var private g_bake_q8q8_repack = @@repack_q8q8_identity
+var private g_bake_mx4_repack = @@repack_mx4_identity
+var private g_bake_kq_repack = @@repack_kq_identity
+
+def set_bake_q8q8_repack(f : RepackQ8Q8Fn) {
+    g_bake_q8q8_repack = f
+}
+
+def set_bake_mx4_repack(f : RepackMx4Fn) {
+    g_bake_mx4_repack = f
+}
+
+def set_bake_kq_repack(f : RepackKqFn) {
+    g_bake_kq_repack = f
+}
+
+//! The repack to HOIST as a value (repack_regions) or call inline (stream_repack_one): the
+//! registered slot normally, the bake twin while a cross-box override is armed.
+def active_repack_q8q8() : RepackQ8Q8Fn {
+    return g_bake_cpu_override ? g_bake_q8q8_repack : g_repack_q8q8
+}
+
+def active_repack_mx4() : RepackMx4Fn {
+    return g_bake_cpu_override ? g_bake_mx4_repack : g_repack_mx4
+}
+
+def active_repack_kq() : RepackKqFn {
+    return g_bake_cpu_override ? g_bake_kq_repack : g_repack_kq
+}
+
+//! True while a cross-box bake override is armed (converter main thread only — the streaming
+//! bake repacks inline, never on lanes).
+def bake_cpu_override_active() : bool {
+    return g_bake_cpu_override
+}
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]
