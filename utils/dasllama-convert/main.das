@@ -76,11 +76,11 @@ struct ConvertArgs {
     @clarg_doc = "List every .dlim beside -m (a GGUF, or a directory): size, version, verdict, baked identity"
     list : bool
 
-    @clarg_doc = "GC beside -m: old-version and unreadable .dlim files (never a loadable image — another box's bake reads as OTHER and stays). DRY-RUN unless --apply"
+    @clarg_doc = "GC beside -m: everything that is not CURRENT — broken, old-version, and other-identity .dlim files. DRY-RUN unless --apply"
     clean : bool
 
-    @clarg_doc = "With --clean: also delete valid other-identity images — only CURRENT survives (old tune identities pile up across re-mints)"
-    clean_other : bool
+    @clarg_doc = "With --clean: preserve valid other-identity images (a bake deliberately carried from another box)"
+    keep_other : bool
 
     @clarg_doc = "With --clean: actually delete (the default is a dry-run listing)"
     apply : bool
@@ -165,13 +165,13 @@ def private list_images(cfg : ConvertArgs) : int {
     if (!cfg.apply) {
         var inv <- dlim_inventory(cfg.model)
         for (im in inv) {
-            if (im.verdict != "CURRENT" && (cfg.clean_other || im.verdict != "OTHER")) {
+            if (im.verdict != "CURRENT" && !(cfg.keep_other && im.verdict == "OTHER")) {
                 to_log(LOG_INFO, "dasllama-convert: would remove {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
             }
         }
         delete inv
     }
-    let r = dlim_clean(cfg.model, cfg.apply, keep_other = !cfg.clean_other)
+    let r = dlim_clean(cfg.model, cfg.apply, keep_other = cfg.keep_other)
     if (cfg.apply) {
         to_log(LOG_INFO, "dasllama-convert: removed {r.removed} of {r.stale} stale image(s), reclaimed {r.freed >> 20l} MB\n")
         if (!st.is_dir) {

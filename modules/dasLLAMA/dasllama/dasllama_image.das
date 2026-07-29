@@ -196,16 +196,16 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
 //! version-stale, AND other-identity images all go (old identities piled up 0.5 TB per box).
 //! CURRENT spans all flavors/quants/families, so a planar save never touches the metal twin.
 def dlim_gc_stale(source_path : string) {
-    let r = dlim_clean(source_path, true, keep_other = false)
+    let r = dlim_clean(source_path, true)
     if (r.removed > 0) {
         to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} dead sibling(s) of {base_name(source_path)}\n")
     }
 }
 
-//! The dlim GC beside `gguf_path`: BROKEN + version-stale always go; ``keep_other = false``
-//! (the after-save form) removes valid other-identity siblings too — only CURRENT survives.
-//! The default keeps OTHER (a directory sweep must not eat another box's carried bake).
-def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = true) : tuple<total : int; stale : int; removed : int; freed : int64> {
+//! The dlim GC beside `gguf_path`: everything non-CURRENT goes by default — BROKEN,
+//! version-stale, AND valid other-identity siblings (old identities pile up across re-mints).
+//! ``keep_other = true`` is the opt-out for a bake deliberately carried from another box.
+def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
     var inv <- dlim_inventory(gguf_path)
     for (im in inv) {
