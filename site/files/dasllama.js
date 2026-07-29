@@ -302,6 +302,72 @@
     return out;
   }
 
+  /* § 01's default view: mirrored bars, teal reference left / amber das right, each pair
+     normalized to its own max so the longer side is the winner and the gap IS the ratio.
+     Reads the same filter selects the table uses; sorted by the active metric's ratio. */
+  function renderBars(rows) {
+    var box = document.getElementById('bench-bars');
+    if (!box) return;
+    var metricBtn = document.querySelector('#bench-metric .is-on');
+    var m = metricBtn ? metricBtn.dataset.metric : 'pp';
+    var filters = {};
+    document.querySelectorAll('#bench-filters .js-filter').forEach(function (s) { filters[s.dataset.field] = s.value; });
+    var shown = rows.filter(function (r) {
+      return (!filters.model || r.model === filters.model) &&
+             (!filters.box || r.box === filters.box) &&
+             (!filters.lane || r.lane === filters.lane) &&
+             r[m + '_ratio'] !== null;
+    }).sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; });
+    if (!shown.length) {
+      box.innerHTML = '<div class="dl-empty">No runs match these filters.</div>';
+      return;
+    }
+    box.innerHTML = shown.map(function (r) {
+      var das = r[m + '_das'], ref = r[m + '_ref'], ratio = r[m + '_ratio'];
+      var mx = Math.max(das, ref);
+      var refW = (ref / mx) * 50, dasW = (das / mx) * 50;   // % of the box, each side max 50
+      var rcls = ratio > 1.005 ? 'dl-win' : (ratio < 0.995 ? 'dl-loss' : '');
+      return '<div class="dl-bar-row">' +
+        '<div class="dl-bar-label">' + esc(r.model) + ' <span class="dl-dim2">· ' + esc(r.boxName) + ' · ' + esc(r.lane) + '</span></div>' +
+        '<div class="dl-bar-num">' + tps(ref) + '</div>' +
+        '<div class="dl-bar-box"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div>' +
+        '<div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div></div>' +
+        '<div class="dl-bar-num dl-bar-num--das">' + tps(das) + '</div>' +
+        '<div class="dl-bar-ratio ' + rcls + '">' + fmt(ratio, 2) + '×</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function mountLLMViews(rows) {
+    var viewSeg = document.getElementById('bench-view');
+    var metricSeg = document.getElementById('bench-metric');
+    var barsBox = document.getElementById('bench-bars');
+    var tableWrap = document.getElementById('bench-table-wrap');
+    if (!viewSeg || !barsBox || !tableWrap) return;
+    function setSeg(seg, btn) {
+      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+    }
+    viewSeg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setSeg(viewSeg, b);
+        var bars = b.dataset.view === 'bars';
+        barsBox.hidden = !bars;
+        tableWrap.hidden = bars;
+        metricSeg.style.visibility = bars ? 'visible' : 'hidden';
+        if (bars) renderBars(rows);
+      });
+    });
+    metricSeg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { setSeg(metricSeg, b); renderBars(rows); });
+    });
+    // the bar view re-renders on the SAME filter selects the table owns
+    var fbox = document.getElementById('bench-filters');
+    if (fbox) fbox.addEventListener('change', function () { renderBars(rows); });
+    var reset = fbox && fbox.querySelector('.js-reset');
+    if (reset) reset.addEventListener('click', function () { renderBars(rows); });
+    renderBars(rows);
+  }
+
   function mountLLM(rows) {
     if (!rows.length) return;
     document.getElementById('bench').hidden = false;
@@ -475,7 +541,9 @@
   fetch('files/dasllama/bench_records.json')
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (recs) {
-      mountLLM(buildLLMPairs(recs));
+      var llmRows = buildLLMPairs(recs);
+      mountLLM(llmRows);
+      mountLLMViews(llmRows);
       mountAudio(recs);
       mountHero(recs);
     })

@@ -76,6 +76,31 @@
   .dl-dim { color: var(--fg-faint); }
   .dl-td-model { color: var(--fg); max-width: 300px; }   /* long model names wrap at hyphens instead of forcing the ratio columns off-screen */
 
+  /* § 01 view toggle + mirrored bar chart: teal reference grows left, amber das grows right,
+     each pair normalized to its own max — the longer side is the winner, the gap is the ratio */
+  .dl-viewbar { margin-top: 26px; display: flex; gap: 14px; align-items: center; }
+  .dl-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .dl-seg button {
+    background: none; border: 0; color: var(--fg-faint); font-family: var(--font-mono);
+    font-size: 11px; padding: 6px 14px; cursor: pointer; letter-spacing: 0.04em;
+  }
+  .dl-seg button + button { border-left: 1px solid var(--rule); }
+  .dl-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
+  .dl-bars { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-family: var(--font-mono); font-size: 12px; }
+  .dl-bar-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .dl-bar-row:hover { background: rgba(232, 161, 58, 0.04); }
+  .dl-bar-label { flex: 0 0 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+  .dl-bar-label .dl-dim2 { font-size: 11px; }
+  .dl-bar-num { flex: 0 0 62px; text-align: right; color: var(--fg-faint); }
+  .dl-bar-num--das { color: var(--fg); }
+  .dl-bar-box { flex: 1 1 auto; position: relative; height: 16px; min-width: 220px; }
+  .dl-bar-box::before { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--rule); }
+  .dl-bar-ref, .dl-bar-das { position: absolute; top: 2px; bottom: 2px; }
+  .dl-bar-ref { right: 50%; background: var(--dl-teal); border-radius: 3px 0 0 3px; opacity: 0.75; }
+  .dl-bar-das { left: 50%; background: var(--amber); border-radius: 0 3px 3px 0; }
+  .dl-bar-ratio { flex: 0 0 56px; text-align: right; }
+  @media (max-width: 860px) { .dl-bar-label { flex-basis: 170px; } .dl-bar-box { min-width: 120px; } }
+
   /* the bridge: the tables convince, this points at the reason — the language */
   .dl-bridge { margin-top: 30px; padding: 18px 22px; border: 1px solid var(--rule); border-left: 2px solid var(--amber); border-radius: 8px; max-width: 780px; }
   .dl-bridge p { margin: 0; color: var(--fg-dim); font-size: 14px; line-height: 1.6; }
@@ -288,7 +313,16 @@ def main() {
             </dl>
 
             <div class="dl-filters" id="bench-filters"></div>
-            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="bench-table"></table></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="bench-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
+                </div>
+                <div class="dl-seg" id="bench-metric">
+                    <button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button>
+                </div>
+            </div>
+            <div class="dl-bars" id="bench-bars"></div>
+            <div class="dl-table-wrap" id="bench-table-wrap" hidden><table class="dl-table dl-table--bench" id="bench-table"></table></div>
             <div class="dl-caption" id="bench-caption"></div>
 
             <div class="dl-bridge">
