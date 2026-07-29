@@ -110,19 +110,39 @@ The "better than VSCode" step, and the reason `--overlay` matters:
 - References and call hierarchy exist in nav.das but are NOT in this arc's
   first three steps; they arrive free once the transport is proven.
 
-## Step 4 — editing, exactly two doors
+## Step 4 — the editor is a PRODUCT, dasHerd is its first customer
 
-- **PR body**: a plain multiline editor (the commit box pattern, bigger
-  capacity) bound to the coming GitHub-PR surface. No LSP, no source view —
-  it is markdown text. Ships with the PR arc, listed here because the
-  editor widget is shared groundwork.
-- **Conflict resolution**: its own slice AFTER viewing-with-LSP proves out.
-  Three panes (ours / base / theirs) + an editable result buffer,
-  per-conflict accept-ours / accept-theirs / edit-by-hand, save writes the
-  file and stages it (the changelist already knows conflicted rows and
-  refuses to discard them). The editable result buffer is the first real
-  editor in the app; keep it to conflicts — the app is a reviewer, not an
-  IDE.
+(Reframed 2026-07-29, Boris's review.) An integrated code editor — with
+LSP, for das — is a feature USERS have asked for: they want a code editor
+inside their own tools. dasHerd's conflict resolution is the first use
+case, not the definition, and heavy follow-up focus is expected. So it is
+NOT hacked together inside dasHerd:
+
+- The editing capability is built as a reusable dasImgui component, the
+  editing sibling of `text_source_view` / the markdown view — same
+  document model, same syntax pipeline, plus a cursor/selection/undo
+  layer and an edit-ops interface a host binds (dasHerd binds LSP hover /
+  definition / diagnostics; a game tool binds whatever it has).
+- **Two /examples ship WITH the component and are part of the
+  deliverable, not demos after the fact:**
+  1. **Rich text editor** — the .md viewer we have gains editing (or a
+     separate .md editor app if the viewer's layout model fights
+     editability; that choice is the first design decision of the arc).
+     Short text does not make it less full-featured: cursor, selection,
+     undo, styling round-trip — the PR-body editor IS this example
+     embedded in dasHerd.
+  2. **Code editor app** — a das code editor with LSP hover, definition
+     and (step 5) completion. The example is the proof the component
+     works OUTSIDE dasHerd; it is what users were asking for.
+- **dasHerd's two consumers** then bind the component: the PR body
+  (markdown editor instance) and conflict resolution — three panes
+  (ours / base / theirs) + an editable result buffer, per-conflict
+  accept-ours / accept-theirs / edit-by-hand, save writes the file and
+  stages it (the changelist already knows conflicted rows and refuses to
+  discard them).
+
+Bigger arc than the viewing steps, same corner of the detour: viewing
+(steps 1–3) proves the LSP transport the editor will reuse.
 
 ## The quality bar (added 2026-07-29, Boris's review)
 
@@ -167,6 +187,11 @@ of, not instead of, compiler-truth completion.
 2. Step 2 both-sides overlay hover, commit.
 3. Step 3 definition + navigation stack, commit.
 4. References/call-hierarchy as a follow-up decision after Boris reviews
-   the feel; Step 4 (editing) rides the GitHub-PR arc.
-5. Completion, profelis floor, ported into the subtool shape — sized as its
-   own arc slice, not squeezed in. LLM-assisted completion follows later.
+   the feel.
+5. The editor arc (Step 4): the reusable dasImgui editing component with
+   its TWO /examples (rich text editor, das code editor with LSP), then
+   dasHerd binds it for the PR body and conflict resolution. Sized as its
+   own arc — a requested product feature, not a dasHerd hack.
+6. Completion, profelis floor, ported into the subtool shape — lands in
+   both the code-editor example and dasHerd. LLM-assisted completion
+   follows later, on top.
