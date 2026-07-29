@@ -26,7 +26,27 @@ let private MAX_BINARY_PREVIEW_PIXELS = 64l * 1024l * 1024l
 // renders anything over 128 KB through the virtualised path, drawing only the
 // visible runs, so nearly all of that work was thrown away. 256 KB keeps
 // highlighting for every hand-written source file in the tree.
-let private MAX_SYNTAX_HIGHLIGHT_BYTES = 256 * 1024
+let private MAX_SYNTAX_HIGHLIGHT_BYTES = 2 * 1024 * 1024
+let private MAX_SYNTAX_HIGHLIGHT_LINE_BYTES = 16 * 1024
+
+def public inspector_syntax_worth_highlighting(source : string) : bool {
+    //! Shape-aware highlight gate. Size alone is generous (2 MiB); what kills
+    //! tree-sitter is BYTES PER LINE — generated tables and minified sources
+    //! put hundreds of KB on one line. No hand-written code has a 16 KB line.
+    if (length(source) > MAX_SYNTAX_HIGHLIGHT_BYTES) return false
+    var line_start = 0
+    var worst = 0
+    peek_data(source) $(data) {
+        for (index in range(length(data))) {
+            if (data[index] == uint8('\n')) {
+                worst = max(worst, index - line_start)
+                line_start = index + 1
+            }
+        }
+        worst = max(worst, length(data) - line_start)
+    }
+    return worst <= MAX_SYNTAX_HIGHLIGHT_LINE_BYTES
+}
 
 enum public InspectorPrepareEventKind {
     ready
@@ -60,6 +80,9 @@ struct public InspectorPrepareEvent {
     changed_source_ranges : array<TextSourceRange>
     view_source : string
     view_text_ready : bool
+    // True when a resolvable language was DROPPED by the highlight gate
+    // (size/line-shape) — the UI says "syntax off" instead of looking broken.
+    syntax_capped : bool
     preview_pixels : array<uint8>
     preview_width : int
     preview_height : int
@@ -310,6 +333,7 @@ def private prepare_worker_main(var jobs : Channel?&;
             var changed_ranges : array<TextSourceRange>
             var view_source = ""
             var view_text_ready = false
+            var syntax_capped = false
             var inscope decoded_view_bytes : array<uint8>
             var preview_pixels : array<uint8>
             var preview_width = 0
@@ -363,11 +387,17 @@ def private prepare_worker_main(var jobs : Channel?&;
                         view_source, prepared_patch)
                     // Past the cap, drop the language: tree_sitter_source_document
                     // with no language builds the same document without parsing
-                    // or spans, so a huge file opens instantly as plain text
-                    // instead of stalling the inspector for twenty seconds.
-                    let highlight_language = (max(length(view_source),
-                            length(old_source)) > MAX_SYNTAX_HIGHLIGHT_BYTES
-                        ? "" : language)
+                    // or spans, so a pathological file opens instantly as plain
+                    // text instead of stalling the inspector for twenty seconds.
+                    // The cap is SHAPE-aware: the 21-second file was 716 KB
+                    // across SEVEN lines (generated parser tables); a normal
+                    // 700 KB hand-written module parses in well under a second
+                    // and keeps its colors (the live-review regression).
+                    let highlight_language = (
+                        inspector_syntax_worth_highlighting(view_source)
+                            && inspector_syntax_worth_highlighting(old_source)
+                        ? language : "")
+                    syntax_capped = !empty(language) && empty(highlight_language)
                     var full_old <- tree_sitter_source_document(
                         old_source, highlight_language, job.generation)
                     var full_new <- tree_sitter_source_document(
@@ -472,6 +502,7 @@ def private prepare_worker_main(var jobs : Channel?&;
                     generation = job.generation,
                     view_source = view_source,
                     view_text_ready = view_text_ready,
+                    syntax_capped = syntax_capped,
                     preview_width = preview_width,
                     preview_height = preview_height,
                     preview_byte_count = job.view_byte_count,

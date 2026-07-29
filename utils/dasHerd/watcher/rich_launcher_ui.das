@@ -198,10 +198,26 @@ def draw_launcher_form() {
     let launch_pending = (g_launch_pending_revision >= 0l && connected
         && g_client.herd_revision == g_launch_pending_revision
         && get_time_nsec(g_launch_pending_started) / 1000000l < 10000l)
-    // ### keeps the widget identity stable while the label changes.
+    // ### keeps the widget identity stable while the label changes. The
+    // target is named by BOTH its identities — branch and folder — because
+    // the Repositories view speaks branch and the folder alone answered
+    // nothing in the live review.
+    var launch_target = base_name(g_agent_source_worktree_path)
+    if (g_client != null) {
+        for (repository in g_client.repositories) {
+            if (repository.record.id != g_agent_source_repository_id) continue
+            for (worktree in repository.worktrees) {
+                if (repository_same_worktree_identity(worktree.path,
+                        g_agent_source_worktree_path)) {
+                    launch_target = worktree_identity_label(worktree.branch,
+                        worktree.path)
+                }
+            }
+        }
+    }
     let launch_label = (LAUNCHER_NEW_WORKTREE.value
         ? "Create worktree + launch###launcher-launch"
-        : "Launch in {base_name(g_agent_source_worktree_path)}###launcher-launch")
+        : "Launch in {launch_target}###launcher-launch")
     if (button(LAUNCHER_LAUNCH,
             (text = launch_label, enabled = connected && !launch_pending
                 && !empty(g_agent_source_repository_id)

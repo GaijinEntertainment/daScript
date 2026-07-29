@@ -270,6 +270,9 @@ struct GitInspectorState {
     changed_source_ranges : array<TextSourceRange>
     view_source : string
     view_prepared : bool
+    // The highlight gate dropped a resolvable language (size/line shape) —
+    // shown as "SYNTAX OFF" so plain text reads as a decision, not a break.
+    syntax_capped : bool
     markdown_gutter_segments : int
     source_patch : string
     source_view_text : string
@@ -854,6 +857,7 @@ def drain_inspector_prepare_events() {
             g_inspector.changed_source_ranges <- event.changed_source_ranges
             g_inspector.view_source = clone_string(event.view_source)
             g_inspector.view_prepared = event.view_text_ready
+            g_inspector.syntax_capped = event.syntax_capped
             g_inspector.installed_repository_id = g_inspector.repository_id
             g_inspector.installed_worktree_path = g_inspector.worktree_path
             g_inspector.installed_file_path = g_inspector.file_path
@@ -1045,6 +1049,17 @@ def git_file_in_group(file : GitFileState const; group : int) : bool {
 
 def git_group_scope(group : int) : string {
     return group == 1 ? "staged" : "working"
+}
+
+def worktree_identity_label(branch, worktree_path : string) : string {
+    //! ONE spelling of a worktree's identity, everywhere a surface names it:
+    //! the branch AND the folder. The two drift apart in practice
+    //! (codex/dictation-transcripts-unthreaded lives in dictation-bot), and a
+    //! surface showing only one of them reads as a different thing than the
+    //! surface showing the other — the live-review confusion.
+    let folder = base_name(worktree_path)
+    if (empty(branch)) return "detached @ {folder}"
+    return "{branch} @ {folder}"
 }
 
 def git_status_file_code(repository : RepositorySnapshot const;

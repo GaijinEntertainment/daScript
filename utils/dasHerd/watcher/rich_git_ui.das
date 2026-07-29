@@ -69,6 +69,8 @@ var GIT_GROUP_CHECK_JOIN : table<int; EmptyMarkerState>
 
 var GIT_STATUS_DISCARD_MENU : table<int; ToggleState>
 
+var GIT_STATUS_DELETE_MENU : table<int; ToggleState>
+
 var GIT_DISCARD_LIST_ROW : table<int; NarrativeState>
 
 var GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
@@ -275,7 +277,11 @@ def draw_repositories_window() {
                 // Transparent label keeps the row id + snapshot text; the
                 // overlay draws MAIN / slash-tinted branch / amber dirty in
                 // the shared token palette (notes 18/20).
-                let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
+                // The folder rides every row: branch and folder names drift
+                // apart, and a row naming only the branch leaves "which
+                // folder is that" unanswerable (the live-review confusion).
+                let folder_tag = " @ {base_name(worktree.path)}"
+                let row_label = "{prefix}{branch}{dirty_label}{folder_tag}##{repository.record.id}:{worktree.path}"
                 WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 var row_clicked = false
                 with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
@@ -319,6 +325,12 @@ def draw_repositories_window() {
                                 float2(branch_x + CalcTextSize(branch).x, text_y),
                                 GetColorU32(token_warning_color()), dirty_label)
                         }
+                    }
+                    with_window_drawlist() $(var dl) {
+                        dl |> add_text(
+                            float2(branch_x + CalcTextSize(branch).x
+                                + CalcTextSize(dirty_label).x, text_y),
+                            GetColorU32(token_muted_color()), folder_tag)
                     }
                 }
                 popup_context_item(WORKTREE_POPUP[row],
@@ -476,7 +488,11 @@ def discard_measure_walk(base, rel : string) {
 }
 
 def open_discard_prompt(repository : RepositorySnapshot const;
-                        worktree : WorktreeState const) {
+                        worktree : WorktreeState const;
+                        scope : string = "all") {
+    //! scope narrows the prompt to one class of the selection: "tracked"
+    //! (revert staged + unstaged edits) or "untracked" (delete files) — the
+    //! two menu verbs — while "all" keeps every discardable row.
     delete g_git_discard.modified_paths
     delete g_git_discard.staged_paths
     delete g_git_discard.untracked_paths
@@ -492,6 +508,12 @@ def open_discard_prompt(repository : RepositorySnapshot const;
     changelist_selection_discards(repository, worktree,
         g_git_discard.modified_paths, g_git_discard.staged_paths,
         g_git_discard.untracked_paths, g_git_discard.conflicted_count)
+    if (scope == "tracked") {
+        delete g_git_discard.untracked_paths
+    } elif (scope == "untracked") {
+        delete g_git_discard.modified_paths
+        delete g_git_discard.staged_paths
+    }
     for (path in g_git_discard.staged_paths) {
         discard_measure_file(worktree.path, path)
     }
@@ -639,15 +661,23 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
     var conflicted = 0
     changelist_selection_discards(repository, worktree, modified_paths,
         staged_paths, untracked_paths, conflicted)
-    let discard_count = (length(modified_paths) + length(staged_paths)
-        + length(untracked_paths))
-    let discard_word = discard_count == 1 ? "file" : "files"
-    // The destructive verb lives ONLY here, never on a one-pixel icon, and
-    // the ellipsis is honest: it opens the confirmation, it does not act.
+    let tracked_count = length(modified_paths) + length(staged_paths)
+    let untracked_count = length(untracked_paths)
+    let tracked_word = tracked_count == 1 ? "file" : "files"
+    let untracked_word = untracked_count == 1 ? "file" : "files"
+    // The destructive verbs live ONLY here, never on a one-pixel icon, and
+    // speak per class: reverting tracked edits and deleting untracked files
+    // are different acts. The ellipsis is honest: it opens the confirmation,
+    // it does not act.
     if (menu_item(GIT_STATUS_DISCARD_MENU[file_row],
-            (text = "Discard {discard_count} {discard_word}...", shortcut = "",
-            enabled = !busy && discard_count > 0))) {
-        open_discard_prompt(repository, worktree)
+            (text = "Discard changes - {tracked_count} tracked {tracked_word}...",
+            shortcut = "", enabled = !busy && tracked_count > 0))) {
+        open_discard_prompt(repository, worktree, "tracked")
+    }
+    if (menu_item(GIT_STATUS_DELETE_MENU[file_row],
+            (text = "Delete {untracked_count} untracked {untracked_word}...",
+            shortcut = "", enabled = !busy && untracked_count > 0))) {
+        open_discard_prompt(repository, worktree, "untracked")
     }
 }
 
@@ -704,6 +734,15 @@ def draw_git_file_group(repository : RepositorySnapshot const;
             selection_plain_click(g_changelist_selection, repository.record.id,
                 worktree.path, group, key)
         }
+        // The popup must attach HERE: BeginPopupContextItem binds to the LAST
+        // submitted item, and decorate_git_file_row submits an overlay icon
+        // button — attached after it, right-click only worked on the tiny
+        // icon (the live-review "menu is missing" bug).
+        popup_context_item(GIT_STATUS_ROW_POPUP[file_row],
+                (str_id = "status-menu:{comparison}:{file.path}",
+                flags = ImGuiPopupFlags.MouseButtonRight)) {
+            draw_changelist_row_menu(repository, worktree, file_row, busy)
+        }
         var action_clicked = false
         decorate_git_file_row("status:{comparison}:{file.path}", row_text,
             file.added_lines, file.deleted_lines, file.stats_known,
@@ -735,11 +774,6 @@ def draw_git_file_group(repository : RepositorySnapshot const;
                     FILE_INSPECTOR_WIN.pending_raise = true
                 }
             }
-        }
-        popup_context_item(GIT_STATUS_ROW_POPUP[file_row],
-                (str_id = "status-menu:{comparison}:{file.path}",
-                flags = ImGuiPopupFlags.MouseButtonRight)) {
-            draw_changelist_row_menu(repository, worktree, file_row, busy)
         }
         file_row++
     }
@@ -1604,7 +1638,9 @@ def draw_git_changelist_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    let title = worktree.is_main ? "MAIN - {worktree.branch}" : worktree.branch
+                    let identity = worktree_identity_label(worktree.branch,
+                        worktree.path)
+                    let title = worktree.is_main ? "MAIN - {identity}" : identity
                     text(GIT_TITLE, (text = title))
                     same_line()
                     if (icon_button(REFRESH_GIT, (glyph = "refresh",

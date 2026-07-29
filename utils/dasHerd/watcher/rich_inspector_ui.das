@@ -139,6 +139,18 @@ def inspector_content_state_name(state : InspectorContentState) : string {
 }
 
 def draw_binary_preview() {
+    if (g_inspector.preview_texture == 0u && g_inspector.view_prepared) {
+        // git reports a binary diff (NUL content, or .gitattributes marking —
+        // ds_parser.cpp is deliberately `binary` there), but the bytes decode
+        // as text and the View payload is already fetched. Raw text is always
+        // available; "Preview unavailable" over a readable file was the
+        // live-review bug. Say why there is no diff, then show the file.
+        text_disabled(INSPECTOR_BINARY_TEXT_NOTE, (text =
+            "git treats this file as binary (content or .gitattributes), " +
+            "so there is no diff - showing the current file text"))
+        draw_file_view()
+        return
+    }
     text("Binary file ({g_inspector.preview_byte_count} bytes)")
     if (g_inspector.preview_texture == 0u) {
         text_disabled(INSPECTOR_BINARY_UNAVAILABLE,
@@ -495,7 +507,9 @@ def file_inspector_status() : GitWindowStatus {
             text = "FAILED {g_inspector.file_path} - {g_inspector.error}{showing}{task}", error = true)
     }
     if (retained) {
-        return GitWindowStatus(text = "{to_upper(g_inspector.installed_comparison)}  {g_inspector.installed_file_path}   HUNKS {length(g_inspector.parsed.hunks)}   PREP {g_inspector.prepare_elapsed_usec / 1000l} ms")
+        let capped = (g_inspector.syntax_capped
+            ? "   SYNTAX OFF (file too large or lines too long)" : "")
+        return GitWindowStatus(text = "{to_upper(g_inspector.installed_comparison)}  {g_inspector.installed_file_path}   HUNKS {length(g_inspector.parsed.hunks)}   PREP {g_inspector.prepare_elapsed_usec / 1000l} ms{capped}")
     }
     return GitWindowStatus(text = "Select a changed file")
 }

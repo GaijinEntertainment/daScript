@@ -1317,6 +1317,7 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
             g_inspector.new_document.source),
         view_byte_count = length(g_inspector.view_source),
         view_prepared = g_inspector.view_prepared,
+        syntax_capped = g_inspector.syntax_capped,
         old_line_mark_count = length(g_inspector.old_document.line_marks),
         new_line_mark_count = length(g_inspector.new_document.line_marks),
         old_line_number_count = length(g_inspector.old_document.line_numbers),
