@@ -325,14 +325,16 @@
     box.innerHTML = shown.map(function (r) {
       var das = r[m + '_das'], ref = r[m + '_ref'], ratio = r[m + '_ratio'];
       var mx = Math.max(das, ref);
-      var refW = (ref / mx) * 50, dasW = (das / mx) * 50;   // % of the box, each side max 50
+      // stacked pair from one baseline: das on top (amber), reference under it (teal); the
+      // winner of the pair spans the full track, the value label rides each bar's tip
+      var dasW = (das / mx) * 100, refW = (ref / mx) * 100;
       var rcls = ratio > 1.005 ? 'dl-win' : (ratio < 0.995 ? 'dl-loss' : '');
       return '<div class="dl-bar-row">' +
-        '<div class="dl-bar-label">' + esc(r.model) + ' <span class="dl-dim2">· ' + esc(r.boxName) + ' · ' + esc(r.lane) + '</span></div>' +
-        '<div class="dl-bar-num">' + tps(ref) + '</div>' +
-        '<div class="dl-bar-box"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div>' +
-        '<div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div></div>' +
-        '<div class="dl-bar-num dl-bar-num--das">' + tps(das) + '</div>' +
+        '<div class="dl-bar-label">' + esc(r.model) + '<span class="dl-dim2">' + esc(r.boxName) + ' · ' + esc(r.lane) + '</span></div>' +
+        '<div class="dl-bar-pair">' +
+        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + tps(das) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + tps(ref) + '</span></div>' +
+        '</div>' +
         '<div class="dl-bar-ratio ' + rcls + '">' + fmt(ratio, 2) + '×</div>' +
         '</div>';
     }).join('');

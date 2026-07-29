@@ -86,20 +86,22 @@
   }
   .dl-seg button + button { border-left: 1px solid var(--rule); }
   .dl-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
-  .dl-bars { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-family: var(--font-mono); font-size: 12px; }
-  .dl-bar-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .dl-bars { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; }
+  .dl-bar-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+  .dl-bar-row:last-child { border-bottom: 0; }
   .dl-bar-row:hover { background: rgba(232, 161, 58, 0.04); }
-  .dl-bar-label { flex: 0 0 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
-  .dl-bar-label .dl-dim2 { font-size: 11px; }
-  .dl-bar-num { flex: 0 0 62px; text-align: right; color: var(--fg-faint); }
-  .dl-bar-num--das { color: var(--fg); }
-  .dl-bar-box { flex: 1 1 auto; position: relative; height: 16px; min-width: 220px; }
-  .dl-bar-box::before { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--rule); }
-  .dl-bar-ref, .dl-bar-das { position: absolute; top: 2px; bottom: 2px; }
-  .dl-bar-ref { right: 50%; background: var(--dl-teal); border-radius: 3px 0 0 3px; opacity: 0.75; }
-  .dl-bar-das { left: 50%; background: var(--amber); border-radius: 0 3px 3px 0; }
-  .dl-bar-ratio { flex: 0 0 56px; text-align: right; }
-  @media (max-width: 860px) { .dl-bar-label { flex-basis: 170px; } .dl-bar-box { min-width: 120px; } }
+  .dl-bar-label { flex: 0 0 250px; overflow: hidden; color: var(--fg); line-height: 1.35; }
+  .dl-bar-label .dl-dim2 { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-bar-pair { flex: 1 1 auto; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
+  .dl-bar-line { display: flex; align-items: center; gap: 8px; height: 10px; }
+  .dl-bar-das, .dl-bar-ref { height: 8px; border-radius: 2px; flex: 0 0 auto; }
+  .dl-bar-das { background: var(--amber); }
+  .dl-bar-ref { background: var(--dl-teal); opacity: 0.8; }
+  .dl-bar-val { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
+  .dl-bar-val--das { color: var(--fg); }
+  .dl-bar-line .dl-bar-das, .dl-bar-line .dl-bar-ref { max-width: calc(100% - 58px); }   /* the value label always fits after the bar */
+  .dl-bar-ratio { flex: 0 0 52px; text-align: right; }
+  @media (max-width: 860px) { .dl-bar-label { flex-basis: 150px; } .dl-bar-pair { min-width: 120px; } }
 
   /* the bridge: the tables convince, this points at the reason — the language */
   .dl-bridge { margin-top: 30px; padding: 18px 22px; border: 1px solid var(--rule); border-left: 2px solid var(--amber); border-radius: 8px; max-width: 780px; }
