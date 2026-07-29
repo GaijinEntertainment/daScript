@@ -4127,6 +4127,7 @@ struct private GpuState {
     dn_scan_set : VkDescriptorSet
     dn_rq_set : VkDescriptorSet
     dn_ready : bool
+    dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
     dnd_meta : HostBuf            // step meta staging (npos = 1 geometry, filled once)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
@@ -4651,14 +4652,30 @@ def private vk_moe_init : bool {
     g_gpu.batch_k6 <- make_kernel_pipe("kq_moe_batch_k6", kq_moe_batch_k6_spv)
     g_gpu.batch_q40 <- make_kernel_pipe("kq_moe_batch_q40", kq_moe_batch_q40_spv)
     g_gpu.comb_pipeline <- make_kernel_pipe("moe_combine", moe_combine_spv)
-    g_gpu.dn_conv_pipeline <- make_kernel_pipe("dn_conv", dn_conv_spv)
-    g_gpu.dnd_fused_pipeline <- make_kernel_pipe("dn_step_fused", dn_step_fused_spv)
-    g_gpu.dn_scan_p1_pipeline <- make_kernel_pipe("dn_scan_p1", dn_scan_p1_spv)
-    g_gpu.dn_scan_p2_pipeline <- make_kernel_pipe("dn_scan_p2", dn_scan_p2_spv)
-    g_gpu.dn_rq_pipeline <- make_kernel_pipe("dn_requant", dn_requant_spv)
-    g_gpu.at_prep_q_pipeline <- make_kernel_pipe("at_prep_q", at_prep_q_spv)
-    g_gpu.at_prep_k_pipeline <- make_kernel_pipe("at_prep_k", at_prep_k_spv)
-    g_gpu.at_attn_pipeline <- make_kernel_pipe("at_attn", at_attn_spv)
+    // nolint:STYLE015 — dn_conv stages a full row in shared (cv_row+cv_scale = 33024 B); Apple
+    // caps threadgroup memory at 32 KB and pipeline COMPILE fails, so the chain gates by limit
+    var limits_props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
+    g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
+    if (g_gpu.dn_shared_ok) {
+        g_gpu.dn_conv_pipeline <- make_kernel_pipe("dn_conv", dn_conv_spv)
+        g_gpu.dnd_fused_pipeline <- make_kernel_pipe("dn_step_fused", dn_step_fused_spv)
+        g_gpu.dn_scan_p1_pipeline <- make_kernel_pipe("dn_scan_p1", dn_scan_p1_spv)
+        g_gpu.dn_scan_p2_pipeline <- make_kernel_pipe("dn_scan_p2", dn_scan_p2_spv)
+        g_gpu.dn_rq_pipeline <- make_kernel_pipe("dn_requant", dn_requant_spv)
+    } else {
+        set_moe_gpu_dn_route(false)
+        set_moe_gpu_dnd_route(false)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < dn_conv's 33024 B tile; recurrent layers stay on the CPU rail\n")
+    }
+    // at_* stages a full projection row in shared like dn_conv (33024 B) — same limit gate
+    if (g_gpu.dn_shared_ok) {
+        g_gpu.at_prep_q_pipeline <- make_kernel_pipe("at_prep_q", at_prep_q_spv)
+        g_gpu.at_prep_k_pipeline <- make_kernel_pipe("at_prep_k", at_prep_k_spv)
+        g_gpu.at_attn_pipeline <- make_kernel_pipe("at_attn", at_attn_spv)
+    } else {
+        set_moe_gpu_attn_route(false)
+    }
     g_gpu.q8k_rq_pipeline <- make_kernel_pipe("q8k_requant", q8k_requant_spv)
     g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms", ar_add_rms_spv)
     g_gpu.rks_pipeline <- make_kernel_pipe("rope_kv_store", rope_kv_store_spv)
@@ -7832,6 +7849,9 @@ def private cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64;
 }
 
 def private ensure_dn_state {
+    if (!g_gpu.dn_shared_ok) {
+        panic("dasLLAMA vulkan tier: deltanet dispatch reached a device whose shared-memory cap declined the chain — route gating failed")
+    }
     if (g_gpu.dn_ready) {
         return
     }
@@ -9139,7 +9159,17 @@ def private vulkan_backend_available : bool {
         g_vk_why = "no vulkan loader (volkInitialize failed)"
         return false
     }
-    let ci = VkInstanceCreateInfo()
+    var ci = VkInstanceCreateInfo()
+    // portability drivers (MoltenVK) reject a bare vkCreateInstance — same opt-in as boost's create_instance
+    var exts : array<string>
+    if (instance_extension_available("VK_KHR_portability_enumeration")) {
+        exts |> push("VK_KHR_portability_enumeration")
+        ci.flags.enumerate_portability_khr = true
+        ci.enabledExtensionCount = 1u
+        unsafe {
+            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
+        }
+    }
     var inst : VkInstance
     let cr = vkCreateInstance(ci, null, inst)
     if (cr != VkResult.SUCCESS) {
