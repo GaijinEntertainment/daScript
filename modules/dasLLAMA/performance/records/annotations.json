@@ -18,5 +18,12 @@
   "engine": "llama-mtmd-cli",
   "workload": "audio-chat",
   "comment": "On jfk.wav the reference's decode phase runs away (41.7 s of generation vs 30 ms on jfk3.wav; reproduced 3x with --temp 0 --reasoning off) - the two engines emit different amounts of text there, so that clip's ratio is a behavior difference, not a speed measurement."
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "zen2",
+  "engine": "llama-mtmd-cli",
+  "workload": "audio-chat",
+  "comment": "Same jfk.wav decode runaway as on the M4 box (the reference generates at length on that clip despite --temp 0 --reasoning off), amplified by CPU-only decode - a behavior difference, not a speed measurement."
  }
 ]

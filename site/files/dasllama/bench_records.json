@@ -417,10 +417,139 @@
             "bytes":6359578
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":5632.8230000000003,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":16765.187999999998,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":224937.52900000001,
+            "audio_s":198.734375
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"2356e63c6",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-f16.gguf",
+            "sha256":"25ce019d76747fde50aa560d1fb539fea9b6b7e6ad0a2b213c0168f94af33774",
+            "bytes":3447348960
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin",
+            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+            "bytes":3252768256
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ],
+        "comment":"The decoder runs un-quantized fp32 - the token-parity configuration; long clips pay the most for it. Quantizing the decoder is open work."
+      },
+      {
+        "engine":"nemo",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"modules\\dasLLAMA\\benchmarks\\asr\\.venv-nemo\\Scripts\\python.exe modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 16 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":8316.7649999999994,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":26590.448,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":53889.078000000001,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1+cpu",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
       }
     ],
     "arch":"Canary-Qwen 2.5B",
-    "size_bytes":3447348864
+    "size_bytes":3447348960
   },
   {
     "gguf":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
@@ -658,6 +787,125 @@
             "bytes":1056078
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":4553.1459999999997,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":8290.2119999999995,
+            "audio_s":33
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"2356e63c6",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+            "sha256":"8a50e5a7d29ae6a28fea9ca45e3bb0a142e76ec07e6787a7703cd498eb08ffaa",
+            "bytes":32484494336
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+            "sha256":"f0dfe825fb692d426362b1ac79678fc08daa4758f7151526cad110515f122883",
+            "bytes":2207465568
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"..\\llama.cpp-mtmd-ref\\build-cpu\\bin\\Release\\llama-mtmd-cli.exe -m D:/Work/llama.cpp/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj D:/Work/llama.cpp/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 16",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":296392
+          },
+          "asr:jfk3.wav":{
+            "ms":11220.1
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "versions":"llama.cpp @ ebd048fc5 + mtmd-timing.patch@70af97d3",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+            "sha256":"8a50e5a7d29ae6a28fea9ca45e3bb0a142e76ec07e6787a7703cd498eb08ffaa",
+            "bytes":32484494336
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+            "sha256":"f0dfe825fb692d426362b1ac79678fc08daa4758f7151526cad110515f122883",
+            "bytes":2207465568
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          }
+        ],
+        "comment":"Same jfk.wav decode runaway as on the M4 box (the reference generates at length on that clip despite --temp 0 --reasoning off), amplified by CPU-only decode - a behavior difference, not a speed measurement."
       }
     ],
     "arch":"Qwen3-Omni-30B audio",
@@ -1147,6 +1395,90 @@
           "tg128":{
             "tok_s":52.938712000000002,
             "stddev":0.30280299999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+            "sha256":"0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "bytes":22663387424
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":179.654163075903,
+            "stddev":1.1707861423492432
+          },
+          "tg128":{
+            "tok_s":16.474762661176996,
+            "stddev":0.23307354748249054
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+            "sha256":"0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "bytes":22663387424
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":103.07125499999999,
+            "stddev":0.98960700000000001
+          },
+          "tg128":{
+            "tok_s":14.497623000000001,
+            "stddev":0.045427000000000002
           }
         },
         "source":"official",
@@ -1651,6 +1983,90 @@
           "tg128":{
             "tok_s":11.840755,
             "stddev":0.084525000000000003
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-27B-MTP-Q4_K_M.gguf",
+            "sha256":"a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+            "bytes":17106773120
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":30.473758158431234,
+            "stddev":0.10934389382600784
+          },
+          "tg128":{
+            "tok_s":3.2990775709424938,
+            "stddev":0.013635567389428616
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-27B-MTP-Q4_K_M.gguf",
+            "sha256":"a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+            "bytes":17106773120
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":23.318874999999998,
+            "stddev":0.162885
+          },
+          "tg128":{
+            "tok_s":3.0249459999999999,
+            "stddev":0.0052420000000000001
           }
         },
         "source":"official",
@@ -2358,13 +2774,97 @@
             "bytes":7381382944
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":58.588822884731734,
+            "stddev":0.43257686495780945
+          },
+          "tg128":{
+            "tok_s":7.2898064694514844,
+            "stddev":0.059651609510183334
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-12B-it-Q4_K_M.gguf",
+            "sha256":"7d8d499eb737382d60fe907004953fc9089e3b5e23d68244edb62c2c030c31e1",
+            "bytes":7381383392
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":58.883408000000003,
+            "stddev":0.371004
+          },
+          "tg128":{
+            "tok_s":6.8875919999999997,
+            "stddev":0.0036259999999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-12B-it-Q4_K_M.gguf",
+            "sha256":"7d8d499eb737382d60fe907004953fc9089e3b5e23d68244edb62c2c030c31e1",
+            "bytes":7381383392
+          }
+        ]
       }
     ],
     "arch":"gemma4",
     "quant":"q8",
     "params_b":11.907350576000001,
     "active_b":11.906580480000001,
-    "size_bytes":7381382944
+    "size_bytes":7381383392
   },
   {
     "gguf":"gemma-4-E4B-it-Q8_0.gguf",
@@ -3052,6 +3552,90 @@
             "bytes":8031242688
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":155.07040336624502,
+            "stddev":0.83440262079238892
+          },
+          "tg128":{
+            "tok_s":11.035761835894885,
+            "stddev":0.027463026344776154
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":112.27488700000001,
+            "stddev":0.467914
+          },
+          "tg128":{
+            "tok_s":10.355643000000001,
+            "stddev":0.0073379999999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          }
+        ]
       }
     ],
     "arch":"gemma4",
@@ -3683,6 +4267,90 @@
             "bytes":12109566560
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":183.14295357662286,
+            "stddev":0.64063704013824463
+          },
+          "tg128":{
+            "tok_s":20.971300778691482,
+            "stddev":0.25774714350700378
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf",
+            "sha256":"be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+            "bytes":12109566560
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":129.94179099999999,
+            "stddev":2.6559599999999999
+          },
+          "tg128":{
+            "tok_s":20.70824,
+            "stddev":0.15254899999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf",
+            "sha256":"be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+            "bytes":12109566560
+          }
+        ]
       }
     ],
     "arch":"gpt-oss",
@@ -4175,6 +4843,90 @@
           "tg128":{
             "tok_s":78.900824,
             "stddev":0.83397200000000005
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+            "sha256":"6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
+            "bytes":18556686752
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":183.3782248148089,
+            "stddev":2.4296135902404785
+          },
+          "tg128":{
+            "tok_s":24.298583063886237,
+            "stddev":0.079449698328971863
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+            "sha256":"6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
+            "bytes":18556686752
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":134.98229499999999,
+            "stddev":1.262675
+          },
+          "tg128":{
+            "tok_s":22.282159,
+            "stddev":0.22025
           }
         },
         "source":"official",
@@ -4693,6 +5445,90 @@
             "bytes":14333910592
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":34.458108422889111,
+            "stddev":0.22747769951820374
+          },
+          "tg128":{
+            "tok_s":3.9618262226632388,
+            "stddev":0.023736687377095222
+          }
+        },
+        "source":"official",
+        "sha":"b1a3af2da",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+            "sha256":"6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
+            "bytes":14333910592
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":30.123165,
+            "stddev":0.15306
+          },
+          "tg128":{
+            "tok_s":3.898981,
+            "stddev":0.027209000000000001
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+            "sha256":"6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
+            "bytes":14333910592
+          }
+        ]
       }
     ],
     "arch":"llama",
@@ -5198,6 +6034,90 @@
             "bytes":16947541728
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m D:/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":54.537559641372198,
+            "stddev":0.21642480790615082
+          },
+          "tg128":{
+            "tok_s":12.931286513416827,
+            "stddev":0.050576005131006241
+          }
+        },
+        "source":"official",
+        "sha":"c142ec35f",
+        "version":"0.6.4",
+        "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "sha256":"f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+            "bytes":16947541728
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":108.878704,
+            "stddev":0.685083
+          },
+          "tg128":{
+            "tok_s":14.458428,
+            "stddev":0.040455999999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048fc5",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "sha256":"f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+            "bytes":16947541728
+          }
+        ]
       }
     ],
     "arch":"gemma4",
@@ -5631,6 +6551,236 @@
           },
           "asr:hp0.wav":{
             "ms":8192.848,
+            "audio_s":273.28699999999998
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":260.17500000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":755.673,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":6655.7389999999996,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":10499.043,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":33571.597000000002,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"b1a3af2da",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v2-f32.bin",
+            "sha256":"9dde716823d0dfe587cb7396a7cc251708c30a8475f6fccc8af36ee769fcd808",
+            "bytes":2471664028
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"parakeet-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\whisper.cpp\\build\\bin\\Release\\parakeet-cli.exe -m D:/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v2-f32.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 16 -ng",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":643.13999999999987
+          },
+          "asr:jfk3.wav":{
+            "ms":1714.4299999999998
+          },
+          "asr:gb1.wav":{
+            "ms":15825.300000000001
+          },
+          "asr:hp0.wav":{
+            "ms":25678.029999999999
+          },
+          "asr:hp0x2.wav":{
+            "ms":83889.320000000007
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"whisper.cpp @ 6fc7c33b4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v2-f32.bin",
+            "sha256":"9dde716823d0dfe587cb7396a7cc251708c30a8475f6fccc8af36ee769fcd808",
+            "bytes":2471664028
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"modules\\dasLLAMA\\benchmarks\\asr\\.venv-onnx\\Scripts\\python.exe modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant v2-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 16 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":625.28999999999996,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":2009.4459999999999,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":15153.222,
+            "audio_s":198.73400000000001
+          },
+          "asr:hp0.wav":{
+            "ms":25262.514999999999,
             "audio_s":273.28699999999998
           }
         },
@@ -7046,6 +8196,697 @@
             "bytes":373038
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-parakeet-tdt-0.6b-v3-f32.bin -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":274.65699999999998,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":806.19799999999998,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":6911.7060000000001,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":10991.870999999999,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":34150.775999999998,
+            "audio_s":546.57449999999994
+          },
+          "asr:librispeech25":{
+            "ms":5876.5080000000007,
+            "audio_s":215.91506250000006
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"b1a3af2da",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-f32.bin",
+            "sha256":"b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
+            "bytes":2508463079
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
+          }
+        ]
+      },
+      {
+        "engine":"parakeet-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\whisper.cpp\\build\\bin\\Release\\parakeet-cli.exe -m D:/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f32.bin -t 16 -ng modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":643.30999999999995
+          },
+          "asr:jfk3.wav":{
+            "ms":1744.1300000000001
+          },
+          "asr:gb1.wav":{
+            "ms":16040.709999999999
+          },
+          "asr:hp0.wav":{
+            "ms":26517.209999999999
+          },
+          "asr:hp0x2.wav":{
+            "ms":83758.37000000001
+          },
+          "asr:librispeech25":{
+            "ms":14232.92
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"whisper.cpp @ 6fc7c33b4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-f32.bin",
+            "sha256":"b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
+            "bytes":2508463079
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"modules\\dasLLAMA\\benchmarks\\asr\\.venv-onnx\\Scripts\\python.exe modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 16 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":483.52199999999999,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":1585.971,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":14779.536,
+            "audio_s":198.73400000000001
+          },
+          "asr:hp0.wav":{
+            "ms":24405.284,
+            "audio_s":273.28699999999998
+          },
+          "asr:librispeech25":{
+            "ms":9790.0899999999983,
+            "audio_s":215.91500000000005
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
+          }
+        ]
       }
     ],
     "arch":"Parakeet-TDT v3",
@@ -7434,6 +9275,206 @@
         "tests":{
           "asr:jfk.wav":{
             "ms":380.20100000000002,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-tiny.bin -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":139.82900000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":326.46600000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":1801.3789999999999,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":2459.9079999999999,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":4260.8940000000002,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"2356e63c6",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny.bin",
+            "sha256":"be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+            "bytes":77691713
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\whisper.cpp\\build\\bin\\Release\\whisper-cli.exe -m D:/Work/whisper.cpp/models/ggml-tiny.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 16 -bs 1 -bo 1 -nf -ng",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":220.75999999999999
+          },
+          "asr:jfk3.wav":{
+            "ms":499.76999999999998
+          },
+          "asr:gb1.wav":{
+            "ms":3062.3200000000002
+          },
+          "asr:hp0.wav":{
+            "ms":3582.6100000000001
+          },
+          "asr:hp0x2.wav":{
+            "ms":7218.2699999999995
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"whisper.cpp @ 6fc7c33b4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny.bin",
+            "sha256":"be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+            "bytes":77691713
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"modules\\dasLLAMA\\benchmarks\\asr\\.venv-onnx\\Scripts\\python.exe modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-tiny-int8 --threads 16 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":573.23199999999997,
             "audio_s":11
           }
         },
@@ -7850,6 +9891,206 @@
             "bytes":352078
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-large-v3-turbo.bin -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2922.375,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":5949.2960000000003,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":24934.915000000001,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":35918.841999999997,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":69224.645999999993,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"2356e63c6",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo.bin",
+            "sha256":"1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+            "bytes":1624555275
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\whisper.cpp\\build\\bin\\Release\\whisper-cli.exe -m D:/Work/whisper.cpp/models/ggml-large-v3-turbo.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 16 -bs 1 -bo 1 -nf -ng",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":6578.4899999999998
+          },
+          "asr:jfk3.wav":{
+            "ms":13360.300000000001
+          },
+          "asr:gb1.wav":{
+            "ms":74263.62999999999
+          },
+          "asr:hp0.wav":{
+            "ms":96385.529999999999
+          },
+          "asr:hp0x2.wav":{
+            "ms":184228.70999999999
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"whisper.cpp @ 6fc7c33b4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo.bin",
+            "sha256":"1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+            "bytes":1624555275
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"modules\\dasLLAMA\\benchmarks\\asr\\.venv-onnx\\Scripts\\python.exe modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-turbo-int8 --threads 16 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":3272.922,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          }
+        ]
       }
     ],
     "arch":"Whisper large-v3-turbo",
@@ -8032,6 +10273,105 @@
         "sha":"0c8200a72",
         "version":"0.6.4",
         "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m4.tune.json DASLLAMA_BOX=m4 DASLLAMA_MODELS_DIR=/Users/dasbox/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"D:\\Work\\daScript-pilot\\bin\\Release\\daslang.exe -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk3.wav":{
+            "ms":8493.9470000000001,
+            "audio_s":33
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"2356e63c6",
+        "version":"0.6.4",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/zen2.tune.json DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"zen2",
+        "threads":16,
+        "date":"2026-07-29",
+        "cmd":"..\\llama.cpp-mtmd-ref\\build-cpu\\bin\\Release\\llama-mtmd-cli.exe -m D:/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj D:/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 16",
+        "hardware":{
+          "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
+          "arch":"AMD64",
+          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "total_cores":128,
+          "ram_gb":256,
+          "gpu":"Parsec Virtual Display Adapter",
+          "ram_config":"8×32 GB @ 2666 MT/s",
+          "power_plan":"AMD Ryzen™ Balanced",
+          "smt":"on"
+        },
+        "tests":{
+          "asr:jfk3.wav":{
+            "ms":8956.7999999999993
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "versions":"llama.cpp @ ebd048fc5 + mtmd-timing.patch@70af97d3",
         "files":[
           {
             "role":"weights",
