@@ -516,6 +516,9 @@ def main() : int {
         let total_ms = int64(get_time_usec(ts)) / 1000l
         to_log(LOG_INFO, "dasllama-convert: wrote {bytes >> 20l} MB (streamed) in {total_ms} ms total\n")
     }
+    if (rc == 0) {
+        dlim_gc_stale(cfg.model)   // the fresh bake proves version-stale siblings dead
+    }
     return rc
 }
 

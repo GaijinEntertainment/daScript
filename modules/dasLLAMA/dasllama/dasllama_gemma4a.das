@@ -282,6 +282,7 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         if (save_image(m, img, tag)) {
             to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
         }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- m
     }
     return <- load_gemma4a_encoder_(path)

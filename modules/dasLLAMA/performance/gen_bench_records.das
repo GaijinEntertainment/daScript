@@ -2,6 +2,7 @@ options gen2
 options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
 
 require profile_common
+require dasllama/dasllama_image   // dlim_clean — the automatic step-zero GC
 require daslib/clargs
 require daslib/fio
 require math
@@ -455,6 +456,18 @@ def main : int {
     if (empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
         set_env_variable("DAS_TUNE_MANIFEST", rig_tune_manifest())
         to_log(LOG_INFO, "gen_bench_records: DAS_TUNE_MANIFEST={rig_tune_manifest()} (one tune per box)\n")
+    }
+    // STEP ZERO, automatic: GC image siblings that can never load again (BROKEN/version-stale)
+    // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER stays.
+    let gc_llm = dlim_clean(models_dir(), true)
+    if (gc_llm.removed > 0) {
+        to_log(LOG_INFO, "gen_bench_records: GC freed {gc_llm.freed >> 20l} MB — {gc_llm.removed} stale image(s) in {models_dir()}\n")
+    }
+    if (cfg.workload == "asr" || cfg.workload == "all") {
+        let gc_w = dlim_clean(whisper_models_dir(), true)
+        if (gc_w.removed > 0) {
+            to_log(LOG_INFO, "gen_bench_records: GC freed {gc_w.freed >> 20l} MB — {gc_w.removed} stale image(s) in {whisper_models_dir()}\n")
+        }
     }
     let apple = is_apple_box()
     if (cfg.backend == "metal" && !apple) {   // fail fast instead of running metal cells that all decline on non-Apple boxes

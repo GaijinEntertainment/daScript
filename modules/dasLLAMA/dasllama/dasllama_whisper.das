@@ -351,6 +351,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         if (save_image(m, img, tag)) {
             to_log(LOG_INFO, "dasLLAMA: prepared whisper image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
         }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- m
     }
     return <- load_whisper_model_(path, q8)

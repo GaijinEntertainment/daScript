@@ -192,6 +192,16 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
     return <- out
 }
 
+//! GC-after-save: sweep the source's BROKEN/version-stale image siblings — a fresh bake is the
+//! proof they are dead. OTHER (a foreign box/knob identity) is never touched. Every save site
+//! on the rail calls this, so stale images never outlive the bake that replaced them.
+def dlim_gc_stale(source_path : string) {
+    let r = dlim_clean(source_path, true)
+    if (r.removed > 0) {
+        to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} stale sibling(s) of {base_name(source_path)}\n")
+    }
+}
+
 //! The dlim GC: remove what can never load again (BROKEN + version-stale) beside `gguf_path`.
 //! NEVER a loadable image — OTHER may be another box's bake carried here on purpose.
 //! apply = false is a dry run (stale counted, nothing removed).
@@ -1181,6 +1191,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 delete m.vkplan
             }
         }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- m
     }
     guard_interp_gguf_load(path)

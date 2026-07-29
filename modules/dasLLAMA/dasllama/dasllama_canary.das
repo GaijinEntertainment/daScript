@@ -268,6 +268,7 @@ def load_canary_encoder(path : string) : CanaryEncoder {
         if (save_image(m, img, tag)) {
             to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
         }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- m
     }
     return <- load_canary_encoder_(path)

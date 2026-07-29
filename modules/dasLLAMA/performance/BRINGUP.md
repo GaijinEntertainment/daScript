@@ -59,8 +59,17 @@ cmake --build build --config Release -j 16        # 15-25 min clean
   models dir; `export DASLLAMA_MODELS_DIR=<dir>`. Reuse an existing models dir when the box has
   one — do NOT re-download tens of GB (fetch script: `plans/m4_fetch_models.sh` pattern).
 - **ASR**: whisper/parakeet ggml carriers into `$WHISPER_CPP/models` (`WHISPER_CPP_MODELS`
-  overrides); the audio-chat ggufs + mmproj files live with the LLM models. Absent models skip
-  with a warning — partial boards are fine, silent substitutions are not.
+  overrides — pointing it at the LLM models dir keeps ONE dir per box); the audio-chat ggufs +
+  mmproj files live with the LLM models. Absent models skip with a warning — partial boards
+  are fine, silent substitutions are not. Provenance (verify sha against an existing box's
+  `.sha` sidecars after every fetch):
+  - `ggerganov/whisper.cpp` → `ggml-tiny.bin`, `ggml-large-v3-turbo.bin`
+  - `ggml-org/gemma-4-E2B-it-GGUF` → `gemma-4-E2B-it-Q8_0.gguf`,
+    `mmproj-gemma-4-E2B-it-BF16.gguf` (rename to the catalog's lowercase `-bf16`)
+  - `ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF` → `Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf`,
+    `mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf`
+  - the parakeet v2/v3 f32 bins and the canary encoder/decoder are REPO CONVERSIONS — copy
+    them (WITH their `.sha` sidecars) from an existing box; there is no upstream to fetch
 
 ## 3. Reference engines
 
@@ -93,8 +102,10 @@ removes the cold-map variance the tripwire otherwise fights. Bake AFTER the firs
 exists (image identity is box- and knob-specific; the converter applies the box profile itself):
 
 ```sh
-# STEP ZERO, every time: GC stale images and check space — this box once carried 748 GB of
-# stale identities and a 22 GB bake died mid-write on the ceiling
+# GC is AUTOMATIC: every image save sweeps its source's version-stale siblings, and
+# gen_bench_records GCs the models dirs at session start (one box carried 748 GB of stale
+# identities; another 274 GB). The manual form remains for ad-hoc checks — and ALWAYS check
+# space before a big bake: a 22 GB write once died mid-file on the ceiling
 bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir> --clean --apply
 df -h <models-dir>
 
