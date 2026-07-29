@@ -79,7 +79,7 @@ def test_handled(t : T?) {
 }
 
 [export]
-def test_fancy_container(var a : array<FancyClass>) {
+def test_fancy_container(a : array<FancyClass>) {
     feint("a = {a}\n")
 }
 
@@ -101,7 +101,7 @@ def test_fancy(t : T?) {
 
 def test_nc_alias(t : T?) {
     var lookingAt = new TestObjectFoo
-    var lookPos = lookingAt.lookAt ?? float3()
+    let lookPos = lookingAt.lookAt ?? float3()
     t |> equal(lookPos, float3())
     unsafe {
         delete lookingAt

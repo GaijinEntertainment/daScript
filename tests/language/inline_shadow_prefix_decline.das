@@ -13,7 +13,7 @@ require _inline_shadow_helper
 var g = 0
 
 def apply2(k : block<(team : int) : int>) : int {
-    var minn = 1
+    var minn = 1   // nolint:LINT003 — a `let` would const-fold into k(1) and change the pinned devirt shape
     if (k(1) < k(minn)) {
         return 1
     }
