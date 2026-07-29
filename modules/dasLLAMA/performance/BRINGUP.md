@@ -98,7 +98,8 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 LLM references (two llama-bench builds):
 
 ```sh
-bin/daslang modules/dasLLAMA/benchmarks/setup_lcpp_ref.das   # clean-cpu + stock builds
+# --src = any llama.cpp checkout; the pinned worktrees + builds are created NEXT to it
+bin/daslang -jit modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src <llama.cpp> -j 16
 export LLAMA_BENCH_CLEAN=<...>/build-clean-cpu/bin/llama-bench
 export LLAMA_BENCH_STOCK=<...>/build-stock/bin/llama-bench
 ```
