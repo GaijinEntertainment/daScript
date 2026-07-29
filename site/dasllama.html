@@ -95,8 +95,9 @@
   .dl-bar-pair { flex: 1 1 auto; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
   .dl-bar-line { display: flex; align-items: center; gap: 8px; height: 10px; }
   .dl-bar-das, .dl-bar-ref { height: 8px; border-radius: 2px; flex: 0 0 auto; }
-  .dl-bar-das { background: var(--amber); }
-  .dl-bar-ref { background: var(--dl-teal); opacity: 0.8; }
+  .dl-bar-das { background: var(--amber); opacity: 0.55; }
+  .dl-bar-ref { background: var(--dl-teal); opacity: 0.45; }
+  .dl-bar-row:hover .dl-bar-das, .dl-bar-row:hover .dl-bar-ref { opacity: 0.95; }   /* the hovered pair lights up; the field stays quiet */
   .dl-bar-val { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
   .dl-bar-val--das { color: var(--fg); }
   .dl-bar-line .dl-bar-das, .dl-bar-line .dl-bar-ref { max-width: calc(100% - 58px); }   /* the value label always fits after the bar */
@@ -346,7 +347,13 @@ def main() {
             <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side.</p>
 
             <div class="dl-filters" id="asr-filters"></div>
-            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="asr-table"></table></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="asr-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
+                </div>
+            </div>
+            <div class="dl-bars" id="asr-bars"></div>
+            <div class="dl-table-wrap" id="asr-table-wrap" hidden><table class="dl-table dl-table--bench" id="asr-table"></table></div>
             <div class="dl-caption" id="asr-caption"></div>
         </div>
     </section>
@@ -359,7 +366,13 @@ def main() {
             <p class="forge-p forge-p--wide">The one audio workload llama.cpp does cover: omni chat models taking audio in, run through <code>llama-mtmd-cli</code>. This is a narrow CPU-only slice &mdash; llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder, and das's optimized fp32 encoder comes out well ahead on that path.</p>
 
             <div class="dl-filters" id="audiochat-filters"></div>
-            <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="audiochat-table"></table></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="audiochat-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
+                </div>
+            </div>
+            <div class="dl-bars" id="audiochat-bars"></div>
+            <div class="dl-table-wrap" id="audiochat-table-wrap" hidden><table class="dl-table dl-table--bench" id="audiochat-table"></table></div>
             <div class="dl-caption" id="audiochat-caption"></div>
         </div>
     </section>

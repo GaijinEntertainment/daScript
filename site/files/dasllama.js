@@ -302,50 +302,48 @@
     return out;
   }
 
-  /* § 01's default view: mirrored bars, teal reference left / amber das right, each pair
-     normalized to its own max so the longer side is the winner and the gap IS the ratio.
-     Reads the same filter selects the table uses; sorted by the active metric's ratio. */
-  function renderBars(rows) {
-    var box = document.getElementById('bench-bars');
-    if (!box) return;
-    var metricBtn = document.querySelector('#bench-metric .is-on');
-    var m = metricBtn ? metricBtn.dataset.metric : 'pp';
-    var filters = {};
-    document.querySelectorAll('#bench-filters .js-filter').forEach(function (s) { filters[s.dataset.field] = s.value; });
-    var shown = rows.filter(function (r) {
-      return (!filters.model || r.model === filters.model) &&
-             (!filters.box || r.box === filters.box) &&
-             (!filters.lane || r.lane === filters.lane) &&
-             r[m + '_ratio'] !== null;
-    }).sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; });
-    if (!shown.length) {
+  /* ── stacked bar pairs, the default view of every section ────────
+     das (amber) over its reference (teal) from one baseline; each pair normalized to its own
+     max so the longer side spans the track and the gap IS the ratio. § 01 bars are tok/s
+     (longer amber = faster); § 02/03 bars are milliseconds (shorter amber = faster) — the
+     value labels and ratio keep either reading unambiguous. */
+  function renderPairBars(box, items) {
+    if (!items.length) {
       box.innerHTML = '<div class="dl-empty">No runs match these filters.</div>';
       return;
     }
-    box.innerHTML = shown.map(function (r) {
-      var das = r[m + '_das'], ref = r[m + '_ref'], ratio = r[m + '_ratio'];
-      var mx = Math.max(das, ref);
-      // stacked pair from one baseline: das on top (amber), reference under it (teal); the
-      // winner of the pair spans the full track, the value label rides each bar's tip
-      var dasW = (das / mx) * 100, refW = (ref / mx) * 100;
-      var rcls = ratio > 1.005 ? 'dl-win' : (ratio < 0.995 ? 'dl-loss' : '');
+    box.innerHTML = items.map(function (it) {
+      var mx = Math.max(it.das, it.ref);
+      var dasW = (it.das / mx) * 100, refW = (it.ref / mx) * 100;
+      var rcls = it.ratio > 1.005 ? 'dl-win' : (it.ratio < 0.995 ? 'dl-loss' : '');
       return '<div class="dl-bar-row">' +
-        '<div class="dl-bar-label">' + esc(r.model) + '<span class="dl-dim2">' + esc(r.boxName) + ' · ' + esc(r.lane) + '</span></div>' +
+        '<div class="dl-bar-label">' + esc(it.label) + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
         '<div class="dl-bar-pair">' +
-        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + tps(das) + '</span></div>' +
-        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + tps(ref) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + it.dasText + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + it.refText + '</span></div>' +
         '</div>' +
-        '<div class="dl-bar-ratio ' + rcls + '">' + fmt(ratio, 2) + '×</div>' +
+        '<div class="dl-bar-ratio ' + rcls + '">' + fmt(it.ratio, 2) + '×</div>' +
         '</div>';
     }).join('');
   }
 
-  function mountLLMViews(rows) {
-    var viewSeg = document.getElementById('bench-view');
-    var metricSeg = document.getElementById('bench-metric');
-    var barsBox = document.getElementById('bench-bars');
-    var tableWrap = document.getElementById('bench-table-wrap');
+  /* one wiring for any section: view toggle, optional metric toggle, the SAME filter selects
+     the table owns, sorted by ratio from the first paint */
+  function wireBars(sec, rows, itemsOf) {
+    var viewSeg = document.getElementById(sec + '-view');
+    var metricSeg = document.getElementById(sec + '-metric');
+    var barsBox = document.getElementById(sec + '-bars');
+    var tableWrap = document.getElementById(sec + '-table-wrap');
     if (!viewSeg || !barsBox || !tableWrap) return;
+    function metric() {
+      var b = metricSeg && metricSeg.querySelector('.is-on');
+      return b ? b.dataset.metric : '';
+    }
+    function draw() {
+      var filters = {};
+      document.querySelectorAll('#' + sec + '-filters .js-filter').forEach(function (s) { filters[s.dataset.field] = s.value; });
+      renderPairBars(barsBox, itemsOf(rows, filters, metric()));
+    }
     function setSeg(seg, btn) {
       seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
     }
@@ -355,19 +353,56 @@
         var bars = b.dataset.view === 'bars';
         barsBox.hidden = !bars;
         tableWrap.hidden = bars;
-        metricSeg.style.visibility = bars ? 'visible' : 'hidden';
-        if (bars) renderBars(rows);
+        if (metricSeg) metricSeg.style.visibility = bars ? 'visible' : 'hidden';
+        if (bars) draw();
       });
     });
-    metricSeg.querySelectorAll('button').forEach(function (b) {
-      b.addEventListener('click', function () { setSeg(metricSeg, b); renderBars(rows); });
+    if (metricSeg) {
+      metricSeg.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { setSeg(metricSeg, b); draw(); });
+      });
+    }
+    var fbox = document.getElementById(sec + '-filters');
+    if (fbox) {
+      fbox.addEventListener('change', draw);
+      var reset = fbox.querySelector('.js-reset');
+      if (reset) reset.addEventListener('click', draw);
+    }
+    draw();
+  }
+
+  function mountLLMViews(rows) {
+    wireBars('bench', rows, function (all, filters, m) {
+      m = m || 'pp';
+      return all.filter(function (r) {
+        return (!filters.model || r.model === filters.model) &&
+               (!filters.box || r.box === filters.box) &&
+               (!filters.lane || r.lane === filters.lane) &&
+               r[m + '_ratio'] !== null;
+      }).sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; })
+        .map(function (r) {
+          return { label: r.model, sub: r.boxName + ' · ' + r.lane,
+                   das: r[m + '_das'], ref: r[m + '_ref'],
+                   dasText: tps(r[m + '_das']), refText: tps(r[m + '_ref']),
+                   ratio: r[m + '_ratio'] };
+        });
     });
-    // the bar view re-renders on the SAME filter selects the table owns
-    var fbox = document.getElementById('bench-filters');
-    if (fbox) fbox.addEventListener('change', function () { renderBars(rows); });
-    var reset = fbox && fbox.querySelector('.js-reset');
-    if (reset) reset.addEventListener('click', function () { renderBars(rows); });
-    renderBars(rows);
+  }
+
+  function mountAudioViews(sec, rows) {
+    wireBars(sec, rows, function (all, filters) {
+      return all.filter(function (r) {
+        return (!filters.model || r.model === filters.model) &&
+               (!filters.box || r.box === filters.box) &&
+               (!filters.tool || r.tool === filters.tool);
+      }).sort(function (a, b) { return b.speed - a.speed; })
+        .map(function (r) {
+          return { label: r.model, sub: r.boxName + ' · ' + r.tool + ' · ' + r.wav,
+                   das: r.das_ms, ref: r.ref_ms,
+                   dasText: ms(r.das_ms) + ' ms', refText: ms(r.ref_ms) + ' ms',
+                   ratio: r.speed };
+        });
+    });
   }
 
   function mountLLM(rows) {
@@ -505,6 +540,7 @@
             ' &nbsp;·&nbsp; speedup = reference time ÷ das time; ×RT = seconds of audio per second of compute';
         }
       });
+      mountAudioViews(cfg.sec, rows);
     });
   }
 
