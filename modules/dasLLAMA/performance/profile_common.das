@@ -1313,15 +1313,22 @@ def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int
 
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
 //! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
+//! The onnx rows ALSO land in [[asr_pybench_out_path]] via --out: parakeet-variant loaders
+//! wreck the child's stdout pipe on Windows (~1 byte then EOF while the run continues), so
+//! the caller re-reads the file whenever the captured stream carries no rows.
 def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int) : array<string> {
     var args <- (tool == "onnx"
-        ? [onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", handle]
+        ? [onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", handle, "--out", asr_pybench_out_path()]
         : [nemo_py(), "{asr_dir()}/canary_qwen_bench.py"])
     args |> push_from(["--threads", "{threads}", "--reps", "{reps}"])
     for (c in clips) {
         args |> push_from(["--wav", "{asr_corpus_dir()}{c}"])
     }
     return <- args
+}
+
+def asr_pybench_out_path() : string {
+    return "{asr_dir()}/_pybench_rows.txt"
 }
 
 // ===== Reference-engine version capture (B4 — never hand-typed) =====

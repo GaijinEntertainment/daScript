@@ -339,10 +339,18 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
         let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
         rr.cmd = argv_line(pyargs)
-        let out = run_capture_argv(pyargs)
-        if (find(out, "BENCH") < 0) {   // no rows at all — surface WHY instead of a bare "nothing measured"
-            let dtail = slice(out, max(0, length(out) - 400))
-            to_log(LOG_WARNING, "gen_bench_records:   {ref.tool} output carries no BENCH rows — tail: {dtail}\n")
+        var out = run_capture_argv(pyargs)
+        if (find(out, "BENCH") < 0) {
+            // pipe came back rowless — fall back to the --out file (Windows: parakeet loaders
+            // wreck the child's stdout pipe; the file survives everything)
+            let sidecar = fread(asr_pybench_out_path())
+            if (find(sidecar, "BENCH") >= 0) {
+                to_log(LOG_INFO, "gen_bench_records:   {ref.tool} pipe was rowless — rows recovered from --out file\n")
+                out = sidecar
+            } else {
+                let dtail = slice(out, max(0, length(out) - 400))
+                to_log(LOG_WARNING, "gen_bench_records:   {ref.tool} output carries no BENCH rows — tail: {dtail}\n")
+            }
         }
         for (wav in spec.buckets) {
             var audio_s = -1.0lf
