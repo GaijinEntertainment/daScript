@@ -65,6 +65,21 @@ C++ bindings. So resolution is per-request, from the worktree being viewed:
 - The state rail reports, per answer: which binary path answered and
   whether it was the fallback.
 
+## Search is table stakes (standing rule, 2026-07-29)
+
+Declared during the first full in-app plan review: **any text view of any
+kind — rich or plain, diff or not — gets IDE-quality search.** Copy the
+VSCode find widget: input, regex / case / whole-word toggles, match count,
+prev/next (F3 / Shift+F3), Ctrl+F opens, Esc closes, full dialog. Today
+`draw_inspector_search` exists but only for NON-markdown View — the
+markdown branch (where the plan was reviewed) and the whole Diff mode have
+none; both are gaps against the rule, fix inside the viewing steps.
+
+**Editors get replace from day one** — search / replace / replace-all
+within the file is part of the editor component's core surface, not a
+follow-up. Follow-up (its own slice): search per TREE — project-wide
+search across the selected worktree.
+
 ## Step 1 — hover in the View tab (the walking skeleton)
 
 Smallest end-to-end slice, all plumbing proven before any diff complexity:

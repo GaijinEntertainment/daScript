@@ -32,6 +32,14 @@ review capacity is the bottleneck the arcs exist to fix.
   adopt the already-running external terminal as a herd session so the
   reviewer can talk back to the builder. Filed 2026-07-29, deliberately not
   built yet — more feedback incoming.
+- **STANDING RULE: every text view gets IDE-quality search.** Rich or
+  plain, diff or not. VSCode find-widget feature set (regex/case/word,
+  count, prev/next, Ctrl+F/Esc). Current gaps: the markdown View branch
+  skips draw_inspector_search entirely (where Boris reviewed the plan),
+  and Diff mode has no search at all. Editors additionally get
+  search/replace/replace-all from day one; per-tree search is the
+  follow-up slice. Declared 2026-07-29 after the first full in-app plan
+  review — the first real win.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
