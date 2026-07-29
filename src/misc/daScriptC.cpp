@@ -399,7 +399,7 @@ void das_get_root_n ( char * root, size_t maxbuf ) {
     }
     if ( !maxbuf ) return;
     auto r = getDasRoot();
-    auto copy_length = min(maxbuf - 1, r.size());
+    auto copy_length = das::min<size_t>(size_t(maxbuf - 1), r.size());
     if ( copy_length ) memcpy(root, r.data(), copy_length);
     root[copy_length] = 0;
 }
@@ -637,7 +637,7 @@ void das_error_report_n ( das_error * error, char * text, size_t maxLength ) {
     if ( !maxLength ) return;
     auto err = (Error *) error;
     auto str = reportError(err->at, err->what, err->extra, err->fixme, err->cerr );
-    auto copy_length = min(maxLength - 1, str.size());
+    auto copy_length = das::min<size_t>(size_t(maxLength - 1), str.size());
     if ( copy_length ) memcpy(text, str.data(), copy_length);
     text[copy_length] = 0;
 }

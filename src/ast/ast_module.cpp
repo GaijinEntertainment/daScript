@@ -291,7 +291,7 @@ namespace das {
         return nullptr;
     }
 
-    Module * Module::requireEx ( const string & name, bool allowPromoted, const string & requireName ) {
+    Module * Module::requireEx ( const string & name, bool allowPromoted, const string & requireName, const string & expectedFileName ) {
         if ( !daScriptEnvironment::getBound() ) return nullptr;
         for ( auto m = daScriptEnvironment::getBound()->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
@@ -303,8 +303,17 @@ namespace das {
                     // `require fio` for a module promoted as `daslib/fio` -- still fails.
                     // An empty stored identity (older serialized data, extra-dependency
                     // promotion) falls back to name-only matching.
+                    // A mis-qualified require -- bare `require fio` for a module promoted as
+                    // `daslib/fio` -- still fails. But the same file is legitimately spelled several
+                    // ways (mount prefix, `/` vs `.`: `%daslib/strings_boost`, `daslib/strings_boost`,
+                    // `daslib.strings_boost`), so when the require resolves to the file this module was
+                    // built from it is the same module whatever the spelling. Rejecting it there
+                    // compiles a second instance, and code compiled against the first one cannot then
+                    // see the second one's functions (error[30341] "module X is not visible directly
+                    // from Y").
                     if ( m->promoted && !requireName.empty() && !m->promotedRequire.empty()
-                            && m->promotedRequire != requireName ) {
+                            && m->promotedRequire != requireName
+                            && !(!expectedFileName.empty() && m->fileName==expectedFileName) ) {
                         continue;
                     }
                     return m;

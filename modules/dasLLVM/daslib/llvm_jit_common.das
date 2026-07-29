@@ -70,6 +70,7 @@ let public FN_JIT_STR_CAT           = "jit_str_cat"
 let public FN_JIT_PROLOGUE          = "jit_prologue"
 let public FN_JIT_EPILOGUE          = "jit_epilogue"
 let public FN_JIT_MAKE_BLOCK        = "jit_make_block"
+let public FN_JIT_AD_BY_SID         = "jit_ad_by_sid"
 let public FN_JIT_DEBUG             = "jit_debug"
 let public FN_JIT_ITERATOR_ITERATE  = "jit_iterator_iterate"
 let public FN_JIT_ITERATOR_DELETE   = "jit_iterator_delete"
@@ -775,6 +776,8 @@ def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_featu
     jit_add_extern(FN_JIT_MAKE_BLOCK,
         jit_fn_type($(blk : void?; argStackTop : int; ad : int64; bodyNode, jitImpl, funcInfo, at, ctx : void?) : void {}),
         get_jit_make_block(), fixed_array(nounwind, willreturn), (nocapture, [0, 3, 4, 5, 6]))
+    jit_add_extern(FN_JIT_AD_BY_SID, jit_fn_type($(sid : int64; ctx : void?) : int64 {}),
+        get_jit_ad_by_sid(), fixed_array(nounwind, willreturn), (nocapture, [1]))
     jit_add_extern(FN_JIT_DEBUG, jit_fn_type($(res : float4; typeInfo, message, ctx, at : void?) : void {}),
         get_jit_debug(), fixed_array(nounwind, willreturn), (nocapture, [1, 2, 3, 4]))
     jit_add_extern(FN_JIT_ITERATOR_ITERATE, jit_fn_type($(it, data, ctx : void?) : bool {}),

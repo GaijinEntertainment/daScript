@@ -6481,11 +6481,15 @@ class public LlvmJitVisitor : AstVisitor {
 
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
-        let argStackTop = (expr._block as ExprBlock).stackTop
-        let annotationData = (expr._block as ExprBlock).annotationData
+        assume annBlock = expr._block as ExprBlock
+        let argStackTop = annBlock.stackTop
         var ann_data_ptr : LLVMOpaqueValue? = null
-        if (annotationData != 0 |> uint64()) {
-            ann_data_ptr = LLVMBuildPtrToInt(g_builder, save_address_global(uid.get_block_ann(expr), unsafe(reinterpret<void?>(annotationData))), types.LLVMIntPtrType(), "")
+        if (annBlock.annotationDataSid != 0 |> uint64()) {
+            // A block_macro's payload is a compile-process address, so it can never be baked into
+            // generated code -- resolve it from the context's sid->data table, as aot_cpp.das does.
+            ann_data_ptr = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_AD_BY_SID],
+                LLVMGetNamedFunction(g_mod, FN_JIT_AD_BY_SID),
+                fixed_array(types.ConstI64(annBlock.annotationDataSid), get_context_param()), "")
         } else {
             // Just an optimization.
             ann_data_ptr = LLVMConstInt(types.t_int64, 0 |> uint64(), 0)
@@ -7567,11 +7571,6 @@ class public ResolveExternVisitor : AstVisitor {
 
     def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
         thisBlock |> push <| unsafe(reinterpret<ExprBlock?>(expr._block))
-
-        let annotationData = (expr._block as ExprBlock).annotationData
-        if (annotationData != 0 |> uint64()) {
-            dll.set_glob_address(uid.get_block_ann(expr), unsafe(reinterpret<void?>(annotationData)))
-        }
     }
 
     def override visitExprMakeBlock(expr : ExprMakeBlock?) : ExpressionPtr {

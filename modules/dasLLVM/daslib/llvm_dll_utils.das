@@ -125,6 +125,7 @@ class public UidNodes {
             return DllName()
         }
         let id = unsafe(id_map[ptr])
+        // nolint:STYLE014 — the sentinel contract below is load-bearing
         // Nodes inside global-variable initializers have no Function context (thisFunc == null):
         // the exe path codegens them as a synthetic init_globals fn. Both the define pass
         // (generate_globals_initialization_fn) and the store pass (collect_external_functions)
@@ -178,10 +179,6 @@ class public UidNodes {
         return get_base(blk, "block_{get_mangled_name(blk)}")
     }
 
-    def public get_block_ann(mk_blk : ExprMakeBlock?) : DllName {
-        return get_base(mk_blk, "makeblock_ann")
-    }
-
     def reset(var func : Function?) {
         thisFunc = func
     }
@@ -203,6 +200,7 @@ def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>; gen_exe
         for (fun in funcs) {
             visit(fun, adapter)
         }
+        // nolint:STYLE014 — the exact-mirror requirement below is load-bearing
         // Exe codegens global-var initializers as a synthetic init_globals fn, so a UID-bearing
         // node in a global init (e.g. an @@fn -> ExprAddr, common for kernel dispatch globals in
         // builtin modules) needs an id too, or get_base panics. JIT skips this: the interpreter

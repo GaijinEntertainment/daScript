@@ -66,8 +66,6 @@ class public CollectExternVisitor : AstVisitor {
     tab_at_apm_accessor : LLVMOpaqueValue?
     reg_extern_tab_type : LLVMOpaqueType?
     reg_extern_tab_wh_type : LLVMOpaqueType?
-    trap_typ : LLVMOpaqueType?
-    trap_ptr : LLVMOpaqueValue?
     reg_standalone_fn_type : LLVMOpaqueType?
     reg_standalone_fn : LLVMOpaqueValue?
     builder : LLVMBuilderRef
@@ -75,7 +73,6 @@ class public CollectExternVisitor : AstVisitor {
     mod : LLVMOpaqueModule?
     types : PrimitiveTypes -const? -const
     seen : table<string; bool>
-    any_unimplemented : bool
     needs_whole_lib : bool
     extern_modules : table<string; bool>
     registered_modules : table<string; bool>
@@ -149,7 +146,6 @@ class public CollectExternVisitor : AstVisitor {
                              _builder : LLVMBuilderRef,
                              _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
                              uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode) {
-        any_unimplemented = false
         needs_whole_lib = false
         uid := uids
         ctx = _ctx
@@ -183,9 +179,6 @@ class public CollectExternVisitor : AstVisitor {
 
         // String insert-after-packed-miss global (inline packed find calls it on a miss); baked into the exe to survive ASLR.
         tab_at_apm_accessor = LLVMAddFunctionWithType(g_mod, "get_jit_string_table_at_after_packed_miss", reg_extern_tab_wh_type)
-
-        trap_typ = LLVMFunctionType(types.t_void, [])
-        trap_ptr = LLVMAddFunctionWithType(g_mod, "jit_trap", trap_typ)
 
         reg_extern_fn_type = g_fn_types[FN_JIT_INIT_EXTERN]
         reg_extern_fn = LLVMGetNamedFunction(g_mod, FN_JIT_INIT_EXTERN)
@@ -375,14 +368,6 @@ class public CollectExternVisitor : AstVisitor {
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
-    def add_unimplemented(name : DllName; expr : ExpressionPtr) {
-        // Trap will not always help. At least try.
-        to_log(LOG_WARNING, "LLVM JIT: Emit trap for {name.glob()} at {describe(expr.at)}.\n")
-        let global_func_ptr = LLVMGetNamedGlobal(g_mod, name.glob());
-        LLVMSetInitializer(global_func_ptr, trap_ptr)
-        any_unimplemented = true
-    }
-
     def override preVisitExprCall(expr : ExprCall?) {
         make_call(expr)
     }
@@ -467,14 +452,6 @@ class public CollectExternVisitor : AstVisitor {
     def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
             register_function(expr.constructor)
-        }
-    }
-
-    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
-        let annotationData = (expr._block as ExprBlock).annotationData
-        if (annotationData != 0 |> uint64()) {
-            add_unimplemented(uid.get_block_ann(expr), expr)
-            // annotationData is never nonnull for a regular das program (this visitor runs only on those).
         }
     }
 
@@ -577,7 +554,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
-                               prog : Program?; register_all_modules : bool = false) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
+                               prog : Program?; register_all_modules : bool = false) : bool {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
@@ -604,7 +581,6 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             }
         }
     }
-    let any_unimp = extern_resolver.any_unimplemented
     let whole_lib = extern_resolver.needs_whole_lib
     for (mod_name in keys(extern_resolver.extern_modules)) {
         used_modules[mod_name] = true
@@ -673,7 +649,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     extern_resolver.uid = null
     extern_resolver.types = null
     unsafe { delete extern_resolver; }
-    return (any_unimplemented = any_unimp, needs_whole_lib = whole_lib)
+    return whole_lib
 }
 
 // --jit-check-abi: emit into initialize_modules() a host-vs-target layout safe-check for every handled
@@ -1177,11 +1153,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         clone_init_glob = cpair._0
     }
 
-    let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
-    if (strict && any_unimplemented) {
-        to_log(LOG_ERROR, "Some of the nodes above are unimplemented!\n")
-        return (fn = null, link_whole_lib = false)
-    }
+    let sort_needs_whole_lib = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
     var needs_whole_lib = sort_needs_whole_lib
     // ast_core / network_core live in the compiler lib, so registering them pulls compiler-only
