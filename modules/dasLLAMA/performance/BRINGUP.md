@@ -71,8 +71,14 @@ cmake --build build --config Release -j 16        # 15-25 min clean
     `mmproj-gemma-4-E2B-it-BF16.gguf` (rename to the catalog's lowercase `-bf16`)
   - `ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF` → `Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf`,
     `mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf`
-  - the parakeet v2/v3 f32 bins and the canary encoder/decoder are REPO CONVERSIONS — copy
-    them (WITH their `.sha` sidecars) from an existing box; there is no upstream to fetch
+  - the parakeet v2/v3 f32 bins and the canary encoder/decoder are CONVERSIONS from public
+    NVIDIA checkpoints — reproducible on any box: parakeet via the pinned whisper.cpp
+    checkout's `models/convert-parakeet-to-ggml.py` over `nvidia/parakeet-tdt-0.6b-v2`/`-v3`;
+    canary via `modules/dasLLAMA/harness/convert_canary_to_ggml.py` over
+    `nvidia/canary-qwen-2.5b` (both need the nemo venv setup_asr_rig creates). The converted
+    bins MUST sha-match the recorded sidecars — a differing hash means environment drift,
+    stop and compare, never bench it. Fast path: copy the bins (WITH `.sha` sidecars) from an
+    existing box when the link is quick
 
 ## 3. Reference engines
 
