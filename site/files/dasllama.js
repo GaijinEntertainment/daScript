@@ -428,12 +428,25 @@
     });
   }
 
+  /* the hero's "up to N×" derives from the audio-in pairs — the same rows § 03 shows, never a
+     hand-typed number. Floor keeps the claim conservative (6.19 measured → "6×"). */
+  function mountHero(recs) {
+    var el = document.getElementById('dl-hero-x');
+    if (!el) return;
+    var best = 0;
+    buildAudioRows(recs, 'audio-chat').forEach(function (r) {
+      if (r.speed > best) best = r.speed;
+    });
+    if (best > 1) el.textContent = best >= 3 ? String(Math.floor(best)) : best.toFixed(1);
+  }
+
   /* ── load ───────────────────────────────────────────────────── */
   fetch('files/dasllama/bench_records.json')
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (recs) {
       mountLLM(buildLLMPairs(recs));
       mountAudio(recs);
+      mountHero(recs);
     })
     .catch(function () { /* no records yet — sections stay hidden */ });
 })();

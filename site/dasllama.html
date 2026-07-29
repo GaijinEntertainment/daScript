@@ -11,7 +11,7 @@
     <meta property="og:url" content="https://daslang.io/dasllama.html" />
     <meta property="og:site_name" content="daslang" />
     <meta property="og:title" content="dasLLAMA — local LLMs with audio in, faster than llama.cpp" />
-    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; omni models with audio in run up to ~6× faster than llama.cpp's multimodal CLI. Every LLM number paired with its llama.cpp yardstick, methodology included." />
+    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; audio-in chat models run up to 6× faster than llama.cpp's multimodal CLI. Every number paired with its yardstick, methodology included." />
     <meta name="twitter:card" content="summary" />
 
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
@@ -53,25 +53,28 @@
   .dl-run .metric { color: var(--fg); }
 
   .dl-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
-  .dl-win { color: var(--amber); }
-  .dl-loss { color: var(--fg-dim); }
+  /* the compound selectors out-rank .dl-num (source order put it later, same specificity) —
+     losses are data, not shame: visible teal, distinct from the amber wins */
+  .dl-win, .dl-num.dl-win { color: var(--amber); }
+  .dl-loss, .dl-num.dl-loss { color: var(--dl-teal); }
+  :root { --dl-teal: #4fb8a8; }
 
   /* data table */
-  .dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; }
+  .dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; scrollbar-width: thin; }
   table.dl-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 720px; }
   .dl-table thead th {
-    text-align: right; padding: 12px 14px; color: var(--fg-faint); font-weight: 400;
+    text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule);
     background: var(--bg-2); white-space: nowrap;
   }
   .dl-table thead th:first-child { text-align: left; }
   .dl-table thead th.dl-grp { color: var(--amber); }
-  .dl-table tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+  .dl-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--rule); }
   .dl-table tbody tr:last-child td { border-bottom: 0; }
   .dl-table tbody tr:hover td { background: rgba(232,161,58,0.04); }
   .dl-num { text-align: right; color: var(--fg); }
   .dl-dim { color: var(--fg-faint); }
-  .dl-td-model { color: var(--fg); }
+  .dl-td-model { color: var(--fg); max-width: 300px; }   /* long model names wrap at hyphens instead of forcing the ratio columns off-screen */
 
   /* pair tables — one row per das measurement ÷ its reference (§ 01 LLM, § 02 ASR, § 03 audio in) */
   .forge-p--wide { max-width: 780px; }
@@ -199,15 +202,14 @@
         <div class="forge-container forge-hero__grid">
             <div>
                 <span class="dl-hero__badge"><span class="dot"></span>dasLLAMA · local inference</span>
-                <h1>Local LLMs with audio in — <em>up to 6× faster.</em></h1>
+                <h1>Local LLMs with audio in — <em>up to <span id="dl-hero-x">6</span>× faster.</em></h1>
                 <p class="forge-hero__lede">
                     dasLLAMA is an LLM + speech-to-text stack written entirely in daslang and
                     JIT-compiled — no hand-written assembly. Its auto-tuned JIT kernels consistently
                     outperform llama.cpp's hand-written universal kernels, on the CPU path and on
                     Metal alike. llama.cpp has no speech-to-text engine, so Whisper and Parakeet are
                     measured against the dedicated ones instead — whisper.cpp, parakeet, ONNX Runtime,
-                    NeMo — and hold their own. The ~6× is omni models with audio in (Qwen3-Omni,
-                    Gemma-4), against llama.cpp's multimodal CLI on CPU.
+                    NeMo — and hold their own. Every number below is a measured pair.
                 </p>
                 <div class="forge-hero__ctas">
                     <a class="forge-btn-primary" href="#bench">$ view the scoreboard →</a>
