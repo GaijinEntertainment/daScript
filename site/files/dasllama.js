@@ -39,6 +39,14 @@
     return esc(text) + (sub ? ' <span class="dl-model-sub">' + esc(sub) + '</span>' : '');
   }
 
+  // the ✱ tooltip IS the note — hover reads it without opening the receipt
+  function noteMark(r) {
+    var t = [r.modelNote,
+      r.das && r.das.comment ? 'das: ' + r.das.comment : '',
+      r.ref && r.ref.comment ? 'reference: ' + r.ref.comment : ''].filter(Boolean).join('\n');
+    return ' <span class="dl-note-mark" title="' + esc(t).replace(/"/g, '&quot;') + '">✱</span>';
+  }
+
   /* ── generic pair table ─────────────────────────────────────────
      spec: { table, filters, caption, rows, cols, filterDefs, sort, tiebreak, receipt, summary }
      cols:       { key, label, get(row), cell(row), num, grp, grpStart, cls, dim }
@@ -193,12 +201,12 @@
       hw.ram_gb ? hw.ram_gb + ' GB' : '', hw.ram_config, hw.gpu, hw.os, hw.power_plan,
       hw.smt ? 'SMT ' + hw.smt : ''].filter(Boolean).join(' · ');
     if (hwLine) lines.push('        ' + esc(hwLine));
-    if (r.comment) lines.push('        <b>note</b>  ' + esc(r.comment));
+    if (r.comment) lines.push('        <span class="dl-receipt-note"><b>note</b>  ' + esc(r.comment) + '</span>');
   }
 
   function pairReceipt(p) {
     var lines = [];
-    if (p.modelNote) lines.push('<b>note     </b> ' + esc(p.modelNote));
+    if (p.modelNote) lines.push('<span class="dl-receipt-note"><b>note     </b> ' + esc(p.modelNote) + '</span>');
     sideLines('das      ', p.das, lines);
     lines.push('');
     sideLines('reference', p.ref, lines);
@@ -301,7 +309,7 @@
         // m.quant is the runtime activation mode, not the file's weight format — the weight
         // format is in the model name, and exec_fmt in the receipt spells it out exactly.
         { key: 'model', label: 'model', get: function (r) { return r.model; },
-          cell: function (r) { return notedCell(r.model, r.arch) + (r.noted ? ' <span class="dl-note-mark" title="annotated — open the receipt">✱</span>' : ''); },
+          cell: function (r) { return notedCell(r.model, r.arch) + (r.noted ? noteMark(r) : ''); },
           cls: 'dl-td-model' },
         { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
@@ -392,7 +400,7 @@
         tiebreak: function (a, b) { return a.audio_s - b.audio_s || a.tool.localeCompare(b.tool); },
         cols: [
           { key: 'model', label: 'model', get: function (r) { return r.model; },
-            cell: function (r) { return notedCell(r.model, '') + (r.noted ? ' <span class="dl-note-mark" title="annotated — open the receipt">✱</span>' : ''); },
+            cell: function (r) { return notedCell(r.model, '') + (r.noted ? noteMark(r) : ''); },
             cls: 'dl-td-model' },
           { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
             cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
