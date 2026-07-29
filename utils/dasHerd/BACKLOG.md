@@ -84,7 +84,12 @@ review capacity is the bottleneck the arcs exist to fix.
   printed" is a first-class design topic, as big as the plumbing — the
   spoken channel is a SUMMARY channel with its own editorial rules, not a
   screen reader. Adoption is allowed to be gradual; the feature must not
-  assume the user talks.
+  assume the user talks. (3) The PROVEN mode from the Telegram bot: speech
+  → ASR → LLM cleanup → readable text, because reading is faster than
+  listening and speech is full of filler. dasHerd voice input rides that
+  exact pipeline — a muttered "look at that ..." arrives at the agent as
+  a crisp written message; the cleanup pass IS the feature. Telegram's
+  builtin transcription is the cautionary counterexample (meh).
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
