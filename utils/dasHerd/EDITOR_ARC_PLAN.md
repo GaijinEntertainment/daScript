@@ -47,16 +47,19 @@ uses. True WYSIWYG editing inside the laid-out rich text is a different,
 much larger beast: named non-goal, revisit only if the split-view editor
 proves insufficient in use.
 
-- Component home: `modules/dasImgui/text/imgui_text_source_edit.das`
-  (dasImgui repo), the editing sibling of `imgui_text_source_view`.
-- Example 1 — **markdown editor**: editor pane + live preview via the
-  existing `markdown_view`, debounced re-parse on edit. Lives in dasImgui
-  `examples/` (self-contained, no daslang-repo dependency).
-- Example 2 — **das code editor**: editor + syntax + LSP hover /
-  definition / diagnostics. Lives in daslang `/examples` — it needs
-  `utils/lsp/subtools` and a compiler, which only exist there. (If Boris
-  prefers both examples in one place, this is the one decision to
-  revisit; the component itself does not care.)
+- Component home: `modules/dasImgui/text/imgui_text_source_edit.das`,
+  the editing sibling of `imgui_text_source_view`.
+- **Both examples live in daslang `/examples`** (settled 2026-07-29):
+  `examples/editor/markdown/` — editor pane + live preview via the
+  existing `markdown_view`, debounced re-parse on edit — and
+  `examples/editor/code/` — editor + syntax + LSP hover / definition /
+  diagnostics via `utils/lsp/subtools`.
+- Context that settles it: **dasImgui is being merged into the main
+  repository before the next release** — it is the one module that keeps
+  getting pulled back in, and keeping it separate has stopped paying.
+  Until the merge lands, the markdown example simply requires the
+  installed dasImgui like every other imgui consumer in the tree; after
+  it, "self-contained in dasImgui" stops meaning anything.
 
 ## The component, in detail
 
