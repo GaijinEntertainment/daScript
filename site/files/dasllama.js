@@ -304,9 +304,8 @@
 
   /* ── stacked bar pairs, the default view of every section ────────
      das (amber) over its reference (teal) from one baseline; each pair normalized to its own
-     max so the longer side spans the track and the gap IS the ratio. § 01 bars are tok/s
-     (longer amber = faster); § 02/03 bars are milliseconds (shorter amber = faster) — the
-     value labels and ratio keep either reading unambiguous. */
+     max so the longer side spans the track and the gap IS the ratio. Bars are RATES in every
+     section — tok/s in § 01, ×RT in § 02/03 — so longer amber always means faster. */
   function renderPairBars(box, items) {
     if (!items.length) {
       box.innerHTML = '<div class="dl-empty">No runs match these filters.</div>';
@@ -390,16 +389,21 @@
   }
 
   function mountAudioViews(sec, rows) {
+    // bars are RATES everywhere (longer amber = faster): audio pairs bar ×RT — seconds of
+    // audio per second of compute — on both sides; the millisecond wall times live in the table
+    function xrt(audio_s, msv) { return msv > 0 ? (audio_s * 1000) / msv : 0; }
+    function xrtText(v) { return fmt(v, v < 10 ? 1 : 0) + '×RT'; }
     wireBars(sec, rows, function (all, filters) {
       return all.filter(function (r) {
         return (!filters.model || r.model === filters.model) &&
                (!filters.box || r.box === filters.box) &&
-               (!filters.tool || r.tool === filters.tool);
+               (!filters.tool || r.tool === filters.tool) &&
+               r.audio_s > 0;
       }).sort(function (a, b) { return b.speed - a.speed; })
         .map(function (r) {
+          var d = xrt(r.audio_s, r.das_ms), f = xrt(r.audio_s, r.ref_ms);
           return { label: r.model, sub: r.boxName + ' · ' + r.tool + ' · ' + r.wav,
-                   das: r.das_ms, ref: r.ref_ms,
-                   dasText: ms(r.das_ms) + ' ms', refText: ms(r.ref_ms) + ' ms',
+                   das: d, ref: f, dasText: xrtText(d), refText: xrtText(f),
                    ratio: r.speed };
         });
     });
