@@ -138,6 +138,7 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
     let t0 = ref_time_ticks()
     let tag = accel ? "{be} accel" : be
     to_log(LOG_INFO, "gen_bench_records: START {file} das {tag}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag)}))
     var args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/lcpp_bench.das", "--",
                  "-m", path, "-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}",
                  "-t", "{threads}", "-o", "json", "--json-path", cellPath]
@@ -151,11 +152,12 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
     var cell : array<BenchModel>
     for (attempt in range(2)) {
         var out = ""
-        let rc = run_and_capture(args, out)
+        let rc = run_and_stream(args, out)
         cell |> clear()
         if (rc != 0 || !read_bench_records(cellPath, cell)) {
             let tail = slice(out, max(0, length(out) - 400))
             to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
+            logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "rc" => JV(rc), "elapsed_ms" => JV(elapsed_ms(t0))}))
             failed |> push("{file} das {tag}")
             return
         }
@@ -182,6 +184,7 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
         }
         if (attempt == 0) {
             to_log(LOG_WARNING, "gen_bench_records: HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) — cold-map warming suspect, re-running the cell warm\n")
+            logger_warning("bench.records", "high variance — warm re-run", JV({"model" => JV(file), "leg" => JV(tag), "cv_pct" => JV(worst * 100.0lf)}))
             settle(cfg)
         } else {
             to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) after a warm re-run — keeping it, treat with suspicion\n")
@@ -190,6 +193,7 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
     absorb_cell(models, cell, store, note)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; cfg : Args; threads : int;
@@ -206,9 +210,11 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     let np = nopo ? " -nopo 1" : ""
     let cmd = "\"{bin}\" -m \"{path}\" -ngl {ngl}{np} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {cfg.reps} -o json"
     to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
     var rows : array<LlamaBenchRow>
     if (!run_llama_bench(cmd, rows) || empty(rows)) {
         to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
         failed |> push("{file} ref {flavor} {backend}")
         return
     }
@@ -235,6 +241,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     stamp_note(models, file, note)
     write_bench_records(store, models)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
@@ -244,21 +251,24 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
                          var models : array<BenchModel>; var failed : array<string>) {
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr")}))
     let args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das", "--",
                  "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
     var out = ""
-    let rc = run_and_capture(args, out)
+    let rc = run_and_stream(args, out)
     var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
         let tail = slice(out, max(0, length(out) - 400))
         to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das asr rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "rc" => JV(rc)}))
         failed |> push("{spec.display} das asr")
         return
     }
     absorb_cell(models, cell, store, "")
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
@@ -289,6 +299,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     }
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
     let model_path = "{spec.root}{spec.das_model}"
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
@@ -305,6 +316,8 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     if (ref.tool == "onnx" || ref.tool == "nemo") {
         // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
         // them); only the clips are local files here
+        let nclips = length(spec.buckets)
+        to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {nclips} clip(s) in one process (python model load amortized)\n")
         let cmd = asr_pybench_cmd(ref.tool, ref.handle, spec.buckets, threads, cfg.asr_reps)
         rr.cmd = cmd
         let out = run_capture("{cmd} 2>&1", false)
@@ -324,12 +337,14 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         }
         for (wav in spec.buckets) {
             let wav_path = "{asr_corpus_dir()}{wav}"
+            to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({cfg.asr_reps} rep(s))...\n")
             var cmd = ""
             let ms = (ref.tool == "mtmd"
                 ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
+                to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
                 // audio seconds live on the das cell's matching test key; cli tools don't report it
                 rr.tests |> insert("asr:{wav}", BenchTest(ms = ms))
                 rr.files |> emplace(file_identity(wav_path, "clip"))
@@ -341,6 +356,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     }
     if (measured == 0) {
         to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} ref {ref.tool} — nothing measured ({elapsed_ms(t0)} ms)\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
         failed |> push("{spec.display} ref {ref.tool}")
         return
     }
@@ -350,6 +366,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr"), "clips" => JV(measured), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 [export]
@@ -365,6 +382,10 @@ def main : int {
         print_help(get_command_info(type<Args>), "gen_bench_records")
         return 0
     }
+    // stdout is the live narration (cells stream their children through); the ndjson logger is
+    // the timestamped machine-readable record beside it
+    logger_set_name(prof_log_name())
+    to_log(LOG_INFO, "gen_bench_records: box={box_name()} workload={cfg.workload} — ndjson record: {logger_get_path()}\n")
     let apple = is_apple_box()
     if (cfg.backend == "metal" && !apple) {   // fail fast instead of running metal cells that all decline on non-Apple boxes
         to_log(LOG_ERROR, "gen_bench_records: --backend metal requested on a non-Apple box — Metal is macOS-only\n")

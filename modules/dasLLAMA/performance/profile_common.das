@@ -309,6 +309,32 @@ struct PlatformInfo {
     @optional tune : string
 }
 
+//! Run a child STREAMING: every line it emits (stdout+stderr, merged by popen_argv) prints to OUR
+//! stdout the moment it arrives — the visibility contract: stdout alone tells how far the process
+//! is and what it does, at every stage, without waiting for the child to exit. A rolling tail is
+//! retained for failure reporting. Returns the exit code.
+def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int = 4096) : int {
+    var acc = ""
+    let rc = unsafe(popen_argv(args, 0.0, $(f) {
+        if (f == null) {
+            return
+        }
+        while (true) {
+            let line = fgets(f)
+            if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
+                break
+            }
+            print(line)
+            acc = "{acc}{line}"
+            if (length(acc) > keep_tail * 2) {
+                acc = slice(acc, length(acc) - keep_tail)
+            }
+        }
+    }))
+    tail_out = length(acc) > keep_tail ? slice(acc, length(acc) - keep_tail) : acc
+    return rc
+}
+
 // Run `cmd`, return its trimmed stdout (first line only when `first_line`). Uses fread_to_eof (fio's
 // pipe-safe reader) — fread(f) whole-file sizes via seek and returns empty on a non-seekable pipe.
 def run_capture(cmd : string; first_line : bool) : string {

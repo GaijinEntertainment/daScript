@@ -1,5 +1,19 @@
 # Box bring-up — the profiling rig from zero
 
+## The visibility contract
+
+Every tool in this rig narrates every stage on **stdout**: which model, which leg, which clip,
+which conversion stage, live as it happens — the orchestrator streams its children's output
+through rather than buffering it. Reading the stdout alone must always answer "how far along is
+it and what is it doing right now."
+
+Consequences:
+- **Never launch a rig tool through `| tail`, `| grep`, `| head` or any pipe that truncates or
+  delays the stream.** A run started that way gets restarted. Backgrounding is fine — redirect
+  the WHOLE stdout to a file (`> sweep.log 2>&1`) and read the file; the stream is the record.
+- A tool that goes silent for minutes is a visibility BUG — fix the tool, don't wrap it in
+  polling.
+
 The checklist a fresh box (rented or owned) follows to produce the full record board — LLM and
 ASR — with receipts complete enough to publish. Every step is scripted; if a step needs
 laptop-local knowledge, that is a bug in this file (the zen2 pilot is the enforcement run).
