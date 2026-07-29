@@ -918,7 +918,12 @@ def upsert_llm(var tests : array<LlmRec>; rec : LlmRec) {
 // references). Override with WHISPER_CPP_MODELS.
 def whisper_models_dir() : string {
     let env = get_env_variable("WHISPER_CPP_MODELS")
-    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
+    if (empty(env)) {
+        return "{whisper_cpp_root()}/models/"
+    }
+    // callers concat "{whisper_models_dir()}{file}" — guarantee the separator (a slashless
+    // override silently skipped every whisper/parakeet catalog entry on the m4 pilot)
+    return ends_with(env, "/") || ends_with(env, "\\") ? env : "{env}/"
 }
 
 // The bench corpus (relative to the repo-root cwd these tools run in).
