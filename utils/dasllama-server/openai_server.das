@@ -10,6 +10,8 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
 require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
+require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
+require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require daslib/jobque_boost
 require daslib/rtti             // this_context().last_exception inside ASR worker recovery
@@ -54,6 +56,7 @@ struct SlotOpts {
 //! the tick loop steps one slot's scheduler at a time (round-robin over slots with work).
 struct ModelSlot {
     name : string
+    path : string                   // the source GGUF — the bake button + /v1/images key off it
     model : Model = Model()
     sched : Scheduler = Scheduler()
     opts : SlotOpts = SlotOpts()
@@ -155,8 +158,8 @@ var private g_started_at = 0l   // ref_time_ticks at init_server; /v1/stats deri
 //! Append a loaded model as a serving slot (call once per model, before ``run_server``). ``name``
 //! is the id ``/v1/models`` reports and requests route on via their ``"model"`` field. The first
 //! slot added is the default until ``set_default_model`` says otherwise.
-def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts()) {
-    var slot <- ModelSlot(name = name, is_default = empty(g_slots))
+def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path : string = "") {
+    var slot <- ModelSlot(name = name, path = path, is_default = empty(g_slots))
     slot.model <- m
     slot.opts = opts
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
@@ -238,7 +241,15 @@ def private bind_gpu_slot(si : int) {
     install_slot_marks(si)
     set_gpu_tier_want(g_slots[si].gpu_want)
     moe_gpu_tier_arm()
-    moe_gpu_upload_resident(g_slots[si].model)
+    // a vulkan-flavor image re-binds by SLICING its baked planes (the same rail its load used);
+    // on a planes-trimmed image a live re-gather would panic — the slice is the only path
+    if (!empty(g_slots[si].model.vkplan)) {
+        vulkan_bake_slice_begin()
+        moe_gpu_upload_resident(g_slots[si].model)
+        vulkan_bake_slice_end(g_slots[si].model)
+    } else {
+        moe_gpu_upload_resident(g_slots[si].model)
+    }
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
     g_slots[si].sw_count ++
@@ -514,6 +525,247 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
     return resp |> JSON(
         "\{\"state\":{json_str(g_bench_state)},\"log\":{log_json},\"result\":{result},\"hardware\":{json_str(g_hardware_line)}}",
         http_status.OK)
+}
+
+// ===== bake button (the .dlim converter) =====
+// POST /bake spawns dasllama-convert as a child (the bench worker's proven single-spawn shape):
+// planar slots stream (peak ~16 GB regardless of model size), the GPU-owner slot bakes the
+// vulkan flavor against the server's LIVE config (--config, eager — RAM peak ≈ the planes).
+// GET /bake serves state/log. The dlim GC (never-loadable images) runs when a bake completes.
+
+var private g_bake_state = "idle"        // idle | running | done | failed
+var private g_bake_log : array<string>
+var private g_bake_result_json = ""      // "" until a run completes
+var private g_bake_events : Channel?
+var private g_bake_model = ""            // slot name of the running/last bake
+var private g_bake_gguf = ""             // its source path — the completion GC target
+
+struct private BakeEvent {
+    kind : int         // 0 = log line, 1 = done (text = result json), 2 = failed (text = reason)
+    text : string
+}
+
+def private bake_emit(events : Channel?; kind : int; text : string) {
+    events |> push_clone(BakeEvent(kind = kind, text = text))
+}
+
+def private bake_worker(daslang_bin, gguf_path, flavor, cfg_path : string; var events : Channel?&) {
+    // same defer the bench worker carries: a still-held channel at worker exit is std::terminate
+    defer() {
+        events |> release
+    }
+    let t0 = ref_time_ticks()
+    var args <- [daslang_bin, "-jit", path_join(get_das_root(), "utils/dasllama-convert/main.das"), "--",
+                 "-m", gguf_path, "--force"]
+    if (flavor == "vulkan") {
+        args |> push("-f")
+        args |> push("vulkan")
+        if (!empty(cfg_path)) {
+            args |> push("--config")
+            args |> push(cfg_path)
+        }
+        bake_emit(events, 0, "vulkan flavor bakes eagerly — RAM peak is the model's planes; minutes-class on big models")
+    } else {
+        args |> push("--stream")
+    }
+    bake_emit(events, 0, "$ {cmdline(args)}")
+    var out = ""
+    var rc = run_and_capture(args, out, 7200.0)
+    if (rc == 3 && find(out, "restart to apply") >= 0) {
+        // [tune] bootstrap: the child tuned this box's kernels first (the watchdog convention)
+        bake_emit(events, 0, "converter tuned this box's kernels first — relaunching with the winners")
+        out = ""
+        rc = run_and_capture(args, out, 7200.0)
+    }
+    delete args
+    if (!empty(cfg_path)) {
+        remove(cfg_path)
+    }
+    if (rc != 0) {
+        bake_emit(events, 2, "bake failed (rc={rc}) — tail: {slice(out, max(0, length(out) - 300))}")
+        return
+    }
+    // surface the converter's own receipt lines (identity, output path, wrote N MB)
+    peek_data(out) $(bytes) {
+        var at = 0
+        var line_start = 0
+        while (at < length(bytes)) {
+            if (bytes[at] == uint8('\n')) {
+                let line = slice(out, line_start, at)
+                if (find(line, "dasllama-convert:") >= 0) {
+                    bake_emit(events, 0, clone_string(line))
+                }
+                line_start = at + 1
+            }
+            at++
+        }
+    }
+    let elapsed = int64(get_time_usec(t0)) / 1000000l
+    bake_emit(events, 1, "\{\"ok\":true,\"flavor\":{json_str(flavor)},\"elapsed_s\":{elapsed},\"ts\":{created_ts()}}")
+}
+
+def private drain_bake_events() {
+    if (g_bake_events == null) {
+        return
+    }
+    var more = true
+    while (more) {
+        more = g_bake_events |> try_pop_clone() $(ev : BakeEvent#) {
+            if (ev.kind == 0) {
+                g_bake_log |> push(clone_string(ev.text))
+                to_log(LOG_INFO, "dasllama-server: bake: {ev.text}\n")
+            } else {
+                if (ev.kind == 1) {
+                    g_bake_result_json = clone_string(ev.text)
+                    g_bake_state = "done"
+                    to_log(LOG_INFO, "dasllama-server: bake complete ({g_bake_model})\n")
+                } else {
+                    g_bake_log |> push(clone_string(ev.text))
+                    g_bake_state = "failed"
+                    to_log(LOG_WARNING, "dasllama-server: bake failed: {ev.text}\n")
+                }
+                // the GC rides every bake completion (and server start) — never-loadable only
+                if (!empty(g_bake_gguf)) {
+                    let gc = dlim_clean(g_bake_gguf, true)
+                    if (gc.removed > 0) {
+                        g_bake_log |> push("GC reclaimed {gc.freed >> 20l} MB from {gc.removed} stale image(s)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (g_bake_state == "running") {
+        return resp |> JSON(error_body("a bake is already running", "invalid_request_error"), http_status.CONFLICT)
+    }
+    if (server_bench_running()) {
+        return resp |> JSON(error_body("a benchmark is running — one child at a time", "invalid_request_error"), http_status.CONFLICT)
+    }
+    if (empty(g_daslang_bin)) {
+        return resp |> JSON(
+            error_body("baking needs a source-tree daslang (standalone exe cannot spawn the converter child)", "invalid_request_error"),
+            http_status.BAD_REQUEST)
+    }
+    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0) {
+        return resp |> JSON(
+            error_body("streams are active — the converter competes for cores and RAM; drain first, then bake", "invalid_request_error"),
+            http_status.CONFLICT)
+    }
+    var model_field = ""
+    var jerr = ""
+    let body_text = string(req.body)
+    var js = read_json(body_text, jerr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    if (js != null) {
+        model_field = js?["model"] ?? ""
+    } elif (!empty(body_text)) {
+        // a malformed body must NOT fall through to the default slot — that would bake the
+        // wrong model on a typo (an empty body legitimately means "the default")
+        return resp |> JSON(error_body("request body is not valid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    let si = slot_index(model_field)
+    if (si < 0) {
+        return resp |> JSON(error_body("unknown model '{model_field}'", "invalid_request_error"), http_status.NOT_FOUND)
+    }
+    if (empty(g_slots[si].path)) {
+        return resp |> JSON(error_body("slot '{g_slots[si].name}' has no source path — cannot bake", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    // the CURRENT config bakes: the GPU owner's live tier config yields the vulkan flavor,
+    // every other slot bakes the planar (CPU) image this box would map
+    var flavor = "planar"
+    var cfg_path = ""
+    if (si == g_gpu_owner) {
+        let dc = dlim_config_current("{g_slots[si].model.quant}")
+        if (dc.vulkan_on) {
+            flavor = "vulkan"
+            var terr : string
+            let tmp = temp_directory(terr)
+            cfg_path = path_join(empty(tmp) ? "." : tmp, "dasllama_bake_cfg_{ref_time_ticks()}.json")
+            var wrote = false
+            fopen(cfg_path, "wb") $(f) {
+                if (f != null) {
+                    f |> fwrite(dlim_config_json(dc))
+                    wrote = true
+                }
+            }
+            if (!wrote) {
+                return resp |> JSON(error_body("cannot write the bake config to '{cfg_path}'", "server_error"), http_status.INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+    g_bake_state = "running"
+    delete g_bake_log
+    g_bake_result_json = ""
+    g_bake_model = g_slots[si].name
+    g_bake_gguf = g_slots[si].path
+    let daslang_bin = g_daslang_bin
+    let gguf_path = g_slots[si].path
+    let flavor_c = flavor
+    let cfg_path_c = cfg_path
+    var events_capture = g_bake_events
+    new_thread() <| @capture(= daslang_bin, = gguf_path, = flavor_c, = cfg_path_c, = events_capture) {
+        bake_worker(daslang_bin, gguf_path, flavor_c, cfg_path_c, events_capture)
+    }
+    to_log(LOG_INFO, "dasllama-server: bake started ({g_bake_model}, {flavor})\n")
+    return resp |> JSON("\{\"ok\":true,\"state\":\"running\",\"model\":{json_str(g_bake_model)},\"flavor\":{json_str(flavor)}}", http_status.ACCEPTED)
+}
+
+def private handle_bake_get(var resp : HttpResponse?) : http_status {
+    var log_doc = JV(g_bake_log)
+    let log_json = write_json_compact(log_doc)
+    unsafe {
+        delete log_doc
+    }
+    let result = empty(g_bake_result_json) ? "null" : g_bake_result_json
+    return resp |> JSON(
+        "\{\"state\":{json_str(g_bake_state)},\"model\":{json_str(g_bake_model)},\"log\":{log_json},\"result\":{result}}",
+        http_status.OK)
+}
+
+// the loaded model's image form: which flavor is actually mapped (locks the matching config knobs)
+def private slot_flavor(s : ModelSlot) : string {
+    if (s.model.metal_blob) {
+        return "metal"
+    }
+    if (long_length(s.model.vkplan) > 0l) {
+        return "vulkan"
+    }
+    return s.model.image_map != null ? "planar" : ""
+}
+
+struct private OaiSlotImages {
+    model : string
+    path : string
+    flavor : string       // what THIS process mapped: planar | vulkan | metal | "" (raw gguf)
+    trimmed : bool
+    images : array<DlimImageInfo>
+}
+
+struct private OaiImagesResponse {
+    baking : string       // "" or the slot name a bake is running for
+    models : array<OaiSlotImages>
+}
+
+def private handle_images(var resp : HttpResponse?) : http_status {
+    var out = OaiImagesResponse(baking = g_bake_state == "running" ? g_bake_model : "")
+    out.models |> reserve(length(g_slots))
+    for (s in g_slots) {
+        var e = OaiSlotImages(model = s.name, path = s.path, flavor = slot_flavor(s),
+                              trimmed = s.model.planes_trimmed)
+        if (!empty(s.path)) {
+            e.images <- dlim_inventory(s.path)
+        }
+        out.models |> emplace(e)
+    }
+    let body = sprint_json(out, false)
+    delete out
+    return resp |> JSON(body, http_status.OK)
 }
 
 var private g_hardware_line = ""   // "<cpu> · N worker lanes · <gpu>" — composed once at init_server
@@ -1206,7 +1458,7 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     var idx = 0
     for (text in inputs) {
         let toks <- encode(cur_model(), text, true, false)
-        prompt_tokens += int64(length(toks))
+        prompt_tokens += long_length(toks)
         var vec = embed(cur_model(), text)
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
@@ -1287,7 +1539,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0) {
-    let np = int64(length(prompt))
+    let np = long_length(prompt)
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
@@ -1539,7 +1791,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
             bad_request(srv, writer, render_error)
             return
         }
-        let required = int64(length(prompt)) + (truncation == "auto" ? max_new : 1l)
+        let required = long_length(prompt) + (truncation == "auto" ? max_new : 1l)
         if (required <= cur_model().config.seq_len || truncation != "auto") {
             break
         }
@@ -1748,6 +2000,7 @@ struct private OaiSlotStats {
     holds_gpu : bool          // the slot whose VRAM state is armed (the GPU owner)
     backend : string          // requested: auto | cpu | gpu
     backend_effective : string
+    flavor : string           // mapped image form: planar | vulkan | metal | "" (raw gguf) — the page locks matching config knobs
     ctx : int64
     active : int64
     queued : int64
@@ -1845,6 +2098,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             name = s.name, is_default = s.is_default, is_active = i == g_active,
             holds_gpu = i == g_gpu_owner,
             backend = s.opts.backend, backend_effective = s.backend_effective,
+            flavor = slot_flavor(s),
             ctx = s.model.config.seq_len,
             active = n_active(s.sched), queued = n_queued(s.sched),
             admitted = s.sched.n_admitted, finished = s.sched.n_finished,
@@ -1931,7 +2185,7 @@ def private handle_streams(var resp : HttpResponse?) : http_status {
                 id = st.id, model = mname,
                 state = st.state == StreamState.prefilling ? "prefilling" : "decoding",
                 age_s = age_seconds(st.t_admit),
-                n_prompt = int64(length(st.prompt)), n_cached = st.n_cached,
+                n_prompt = long_length(st.prompt), n_cached = st.n_cached,
                 n_prefilled = st.n_prefilled, n_gen = st.n_gen, max_new = st.max_new,
                 ttft_ms = float(st.ttft_us) / 1000.0,
                 prompt_head = st.prompt_head, gen_tail = utf8_trim_partial_end(string(st.gen_tail_bytes))))
@@ -1940,7 +2194,7 @@ def private handle_streams(var resp : HttpResponse?) : http_status {
             out.streams |> push(OaiStreamInfo(
                 id = q.id, model = mname, state = "queued",
                 age_s = q.t_submit != 0l ? age_seconds(q.t_submit) : 0.0,
-                n_prompt = int64(length(q.prompt)), max_new = q.max_new))
+                n_prompt = long_length(q.prompt), max_new = q.max_new))
         }
         for (d in sch.recent_done) {
             out.streams |> push(OaiStreamInfo(
@@ -2587,6 +2841,15 @@ class OpenAiServer : HvWebServer {
         GET("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bench_get(resp)
         }
+        POST("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_bake_start(req, resp)
+        }
+        GET("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_bake_get(resp)
+        }
+        GET("/v1/images") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_images(resp)
+        }
         POST("/restart") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!g_shutdown_requested) {
                 to_log(
@@ -2662,6 +2925,9 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_bench_events = unsafe(channel_create())
     g_bench_state = "idle"
     g_bench_result_json = ""
+    g_bake_events = unsafe(channel_create())
+    g_bake_state = "idle"
+    g_bake_result_json = ""
     start_asr_worker_threads()
     if (empty(g_slots)) {
         to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first)\n")
@@ -2737,6 +3003,7 @@ def update_server() : bool {
     g_server->tick()   // drains queued handlers: requests parse + render + submit here
     drain_asr_events(g_server.server)
     drain_bench_events()
+    drain_bake_events()
     reap_disconnected(g_server.server)
     // serialized multi-model stepping: ONE scheduler step per tick, slots with work interleave
     // round-robin. Every step runs under ITS model's routing marks; the GPU tier follows a
@@ -2810,9 +3077,11 @@ def shutdown_server() {
     var asr_jobs = g_asr_jobs
     var asr_events = g_asr_events
     var bench_events = g_bench_events
+    var bake_events = g_bake_events
     g_asr_jobs = null
     g_asr_events = null
     g_bench_events = null
+    g_bake_events = null
     unsafe {
         if (asr_jobs != null) {
             asr_jobs |> channel_remove
@@ -2820,8 +3089,22 @@ def shutdown_server() {
         if (asr_events != null) {
             asr_events |> channel_remove
         }
+        // a still-running worker holds a channel ref, and channel_remove throws on outstanding
+        // refs — leave the channel to the worker (its exit release is safe on the live object;
+        // the worker can't be cancelled, its child process runs minutes) instead of aborting stop
         if (bench_events != null) {
-            bench_events |> channel_remove
+            if (g_bench_state == "running") {
+                to_log(LOG_WARNING, "dasllama-server: shutdown with a bench still running — channel left to the worker\n")
+            } else {
+                bench_events |> channel_remove
+            }
+        }
+        if (bake_events != null) {
+            if (g_bake_state == "running") {
+                to_log(LOG_WARNING, "dasllama-server: shutdown with a bake still running — channel left to the worker\n")
+            } else {
+                bake_events |> channel_remove
+            }
         }
     }
     delete g_bench_log

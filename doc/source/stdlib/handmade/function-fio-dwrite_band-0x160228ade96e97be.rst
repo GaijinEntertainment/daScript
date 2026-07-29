@@ -1,0 +1,1 @@
+Hand out the writer's own staging band so a producer can build bytes in place instead of building a buffer and appending a copy. ``avail`` receives the free space left in the current band; fill up to that many bytes and account for them with ``dwrite_commit``. Returns null on a dead writer.

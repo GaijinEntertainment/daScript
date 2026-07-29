@@ -6,6 +6,7 @@ module dasllama_math_vulkan shared public
 require dasllama/dasllama_math
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb + the q8/kq plane consts — the stride source
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_config  // DlimConfiguration — this module registers the vulkan source
 require dasllama/dasllama_par
 require dasllama/dasllama_vulkan_lens
 require vulkan
@@ -3993,6 +3994,8 @@ struct private GpuState {
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
+    dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
+    msr : int64              // maxStorageBufferRange — device-queried at init, config-supplied when dry
     @do_not_delete stacks : array<VkStack>
     // the resident driver's weight arenas, one per format present (see the arena section). Separate
     // from `stacks` on purpose: the two tiers never co-arm on one model, and the arena has no
@@ -4197,7 +4200,7 @@ def private find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
-def private make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false) : HostBuf {
+def private make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false; soft : bool = false) : HostBuf {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = storage
@@ -4212,7 +4215,19 @@ def private make_host_buf(bytes : int64; storage : bool; cached : bool = false; 
     let req = get_buffer_memory_requirements(g_gpu.device, b)
     let mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_host_mem(req.memoryTypeBits, cached))
-    var m <- allocate_memory(g_gpu.device, mai)
+    var ares = VkResult.SUCCESS
+    var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
+    if (ares != VkResult.SUCCESS) {
+        // soft callers (stream mirrors) degrade — the walk treats it as its budget stop
+        if (!soft) {
+            panic("dasLLAMA vulkan tier: pinned host alloc failed ({ares}, {bytes} bytes, type {mai.memoryTypeIndex})")
+        }
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: pinned mirror alloc declined ({ares}, {bytes} bytes, type {mai.memoryTypeIndex}) — streamed walk stops here\n")
+        unsafe {
+            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
+        }
+        return HostBuf()
+    }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
     var mapped : void? = null
     let mf : VkMemoryMapFlags
@@ -4302,11 +4317,174 @@ def private nonowning_buf(h : uint64) : Buffer {
     return b
 }
 
+// The coopmat-mode ladder, shared by vk_moe_init and the DlimConfiguration source — one
+// resolver, so the config's recorded mode can never drift from the mode the device runs.
+def private resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
+    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
+    var cmode = has_cm ? 3 : 0
+    if (has_cm) {
+        let mode = env_str("DASLLAMA_COOPMAT", "")
+        if (mode == "sdot4") {
+            cmode = 0
+        } elif (mode == "f16") {
+            cmode = 1
+        } elif (mode == "int8") {
+            cmode = 2
+        } elif (mode == "mm") {
+            cmode = 3
+        } elif (mode == "cm2" && has_cm2) {
+            cmode = 4
+        }
+    }
+    if (g_coopmat_mode_force >= 0) {
+        cmode = has_cm ? g_coopmat_mode_force : 0
+    }
+    if (cmode == 4 && !has_cm2) {
+        cmode = 3   // forced/requested cm2 without the extension: mm
+    }
+    return cmode
+}
+
+struct private VkHeapInfo {
+    budget : int64   // largest device-local heap's current budget (0 = no VK_EXT_memory_budget)
+    used : int64
+    size : int64
+}
+
+def private query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
+    var r = VkHeapInfo()
+    // heap SIZE needs no extension — only the live budget/usage ride VK_EXT_memory_budget
+    let has_budget = device_extension_available(phys, "VK_EXT_memory_budget")
+    var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
+    var mp2 = VkPhysicalDeviceMemoryProperties2()
+    if (has_budget) {
+        unsafe {
+            mp2.pNext = addr<void?>(mb)
+        }
+    }
+    vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
+    var best = -1
+    for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
+        if (!mp2.memoryProperties.memoryHeaps[i].flags.device_local) {
+            continue
+        }
+        // rank by live budget when the ext reports it, by raw size otherwise
+        if (best < 0) {
+            best = i
+        } elif (has_budget ? mb.heapBudget[i] > mb.heapBudget[best]
+                : mp2.memoryProperties.memoryHeaps[i].size > mp2.memoryProperties.memoryHeaps[best].size) {
+            best = i
+        }
+    }
+    if (best >= 0) {
+        r.size = int64(mp2.memoryProperties.memoryHeaps[best].size)
+        if (has_budget && mb.heapBudget[best] > 0ul) {
+            r.budget = int64(mb.heapBudget[best])
+            r.used = int64(mb.heapUsage[best])
+        }
+    }
+    return r
+}
+
+// The pre-carve weight cap, shared by vk_moe_init and the DlimConfiguration source. Env wins
+// outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); auto derives from heap SIZE, a
+// hardware constant — same number every run. Transient pressure is the memprio shield's job.
+def private resolve_weight_cap(heap : VkHeapInfo) : int64 {
+    let vram_mb = gpu_want_vram_mb()
+    if (vram_mb > 0l) {
+        return vram_mb * 1_000_000l
+    }
+    if (has_env_variable("DASLLAMA_GPU_VRAM_MB")) {
+        return WEIGHT_CAP
+    }
+    var cap = WEIGHT_CAP
+    if (heap.size > 0l) {
+        cap = clamp(heap.size - VRAM_RESERVE, 0l, cap)
+    }
+    return cap
+}
+
+// The stream-slot carve, derived AT READ TIME — g_gpu.weight_budget stores the UNCARVED cap.
+// Init-time carving was timing-dependent (the expert_q8n probe can init the device BEFORE the
+// loader reports its slot need), which made a dry bake's plan diverge from the live walk's.
+def private carved_budget : int64 {
+    var r = g_gpu.weight_budget
+    if (gpu_want_moe_stream() != 0l) {
+        let need = moe_gpu_stream_need()
+        if (need > 0l) {
+            r -= 2l * need
+        } elif (gpu_want_moe_stream() > 0l) {
+            r -= STREAM_RESERVE
+        }
+    }
+    return max(r, 0l)
+}
+
+var private g_vk_dry_want = false
+var private g_vk_dry_cfg = DlimVulkanConfig()
+
+// fill the env-else-programmatic wants half of a config section (the caps half is the
+// device's / the dry config's) — shared by the live source and the dry arm's verify
+def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
+    v.moe_layers = gpu_want_moe_layers()
+    v.moe_stream = gpu_want_moe_stream()
+    v.dn = gpu_want_dn()
+    v.attn = gpu_want_attn()
+    v.dnd = gpu_want_dnd()
+    v.shexp = gpu_want_shexp()
+    v.qkv = gpu_want_qkv()
+    v.cls = gpu_want_cls_upload()   // the WALK's gate, not the arm-intent (they had split defaults)
+    v.dense = gpu_want_dense()
+    v.dense_attn = gpu_want_dense_attn()
+    v.dense_shexp = gpu_want_dense_shexp()
+    v.trim = env_flag("DASLLAMA_TRIM", false)
+}
+
+//! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic
+//! against the config's numbers, gathers collect into the bake blob, and no Vulkan call is
+//! made — no instance, no device, no VRAM. The converter's `-f vulkan` rail.
+def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
+    // the walk's gates read env-else-programmatic wants — a bake whose config disagrees with
+    // them would write an image whose identity lies about its own plan. Fail closed, name both.
+    var w = v
+    vk_dlim_wants_fill(w)
+    w.trim = v.trim   // trim shapes the SAVE, not the walk — the converter's flag decides it
+    if (dlim_vulkan_tag(w) != dlim_vulkan_tag(v)) {
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: dry-bake config disagrees with this process' wants (set the DASLLAMA_GPU_* knobs to match)\n  config {dlim_vulkan_tag(v)}\n  wants  {dlim_vulkan_tag(w)}\n")
+        return false
+    }
+    g_vk_dry_want = true
+    g_vk_dry_cfg = v
+    set_moe_gpu_layer_count(v.moe_layers)
+    if (!moe_gpu_tier_installed()) {
+        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+    }
+    return true
+}
+
 def private vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
     }
     if (g_gpu != null) {
+        return true
+    }
+    if (g_vk_dry_want) {
+        // DlimVulkanConfig numbers feed the SAME arithmetic — a dry bake cannot drift from live
+        if (g_vk_dry_cfg.subgroup_size < 32) {
+            to_log(LOG_ERROR, "dasLLAMA vulkan tier: config subgroupSize {g_vk_dry_cfg.subgroup_size} < 32 — bake declined\n")
+            g_init_failed = true
+            return false
+        }
+        g_gpu = new GpuState()
+        g_gpu.dry = true
+        g_gpu.coopmat_mode = g_vk_dry_cfg.coopmat_mode
+        g_gpu.has_coopmat = g_vk_dry_cfg.coopmat_mode > 0
+        g_gpu.has_coopmat2 = g_vk_dry_cfg.coopmat_mode == 4
+        g_gpu.rows_per_wg = int64((WG_X + uint(g_vk_dry_cfg.subgroup_size) - 1u) / uint(g_vk_dry_cfg.subgroup_size))
+        g_gpu.msr = g_vk_dry_cfg.max_storage_range
+        g_gpu.weight_budget = g_vk_dry_cfg.vram_mb * 1_000_000l
+
         return true
     }
     g_init_failed = true   // cleared only on full success
@@ -4327,28 +4505,7 @@ def private vk_moe_init : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
-    g_gpu.coopmat_mode = g_gpu.has_coopmat ? 3 : 0
-    if (g_gpu.has_coopmat) {
-        let mode = env_str("DASLLAMA_COOPMAT", "")
-        if (mode == "sdot4") {
-            g_gpu.coopmat_mode = 0
-        } elif (mode == "f16") {
-            g_gpu.coopmat_mode = 1
-        } elif (mode == "int8") {
-            g_gpu.coopmat_mode = 2
-        } elif (mode == "mm") {
-            g_gpu.coopmat_mode = 3
-        } elif (mode == "cm2" && g_gpu.has_coopmat2) {
-            g_gpu.coopmat_mode = 4
-        }
-    }
-    if (g_coopmat_mode_force >= 0) {
-        g_gpu.coopmat_mode = g_gpu.has_coopmat ? g_coopmat_mode_force : 0
-    }
-    if (g_gpu.coopmat_mode == 4 && !g_gpu.has_coopmat2) {
-        g_gpu.coopmat_mode = 3   // forced/requested cm2 without the extension: mm
-    }
+    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
     if (g_gpu.has_coopmat && env_flag("DASLLAMA_VK_XFERQ", true)
@@ -4405,49 +4562,22 @@ def private vk_moe_init : bool {
         return false
     }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
-    // env wins outright (=0 pins WEIGHT_CAP — the misreporting-driver hatch); else live budget - reserve
-    g_gpu.weight_budget = WEIGHT_CAP
-    let vram_mb = gpu_want_vram_mb()
-    let vram_override = vram_mb > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
-    if (vram_mb > 0l) {
-        g_gpu.weight_budget = vram_mb * 1_000_000l
+    var pdp : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
+    g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
+    // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
+    let heap = query_heap_info(g_gpu.phys)
+    g_gpu.weight_budget = resolve_weight_cap(heap)
+    if (heap.budget > 0l) {
+        let vram_override = gpu_want_vram_mb() > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
+        // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
+        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - 2_147_483_648l)
+        if (vram_override && g_gpu.weight_budget > cliff) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
+        }
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
-    if (device_extension_available(g_gpu.phys, "VK_EXT_memory_budget")) {
-        var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
-        var mp2 = VkPhysicalDeviceMemoryProperties2()
-        unsafe {
-            mp2.pNext = addr<void?>(mb)
-        }
-        vkGetPhysicalDeviceMemoryProperties2(g_gpu.phys, mp2)
-        var best = -1
-        for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
-            if (mp2.memoryProperties.memoryHeaps[i].flags.device_local
-                    && (best < 0 || mb.heapBudget[i] > mb.heapBudget[best])) {
-                best = i
-            }
-        }
-        if (best >= 0 && mb.heapBudget[best] > 0ul) {
-            let safe_cap = max(int64(mb.heapBudget[best]) - VRAM_RESERVE, 0l)
-            // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
-            let cliff = min(safe_cap, int64(mp2.memoryProperties.memoryHeaps[best].size) - 2_147_483_648l)
-            if (!vram_override) {
-                g_gpu.weight_budget = min(safe_cap, g_gpu.weight_budget)
-            } elif (g_gpu.weight_budget > cliff) {
-                to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
-            }
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {int64(mb.heapBudget[best]) / 1000000l} MB (used {int64(mb.heapUsage[best]) / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
-        }
-    }
-    // stream-slot carve: exact loader-reported need, else the legacy constant (direct-upload paths)
-    if (gpu_want_moe_stream() != 0l) {
-        let need = moe_gpu_stream_need()
-        if (need > 0l) {
-            g_gpu.stream_reserve = 2l * need
-        } elif (gpu_want_moe_stream() > 0l) {
-            g_gpu.stream_reserve = STREAM_RESERVE
-        }
-        g_gpu.weight_budget = max(g_gpu.weight_budget - g_gpu.stream_reserve, 0l)
-    }
+
     // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
     if (env_flag("DASLLAMA_VK_REBAR", true)) {
         var rmp : VkPhysicalDeviceMemoryProperties
@@ -4632,7 +4762,8 @@ def private stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws
 def private make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // q8n has no scale plane (wscap 0) — floor the buffer so its descriptor slot stays valid
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
-                     wqbuf = make_device_buf(wqcap, xfer_shared), wsbuf = make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
+                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -4666,17 +4797,163 @@ def private ensure_gemv_scratch(si : int) {
     g_gpu.stacks[si].gemv_made = true
 }
 
-// stream arm: keep the gathered device-layout planes in a pinned host mirror (host-visible
-// memory the copy engine DMA-streams into a slot per prefill). No VRAM spent here.
+// import support is spec-gray per driver: one decline disables imports for the process (say WHY
+// once) — every later stack goes straight to the pinned copy instead of churning failed vk calls
+def private vk_import_declined(why : string) {
+    if (!g_vk_import_declined_said) {
+        g_vk_import_declined_said = true
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: mapped-image import declined ({why}) — pinned mirror copies\n")
+    }
+}
+
+// P2: import a 4KB-aligned mapped-file window as a transfer_src buffer (VK_EXT_external_memory_host).
+// buf == 0 = declined, the caller falls back to the pinned copy. NVIDIA/Windows refuses FILE-BACKED
+// pages in BOTH protections while anon imports succeed (full 2x2: _vk_import_probe.das, 2026-07-28)
+def private make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
+    let hb = HostBuf()
+    if (ptr == null || bytes <= 0l || !device_extension_available(g_gpu.phys, "VK_EXT_external_memory_host")) {
+        return hb
+    }
+    let algn = int64(external_memory_host_min_alignment(g_gpu.phys))
+    if (algn <= 0l || int64(intptr(ptr)) % algn != 0l) {
+        return hb
+    }
+    // the round-up stays inside the mapping: windows start 4KB-aligned, the file is 16KB-padded
+    let sz = (bytes + algn - 1l) / algn * algn
+    var ht : VkExternalMemoryHandleTypeFlags
+    ht.host_allocation_ext = true
+    var hpp = VkMemoryHostPointerPropertiesEXT()
+    let hres = vkGetMemoryHostPointerPropertiesEXT(dev_raw(), ht, ptr, hpp)
+    if (hres != VkResult.SUCCESS) {
+        vk_import_declined("vkGetMemoryHostPointerPropertiesEXT {hres}")
+        return hb
+    }
+    var emb = VkExternalMemoryBufferCreateInfo()
+    emb.handleTypes = ht
+    var bci : BufferCreateInfo
+    bci.size = uint64(sz)
+    bci.usage.transfer_src = true
+    if (g_gpu.xfer_fam >= 0) {
+        // same CONCURRENT sharing the pinned mirrors use (transfer-queue fills + compute heat slices)
+        bci.sharingMode = VkSharingMode.CONCURRENT
+        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    }
+    unsafe {
+        bci.next = addr<void?>(emb)
+    }
+    var cres = VkResult.SUCCESS
+    var b <- create_buffer(g_gpu.device, bci, unsafe(addr(cres)))   // deliberately never finalized (make_host_buf's rule)
+    if (cres != VkResult.SUCCESS) {
+        vk_import_declined("vkCreateBuffer {cres}")
+        return hb
+    }
+    let req = get_buffer_memory_requirements(g_gpu.device, b)
+    let usable = hpp.memoryTypeBits & req.memoryTypeBits
+    if (usable == 0u || int64(req.size) > sz) {
+        unsafe {
+            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
+        }
+        vk_import_declined(usable == 0u ? "no usable memory type" : "buffer wants {req.size} bytes over a {sz} byte window")
+        return hb
+    }
+    // prefer host_cached NON-device-local: the lowest usable bit can be the ReBAR heap (multi-GB imports exhaust VRAM), and imported file pages are cached RAM — an attribute mismatch is a driver refusal
+    var mp : VkPhysicalDeviceMemoryProperties
+    vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, mp)
+    var ti = 0u
+    while ((usable & (1u << ti)) == 0u) {
+        ti++
+    }
+    var plain = -1
+    var cached = -1
+    for (i in range(int(mp.memoryTypeCount))) {
+        let fl = mp.memoryTypes[i].propertyFlags
+        if ((usable & (1u << uint(i))) != 0u && fl.host_visible && !fl.device_local) {
+            plain = plain < 0 ? i : plain
+            cached = cached < 0 && fl.host_cached ? i : cached
+        }
+    }
+    if (cached >= 0) {
+        ti = uint(cached)
+    } elif (plain >= 0) {
+        ti = uint(plain)
+    }
+    var imp = VkImportMemoryHostPointerInfoEXT()
+    imp.handleType = ht
+    imp.pHostPointer = ptr
+    var mai = MemoryAllocateInfo(allocationSize = uint64(sz), memoryTypeIndex = ti)
+    unsafe {
+        mai.next = addr<void?>(imp)
+    }
+    var ares = VkResult.SUCCESS
+    var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
+    if (ares != VkResult.SUCCESS) {
+        unsafe {
+            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
+        }
+        vk_import_declined("vkAllocateMemory {ares}, type {ti} of usable {usable} ({mp.memoryTypes[int(ti)].propertyFlags}), {sz} bytes")
+        return hb
+    }
+    var bres = VkResult.SUCCESS
+    bind_buffer_memory(g_gpu.device, b, m, 0ul, unsafe(addr(bres)))
+    if (bres != VkResult.SUCCESS) {
+        unsafe {
+            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(m._vk), null)
+            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
+        }
+        vk_import_declined("vkBindBufferMemory {bres}")
+        return hb
+    }
+    g_gpu.host_mem |> insert(b._vk, m._vk)
+    return HostBuf(buf = b._vk, mem = m._vk, mapped = ptr, bytes = bytes)
+}
+
+// stream arm: pinned host mirror the copy engine DMAs into a slot per prefill (no VRAM spent); P2: a flavor load IMPORTS the gather's mapped-blob window instead — zero pinned RAM, the page cache is the mirror
 def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, rows : int64; fmt : int) : bool {
     let pb = stack_plane_bytes(n, rows, fmt)
-    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws,
-                         hwq = make_host_buf(pb.wq, false, [xfer_shared = true]),
-                         hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true]))
-    unsafe {
-        par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
-        if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
-            par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
+    if (env_flag("DASLLAMA_VK_IMPORT", true) && !g_vk_import_declined_said) {
+        let win = moe_gpu_slice_window(woff, fmt)
+        if (win.wq != null && win.wqb == pb.wq && (pb.ws <= 0l || (win.ws != null && win.wsb == pb.ws))) {
+            var iq = make_imported_buf(win.wq, pb.wq)
+            if (iq.buf != 0ul) {
+                // ws: import the real window, or a tiny pinned dummy for the descriptor floor (q8n)
+                let is_ = pb.ws > 0l ? make_imported_buf(win.ws, pb.ws) : make_host_buf(64l, false, [xfer_shared = true])
+                if (is_.buf != 0ul) {
+                    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt,
+                                         wqbytes = pb.wq, wsbytes = pb.ws, hwq = iq, hws = is_)
+                    if (length(g_gpu.stream_stacks) % 3 == 2) {
+                        g_gpu.stream_max_dn_wq = max(g_gpu.stream_max_dn_wq, pb.wq)
+                        g_gpu.stream_max_dn_ws = max(g_gpu.stream_max_dn_ws, pb.ws)
+                    } else {
+                        g_gpu.stream_max_gu_wq = max(g_gpu.stream_max_gu_wq, pb.wq)
+                        g_gpu.stream_max_gu_ws = max(g_gpu.stream_max_gu_ws, pb.ws)
+                    }
+                    g_gpu.stream_stacks |> emplace(ss)
+                    if (!g_vk_import_said) {
+                        g_vk_import_said = true
+                        to_log(LOG_INFO, "dasLLAMA vulkan tier: stream mirrors IMPORT the mapped image (external_memory_host) — zero pinned copies\n")
+                    }
+                    return true
+                }
+                destroy_host_buf(iq)
+            }
+        }
+    }
+    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws)
+    if (!g_gpu.dry) {
+        ss.hwq = make_host_buf(pb.wq, false, [xfer_shared = true, soft = true])
+        if (ss.hwq.buf == 0ul) {
+            return false   // pinned-mirror stop: the walk rolls the partial triple back and breaks
+        }
+        ss.hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true, soft = true])
+        if (ss.hws.buf == 0ul) {
+            destroy_host_buf(ss.hwq)
+            return false
+        }
+        unsafe {
+            par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
+            if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
+                par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
+            }
         }
     }
     if (length(g_gpu.stream_stacks) % 3 == 2) {   // walk order gate/up/down: this one is a down
@@ -4690,6 +4967,27 @@ def private vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int
     return true
 }
 
+// The resident-accept arithmetic, shared by the upload path and the slice replay's would-accept
+// probe — a divergent copy would desync the baked plan at the refusal boundary.
+// 0 = accept, 1 = VRAM budget, 2 = descriptor capacity.
+def private vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
+    let pb = stack_plane_bytes(n, rows, fmt)
+    if (g_gpu.resident_bytes + pb.wq + pb.ws > carved_budget()) {
+        return 1
+    }
+    return length(g_gpu.stacks) >= MAX_STACKS ? 2 : 0
+}
+
+//! MoeGpuWouldAcceptFn: would the tier accept this stack right now? Pure arithmetic, no side
+//! effects — the slice replay uses it to distinguish a refusal boundary (the walk attempts a
+//! gather the bake refused, so it is NOT in the plan) from real plan divergence.
+def vk_moe_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool {
+    if (g_gpu == null) {
+        return true   // tier not up: claim accept so a mismatch reads as real divergence
+    }
+    return stream || vk_moe_resident_verdict(n, rows, fmt) == 0
+}
+
 //! MoeGpuUploadFn: upload one weight stack ([rows x n] at element offset woff) from the loader's
 //! gathered row-major planes. stream = pinned host mirror for per-prefill DMA instead of VRAM.
 def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool {
@@ -4699,20 +4997,23 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
     if (stream) {
         return vk_moe_stream_stack(wq, ws, woff, n, rows, fmt)
     }
-    let pb = stack_plane_bytes(n, rows, fmt)
-    let wqbytes = pb.wq
-    let wsbytes = pb.ws
-    if (g_gpu.resident_bytes + wqbytes + wsbytes > g_gpu.weight_budget) {
+    let verdict = vk_moe_resident_verdict(n, rows, fmt)
+    if (verdict == 1) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: VRAM budget reached at {g_gpu.resident_bytes} bytes\n")
         return false
     }
-    if (length(g_gpu.stacks) >= MAX_STACKS) {
+    if (verdict == 2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks\n")
         return false
     }
+    let pb = stack_plane_bytes(n, rows, fmt)
+    let wqbytes = pb.wq
+    let wsbytes = pb.ws
     let si = make_stack_shell(woff, rows * n, fmt, wqbytes, wsbytes)
-    upload_region(g_gpu.stacks[si].wqbuf, wq, wqbytes)
-    upload_region(g_gpu.stacks[si].wsbuf, ws, wsbytes)
+    if (!g_gpu.dry) {
+        upload_region(g_gpu.stacks[si].wqbuf, wq, wqbytes)
+        upload_region(g_gpu.stacks[si].wsbuf, ws, wsbytes)
+    }
     g_gpu.resident_bytes += wqbytes + wsbytes
     return true
 }
@@ -4723,8 +5024,10 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
     if (stream) {
         for (_i in range(n)) {
             let k = length(g_gpu.stream_stacks) - 1
-            destroy_host_buf(g_gpu.stream_stacks[k].hwq)
-            destroy_host_buf(g_gpu.stream_stacks[k].hws)
+            if (!g_gpu.dry) {
+                destroy_host_buf(g_gpu.stream_stacks[k].hwq)
+                destroy_host_buf(g_gpu.stream_stacks[k].hws)
+            }
             g_gpu.stream_stacks |> resize(k)
         }
         return
@@ -4734,8 +5037,10 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
         assert(!g_gpu.stacks[k].gemv_made && !g_gpu.stacks[k].batch_made && !g_gpu.stacks[k].cls_made,
             "dasLLAMA vulkan tier: dropping a stack with live dispatch state")
         g_gpu.resident_bytes -= g_gpu.stacks[k].wqbytes + g_gpu.stacks[k].wsbytes
-        destroy_device_buf(g_gpu.stacks[k].wqbuf)
-        destroy_device_buf(g_gpu.stacks[k].wsbuf)
+        if (!g_gpu.dry) {
+            destroy_device_buf(g_gpu.stacks[k].wqbuf)
+            destroy_device_buf(g_gpu.stacks[k].wsbuf)
+        }
         g_gpu.stacks |> resize(k)
     }
 }
@@ -4745,6 +5050,14 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
 def vk_drop_model_state {
     if (g_gpu == null) {
+        return
+    }
+    if (g_gpu.dry) {
+        // dry bake owns no device objects — reset the accounting shells only
+        g_gpu.stacks |> clear()
+        g_gpu.stream_stacks |> clear()
+        g_gpu.arenas |> clear()
+        g_gpu.resident_bytes = 0l
         return
     }
     vk_check(vkQueueWaitIdle(g_gpu.queue), null)
@@ -4928,15 +5241,13 @@ def private arena_reserve(fmt : int; cap_blocks : int64) : bool {
     // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
     let sbytes = max(cap_blocks * bb.ws, 64l)
     // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
-    var lp : VkPhysicalDeviceProperties
-    vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
-    let shard_cap = int64(lp.limits.maxStorageBufferRange)
+    let shard_cap = g_gpu.msr
     if (qbytes > shard_cap || sbytes > shard_cap) {
         to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
         return false
     }
     var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
-                     wqbuf = make_device_buf(qbytes), wsbuf = make_device_buf(sbytes))
+                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(qbytes), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sbytes))
     g_gpu.arenas |> insert(fmt, a)
     return true
 }
@@ -4956,9 +5267,11 @@ def private arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; f
         let blk = a.blocks
         a.blocks += need
         let bb = arena_block_bytes(fmt)
-        upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
-        if (bb.ws > 0l) {
-            upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+        if (!g_gpu.dry) {
+            upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
+            if (bb.ws > 0l) {
+                upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+            }
         }
         return blk
     }
@@ -5428,6 +5741,9 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} > {AR_MAX_DIM} or head_size {head_size} > 256 exceeds the workgroup row slabs\n")
         return false
     }
+    if (g_gpu.dry) {
+        return true   // guards above ARE the plan decision; everything below is device state
+    }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
                  hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,
@@ -5479,6 +5795,9 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
 //! rms_final], dim floats each, exactly the layout the layer w_offs index. Under qk_norm the
 //! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
 def vk_rdec_upload_norms(norms : array<float>) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
     upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), long_length(norms) * 4l)
     // the fused-rail constants: eps/ascale past the norm rows, and (under qk_norm) a copy of the
@@ -5505,6 +5824,9 @@ def vk_rdec_upload_norms(norms : array<float>) {
 //! once per layer after prepare. `w_ffn_off`/`w_next_off` are the rms_ffn[l] and rms_att[l+1]
 //! (or rms_final for the last layer) offsets in the norms buffer (dim-element units).
 def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_set_layer before prepare")
     while (long_length(g_rd.layers) <= l) {
         g_rd.layers |> emplace(RLayer())
@@ -5623,6 +5945,9 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
 //! Register the classifier plane (arena block + format) and build the prologue / final-norm / cls
 //! sets. Call after all layers are set.
 def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
     assert(g_rd != null, "vk_rdec_set_cls before prepare")
     let dim = g_rd.dim
     let vocab = g_rd.vocab
@@ -8420,7 +8745,7 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
     let pb3 = stack_plane_bytes(n, nfe, f3)
     let pb2 = stack_plane_bytes(nfe, n, f2)
     let per_slot = pb1.wq + pb1.ws + pb3.wq + pb3.ws + pb2.wq + pb2.ws
-    let c = min(want, (g_gpu.weight_budget - g_gpu.resident_bytes) / per_slot)
+    let c = min(want, (carved_budget() - g_gpu.resident_bytes) / per_slot)
     if (c <= 0l) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: heat cache skips layer {l} (VRAM budget)\n")
         g_gpu.heat_pools[l] <- pool
@@ -8774,6 +9099,31 @@ def vk_moe_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float con
 
 // ===== registration =====
 
+var private g_vk_import_said = false   // one import proof-line per process
+var private g_vk_import_declined_said = false
+
+// MoeGpuUnmapNotifyFn: a model's mapping is about to unmap — release imported device memory
+// over it FIRST (reading through a freed import faults the device). Whole-model teardown: the
+// single-owner tier's stream mirrors all belong to the unmapping model when any hit the range.
+def private vk_unmap_notify(base : void?; bytes : uint64) {
+    if (g_gpu == null || g_gpu.dry || base == null) {
+        return
+    }
+    var hit = false
+    let b0 = intptr(base)
+    for (ss in g_gpu.stream_stacks) {
+        let p = intptr(ss.hwq.mapped)
+        if (p >= b0 && p < b0 + bytes) {
+            hit = true
+            break
+        }
+    }
+    if (hit) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: model unmapping — dropping imported stream mirrors first\n")
+        vk_drop_model_state()
+    }
+}
+
 var private g_vk_probed = false
 var private g_vk_available = false
 var private g_vk_why = ""   // why the device probe said no — discarded before, which made it silent
@@ -8828,7 +9178,7 @@ def private vk_resident_bytes : int64 => g_gpu != null ? g_gpu.resident_bytes : 
 // The resident driver sizes a whole model against these BEFORE uploading anything. Probing the
 // device here (rather than reporting 0 until something else arms it) is what lets the gate answer
 // "would this fit?" on a cold tier.
-def private vk_weight_budget : int64 => vk_moe_init() ? g_gpu.weight_budget : 0l
+def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -8886,18 +9236,49 @@ def vulkan_moe_gpu_arm : bool {
     return true
 }
 
-// the vulkan flavor's config identity. ENV-OR-AUTO knobs only — resolving them (vk_moe_init)
-// would carve the stream reserve BEFORE the loader reports the model's slot need (518ae164a);
-// "auto" resolves deterministically per box and the image is local, so the identity is stable.
-def private vk_bake_tag : string {
+// Fill the caps-derived half of the vulkan config section from a physical device. Phys-level
+// queries only — vk_moe_init stays untouched, so the stream-reserve carve still happens AFTER
+// the loader reports the model's slot need (518ae164a).
+def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
+    let has_cm = cooperative_matrix_supported(phys)
+    let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
+    v.coopmat_mode = resolve_coopmat_mode(has_cm, has_cm2)
+    v.expert_q8n = v.coopmat_mode == 4
+    v.subgroup_size = int(subgroup_properties(phys).subgroupSize)
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    v.max_storage_range = int64(props.limits.maxStorageBufferRange)
+    v.vram_mb = resolve_weight_cap(query_heap_info(phys)) / 1_000_000l
+}
+
+// The DlimConfiguration vulkan source — RESOLVED values (the old tag folded raw env strings,
+// so "auto" hid device-derived byte differences and a moving heap budget).
+def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
+    if (g_vk_dry_want) {
+        // an offline bake IS its config — echo it, never probe (there may be no device at all)
+        v = g_vk_dry_cfg
+        return true
+    }
     if (!vulkan_moe_gpu_arm()) {
+        return false
+    }
+    vk_dlim_wants_fill(v)
+    if (g_gpu != null) {
+        vk_caps_fill(g_gpu.phys, v)
+    } else {
+        var inscope instance <- create_instance("dasLLAMA dlim config", make_api_version(1u, 3u, 0u))
+        volkLoadInstance(boost_value_to_vk(instance))
+        vk_caps_fill(select_physical_device(instance), v)
+    }
+    return true
+}
+
+def private vk_bake_tag : string {
+    var v : DlimVulkanConfig
+    if (!vk_dlim_source(v)) {
         return ""
     }
-    let cm = env_str("DASLLAMA_COOPMAT", "auto")
-    let vb = env_str("DASLLAMA_GPU_VRAM_MB", "auto")
-    return ("m{cm} b{vb}"
-        + " l{gpu_want_moe_layers()} s{gpu_want_moe_stream()}"
-        + " r{gpu_want_dn() ? 1 : 0}{gpu_want_attn() ? 1 : 0}{gpu_want_dnd() ? 1 : 0}{gpu_want_shexp() ? 1 : 0}{gpu_want_qkv() ? 1 : 0}{gpu_want_cls() ? 1 : 0}")
+    return dlim_vulkan_tag(v)
 }
 
 [init]
@@ -8907,6 +9288,10 @@ def dasllama_math_vulkan_register() {
         needs_repack = false, priority = -1, available = @@vulkan_backend_available))
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
     set_moe_gpu_bake_tag(@@vk_bake_tag)
+    set_dlim_vulkan_source(@@vk_dlim_source)
+    set_moe_gpu_dry_bake_arm(@@vulkan_dry_bake_arm)
+    set_moe_gpu_unmap_notify(@@vk_unmap_notify)
+    set_moe_gpu_would_accept_fn(@@vk_moe_would_accept)
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)

@@ -67,7 +67,10 @@ struct PtyProcessGuard {
 
 TEST_CASE("terminal: native PTY is a raw byte transport") {
 #if defined(_WIN32)
-    const int integration_timeout_ms = 30000;
+    // 120s, not 30s: Windows PowerShell's cold start inside ConPTY on a loaded CI runner
+    // (pwsh absent -> powershell.exe, profile-less init) has been observed past 30s — the
+    // timeout is a flake guard, real transport breakage still fails every REQUIRE below
+    const int integration_timeout_ms = 120000;
     PtyProcessOptions options;
     options.columns = 40;
     options.rows = 10;

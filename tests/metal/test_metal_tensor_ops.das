@@ -200,6 +200,19 @@ def test_tensor_ops(t : T?) {
                     feint("Metal-4 tensor ops unavailable (needs macOS 26 / MSL 4.0); GPU compare skipped\n")
                     return
                 }
+                // macOS-26 CI runners pass the SDK probe above, but their PARAVIRTUAL device
+                // cannot lower cooperative tensors — pipeline builds fail with the
+                // "deferred-static-alloca-size" signature. That exact signature is a capability
+                // skip; any other compile error still fails loudly in the loop below.
+                var perr0 : string
+                var pso0 = pipeline_from_source(dev, tmm_bf16_msl, tmm_bf16_msl_entry, false, perr0)
+                if (pso0 == null && find(perr0, "deferred-static-alloca-size") >= 0) {
+                    feint("Metal-4 cooperative tensors unsupported by this device (paravirtual runner); GPU compare skipped\n")
+                    return
+                }
+                if (pso0 != null) {
+                    metal_release(pso0)
+                }
                 var queue = metal_new_command_queue(dev)
                 var bxa = buf_upload(dev, oracle.xa)
                 var bwb = buf_upload(dev, oracle.wb)

@@ -305,7 +305,9 @@ def run_capture(cmd : string; first_line : bool) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
-            out = fread_to_eof(f)
+            if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
+                out = fread_to_eof(f)
+            }
         }
     }
     out = strip(out)
@@ -321,8 +323,22 @@ def run_capture(cmd : string; first_line : bool) : string {
 // The running daslang's version, via the box's binary (DASLANG_BIN, default bin/daslang from the
 // repo-root cwd these tools run in). Takes the last token of the first --version line ("0.6.3").
 def das_version() : string {
-    let bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
-    let line = run_capture("{bin} --version", true)
+    // shell-free spawn (fio's run_and_capture → popen_argv), so no cmd and no quote/option traps;
+    // CreateProcess still wants backslashes in the program path (probe-verified: `bin/daslang`
+    // fails to spawn, `bin\daslang` runs), hence the normalize
+    var bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
+    if (is_windows()) {
+        bin = replace(bin, "/", "\\")
+    }
+    var out = ""
+    if (run_and_capture([bin, "--version"], out) != 0) {
+        return "unknown"
+    }
+    var line = strip(out)
+    let nl = find(line, "\n")
+    if (nl >= 0) {
+        line = slice(line, 0, nl)
+    }
     let toks <- split(line, " ")
     return empty(toks) ? "unknown" : toks[length(toks) - 1]
 }
@@ -436,15 +452,18 @@ def private platform_ram_gb() : int {
     }
     let gib = 1024.0 * 1024.0 * 1024.0
     if (is_windows()) {
-        // wmic emits "TotalPhysicalMemory=68632934400"
-        let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value", false)
+        // wmic emits "TotalPhysicalMemory=68632934400"; clean Windows 11 24H2+ installs ship
+        // without wmic (it survives in-place upgrades), so fall through to CIM when it yields
+        // nothing — and 2>nul keeps the miss off the console
+        let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value 2>nul", false)
         for (ln in split(raw, "\n")) {
             let i = find(ln, "=")
             if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
                 return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
             }
         }
-        return 0
+        let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"", true)
+        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
     }
     if (is_macos()) {
         return int(to_float(run_capture("sysctl -n hw.memsize", true)) / gib + 0.5)
@@ -473,20 +492,55 @@ def private line_value(raw, key : string) : string {
     return ""
 }
 
+// display-adapter names that belong to a virtual/remote stack (Parsec, RDP, Hyper-V, VMware,
+// Citrix, the driverless fallback), not the physical GPU; matched case-insensitively
+def private is_virtual_gpu(name : string) : bool {
+    let low = to_lower(name)
+    for (marker in fixed_array("virtual", "remote display", "basic display", "hyper-v", "vmware", "citrix")) {
+        if (find(low, marker) >= 0) {
+            return true
+        }
+    }
+    return false
+}
+
+// first non-virtual adapter, else the first at all — remote-desktop stacks enumerate their
+// virtual display ahead of the physical GPU
+def private pick_gpu_name(names : array<string>) : string {
+    for (name in names) {
+        if (!is_virtual_gpu(name)) {
+            return name
+        }
+    }
+    return empty(names) ? "" : names[0]
+}
+
 def private platform_gpu() : string {
     let ov = get_env_variable("DASLLAMA_GPU_NAME")
     if (!empty(ov)) {
         return ov
     }
     if (is_windows()) {
-        let raw = run_capture("wmic path win32_VideoController get name /value", false)
+        // wmic emits "Name=..." lines where present; clean Windows 11 24H2+ installs ship without
+        // it (survives in-place upgrades), so fall through to the same probe via CIM
+        var inscope names : array<string>
+        let raw = run_capture("wmic path win32_VideoController get name /value 2>nul", false)
         for (ln in split(raw, "\n")) {
             let i = find(ln, "Name=")
             if (i >= 0) {
-                return strip(slice(ln, i + length("Name=")))
+                names |> push(strip(slice(ln, i + length("Name="))))
             }
         }
-        return ""
+        if (empty(names)) {
+            let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController).Name\"", false)
+            for (ln in split(ps, "\n")) {
+                let name = strip(ln)
+                if (!empty(name)) {
+                    names |> push(name)
+                }
+            }
+        }
+        return pick_gpu_name(names)
     }
     if (is_macos()) {
         let raw = run_capture("system_profiler SPDisplaysDataType", false)
@@ -1068,9 +1122,15 @@ struct LlamaBenchRow {
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
 //! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
 def run_llama_bench(cmd : string; var rows : array<LlamaBenchRow>) : bool {
+    // _popen hands the string to `cmd /c` verbatim; a command that starts with a quote and
+    // contains more quotes loses its first and last quote to cmd's strip rule (`cmd /?`), breaking
+    // the binary path — one extra outer pair is the documented workaround (safe either way).
+    // Shell-free popen_argv (fio's run_and_capture) would sidestep cmd, but callers hand us a
+    // full shell string here
+    let shell = is_windows() ? "\"{cmd}\"" : cmd
     var out = ""
     unsafe {
-        popen(cmd) $(f) {
+        popen(shell) $(f) {
             if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
                 out = fread_to_eof(f)
             }

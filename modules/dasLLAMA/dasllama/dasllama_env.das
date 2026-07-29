@@ -229,6 +229,12 @@ def private reg_vulkan(var o : array<EnvKnob>) {
       "Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B.")
     k(o, "DASLLAMA_VK_XFERQ", EnvKind.flag, EnvArea.vulkan, "on",
       "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail.")
+    k(o, "DASLLAMA_PREFETCH", EnvKind.flag, EnvArea.engine, "on",
+      "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting.")
+    k(o, "DASLLAMA_VK_IMPORT", EnvKind.flag, EnvArea.vulkan, "on",
+      "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path.")
+    k(o, "DASLLAMA_TRIM", EnvKind.flag, EnvArea.vulkan, "off",
+      "Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity).")
     k(o, "DASLLAMA_VK_MEMPRIO", EnvKind.flag, EnvArea.vulkan, "on",
       "Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours.")
     k(o, "DASLLAMA_VK_FA", EnvKind.flag, EnvArea.vulkan, "on",
@@ -372,6 +378,8 @@ def private reg_test(var o : array<EnvKnob>) {
       "Directory of audio corpus files for the transcription tests.")
     k(o, "TMPDIR", EnvKind.path, EnvArea.test, "/tmp",
       "Scratch directory for test artifacts; set by the OS on macOS.")
+    k(o, "TEMP", EnvKind.path, EnvArea.test, "",
+      "Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir).")
 }
 
 def private reg_example(var o : array<EnvKnob>) {

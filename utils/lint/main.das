@@ -20,7 +20,7 @@ let JSON_PREFIX = "##lint##\n"
 struct LintResult {
     file : string
     count : int
-    errors : array<string>
+    issues : array<LintIssue>
     failed : bool
     compile_errors : string
     skip_reason : string
@@ -31,6 +31,9 @@ struct Config {
     @clarg_short = "q"
     @clarg_doc = "Suppress PASS lines and progress messages"
     quiet : bool
+
+    @clarg_doc = "Do not print source lines under warnings"
+    silent : bool
 
     @clarg_doc = "Enable STYLE014/STYLE015 comment-length checks"
     comment_hygiene : bool
@@ -64,23 +67,57 @@ struct Config {
     help : bool
 }
 
-def write_deduped(var writer : StringBuilderWriter; messages : array<string>; prefix : string = "  ") {
+var private source_text_cache : table<string; string>
+
+// Same shape the *_collect string overloads emit: pass prefix + message + LineInfo::describe location.
+def private format_issue(issue : LintIssue) : string {
+    let kind = (issue.code |> starts_with("PERF") ? "performance warning: "
+        : (issue.code |> starts_with("STYLE") ? "style warning: " : ""))
+    let loc = empty(issue.file) ? "" : "{issue.file}:{issue.line}:{issue.column}"
+    return "{kind}{issue.message} at {loc}"
+}
+
+def private source_line_at(file : string; lineno : int) : string {
+    if (!source_text_cache |> key_exists(file)) {
+        source_text_cache[file] = fread(file)
+    }
+    let text = source_text_cache[file]
+    return "" if (empty(text))
+    var start = 0
+    for (_ in range(lineno - 1)) {
+        let nl = find(text, "\n", start)
+        return "" if (nl < 0)
+        start = nl + 1
+    }
+    let fin = find(text, "\n", start)
+    let line = fin < 0 ? slice(text, start) : slice(text, start, fin)
+    return line |> strip
+}
+
+def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; prefix : string = "  "; show_source : bool = true) {
     var counts : table<string; int>
-    var order : array<string>
-    for (msg in messages) {
+    var order : array<int>  // index of first occurrence per unique message
+    for (i in range(length(issues))) {
+        let msg = format_issue(issues[i])
         if (key_exists(counts, msg)) {
             counts[msg]++
         } else {
             counts[msg] = 1
-            order |> push(msg)
+            order |> push(i)
         }
     }
-    for (msg in order) {
+    for (i in order) {
+        let msg = format_issue(issues[i])
         let n = counts[msg]
         if (n > 1) {
             writer |> write("{prefix}{msg} (x{n})\n")
         } else {
             writer |> write("{prefix}{msg}\n")
+        }
+        continue if (!show_source || empty(issues[i].file) || issues[i].line <= 0)
+        let src = source_line_at(issues[i].file, issues[i].line)
+        if (!empty(src)) {
+            writer |> write("{prefix}  > {src}\n")
         }
     }
 }
@@ -220,24 +257,24 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
                     return
                 }
                 if (run_paranoid) {
-                    var paranoid_issues : array<string>
-                    result.count += paranoid_collect(program, paranoid_issues, disabled_codes, enabled_codes)
+                    var paranoid_issues : array<LintIssue>
+                    result.count += paranoid_collect_issues(program, paranoid_issues, disabled_codes, enabled_codes)
                     for (w in paranoid_issues) {
-                        result.errors |> push(w)
+                        result.issues |> push(w)
                     }
                 }
                 if (run_perf) {
-                    var perf_issues : array<string>
-                    result.count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
+                    var perf_issues : array<LintIssue>
+                    result.count += perf_lint_collect_issues(program, perf_issues, disabled_codes, enabled_codes)
                     for (w in perf_issues) {
-                        result.errors |> push(w)
+                        result.issues |> push(w)
                     }
                 }
                 if (run_style) {
-                    var style_issues : array<string>
-                    result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, comment_hygiene)
+                    var style_issues : array<LintIssue>
+                    result.count += style_lint_collect_issues(program, style_issues, disabled_codes, enabled_codes, comment_hygiene)
                     for (w in style_issues) {
-                        result.errors |> push(w)
+                        result.issues |> push(w)
                     }
                 }
             }
@@ -248,7 +285,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
 
 // Print a single LintResult in the user-facing format. Shared by serial
 // and parallel paths so output is byte-identical regardless of mode.
-def print_result(result : LintResult; quiet : bool) {
+def print_result(result : LintResult; quiet, silent : bool) {
     if (!empty(result.skip_reason)) {
         if (!quiet) {
             print("SKIP {result.file} {result.skip_reason}\n")
@@ -263,7 +300,7 @@ def print_result(result : LintResult; quiet : bool) {
     } elif (result.count > 0) {
         print("WARN {result.file} ({result.count})\n")
         print(build_string() $(var w) {
-            write_deduped(w, result.errors)
+            write_deduped(w, result.issues, "  ", !silent)
         })
     } elif (!quiet) {
         print("PASS {result.file}\n")
@@ -512,7 +549,7 @@ def main() : int {
         // Sort by file path so output is deterministic across worker counts.
         sort(results, $(a, b : LintResult) => a.file < b.file)
         for (result in results) {
-            print_result(result, cfg.quiet)
+            print_result(result, cfg.quiet, cfg.silent)
             if (!empty(result.skip_reason)) {
                 total_skipped++
             } elif (result.failed) {
@@ -530,7 +567,7 @@ def main() : int {
                 print("checking {file}...\n")
             }
             let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, disabled_codes, enabled_codes)
-            print_result(result, cfg.quiet)
+            print_result(result, cfg.quiet, cfg.silent)
             if (!empty(result.skip_reason)) {
                 total_skipped++
             } elif (result.failed) {
