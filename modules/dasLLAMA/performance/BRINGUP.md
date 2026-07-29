@@ -43,8 +43,14 @@ pre-bakes) stamps winners from this single manifest, so their `.dlim` image iden
 and a pre-baked image serves every consumer. Without it each script mints its own sidecar and
 near-tie winners flip between mints — observed to fork the identity (`q51 mr4` vs `mr8`),
 which makes every cell silently re-bake its own duplicate images. The orchestrator sets the
-env itself when unset, but the converter runs in step 4 need it exported in the shell. First
-tuned run mints the manifest (~5 min, once per box per binary build).
+env itself when unset, but the converter runs in step 4 need it exported in the shell.
+
+**Mint the tune BEFORE the pre-bake, and re-mint after ANY daslang rebuild.** The manifest is
+mtime-gated against the binary: a rebuild silently turns it stale and every kernel drops to
+its fallback winner — the m4 pilot pre-baked one identity, then swept a whole board on
+fallback kernels under a manifest one rebuild older. The bench cells now REFUSE to measure on
+non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape), so the
+order is: build → run any tuned tool once to mint (~5 min) → pre-bake → sweep.
 
 ## 1. daslang
 

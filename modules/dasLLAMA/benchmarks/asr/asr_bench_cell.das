@@ -129,6 +129,9 @@ def main() : int {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_asr_model users get
+    if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
+        return 2
+    }
 
     var found = false
     var jsonModels : array<BenchModel>

@@ -280,6 +280,9 @@ def main() {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
+    if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
+        return
+    }
     if (cfg.accel && gpu) {
         print("--accel is a CPU-tier lever — drop it or run with -ngl 0\n")
         return

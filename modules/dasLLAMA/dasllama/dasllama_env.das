@@ -300,6 +300,8 @@ def private reg_harness(var o : array<EnvKnob>) {
 }
 
 def private reg_benchmark(var o : array<EnvKnob>) {
+    k(o, "DASLLAMA_ALLOW_UNTUNED", EnvKind.flag, EnvArea.benchmark, "off",
+      "Let a bench cell measure on fallback/absent tune winners. The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published.")
     k(o, "DASLLAMA_BENCH_MODEL", EnvKind.text, EnvArea.benchmark, "tinyllama",
       "Model name for the isolated GEMM bench.")
     k(o, "DASLLAMA_BENCH_NTOK", EnvKind.number, EnvArea.benchmark, "",

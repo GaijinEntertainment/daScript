@@ -442,6 +442,41 @@ def tune_summary() : string {
     return s
 }
 
+//! The bench cells' provenance gate: REFUSE to measure unless every gen kernel stamps a
+//! manifest winner. A stale/absent sidecar silently downgrades every ``[tune]`` kernel to its
+//! fallback with only [I]-level warnings — the m4 pilot shipped a full board that way.
+//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the explicit dev-run escape (numbers never publishable).
+def tune_gate() : bool {
+    var st <- tune_status()
+    var total = 0
+    var bad = 0
+    var sample = ""
+    for (r in st) {
+        total++
+        if (r.source != "manifest") {
+            bad++
+            if (empty(sample)) {
+                sample = tune_row_str(r)
+            }
+        }
+    }
+    delete st
+    var why = ""
+    if (total == 0) {
+        why = "tune_status is EMPTY — the cell cannot prove its kernel provenance"
+    } elif (bad > 0) {
+        why = "{bad}/{total} kernels stamp non-manifest winners (first: {sample}) — stale or absent sidecar"
+    } else {
+        return true
+    }
+    if (env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
+        to_log(LOG_WARNING, "tune gate: {why} — measuring anyway (DASLLAMA_ALLOW_UNTUNED=1, numbers are NOT publishable)\n")
+        return true
+    }
+    to_log(LOG_ERROR, "tune gate: {why}. Re-mint the box manifest (any tuned tool run with DAS_TUNE_MANIFEST newer than the binary re-tunes it), then retry; DASLLAMA_ALLOW_UNTUNED=1 overrides for dev runs\n")
+    return false
+}
+
 // Gather the platform block. `llama_cpp` (the reference commit) and `date` are passed in — the caller
 // reads them from the freshly-run baseline / the environment so they stay honest per run. CPU/OS come
 // from OS-native probes with DASLLAMA_CPU / DASLLAMA_OS env overrides for boxes without a clean probe.
