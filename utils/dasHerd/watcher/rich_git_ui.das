@@ -57,6 +57,21 @@ var GIT_FILE_ROW : table<int; ToggleState>
 // user switches tabs.
 var GIT_STATUS_ROW : table<int; ToggleState>
 
+// Segmented view switches share one identity table; each strip owns a base
+// offset (widget-state tables must be referenced as module globals, so the
+// switch cannot take them as parameters).
+var VIEW_SWITCH_BTN : table<int; ClickState>
+
+var VIEW_SWITCH_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_ICON : table<int; ClickState>
+
+var GIT_NET_ICON_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_COUNT_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_COUNT : table<int; NarrativeState>
+
 var GIT_STATUS_ROW_POPUP : table<int; PopupContextItemState>
 
 var GIT_STATUS_STAGE_MENU : table<int; ToggleState>
@@ -389,6 +404,34 @@ def focused_file_label(repository_id, worktree_path,
                        file_path : string) : string {
     return (agent_marks_file(repository_id, worktree_path, file_path)
         ? "[AGENT] {file_path}" : file_path)
+}
+
+def view_switch(strip_base : int; base_id : string; labels : array<string>;
+                active : int) : int {
+    //! Segmented view switch: the ACTIVE segment is filled, inactive ones
+    //! are quiet text. Replaces the imgui tab bars that could not show which
+    //! view was live (the live-review complaint). strip_base spaces strips
+    //! apart in the shared identity table.
+    var clicked = -1
+    for (index in range(length(labels))) {
+        let slot = strip_base + index
+        if (index > 0) {
+            same_line(VIEW_SWITCH_JOIN[slot])
+        }
+        let is_active = index == active
+        with_style((ImGuiCol.Button, is_active
+                ? token_branch_color(0.40f)
+                : float4(0.0f, 0.0f, 0.0f, 0.0f)),
+                (ImGuiCol.Text, is_active
+                    ? token_title_color()
+                    : token_muted_color())) {
+            if (button(VIEW_SWITCH_BTN[slot],
+                    (text = "{labels[index]}##{base_id}:{index}"))) {
+                clicked = index
+            }
+        }
+    }
+    return clicked
 }
 
 def changelist_rail_busy : bool {
@@ -1468,7 +1511,7 @@ def git_activity_status(repository : RepositorySnapshot const;
     if (g_client == null || !g_client.connected) {
         return GitWindowStatus(text = "WATCHER DISCONNECTED - reconnecting...", error = true)
     }
-    if (GIT_TREE_TAB.selected) {
+    if (g_git_perspective == "tree") {
         if (!empty(worktree.refs_error)) {
             return GitWindowStatus(text = worktree.refs_error, error = true)
         }
@@ -1487,7 +1530,7 @@ def git_activity_status(repository : RepositorySnapshot const;
         }
         return GitWindowStatus(text = "TREE {mode}   COMMITS {length(g_tree_model.nodes)}   REFS {g_tree_model.included_ref_count}")
     }
-    if (GIT_HISTORY_TAB.selected) {
+    if (g_git_perspective == "history") {
         if (!empty(worktree.history_error)) {
             return GitWindowStatus(text = worktree.history_error, error = true)
         }
@@ -1496,7 +1539,7 @@ def git_activity_status(repository : RepositorySnapshot const;
         }
         return GitWindowStatus(text = "COMMITS ON {worktree.history_ref}  {git_history_commit_count(repository, worktree)}")
     }
-    if (GIT_PROJECT_TAB.selected) {
+    if (g_git_perspective == "project") {
         if (!empty(g_worktree_files_error)) {
             return GitWindowStatus(text = g_worktree_files_error, error = true)
         }
@@ -1549,7 +1592,7 @@ def git_changelist_status(repository : RepositorySnapshot const;
     if (repository.refreshing) {
         return GitWindowStatus(text = "Refreshing repository...", busy = true)
     }
-    if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
+    if (g_git_perspective == "history" || g_git_perspective == "tree") {
         if (!empty(worktree.history_error)) {
             return GitWindowStatus(text = worktree.history_error, error = true)
         }
@@ -1578,52 +1621,67 @@ def network_ready : bool {
     return (g_client != null && g_client.connected && !changelist_rail_busy())
 }
 
+def network_icon(index : int; glyph, tip : string;
+                 enabled : bool; count : int) : bool {
+    // One network verb: icon + optional count, the words in the tooltip.
+    // Indexed identity throughout: this body runs four times per frame.
+    same_line(GIT_NET_ICON_JOIN[index])
+    var clicked = false
+    if (enabled) {
+        clicked = icon_button(GIT_NET_ICON[index], (glyph = glyph, tip = tip,
+            size = GetTextLineHeight()))
+    } else {
+        icon_tinted(glyph, GetTextLineHeight(), token_muted_color(0.45f))
+        if (IsItemHovered()) {
+            set_tooltip(GIT_HOVER_TOOLTIP, tip)
+        }
+    }
+    if (count > 0) {
+        same_line(GIT_NET_COUNT_JOIN[index])
+        text_disabled(GIT_NET_COUNT[index], (text = "{count}"))
+    }
+    return clicked
+}
+
 def draw_changelist_network_row(repository : RepositorySnapshot const;
                                 worktree : WorktreeState const) {
-    //! The network four. Counted labels ("Push 3", "Pull 12") instead of
-    //! blind verbs, from the ahead/behind the status branch line already
-    //! carries; a branch with no upstream turns Push into an explicit
-    //! Publish that names the remote it will create.
+    //! The network four as icons on the title row, counts beside pull/push,
+    //! full verbs in the tooltips; a branch with no upstream turns Push into
+    //! an explicit Publish naming the remote it will create.
     let has_upstream = !empty(worktree.upstream_ref)
     let detached = empty(worktree.branch)
-    if (button(GIT_NET_FETCH, (text = "Fetch",
-            enabled = network_ready())) && g_client != null) {
+    if (network_icon(0, "import",
+            "Fetch from the remote (--prune); always safe",
+            network_ready(), 0) && g_client != null) {
         g_client->changelist_network(repository.record.id, worktree.path,
             "fetch")
     }
-    same_line()
-    let pull_label = worktree.behind > 0 ? "Pull {worktree.behind}" : "Pull"
-    if (button(GIT_NET_PULL, (text = pull_label,
-            enabled = network_ready() && has_upstream))
+    if (network_icon(1, "chevron-down",
+            has_upstream
+                ? "Pull {worktree.behind} (fast-forward only, never a surprise merge)"
+                : "Pull - no upstream to pull from",
+            network_ready() && has_upstream, worktree.behind)
             && g_client != null) {
         g_client->changelist_network(repository.record.id, worktree.path,
             "pull")
     }
-    same_line()
-    let push_label = (has_upstream
-        ? (worktree.ahead > 0 ? "Push {worktree.ahead}" : "Push")
-        : "Publish branch")
-    if (button(GIT_NET_PUSH, (text = push_label,
-            enabled = network_ready() && !detached
-                && (!has_upstream || worktree.ahead > 0)))
+    let push_tip = (detached ? "detached HEAD - nothing to push"
+        : (has_upstream ? "Push {worktree.ahead} to {worktree.upstream_ref}"
+            : "Publish branch - creates origin/{worktree.branch}"))
+    if (network_icon(2, "export", push_tip,
+            network_ready() && !detached
+                && (!has_upstream || worktree.ahead > 0),
+            has_upstream ? worktree.ahead : 0)
             && g_client != null) {
         g_client->changelist_network(repository.record.id, worktree.path,
             "push")
     }
-    same_line()
-    if (button(GIT_NET_SYNC, (text = "Sync",
-            enabled = network_ready() && has_upstream && !detached))
+    if (network_icon(3, "loop",
+            "Sync: fetch, then pull --ff-only, then push",
+            network_ready() && has_upstream && !detached, 0)
             && g_client != null) {
         g_client->changelist_network(repository.record.id, worktree.path,
             "sync")
-    }
-    if (!has_upstream && !detached) {
-        same_line()
-        text_disabled(GIT_NET_NOTE, (text =
-            "no upstream - Publish creates origin/{worktree.branch}"))
-    } elif (detached) {
-        same_line()
-        text_disabled(GIT_NET_NOTE, (text = "detached HEAD - nothing to push"))
     }
 }
 
@@ -1657,24 +1715,35 @@ def draw_git_changelist_window() {
                         g_client->request_repository_refs(
                             repository.record.id, worktree.path)
                     }
-                    text_disabled(GIT_WORKTREE_PATH, (text = worktree.path))
                     draw_changelist_network_row(repository, worktree)
+                    text_disabled(GIT_WORKTREE_PATH, (text = worktree.path))
                     separator()
-                    if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
+                    if (g_git_perspective == "history"
+                            || g_git_perspective == "tree") {
                         draw_commit_files(repository, worktree)
                     } else {
-                        tab_bar(GIT_CHANGELIST_TABS,
-                            (text = "Changelist views", flags = ImGuiTabBarFlags.None)) {
-                            tab_item(CHANGELIST_CHANGES_TAB.PUBLIC,
-                                (text = "Changes", closable = false,
-                                flags = ImGuiTabItemFlags.None)) {
-                                draw_git_status_groups(repository, worktree)
-                            }
-                            tab_item(CHANGELIST_PR_TAB.PUBLIC,
-                                (text = "PR result", closable = false,
-                                flags = ImGuiTabItemFlags.None)) {
-                                draw_shared_pr_files(repository, worktree)
-                            }
+                        // Default per worktree: dirty opens Changes, a clean
+                        // tree opens PR result — where its committed files
+                        // live (the "my plan file disappeared" review find).
+                        if (g_changelist_view_worktree != worktree.path) {
+                            g_changelist_view_worktree = worktree.path
+                            let dirt = (worktree.staged + worktree.unstaged
+                                + worktree.untracked + worktree.conflicted)
+                            g_changelist_view = dirt > 0 ? "changes" : "pr"
+                        }
+                        let view_labels <- ["Changes", "PR result"]
+                        let switched = view_switch(0, "changelist-view",
+                            view_labels,
+                            g_changelist_view == "changes" ? 0 : 1)
+                        if (switched == 0) {
+                            g_changelist_view = "changes"
+                        } elif (switched == 1) {
+                            g_changelist_view = "pr"
+                        }
+                        if (g_changelist_view == "changes") {
+                            draw_git_status_groups(repository, worktree)
+                        } else {
+                            draw_shared_pr_files(repository, worktree)
                         }
                     }
                     status = git_changelist_status(repository, worktree)
@@ -1711,25 +1780,39 @@ def draw_git_activity_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    tab_bar(GIT_PERSPECTIVE_TABS,
-                        (text = "Git perspectives", flags = ImGuiTabBarFlags.None)) {
-                        tab_item(GIT_PR_TAB.PUBLIC, (text = "PR", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_pr_review(repository, worktree)
+                    let perspective_labels <- ["PR", "History", "Tree", "Project"]
+                    var active = 0
+                    if (g_git_perspective == "history") {
+                        active = 1
+                    } elif (g_git_perspective == "tree") {
+                        active = 2
+                    } elif (g_git_perspective == "project") {
+                        active = 3
+                    }
+                    let switched = view_switch(16, "activity-view",
+                        perspective_labels, active)
+                    if (switched == 0) {
+                        g_git_perspective = "pr"
+                    } elif (switched == 1) {
+                        g_git_perspective = "history"
+                    } elif (switched == 2) {
+                        g_git_perspective = "tree"
+                        if (g_client != null && g_client.connected) {
+                            g_client->request_repository_history(
+                                repository.record.id, worktree.path, "__all__")
                         }
-                        tab_item(GIT_HISTORY_TAB.PUBLIC, (text = "History", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_history_review(repository, worktree)
-                        }
-                        tab_item(GIT_TREE_TAB.PUBLIC, (text = "Tree", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_tree_review(repository, worktree)
-                        }
-                        tab_item(GIT_PROJECT_TAB.PUBLIC, (text = "Project", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_perspective_banner("PROJECT", worktree.path)
-                            draw_project_files()
-                        }
+                    } elif (switched == 3) {
+                        g_git_perspective = "project"
+                    }
+                    if (g_git_perspective == "history") {
+                        draw_history_review(repository, worktree)
+                    } elif (g_git_perspective == "tree") {
+                        draw_tree_review(repository, worktree)
+                    } elif (g_git_perspective == "project") {
+                        draw_perspective_banner("PROJECT", worktree.path)
+                        draw_project_files()
+                    } else {
+                        draw_pr_review(repository, worktree)
                     }
                     status = git_activity_status(repository, worktree)
                 }

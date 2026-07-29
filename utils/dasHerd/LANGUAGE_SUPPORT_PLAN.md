@@ -43,6 +43,28 @@ explain llm what to keep."
   timeouts today; for LOCAL subtool calls the client can also spawn
   directly (popen_argv) since the daslang binary is local by definition.
 
+## Which tree answers (added 2026-07-29, Boris's review)
+
+The subtool runs IN a worktree, and dasHerd shows MANY worktrees. An answer
+computed by the wrong tree's binary is the cross-tree staleness bug the MCP
+tools already warn about (#3392): wrong module sources AND wrong compiled-in
+C++ bindings. So resolution is per-request, from the worktree being viewed:
+
+- Preferred: `<worktree>/bin/Release/daslang(.exe)` running
+  `<worktree>/utils/lsp/subtools/nav.das` — that tree's binary, that tree's
+  subtool, that tree's daslib. Both paths verified per worktree ONCE and
+  cached until its HEAD moves.
+- Fallback (worktree has no built binary — fresh `git worktree add`): the
+  MAIN checkout's binary and subtool, cwd still the viewed worktree. The
+  answer is then best-effort: the hover tooltip carries a one-line
+  "answered by MAIN's compiler" marker, because for a worktree that changed
+  the compiler or daslib the answer may be stale — say it, never imply
+  tree-local truth.
+- No binary anywhere → no hover, and the status line says why once per
+  worktree, not per mouse move.
+- The state rail reports, per answer: which binary path answered and
+  whether it was the fallback.
+
 ## Step 1 — hover in the View tab (the walking skeleton)
 
 Smallest end-to-end slice, all plumbing proven before any diff complexity:
@@ -102,12 +124,28 @@ The "better than VSCode" step, and the reason `--overlay` matters:
   editor in the app; keep it to conflicts — the app is a reviewer, not an
   IDE.
 
-## Non-goals (v1)
+## The quality bar (added 2026-07-29, Boris's review)
+
+https://github.com/profelis/daScript-plugin — the existing daScript VSCode
+LSP — is the reference implementation for HOVER: its hovers are rich and
+very specific (resolved signatures, types, docs from the compiled program),
+and our `nav.das -- hover` must reach at least that level before Step 1
+ships. Port what it computes, not its architecture — it keeps a resident
+server; we keep spawn-per-request.
+
+**Completion is on the roadmap with the same bar.** Same nature of problem,
+similar code to port from that plugin, and NOT a small issue — it is its own
+step after Step 3, not a v1 stretch goal. The profelis plugin's completion
+quality is the FLOOR; LLM-assisted completion comes later (it will), on top
+of, not instead of, compiler-truth completion.
+
+## Non-goals (v1 = steps 1–3)
 
 - No resident LSP process, no lsp_supervisor.py dependency, no LSP framing.
 - No .cpp semantics (clangd is a different animal; .cpp keeps tree-sitter
   colors only).
-- No completion, no rename, no formatting-on-edit. Review first.
+- No rename, no formatting-on-edit. Completion is NOT a non-goal — it is
+  step 5, after the viewing experience proves out (see the quality bar).
 
 ## Tests
 
@@ -124,8 +162,11 @@ The "better than VSCode" step, and the reason `--overlay` matters:
 
 ## Order of work
 
-1. Step 1 skeleton + the cold-hover measurement, commit.
+1. Step 1 skeleton + the cold-hover measurement, commit. Hover CONTENT
+   brought up to the profelis-plugin bar before calling the step done.
 2. Step 2 both-sides overlay hover, commit.
 3. Step 3 definition + navigation stack, commit.
 4. References/call-hierarchy as a follow-up decision after Boris reviews
-   the feel; Step 4 rides the GitHub-PR arc.
+   the feel; Step 4 (editing) rides the GitHub-PR arc.
+5. Completion, profelis floor, ported into the subtool shape — sized as its
+   own arc slice, not squeezed in. LLM-assisted completion follows later.

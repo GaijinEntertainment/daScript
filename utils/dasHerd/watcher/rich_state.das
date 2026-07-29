@@ -704,6 +704,17 @@ var g_git_discard = GitDiscardPrompt()
 // on a stale success from an earlier operation.
 var g_commit_clear_watch : int64
 
+// The Git Activity perspective and the Changelist view, as plain state
+// driven by segmented switches — imgui tab bars couldn't SHOW which tab was
+// active (the live-review complaint), and implicit tab-selected coupling
+// made the state invisible to the rails.
+var g_git_perspective = "pr"
+
+// "changes" | "pr"; re-defaulted per worktree — dirty opens Changes, a
+// clean tree opens PR result (where its committed files live).
+var g_changelist_view = "changes"
+var g_changelist_view_worktree : string
+
 var g_prepare_worker = InspectorPrepareWorker()
 
 var g_jobque_owned = false

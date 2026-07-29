@@ -894,8 +894,7 @@ def update() {
         }
     }
     herd_commands_poll()
-    let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
-        "tree={GIT_TREE_TAB.selected} proj={GIT_PROJECT_TAB.selected} " +
+    let tab_signature = ("git={g_git_perspective} cl={g_changelist_view} " +
         "diff={INSPECTOR_DIFF_TAB.selected} " +
         "view={INSPECTOR_VIEW_TAB.selected} wt={g_selected_worktree_path}")
     if (tab_signature != g_ui_tab_signature) {

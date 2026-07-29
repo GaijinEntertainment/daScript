@@ -1191,23 +1191,18 @@ def herder_git_clipboard_state(_input : JsonValue?) : JsonValue? {
 def herder_git_perspective(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<HerderGitPerspectiveArgs>)
     let perspective = to_lower(args.perspective)
-    if (perspective == "pr") {
-        GIT_PR_TAB.pending_select = true
-    } elif (perspective == "history") {
-        GIT_HISTORY_TAB.pending_select = true
-    } elif (perspective == "tree") {
-        GIT_TREE_TAB.pending_select = true
+    if (perspective == "tree") {
         if (g_client != null && g_client.connected
                 && !empty(g_selected_repository_id)
                 && !empty(g_selected_worktree_path)) {
             g_client->request_repository_history(g_selected_repository_id,
                 g_selected_worktree_path, "__all__")
         }
-    } elif (perspective == "project") {
-        GIT_PROJECT_TAB.pending_select = true
-    } else {
+    } elif (perspective != "pr" && perspective != "history"
+            && perspective != "project") {
         return JV((ok = false, error = "perspective must be pr, history, tree, or project"))
     }
+    g_git_perspective = perspective
     GIT_CHANGELIST_WIN.open = true
     GIT_ACTIVITY_WIN.open = true
     GIT_ACTIVITY_WIN.pending_raise = true
@@ -1219,7 +1214,7 @@ def herder_project_state(_input : JsonValue?) : JsonValue? {
     var folders, files, dirty : int
     project_model_counts(folders, files, dirty)
     return JV((ok = empty(g_worktree_files_error),
-        selected = GIT_PROJECT_TAB.selected,
+        selected = g_git_perspective == "project",
         loading = g_worktree_files_loading,
         error = g_worktree_files_error,
         file_count = length(g_worktree_files),

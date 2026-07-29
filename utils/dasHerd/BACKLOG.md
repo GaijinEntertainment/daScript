@@ -22,6 +22,16 @@ review capacity is the bottleneck the arcs exist to fix.
   default to PR result when the tree is clean, merge the two views into
   one grouped list (CONFLICTS/STAGED/MODIFIED/UNTRACKED + COMMITTED vs
   base), or keep tabs and remember the last choice.
+- **Comment on a selection, addressed to an agent.** Reading a doc in the
+  inspector, Boris can select text but cannot SAY anything about it. Wanted:
+  select (in View, rich markdown or plain source) → right-click → "Leave a
+  comment" → typed note travels with the byte-range focus target to an
+  agent, riding the existing Look-at-that mailbox shape. Prerequisite worth
+  doing at the same time: the session DRIVING dasHerd development (this
+  Claude Code session) is not herd-managed, so there is nobody to address —
+  adopt the already-running external terminal as a herd session so the
+  reviewer can talk back to the builder. Filed 2026-07-29, deliberately not
+  built yet — more feedback incoming.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
