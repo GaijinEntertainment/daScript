@@ -198,12 +198,12 @@ Skip for changes that can't alter what external/module-gated code sees (tests-on
 
 ## 3. Build and run AOT tests
 
-**IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files.
+**IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files. **Kill BY PATH, never by image name**: `taskkill /IM daslang.exe` murders every daslang on the box, including the dasHerd watcher that owns other sessions' PTYs (observed 2026-07-29: silent exit 1, no log — this exact ritual from a sibling session was the likely killer).
 
-```bash
-# Kill processes that lock build files
-taskkill /F /IM daslang.exe 2>/dev/null
-taskkill /F /IM mcp.exe 2>/dev/null
+```powershell
+# Kill ONLY processes running from THIS tree (adjust the path to your worktree)
+Get-Process daslang,daslang-live,mcp -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like "$(Get-Location)\*" } | Stop-Process -Force
 
 # Build test_aot
 cmake --build build --config Release --target test_aot -j 64 -- /nodeReuse:false
