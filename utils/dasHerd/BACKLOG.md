@@ -5,6 +5,17 @@ HERDER_FIXROUND.md; arc designs in PTY_HOST_DESIGN.md and
 AGENT_REVIEW_WORKFLOWS.md. Rule of the round stands: bugs over everything;
 review capacity is the bottleneck the arcs exist to fix.
 
+## Filed 2026-07-29 (live review round 2)
+
+- **Input lock must be visible in the title bar.** When @live synth input
+  holds the app (`set_user_control(false)` — which `imgui_click` takes
+  implicitly), the window title must read
+  "dasHerd - is being controlled by @live"; today the app just feels dead
+  until control is handed back, and Boris hit exactly that. Title reverts
+  when `user_control` returns true. Consider the same marker in
+  `herder_client_state`. (Also a driver-discipline rule for Claude:
+  every synthetic interaction ends with `set_user_control {enabled:true}`.)
+
 ## Phase 0 — deploy and prove — PROVEN LIVE 2026-07-26 (accidentally)
 
 The goal-round rig ran the current branch; the watcher died mid-flight
