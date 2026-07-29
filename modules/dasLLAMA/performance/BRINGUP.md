@@ -91,9 +91,21 @@ cmake --build build --config Release -j 16        # 15-25 min clean
     the pinned whisper.cpp checkout's `models/convert-parakeet-to-ggml.py --use-f32` over the
     `nvidia/parakeet-tdt-0.6b-v2`/`-v3` `.nemo` files; canary via
     `modules/dasLLAMA/harness/convert_canary_to_ggml.py` over `nvidia/canary-qwen-2.5b`
-    (both run in the nemo venv setup_asr_rig creates). The converted bins MUST sha-match the
-    recorded sidecars — a differing hash means environment drift: stop and compare, never
-    bench it
+    (both run in the nemo venv setup_asr_rig creates). Acceptance gates differ by what the
+    conversion does:
+    - **parakeet + canary ENCODER** are pure repacks (zero arithmetic) — they byte-match
+      across every OS/arch/python; the bins MUST sha-match the recorded sidecars, and a
+      differing hash means environment drift: stop and compare, never bench it.
+    - **canary DECODER** does real math (the torch LoRA merge, fp16) — ARM and x86 torch
+      round the last ulp differently, and the gguf writer stamps tool versions, so its
+      byte hash is canonical only per (architecture, convert-kit version). The gate that
+      matters is OUTPUT parity: transcribe the three canary corpus clips
+      (`asr_bench.das --text` over jfk/jfk3/gb1) and diff token-for-token against
+      `benchmarks/asr/canary_transcripts.expected` — proven identical across an
+      ARM-converted and an x86-converted decoder on 2026-07-29. Bit-identity across
+      arches was never the goal for LLM/ASR outputs (you cannot attribute a bit of drift
+      to model bit reduction vs cache reduction vs speculative decoding without massive
+      effort); token-for-token output parity is.
 
 ## 3. Reference engines
 
