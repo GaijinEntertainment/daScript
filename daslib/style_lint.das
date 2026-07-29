@@ -42,15 +42,21 @@ module style_lint shared private
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
 //!   STYLE034 — reinterpret<T?>(addr(x)) — use addr<T?>(x); one unsafe() covers both halves (pointer targets only; the sugar's own desugared output is exempt via fromAddrSugar)
 //!   STYLE035 — non-int numeric variable compared with a built-in numeric cast of '<char>' — make the variable int and compare directly with the character literal
+//!   STYLE036 — type contract ('-const', '-&', '-[]', '-#', '==const', '==&') on an already-resolved cast/reinterpret/upcast/addr target does nothing — drop it
+//!   STYLE037 — function or closure cyclomatic complexity exceeds the limit (override per module with 'options _cyclomatic_complexity = N'; 0 disables) — split it into smaller functions
 
 require daslib/ast_boost
 require daslib/is_local
 require daslib/lint_config
+require math
 require strings
 
 // STYLE033 arity caps — never suggest a call shape with no matching overload.
 let MAX_CONCAT_ARITY = 8         // linq `concat` tops out at 8 sources (PR #3224)
 let MAX_VARIADIC_PUSH_ARITY = 4  // builtin push_from/push_clone_from fixed-arity 2..4 (PR #3230)
+
+// STYLE037 default ceiling — override per module with `options _cyclomatic_complexity = N`; 0 disables.
+let STYLE037_DEFAULT_MAX = 30
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -82,6 +88,9 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete unsafeExprs : table<Expression?; UnsafeFrame>
     unsafe_stack : array<UnsafeFrame>
     unsafe_block_stack : array<int>
+    // STYLE037 — one counter per function/closure level (same shape as unsafe_block_stack), base score 1
+    complexity_stack : array<int>
+    max_complexity : int = STYLE037_DEFAULT_MAX
     // STYLE029 — transitive-only require detection. Enabled only when linting the
     // root module. `used_modules` collects names of modules with >=1 direct
     // reference from code written in `this_module`.
@@ -161,6 +170,7 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         unsafe_block_stack |> push(0)
+        complexity_stack |> push(1)
         check_defer_pipe(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
@@ -209,9 +219,40 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
+        st037_pop_and_check("function '{fn.name}'", "split it into smaller functions", fn.at)
         current_function = null
         unsafe_block_stack |> pop
         return <- fn
+    }
+
+    // ===== STYLE037 — cyclomatic complexity =====
+
+    def st037_bump() : void {
+        let n = length(complexity_stack)
+        if (n > 0) complexity_stack[n - 1]++
+    }
+
+    def st037_pop_and_check(what : string; fix : string; at : LineInfo) : void {
+        let n = length(complexity_stack)
+        if (n == 0) return
+        let cc = complexity_stack[n - 1]
+        complexity_stack |> pop
+        // max_complexity == 0 disables the rule (per-module `options _cyclomatic_complexity = 0`)
+        if (max_complexity > 0 && cc > max_complexity) {
+            style_warning("STYLE037: {what} has cyclomatic complexity {cc} (max {max_complexity}); {fix}", at)
+        }
+    }
+
+    def override preVisitExprWhile(expr : ExprWhile?) : void {
+        if (!expr.genFlags.generated) st037_bump()
+    }
+
+    def override preVisitExprFor(expr : ExprFor?) : void {
+        if (!expr.genFlags.generated) st037_bump()
+    }
+
+    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+        if (!expr.genFlags.generated) st037_bump()
     }
 
     // --- STYLE001/002/003/011: pipe and redundant $() on block arguments ---
@@ -784,6 +825,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
         if (ifte.if_flags.isStatic || ifte.genFlags.generated) return  // macro-made ifs are not user style
+        st037_bump()
         // STYLE010: if (true) { ... }
         var cond = ifte.cond
         if (cond is ExprConstBool) {
@@ -853,6 +895,8 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
+            // STYLE037: generated closures bill the host — counts must not depend on whether the optimizer inlines them
+            if (!blk.genFlags.generated) complexity_stack |> push(1)
         }
         check_style012_chain_runs(blk)
         check_style033_existing_runs(blk)
@@ -890,6 +934,9 @@ class StyleLintVisitor : AstVisitor {
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> pop
+            if (!blk.genFlags.generated) {
+                st037_pop_and_check("closure", "extract it into a named function", blk.at)
+            }
         }
         return blk
     }
@@ -2461,6 +2508,7 @@ class StyleLintVisitor : AstVisitor {
     }
     def override preVisitExprOp3(expr : ExprOp3?) : void {
         st029_record_func(expr.func)
+        if (!expr.genFlags.generated) st037_bump()  // ternary `?:` is a branch
         if (!expr.genFlags.generated
                 && call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
@@ -2537,6 +2585,12 @@ def private comment_hygiene_for(prog : ProgramPtr; requested : bool) : bool {
     return starts_with(file, "daslib/") || find(file, "/daslib/") >= 0
 }
 
+def private max_complexity_for(prog : ProgramPtr) : int {
+    // 0 (or negative) disables STYLE037 for the module
+    let configured = prog._options |> find_arg("_cyclomatic_complexity") ?as tInt ?? STYLE037_DEFAULT_MAX
+    return max(configured, 0)
+}
+
 def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int {
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
@@ -2552,6 +2606,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     let hygiene = comment_hygiene_for(prog, comment_hygiene)
     var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.this_module = prog.getThisModule
     let empty_enabled : table<string>
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
@@ -2588,6 +2643,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
@@ -2616,6 +2672,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {

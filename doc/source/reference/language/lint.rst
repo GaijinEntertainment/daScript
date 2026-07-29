@@ -2225,6 +2225,46 @@ typedef is not such a case — with ``typedef CI = int const``,
 ``reinterpret<CI? -const>`` keeps the const, so the contract is inert there
 too and the rule correctly fires.
 
+STYLE037 — cyclomatic complexity over the limit
+================================================
+
+A function with too many independent decision points is hard to read, test,
+and modify. The score starts at 1 per function (or block-argument closure) and
+adds 1 for each of:
+
+* ``if`` / ``elif`` branch (including the postfix form ``return X if (cond)``)
+* ``for`` and ``while`` loop
+* ternary ``?:``
+* ``try`` / ``recover``
+* ``match`` arm
+* comprehension loop and its ``where`` filter
+
+Not counted: ``&&`` / ``||`` short-circuit operators, the null-safe chain
+operators ``??`` / ``?.`` / ``?[`` / ``?as``, ``static_if`` branches, and
+macro-generated control flow.
+
+.. code-block:: das
+
+    // Bad — one function absorbing every case
+    def classify(x : int) : int {       // STYLE037 when the total passes the limit
+        if (x == 1) return 10
+        if (x == 2) return 20
+        // ... dozens more decision points ...
+    }
+
+    // Good — split into focused helpers, or table the data
+    let CLASS_OF <- { 1 => 10, 2 => 20 }
+
+A block-argument closure gets its own score and its own warning (at the
+closure), so a complex block does not bill its host; extract it into a named
+function. Lambda and generator bodies are lowered to generated functions
+before the lint pass runs and are not checked — the same pre-existing rule
+that keeps every style rule out of macro-generated functions.
+
+Override the limit per module with ``options _cyclomatic_complexity = N``;
+``N = 0`` disables the rule for the module. Suppress a single deliberate keep
+with ``// nolint:STYLE037`` on the ``def`` line.
+
 -----
 Tests
 -----
