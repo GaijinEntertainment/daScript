@@ -350,7 +350,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-07-29",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -364,20 +364,19 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":147.03075317752402,
-            "stddev":0.57052052021026611
+            "tok_s":147.2839705446828,
+            "stddev":0.13619960844516754
           },
           "tg128":{
-            "tok_s":14.238688347652262,
-            "stddev":0.32831421494483948
+            "tok_s":14.545525765865751,
+            "stddev":0.01352222915738821
           }
         },
         "source":"official",
-        "sha":"57346c9fa",
+        "sha":"deca8fcbd",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json DASLLAMA_BOX=m1",
         "files":[
           {
             "role":"weights",
@@ -393,7 +392,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-07-29",
         "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -407,12 +406,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":104.29951199999999,
-            "stddev":2.0380410000000002
+            "tok_s":129.53068400000001,
+            "stddev":0.085514000000000007
           },
           "tg128":{
-            "tok_s":10.632871,
-            "stddev":0.33075300000000002
+            "tok_s":11.983140000000001,
+            "stddev":0.0077019999999999996
           }
         },
         "source":"official",
