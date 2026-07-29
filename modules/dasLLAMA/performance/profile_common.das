@@ -1094,12 +1094,18 @@ def whisper_cpp_bin(cli : string) : string {
     return normalize("{root}/build/bin/{cli}")
 }
 
+//! A venv's interpreter across layouts — POSIX puts it in bin/, Windows in Scripts/.
+def venv_python(venv : string) : string {
+    let posix = "{venv}/bin/python"
+    return stat(posix).is_valid ? posix : "{venv}/Scripts/python.exe"
+}
+
 def onnx_py() : string {
-    return normalize(env_str("ONNX_PY", "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python"))
+    return normalize(env_str("ONNX_PY", venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx")))
 }
 
 def nemo_py() : string {
-    return normalize(env_str("NEMO_PY", "modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python"))
+    return normalize(env_str("NEMO_PY", venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo")))
 }
 
 // The clean CPU-only build (llama.cpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
