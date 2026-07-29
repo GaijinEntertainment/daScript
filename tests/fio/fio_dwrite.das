@@ -148,4 +148,81 @@ def test_dwrite(t : T?) {
         let w = unsafe(dwrite_open("Z:/no/such/dir/ever/fio_dwrite_probe.bin", 0ul, 0ul))
         t |> success(w == null, "impossible path declines with null")
     }
+    t |> run("a single append past 2 GiB survives (DASTEST_BIG_IO=1)") @(t : T?) {
+        // macOS write(2) REJECTS nbyte > INT_MAX with EINVAL (Linux merely truncates), so an
+        // unchunked raw writer dies exactly on a big single append — an 11 GB image plane read
+        // as "disk full". A das array caps at int elements (why no unit ever hit this), so the
+        // >2 GiB source comes from an fmap of a staged file. ~4.2 GB of disk traffic — opt-in;
+        // the M-box bring-ups run it.
+        if (empty(get_env_variable("DASTEST_BIG_IO"))) {
+            t |> success(true, "skipped — set DASTEST_BIG_IO=1 (writes ~4.2 GB)")
+            return
+        }
+        let half = 1073743872l                  // 1 GiB + 2048: two of these cross INT_MAX
+        let big = 2l * half
+        let src_name = make_probe_path("bigsrc")
+        var chunk : array<uint8>
+        chunk |> resize(int(half))
+        for (i in range(4096)) {
+            chunk[i] = dwrite_pattern(i)
+            chunk[int(half) - 1 - i] = dwrite_pattern(i)
+        }
+        var sw = unsafe(dwrite_open(src_name, uint64(big), 8ul * 1024ul * 1024ul))
+        t |> success(sw != null, "stage writer opened")
+        if (sw == null) {
+            delete chunk
+            return
+        }
+        var staged = unsafe(dwrite_append(sw, unsafe(addr<void?>(chunk[0])), uint64(half)))
+        staged = staged && unsafe(dwrite_append(sw, unsafe(addr<void?>(chunk[0])), uint64(half)))
+        staged = staged && unsafe(dwrite_close(sw))
+        delete chunk
+        t |> success(staged, "staged the 2.1 GiB source in sub-2GiB appends")
+        if (!staged) {
+            remove(src_name)
+            return
+        }
+        // the actual regression: ONE append of the whole >2 GiB mapping
+        let dst_name = make_probe_path("bigdst")
+        var appended = false
+        var closed = false
+        fopen(src_name, "rb") $(f) {
+            if (f == null) {
+                return
+            }
+            fmap(f) $(var bytes : array<uint8>#) {
+                var w = unsafe(dwrite_open(dst_name, uint64(big), 8ul * 1024ul * 1024ul))
+                if (w == null) {
+                    return
+                }
+                appended = unsafe(dwrite_append(w, unsafe(addr<void?>(bytes[0])), uint64(big)))
+                closed = unsafe(dwrite_close(w))
+            }
+        }
+        t |> success(appended, ">2 GiB single append accepted")
+        t |> success(closed, "close flushed and truncated")
+        t |> equal(int64(stat(dst_name).size), big)
+        var seams_ok = true
+        fopen(dst_name, "rb") $(f) {
+            if (f == null) {
+                seams_ok = false
+                return
+            }
+            fmap(f) $(var bytes : array<uint8>#) {
+                // the two halves are identical staged chunks: check both copies' seams
+                for (i in range(4096)) {
+                    seams_ok = seams_ok && bytes[i] == dwrite_pattern(i)
+                    unsafe {
+                        let bp = addr(bytes[0])
+                        seams_ok = seams_ok && bp[big - 1l - int64(i)] == dwrite_pattern(i)
+                        seams_ok = seams_ok && bp[half - 1l - int64(i)] == dwrite_pattern(i)
+                        seams_ok = seams_ok && bp[half + int64(i)] == dwrite_pattern(i)
+                    }
+                }
+            }
+        }
+        t |> success(seams_ok, "all four half-seams intact after the big append")
+        remove(src_name)
+        remove(dst_name)
+    }
 }
