@@ -36,12 +36,27 @@ Both exist to reproduce another box's codegen locally, or to check that a featur
 actually the one being measured. Forcing a feature the CPU lacks produces an illegal instruction at
 run time, not a diagnostic.
 
+They also override `cpu_supports`, which is what `requires=` on a `[tune_perm]` and the
+`suffix:requires` entries of a `[tuned]` fallback chain are matched against — so forcing a feature
+is how you check that a per-ISA default resolves the way you expect without owning that silicon.
+Names are the LLVM target-feature spellings on both architectures (`avx2`, `amx-int8`; `dotprod`,
+`i8mm`, `fullfp16`).
+
 ## Kernel tuning
 
 `DAS_TUNE_MODE`, `DAS_TUNE_MANIFEST` and `DAS_TUNE_POLICY` drive the `[tune]` framework. They are
 documented where the framework is — see `skills/tune.md`. The one worth repeating here:
 `DAS_TUNE_MANIFEST` points at the sidecar to read and write, which is how you tune when the
 application directory is read-only.
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_TUNE_VERBOSITY` | text | What a tune shows: `silent`, `normal` (default), `verbose`. Anything unrecognized reads as `normal`, so a typo never silences a tune. |
+
+`--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
+process chain — the measuring code is two `popen`s below the process the user typed the flag at.
+It gates only what a human sees: progress *events* are forwarded to a capturing parent regardless,
+so `silent` under a supervisor still yields a full event stream in the log.
 
 ## Lint
 

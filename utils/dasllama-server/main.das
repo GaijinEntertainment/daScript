@@ -22,6 +22,7 @@ options stack = 262144   // the forward chain runs deep under the HTTP tick + C+
 
 require openai_server           // the server + route handlers (this directory)
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
+require dasllama/dasllama_image // dlim_clean — the startup dlim GC
 require dasllama/dasllama_math  // set_dispatch_worker_limit (engine-level knob, not re-exported)
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status (the injected guard resolves here)
 require daslib/clargs
@@ -822,13 +823,21 @@ def init() {
             opts.kv_dtype_set = true
         }
         opts.mtp = ent.mtp
-        add_model(m, ent.name, opts)   // captures this load's arm outcome + marks onto the slot
+        add_model(m, ent.name, opts, ent.path)   // captures this load's arm outcome + marks onto the slot
         if (gpu == "vulkan" && ent.backend != "cpu") {
             set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with
         }
     }
     set_default_model(g_models[def_idx].name)
     set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 256l)
+
+    // the dlim GC rides server start (and every bake): only never-loadable images go
+    for (ent in g_models) {
+        let gc = dlim_clean(ent.path, true)
+        if (gc.removed > 0) {
+            to_log(LOG_INFO, "dasllama-server: dlim GC reclaimed {gc.freed >> 20l} MB from {gc.removed} stale image(s) beside {base_name(ent.path)}\n")
+        }
+    }
 
     if (!empty(g_cfg.asr)) {
         configure_asr_workers(g_cfg.asr, g_cfg.mmproj, g_cfg.asr_workers > 0 ? g_cfg.asr_workers : 1)

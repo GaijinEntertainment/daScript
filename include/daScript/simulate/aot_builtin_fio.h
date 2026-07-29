@@ -88,7 +88,15 @@ namespace das {
     DAS_API vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args );
     DAS_API void builtin_map_file ( const FILE* _f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context*, LineInfoArg * at );
     DAS_API void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at );
+    DAS_API void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at );
     DAS_API void builtin_fmap_close ( void * data, uint64_t size, Context * context, LineInfoArg * at );
+    DAS_API void * builtin_dwrite_open ( const char * name, uint64_t total_bytes, uint64_t band_bytes, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_dwrite_append ( void * h, void * data, uint64_t bytes, Context * context, LineInfoArg * at );
+    DAS_API void * builtin_dwrite_band ( void * h, uint64_t * avail, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_dwrite_commit ( void * h, uint64_t bytes, Context * context, LineInfoArg * at );
+    DAS_API uint64_t builtin_dwrite_stat ( void * h, int32_t which, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at );
     DAS_API char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at );
     DAS_API char * builtin_basename ( const char * name, Context * context, LineInfoArg * at );
     DAS_API bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at );
@@ -100,6 +108,8 @@ namespace das {
     DAS_API const FILE * builtin_stdin();
     DAS_API const FILE * builtin_stdout();
     DAS_API const FILE * builtin_stderr();
+    DAS_API bool builtin_is_terminal ( int32_t fd );
+    DAS_API int32_t builtin_terminal_width ();
     DAS_API int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );

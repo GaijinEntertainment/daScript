@@ -49,6 +49,9 @@ struct private MslCtx {
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
+    gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
+    scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
+    tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk" (decl suppressed on GPU)
     self_name : string
 }
 
@@ -264,6 +267,15 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
         if (key_exists(ctx.members, name)) {
             ctx.members[name].written = true
         }
+    } elif (e is ExprVar) {
+        // a pointer local (`var p = unsafe(addr(member[..]))`) writes through to its member
+        let pn = string((e as ExprVar).name)
+        if (key_exists(ctx.scan_ptrs, pn)) {
+            let mem = ctx.scan_ptrs[pn]
+            if (key_exists(ctx.members, mem)) {
+                ctx.members[mem].written = true
+            }
+        }
     }
 }
 
@@ -284,6 +296,12 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         scan_body(ctx, (e as ExprWith).body)
     } elif (e is ExprLet) {
         for (v in (e as ExprLet).variables) {
+            if (v.init != null && v.init is ExprRef2Ptr && (v.init as ExprRef2Ptr).subexpr is ExprAt) {
+                let pat = (v.init as ExprRef2Ptr).subexpr as ExprAt
+                if (pat.subexpr is ExprField) {
+                    ctx.scan_ptrs[string(v.name)] = string((pat.subexpr as ExprField).name)
+                }
+            }
             scan_body(ctx, v.init)
         }
     } elif (e is ExprCopy) {
@@ -324,8 +342,29 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         let ecs = e as ExprCall
         // simdgroup_store writes through its buffer argument — without this the write-set scan
         // would lower the parameter `device const`
-        if (call_base_name("{ecs.name}") == "simdgroup_store" && length(ecs.arguments) == 4) {
+        let scn = call_base_name("{ecs.name}")
+        if (scn == "simdgroup_store" && length(ecs.arguments) == 4) {
             mark_write_target(ctx, ecs.arguments[1])
+        }
+        // the tensor GEMMs write through their C pointer (arg 7 for the 10-arg forms, 11 for q8xq8)
+        if ((scn == "tmm2d_f32_bf16_f32" && length(ecs.arguments) == 10)
+                || (scn == "tmm2d_q8b_f32" && length(ecs.arguments) == 11)) {
+            mark_write_target(ctx, ecs.arguments[7])
+        }
+        if ((scn == "tmm2d_q8_f32" || scn == "tmm2d_q8_f16s") && length(ecs.arguments) == 14) {
+            mark_write_target(ctx, ecs.arguments[11])
+        }
+        if (scn == "tmm2d_tg_store" && length(ecs.arguments) == 5) {
+            mark_write_target(ctx, ecs.arguments[1])
+        }
+        if (scn == "tmm2d_tg_begin" && length(ecs.arguments) == 5) {
+            var acc0 = ecs.arguments[0]
+            if (acc0 is ExprRef2Value) {
+                acc0 = (acc0 as ExprRef2Value).subexpr
+            }
+            if (acc0 is ExprVar) {
+                ctx.tg_accs[string((acc0 as ExprVar).name)] = ""   // params fill at emit time
+            }
         }
         for (arg in ecs.arguments) {
             scan_body(ctx, arg)
@@ -1139,6 +1178,206 @@ def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : strin
 
 // ===== statement emission =====
 
+// ===== Metal-4 tensor ops (mpp::tensor_ops::matmul2d) =====
+// Each tmm2d_* call lowers to ONE generated preamble helper (mangled by kind/m/n/sgs) holding
+// the tensor_inline views + matmul2d op, and a plain call at the site. m/n/sgs must be
+// call-site constants (the simdgroup-lane precedent). Layout contract in metal_builtins.das.
+
+def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) : uint {
+    var v = e
+    if (v is ExprRef2Value) {
+        v = (v as ExprRef2Value).subexpr
+    }
+    if (v is ExprConstUInt) {
+        return (v as ExprConstUInt).value
+    }
+    err(ctx, e.at, "tmm2d: {what} must be a compile-time uint constant")
+    return 0u
+}
+
+def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
+    let name = "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}"
+    let ct = "tensor<device int8_t, dextents<int32_t, 2>, tensor_inline>"
+    if (kind == "bf") {
+        return build_string() $(var w) {
+            w |> write("static void {name}(device const float * a, uint lda, device const ushort * bw, uint ldw, device float * c, uint ldc, uint kk) \{\n")
+            w |> write("    auto A = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)a, dextents<int32_t, 2>(int(kk), {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("    auto W = tensor<device bfloat, dextents<int32_t, 2>, tensor_inline>((device bfloat *)bw, dextents<int32_t, 2>(int(kk), {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
+            w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+            w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, false);\n")
+            w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+            w |> write("    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
+            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+            w |> write("    op.run(A, W, cT);\n")
+            w |> write("    cT.store(C);\n")
+            w |> write("\}")
+        }
+    }
+    if (kind == "q8b") {
+        // interleaved-q8_0 W blocks (34B stride, quants pre-offset +2) x raw f32 activations:
+        // f32 chunk accumulate, per-(col,chunk) W scale folded between chunks
+        return build_string() $(var w) {
+            w |> write("static void {name}(device const half * ws, device const char * wq, device const float * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb) \{\n")
+            w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, 32, false, true, false);\n")
+            w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+            w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+            w |> write("    const uint nb = kk / 32u;\n")
+            w |> write("    auto A0 = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)a, dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("    auto W0 = {ct}((device int8_t *)wq, dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldwb * 34u)\});\n")
+            w |> write("    auto fT = op.get_destination_cooperative_tensor<decltype(A0), decltype(W0), float>();\n")
+            w |> write("    for (uint16_t i = 0; i < fT.get_capacity(); ++i) \{ if (fT.is_valid_element(i)) fT[i] = 0.0f; \}\n")
+            w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
+            w |> write("        auto A = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("        auto W = {ct}((device int8_t *)(wq + b * 34u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldwb * 34u)\});\n")
+            w |> write("        auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
+            w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+            w |> write("        op.run(A, W, cT);\n")
+            w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) \{\n")
+            w |> write("            auto ids = cT.get_multidimensional_index(i);\n")
+            w |> write("            fT[i] += cT[i] * float(ws[(uint(ids[0]) * ldwb + b) * 17u]);\n")
+            w |> write("        \} \}\n")
+            w |> write("    \}\n")
+            w |> write("    fT.store(C);\n")
+            w |> write("\}")
+        }
+    }
+    // q8 / q8_f16s: per-32-block exact int accumulate + scale fold in a float cooperative acc
+    let wst = kind == "q8h" ? "device const ushort" : "device const float"
+    let wsread = kind == "q8h" ? "float(as_type<half>(ws[uint(ids[0]) * ldws + b]))" : "ws[uint(ids[0]) * ldws + b]"
+    return build_string() $(var w) {
+        w |> write("static void {name}(device const char * aq, uint lda, device const float * as, uint ldas, device const char * wq, uint ldw, {wst} * ws, uint ldws, device float * c, uint ldc, uint kk) \{\n")
+        w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, 32, false, true, false);\n")
+        w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+        w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+        w |> write("    auto A0 = {ct}((device int8_t *)aq, dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+        w |> write("    auto W0 = {ct}((device int8_t *)wq, dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
+        w |> write("    auto fT = op.get_destination_cooperative_tensor<decltype(A0), decltype(W0), float>();\n")
+        w |> write("    for (uint16_t i = 0; i < fT.get_capacity(); ++i) \{ if (fT.is_valid_element(i)) fT[i] = 0.0f; \}\n")
+        w |> write("    const uint nb = kk / 32u;\n")
+        w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
+        w |> write("        auto A = {ct}((device int8_t *)(aq + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+        w |> write("        auto W = {ct}((device int8_t *)(wq + b * 32u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
+        w |> write("        auto iT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), int32_t>();\n")
+        w |> write("        for (uint16_t i = 0; i < iT.get_capacity(); ++i) \{ if (iT.is_valid_element(i)) iT[i] = 0; \}\n")
+        w |> write("        op.run(A, W, iT);\n")
+        w |> write("        for (uint16_t i = 0; i < iT.get_capacity(); ++i) \{ if (iT.is_valid_element(i)) \{\n")
+        w |> write("            auto ids = iT.get_multidimensional_index(i);\n")
+        w |> write("            fT[i] += float(iT[i]) * as[uint(ids[1]) * ldas + b] * {wsread};\n")
+        w |> write("        \} \}\n")
+        w |> write("    \}\n")
+        w |> write("    fT.store(C);\n")
+        w |> write("\}")
+    }
+}
+
+// acc arg (position 0 of every tg-protocol call) -> the das variable name, MSL-mangled
+def private tg_acc_name(var ctx : MslCtx; e : Expression?) : string {
+    var a = e
+    if (a is ExprRef2Value) {
+        a = (a as ExprRef2Value).subexpr
+    }
+    if (a is ExprVar) {
+        return msl_safe_name(string((a as ExprVar).name))
+    }
+    err(ctx, e.at, "tmm2d_tg_*: acc must be a plain local variable")
+    return "__bad_acc"
+}
+
+def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_begin takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[4], "kk (chunk K width)")
+    if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
+    }
+    note(ctx, "call.tmm2d_tg_begin")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, false);")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
+    lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
+}
+
+def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 6) {
+        err(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let ta = emit_value(ctx, ec.arguments[1])
+    let tb = emit_value(ctx, ec.arguments[2])
+    let m = tmm2d_const_uint(ctx, ec.arguments[3], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[4], "n (tile cols)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[5], "kk (chunk K width)")
+    if (m == 0u || n == 0u || kk == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_step")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __A = __tgt_{acc}((threadgroup half *){ta}, dextents<int32_t, 2>({int(kk)}, {int(m)}));")
+    lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(kk)}, {int(n)}));")
+    lines |> push("{indent}    auto __c = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __c);")
+    lines |> push("{indent}    for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] += __c[__i]; \}")
+    lines |> push("{indent}\}")
+}
+
+def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_store takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let cp = emit_value(ctx, ec.arguments[1])
+    let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
+    let ldc = emit_value(ctx, ec.arguments[4])
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_store")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __C = tensor<device float, dextents<int32_t, 2>, tensor_inline>({cp}, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int({ldc})\});")
+    lines |> push("{indent}    __tgf_{acc}.store(__C);")
+    lines |> push("{indent}\}")
+}
+
+def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    let cname = call_base_name("{ec.name}")
+    let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))
+    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : 14)
+    if (length(ec.arguments) != want_args) {
+        err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
+        return
+    }
+    let m = tmm2d_const_uint(ctx, ec.arguments[0], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[1], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[2], "sgs (simdgroups)")
+    if (m == 0u || n == 0u || sgs == 0u) {
+        return
+    }
+    let hname = "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}"
+    if (!key_exists(ctx.gen_helpers, hname)) {
+        ctx.gen_helpers[hname] = tmm2d_helper_text(kind, m, n, sgs)
+    }
+    let vals <- [for (i in range(3, length(ec.arguments))); emit_value(ctx, ec.arguments[i])]
+    note(ctx, "call.{cname}")
+    lines |> push("{indent}{hname}({join(vals, ", ")});")
+}
+
 def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var lines : array<string>) {
     if (e == null) {
         return
@@ -1154,6 +1393,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         emit_stmt(ctx, (e as ExprWith).body, indent, lines)
     } elif (e is ExprLet) {
         for (v in (e as ExprLet).variables) {
+            if (key_exists(ctx.tg_accs, string(v.name))) {
+                continue   // staged-GEMM accumulator: CPU-replay state only — the GPU uses a cooperative tensor
+            }
             let sgname = sgmat_type_name(v._type)
             if (!empty(sgname)) {
                 let sgVarName = string(v.name)
@@ -1328,6 +1570,14 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tg_store_float4(ctx, ec, indent, lines)
         } elif (cname == "simdgroup_multiply_accumulate" || cname == "simdgroup_multiply") {
             emit_sgmat_multiply(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32") {
+            emit_tmm2d(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_begin") {
+            emit_tmm2d_tg_begin(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_step") {
+            emit_tmm2d_tg_step(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_store") {
+            emit_tmm2d_tg_store(ctx, ec, indent, lines)
         } else {
             err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering — only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
@@ -1569,8 +1819,22 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         hs |> sort()    // table iteration order is hash-based — pin the emitted order
         helper_text = join(hs, "\n") + "\n"
     }
+    var mpp_include = ""
+    if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs)) {
+        // Metal-4 tensor ops: the MPP include + namespace (the tg protocol emits inline —
+        // no helpers, include still required), then generated helpers in pinned (sorted) order
+        mpp_include = "#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\nusing namespace mpp::tensor_ops;\n"
+        var gh <- [for (k in keys(ctx.gen_helpers)); k]
+        gh |> sort()
+        helper_text += build_string() $(var w) {
+            for (k in gh) {
+                w |> write(ctx.gen_helpers[k])
+                w |> write("\n")
+            }
+        }
+    }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{helper_text}kernel void {kernel_entry_name(fn, cfg)}(",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}kernel void {kernel_entry_name(fn, cfg)}(",
         join(params, ",\n        "),
         ") \{\n",
         empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",

@@ -480,6 +480,73 @@ function apply(s) {
 // received the GPU tier; its ms comes from the sw totals delta. Polls a second apart can merge
 // two switches into one chip — accepted for an admin surface.
 const slotHitHist = new Map();   // slot name -> rolling cumulative prefix-hit-rate series
+// ===== .dlim inventory + bake (refreshed on load and when a bake completes, not per poll) =====
+const imagesBySlot = new Map();  // slot name -> { flavor, trimmed, images: [{file,bytes,version,verdict}] }
+let bakingModel = "";
+let bakePolling = false;
+
+async function refreshImages() {
+    try {
+        const r = await fetch("/v1/images", { cache: "no-store" });
+        const j = await r.json();
+        imagesBySlot.clear();
+        for (const m of j.models || []) imagesBySlot.set(m.model, m);
+        bakingModel = j.baking || "";
+        if (bakingModel) pollBake();
+    } catch (_e) { /* server may be gone */ }
+}
+
+function pollBake() {
+    if (bakePolling) return;
+    bakePolling = true;
+    const tick = async () => {
+        try {
+            const r = await fetch("/bake", { cache: "no-store" });
+            const j = await r.json();
+            bakingModel = j.state === "running" ? j.model : "";
+            if (j.state === "running") { setTimeout(tick, 2000); return; }
+            if (j.state === "done" || j.state === "failed") {
+                $("m-note").textContent = "bake " + j.state + " (" + j.model + ")" +
+                    (j.state === "failed" && j.log && j.log.length ? " — " + j.log[j.log.length - 1] : "");
+                refreshImages();
+            }
+        } catch (_e) { /* server may be gone */ }
+        bakePolling = false;
+    };
+    setTimeout(tick, 2000);
+}
+
+function dlimLine(m) {
+    const inv = imagesBySlot.get(m.name);
+    if (!inv) return "";
+    const imgs = inv.images || [];
+    const cur = imgs.filter(x => x.verdict === "CURRENT").length;
+    const stale = imgs.filter(x => x.verdict === "BROKEN" || x.verdict.startsWith("STALE")).length;
+    const gb = imgs.reduce((a, x) => a + x.bytes, 0) / 1e9;
+    const serving = inv.flavor ? "serving " + inv.flavor + (inv.trimmed ? " (trimmed)" : "") : "no image mapped";
+    const tip = imgs.map(x => x.file + " — " + (x.bytes / 1e9).toFixed(1) + " GB · v" + x.version + " · " + x.verdict).join("\n");
+    const bakeBit = bakingModel === m.name ? ' · <span class="chip">baking…</span>'
+        : (bakingModel ? "" : ' · <button class="mini xs" type="button" data-bake="' + esc(m.name).replace(/"/g, "&quot;") + '">bake</button>');
+    return '<div class="line dim" title="' + esc(tip) + '">.dlim ' + serving + ' · ' +
+        (imgs.length ? cur + " current" + (stale ? " / " + stale + " stale" : "") + " · " + gb.toFixed(1) + " GB" : "none baked") +
+        bakeBit + '</div>';
+}
+
+// serving from a flavor image bakes the matching knobs into the file — flipping them under a
+// mapped .dlim cannot take effect (a vulkan image cannot switch to cpu mode); lock + hint
+function lockGpuControls(flavor) {
+    const vk = flavor === "vulkan";
+    const locked = vk || flavor === "metal";
+    const hint = locked ? "locked: serving a " + flavor + " .dlim — rebake to change" : "";
+    const ids = vk ? ["f-gpu", "f-gpu_layers", "f-gpu_stream", "f-gpu_vram_mb", "f-gpu_dn", "f-gpu_attn", "f-gpu_dense"] : ["f-gpu"];
+    for (const id of ["f-gpu", "f-gpu_layers", "f-gpu_stream", "f-gpu_vram_mb", "f-gpu_dn", "f-gpu_attn", "f-gpu_dense"]) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const on = locked && ids.includes(id);
+        el.disabled = on;
+        el.title = on ? hint : "";
+    }
+}
 const swHist = [];               // newest first: { from, to, ms }
 let prevSlots = null;            // last poll's models[] keyed by name
 
@@ -534,12 +601,15 @@ function renderModels(s) {
             '<div class="line dim">' + (m.last_used_s < 0 ? 'never used' : 'used ' + fmtAge(m.last_used_s) + ' ago') +
                 (m.sw_count > 0 ? ' · ' + m.sw_count + ' switch-in' + (m.sw_count > 1 ? 's' : '') +
                     ' · avg ' + m.sw_avg_ms.toFixed(0) + 'ms' : '') + '</div>' +
+            dlimLine(m) +
             '<canvas class="mspark" height="26" title="prefix-cache hit rate"></canvas>';
         draw(el.querySelector("canvas"), [{ data: hh, color: css("--green") }]);
     }
     for (const el of [...box.querySelectorAll(".mcard")]) {
         if (!want.has(el.id)) el.remove();
     }
+    const act = slots.find(x => x.is_active);
+    lockGpuControls(act ? (act.flavor || "") : "");
     if (s.gpu_budget_bytes > 0) {
         $("vram-panel").style.display = "block";
         const owner = slots.find(m => m.holds_gpu);
@@ -558,6 +628,28 @@ function renderModels(s) {
 }
 
 $("mcards").addEventListener("click", async e => {
+    const bk = e.target.closest("button[data-bake]");
+    if (bk) {
+        bk.disabled = true;
+        try {
+            const r = await fetch("/bake", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: bk.dataset.bake }),
+            });
+            const j = await r.json().catch(() => null);
+            if (r.ok && j) {
+                bakingModel = j.model;
+                $("m-note").textContent = "baking " + j.model + " (" + j.flavor + ") — the converter runs as a child, hold on";
+                pollBake();
+            } else {
+                $("m-note").textContent = j && j.error ? j.error.message : "bake failed: " + r.status;
+            }
+        } catch (_e) {
+            $("m-note").textContent = "bake request failed";
+        }
+        return;
+    }
     const b = e.target.closest("button[data-activate]");
     if (!b) return;
     b.disabled = true;
@@ -1826,6 +1918,7 @@ fetch("/bench", { cache: "no-store" }).then(r => r.json()).then(renderBench).cat
 
 poll();
 loadConfig();
+refreshImages();
 </script>
 </body>
 </html>

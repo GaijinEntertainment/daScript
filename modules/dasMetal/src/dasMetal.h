@@ -65,6 +65,7 @@ namespace das {
     DAS_MOD_API void metal_commit ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
     DAS_MOD_API void metal_wait_until_completed ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
     DAS_MOD_API char * metal_command_buffer_error ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
+    DAS_MOD_API bool metal_command_buffer_failed ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
     DAS_MOD_API double metal_command_buffer_gpu_start_time ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
     DAS_MOD_API double metal_command_buffer_gpu_end_time ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );
     DAS_MOD_API double metal_command_buffer_kernel_start_time ( MetalCommandBuffer * cb, Context * ctx, LineInfoArg * at );

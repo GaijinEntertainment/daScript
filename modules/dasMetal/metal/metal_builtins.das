@@ -11,6 +11,7 @@ options indenting = 4
 module metal_builtins shared public
 
 require daslib/shader_lingua_franca public
+require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs decode bf16/f16 halfwords
 
 // ===== compute builtins (Metal-only additions) =====
 // simdgroup IDs, GLSL subgroup spellings (KHR_shader_subgroup names — portable if dasSpirv grows
@@ -241,6 +242,189 @@ def public simdgroup_multiply(var d : simdgroup_half8x8; a, b : simdgroup_half8x
                 acc += a.data[r * 8 + k] * b.data[k * 8 + cc]
             }
             d.data[r * 8 + cc] = acc
+        }
+    }
+}
+
+// ===== Metal-4 tensor ops (MTLTensor / mpp::tensor_ops::matmul2d) =====
+// Statement-form cooperative GEMM markers: on the GPU the MSL emitter replaces each call with
+// tensor_inline views + a matmul2d op (see msl_emit); the bodies below are the CPU-replay
+// reference. All threads must reach the call convergently (cooperative op); the stubs compute
+// the full tile once (thread 0) since replay threads run independently.
+// Layout contract (NT, the engine's panels): A = activations, m rows x kk, row stride lda;
+// W = weights, n output cols x kk, row stride ldw; C = m x n, row stride ldc, OVERWRITTEN.
+// m/n/sgs (tile rows, tile cols, cooperating simdgroups) must be call-site constants.
+
+//! f32 activations x bf16 weights -> f32 tile (raw bf16 halfwords in `w`).
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += a[r * int(lda) + k] * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+//! Q8xQ8 tile with the per-32-block scale fold (exact int32 accumulate per block, then
+//! facc += float(iacc) * as[r][b] * ws[j][b] — the dot_q8q8 contract). Scale row strides in
+//! ELEMENTS (blocks): as at a + r*lda_s, ws at w + j*ldw_s.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_q8_f32(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : float const?; lda_s : uint; wq : int8 const?; ldw : uint; wsf : float const?; ldw_s : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    var iacc = 0
+                    for (k in range(32)) {
+                        iacc += int(aq[r * int(lda) + b * 32 + k]) * int(wq[j * int(ldw) + b * 32 + k])
+                    }
+                    facc += float(iacc) * asf[r * int(lda_s) + b] * wsf[j * int(ldw_s) + b]
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
+// binary16 halfword -> f32 for the CPU stubs (exact; subnormals included)
+def private f16_bits_to_f32(h : uint) : float {
+    let s = (h >> 15u) & 1u
+    let e = (h >> 10u) & 31u
+    let mant = h & 1023u
+    var bits : uint
+    if (e == 0u) {
+        if (mant == 0u) {
+            bits = s << 31u
+        } else {
+            var m = mant
+            var ee = 127u - 15u + 1u
+            while ((m & 1024u) == 0u) {
+                m <<= 1u
+                ee--
+            }
+            bits = (s << 31u) | (ee << 23u) | ((m & 1023u) << 13u)
+        }
+    } elif (e == 31u) {
+        bits = (s << 31u) | (255u << 23u) | (mant << 13u)
+    } else {
+        bits = (s << 31u) | ((e + 127u - 15u) << 23u) | (mant << 13u)
+    }
+    return uint_bits_to_float(bits)
+}
+
+//! The wscale_f16 twin of tmm2d_q8_f32: weight scales are raw binary16 halfwords.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_q8_f16s(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : float const?; lda_s : uint; wq : int8 const?; ldw : uint; wsf : uint16 const?; ldw_s : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    var iacc = 0
+                    for (k in range(32)) {
+                        iacc += int(aq[r * int(lda) + b * 32 + k]) * int(wq[j * int(ldw) + b * 32 + k])
+                    }
+                    facc += float(iacc) * asf[r * int(lda_s) + b] * f16_bits_to_f32(uint(wsf[j * int(ldw_s) + b]))
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
+//! Interleaved-q8_0 W blocks x RAW f32 activations (the production MulMm dataflow). `wsh` is the
+//! blob's f16-scale view at the tile's first block (row j chunk b scale at (j*ldwb+b)*17); `wqb`
+//! the byte view pre-offset to that block's quants (+2 done by the caller). `ldwb` = W row stride
+//! in BLOCKS (kk/32 for a full row; larger under split-K). W scale folded between f32 chunks.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * int(ldwb) + b
+                    var ch = 0.0
+                    for (k in range(32)) {
+                        ch += a[r * int(lda) + b * 32 + k] * float(wqb[blk * 34 + k])
+                    }
+                    facc += ch * float(wsh[blk * 17])
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
+// ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
+// For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
+// k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.
+// `acc` is an m*n float @workgroup (or local) scratch — the CPU-replay accumulator; on GPU the
+// emitter keys a persistent cooperative tensor to the acc VARIABLE and never touches the array.
+// run() OVERWRITES a cooperative destination (probe-proven), so step folds explicitly.
+
+//! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step: acc[r][j] += ta[r][k] * tb[j][k] over one staged chunk — ta flat [m][kk] f16,
+//! tb flat [n][kk] f16, both row-major. Call between the same barriers the staging uses.
+[sideeffects]
+def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
+            }
+            acc[r * int(n) + j] += facc
+        }
+    }
+}
+
+//! store: C[r][j] = acc[r][j] (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = acc[r * int(n) + j]
+            }
         }
     }
 }

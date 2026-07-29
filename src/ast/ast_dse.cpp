@@ -338,10 +338,17 @@ namespace das {
                             continue;   // the statement vanishes whole: no kills, no uses
                         }
                         // impure rhs: the store dies, the rhs stays as a bare statement -
-                        // no kills (the write is gone), uses stay (the rhs still evaluates)
-                        deadKeepRhs.insert(b->stmts[si]);
-                        for ( int u : SI.uses ) live[u>>6] |= 1ull<<(u&63);
-                        continue;
+                        // no kills (the write is gone), uses stay (the rhs still evaluates).
+                        // NOT for an operator-topped rhs: a bare `a + b` statement trips the
+                        // top-level no-side-effect lint when a reused shared module re-lints
+                        // its optimized AST (the operator node itself is a pure builtin even
+                        // when an operand is not) - that store stays whole
+                        auto rhs = static_cast<ExprCopy *>(b->stmts[si])->right;
+                        if ( !rhs->rtti_isOp2() && !rhs->rtti_isOp1() ) {
+                            deadKeepRhs.insert(b->stmts[si]);
+                            for ( int u : SI.uses ) live[u>>6] |= 1ull<<(u&63);
+                            continue;
+                        }
                     }
                     if ( !SI.letInits.empty() ) {
                         // a later init in the same `let` may read an earlier variable -

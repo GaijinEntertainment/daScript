@@ -161,6 +161,39 @@ def test_openai_server(t : T?) {
                     }
                 }
             }
+            // /v1/images — the .dlim inventory surface (set_model registers no path, so the
+            // slot reports an empty inventory; the SHAPE is what the page contracts on)
+            GET("{base_url}/v1/images") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null, "images JSON parses")
+                if (js != null) {
+                    t |> equal(string(js?["baking"] ?? "?"), "")
+                    let ms = js?["models"]
+                    t |> success(ms != null && ms is _array && length(ms as _array) == 1, "one slot listed")
+                    if (ms != null && ms is _array && length(ms as _array) == 1) {
+                        t |> equal(string((ms as _array)[0]?["model"] ?? ""), "test-llm")
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            // /bake — idle state; POST declines cleanly without a configured spawner
+            GET("{base_url}/bake") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && string(js?["state"] ?? "") == "idle", "bake starts idle")
+                unsafe {
+                    delete js
+                }
+            }
+            POST("{base_url}/bake", "\{}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "source-tree daslang") >= 0, "bake declines without a spawner")
+            }
             // /v1/embeddings — single input: unit-normalized vector of the model's hidden dim
             POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))

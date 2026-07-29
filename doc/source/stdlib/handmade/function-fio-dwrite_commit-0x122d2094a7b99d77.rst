@@ -1,0 +1,1 @@
+Account ``bytes`` written into the pointer ``dwrite_band`` handed out; a full band flushes to the device automatically. Returns false when the commit overruns the band's remaining space (a producer bug) or the writer already failed.
