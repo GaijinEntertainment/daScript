@@ -173,9 +173,7 @@ def get_first_line(text : string) : string {
     return strip(clean)
 }
 
-def do_outline(file, glob_filter : string) : string {
-    if (empty(file) && empty(glob_filter)) return make_tool_result("'file' or 'glob' argument is required", true)
-    let das_root = get_das_root()
+def build_outline_cmd(file, glob_filter, das_root : string) : string {
     let rules_path = "{das_root}/tree-sitter-daslang/outline_rules.yml"
     // build target path(s)
     var target : string
@@ -194,6 +192,34 @@ def do_outline(file, glob_filter : string) : string {
     } elif (!empty(glob_filter)) {
         cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{das_root}\""
     }
+    return cmd
+}
+
+def format_outline(entries : array<OutlineEntry>; var by_file : table<string; array<int>>; file_order : array<string>) : string {
+    let multi_file = length(file_order) > 1
+    return build_string() $(var w) {
+        for (fp_idx in range(length(file_order))) {
+            let fp = file_order[fp_idx]
+            if (multi_file) {
+                write(w, "{fp}:\n")
+            }
+            unsafe {
+                for (idx in by_file[fp]) {
+                    let e & = entries[idx]
+                    write(w, "  {e.line}: [{e.kind}] {e.text}\n")
+                }
+            }
+            if (multi_file && fp_idx < length(file_order) - 1) {
+                write(w, "\n")
+            }
+        }
+    }
+}
+
+def do_outline(file, glob_filter : string) : string {
+    if (empty(file) && empty(glob_filter)) return make_tool_result("'file' or 'glob' argument is required", true)
+    let das_root = get_das_root()
+    let cmd = build_outline_cmd(file, glob_filter, das_root)
     var raw_json : string
     unsafe {
         popen(cmd) $(f) {
@@ -251,24 +277,5 @@ def do_outline(file, glob_filter : string) : string {
             }
         }
     }
-    // format output
-    let multi_file = length(file_order) > 1
-    let output = build_string() $(var w) {
-        for (fp_idx in range(length(file_order))) {
-            let fp = file_order[fp_idx]
-            if (multi_file) {
-                write(w, "{fp}:\n")
-            }
-            unsafe {
-                for (idx in by_file[fp]) {
-                    let e & = entries[idx]
-                    write(w, "  {e.line}: [{e.kind}] {e.text}\n")
-                }
-            }
-            if (multi_file && fp_idx < length(file_order) - 1) {
-                write(w, "\n")
-            }
-        }
-    }
-    return make_tool_result(output)
+    return make_tool_result(format_outline(entries, by_file, file_order))
 }

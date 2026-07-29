@@ -1798,10 +1798,10 @@ def document_module_gltf(_root : string) {
 // das2rst compiles tuned libraries to inspect their source API. The explicit
 // documentation context keeps all [tune] transforms and policy machinery inert.
 [export]
-def main {
+def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch list
     disable_profiler(this_context())
     disable_profiler_log(this_context())
-    ast_gc_guard() {
+    ast_gc_guard() {  // nolint:STYLE038 — same flat dispatch list, one guard scope
     let root = get_das_root() + "/doc/source/stdlib/generated"
     // document embedded modules
     document_module_builtin(root)

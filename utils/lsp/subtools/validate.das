@@ -95,6 +95,36 @@ def private push_lint_issues(var result : ValidateResult; issues : array<LintIss
     }
 }
 
+def collect_lint_diagnostics(var result : ValidateResult; program : ProgramPtr; lines : array<string>; target : string;
+                             disabled_codes, enabled_codes : table<string>) : void {
+    var lint_issues : array<LintIssue>
+    paranoid_collect_issues(program, lint_issues, disabled_codes, enabled_codes)
+    perf_lint_collect_issues(program, lint_issues, disabled_codes, enabled_codes)
+    let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
+    style_lint_collect_issues(program, lint_issues, disabled_codes, enabled_codes, hygiene)
+    push_lint_issues(result, lint_issues, lines, target)
+}
+
+def push_compile_errors(var result : ValidateResult; program : ProgramPtr; lines : array<string>; target : string) : void {
+    for (err in program.errors) {
+        let err_file = err.at.fileInfo != null ? to_generic_path("{err.at.fileInfo.name}") : ""
+        var diag = LspDiagnostic(
+            severity = 1,
+            code = "{int(err.cerr)}",
+            source = "daslang",
+            message = build_message("{err.what}", "{err.extra}", "{err.fixme}"))
+        if (err_file == target) {
+            diag._range = make_range(lines, int(err.at.line), int(err.at.column),
+                int(err.at.last_line), int(err.at.last_column))
+        } elif (!empty(err_file)) {
+            // error in a required file: surface at the top of the edited one
+            diag.message = "in {err_file}:{int(err.at.line)}: {diag.message}"
+            diag._range.end.character = 1
+        }
+        result.diagnostics |> push(diag)
+    }
+}
+
 [export]
 def main() : int {
     let raw <- get_command_line_arguments()
@@ -153,32 +183,11 @@ def main() : int {
                             source = "daslang",
                             message = "compilation failed: {issues}"))
                     } elif (program != null) {
-                        var lint_issues : array<LintIssue>
-                        paranoid_collect_issues(program, lint_issues, disabled_codes, enabled_codes)
-                        perf_lint_collect_issues(program, lint_issues, disabled_codes, enabled_codes)
-                        let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-                        style_lint_collect_issues(program, lint_issues, disabled_codes, enabled_codes, hygiene)
-                        push_lint_issues(result, lint_issues, lines, target)
+                        collect_lint_diagnostics(result, program, lines, target, disabled_codes, enabled_codes)
                     }
                     return
                 }
-                for (err in program.errors) {
-                    let err_file = err.at.fileInfo != null ? to_generic_path("{err.at.fileInfo.name}") : ""
-                    var diag = LspDiagnostic(
-                        severity = 1,
-                        code = "{int(err.cerr)}",
-                        source = "daslang",
-                        message = build_message("{err.what}", "{err.extra}", "{err.fixme}"))
-                    if (err_file == target) {
-                        diag._range = make_range(lines, int(err.at.line), int(err.at.column),
-                            int(err.at.last_line), int(err.at.last_column))
-                    } elif (!empty(err_file)) {
-                        // error in a required file: surface at the top of the edited one
-                        diag.message = "in {err_file}:{int(err.at.line)}: {diag.message}"
-                        diag._range.end.character = 1
-                    }
-                    result.diagnostics |> push(diag)
-                }
+                push_compile_errors(result, program, lines, target)
             }
         }
     }

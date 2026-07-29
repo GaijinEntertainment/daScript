@@ -2265,6 +2265,45 @@ Override the limit per module with ``options _cyclomatic_complexity = N``;
 ``N = 0`` disables the rule for the module. Suppress a single deliberate keep
 with ``// nolint:STYLE037`` on the ``def`` line.
 
+STYLE038 — function longer than the line limit
+===============================================
+
+An overgrown function is hard to navigate, review, and test even when its
+branching stays simple — a straight-line emitter or a giant literal table has a
+low cyclomatic complexity and is still unreadable. STYLE038 is the length half
+of that pair: it measures **physical lines**, from the ``def`` line through the
+body's closing brace, counting comments and blank lines.
+
+The default limit is 80 lines, chosen from this codebase's own distribution:
+across ~34,000 functions the median is 7 lines, p90 is 31 and p95 is 52, so 80
+sits near p97 and flags roughly the worst 2%. For reference, other linters
+default to 50 (ESLint ``max-lines-per-function``, SwiftLint warning), 60
+(golangci-lint ``funlen``, detekt ``LongMethod``) and 150 (Checkstyle
+``MethodLength``).
+
+.. code-block:: das
+
+    // Bad — one function carrying a hundred lines of straight-line work
+    def emit_everything(var w : StringBuilderWriter) {   // STYLE038
+        // ... 100+ lines ...
+    }
+
+    // Good — one function per emitted section
+    def emit_everything(var w : StringBuilderWriter) {
+        emit_header(w)
+        emit_body(w)
+        emit_footer(w)
+    }
+
+The rule checks **functions only**. A closure's physical span always sits
+inside its host function's, so the host trips first and a separate closure
+check could only ever double-report the same lines.
+
+Override the limit per module with ``options _function_length = N``; ``N = 0``
+disables the rule for the module — the right escape for a legitimately dense
+file such as a code emitter or a ported kernel. Suppress a single deliberate
+keep with ``// nolint:STYLE038`` on the ``def`` line.
+
 -----
 Tests
 -----

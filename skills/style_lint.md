@@ -50,6 +50,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE036 | A type contract (`-const`, `-&`, `-[]`, `-#`, `==const`, `==&`) on an already-resolved `cast<>` / `reinterpret<>` / `upcast<>` / `addr<T?>` target | Drop it — it does nothing. These are substitution contracts, consumed (and cleared) by infer when a generic binds; a concrete target has nothing to consume them, so a flag still set at lint time proves it was inert. Excludes `auto`/unresolved-alias targets, where substitution has not run yet (`reinterpret<ARGT -const>` in linq.das genuinely strips const) — that exclusion took the daslib hit count from 179 to 5. A *concrete* typedef is not excluded: `reinterpret<CI? -const>` with `typedef CI = int const` keeps the const, so it fires correctly. Generated subtrees skipped. |
 | STYLE035 | A plain non-`int` numeric variable compared with the same built-in numeric cast of `'<char>'` using `==`, `!=`, `<`, `<=`, `>`, or `>=` (either operand order) | Change the variable to `int` and compare directly with the character literal. Covers `int8/16/64`, `uint/8/16/64`, `float`, and `double`; reports at the declaration, so repeated comparisons produce one warning. Fields, indexes, calls, user-defined constructors, `int` variables, and numeric casts such as `uint(40)` stay silent. |
 | STYLE037 | Function or block-argument closure whose cyclomatic complexity exceeds the limit (`STYLE037_DEFAULT_MAX`; per-module override `options _cyclomatic_complexity = N`, `0` disables) | Split it into smaller functions (closure: extract into a named function). Score = 1 per scope, +1 per `if`/`elif` (incl. postfix `return X if (cond)`), `for`, `while`, ternary `?:`, `try/recover`, `match` arm, comprehension loop and its `where`. NOT counted: `&&`/`\|\|`, `??`/`?.`/`?[`/`?as`, `static_if`, generated control flow. Suppress with `// nolint:STYLE037` on the `def` line. |
+| STYLE038 | Function longer than the physical-line limit (`STYLE038_DEFAULT_MAX_LINES` = 80; per-module override `options _function_length = N`, `0` disables) | Split it into smaller functions. Length is `def` line through body's closing brace, comments and blanks included. **Functions only** — a closure's span always sits inside its host's, so the host trips first and a closure check could only double-report. Suppress with `// nolint:STYLE038` on the `def` line. Pairs with STYLE037: complexity catches condition-dense functions, length catches straight-line monsters (emitters, giant literals) that branch little. |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -80,30 +81,37 @@ The `<|` pipe and `$()` are desugared during parsing — in the compiled AST, `f
 - **STYLE037:** Counter stack `complexity_stack : array<int>` mirrors `unsafe_block_stack` — pushed with base 1 in `preVisitFunction` and for non-generated `isClosure` blocks in `preVisitExprBlock`, popped + checked in `visitFunction` / `visitExprBlock`. Bumps live in `preVisitExprIfThenElse` (after the `isStatic || generated` guard), `preVisitExprOp3`, and new `preVisitExprWhile`/`preVisitExprFor`/`preVisitExprTryCatch` overrides (each skips `genFlags.generated`). Match arms count because `MatchMacro` emits plain `ExprIfThenElse` without setting `generated`. Comprehension `for`/`where` nodes are ALSO unflagged (`generateComprehension` marks only the wrapper closure block generated) — that's why generated closures bill the host instead of getting their own scope: the optimizer may inline the wrapper into the host body, and the count must not depend on that (macro mode vs the runner's `no_optimizations`). Lambda/generator bodies lower to `flags.generated` functions before lint, so `style_warning` suppresses them — lambdas are unchecked, block arguments are checked. Generic instantiations all share the template's `fn.at`, so `reported_locations` dedup keeps it to one warning. Threshold resolved once per entry point via `max_complexity_for(prog)`.
 - **STYLE014/STYLE015:** Post-visit pass — `scan_long_comment_blocks(prog)` runs after the visitor finishes. Walks `prog.getThisModule` only (transitively-required modules are skipped). Per native function/structure (filters: `_module == mod`, not `generated`, not `fromGeneric`, not `moreFlags.isTemplate` for fns / not `flags.isTemplate` for structs, not a name with `<` — the angle-bracket heuristic catches template-instantiated structs whose `at` points to the template's source file). Records `(file, start, end, is_private)` per function and the per-file `first_decl_line` / `max_line`. Then for each unique file, walks source line-by-line via `get_file_source_line`, accumulates contiguous `//` / `//!` lines into a block, and on block end checks: (a) skip if block starts before `first_decl_line` (module-leading docstring), (b) skip if first line contains `@nolint`, (c) find smallest enclosing function range — if private and block size > 1, emit STYLE015; otherwise if size > 3, emit STYLE014. The existing `// nolint:STYLE014` / `// nolint:STYLE015` per-line mechanism (matched by `is_suppressed`) catches the `//` form on the first line of the block; the `//!@nolint` form is matched directly via `find(first_line_text, "@nolint") >= 0` because the `is_suppressed` machinery looks for `:STYLEnnn` after `nolint`.
 
-## STYLE037 resolution policy — do NOT mass-rewrite to satisfy the number
+## STYLE037 / STYLE038 resolution policy — do NOT mass-rewrite to satisfy the number
 
-**New code should just follow the rule.** Design new functions under the limit from
+Applies to both metric rules — cyclomatic complexity (STYLE037) and function length
+(STYLE038). Their escapes are spelled the same way: `// nolint:STYLE03x` on the `def`
+line, or a per-module `options _cyclomatic_complexity = N` / `options _function_length = N`
+(`0` disables).
+
+**New code should just follow the rules.** Design new functions under both limits from
 the start — the escapes below exist for real irreducible shapes, not as a license to
-write complex code and suppress the warning. Reach for them in new code only with a
+write oversized code and suppress the warning. Reach for them in new code only with a
 true reason (the same irreducible shapes listed under 2).
 
-For EXISTING code, a STYLE037 hit is a prompt to look, not an order to refactor. Never
-rewrite a working function (let alone a file's worth of them) just to get under the
-limit: mechanical extract-a-helper splits that hide control flow behind single-caller
-helpers make the code *worse*, and a wide refactor of working code is riskier than the
-complexity it removes. Resolution order:
+For EXISTING code, a hit is a prompt to look, not an order to refactor. Never rewrite a
+working function (let alone a file's worth of them) just to get under the limit:
+mechanical extract-a-helper splits that hide control flow behind single-caller helpers
+make the code *worse*, and a wide refactor of working code is riskier than the
+complexity or length it removes. Resolution order:
 
 1. **Split only along a natural seam** — a self-contained arm (a character-class
    matcher inside a glob loop), a repeated pattern collapsible into one helper (a
-   strip-modifiers loop copy-pasted across arms), or genuinely duplicated logic worth
-   deduplicating. The extracted helper must make sense as a function on its own; if
-   its only virtue is "the caller's number went down", don't extract it.
-2. **`// nolint:STYLE037` on the `def` line** (with a short tail-comment reason) when
-   the shape is irreducible by design: exact-type `is` ladders over handled AST types,
-   visitor/dispatch tables, flat CLI-argument handling.
-3. **`options _cyclomatic_complexity = N`** per module when a whole file is
-   legitimately dense (codegen emitters, parsers, ported code); `= 0` disables the
-   rule for the module entirely.
+   strip-modifiers loop copy-pasted across arms), a distinct phase of a multi-phase
+   function (collect → scan), or genuinely duplicated logic worth deduplicating. The
+   extracted helper must make sense as a function on its own; if its only virtue is
+   "the caller's number went down", don't extract it.
+2. **`// nolint:STYLE037` / `// nolint:STYLE038` on the `def` line** (with a short
+   tail-comment reason) when the shape is irreducible by design: exact-type `is` ladders
+   over handled AST types, visitor/dispatch tables, flat CLI-argument handling, flat
+   one-call-per-item dispatch lists.
+3. **`options _cyclomatic_complexity = N` / `options _function_length = N`** per module
+   when a whole file is legitimately dense (codegen emitters, parsers, ported code);
+   `= 0` disables that rule for the module entirely.
 
 ## How to Add a New Rule
 
