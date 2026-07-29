@@ -117,8 +117,8 @@ configurations still in active development. Measured rows are annotated, not del
 - ASR comparisons are CPU-only, and the macOS reference CLIs do get Apple's AMX matrix unit
   through Accelerate — noted where it applies. llama.cpp has no speech-to-text engine; those
   references are the dedicated ones (whisper.cpp, parakeet-cli, ONNX Runtime, NeMo).
-- The audio-in (omni) comparison is a narrow CPU slice: llama.cpp's audio encoders do not route
-  through BLAS on CPU, and a GPU build of its multimodal path would tell a different story.
+- The audio-in comparison is a narrow CPU slice: llama.cpp's audio encoders do not route
+  through BLAS on CPU. GPU builds of the multimodal path are not measured here.
 - Community-submitted rows are out of scope for now; the record schema carries a source field
   for them, but no submission path is defined yet.
 

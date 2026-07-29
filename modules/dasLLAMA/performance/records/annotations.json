@@ -5,6 +5,11 @@
   "engine": "das",
   "backend": "vulkan",
   "flavor": "tuned",
-  "comment": "Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. Yardstick is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
+  "comment": "Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. The reference is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
+ },
+ {
+  "gguf": "canary-qwen-2.5b-decoder-f16.gguf",
+  "engine": "das",
+  "comment": "The decoder runs un-quantized fp32 - the token-parity configuration; long clips pay the most for it. Quantizing the decoder is open work."
  }
 ]

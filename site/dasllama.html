@@ -278,7 +278,7 @@ def main() {
         <div class="forge-container">
             <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>speech-to-text</span></div>
             <h2 class="forge-h2">Transcription, clip by clip.</h2>
-            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side. Canary-Qwen runs an un-quantized fp32 decoder and trails on the longest clip &mdash; a known follow-up, visible in the table rather than written around.</p>
+            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side.</p>
 
             <div class="dl-filters" id="asr-filters"></div>
             <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="asr-table"></table></div>
@@ -291,7 +291,7 @@ def main() {
         <div class="forge-container">
             <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>audio in</span></div>
             <h2 class="forge-h2">Omni models, audio straight into the prompt.</h2>
-            <p class="forge-p forge-p--wide">The one audio workload llama.cpp does cover: omni chat models taking audio in, run through <code>llama-mtmd-cli</code>. This is a narrow CPU-only slice &mdash; llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder, and das's optimized fp32 encoder comes out well ahead on that path. A GPU build of llama.cpp would tell a different story.</p>
+            <p class="forge-p forge-p--wide">The one audio workload llama.cpp does cover: omni chat models taking audio in, run through <code>llama-mtmd-cli</code>. This is a narrow CPU-only slice &mdash; llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder, and das's optimized fp32 encoder comes out well ahead on that path.</p>
 
             <div class="dl-filters" id="audiochat-filters"></div>
             <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="audiochat-table"></table></div>

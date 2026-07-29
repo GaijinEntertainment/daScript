@@ -31,7 +31,7 @@
         "sha":"5b4bc1b3f",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; resident vulkan graph (prefill + decode)",
         "env":"DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=6000 DASLLAMA_COOPMAT=mm",
-        "comment":"Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. Yardstick is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
+        "comment":"Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. The reference is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
       },
       {
         "engine":"llama.cpp",
@@ -159,6 +159,141 @@
     "params_b":4.0222720000000001,
     "active_b":4.0222720000000001,
     "size_bytes":4280405600
+  },
+  {
+    "gguf":"canary-qwen-2.5b-decoder-f16.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-07-28",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":4902.5630000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":15415.68,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":125138.443,
+            "audio_s":198.734375
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"8665ceedd",
+        "version":"0.6.4",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-f16.gguf",
+            "sha256":"db035e415f77aeb48222c81f92a49a68906ae80cef4e0600cde8ea699c12b496",
+            "bytes":3447348864
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin",
+            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+            "bytes":3252768256
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ],
+        "comment":"The decoder runs un-quantized fp32 - the token-parity configuration; long clips pay the most for it. Quantizing the decoder is open work."
+      },
+      {
+        "engine":"nemo",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-07-28",
+        "cmd":"/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":8151.6279999999997,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":22088.127,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":41512.146999999997,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      }
+    ],
+    "arch":"Canary-Qwen 2.5B",
+    "size_bytes":3447348864
   },
   {
     "gguf":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
@@ -5610,140 +5745,6 @@
     ],
     "arch":"Whisper large-v3-turbo",
     "size_bytes":1624555275
-  },
-  {
-    "gguf":"canary-qwen-2.5b-decoder-f16.gguf",
-    "runs":[
-      {
-        "engine":"das",
-        "backend":"cpu",
-        "flavor":"tuned",
-        "box":"m1",
-        "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
-        "hardware":{
-          "cpu":"Apple M1 Max",
-          "arch":"arm64",
-          "os":"macOS 26.5.2",
-          "perf_cores":8,
-          "total_cores":10,
-          "ram_gb":64,
-          "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
-        },
-        "tests":{
-          "asr:jfk.wav":{
-            "ms":4902.5630000000001,
-            "audio_s":11
-          },
-          "asr:jfk3.wav":{
-            "ms":15415.68,
-            "audio_s":33
-          },
-          "asr:gb1.wav":{
-            "ms":125138.443,
-            "audio_s":198.734375
-          }
-        },
-        "workload":"asr",
-        "source":"official",
-        "sha":"8665ceedd",
-        "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
-        "files":[
-          {
-            "role":"weights",
-            "name":"canary-qwen-2.5b-decoder-f16.gguf",
-            "sha256":"db035e415f77aeb48222c81f92a49a68906ae80cef4e0600cde8ea699c12b496",
-            "bytes":3447348864
-          },
-          {
-            "role":"mmproj",
-            "name":"canary-qwen-2.5b-encoder-f32.bin",
-            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
-            "bytes":3252768256
-          },
-          {
-            "role":"clip",
-            "name":"jfk.wav",
-            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
-            "bytes":352078
-          },
-          {
-            "role":"clip",
-            "name":"jfk3.wav",
-            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
-            "bytes":1056078
-          },
-          {
-            "role":"clip",
-            "name":"gb1.wav",
-            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
-            "bytes":6359578
-          }
-        ]
-      },
-      {
-        "engine":"nemo",
-        "backend":"cpu",
-        "flavor":"stock",
-        "box":"m1",
-        "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
-        "hardware":{
-          "cpu":"Apple M1 Max",
-          "arch":"arm64",
-          "os":"macOS 26.5.2",
-          "perf_cores":8,
-          "total_cores":10,
-          "ram_gb":64,
-          "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
-        },
-        "tests":{
-          "asr:jfk.wav":{
-            "ms":8151.6279999999997,
-            "audio_s":11
-          },
-          "asr:jfk3.wav":{
-            "ms":22088.127,
-            "audio_s":33
-          },
-          "asr:gb1.wav":{
-            "ms":41512.146999999997,
-            "audio_s":199
-          }
-        },
-        "workload":"asr",
-        "source":"official",
-        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
-        "files":[
-          {
-            "role":"clip",
-            "name":"jfk.wav",
-            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
-            "bytes":352078
-          },
-          {
-            "role":"clip",
-            "name":"jfk3.wav",
-            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
-            "bytes":1056078
-          },
-          {
-            "role":"clip",
-            "name":"gb1.wav",
-            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
-            "bytes":6359578
-          }
-        ]
-      }
-    ],
-    "arch":"Canary-Qwen 2.5B",
-    "size_bytes":3447348864
   },
   {
     "gguf":"gemma-4-E2B-it-Q8_0.gguf",
