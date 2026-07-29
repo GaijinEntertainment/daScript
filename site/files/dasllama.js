@@ -4,7 +4,7 @@
 
    Every table on this page is a *pair* table: one row is one das measurement and
    the reference run it was measured against, same workload and same machine. A das
-   number is never rendered without its yardstick, so a measurement whose reference
+   number is never rendered without its reference, so a measurement whose reference
    is missing simply produces no row. */
 
 (function () {
@@ -272,7 +272,7 @@
             return hits.length ? newest(hits) : null;
           }
           var das = pick('das', L.das), ref = pick('llama.cpp', L.ref);
-          if (!das || !ref) return;                    // no yardstick → no row
+          if (!das || !ref) return;                    // no reference → no row
           out.push({
             model: m.gguf.replace(/\.gguf$/, ''), arch: m.arch || '',
             size: m.size_bytes || 0, box: bx, boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
@@ -358,7 +358,7 @@
           Object.keys(das.tests || {}).forEach(function (k) {
             if (k.indexOf('asr:') !== 0 || !ref.tests || !ref.tests[k]) return;
             var dm = das.tests[k].ms, rm = ref.tests[k].ms;
-            if (!(dm > 0) || !(rm > 0)) return;        // no yardstick → no row
+            if (!(dm > 0) || !(rm > 0)) return;        // no reference → no row
             out.push({
               model: m.arch || m.gguf, box: bx,
               boxName: boxLabel(das.hardware && das.hardware.cpu, bx),

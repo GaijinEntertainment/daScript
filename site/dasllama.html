@@ -11,7 +11,7 @@
     <meta property="og:url" content="https://daslang.io/dasllama.html" />
     <meta property="og:site_name" content="daslang" />
     <meta property="og:title" content="dasLLAMA — local LLMs with audio in, faster than llama.cpp" />
-    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; audio-in chat models run up to 6× faster than llama.cpp's multimodal CLI. Every number paired with its yardstick, methodology included." />
+    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; audio-in chat models run up to 6× faster than llama.cpp's multimodal CLI. Every number ships with its reference pair, methodology included." />
     <meta name="twitter:card" content="summary" />
 
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
@@ -259,7 +259,7 @@ def main() {
         <div class="forge-container">
             <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span><span>per-model benchmarks</span></div>
             <h2 class="forge-h2">Every run, paired with its yardstick.</h2>
-            <p class="forge-p forge-p--wide">Every row is one das configuration and the matched llama.cpp build it is measured against &mdash; same model, same machine, same category. A das number never appears without its yardstick. Filter and sort any column; click a row for the receipt: both command lines, commits, tune state, and auto-probed hardware. pp512 = 512-token prefill, tg128 = 128-token greedy decode, tok/s, higher is better.</p>
+            <p class="forge-p forge-p--wide">Every row is one das configuration and the matched llama.cpp build it is measured against &mdash; same model, same machine, same category. A das number never appears without its reference. Filter and sort any column; click a row for the receipt: both command lines, commits, tune state, and auto-probed hardware. pp512 = 512-token prefill, tg128 = 128-token greedy decode, tok/s, higher is better.</p>
 
             <dl class="dl-lanes">
                 <div><dt>cpu</dt><dd>Portable CPU kernels on both sides &mdash; no vendor math library, no GPU. llama.cpp is a <em>clean-cpu</em> build at <code>-ngl 0</code>. Kernel against kernel.</dd></div>
