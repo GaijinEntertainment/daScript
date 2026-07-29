@@ -56,7 +56,7 @@ let MAX_CONCAT_ARITY = 8         // linq `concat` tops out at 8 sources (PR #322
 let MAX_VARIADIC_PUSH_ARITY = 4  // builtin push_from/push_clone_from fixed-arity 2..4 (PR #3230)
 
 // STYLE037 default ceiling — override per module with `options _cyclomatic_complexity = N`; 0 disables.
-let STYLE037_DEFAULT_MAX = 30
+let STYLE037_DEFAULT_MAX = 20
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -1699,7 +1699,7 @@ class StyleLintVisitor : AstVisitor {
         return (lhs as ExprAt).index
     }
 
-    def const_key_repr(key0 : Expression?) : string {
+    def const_key_repr(key0 : Expression?) : string {  // nolint:STYLE037 — `is` on handled types is exact-type, so one arm per const class is irreducible
         //! Type-tagged stringification of the key when it is a constant literal;
         var key = key0
         if (key != null && key is ExprRef2Value) {
@@ -1716,6 +1716,43 @@ class StyleLintVisitor : AstVisitor {
         if (key is ExprConstBool) return "b:{(key as ExprConstBool).value}"
         if (key is ExprConstEnumeration) return "e:{(key as ExprConstEnumeration).value}"
         return ""
+    }
+
+    def st031_scan_insert_run(blk : ExprBlock?; idx, n : int; v : VariablePtr; isSet : bool; var dup_const_key : bool&) : int {
+        // Length of the contiguous insert/`[]=` run into `v` starting at idx+1; flags a repeated constant key.
+        var count = 0
+        var seen_keys : table<string>
+        for (j in range(idx + 1, n)) {
+            let stmt = blk.list[j]
+            var key : Expression? = null
+            if (stmt is ExprCall && is_table_insert_of(stmt as ExprCall, v, isSet ? 2 : 3)) {
+                key = (stmt as ExprCall).arguments[1]
+            } elif (!isSet && is_at_assign_of(stmt, v)) {
+                key = at_assign_key(stmt)
+            } else {
+                break
+            }
+            let repr = const_key_repr(key)
+            if (repr != "") {
+                if (key_exists(seen_keys, repr)) {
+                    dup_const_key = true
+                }
+                seen_keys |> insert(repr)
+            }
+            count++
+        }
+        delete seen_keys
+        return count
+    }
+
+    def st031_jv_const_key_run(blk : ExprBlock?; idx, n : int; v : VariablePtr) : int {
+        var jv = 0
+        for (j in range(idx + 1, n)) {
+            let stmt = blk.list[j]
+            if (!(stmt is ExprCall) || !is_insert_of_const_key(stmt as ExprCall, v)) break
+            jv++
+        }
+        return jv
     }
 
     def check_style031_table_init(blk : ExprBlock?; elet : ExprLet?) : void {
@@ -1736,42 +1773,13 @@ class StyleLintVisitor : AstVisitor {
                 || v.flags.generated || v.flags.inScope
                 || v._type == null || v._type.baseType != Type.tTable) continue
             let isSet = v._type.secondType == null || v._type.secondType.baseType == Type.tVoid
-            var count = 0
             var dup_const_key = false
-            {
-                var seen_keys : table<string>
-                for (j in range(idx + 1, n)) {
-                    let stmt = blk.list[j]
-                    var key : Expression? = null
-                    if (stmt is ExprCall && is_table_insert_of(stmt as ExprCall, v, isSet ? 2 : 3)) {
-                        key = (stmt as ExprCall).arguments[1]
-                    } elif (!isSet && is_at_assign_of(stmt, v)) {
-                        key = at_assign_key(stmt)
-                    } else {
-                        break
-                    }
-                    let repr = const_key_repr(key)
-                    if (repr != "") {
-                        if (key_exists(seen_keys, repr)) {
-                            dup_const_key = true
-                        }
-                        seen_keys |> insert(repr)
-                    }
-                    count++
-                }
-                delete seen_keys
-            }
+            let count = st031_scan_insert_run(blk, idx, n, v, isSet, dup_const_key)
             // Duplicate constant keys stay silent: sequential inserts overwrite (last wins), but a literal rejects them at compile time (error 30706).
             if (count < 2 || dup_const_key) continue
             // STYLE021 owns the table<string; JsonValue?> const-key run (the JV((k1=..., k2=...)) form is the stronger suggestion).
             if (is_jv_table_type(v._type)) {
-                var jv = 0
-                for (j in range(idx + 1, n)) {
-                    let stmt = blk.list[j]
-                    if (!(stmt is ExprCall) || !is_insert_of_const_key(stmt as ExprCall, v)) break
-                    jv++
-                }
-                continue if (jv >= 2)
+                continue if (st031_jv_const_key_run(blk, idx, n, v) >= 2)
             }
             if (isSet) {
                 style_warning("STYLE031: table<K> set initialized by a run of insert calls; use a set literal move-assign `var {v.name} <- \{k1, k2, ...\}`", v.at)

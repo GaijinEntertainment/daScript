@@ -229,6 +229,70 @@ def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void
 
 // ===== glob =====
 
+// `[...]` character-class arm of the glob matcher: matches one source byte and
+// advances pi past the class (and si past the byte) on success.
+def private _match_glob_class(p : array<uint8> const#; var pi : int&; s : array<uint8> const#; var si : int&) : bool {
+    let plen = length(p)
+    let slen = length(s)
+    // POSIX fnmatch: `[` without a closing `]` matches the literal `[`.
+    var scan = pi + 1
+    if (scan < plen && (p[scan] == uint8('!') || p[scan] == uint8('^'))) {
+        scan++
+    }
+    // A `]` immediately after `[` or `[!`/`[^` is a literal class member, not the terminator (POSIX rule for closing brackets in classes).
+    if (scan < plen && p[scan] == uint8(']')) {
+        scan++
+    }
+    while (scan < plen && p[scan] != uint8(']')) {
+        scan++
+    }
+    if (scan >= plen) {
+        // No closing `]` — treat the `[` as a literal character.
+        return false if (si >= slen || int(s[si]) != '[')
+        pi++
+        si++
+        return true
+    }
+    return false if (si >= slen)
+    let sc = int(s[si])
+    return false if (sc == '/')
+    pi++
+    var negate = false
+    if (pi < plen && (p[pi] == uint8('!') || p[pi] == uint8('^'))) {
+        negate = true
+        pi++
+    }
+    var matched = false
+    // POSIX: `]` right after `[` (or `[!`/`[^`) is a literal class member, not the terminator.
+    if (pi < plen && p[pi] == uint8(']')) {
+        if (sc == ']') {
+            matched = true
+        }
+        pi++
+    }
+    while (pi < plen && p[pi] != uint8(']')) {
+        if (pi + 2 < plen && p[pi + 1] == uint8('-') && p[pi + 2] != uint8(']')) {
+            let lo = int(p[pi])
+            let hi = int(p[pi + 2])
+            if (sc >= lo && sc <= hi) {
+                matched = true
+            }
+            pi += 3
+        } else {
+            if (sc == int(p[pi])) {
+                matched = true
+            }
+            pi++
+        }
+    }
+    if (pi < plen) {
+        pi++
+    }
+    return false if (matched == negate)
+    si++
+    return true
+}
+
 // Byte-level pathname-glob matcher. `/` is a hard segment boundary that single
 // `*` and `?` may not cross; `**` matches across `/`.
 def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<uint8> const#; var si : int) : bool {
@@ -271,62 +335,7 @@ def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<u
             pi++
             si++
         } elif (pc == '[') {
-            // POSIX fnmatch: `[` without a closing `]` matches the literal `[`.
-            var scan = pi + 1
-            if (scan < plen && (p[scan] == uint8('!') || p[scan] == uint8('^'))) {
-                scan++
-            }
-            // A `]` immediately after `[` or `[!`/`[^` is a literal class member, not the terminator (POSIX rule for closing brackets in classes).
-            if (scan < plen && p[scan] == uint8(']')) {
-                scan++
-            }
-            while (scan < plen && p[scan] != uint8(']')) {
-                scan++
-            }
-            if (scan >= plen) {
-                // No closing `]` — treat the `[` as a literal character.
-                return false if (si >= slen || int(s[si]) != pc)
-                pi++
-                si++
-            } else {
-                return false if (si >= slen)
-                let sc = int(s[si])
-                return false if (sc == '/')
-                pi++
-                var negate = false
-                if (pi < plen && (p[pi] == uint8('!') || p[pi] == uint8('^'))) {
-                    negate = true
-                    pi++
-                }
-                var matched = false
-                // POSIX: `]` right after `[` (or `[!`/`[^`) is a literal class member, not the terminator.
-                if (pi < plen && p[pi] == uint8(']')) {
-                    if (sc == ']') {
-                        matched = true
-                    }
-                    pi++
-                }
-                while (pi < plen && p[pi] != uint8(']')) {
-                    if (pi + 2 < plen && p[pi + 1] == uint8('-') && p[pi + 2] != uint8(']')) {
-                        let lo = int(p[pi])
-                        let hi = int(p[pi + 2])
-                        if (sc >= lo && sc <= hi) {
-                            matched = true
-                        }
-                        pi += 3
-                    } else {
-                        if (sc == int(p[pi])) {
-                            matched = true
-                        }
-                        pi++
-                    }
-                }
-                if (pi < plen) {
-                    pi++
-                }
-                return false if (matched == negate)
-                si++
-            }
+            return false if (!_match_glob_class(p, pi, s, si))
         } else {
             return false if (si >= slen || int(s[si]) != pc)
             pi++

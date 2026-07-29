@@ -64,6 +64,16 @@ def find_earliest(text : string; chars : array<int>) : int {
     return best
 }
 
+def strip_modifiers(rest0 : string; modifiers : array<string>) : string {
+    var rest = rest0
+    for (m in modifiers) {
+        if (starts_with(rest, m)) {
+            rest = strip(slice(rest, length(m)))
+        }
+    }
+    return rest
+}
+
 def extract_name_from_text(text, kind : string) : string {
     // Extract the declaration name from the first line of text
     // e.g. "def foo(x : int) : string {" -> "foo"
@@ -74,14 +84,9 @@ def extract_name_from_text(text, kind : string) : string {
         // "def name(" or "def name {" or "def name<"
         let def_pos = find(line, "def ")
         if (def_pos >= 0) {
-            var rest = strip(slice(line, def_pos + 4))
             // skip visibility: "def private foo" / "def public foo" / "def abstract foo" / "def override foo" / "def static foo" / "def sealed foo" / "def const foo"
-            let modifiers = ["private ", "public ", "abstract ", "override ", "static ", "sealed ", "const "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            let rest = strip_modifiers(strip(slice(line, def_pos + 4)),
+                ["private ", "public ", "abstract ", "override ", "static ", "sealed ", "const "])
             // name ends at '(' or '{' or ' ' or end
             return slice(rest, 0, find_earliest(rest, ['(', '{', ' ']))
         }
@@ -95,26 +100,13 @@ def extract_name_from_text(text, kind : string) : string {
             if (sp >= 0) {
                 rest = strip(slice(rest, sp + 1))
             }
-            // skip modifiers
-            let modifiers = ["public ", "private ", "sealed ", "template "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            rest = strip_modifiers(rest, ["public ", "private ", "sealed ", "template "])
             return slice(rest, 0, find_earliest(rest, ['{', ':', ' ']))
         }
     } elif (kind == "enum") {
         let kw_pos = find(line, "enum ")
         if (kw_pos >= 0) {
-            var rest = strip(slice(line, kw_pos + 5))
-            // skip visibility
-            let modifiers = ["public ", "private "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            let rest = strip_modifiers(strip(slice(line, kw_pos + 5)), ["public ", "private "])
             return slice(rest, 0, find_earliest(rest, ['{', ' ', ':']))
         }
     } elif (kind == "global") {
@@ -126,13 +118,7 @@ def extract_name_from_text(text, kind : string) : string {
             if (sp >= 0) {
                 rest = strip(slice(rest, sp + 1))
             }
-            // skip modifiers
-            let modifiers = ["shared ", "public ", "private "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            rest = strip_modifiers(rest, ["shared ", "public ", "private "])
             // Handle block form: "let private {" -> skip
             if (first_character(rest) == '{') return ""
             // Handle annotations before name
@@ -153,25 +139,13 @@ def extract_name_from_text(text, kind : string) : string {
     } elif (kind == "bitfield") {
         let kw_pos = find(line, "bitfield ")
         if (kw_pos >= 0) {
-            var rest = strip(slice(line, kw_pos + 9))
-            let modifiers = ["public ", "private "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            let rest = strip_modifiers(strip(slice(line, kw_pos + 9)), ["public ", "private "])
             return slice(rest, 0, find_earliest(rest, ['{', ' ', ':']))
         }
     } elif (kind == "variant") {
         let kw_pos = find(line, "variant ")
         if (kw_pos >= 0) {
-            var rest = strip(slice(line, kw_pos + 8))
-            let modifiers = ["public ", "private "]
-            for (m in modifiers) {
-                if (starts_with(rest, m)) {
-                    rest = strip(slice(rest, length(m)))
-                }
-            }
+            let rest = strip_modifiers(strip(slice(line, kw_pos + 8)), ["public ", "private "])
             return slice(rest, 0, find_earliest(rest, ['{', ' ']))
         }
     }
