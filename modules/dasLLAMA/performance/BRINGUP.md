@@ -49,8 +49,14 @@ env itself when unset, but the converter runs in step 4 need it exported in the 
 mtime-gated against the binary: a rebuild silently turns it stale and every kernel drops to
 its fallback winner — the m4 pilot pre-baked one identity, then swept a whole board on
 fallback kernels under a manifest one rebuild older. The bench cells now REFUSE to measure on
-non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape), so the
-order is: build → run any tuned tool once to mint (~5 min) → pre-bake → sweep.
+non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape). The
+auto-tune policy does NOT mint into an env-pinned manifest — mint explicitly (~5 min):
+
+```sh
+DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>
+```
+
+Order: build → mint → pre-bake → sweep.
 
 ## 1. daslang
 
