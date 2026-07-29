@@ -2686,7 +2686,8 @@ bool das_prefetch_map ( void *, uint64_t ) { return false; }
 // Advisory: a false return means the OS declined — reads still work, just cold.
 bool das_prefetch_map ( void * base, uint64_t bytes ) {
     if ( !base || bytes==0 ) return false;
-#ifdef _MSC_VER
+#if defined(_WIN32)
+    // _WIN32, not _MSC_VER — clang-mingw is Windows too and has no madvise
     WIN32_MEMORY_RANGE_ENTRY range;
     range.VirtualAddress = base;
     range.NumberOfBytes = (SIZE_T) bytes;
