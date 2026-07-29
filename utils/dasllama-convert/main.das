@@ -79,6 +79,9 @@ struct ConvertArgs {
     @clarg_doc = "GC beside -m: old-version and unreadable .dlim files (never a loadable image — another box's bake reads as OTHER and stays). DRY-RUN unless --apply"
     clean : bool
 
+    @clarg_doc = "With --clean: also delete valid other-identity images — only CURRENT survives (old tune identities pile up across re-mints)"
+    clean_other : bool
+
     @clarg_doc = "With --clean: actually delete (the default is a dry-run listing)"
     apply : bool
 
@@ -162,13 +165,13 @@ def private list_images(cfg : ConvertArgs) : int {
     if (!cfg.apply) {
         var inv <- dlim_inventory(cfg.model)
         for (im in inv) {
-            if (im.verdict == "BROKEN" || im.verdict |> starts_with("STALE")) {
+            if (im.verdict != "CURRENT" && (cfg.clean_other || im.verdict != "OTHER")) {
                 to_log(LOG_INFO, "dasllama-convert: would remove {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
             }
         }
         delete inv
     }
-    let r = dlim_clean(cfg.model, cfg.apply)
+    let r = dlim_clean(cfg.model, cfg.apply, keep_other = !cfg.clean_other)
     if (cfg.apply) {
         to_log(LOG_INFO, "dasllama-convert: removed {r.removed} of {r.stale} stale image(s), reclaimed {r.freed >> 20l} MB\n")
         if (!st.is_dir) {

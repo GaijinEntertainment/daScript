@@ -192,25 +192,25 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
     return <- out
 }
 
-//! GC-after-save: sweep the source's BROKEN/version-stale image siblings — a fresh bake is the
-//! proof they are dead. OTHER (a foreign box/knob identity) is never touched. Every save site
-//! on the rail calls this, so stale images never outlive the bake that replaced them.
+//! GC-after-save: a fresh bake proves every non-CURRENT sibling of this source dead — BROKEN,
+//! version-stale, AND other-identity images all go (old identities piled up 0.5 TB per box).
+//! CURRENT spans all flavors/quants/families, so a planar save never touches the metal twin.
 def dlim_gc_stale(source_path : string) {
-    let r = dlim_clean(source_path, true)
+    let r = dlim_clean(source_path, true, keep_other = false)
     if (r.removed > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} stale sibling(s) of {base_name(source_path)}\n")
+        to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} dead sibling(s) of {base_name(source_path)}\n")
     }
 }
 
-//! The dlim GC: remove what can never load again (BROKEN + version-stale) beside `gguf_path`.
-//! NEVER a loadable image — OTHER may be another box's bake carried here on purpose.
-//! apply = false is a dry run (stale counted, nothing removed).
-def dlim_clean(gguf_path : string; apply : bool) : tuple<total : int; stale : int; removed : int; freed : int64> {
+//! The dlim GC beside `gguf_path`: BROKEN + version-stale always go; ``keep_other = false``
+//! (the after-save form) removes valid other-identity siblings too — only CURRENT survives.
+//! The default keeps OTHER (a directory sweep must not eat another box's carried bake).
+def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = true) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
     var inv <- dlim_inventory(gguf_path)
     for (im in inv) {
         r.total++
-        continue if (im.verdict != "BROKEN" && !(im.verdict |> starts_with("STALE")))
+        continue if (im.verdict == "CURRENT" || (keep_other && im.verdict == "OTHER"))
         r.stale++
         if (apply && remove(im.path)) {
             r.removed++
