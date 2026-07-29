@@ -7,6 +7,23 @@ review capacity is the bottleneck the arcs exist to fix.
 
 ## Filed 2026-07-29 (live review round 2)
 
+- **Watcher died SILENTLY with exit 1 after ~3h (observed live).** The
+  log ends mid-GC-line: no panic text, no error, nothing — the same
+  silent-exit(1) class the crash-capture arc left open for
+  dasllama-server, now observed in the watcher. The watcher needs the
+  crash-capture treatment: last-words handler + the exit reason in the
+  log, always. (New watcher token after restart:
+  0x63ad4756-0xce6172c6-0x664a86cd-0xd313c828.)
+- **Idle GC churn in the watcher (probable cause-adjacent).** With the
+  client CLOSED and zero user activity, the dead run logged 253
+  string_fragmentation GC cycles — one per second, ~70 ms each, string
+  heap swinging 0xa0b7c → 0x2d0000 every cycle, allocation counters
+  climbing ~30K strings/s. Something in the idle observation loop
+  (repository polling most likely) allocates furiously with nobody
+  listening. Find it with `-das-profiler` / allocation tracking; an idle
+  watcher should be SILENT. Churn at this rate is also the prime suspect
+  for whatever killed it.
+
 - **Search by file name, across worktrees.** The Project tab's filter only
   narrows the SELECTED worktree's tree. Boris looked for
   LANGUAGE_SUPPORT_PLAN.md and could not find it — it existed one worktree
