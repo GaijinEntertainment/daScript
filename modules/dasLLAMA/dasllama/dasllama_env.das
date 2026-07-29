@@ -353,6 +353,8 @@ def private reg_profiling(var o : array<EnvKnob>) {
       "Directory of whisper.cpp models for ASR reference baselines.")
     k(o, "MTMD_BIN", EnvKind.path, EnvArea.profiling, "",
       "llama-mtmd-cli binary for multimodal reference baselines.")
+    k(o, "DASLLAMA_BASE_PYTHON", EnvKind.path, EnvArea.profiling, "",
+      "Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range.")
     k(o, "NEMO_PY", EnvKind.path, EnvArea.profiling, "",
       "Python interpreter of the NeMo oracle venv, for canary/parakeet baselines.")
     k(o, "ONNX_PY", EnvKind.path, EnvArea.profiling, "",

@@ -2,6 +2,7 @@ options gen2
 options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
 
 require profile_common
+require dasllama/dasllama_env
 require daslib/clargs
 require daslib/fio
 require strings
@@ -295,6 +296,14 @@ def private probe_python_version(cand : string) : int {
 // Meson source build), so only 3.10-3.12 qualifies; a uv-managed interpreter is the fallback
 // when every PATH python is outside the range.
 def private base_python() : string {
+    let pinned = normalize(env_str("DASLLAMA_BASE_PYTHON", ""))
+    if (!empty(pinned)) {
+        let pv = probe_python_version(pinned)
+        if (pv >= 310 && pv < 313) {
+            return pinned
+        }
+        to_log(LOG_WARNING, "setup_asr_rig: DASLLAMA_BASE_PYTHON={pinned} probes as {pv} — outside 3.10-3.12, ignoring\n")
+    }
     for (cand in ["python3.11", "python3.10", "python3.12", "python3", "python"]) {
         let v = probe_python_version(cand)
         if (v >= 310 && v < 313) {
