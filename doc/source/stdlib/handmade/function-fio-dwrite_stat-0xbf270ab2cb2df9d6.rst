@@ -1,0 +1,1 @@
+Where the writer spent its time so far: ``which`` 0 = staging nanoseconds (memcpy into the bounce band), 1 = syscall nanoseconds, 2 = bytes written directly from caller memory, 3 = bytes that went through the bounce band. Call before ``dwrite_close`` — the handle is gone after.

@@ -54,64 +54,7 @@ def public metal_decode_shutdown {
     metal_common_release()
 }
 
-// what each decode path's kernels implement beyond the base llama dense block — grows wave by wave.
-let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
-    MetalNeed.softcap | MetalNeed.sliding | MetalNeed.pre_post_norm | MetalNeed.geglu |
-    MetalNeed.v_norm | MetalNeed.attn_scale | MetalNeed.out_scale |
-    MetalNeed.sinks | MetalNeed.out_bias | MetalNeed.partial_rope | MetalNeed.q_gated |
-    MetalNeed.ple)
-// q_gated/partial_rope only occur on hybrid models (attn_is_std false), which batch graph-declines;
-// ple (E-series) has no batch arm either — batched steps decline `feature` and fall back per-row
-let BATCH_NEEDS_OK = DECODE_NEEDS_OK & ~MetalNeed.ple   // clear ple explicitly (XOR would re-add it if DECODE ever drops it)
 
-def private decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false) : MetalDecodeDecline {
-    if (t.quant != QuantMode.q8) {
-        return MetalDecodeDecline.quant_mode
-    }
-    if (!kq_load_gpu_supported(t)) {   // a fmt without a GPU kernel (the q4_0 QAT tier, ...) must not dispatch
-        return MetalDecodeDecline.kquant_native
-    }
-    // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it
-    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
-            (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
-        return MetalDecodeDecline.graph
-    }
-    if (kernel_backend_needs_repack(active_kernel_backend())) {
-        return MetalDecodeDecline.backend_repack
-    }
-    if (!get_rope_table_mode()) {
-        return MetalDecodeDecline.rope_mode
-    }
-    if (metal_missing_needs(t, needs_ok) != default<MetalNeed>) {
-        return MetalDecodeDecline.feature
-    }
-    let c = t.config
-    let hidden = layer_hidden(t, 0l)
-    // sliding masking lives on the CHUNKED path only — window >= 128 (the single-form depth ceiling's clamp max) guarantees the single form never sees a masked row; decline tighter
-    if (((c.dim % 32l) != 0l || (hidden % 32l) != 0l) ||
-            (c.sliding_window > 0l && c.sliding_window < 128l)) {
-        return MetalDecodeDecline.shape
-    }
-    // per-CLASS: whole simdgroups; red[16] + the epl <= 16 q-register hoist cap the threadgroup width at 512 (gemma4's global class)
-    for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {   // no KV, no attention tensors — only the FFN uniformity applies
-            if (layer_hidden(t, l) != hidden) {
-                return MetalDecodeDecline.layers
-            }
-            continue
-        }
-        let hs_l = layer_head_size(c, l)
-        if ((hs_l % 32l) != 0l || hs_l > 512l || (layer_kv_dim(c, l) % 32l) != 0l) {
-            return MetalDecodeDecline.shape
-        }
-        // E-series KV sharing: only the single-stream driver has the Q-only arm (allow_kv_share)
-        if ((t.kv_src[l] != l && !(allow_kv_share && kv_share_ok(t, l))) || layer_hidden(t, l) != hidden) {
-            return MetalDecodeDecline.layers
-        }
-        // a missing attn_v (V = the pre-norm K projection) serves — raw copy without v_norm; both encoded (the CPU mm_qkv shapes)
-    }
-    return MetalDecodeDecline.none
-}
 
 // ... plus the decode-specific gates (uniform f16/f32 KV, attention depth, a real session uid)
 [unused_argument(pos)]   // depth retired (M2.4) — pos stays in the gate signature for future clauses
@@ -147,17 +90,6 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
 
 def private kq_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
-// mint-time servability (register_metal_servable): shape/graph/feature gates only — the planar
-// check is a RUNTIME gate. Tied-fp32 classifiers decline: the blob drivers force GPU logits
-// and have no fp32-table GEMV.
-def private metal_model_servable_impl(t : Model) : bool {
-    let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    // tied-fp32 classifier declines (no fp32-table GEMV); NextN serves — prefill stashes mtp_h + warms the slab
-    if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
-        return false
-    }
-    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true) == MetalDecodeDecline.none
-}
 
 // Can the speculative chain feed itself on this model? It needs a GPU embed gather for the
 // argmax winner: the q8 linear copy (cls_q8), or a tied k6 classifier (every K-quant file on
@@ -3306,7 +3238,6 @@ def dasllama_metal_llama_register() {
     register_batch_decode_override("metal", @@metal_batch_decode_forward)
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
-    register_metal_servable(@@metal_model_servable_impl)   // load_model's image-flavor gate
     g_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
     g_env_batch_mm = env_flag("DASLLAMA_METAL_BATCH_MM", false)
     g_env_attn_d = env_flag("DASLLAMA_METAL_ATTN_D", true)

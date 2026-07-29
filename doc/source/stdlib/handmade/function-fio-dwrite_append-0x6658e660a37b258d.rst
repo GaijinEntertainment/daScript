@@ -1,0 +1,1 @@
+Append ``bytes`` from ``data`` at the writer's current end. Any pointer, any size — the handle re-blocks into aligned bands internally, and a band-multiple, band-aligned source is written directly with no copy. Returns false when a write fails (disk full, in practice); a failed writer stays failed, so checking ``dwrite_close`` once is enough.

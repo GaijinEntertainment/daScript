@@ -1,0 +1,1 @@
+Flush the writer's tail (sector-padded on cache-bypassing platforms), truncate the file to exactly what was appended, and free the handle. Returns false if anything failed anywhere along the writer's life — this is the one completion verdict a caller needs to check.

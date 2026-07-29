@@ -22,6 +22,14 @@ Never merge with an unresolved thread or with Copilot's latest review targeting 
 
 ## 1. Watching the PR — the loop
 
+**YOU babysit the build — the user does not babysit YOU.** A ready, verified fix gets
+committed and pushed **immediately**. "Batch fixes into one push" means: fix every *distinct*
+failure currently on the table, then push once — it does **NOT** mean waiting for the rest of
+the matrix to finish. Straggler lanes reproducing an already-fixed failure are zero
+information (the post-push run re-tests everything); idling on them while holding ready fixes
+is the anti-pattern. If two consecutive status updates say "still waiting", you are doing it
+wrong — act.
+
 **Iterate against Copilot (~5 min), not the CI matrix (~30 min).** Copilot's review is a free ruleset check that lands in ~5 minutes; the full CI matrix is free too but takes ~30. So the loop is driven by Copilot and you **never sit through a full matrix between rounds**:
 
 1. Compare the PR's current `headRefOid` with Copilot's latest review `commit_id`.
