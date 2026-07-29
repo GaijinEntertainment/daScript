@@ -4516,7 +4516,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-07-29",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-parakeet-tdt-0.6b-v3-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -4530,32 +4530,35 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":168.50999999999999,
+            "ms":161.274,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":489.18900000000002,
+            "ms":490.10899999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4774.1540000000005,
+            "ms":4727.0950000000003,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":8034.6379999999999,
+            "ms":7742.1270000000004,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":25422.958999999999,
+            "ms":25447.474999999999,
             "audio_s":546.57449999999994
+          },
+          "asr:librispeech25":{
+            "ms":3458.6059999999998,
+            "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"edc7e5b8c",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json",
         "files":[
           {
             "role":"weights",
@@ -4592,6 +4595,156 @@
             "name":"hp0x2.wav",
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
           }
         ]
       },
@@ -4601,8 +4754,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/parakeet-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f32.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
+        "date":"2026-07-29",
+        "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/parakeet-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f32.bin -t 8 -ng modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -4615,19 +4768,22 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":472.96000000000004
+            "ms":501.83000000000004
           },
           "asr:jfk3.wav":{
-            "ms":1079.5099999999998
+            "ms":1104.7399999999998
           },
           "asr:gb1.wav":{
-            "ms":8763.3999999999996
+            "ms":8841.9300000000003
           },
           "asr:hp0.wav":{
-            "ms":14244.34
+            "ms":14350.130000000001
           },
           "asr:hp0x2.wav":{
-            "ms":48954
+            "ms":48751.690000000002
+          },
+          "asr:librispeech25":{
+            "ms":10562.48
           }
         },
         "workload":"asr",
@@ -4669,6 +4825,156 @@
             "name":"hp0x2.wav",
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
           }
         ]
       },
@@ -4678,8 +4984,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "date":"2026-07-29",
+        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -4692,20 +4998,24 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":468.29300000000001,
+            "ms":460.71499999999997,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":896.68299999999999,
+            "ms":903.63099999999997,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":7080.527,
+            "ms":7087.0309999999999,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":11424.276,
+            "ms":11415.859,
             "audio_s":273.28699999999998
+          },
+          "asr:librispeech25":{
+            "ms":10056.223000000002,
+            "audio_s":215.91500000000005
           }
         },
         "workload":"asr",
@@ -4735,6 +5045,156 @@
             "name":"hp0.wav",
             "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
             "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"01_1089-134686-0000.wav",
+            "sha256":"8b6780c5a57ce806f959df2d4af9b0cc5ecf326653e774307e0cdafc17020131",
+            "bytes":333998
+          },
+          {
+            "role":"clip",
+            "name":"02_1089-134686-0001.wav",
+            "sha256":"beb48de8d3215702545c435a253ce3e9bb2543bf5953d9af6b2124a518abb19f",
+            "bytes":104878
+          },
+          {
+            "role":"clip",
+            "name":"03_1089-134686-0002.wav",
+            "sha256":"728272a8282fda5bdc35041438c535aa0e1c9828bd7421b1b52f7ee8501326db",
+            "bytes":212078
+          },
+          {
+            "role":"clip",
+            "name":"04_1089-134686-0003.wav",
+            "sha256":"1e0c7e05fe2dcdaab84a62dbd55b77ecea49b6d61e67976d81b777774142cf00",
+            "bytes":85838
+          },
+          {
+            "role":"clip",
+            "name":"05_1089-134686-0004.wav",
+            "sha256":"7b7e08e556074f56dfb60afdad5e4c1325cb796d42d7303a562f581c43790e60",
+            "bytes":166960
+          },
+          {
+            "role":"clip",
+            "name":"06_1089-134686-0005.wav",
+            "sha256":"bee1410747626920beea646c3e3d28f6e79bf237db298297266db829bfd94ce0",
+            "bytes":308398
+          },
+          {
+            "role":"clip",
+            "name":"07_1089-134686-0006.wav",
+            "sha256":"050f134bc6881aad69043f786f8ff8ffdd2f644f11bc6eae21fc073629456a34",
+            "bytes":337838
+          },
+          {
+            "role":"clip",
+            "name":"08_1089-134686-0007.wav",
+            "sha256":"4faafa6e3cfd555a723dd32dc36e59a470efe5d213f4eb1ae101d02b762357b7",
+            "bytes":136878
+          },
+          {
+            "role":"clip",
+            "name":"09_1089-134686-0008.wav",
+            "sha256":"a453827a6a96d516da3c439a21a25fef88a921e15833a15a00dd78c0fc89e7ec",
+            "bytes":215438
+          },
+          {
+            "role":"clip",
+            "name":"10_1089-134686-0009.wav",
+            "sha256":"e719ca339735283c807291ee8dc58c1e237d0fcd27047646edcfe39098c46df9",
+            "bytes":338478
+          },
+          {
+            "role":"clip",
+            "name":"11_1089-134686-0010.wav",
+            "sha256":"fc3cf644b9ab5cb29002f75ef57bf5b54432a9709663335d0380a3e4dd743201",
+            "bytes":141038
+          },
+          {
+            "role":"clip",
+            "name":"12_1089-134686-0011.wav",
+            "sha256":"e6327e6ca63b88361d25be53cbfd80e0221e9207b23ff925175df64719c39c7a",
+            "bytes":398318
+          },
+          {
+            "role":"clip",
+            "name":"13_1089-134686-0012.wav",
+            "sha256":"0ea79e7eb288ba997a2976cfa3a6004c8cc733f81a0fc668dc8183719e9a1ea2",
+            "bytes":372558
+          },
+          {
+            "role":"clip",
+            "name":"14_1089-134686-0013.wav",
+            "sha256":"0ccfed467edce983d47d99fc85a30e688f5ea16baf8942390ef44d342ec77b4e",
+            "bytes":253358
+          },
+          {
+            "role":"clip",
+            "name":"15_1089-134686-0014.wav",
+            "sha256":"4d014f1b31177b0c2672bc6de972c59dca2ac7ca5cbc3c15d7b02d9cb581a326",
+            "bytes":71278
+          },
+          {
+            "role":"clip",
+            "name":"16_1089-134686-0015.wav",
+            "sha256":"0b4ca0a62c95ce681c25f15d5f8c0fccaeae51a0eb45ba842441563e967e6a80",
+            "bytes":186158
+          },
+          {
+            "role":"clip",
+            "name":"17_1089-134686-0016.wav",
+            "sha256":"e2b05cc66b4790c04acd29a917f580c16996e4a448c4a308950556589990fca7",
+            "bytes":113358
+          },
+          {
+            "role":"clip",
+            "name":"18_1089-134686-0017.wav",
+            "sha256":"2537c2436aff852d0894a1ce4ac0c69aebe79164edf4ac4441c3cd754eeff0f0",
+            "bytes":283918
+          },
+          {
+            "role":"clip",
+            "name":"19_1089-134686-0018.wav",
+            "sha256":"04f59e5e7f11cb85e53eadbe48d148cdaaedbb671fb82d9509436b5ef3cd7c37",
+            "bytes":503118
+          },
+          {
+            "role":"clip",
+            "name":"20_1089-134686-0019.wav",
+            "sha256":"937657fd79fb7f36d987da7a9edcdd06cd2b06f33e9677e83fb4433b9de9c50b",
+            "bytes":444718
+          },
+          {
+            "role":"clip",
+            "name":"21_1089-134686-0020.wav",
+            "sha256":"556430efcb9c3d1f7b8a654ae9569a5513a3416745b6eebe44bebbf4827f16b4",
+            "bytes":537358
+          },
+          {
+            "role":"clip",
+            "name":"22_1089-134686-0021.wav",
+            "sha256":"79da6d406d31b3cead5eaf1a43e90cb2f63a59b592ed19dc337e7c824bdd91a2",
+            "bytes":209678
+          },
+          {
+            "role":"clip",
+            "name":"23_1089-134686-0022.wav",
+            "sha256":"e30eebff7f649764c417cd20e1acfa051e776deaf9b756250cff84b0dfe32241",
+            "bytes":357678
+          },
+          {
+            "role":"clip",
+            "name":"24_1089-134686-0023.wav",
+            "sha256":"c9aeaea8227f91ed5f64a6361278938aa88d167cda8abf864e5af396e3aa64a3",
+            "bytes":424878
+          },
+          {
+            "role":"clip",
+            "name":"25_1089-134686-0024.wav",
+            "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
+            "bytes":373038
           }
         ]
       }

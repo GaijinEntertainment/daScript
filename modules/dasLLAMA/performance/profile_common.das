@@ -1141,6 +1141,33 @@ def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd
     return best
 }
 
+//! One parakeet-cli process over MANY clips (`file0 file1 ...`): the per-file timing blocks
+//! repeat the load and ACCUMULATE `total time`, so parse_cli_ms on the full output (last
+//! total − load) is the whole-set engine time. A block-count mismatch (an unreadable clip
+//! mid-list) discards the rep — a partial cumulative total would mispair. Best over `reps`.
+def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threads, reps : int; var cmd_out : string&) : double {
+    cmd_out = "{whisper_cpp_bin(cli)} -m {model_path} -t {threads} -ng {join(wav_paths, " ")}"
+    var best = -1.0lf
+    for (_rep in range(reps)) {
+        let out = run_capture("{cmd_out} 2>&1", false)
+        var blocks = 0
+        for (line in split(out, "\n")) {
+            if (find(line, "_print_timings") >= 0 && find(line, "total time") >= 0) {
+                blocks++
+            }
+        }
+        if (blocks != length(wav_paths)) {
+            to_log(LOG_WARNING, "run_asr_cli_multi: {blocks}/{length(wav_paths)} files timed — rep discarded\n")
+            continue
+        }
+        let ms = parse_cli_ms(out)
+        if (ms > 0.0lf && (best < 0.0lf || ms < best)) {
+            best = ms
+        }
+    }
+    return best
+}
+
 //! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
 //! Best total over `reps`.
 def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
@@ -1242,58 +1269,30 @@ def asr_tool_versions(tool : string) : string {
     return ""
 }
 
-// ===== ASR: baseline TSV I/O (reference tool times the establisher writes, the generator reads) =====
+// ===== ASR: the LibriSpeech dictation set (setup_asr_rig --libri) =====
 
-//! One reference-tool baseline row: the tool, the das display name it references, the clip, its audio
-//! seconds, the best-of-reps transcribe ms, and (mtmd only) the encode+prefill split (-1 = N/A). `kind`
-//! is "corpus" (a named bucket) or "libri" (one of the 25 LibriSpeech dictation clips).
-struct AsrBaseRow {
-    tool : string
-    model : string
-    kind : string
-    wav : string
-    audio_s : double
-    ms : double
-    encode_ms : double
-}
-
-def baseline_asr_path() : string {
-    return "modules/dasLLAMA/performance/baseline_asr_{box_name()}.tsv"
-}
-
-def write_asr_baselines(rows : array<AsrBaseRow>) {
-    fopen(baseline_asr_path(), "wb") $(f) {
-        if (f == null) {
-            return
-        }
-        fwrite(f, "tool\tmodel\tkind\twav\taudio_s\tms\tencode_ms\n")
-        for (r in rows) {
-            fwrite(f, "{r.tool}\t{r.model}\t{r.kind}\t{r.wav}\t{r.audio_s}\t{r.ms}\t{r.encode_ms}\n")
+//! The dictation set's corpus-relative wav paths, sorted — exactly 25 or empty (a partial
+//! fetch would sum a different set on each side of a pair; the legs skip with a warning).
+def libri_wavs() : array<string> {
+    var out : array<string>
+    dir("{asr_corpus_dir()}librispeech") $(name : string) {
+        if (name |> ends_with(".wav")) {
+            out |> push("librispeech/{name}")
         }
     }
+    if (length(out) != 25) {
+        out |> clear()
+        return <- out
+    }
+    sort(out)
+    return <- out
 }
 
-def read_asr_baselines() : array<AsrBaseRow> {
-    var rows : array<AsrBaseRow>
-    let text = fread(baseline_asr_path())
-    var first = true
-    for (line in split(text, "\n")) {
-        if (first) {
-            first = false
-            continue
-        }
-        if (empty(strip(line))) {
-            continue
-        }
-        let col <- split(line, "\t")
-        if (length(col) < 7) {
-            continue
-        }
-        rows |> emplace(AsrBaseRow(
-            tool = col[0], model = col[1], kind = col[2], wav = col[3],
-            audio_s = to_double(col[4]), ms = to_double(col[5]), encode_ms = to_double(col[6])))
-    }
-    return <- rows
+//! The one BenchTest key both sides of the LibriSpeech aggregate record under: total
+//! best-of-reps ms over the 25 clips (+ total audio seconds) — the dictation stat is a
+//! whole-set number, never 25 table rows.
+def libri_test_key() : string {
+    return "asr:librispeech25"
 }
 
 // ===== ASR: profile JSON (the deliverable — full-fidelity: N references/model, per-bucket ms) =====

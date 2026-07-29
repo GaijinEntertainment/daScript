@@ -179,6 +179,29 @@ def main() : int {
                 print("asr_bench_cell: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
                 delete samples
             }
+            if (!empty(spec.libri_short)) {
+                // the dictation aggregate: 25 short clips, ONE whole-set total on one test key
+                var lib <- libri_wavs()
+                if (empty(lib)) {
+                    print("asr_bench_cell: {spec.display} — librispeech set absent/partial (setup_asr_rig --libri), leg skipped\n")
+                } else {
+                    var lib_ms = 0.0lf
+                    var lib_audio = 0.0lf
+                    for (wav in lib) {
+                        var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
+                        let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
+                        let das_ms = measure_das(m, samples, cfg.reps, spec.lang)
+                        lib_ms += das_ms
+                        lib_audio += audio_s
+                        run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
+                        print("asr_bench_cell: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
+                        delete samples
+                    }
+                    run.tests |> insert(libri_test_key(), BenchTest(ms = lib_ms, audio_s = lib_audio))
+                    print("asr_bench_cell: {spec.display} librispeech25 total {lib_ms} ms ({lib_audio} s audio, {length(lib)} clips)\n")
+                }
+                delete lib
+            }
             var cell = BenchModel(
                 gguf = spec.das_model,
                 arch = spec.display,

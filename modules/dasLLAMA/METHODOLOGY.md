@@ -46,6 +46,14 @@ A box without an accelerated tier simply shows fewer categories.
   recognize calls. No process wall-clocks, no startup costs. There is no encode/decode split:
   total time is what a user experiences, and per-stage internals are not comparable across
   engines.
+- **Dictation aggregate** (`librispeech25`): whole-set engine time over the 25-clip
+  LibriSpeech set (test-clean 1089-134686, ~3.6 min of short utterances) — one number per
+  side, never 25 rows. Scoped to the fastest model (Parakeet-TDT v3), paired against both
+  references: das sums its per-clip best-of-reps times; parakeet-cli runs the whole set in
+  ONE process (its per-file timing blocks accumulate `total time`, so the final
+  `total − load` is the set's engine time, best of reps); ONNX Runtime times its recognize
+  calls per clip in one amortized process and the per-clip bests sum. Load is excluded on
+  every side, as everywhere.
 
 Model load is excluded everywhere. Sweeps run on pre-baked model images so first-load
 conversion cost cannot leak into a cold cell; a >3% coefficient of variation on a das cell

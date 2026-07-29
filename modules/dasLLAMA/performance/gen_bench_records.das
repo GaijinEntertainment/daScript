@@ -316,9 +316,20 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     if (ref.tool == "onnx" || ref.tool == "nemo") {
         // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
         // them); only the clips are local files here
-        let nclips = length(spec.buckets)
-        to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {nclips} clip(s) in one process (python model load amortized)\n")
-        let cmd = asr_pybench_cmd(ref.tool, ref.handle, spec.buckets, threads, cfg.asr_reps)
+        var clips := spec.buckets
+        var lib : array<string>
+        if (!empty(spec.libri_short) && ref.tool == "onnx") {
+            // the dictation aggregate pairs against onnx only: one amortized process covers all
+            // 25 clips in ~30 s, where a per-clip cli process would cost ~9 min per sweep
+            lib <- libri_wavs()
+            if (empty(lib)) {
+                to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref onnx — librispeech set absent/partial, leg skipped\n")
+            } else {
+                clips |> push_from(lib)
+            }
+        }
+        to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
+        let cmd = asr_pybench_cmd(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
         rr.cmd = cmd
         let out = run_capture("{cmd} 2>&1", false)
         for (wav in spec.buckets) {
@@ -330,6 +341,31 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
                 measured++
             }
         }
+        if (!empty(lib)) {
+            // all-or-nothing: a partial sum would pair against das's full-set total and lie
+            var lib_ms = 0.0lf
+            var lib_audio = 0.0lf
+            var lib_n = 0
+            for (wav in lib) {
+                var audio_s = -1.0lf
+                let ms = parse_bench_best(out, base_name(wav), audio_s)
+                if (ms > 0.0lf) {
+                    lib_ms += ms
+                    lib_audio += audio_s
+                    lib_n++
+                    rr.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
+                }
+            }
+            if (lib_n == length(lib)) {
+                rr.tests |> insert(libri_test_key(), BenchTest(ms = lib_ms, audio_s = lib_audio))
+                measured++
+                to_log(LOG_INFO, "gen_bench_records:   onnx librispeech25 total {lib_ms:.0f} ms ({lib_n} clips)\n")
+            } else {
+                to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref onnx — {lib_n}/{length(lib)} libri clips parsed, aggregate NOT recorded\n")
+            }
+        }
+        delete lib
+        delete clips
     } else {
         rr.files |> emplace(file_identity(model_path, "weights"))
         if (ref.tool == "mtmd") {
@@ -352,6 +388,33 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             } else {
                 to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref {ref.tool} {wav} — no timing parsed\n")
             }
+        }
+        if (!empty(spec.libri_short) && ref.tool == "parakeet-cli") {
+            // ONE multi-file process: the load (~0.6 s) amortizes over the whole set and the
+            // cumulative total − load IS the aggregate (see run_asr_cli_multi)
+            var lib <- libri_wavs()
+            if (empty(lib)) {
+                to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref {ref.tool} — librispeech set absent/partial, leg skipped\n")
+            } else {
+                var paths <- [for (w in lib); "{asr_corpus_dir()}{w}"]
+                to_log(LOG_INFO, "gen_bench_records:   {ref.tool} librispeech25 — one process over {length(lib)} clip(s) ({cfg.asr_reps} rep(s))...\n")
+                var cmd = ""
+                let ms = run_asr_cli_multi(ref.tool, model_path, paths, threads, cfg.asr_reps, cmd)
+                rr.cmd = cmd
+                if (ms > 0.0lf) {
+                    rr.tests |> insert(libri_test_key(), BenchTest(ms = ms))
+                    rr.files |> reserve(length(rr.files) + length(lib))
+                    for (w in lib) {
+                        rr.files |> emplace(file_identity("{asr_corpus_dir()}{w}", "clip"))
+                    }
+                    measured++
+                    to_log(LOG_INFO, "gen_bench_records:   {ref.tool} librispeech25 = {ms:.0f} ms\n")
+                } else {
+                    to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref {ref.tool} librispeech25 — no timing parsed\n")
+                }
+                delete paths
+            }
+            delete lib
         }
     }
     if (measured == 0) {
