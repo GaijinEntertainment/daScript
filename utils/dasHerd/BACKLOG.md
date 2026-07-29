@@ -35,7 +35,15 @@ review capacity is the bottleneck the arcs exist to fix.
   expected until those sessions cycle; the tombstone will classify.
   (Also: what IS the Session-0 daslang? 463 MB, running as a service —
   identify it.)
-- **Death verdict revised: probably taskkill, not a crash.** No log
+- **VERDICT CONFIRMED (Boris checked): other sessions killed the watcher
+  with `taskkill daslang.exe` — "because fuck u thats why".** Both
+  deaths. Not a crash, not the GC. Mitigations already landed: every
+  kill ritual in both repos' skills + the private playbook now kills by
+  PATH; running sessions carry the old instructions until they cycle, so
+  the watcher may die again before the fleet turns over. The tombstone
+  below stays worth building — next time the classification should take
+  one glance, not an investigation.
+- **Death verdict was: probably taskkill, not a crash.** No log
   tail + exit code 1 is exactly what `taskkill /F` (TerminateProcess)
   leaves; the likely killer is ANOTHER session clearing daslang.exe by
   IMAGE NAME before a build — the standard kill-before-link ritual,
