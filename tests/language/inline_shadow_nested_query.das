@@ -25,14 +25,14 @@ require math
 }
 
 def my_region(cb : block<(center : float3) : void>) {
-    each_region() <| $ (var transform : float3x4) {
+    each_region() <| $(var transform : float3x4) {
         cb |> invoke(transform[3])
     }
 }
 
 [export] def main {
-    each_region() <| $ (var transform : float3x4) {
-        my_region() <| $ (center : float3) {
+    each_region() <| $(var transform : float3x4) {
+        my_region() <| $(center : float3) {
             transform[3] = center
             each_region() <| $ [shadowable] (var transform : float3x4) {
                 print("{transform[3]}\n")
