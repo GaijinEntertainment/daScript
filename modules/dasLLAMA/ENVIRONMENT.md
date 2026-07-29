@@ -46,6 +46,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
 
 ## Metal backend
 
@@ -95,6 +96,8 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
 | `DASLLAMA_VK_FUSE` | flag | on | Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
+| `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
+| `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash-attention kernel; 0 falls back to the chunked path. |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
@@ -187,6 +190,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |
 | `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
 | `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
+| `TEMP` | path | unset | Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir). |
 
 ## Examples and tutorials
 
