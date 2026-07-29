@@ -40,6 +40,13 @@ review capacity is the bottleneck the arcs exist to fix.
   search/replace/replace-all from day one; per-tree search is the
   follow-up slice. Declared 2026-07-29 after the first full in-app plan
   review — the first real win.
+- **Inspector auto-reload on change.** The inspector captures content at
+  inspect time and never watches the disk; a refresh icon on the header
+  ships today (2026-07-29). The real fix: when a repository refresh lands
+  and the INSTALLED file's status row changed (code or stats), re-inspect
+  automatically with the installed identity — stale-while-revalidate
+  already keeps the swap flicker-free. Watch generation guards: a user
+  click mid-auto-reload must win.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is

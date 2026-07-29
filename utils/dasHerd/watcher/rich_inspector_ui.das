@@ -763,6 +763,24 @@ def draw_file_inspector_content() {
     same_line()
     text_disabled(INSPECTOR_SCOPE,
         (text = to_upper(g_inspector.installed_comparison)))
+    // The inspector does NOT watch the disk: content is captured at inspect
+    // time. Until auto-reload lands (backlog), the refresh is one click.
+    if (!empty(g_inspector.installed_file_path)) {
+        same_line()
+        let inspect_busy = (g_inspector.loading
+            || g_inspector.prepare.request != InspectorRequestState.idle)
+        if (icon_button(INSPECTOR_REFRESH, (glyph = "refresh",
+                tip = "Re-read this file (the view does not follow disk changes)",
+                size = 16.0f))
+                && !inspect_busy && g_client != null && g_client.connected) {
+            g_client->inspect_file(g_inspector.installed_repository_id,
+                g_inspector.installed_worktree_path,
+                g_inspector.installed_file_path,
+                g_inspector.installed_comparison,
+                g_inspector.installed_diff_context,
+                g_inspector.installed_git_revision)
+        }
+    }
     if (!empty(g_active_focus_message)) {
         same_line()
         if (arrow_button(FOCUS_PREVIOUS,
