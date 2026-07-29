@@ -345,16 +345,25 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
 
 //! Capture twin of [[run_and_stream]] — argv spawn (no shell parse, the Windows cmd quoting
 //! traps can't bite), stdout+stderr merged by popen_argv, whole output returned trimmed.
+//! Reads via the same fgets loop as run_and_stream — fread_to_eof lost multi-KB pipe output
+//! on Windows (zen2: a 95-s onnx child's rows captured as empty; the line loop never has).
 def run_capture_argv(args : array<string>) : string {
-    var out = ""
+    var acc = ""
     unsafe {
         popen_argv(args, 0.0, $(f) {
-            if (f != null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
-                out = fread_to_eof(f)
+            if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
+                return
+            }
+            while (true) {
+                let line = fgets(f)
+                if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
+                    break
+                }
+                acc = "{acc}{line}"
             }
         })
     }
-    return strip(out)
+    return strip(acc)
 }
 
 //! The display form of an argv for receipts — one line, elements with spaces quoted.
