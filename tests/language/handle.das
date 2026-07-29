@@ -88,10 +88,10 @@ def test_fancy(t : T?) {
     t |> equal(fc0.value, 13)
     var fc = FancyClass(1, 2)
     t |> equal(fc.value, 3)
-    using() <| $(var f : FancyClass) {
+    using() $(var f : FancyClass) {
         t |> equal(f.value, 13)
     }
-    using(1, 3) <| $(var f : FancyClass) {
+    using(1, 3) $(var f : FancyClass) {
         t |> equal(f.value, 4)
     }
     // otherwise we leak hidden std::string inside fancy class

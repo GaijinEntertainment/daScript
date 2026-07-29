@@ -22,7 +22,7 @@ def read_data(o : TestObjectNotLocal) : int {
 
 def pick_not_local(c : bool) : int {
     var total = 0
-    testNotLocalObject() <| $(o) {
+    testNotLocalObject() $(o) {
         let p = unsafe(addr(o))
         total = read_data(c ? o : *p)
     }
