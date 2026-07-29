@@ -1096,8 +1096,9 @@ def whisper_cpp_bin(cli : string) : string {
 
 //! A venv's interpreter across layouts — POSIX puts it in bin/, Windows in Scripts/.
 def venv_python(venv : string) : string {
+    // native separators: cmd parses a bare `foo/Scripts/python.exe` as command `foo` + switches
     let posix = "{venv}/bin/python"
-    return stat(posix).is_valid ? posix : "{venv}/Scripts/python.exe"
+    return normalize(stat(posix).is_valid ? posix : "{venv}/Scripts/python.exe")
 }
 
 def onnx_py() : string {

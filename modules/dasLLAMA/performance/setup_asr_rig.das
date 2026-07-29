@@ -311,7 +311,7 @@ def private setup_venvs() : bool {
     for (spec in [(name = "onnx", py = onnx_py()), (name = "nemo", py = nemo_py())]) {
         // present = the interpreter exists AND the pinned packages import — a half-made venv
         // (pip died mid-install) leaves the interpreter behind and must be rebuilt, not skipped
-        if (stat(spec.py).is_valid && to_int(strip(run_capture("\"{spec.py}\" -c \"import {spec.name == "onnx" ? "onnx_asr" : "nemo"}; print(1)\" 2>/dev/null", true))) == 1) {
+        if (stat(spec.py).is_valid && venv_ready(spec.name, spec.py)) {
             to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv — present\n")
             continue
         }
@@ -321,10 +321,13 @@ def private setup_venvs() : bool {
             run_capture("rm -rf \"{venv}\"", false)
         }
         to_log(LOG_INFO, "setup_asr_rig: creating {spec.name} venv at {venv} (base: {basepy})\n")
-        run_capture("{basepy} -m venv \"{venv}\"", false)
+        run_capture("{basepy} -m venv {venv}", false)
         let py = venv_python(venv)
-        run_capture("\"{py}\" -m pip -q install -r \"{asr_dir()}/requirements-{spec.name}.txt\"", false)
-        if (stat(py).is_valid) {
+        let req = normalize("{asr_dir()}/requirements-{spec.name}.txt")
+        run_capture("{py} -m pip -q install -r {req}", false)
+        // gate on the PACKAGES importing, not the interpreter existing — pip dying after
+        // `python -m venv` succeeded leaves a stat-able python.exe over an empty site-packages
+        if (stat(py).is_valid && venv_ready(spec.name, py)) {
             to_log(LOG_INFO, "setup_asr_rig: set {spec.name == "onnx" ? "ONNX_PY" : "NEMO_PY"}={py}\n")
         } else {
             to_log(LOG_ERROR, "setup_asr_rig: {spec.name} venv creation failed\n")
@@ -332,6 +335,12 @@ def private setup_venvs() : bool {
         }
     }
     return ok
+}
+
+def private venv_ready(name, py : string) : bool {
+    let devnull = is_windows_box() ? "2>nul" : "2>/dev/null"
+    let probe = run_capture("{py} -c \"import {name == "onnx" ? "onnx_asr" : "nemo"}; print(1)\" {devnull}", true)
+    return to_int(strip(probe)) == 1
 }
 
 // ===== check =====
