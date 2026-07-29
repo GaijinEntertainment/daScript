@@ -271,6 +271,9 @@ FILE(GLOB AOT_METAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 list(FILTER AOT_METAL_FILES EXCLUDE REGEX "/_")
 SET(AOT_METAL_MODULE_FILES
     tests/metal/_metal_common.das
+    # f16_cvt is a generic dasLLVM daslib helper the tensor-ops test requires; it used to ride
+    # the (deleted) dasLLAMA module lib — dasLLAMA itself is NEVER AOT'd (see above)
+    modules/dasLLVM/daslib/f16_cvt.das
 )
 IF(APPLE)
     # das_metal_boost hard-requires the APPLE-gated das_metal C++ module; the GPU-behavioral
