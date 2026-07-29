@@ -386,6 +386,13 @@ def main : int {
     // the timestamped machine-readable record beside it
     logger_set_name(prof_log_name())
     to_log(LOG_INFO, "gen_bench_records: box={box_name()} workload={cfg.workload} — ndjson record: {logger_get_path()}\n")
+    // ONE tune per box: every child (das cells, converter runs) reads the same env-pointed
+    // manifest, so their image identities agree and the pre-bake serves every cell. Divergent
+    // per-script mints (near-tie winners flip) were observed to fork identities — B7.
+    if (empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
+        set_env_variable("DAS_TUNE_MANIFEST", rig_tune_manifest())
+        to_log(LOG_INFO, "gen_bench_records: DAS_TUNE_MANIFEST={rig_tune_manifest()} (one tune per box)\n")
+    }
     let apple = is_apple_box()
     if (cfg.backend == "metal" && !apple) {   // fail fast instead of running metal cells that all decline on non-Apple boxes
         to_log(LOG_ERROR, "gen_bench_records: --backend metal requested on a non-Apple box — Metal is macOS-only\n")

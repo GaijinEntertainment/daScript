@@ -47,6 +47,13 @@ def box_name() : string {
     return empty(env) ? "m1" : env
 }
 
+//! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
+//! rig process — cells, converter pre-bakes — stamps the same winners and their .dlim image
+//! identities agree. Gitignored (machine-local; staleness = older than the binary).
+def public rig_tune_manifest() : string {
+    return "modules/dasLLAMA/performance/{box_name()}.tune.json"
+}
+
 //! Profiling lane/thread count: min(16, physical performance cores), same count both engines,
 //! pinned — one rule for every box (M1 Max 8, M4 Pro 10, M3 Air 4, big x86 16). Fixed by policy:
 //! no per-engine detection, no thread matrix (METHODOLOGY.md carries the why). Override with

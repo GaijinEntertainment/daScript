@@ -32,7 +32,16 @@ reference pair**, so the reference engines are not optional.
 
 ```sh
 export DASLLAMA_BOX=<box>          # e.g. zen3a — short, stable, lowercase
+export DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/$DASLLAMA_BOX.tune.json
 ```
+
+`DAS_TUNE_MANIFEST` is the **one-tune-per-box** rule: every rig process (cells, converter
+pre-bakes) stamps winners from this single manifest, so their `.dlim` image identities agree
+and a pre-baked image serves every consumer. Without it each script mints its own sidecar and
+near-tie winners flip between mints — observed to fork the identity (`q51 mr4` vs `mr8`),
+which makes every cell silently re-bake its own duplicate images. The orchestrator sets the
+env itself when unset, but the converter runs in step 4 need it exported in the shell. First
+tuned run mints the manifest (~5 min, once per box per binary build).
 
 ## 1. daslang
 
@@ -99,11 +108,31 @@ done
 # not a failure). Already-valid images are a no-op (~10 s each, load-and-verify).
 ```
 
+The AUDIO models ride the same rail — the converter sniffs the family (whisper/parakeet ggml
+bins, the CNRY canary encoder, audio mmproj GGUFs) and bakes the family-tagged image; ASR
+decoder GGUFs are plain decoder bakes (canary's is fp32 — the parity-pinned exception):
+
+```sh
+for m in $WHISPER_CPP/models/ggml-tiny.bin $WHISPER_CPP/models/ggml-large-v3-turbo.bin \
+         $WHISPER_CPP/models/ggml-parakeet-tdt-0.6b-v*-f32.bin \
+         <models-dir>/canary-qwen-2.5b-encoder-f32.bin \
+         <models-dir>/mmproj-gemma-4-E2B-it-bf16.gguf <models-dir>/gemma-4-E2B-it-Q8_0.gguf \
+         <models-dir>/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf \
+         <models-dir>/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf; do
+    bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"
+done
+bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir>/canary-qwen-2.5b-decoder-f16.gguf -q fp32
+# the GC step covers the whisper models dir too:
+bin/daslang -jit utils/dasllama-convert/main.das -- -m $WHISPER_CPP/models --clean --apply
+```
+
 Expected wall-clock (M1 Max, NVMe ~6 GB/s image writes, catalog of 8): a FULL re-bake of both
 flavors is **~5–6 minutes total**. Per model: bake time is dominated by reading + transcoding
 the GGUF, not the write — the 22 GB 35B ≈ 19 s planar / 10 s metal, the 16–19 GB class ≈ 7–15 s
 per flavor, the 7–8 GB class ≈ 4–7 s. A re-run over valid images completes in ~2 minutes of
-verify-and-skip.
+verify-and-skip. The ASR set adds **~1 minute** (measured M1: the 31 GB Omni decoder 40 s —
+34 s eager load + 5 s write at 6 GB/s; every other file 0.2–5 s) and removes the eager loads
+from EVERY subsequent `--workload asr` sweep, which then maps all seven models in milliseconds.
 
 ## 5. Sweep
 

@@ -8,6 +8,7 @@ require daslib/fio
 require strings
 require daslib/strings_boost
 require dasllama/dasllama_gguf   // rd_u32 for the magic sniff
+require dasllama/dasllama_image  // load_model_cached (decoders ride the .dlim rail) + image_peek
 require dasllama/dasllama_audio  // EncoderState (the qwen3a tower's scratch)
 require dasllama/dasllama_whisper public
 require dasllama/dasllama_qwen3a public
@@ -83,10 +84,37 @@ def set_asr_fp32(on : bool) {
     g_asr_force_fp32 = on
 }
 
-//! Load an ASR model, sniffing the format: ggml-bin magic = whisper vs parakeet
-//! (disambiguated on vocab size: whisper >= 51864, parakeet 1k/8k); GGUF needs the model's
-//! mmproj too — use the two-argument overload. One loader, no family names.
+// a prepared image's family, from the baked identity's trailing tag ("" = no family tag —
+// a decoder/tower image that needs the two-argument route)
+def private image_family_tag(path : string) : string {
+    let p = image_peek(path)
+    if (!p.valid || empty(p.identity)) {
+        panic("dasLLAMA asr: '{path}' is not a readable prepared image (see the log above)")
+    }
+    var parts <- split(p.identity, "|")
+    let tag = parts[length(parts) - 1]
+    delete parts
+    return tag
+}
+
+//! Load an ASR model, sniffing the format: ggml-bin magic = whisper vs parakeet (disambiguated
+//! on vocab size: whisper >= 51864, parakeet 1k/8k); GGUF needs the model's mmproj too — use the
+//! two-argument overload. A ``.dlim`` prepared image routes on its baked family tag. One loader, no family names.
 def load_asr_model(path : string) : AsrModel {
+    if (path |> ends_with(".dlim")) {
+        let tag = image_family_tag(path)
+        if (tag == "whisper-q8" || tag == "whisper-f32") {
+            var wm = AsrModel(kind = AsrKind.whisper)
+            wm.whisper <- load_whisper_model(path, tag == "whisper-q8")
+            return <- wm
+        }
+        if (tag == "parakeet-q8" || tag == "parakeet-f32") {
+            var pm = AsrModel(kind = AsrKind.parakeet)
+            pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
+            return <- pm
+        }
+        panic("dasLLAMA asr: '{path}' is baked as '{tag}' — a decoder/tower image needs the pair: load_asr_model(decoder, mmproj)")
+    }
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA asr: cannot open model '{path}'")
@@ -127,33 +155,46 @@ def load_asr_model(path : string) : AsrModel {
 def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
     //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
-    //! bin = Canary-Qwen FastConformer. Canary decoder loads fp32 (parity gate); others load Q8.
-    let ef = fopen(mmproj, "rb")
-    if (ef == null) {
-        panic("dasLLAMA asr: cannot open mmproj '{mmproj}'")
-    }
-    // stat, not length(bytes): the fmap array's length() wraps int32 on >2GB files (the fp32
-    // canary encoder is ~3GB), which would misroute the sniff
-    if (stat(mmproj).size < 4ul) {
-        panic("dasLLAMA asr: mmproj '{mmproj}' is too short")
-    }
+    //! bin = Canary-Qwen FastConformer. Canary decoder loads fp32 (parity gate); others load Q8. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
-    fmap(ef) $(var bytes : array<uint8>#) {
-        emagic = rd_u32(bytes, 0l)
-        if (emagic == 0x46554747u) {   // "GGUF" — sniff the audio projector type
-            var inscope mm <- parse_gguf_meta(bytes)
-            if (gguf_has(mm, "clip.audio.projector_type")) {
-                eproj = gguf_str(mm, bytes, "clip.audio.projector_type")
-            } elif (gguf_has(mm, "clip.projector_type")) {
-                eproj = gguf_str(mm, bytes, "clip.projector_type")
+    if (mmproj |> ends_with(".dlim")) {
+        let tag = image_family_tag(mmproj)
+        if (tag == "qwen3a-f32") {
+            eproj = "qwen3a"
+        } elif (tag == "gemma4a-f32") {
+            eproj = "gemma4a"
+        } elif (tag == "canary-f32") {
+            emagic = CANARY_MAGIC
+        } else {
+            panic("dasLLAMA asr: mmproj image '{mmproj}' is baked as '{tag}' — not an audio front-end image")
+        }
+    } else {
+        let ef = fopen(mmproj, "rb")
+        if (ef == null) {
+            panic("dasLLAMA asr: cannot open mmproj '{mmproj}'")
+        }
+        // stat, not length(bytes): the fmap array's length() wraps int32 on >2GB files (the fp32
+        // canary encoder is ~3GB), which would misroute the sniff
+        if (stat(mmproj).size < 4ul) {
+            panic("dasLLAMA asr: mmproj '{mmproj}' is too short")
+        }
+        fmap(ef) $(var bytes : array<uint8>#) {
+            emagic = rd_u32(bytes, 0l)
+            if (emagic == 0x46554747u) {   // "GGUF" — sniff the audio projector type
+                var inscope mm <- parse_gguf_meta(bytes)
+                if (gguf_has(mm, "clip.audio.projector_type")) {
+                    eproj = gguf_str(mm, bytes, "clip.audio.projector_type")
+                } elif (gguf_has(mm, "clip.projector_type")) {
+                    eproj = gguf_str(mm, bytes, "clip.projector_type")
+                }
             }
         }
+        fclose(ef)
     }
-    fclose(ef)
     if (eproj == "gemma4a") {
         var m = AsrModel(kind = AsrKind.gemma4a)
-        m.dec <- load_model_(path, QuantMode.q8)
+        m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
         if (m.dec.arch != "gemma4") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the gemma4a audio route expects a Gemma-4 decoder")
         }
@@ -166,7 +207,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (emagic == CANARY_MAGIC) {
         var m = AsrModel(kind = AsrKind.canary)
-        m.dec <- load_model_(path, QuantMode.fp32)
+        m.dec <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         if (m.dec.arch != "qwen3") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the Canary route expects a Qwen3-1.7B decoder")
         }
@@ -178,7 +219,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         return <- m
     }
     var m = AsrModel(kind = AsrKind.qwen3a)
-    m.dec <- load_model_(path, QuantMode.q8)
+    m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
     // Same qwen3a AuT tower, two thinkers: Qwen3-ASR is a dense qwen3 (arch `qwen3`/`qwen3vl`);
     // Qwen3-Omni-30B is the MoE thinker (arch `qwen3vlmoe`), driven as a chat/transcription turn.
     if (m.dec.arch == "qwen3vlmoe") {

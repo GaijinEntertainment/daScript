@@ -129,6 +129,18 @@ struct DlimImageInfo {
     identity : string
 }
 
+// family flavor tags (whisper-q8, tower-f32, parakeet-q8, …) — each family module's [init]
+// registers its own, so inventory/GC verdicts recognize those images as CURRENT
+var private g_family_tags : array<string>
+
+//! Register an image family/flavor tag (call from the family module's [init]) so
+//! ``dlim_current_identities`` — and with it every list/GC verdict — covers its images.
+def register_image_family_tag(tag : string) {
+    if (!has_value(g_family_tags, tag)) {
+        g_family_tags |> push(tag)
+    }
+}
+
 //! The identities THIS box would produce right now, across flavors and quants — the CURRENT
 //! verdict's reference set. Callers pin the box profile first (same ordering as the load path).
 def dlim_current_identities : table<string> {
@@ -140,6 +152,9 @@ def dlim_current_identities : table<string> {
         if (vk != "") {
             idents |> insert(image_identity(vk, q))
         }
+    }
+    for (t in g_family_tags) {
+        idents |> insert(image_identity(t))   // family tags fold their flavor into the tag itself
     }
     return <- idents
 }
@@ -1052,10 +1067,12 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     return true
 }
 
-//! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the
-//! facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image
-//! (``DASLLAMA_IMAGE=0`` disables); under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise. Call inside ``with_job_que()``.
-def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+//! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
+//! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
+//! Call inside ``with_job_que()``.
+def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
+                      planar_only : bool = false; image_fp32 : bool = false) : Model {
+    let qs = "{mode}"
     if (path |> ends_with(".dlim")) {
         // a prepared image named directly — first-class once the source gguf is gone. EXPECTED
         // flavor first (metal mode > armed vulkan tier > planar) so the normal case loads
@@ -1063,8 +1080,8 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Model()
-        let metal_first = get_metal_mode() != MetalMode.off && has_decode_override("metal")
-        let vk_cfg = metal_first ? "" : moe_gpu_bake_tag()
+        let metal_first = !planar_only && get_metal_mode() != MetalMode.off && has_decode_override("metal")
+        let vk_cfg = (planar_only || metal_first) ? "" : moe_gpu_bake_tag()
         let vk_tag = vk_cfg   // dlim_vulkan_tag already carries the "vulkan|" prefix ("" = tier absent)
         var loaded = false
         if (vk_tag != "") {
@@ -1075,6 +1092,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             } else {
                 vulkan_bake_disarm()
             }
+        }
+        if (!loaded && mode != QuantMode.q8) {
+            loaded = load_model_image(path, t, "", qs)   // the named image may be this mode's non-q8 planar bake
         }
         if (!loaded) {
             loaded = (metal_first
@@ -1090,8 +1110,8 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
     }
     // load-time flavor pick: blob-only metal when its drivers serve the config; the vulkan
     // flavor (planar + baked GPU planes) when the vulkan tier arms; planar CPU otherwise
-    let want_metal = mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
-    if (mode == QuantMode.q8 && env_flag("DASLLAMA_IMAGE", true)) {
+    let want_metal = !planar_only && mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
+    if ((mode == QuantMode.q8 || (mode == QuantMode.fp32 && image_fp32)) && env_flag("DASLLAMA_IMAGE", true)) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let ts_img = ref_time_ticks()
         var t = Model()
@@ -1104,7 +1124,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         }
         // the vulkan flavor: the GPU walk slices the baked device-layout planes off the mapping
         // instead of re-gathering; ANY vulkan config switch changes the tag and rebakes below
-        let vk_cfg = want_metal ? "" : moe_gpu_bake_tag()
+        let vk_cfg = (planar_only || want_metal || mode != QuantMode.q8) ? "" : moe_gpu_bake_tag()
         let vk_tag = vk_cfg   // dlim_vulkan_tag already carries the "vulkan|" prefix ("" = tier absent)
         if (vk_tag != "") {
             let img_v = image_path_for(path, vk_tag)
@@ -1117,8 +1137,8 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
             vulkan_bake_disarm()
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
-        let img = image_path_for(path)
-        if (load_model_image(img, t)) {
+        let img = image_path_for(path, "", qs)
+        if (load_model_image(img, t, "", qs)) {
             if (vk_tag != "" && vulkan_bake_take(t)) {
                 // the planar image served this run's uploads; bake the flavor for the next one
                 let ts_save = ref_time_ticks()
@@ -1148,7 +1168,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32) : Model 
         } else {
             // planar saves FIRST (vkblob still empty — the planar flavor must stay planar),
             // then the take moves the collected planes in and the vulkan flavor saves
-            if (save_model_image(m, img)) {
+            if (save_model_image(m, img, "", qs)) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
             }
             if (vk_tag != "" && vulkan_bake_take(m)) {

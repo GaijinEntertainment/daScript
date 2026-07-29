@@ -356,8 +356,14 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
     return <- load_whisper_model_(path, q8)
 }
 
-// the ggml-bin reader proper (see load_whisper_model's doc for the container contract)
-def private load_whisper_model_(path : string; q8 : bool = false) : WhisperModel {
+[init]
+def private register_whisper_image_tags {
+    register_image_family_tag("whisper-q8")
+    register_image_family_tag("whisper-f32")
+}
+
+//! The ggml-bin reader proper — the eager (no image cache) load; ``load_whisper_model`` wraps it.
+def load_whisper_model_(path : string; q8 : bool = false) : WhisperModel {
     var w = WhisperModel()
     // record walk needs the true byte count: length(bytes) is int32 and wraps negative on >2 GB bins (large-v3) — stat's st_size is 64-bit
     let n_bytes = int64(stat(path).size)

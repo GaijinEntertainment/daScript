@@ -26,6 +26,8 @@ require dasllama/dasllama_image         // the .dlim rail itself
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
 require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
 require dasllama/dasllama_gguf          // GGUFMeta — the streaming block's mapping handle
+require dasllama/dasllama_asr           // the ASR family loaders — their wraps bake the family images
+require dasllama/dasllama_audio         // load_audio_tower — the qwen2a/ultravox/voxtral mmproj family
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -178,6 +180,129 @@ def private list_images(cfg : ConvertArgs) : int {
     return 0
 }
 
+// "" = a regular decoder GGUF (the Model flow); else the audio family the source carries:
+// whisper | parakeet | canary | qwen3a | gemma4a | tower (qwen2a/ultravox/voxtral mmproj) |
+// vision (a vision mmproj — declined loudly in convert_asr)
+def private sniff_asr_kind(path : string) : string {
+    var st : FStat
+    if (!stat(path, st) || st.is_dir || int64(st.size) < 8l) {
+        return ""
+    }
+    var kind = ""
+    let f = fopen(path, "rb")
+    if (f == null) {
+        return ""
+    }
+    fmap(f) $(var bytes : array<uint8>#) {
+        let magic = rd_u32(bytes, 0l)
+        if (magic == 0x67676d6cu) {   // ggml bin: whisper vs parakeet on vocab size
+            kind = int(rd_u32(bytes, 4l)) < 32768 ? "parakeet" : "whisper"
+        } elif (magic == CANARY_MAGIC) {
+            kind = "canary"
+        } elif (magic == 0x46554747u) {   // GGUF: an audio mmproj or a plain decoder
+            var inscope m <- parse_gguf_meta(bytes)
+            var proj = ""
+            if (gguf_has(m, "clip.audio.projector_type")) {
+                proj = gguf_str(m, bytes, "clip.audio.projector_type")
+            } elif (gguf_has(m, "clip.projector_type")) {
+                proj = gguf_str(m, bytes, "clip.projector_type")
+            }
+            if (proj == "qwen3a" || proj == "gemma4a") {
+                kind = proj
+            } elif (proj == "qwen2a" || proj == "qwen2.5o" || proj == "ultravox" || proj == "voxtral") {
+                kind = "tower"
+            } elif (proj != "") {
+                kind = "vision"
+            }
+        }
+    }
+    fclose(f)
+    return kind
+}
+
+// ASR carriers (whisper/parakeet ggml bins, the CNRY encoder, audio mmproj GGUFs) bake through
+// their family loaders' own image cache: load once eagerly, the wrap saves the identity-named
+// image beside the source. -o is unsupported (family images are identity-named siblings).
+def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int {
+    if (kind == "vision") {
+        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' is a VISION mmproj — no das image family bakes those\n")
+        return 2
+    }
+    if (cfg.flavor != Flavor.planar) {
+        to_log(LOG_ERROR, "dasllama-convert: ASR sources have a single (planar) image flavor\n")
+        return 2
+    }
+    if (cfg.trim || cfg.stream) {
+        to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs, not ASR sources\n")
+        return 2
+    }
+    if (cfg.out != "") {
+        to_log(LOG_ERROR, "dasllama-convert: -o is unsupported for ASR sources — the image lands beside the source under its identity name\n")
+        return 2
+    }
+    let q8 = qm == QuantMode.q8
+    if (!q8 && qm != QuantMode.fp32) {
+        to_log(LOG_ERROR, "dasllama-convert: ASR sources bake q8 or fp32\n")
+        return 2
+    }
+    var tag = ""
+    if (kind == "whisper") {
+        tag = q8 ? "whisper-q8" : "whisper-f32"
+    } elif (kind == "parakeet") {
+        tag = q8 ? "parakeet-q8" : "parakeet-f32"
+    } elif (kind == "canary") {
+        tag = "canary-f32"       // the CNRY encoder is fp32-only
+    } elif (kind == "qwen3a") {
+        tag = "qwen3a-f32"
+    } elif (kind == "gemma4a") {
+        tag = "gemma4a-f32"
+    } else {
+        tag = q8 ? "tower-q8" : "tower-f32"
+    }
+    let out = image_path_for(cfg.model, tag)
+    to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({kind})\n")
+    to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
+    to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
+    if (!cfg.keep_stale_tmp) {
+        sweep_stale_tmp(cfg.model)
+    }
+    if (stat(out).is_valid) {
+        if (!cfg.force) {
+            to_log(LOG_INFO, "dasllama-convert: image already present — nothing to do (use --force to rebuild)\n")
+            return 0
+        }
+        if (!remove(out)) {
+            to_log(LOG_ERROR, "dasllama-convert: cannot remove '{out}' for the --force rebuild\n")
+            return 1
+        }
+    }
+    let ts = ref_time_ticks()
+    with_job_que() {
+        // the family wrap loads eagerly on the miss and saves the image itself
+        if (kind == "whisper") {
+            var inscope m <- load_whisper_model(cfg.model, q8)
+        } elif (kind == "parakeet") {
+            var inscope m <- load_parakeet_model(cfg.model, q8)
+        } elif (kind == "canary") {
+            var inscope m <- load_canary_encoder(cfg.model)
+        } elif (kind == "qwen3a") {
+            var inscope m <- load_qwen3a_tower(cfg.model)
+        } elif (kind == "gemma4a") {
+            var inscope m <- load_gemma4a_encoder(cfg.model)
+        } else {
+            var inscope m <- load_audio_tower(cfg.model, q8)
+        }
+    }
+    var st : FStat
+    if (!stat(out, st)) {
+        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above (DASLLAMA_IMAGE=0 set?)\n")
+        return 1
+    }
+    let total_ms = int64(get_time_usec(ts)) / 1000l
+    to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {total_ms} ms total\n")
+    return 0
+}
+
 def private flavor_tag(f : Flavor) : string {
     if (f == Flavor.metal) {
         return METAL_IMAGE_TAG
@@ -293,6 +418,10 @@ def main() : int {
             return 2
         }
         have_want = true
+    }
+    let asr_kind = sniff_asr_kind(cfg.model)
+    if (asr_kind != "") {
+        return convert_asr(cfg, asr_kind, qm)
     }
     if (cfg.trim && cfg.flavor != Flavor.vulkan) {
         to_log(LOG_ERROR, "dasllama-convert: --trim is a vulkan-flavor property (add -f vulkan)\n")

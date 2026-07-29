@@ -688,6 +688,12 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
 [unused_argument(t)]
 def private image_post_load(var t : AudioTower) {}   // no derived state — offsets ARE the meta
 
+[init]
+def private register_tower_image_tags {
+    register_image_family_tag("tower-q8")
+    register_image_family_tag("tower-f32")
+}
+
 def audio_has_avgpool(t : AudioTower) : bool => (
     t.proj_kind == AudioProjKind.qwen2a || t.proj_kind == AudioProjKind.voxtral)
 
@@ -998,7 +1004,8 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
     return <- load_audio_tower_(path, q8)
 }
 
-def private load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
+//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_audio_tower`` wraps it.
+def load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
     var t = AudioTower()
     let f = fopen(path, "rb")
     if (f == null) {
