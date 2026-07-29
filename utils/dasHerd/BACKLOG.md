@@ -7,6 +7,19 @@ review capacity is the bottleneck the arcs exist to fix.
 
 ## Filed 2026-07-29 (live review round 2)
 
+- **Search by file name, across worktrees.** The Project tab's filter only
+  narrows the SELECTED worktree's tree. Boris looked for
+  LANGUAGE_SUPPORT_PLAN.md and could not find it — it existed one worktree
+  over. Wanted: a name search over ALL worktrees of the repository (each
+  worktree is a branch, so this is cross-branch by construction), results
+  labeled with the branch @ folder identity, click = select that worktree
+  and open the file.
+- **"Where is the file, really?"** A file's location is three-dimensional
+  (repository, worktree/branch, path) and the app shows only the path. Any
+  file surface should answer: which worktrees contain this path, which is
+  the one I am looking at, and does the content differ between them. First
+  slice: the search above listing every worktree that has the file.
+
 - **Input lock must be visible in the title bar.** When @live synth input
   holds the app (`set_user_control(false)` — which `imgui_click` takes
   implicitly), the window title must read
