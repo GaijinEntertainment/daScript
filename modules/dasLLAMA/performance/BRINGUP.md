@@ -24,9 +24,11 @@ reference pair**, so the reference engines are not optional.
 
 ## 0. Prerequisites
 
-- git, cmake, a C++ toolchain, **python3 ≥ 3.11** (the venv pins were frozen on 3.11; a fresh
-  mac's CLT python is 3.9 — no-admin route: `curl -LsSf https://astral.sh/uv/install.sh | sh`,
-  `uv python install 3.11`, put its bin dir first on PATH), curl, tar, ffmpeg (corpus
+- git, cmake, a C++ toolchain, **CPython 3.10–3.12** (the venv pins were frozen on 3.11;
+  3.13+ breaks them — the numpy pin has no cp313 wheel and pip falls into a Meson source
+  build; a fresh mac's CLT python is 3.9 — no-admin route:
+  `curl -LsSf https://astral.sh/uv/install.sh | sh`, `uv python install 3.11`; setup_asr_rig
+  probes PATH names first, then asks uv itself), curl, tar, ffmpeg (corpus
   conversion — or copy the converted corpus from a manifest-clean box), ~30 GB free beyond the
   models.
 - Windows boxes: run everything from a shell where `cmake`/`git` resolve; the rig handles

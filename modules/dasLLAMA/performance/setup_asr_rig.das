@@ -285,13 +285,26 @@ def private setup_refs(cfg : Args) : bool {
     return ok
 }
 
+def private probe_python_version(cand : string) : int {
+    return to_int(strip(run_capture("{cand} -c \"import sys; print(sys.version_info.major * 100 + sys.version_info.minor)\" 2>&1", true)))
+}
+
 // the base interpreter: POSIX ships `python3`, Windows ships `python` (and a Store-alias stub
-// that answers `python3` with an install nag) — probe in order, first real >= 3.10 wins
+// that answers `python3` with an install nag) — probe in order. The pins were frozen on
+// CPython 3.11 and 3.13 breaks them (the numpy pin has no cp313 wheel — pip falls into a
+// Meson source build), so only 3.10-3.12 qualifies; a uv-managed interpreter is the fallback
+// when every PATH python is outside the range.
 def private base_python() : string {
-    for (cand in ["python3", "python"]) {
-        let v = strip(run_capture("{cand} -c \"import sys; print(sys.version_info.major * 100 + sys.version_info.minor)\" 2>&1", true))
-        if (to_int(v) >= 310) {
+    for (cand in ["python3.11", "python3.10", "python3.12", "python3", "python"]) {
+        let v = probe_python_version(cand)
+        if (v >= 310 && v < 313) {
             return cand
+        }
+    }
+    for (ver in ["3.11", "3.10", "3.12"]) {
+        let p = normalize(strip(run_capture("uv python find {ver} 2>&1", true)))
+        if (stat(p).is_valid && probe_python_version(p) >= 310) {
+            return p
         }
     }
     return ""
@@ -304,7 +317,7 @@ def private setup_venvs() : bool {
     // `uv python install 3.11`, put its bin dir first on PATH.
     let basepy = base_python()
     if (empty(basepy)) {
-        to_log(LOG_ERROR, "setup_asr_rig: no python >= 3.10 on PATH (tried python3, python) — the venv pins were frozen on CPython 3.11; install 3.11 (uv route above) and re-run\n")
+        to_log(LOG_ERROR, "setup_asr_rig: no CPython 3.10-3.12 found (PATH names or uv) — the venv pins were frozen on 3.11 and 3.13+ breaks them; `uv python install 3.11` (uv route above) and re-run\n")
         return false
     }
     var ok = true
