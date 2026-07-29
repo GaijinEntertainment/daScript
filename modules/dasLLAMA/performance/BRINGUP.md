@@ -24,8 +24,11 @@ reference pair**, so the reference engines are not optional.
 
 ## 0. Prerequisites
 
-- git, cmake, a C++ toolchain, python3, curl, tar, ffmpeg (corpus conversion), ~30 GB free
-  beyond the models.
+- git, cmake, a C++ toolchain, **python3 ≥ 3.11** (the venv pins were frozen on 3.11; a fresh
+  mac's CLT python is 3.9 — no-admin route: `curl -LsSf https://astral.sh/uv/install.sh | sh`,
+  `uv python install 3.11`, put its bin dir first on PATH), curl, tar, ffmpeg (corpus
+  conversion — or copy the converted corpus from a manifest-clean box), ~30 GB free beyond the
+  models.
 - Windows boxes: run everything from a shell where `cmake`/`git` resolve; the rig handles
   SMT masking itself.
 - Set the box identity FIRST — every store filename derives from it:

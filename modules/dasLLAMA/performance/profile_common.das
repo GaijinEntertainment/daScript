@@ -1015,8 +1015,11 @@ def asr_engine_name(tool : string) : string {
     return tool == "mtmd" ? "llama-mtmd-cli" : tool
 }
 
+// Box-neutral defaults: every reference lands where setup_asr_rig puts it — the checkouts as
+// siblings of the repo root, the venvs inside the repo — so a fresh box needs NO exports
+// (the env vars remain the overrides). A laptop-absolute default here is a BRINGUP bug.
 def whisper_cpp_root() : string {
-    return env_str("WHISPER_CPP", "/Users/borisbatkin/Work/whisper.cpp")
+    return env_str("WHISPER_CPP", "../whisper.cpp")
 }
 
 def whisper_cpp_bin(cli : string) : string {
@@ -1034,11 +1037,11 @@ def whisper_cpp_bin(cli : string) : string {
 }
 
 def onnx_py() : string {
-    return normalize(env_str("ONNX_PY", "/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python"))
+    return normalize(env_str("ONNX_PY", "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python"))
 }
 
 def nemo_py() : string {
-    return normalize(env_str("NEMO_PY", "/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python"))
+    return normalize(env_str("NEMO_PY", "modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python"))
 }
 
 // The clean CPU-only build (llama.cpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
@@ -1046,7 +1049,7 @@ def nemo_py() : string {
 // rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
 // BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 def mtmd_bin() : string {
-    return normalize(env_str("MTMD_BIN", "/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli"))
+    return normalize(env_str("MTMD_BIN", "../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli"))
 }
 
 // The python bench scripts live beside the corpus (asr/); these tools run from the repo-root cwd.

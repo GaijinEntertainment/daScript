@@ -286,13 +286,28 @@ def private setup_refs(cfg : Args) : bool {
 }
 
 def private setup_venvs() : bool {
+    // the pins in requirements-*.txt were frozen on CPython 3.11 — an older interpreter dies
+    // five screens deep in pip resolution, so gate LOUDLY first. No-admin install route (a
+    // fresh mac's CLT python is 3.9): `curl -LsSf https://astral.sh/uv/install.sh | sh`,
+    // `uv python install 3.11`, put its bin dir first on PATH.
+    let pyv = strip(run_capture("python3 -c \"import sys; print(sys.version_info.major * 100 + sys.version_info.minor)\" 2>&1", true))
+    if (to_int(pyv) < 310) {
+        to_log(LOG_ERROR, "setup_asr_rig: python3 on PATH is too old ({pyv} < 310) — the venv pins were frozen on CPython 3.11; install 3.11 (uv route above) and re-run\n")
+        return false
+    }
     var ok = true
     for (spec in [(name = "onnx", py = onnx_py()), (name = "nemo", py = nemo_py())]) {
-        if (stat(spec.py).is_valid) {
+        // present = the interpreter exists AND the pinned packages import — a half-made venv
+        // (pip died mid-install) leaves bin/python behind and must be rebuilt, not skipped
+        if (stat(spec.py).is_valid && to_int(strip(run_capture("\"{spec.py}\" -c \"import {spec.name == "onnx" ? "onnx_asr" : "nemo"}; print(1)\" 2>/dev/null", true))) == 1) {
             to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv — present\n")
             continue
         }
         let venv = normalize("{asr_dir()}/.venv-{spec.name}")
+        if (stat(venv).is_valid) {
+            to_log(LOG_WARNING, "setup_asr_rig: {spec.name} venv at {venv} is half-made — rebuilding\n")
+            run_capture("rm -rf \"{venv}\"", false)
+        }
         to_log(LOG_INFO, "setup_asr_rig: creating {spec.name} venv at {venv}\n")
         run_capture("python3 -m venv \"{venv}\" && \"{venv}/bin/pip\" -q install -r \"{asr_dir()}/requirements-{spec.name}.txt\"", false)
         let py = normalize("{venv}/bin/python")
